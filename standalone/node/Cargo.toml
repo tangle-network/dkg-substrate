@@ -38,7 +38,7 @@ sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkad
 sp-timestamp = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.10' }
 
 # These dependencies are used for the node template's RPCs
-jsonrpc-core = "18.0.0"
+jsonrpc-core = "15.0.0"
 sc-rpc = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.10' }
 sp-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.10' }
 sc-rpc-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.10' }
