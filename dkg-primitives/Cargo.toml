@@ -1,0 +1,24 @@
+[package]
+name = "dkg-primitives"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+fnv = "1.0.6"
+futures = "0.3"
+log = "0.4"
+parking_lot = "0.11"
+thiserror = "1.0"
+wasm-timer = "0.2.5"
+libsecp256k1 = "0.3.5"
+sha3 = "0.9"
+hex = "0.4"
+
+codec = { version = "2.0.0", package = "parity-scale-codec", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.2.1"
+
+curv = { package = "curv-kzen", version = "0.7", default-features = false }
+round-based = { version = "0.1.4", features = [] }
+multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
+
