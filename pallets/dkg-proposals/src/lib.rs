@@ -55,6 +55,7 @@ use frame_support::{
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
+use primitives::ProposalHandlerTrait;
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::{AccountIdConversion, Dispatchable},
@@ -85,12 +86,16 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
 		/// Origin used to administer the pallet
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
+
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend;
+
 		/// ChainID for anchor edges
 		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a
 		/// set of bridged chains.
@@ -103,7 +108,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type BridgeAccountId: Get<PalletId>;
 
-		type ProposalDispatch: Get<Dispatchable>;
+		type ProposalHandler: ProposalHandlerTrait<Self::Proposal>;
 	}
 
 	/// The parameter maintainer who can change the parameters
@@ -604,10 +609,7 @@ impl<T: Config> Pallet<T> {
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, deposit_nonce: nonce });
-		let call = T::ProposalDispatch::get();
-		call.dispatch(frame_system::RawOrigin::Signed(Self::account_id()).into())
-			.map(|_| ())
-			.map_err(|e| e.error)?;
+		T::ProposalHandler::handle_proposal(prop, primitives::ProposalAction::Sign(0))?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, deposit_nonce: nonce });
 		Ok(().into())
 	}
@@ -621,7 +623,7 @@ impl<T: Config> Pallet<T> {
 
 /// Simple ensure origin for the bridge account
 #[derive(Encode, Decode, Clone, Eq, PartialEq, TypeInfo, RuntimeDebug)]
-pub struct EnsureBridge<T>(sp_std::marker::PhantomData<(T, I)>);
+pub struct EnsureBridge<T>(sp_std::marker::PhantomData<T>);
 impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	type Success = T::AccountId;
 

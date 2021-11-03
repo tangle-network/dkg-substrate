@@ -5223,6 +5223,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "primitives",
  "serde",
  "sp-core",
  "sp-io",
@@ -5239,6 +5240,7 @@ dependencies = [
  "frame-system-benchmarking",
  "pallet-balances",
  "parity-scale-codec",
+ "primitives",
  "scale-info 1.0.0",
  "sp-core",
  "sp-io",
@@ -7438,6 +7440,14 @@ dependencies = [
  "impl-rlp",
  "impl-serde",
  "uint",
+]
+
+[[package]]
+name = "primitives"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "parity-scale-codec",
 ]
 
 [[package]]
