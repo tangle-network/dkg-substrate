@@ -55,6 +55,7 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
+	type Proposal = Vec<u8>;
 }
 
 // Build genesis storage according to the mock runtime.

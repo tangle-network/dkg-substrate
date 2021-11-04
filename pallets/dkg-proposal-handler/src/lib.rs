@@ -32,9 +32,6 @@ pub mod pallet {
 
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend;
-
-		/// Origin of DKG proposal governor who submits approved tx blobs for signing
-		type BridgeOrigin: EnsureOrigin<Self::Origin, Success = Self::AccountId>;
 	}
 
 	#[pallet::pallet]

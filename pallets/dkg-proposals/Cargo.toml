@@ -15,6 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 # primitives
 codec = { package = "parity-scale-codec", version = "2.3.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler", default-features = false }
 primitives = { path = '../../primitives' }
 
 sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.10' }
@@ -28,6 +29,7 @@ pallet-balances = { default-features = false, git = "https://github.com/parityte
 
 frame-system-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.10', optional = true }
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.10', optional = true }
+
 
 [features]
 default = ["std"]

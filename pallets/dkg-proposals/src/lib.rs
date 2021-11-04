@@ -106,7 +106,7 @@ pub mod pallet {
 		type ProposalLifetime: Get<Self::BlockNumber>;
 
 		#[pallet::constant]
-		type BridgeAccountId: Get<PalletId>;
+		type DKGAccountId: Get<PalletId>;
 
 		type ProposalHandler: ProposalHandlerTrait<Self::Proposal>;
 	}
@@ -441,7 +441,7 @@ impl<T: Config> Pallet<T> {
 	/// Provides an AccountId for the pallet.
 	/// This is used both as an origin check and deposit/withdrawal account.
 	pub fn account_id() -> T::AccountId {
-		T::BridgeAccountId::get().into_account()
+		T::DKGAccountId::get().into_account()
 	}
 
 	/// Asserts if a resource is registered
@@ -628,7 +628,7 @@ impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	type Success = T::AccountId;
 
 	fn try_origin(o: T::Origin) -> Result<Self::Success, T::Origin> {
-		let bridge_id = T::BridgeAccountId::get().into_account();
+		let bridge_id = T::DKGAccountId::get().into_account();
 		o.into().and_then(|o| match o {
 			system::RawOrigin::Signed(who) if who == bridge_id => Ok(bridge_id),
 			r => Err(T::Origin::from(r)),
@@ -640,6 +640,6 @@ impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	/// ** Should be used for benchmarking only!!! **
 	#[cfg(feature = "runtime-benchmarks")]
 	fn successful_origin() -> T::Origin {
-		T::Origin::from(frame_system::RawOrigin::Signed(T::BridgeAccountId::get().into_account()))
+		T::Origin::from(frame_system::RawOrigin::Signed(T::DKGAccountId::get().into_account()))
 	}
 }

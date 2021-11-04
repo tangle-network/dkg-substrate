@@ -26,6 +26,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -83,17 +84,23 @@ impl pallet_balances::Config for Test {
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: u64 = 50;
-	pub const BridgeAccountId: PalletId = PalletId(*b"dw/bridg");
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+}
+
+impl pallet_dkg_proposal_handler::Config for Test {
+	type Event = Event;
+	type Proposal = Vec<u8>;
 }
 
 impl Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type BridgeAccountId = BridgeAccountId;
+	type DKGAccountId = DKGAccountId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 // pub const BRIDGE_ID: u64 =
@@ -104,9 +111,9 @@ pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let bridge_id = PalletId(*b"dw/bridg").into_account();
+	let dkg_id = PalletId(*b"dw/dkgac").into_account();
 	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> { balances: vec![(bridge_id, ENDOWED_BALANCE)] }
+	pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
 		.assimilate_storage(&mut t)
 		.unwrap();
 	let mut ext = sp_io::TestExternalities::new(t);
@@ -122,17 +129,17 @@ pub fn new_test_ext_initialized(
 	let mut t = new_test_ext();
 	t.execute_with(|| {
 		// Set and check threshold
-		assert_ok!(Bridge::set_threshold(Origin::root(), TEST_THRESHOLD));
-		assert_eq!(Bridge::relayer_threshold(), TEST_THRESHOLD);
+		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_eq!(DKGProposals::relayer_threshold(), TEST_THRESHOLD);
 		// Add relayers
-		assert_ok!(Bridge::add_relayer(Origin::root(), RELAYER_A));
-		assert_ok!(Bridge::add_relayer(Origin::root(), RELAYER_B));
-		assert_ok!(Bridge::add_relayer(Origin::root(), RELAYER_C));
+		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_A));
+		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_B));
+		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_C));
 		// Whitelist chain
-		assert_ok!(Bridge::whitelist_chain(Origin::root(), src_id));
+		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
 		// Set and check resource ID mapped to some junk data
-		assert_ok!(Bridge::set_resource(Origin::root(), r_id, resource));
-		assert_eq!(Bridge::resource_exists(r_id), true);
+		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, resource));
+		assert_eq!(DKGProposals::resource_exists(r_id), true);
 	});
 	t
 }
