@@ -104,9 +104,9 @@ impl Config for Test {
 }
 
 // pub const BRIDGE_ID: u64 =
-pub const RELAYER_A: u64 = 0x2;
-pub const RELAYER_B: u64 = 0x3;
-pub const RELAYER_C: u64 = 0x4;
+pub const PROPOSER_A: u64 = 0x2;
+pub const PROPOSER_B: u64 = 0x3;
+pub const PROPOSER_C: u64 = 0x4;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
@@ -130,11 +130,11 @@ pub fn new_test_ext_initialized(
 	t.execute_with(|| {
 		// Set and check threshold
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
-		assert_eq!(DKGProposals::relayer_threshold(), TEST_THRESHOLD);
-		// Add relayers
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_A));
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_B));
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_C));
+		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
+		// Add proposers
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_A));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_B));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_C));
 		// Whitelist chain
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
 		// Set and check resource ID mapped to some junk data

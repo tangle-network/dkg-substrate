@@ -67,7 +67,7 @@ use sp_std::prelude::*;
 pub mod pallet {
 	use super::*;
 	use crate::types::{
-		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_RELAYER_THRESHOLD,
+		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
 	};
 	use frame_support::{
 		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
@@ -122,25 +122,25 @@ pub mod pallet {
 	pub type ChainNonces<T: Config> = StorageMap<_, Blake2_256, T::ChainId, DepositNonce>;
 
 	#[pallet::type_value]
-	pub fn DefaultForRelayerThreshold() -> u32 {
-		DARKWEBB_DEFAULT_RELAYER_THRESHOLD
+	pub fn DefaultForProposerThreshold() -> u32 {
+		DARKWEBB_DEFAULT_PROPOSER_THRESHOLD
 	}
 
 	/// Number of votes required for a proposal to execute
 	#[pallet::storage]
-	#[pallet::getter(fn relayer_threshold)]
-	pub type RelayerThreshold<T: Config> =
-		StorageValue<_, u32, ValueQuery, DefaultForRelayerThreshold>;
+	#[pallet::getter(fn proposer_threshold)]
+	pub type ProposerThreshold<T: Config> =
+		StorageValue<_, u32, ValueQuery, DefaultForProposerThreshold>;
 
-	/// Tracks current relayer set
+	/// Tracks current proposer set
 	#[pallet::storage]
-	#[pallet::getter(fn relayers)]
-	pub type Relayers<T: Config> = StorageMap<_, Blake2_256, T::AccountId, bool, ValueQuery>;
+	#[pallet::getter(fn proposers)]
+	pub type Proposers<T: Config> = StorageMap<_, Blake2_256, T::AccountId, bool, ValueQuery>;
 
-	/// Number of relayers in set
+	/// Number of proposers in set
 	#[pallet::storage]
-	#[pallet::getter(fn relayer_count)]
-	pub type RelayerCount<T: Config> = StorageValue<_, u32, ValueQuery>;
+	#[pallet::getter(fn proposer_count)]
+	pub type ProposerCount<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	/// All known proposals.
 	/// The key is the hash of the call and the deposit ID, to ensure it's
@@ -177,13 +177,13 @@ pub mod pallet {
 		/// Maintainer is set
 		MaintainerSet { old_maintainer: T::AccountId, new_maintainer: T::AccountId },
 		/// Vote threshold has changed (new_threshold)
-		RelayerThresholdChanged { new_threshold: u32 },
+		ProposerThresholdChanged { new_threshold: u32 },
 		/// Chain now available for transfers (chain_id)
 		ChainWhitelisted { chain_id: T::ChainId },
-		/// Relayer added to set
-		RelayerAdded { relayer_id: T::AccountId },
-		/// Relayer removed from set
-		RelayerRemoved { relayer_id: T::AccountId },
+		/// Proposer added to set
+		ProposerAdded { proposer_id: T::AccountId },
+		/// Proposer removed from set
+		ProposerRemoved { proposer_id: T::AccountId },
 		/// Vote submitted in favour of proposal
 		VoteFor { chain_id: T::ChainId, deposit_nonce: DepositNonce, who: T::AccountId },
 		/// Vot submitted against proposal
@@ -203,11 +203,11 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// Account does not have correct permissions
 		InvalidPermissions,
-		/// Relayer threshold not set
+		/// Proposer threshold not set
 		ThresholdNotSet,
 		/// Provided chain Id is not valid
 		InvalidChainId,
-		/// Relayer threshold cannot be 0
+		/// Proposer threshold cannot be 0
 		InvalidThreshold,
 		/// Interactions with this chain is not permitted
 		ChainNotWhitelisted,
@@ -215,14 +215,14 @@ pub mod pallet {
 		ChainAlreadyWhitelisted,
 		/// Resource ID provided isn't mapped to anything
 		ResourceDoesNotExist,
-		/// Relayer already in set
-		RelayerAlreadyExists,
-		/// Provided accountId is not a relayer
-		RelayerInvalid,
-		/// Protected operation, must be performed by relayer
-		MustBeRelayer,
-		/// Relayer has already submitted some vote for this proposal
-		RelayerAlreadyVoted,
+		/// Proposer already in set
+		ProposerAlreadyExists,
+		/// Provided accountId is not a proposer
+		ProposerInvalid,
+		/// Protected operation, must be performed by proposer
+		MustBeProposer,
+		/// Proposer has already submitted some vote for this proposal
+		ProposerAlreadyVoted,
 		/// A proposal with these parameters has already been submitted
 		ProposalAlreadyExists,
 		/// No proposal with the ID was found
@@ -290,7 +290,7 @@ pub mod pallet {
 		#[pallet::weight(195_000_000)]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
-			Self::set_relayer_threshold(threshold)
+			Self::set_proposer_threshold(threshold)
 		}
 
 		/// Stores a method name on chain under an associated resource ID.
@@ -333,26 +333,29 @@ pub mod pallet {
 			Self::whitelist(id)
 		}
 
-		/// Adds a new relayer to the relayer set.
+		/// Adds a new proposer to the proposer set.
 		///
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
 		#[pallet::weight(195_000_000)]
-		pub fn add_relayer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
+		pub fn add_proposer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
-			Self::register_relayer(v)
+			Self::register_proposer(v)
 		}
 
-		/// Removes an existing relayer from the set.
+		/// Removes an existing proposer from the set.
 		///
 		/// # <weight>
 		/// - O(1) lookup and removal
 		/// # </weight>
 		#[pallet::weight(195_000_000)]
-		pub fn remove_relayer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
+		pub fn remove_proposer(
+			origin: OriginFor<T>,
+			v: T::AccountId,
+		) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
-			Self::unregister_relayer(v)
+			Self::unregister_proposer(v)
 		}
 
 		/// Commits a vote in favour of the provided proposal.
@@ -374,7 +377,7 @@ pub mod pallet {
 			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
-			ensure!(Self::is_relayer(&who), Error::<T>::MustBeRelayer);
+			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(Self::chain_whitelisted(src_id), Error::<T>::ChainNotWhitelisted);
 			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
 
@@ -395,7 +398,7 @@ pub mod pallet {
 			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
-			ensure!(Self::is_relayer(&who), Error::<T>::MustBeRelayer);
+			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(Self::chain_whitelisted(src_id), Error::<T>::ChainNotWhitelisted);
 			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
 
@@ -433,9 +436,9 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	/// Checks if who is a relayer
-	pub fn is_relayer(who: &T::AccountId) -> bool {
-		Self::relayers(who)
+	/// Checks if who is a proposer
+	pub fn is_proposer(who: &T::AccountId) -> bool {
+		Self::proposers(who)
 	}
 
 	/// Provides an AccountId for the pallet.
@@ -457,10 +460,10 @@ impl<T: Config> Pallet<T> {
 	// *** Admin methods ***
 
 	/// Set a new voting threshold
-	pub fn set_relayer_threshold(threshold: u32) -> DispatchResultWithPostInfo {
+	pub fn set_proposer_threshold(threshold: u32) -> DispatchResultWithPostInfo {
 		ensure!(threshold > 0, Error::<T>::InvalidThreshold);
-		RelayerThreshold::<T>::put(threshold);
-		Self::deposit_event(Event::RelayerThresholdChanged { new_threshold: threshold });
+		ProposerThreshold::<T>::put(threshold);
+		Self::deposit_event(Event::ProposerThresholdChanged { new_threshold: threshold });
 		Ok(().into())
 	}
 
@@ -487,22 +490,22 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	/// Adds a new relayer to the set
-	pub fn register_relayer(relayer: T::AccountId) -> DispatchResultWithPostInfo {
-		ensure!(!Self::is_relayer(&relayer), Error::<T>::RelayerAlreadyExists);
-		Relayers::<T>::insert(&relayer, true);
-		RelayerCount::<T>::mutate(|i| *i += 1);
+	/// Adds a new proposer to the set
+	pub fn register_proposer(proposer: T::AccountId) -> DispatchResultWithPostInfo {
+		ensure!(!Self::is_proposer(&proposer), Error::<T>::ProposerAlreadyExists);
+		Proposers::<T>::insert(&proposer, true);
+		ProposerCount::<T>::mutate(|i| *i += 1);
 
-		Self::deposit_event(Event::RelayerAdded { relayer_id: relayer });
+		Self::deposit_event(Event::ProposerAdded { proposer_id: proposer });
 		Ok(().into())
 	}
 
-	/// Removes a relayer from the set
-	pub fn unregister_relayer(relayer: T::AccountId) -> DispatchResultWithPostInfo {
-		ensure!(Self::is_relayer(&relayer), Error::<T>::RelayerInvalid);
-		Relayers::<T>::remove(&relayer);
-		RelayerCount::<T>::mutate(|i| *i -= 1);
-		Self::deposit_event(Event::RelayerRemoved { relayer_id: relayer });
+	/// Removes a proposer from the set
+	pub fn unregister_proposer(proposer: T::AccountId) -> DispatchResultWithPostInfo {
+		ensure!(Self::is_proposer(&proposer), Error::<T>::ProposerInvalid);
+		Proposers::<T>::remove(&proposer);
+		ProposerCount::<T>::mutate(|i| *i -= 1);
+		Self::deposit_event(Event::ProposerRemoved { proposer_id: proposer });
 		Ok(().into())
 	}
 
@@ -527,10 +530,10 @@ impl<T: Config> Pallet<T> {
 			},
 		};
 
-		// Ensure the proposal isn't complete and relayer hasn't already voted
+		// Ensure the proposal isn't complete and proposer hasn't already voted
 		ensure!(!votes.is_complete(), Error::<T>::ProposalAlreadyComplete);
 		ensure!(!votes.is_expired(now), Error::<T>::ProposalExpired);
-		ensure!(!votes.has_voted(&who), Error::<T>::RelayerAlreadyVoted);
+		ensure!(!votes.has_voted(&who), Error::<T>::ProposerAlreadyVoted);
 
 		if in_favour {
 			votes.votes_for.push(who.clone());
@@ -565,7 +568,7 @@ impl<T: Config> Pallet<T> {
 			ensure!(!votes.is_expired(now), Error::<T>::ProposalExpired);
 
 			let status =
-				votes.try_to_complete(RelayerThreshold::<T>::get(), RelayerCount::<T>::get());
+				votes.try_to_complete(ProposerThreshold::<T>::get(), ProposerCount::<T>::get());
 			Votes::<T>::insert(src_id, (nonce, prop.clone()), votes.clone());
 
 			match status {
@@ -591,7 +594,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Commits a vote against the proposal and cancels it if more than
-	/// (relayers.len() - threshold) votes against exist.
+	/// (proposers.len() - threshold) votes against exist.
 	fn vote_against(
 		who: T::AccountId,
 		nonce: DepositNonce,

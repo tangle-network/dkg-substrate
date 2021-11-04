@@ -5,7 +5,7 @@ use core::panic;
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, Call, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, ENDOWED_BALANCE, RELAYER_A, RELAYER_B, RELAYER_C,
+		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
 		TEST_THRESHOLD,
 	},
 	*,
@@ -120,19 +120,19 @@ fn whitelist_chain() {
 #[test]
 fn set_get_threshold() {
 	new_test_ext().execute_with(|| {
-		assert_eq!(RelayerThreshold::<Test>::get(), 1);
+		assert_eq!(ProposerThreshold::<Test>::get(), 1);
 
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
-		assert_eq!(RelayerThreshold::<Test>::get(), TEST_THRESHOLD);
+		assert_eq!(ProposerThreshold::<Test>::get(), TEST_THRESHOLD);
 
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), 5));
-		assert_eq!(RelayerThreshold::<Test>::get(), 5);
+		assert_eq!(ProposerThreshold::<Test>::get(), 5);
 
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerThresholdChanged {
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: TEST_THRESHOLD,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerThresholdChanged {
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: 5,
 			}),
 		]);
@@ -143,40 +143,40 @@ fn set_get_threshold() {
 fn add_remove_relayer() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
-		assert_eq!(DKGProposals::relayer_count(), 0);
+		assert_eq!(DKGProposals::proposer_count(), 0);
 
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_A));
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_B));
-		assert_ok!(DKGProposals::add_relayer(Origin::root(), RELAYER_C));
-		assert_eq!(DKGProposals::relayer_count(), 3);
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_A));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_B));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_C));
+		assert_eq!(DKGProposals::proposer_count(), 3);
 
 		// Already exists
 		assert_noop!(
-			DKGProposals::add_relayer(Origin::root(), RELAYER_A),
-			Error::<Test>::RelayerAlreadyExists
+			DKGProposals::add_proposer(Origin::root(), PROPOSER_A),
+			Error::<Test>::ProposerAlreadyExists
 		);
 
 		// Confirm removal
-		assert_ok!(DKGProposals::remove_relayer(Origin::root(), RELAYER_B));
-		assert_eq!(DKGProposals::relayer_count(), 2);
+		assert_ok!(DKGProposals::remove_proposer(Origin::root(), PROPOSER_B));
+		assert_eq!(DKGProposals::proposer_count(), 2);
 		assert_noop!(
-			DKGProposals::remove_relayer(Origin::root(), RELAYER_B),
-			Error::<Test>::RelayerInvalid
+			DKGProposals::remove_proposer(Origin::root(), PROPOSER_B),
+			Error::<Test>::ProposerInvalid
 		);
-		assert_eq!(DKGProposals::relayer_count(), 2);
+		assert_eq!(DKGProposals::proposer_count(), 2);
 
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerAdded {
-				relayer_id: RELAYER_A,
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+				proposer_id: PROPOSER_A,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerAdded {
-				relayer_id: RELAYER_B,
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+				proposer_id: PROPOSER_B,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerAdded {
-				relayer_id: RELAYER_C,
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+				proposer_id: PROPOSER_C,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerRemoved {
-				relayer_id: RELAYER_B,
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerRemoved {
+				proposer_id: PROPOSER_B,
 			}),
 		]);
 	})
@@ -197,7 +197,7 @@ fn create_sucessful_proposal() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(RELAYER_A),
+			Origin::signed(PROPOSER_A),
 			prop_id,
 			src_id,
 			r_id,
@@ -205,7 +205,7 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -214,7 +214,7 @@ fn create_sucessful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(RELAYER_B),
+			Origin::signed(PROPOSER_B),
 			prop_id,
 			src_id,
 			r_id,
@@ -222,8 +222,8 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
-			votes_against: vec![RELAYER_B],
+			votes_for: vec![PROPOSER_A],
+			votes_against: vec![PROPOSER_B],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -231,7 +231,7 @@ fn create_sucessful_proposal() {
 
 		// Third relayer votes in favour
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(RELAYER_C),
+			Origin::signed(PROPOSER_C),
 			prop_id,
 			src_id,
 			r_id,
@@ -239,8 +239,8 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A, RELAYER_C],
-			votes_against: vec![RELAYER_B],
+			votes_for: vec![PROPOSER_A, PROPOSER_C],
+			votes_against: vec![PROPOSER_B],
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -250,17 +250,17 @@ fn create_sucessful_proposal() {
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_A,
+				who: PROPOSER_A,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_B,
+				who: PROPOSER_B,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_C,
+				who: PROPOSER_C,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: src_id,
@@ -285,7 +285,7 @@ fn create_unsucessful_proposal() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(RELAYER_A),
+			Origin::signed(PROPOSER_A),
 			prop_id,
 			src_id,
 			r_id,
@@ -293,7 +293,7 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -302,7 +302,7 @@ fn create_unsucessful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(RELAYER_B),
+			Origin::signed(PROPOSER_B),
 			prop_id,
 			src_id,
 			r_id,
@@ -310,8 +310,8 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
-			votes_against: vec![RELAYER_B],
+			votes_for: vec![PROPOSER_A],
+			votes_against: vec![PROPOSER_B],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -319,7 +319,7 @@ fn create_unsucessful_proposal() {
 
 		// Third relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(RELAYER_C),
+			Origin::signed(PROPOSER_C),
 			prop_id,
 			src_id,
 			r_id,
@@ -327,31 +327,31 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
-			votes_against: vec![RELAYER_B, RELAYER_C],
+			votes_for: vec![PROPOSER_A],
+			votes_against: vec![PROPOSER_B, PROPOSER_C],
 			status: ProposalStatus::Rejected,
 			expiry: ProposalLifetime::get() + 1,
 		};
 		assert_eq!(prop, expected);
 
-		assert_eq!(Balances::free_balance(RELAYER_B), 0);
+		assert_eq!(Balances::free_balance(PROPOSER_B), 0);
 		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
 
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_A,
+				who: PROPOSER_A,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_B,
+				who: PROPOSER_B,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_C,
+				who: PROPOSER_C,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
 				chain_id: src_id,
@@ -372,7 +372,7 @@ fn execute_after_threshold_change() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(RELAYER_A),
+			Origin::signed(PROPOSER_A),
 			prop_id,
 			src_id,
 			r_id,
@@ -380,7 +380,7 @@ fn execute_after_threshold_change() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -392,7 +392,7 @@ fn execute_after_threshold_change() {
 
 		// Attempt to execute
 		assert_ok!(DKGProposals::eval_vote_state(
-			Origin::signed(RELAYER_A),
+			Origin::signed(PROPOSER_A),
 			prop_id,
 			src_id,
 			proposal.clone(),
@@ -400,23 +400,23 @@ fn execute_after_threshold_change() {
 
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
 		assert_eq!(prop, expected);
 
-		assert_eq!(Balances::free_balance(RELAYER_B), 0);
+		assert_eq!(Balances::free_balance(PROPOSER_B), 0);
 		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
 
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				deposit_nonce: prop_id,
-				who: RELAYER_A,
+				who: PROPOSER_A,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::RelayerThresholdChanged {
+			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: 1,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
@@ -442,7 +442,7 @@ fn proposal_expires() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(RELAYER_A),
+			Origin::signed(PROPOSER_A),
 			prop_id,
 			src_id,
 			r_id,
@@ -450,7 +450,7 @@ fn proposal_expires() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -462,7 +462,7 @@ fn proposal_expires() {
 
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -472,7 +472,7 @@ fn proposal_expires() {
 		// Attempt to submit a vote should fail
 		assert_noop!(
 			DKGProposals::reject_proposal(
-				Origin::signed(RELAYER_B),
+				Origin::signed(PROPOSER_B),
 				prop_id,
 				src_id,
 				r_id,
@@ -484,7 +484,7 @@ fn proposal_expires() {
 		// Proposal state should remain unchanged
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -494,7 +494,7 @@ fn proposal_expires() {
 		// eval_vote_state should have no effect
 		assert_noop!(
 			DKGProposals::eval_vote_state(
-				Origin::signed(RELAYER_C),
+				Origin::signed(PROPOSER_C),
 				prop_id,
 				src_id,
 				proposal.clone(),
@@ -503,7 +503,7 @@ fn proposal_expires() {
 		);
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![RELAYER_A],
+			votes_for: vec![PROPOSER_A],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -513,7 +513,7 @@ fn proposal_expires() {
 		assert_events(vec![Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 			chain_id: src_id,
 			deposit_nonce: prop_id,
-			who: RELAYER_A,
+			who: PROPOSER_A,
 		})]);
 	})
 }
