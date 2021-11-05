@@ -231,9 +231,7 @@ fn testnet_genesis(
 				})
 				.collect(),
 		},
-		aura: parachain_runtime::AuraConfig {
-			authorities: candidates.iter().cloned().map(|(_, aura, _)| aura.clone()).collect(),
-		},
+		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
 	}
