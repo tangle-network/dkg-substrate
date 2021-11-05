@@ -1,10 +1,14 @@
 use cumulus_primitives_core::ParaId;
-use parachain_runtime::{AccountId, AuraId, Signature};
+use parachain_runtime::{AccountId, AuraId, Balance, Signature, MICROUNIT, MILLIUNIT};
+use parachain_staking::{InflationInfo, Range};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
-use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_runtime::{
+	traits::{IdentifyAccount, Verify},
+	Perbill,
+};
 
 /// Specialized `ChainSpec` for the normal parachain runtime.
 pub type ChainSpec = sc_service::GenericChainSpec<parachain_runtime::GenesisConfig, Extensions>;
@@ -14,6 +18,22 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 	TPublic::Pair::from_string(&format!("//{}", seed), None)
 		.expect("static values are valid; qed")
 		.public()
+}
+
+/// Generate collator keys from seed.
+///
+/// This function's return type must always match the session keys of the chain
+/// in tuple format.
+pub fn get_collator_keys_from_seed(seed: &str) -> AuraId {
+	get_from_seed::<AuraId>(seed)
+}
+
+/// Generate the session keys from individual elements.
+///
+/// The input must be a tuple of individual keys (a single arg for now since we
+/// have just one key).
+pub fn dkg_session_keys(keys: AuraId) -> parachain_runtime::SessionKeys {
+	parachain_runtime::SessionKeys { aura: keys }
 }
 
 /// The extensions for the [`ChainSpec`].
@@ -58,7 +78,20 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 		move || {
 			testnet_genesis(
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
-				vec![get_from_seed::<AuraId>("Alice"), get_from_seed::<AuraId>("Bob")],
+				vec![
+					(
+						get_account_id_from_seed::<sr25519::Public>("Alice"),
+						get_collator_keys_from_seed("Alice"),
+						10 * MICROUNIT,
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Bob"),
+						get_collator_keys_from_seed("Bob"),
+						10 * MICROUNIT,
+					),
+				],
+				// Nominations
+				vec![],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -94,7 +127,20 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 		move || {
 			testnet_genesis(
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
-				vec![get_from_seed::<AuraId>("Alice"), get_from_seed::<AuraId>("Bob")],
+				vec![
+					(
+						get_account_id_from_seed::<sr25519::Public>("Alice"),
+						get_collator_keys_from_seed("Alice"),
+						10 * MICROUNIT,
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Bob"),
+						get_collator_keys_from_seed("Bob"),
+						10 * MICROUNIT,
+					),
+				],
+				// Nominations
+				vec![],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -123,9 +169,31 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 	)
 }
 
+pub fn dkg_inflation_config() -> InflationInfo<Balance> {
+	InflationInfo {
+		expect: Range {
+			min: 100_000 * MICROUNIT,
+			ideal: 200_000 * MICROUNIT,
+			max: 500_000 * MICROUNIT,
+		},
+		annual: Range {
+			min: Perbill::from_percent(4),
+			ideal: Perbill::from_percent(5),
+			max: Perbill::from_percent(5),
+		},
+		// 8766 rounds (hours) in a year
+		round: Range {
+			min: Perbill::from_parts(Perbill::from_percent(4).deconstruct() / 8766),
+			ideal: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
+			max: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
+		},
+	}
+}
+
 fn testnet_genesis(
 	root_key: AccountId,
-	initial_authorities: Vec<AuraId>,
+	candidates: Vec<(AccountId, AuraId, Balance)>,
+	nominations: Vec<(AccountId, AccountId, Balance)>,
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
 ) -> parachain_runtime::GenesisConfig {
@@ -137,11 +205,35 @@ fn testnet_genesis(
 			changes_trie_config: Default::default(),
 		},
 		balances: parachain_runtime::BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
 		sudo: parachain_runtime::SudoConfig { key: root_key },
 		parachain_info: parachain_runtime::ParachainInfoConfig { parachain_id: id },
-		aura: parachain_runtime::AuraConfig { authorities: initial_authorities },
+		parachain_staking: parachain_runtime::ParachainStakingConfig {
+			candidates: candidates
+				.iter()
+				.cloned()
+				.map(|(account, _, bond)| (account, bond))
+				.collect(),
+			nominations,
+			inflation_config: dkg_inflation_config(),
+		},
+		session: parachain_runtime::SessionConfig {
+			keys: candidates
+				.iter()
+				.cloned()
+				.map(|(acc, aura, _)| {
+					(
+						acc.clone(),            // account id
+						acc.clone(),            // validator id
+						dkg_session_keys(aura), // session keys
+					)
+				})
+				.collect(),
+		},
+		aura: parachain_runtime::AuraConfig {
+			authorities: candidates.iter().cloned().map(|(_, aura, _)| aura.clone()).collect(),
+		},
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
 	}

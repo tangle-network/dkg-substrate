@@ -5,14 +5,17 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
-
-use node_template_runtime::{opaque::Block, AccountId, Balance, Index};
-pub use sc_rpc_api::DenyUnsafe;
+use node_template_runtime::{opaque::Block, AccountId, Balance, Index as Nonce};
+use sc_client_api::AuxStore;
+pub use sc_rpc::{DenyUnsafe, SubscriptionTaskExecutor};
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
+use std::sync::Arc;
+
+/// A type representing all RPC extensions.
+pub type RpcExtension = jsonrpc_core::IoHandler<sc_rpc::Metadata>;
 
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
@@ -25,15 +28,19 @@ pub struct FullDeps<C, P> {
 }
 
 /// Instantiate all full RPC extensions.
-pub fn create_full<C, P>(deps: FullDeps<C, P>) -> jsonrpc_core::IoHandler<sc_rpc::Metadata>
+pub fn create_full<C, P>(deps: FullDeps<C, P>) -> RpcExtension
 where
-	C: ProvideRuntimeApi<Block>,
-	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
-	C: Send + Sync + 'static,
-	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
+	C: ProvideRuntimeApi<Block>
+		+ HeaderBackend<Block>
+		+ AuxStore
+		+ HeaderMetadata<Block, Error = BlockChainError>
+		+ Send
+		+ Sync
+		+ 'static,
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
+	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
 	C::Api: BlockBuilder<Block>,
-	P: TransactionPool + 'static,
+	P: TransactionPool + Sync + Send + 'static,
 {
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApi};
 	use substrate_frame_rpc_system::{FullSystem, SystemApi};
