@@ -19,7 +19,7 @@ use crate as stake;
 use crate::{pallet, AwardedPts, Config, InflationInfo, Points, Range};
 use frame_support::{
 	construct_runtime, parameter_types,
-	traits::{Everything, FindAuthor, GenesisBuild, OnFinalize, OnInitialize},
+	traits::{Everything, GenesisBuild, OnFinalize, OnInitialize},
 	weights::Weight,
 };
 use sp_core::H256;
@@ -156,7 +156,11 @@ impl pallet_session::SessionHandler<u64> for TestSessionHandler {
 
 	fn on_before_session_ending() {}
 
-	fn on_disabled(_: u32) {}
+	fn on_disabled(_: usize) {}
+}
+
+parameter_types! {
+	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
 
 impl pallet_session::Config for Test {
@@ -170,6 +174,7 @@ impl pallet_session::Config for Test {
 	// we don't have stash and controller, thus we don't need the convert as well.
 	type ValidatorIdOf = crate::IdentityCollator;
 	type WeightInfo = ();
+	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 parameter_types! {
