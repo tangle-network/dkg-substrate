@@ -30,13 +30,16 @@ pub use frame_support::{
 	},
 	StorageValue,
 };
-use frame_system::limits::{BlockLength, BlockWeights};
+use frame_system::{
+	limits::{BlockLength, BlockWeights},
+	EnsureRoot,
+};
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-pub use sp_runtime::{MultiAddress, Perbill, Permill};
+pub use sp_runtime::{MultiAddress, Perbill, Percent, Permill};
 
 // XCM Imports
 use pallet_xcm::XcmPassthrough;
@@ -46,8 +49,7 @@ use xcm_builder::{
 	AccountId32Aliases, AllowTopLevelPaidExecutionFrom, AllowUnpaidExecutionFrom, CurrencyAdapter,
 	EnsureXcmOrigin, FixedWeightBounds, IsConcrete, LocationInverter, NativeAsset, ParentIsDefault,
 	RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
-	SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit,
-	UsingComponents,
+	SignedAccountId32AsNative, SovereignSignedViaLocation, TakeWeightCredit, UsingComponents,
 };
 use xcm_executor::{Config, XcmExecutor};
 
@@ -98,12 +100,6 @@ pub type Executive = frame_executive::Executive<
 	Runtime,
 	AllPallets,
 >;
-
-impl_opaque_keys! {
-	pub struct SessionKeys {
-		pub aura: Aura,
-	}
-}
 
 /// This runtime version.
 #[sp_version::runtime_version]
@@ -180,6 +176,12 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 }
 
+impl_opaque_keys! {
+	pub struct SessionKeys {
+		pub aura: Aura,
+	}
+}
+
 // Configure FRAME pallets to include in runtime.
 
 impl frame_system::Config for Runtime {
@@ -249,6 +251,7 @@ parameter_types! {
 	pub const TransactionByteFee: u128 = 1 * MICROUNIT;
 	pub const MaxLocks: u32 = 50;
 	pub const MaxReserves: u32 = 50;
+	pub const OperationalFeeMultiplier: u8 = 5;
 }
 
 impl pallet_balances::Config for Runtime {
@@ -270,6 +273,7 @@ impl pallet_transaction_payment::Config for Runtime {
 	type TransactionByteFee = TransactionByteFee;
 	type WeightToFee = IdentityFee<Balance>;
 	type FeeMultiplierUpdate = ();
+	type OperationalFeeMultiplier = OperationalFeeMultiplier;
 }
 
 impl pallet_randomness_collective_flip::Config for Runtime {}
@@ -358,6 +362,7 @@ parameter_types! {
 	pub UnitWeightCost: Weight = 1_000_000;
 	// One UNIT buys 1 second of weight.
 	pub const WeightPrice: (MultiLocation, u128) = (MultiLocation::parent(), UNIT);
+	pub const MaxInstructions: u32 = 100;
 }
 
 match_type! {
@@ -378,6 +383,8 @@ pub struct XcmConfig;
 impl Config for XcmConfig {
 	type Call = Call;
 	type XcmSender = XcmRouter;
+	type AssetClaims = PolkadotXcm;
+	type AssetTrap = PolkadotXcm;
 	// How to withdraw and deposit an asset.
 	type AssetTransactor = LocalAssetTransactor;
 	type OriginConverter = XcmOriginToTransactDispatchOrigin;
@@ -385,7 +392,7 @@ impl Config for XcmConfig {
 	type IsTeleporter = (); // Teleporting is disabled.
 	type LocationInverter = LocationInverter<Ancestry>;
 	type Barrier = Barrier;
-	type Weigher = FixedWeightBounds<UnitWeightCost, Call>;
+	type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
 	type Trader = UsingComponents<IdentityFee<Balance>, RelayLocation, AccountId, Balances, ()>;
 	type ResponseHandler = (); // Don't handle responses for now.
 	type SubscriptionService = PolkadotXcm;
@@ -405,15 +412,20 @@ pub type XcmRouter = (
 
 impl pallet_xcm::Config for Runtime {
 	type Event = Event;
+	type Call = Call;
+	type Origin = Origin;
 	type SendXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
 	type XcmRouter = XcmRouter;
 	type ExecuteXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
 	type XcmExecuteFilter = Everything;
 	type XcmExecutor = XcmExecutor<XcmConfig>;
 	type XcmTeleportFilter = Everything;
-	type XcmReserveTransferFilter = ();
-	type Weigher = FixedWeightBounds<UnitWeightCost, Call>;
+	type XcmReserveTransferFilter = Everything;
+	type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
 	type LocationInverter = LocationInverter<Ancestry>;
+	type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
+
+	const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
 }
 
 impl cumulus_pallet_xcm::Config for Runtime {
@@ -434,14 +446,100 @@ impl cumulus_pallet_dmp_queue::Config for Runtime {
 	type ExecuteOverweightOrigin = frame_system::EnsureRoot<AccountId>;
 }
 
+parameter_types! {
+	pub const MaxAuthorities: u32 = 1_000;
+}
+
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
+	type MaxAuthorities = MaxAuthorities;
 }
 
 /// Configure the pallet template in pallets/template.
 impl template::Config for Runtime {
 	type Event = Event;
+}
+
+parameter_types! {
+	pub const UncleGenerations: u32 = 0;
+}
+
+impl pallet_authorship::Config for Runtime {
+	type EventHandler = (ParachainStaking,);
+	type FilterUncle = ();
+	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
+	type UncleGenerations = UncleGenerations;
+}
+
+parameter_types! {
+	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
+}
+
+impl pallet_session::Config for Runtime {
+	type Event = Event;
+	type Keys = SessionKeys;
+	type NextSessionRotation = ParachainStaking;
+	// Essentially just Aura, but lets be pedantic.
+	type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
+	type SessionManager = ParachainStaking;
+	type ShouldEndSession = ParachainStaking;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	// we don't have stash and controller, thus we don't need the convert as well.
+	type ValidatorIdOf = parachain_staking::IdentityCollator;
+	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
+}
+
+parameter_types! {
+	pub const  BlocksPerRound: u32 = 6 * HOURS;
+	pub const  MinBlocksPerRound: u32 = 10;
+	/// Collator candidate exits are delayed by 2 rounds
+	pub const LeaveCandidatesDelay: u32 = 2;
+	/// Nominator exits are delayed by 2 rounds
+	pub const LeaveNominatorsDelay: u32 = 2;
+	/// Nomination revocations are delayed by 2 rounds
+	pub const RevokeNominationDelay: u32 = 2;
+	/// Reward payments are delayed by 2 rounds
+	pub const RewardPaymentDelay: u32 = 2;
+	/// Minimum 8 collators selected per round, default at genesis and minimum forever after
+	pub const MinSelectedCandidates: u32 = 2;
+	/// Maximum 100 nominators per collator
+	pub const MaxNominatorsPerCollator: u32 = 100;
+	/// Maximum 100 collators per nominator
+	pub const MaxCollatorsPerNominator: u32 = 100;
+	/// Default fixed percent a collator takes off the top of due rewards is 20%
+	pub const DefaultCollatorCommission: Perbill = Perbill::from_percent(20);
+	/// Default percent of inflation set aside for parachain bond every round
+	pub const DefaultParachainBondReservePercent: Percent = Percent::from_percent(30);
+	/// Minimum stake required to become a collator
+	pub const MinCollatorStk: u128 = 2 * MILLIUNIT;
+	/// Minimum stake required to be reserved to be a candidate
+	pub const MinCollatorCandidateStk: u128 = MILLIUNIT / 10;
+	/// Minimum stake required to be reserved to be a nominator is 5
+	pub const MinNominatorStk: u128 = MICROUNIT;
+}
+
+impl parachain_staking::Config for Runtime {
+	type BlocksPerRound = BlocksPerRound;
+	type Currency = Balances;
+	type DefaultCollatorCommission = DefaultCollatorCommission;
+	type DefaultParachainBondReservePercent = DefaultParachainBondReservePercent;
+	type Event = Event;
+	type LeaveCandidatesDelay = LeaveCandidatesDelay;
+	type LeaveNominatorsDelay = LeaveNominatorsDelay;
+	type MaxCollatorsPerNominator = MaxCollatorsPerNominator;
+	type MaxNominatorsPerCollator = MaxNominatorsPerCollator;
+	type MinBlocksPerRound = MinBlocksPerRound;
+	type MinCollatorCandidateStk = MinCollatorCandidateStk;
+	type MinCollatorStk = MinCollatorStk;
+	type MinNomination = MinNominatorStk;
+	type MinNominatorStk = MinNominatorStk;
+	type MinSelectedCandidates = MinSelectedCandidates;
+	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
+	type RevokeNominationDelay = RevokeNominationDelay;
+	type RewardPaymentDelay = RewardPaymentDelay;
+	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -463,8 +561,12 @@ construct_runtime!(
 
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 30,
 
-		Aura: pallet_aura::{Pallet, Config<T>},
-		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config},
+		// Collator support. the order of these 4 are important and shall not change.
+		Authorship: pallet_authorship::{Pallet, Call, Storage} = 31,
+		ParachainStaking: parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>} = 32,
+		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
+		Aura: pallet_aura::{Pallet, Config<T>} = 34,
+		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
@@ -494,7 +596,7 @@ impl_runtime_apis! {
 
 	impl sp_api::Metadata<Block> for Runtime {
 		fn metadata() -> OpaqueMetadata {
-			Runtime::metadata().into()
+			OpaqueMetadata::new(Runtime::metadata().into())
 		}
 	}
 
@@ -555,7 +657,7 @@ impl_runtime_apis! {
 		}
 
 		fn authorities() -> Vec<AuraId> {
-			Aura::authorities()
+			Aura::authorities().into_inner()
 		}
 	}
 
