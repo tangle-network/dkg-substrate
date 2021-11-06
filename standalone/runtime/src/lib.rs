@@ -428,6 +428,20 @@ impl_runtime_apis! {
 		}
 	}
 
+	impl dkg_runtime::DkgApi<Block, dkg_runtime::crypto::AuthorityId> for Runtime {
+		fn authority_set() -> dkg_runtime::AuthoritySet<dkg_runtime::crypto::AuthorityId> {
+			Grandpa::grandpa_authorities().iter().map(|auth| {
+				auth
+			});
+
+			dkg_runtime::AuthoritySet::empty()
+		}
+
+		fn signature_threshold() -> u16 {
+			2
+		}
+	}
+
 	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
 		fn account_nonce(account: AccountId) -> Index {
 			System::account_nonce(account)

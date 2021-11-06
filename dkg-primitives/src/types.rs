@@ -11,14 +11,14 @@ pub type SignerSetId = u64;
 /// A message wrapper intended to be passed between the nodes
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGMessage<Public, Key> {
+pub struct DKGMessage<AuthorityId, Key> {
 	/// Node authority id
-	pub id: Public,
+	pub id: AuthorityId,
 	/// DKG message contents
 	pub payload: DKGMsgPayload<Key>,
 }
 
-impl<P, K> fmt::Display for DKGMessage<P, K> {
+impl<ID, K> fmt::Display for DKGMessage<ID, K> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let label = match self.payload {
 			DKGMsgPayload::Keygen(_) => "Keygen",

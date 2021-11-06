@@ -7,5 +7,6 @@ members = [
 	'pallets/*',
 	'runtime',
 	'standalone/*',
-	'dkg-primitives'
+	'dkg-primitives',
+	'dkg-runtime',
 ]
