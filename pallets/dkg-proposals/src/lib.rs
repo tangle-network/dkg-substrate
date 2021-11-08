@@ -57,22 +57,19 @@ use frame_system::{self as system, ensure_root};
 pub use pallet::*;
 use primitives::ProposalHandlerTrait;
 use scale_info::TypeInfo;
-use sp_runtime::{
-	traits::{AccountIdConversion, Dispatchable},
-	RuntimeDebug,
-};
+use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
 use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use std::marker::PhantomData;
+
 	use super::*;
 	use crate::types::{
 		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
 	};
 	use frame_support::{
-		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
-		pallet_prelude::*,
-		PalletId,
+		dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::GenesisBuild, PalletId,
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AtLeast32Bit;
@@ -109,6 +106,9 @@ pub mod pallet {
 		type DKGAccountId: Get<PalletId>;
 
 		type ProposalHandler: ProposalHandlerTrait<Self::Proposal>;
+
+		/// List of active collators
+		type Collators: Get<Vec<Self::AccountId>>;
 	}
 
 	/// The parameter maintainer who can change the parameters
@@ -237,6 +237,32 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config>(PhantomData<T>);
+
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self(Default::default())
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			let collators = T::Collators::get();
+			let num_collators = collators.len();
+
+			if num_collators != 0 {
+				for collator in &collators {
+					Proposers::<T>::insert(collator, true)
+				}
+
+				ProposerCount::<T>::put(num_collators as u32);
+			}
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {

@@ -1,13 +1,18 @@
 #![cfg(test)]
 
+use std::default;
+
 use super::*;
 
-use frame_support::{assert_ok, ord_parameter_types, parameter_types, PalletId};
+use frame_support::{
+	assert_ok, ord_parameter_types, parameter_types, traits::GenesisBuild, PalletId,
+};
 use frame_system::{self as system};
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
 	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
+	Perbill, Percent,
 };
 
 use crate::{self as pallet_dkg_proposals, Config};
@@ -25,7 +30,8 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>, Config<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -82,6 +88,45 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
+	pub const MinBlocksPerRound: u32 = 3;
+	pub const BlocksPerRound: u32 = 5;
+	pub const LeaveCandidatesDelay: u32 = 2;
+	pub const LeaveNominatorsDelay: u32 = 2;
+	pub const RevokeNominationDelay: u32 = 2;
+	pub const RewardPaymentDelay: u32 = 2;
+	pub const MinSelectedCandidates: u32 = 2;
+	pub const MaxNominatorsPerCollator: u32 = 4;
+	pub const MaxCollatorsPerNominator: u32 = 4;
+	pub const DefaultCollatorCommission: Perbill = Perbill::from_percent(20);
+	pub const DefaultParachainBondReservePercent: Percent = Percent::from_percent(30);
+	pub const MinCollatorStk: u64 = 10;
+	pub const MinNominatorStk: u64 = 5;
+	pub const MinNomination: u64 = 3;
+}
+
+impl pallet_parachain_staking::Config for Test {
+	type BlocksPerRound = BlocksPerRound;
+	type Currency = Balances;
+	type DefaultCollatorCommission = DefaultCollatorCommission;
+	type DefaultParachainBondReservePercent = DefaultParachainBondReservePercent;
+	type Event = Event;
+	type LeaveCandidatesDelay = LeaveCandidatesDelay;
+	type LeaveNominatorsDelay = LeaveNominatorsDelay;
+	type MaxCollatorsPerNominator = MaxCollatorsPerNominator;
+	type MaxNominatorsPerCollator = MaxNominatorsPerCollator;
+	type MinBlocksPerRound = MinBlocksPerRound;
+	type MinCollatorCandidateStk = MinCollatorStk;
+	type MinCollatorStk = MinCollatorStk;
+	type MinNomination = MinNomination;
+	type MinNominatorStk = MinNominatorStk;
+	type MinSelectedCandidates = MinSelectedCandidates;
+	type MonetaryGovernanceOrigin = frame_system::EnsureRoot<u64>;
+	type RevokeNominationDelay = RevokeNominationDelay;
+	type RewardPaymentDelay = RewardPaymentDelay;
+	type WeightInfo = ();
+}
+
+parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
@@ -101,24 +146,68 @@ impl Config for Test {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type Collators = ParachainStaking;
 }
 
 // pub const BRIDGE_ID: u64 =
 pub const PROPOSER_A: u64 = 0x2;
 pub const PROPOSER_B: u64 = 0x3;
 pub const PROPOSER_C: u64 = 0x4;
+
+pub const COLLATOR_A: u64 = 0x5;
+pub const COLLATOR_B: u64 = 0x6;
+
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
-pub fn new_test_ext() -> sp_io::TestExternalities {
-	let dkg_id = PalletId(*b"dw/dkgac").into_account();
-	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
+pub struct ExtBuilder;
+
+impl Default for ExtBuilder {
+	fn default() -> Self {
+		Self {}
+	}
+}
+
+impl ExtBuilder {
+	pub fn with_initial_collators() -> sp_io::TestExternalities {
+		let dkg_id = PalletId(*b"dw/dkgac").into_account();
+		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+		pallet_balances::GenesisConfig::<Test> {
+			balances: vec![(dkg_id, ENDOWED_BALANCE), (COLLATOR_A, 500), (COLLATOR_B, 500)],
+		}
 		.assimilate_storage(&mut t)
 		.unwrap();
-	let mut ext = sp_io::TestExternalities::new(t);
-	ext.execute_with(|| System::set_block_number(1));
-	ext
+
+		pallet_parachain_staking::GenesisConfig::<Test> {
+			candidates: vec![(COLLATOR_A, 100), (COLLATOR_B, 150)],
+			nominations: vec![],
+			inflation_config: Default::default(),
+		}
+		.assimilate_storage(&mut t)
+		.unwrap();
+
+		pallet::GenesisConfig::<Test>::default().assimilate_storage(&mut t).unwrap();
+
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| System::set_block_number(1));
+		ext
+	}
+
+	pub fn build() -> sp_io::TestExternalities {
+		let dkg_id = PalletId(*b"dw/dkgac").into_account();
+		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+		pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
+			.assimilate_storage(&mut t)
+			.unwrap();
+
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| System::set_block_number(1));
+		ext
+	}
+}
+
+pub fn new_test_ext() -> sp_io::TestExternalities {
+	ExtBuilder::build()
 }
 
 pub fn new_test_ext_initialized(

@@ -10,7 +10,7 @@ use super::{
 	},
 	*,
 };
-use crate::mock::new_test_ext_initialized;
+use crate::mock::{new_test_ext_initialized, ExtBuilder, COLLATOR_A, COLLATOR_B};
 use frame_support::{assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
@@ -325,6 +325,7 @@ fn create_unsucessful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
+
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![PROPOSER_A],
@@ -515,5 +516,13 @@ fn proposal_expires() {
 			deposit_nonce: prop_id,
 			who: PROPOSER_A,
 		})]);
+	})
+}
+
+#[test]
+fn should_initialize_proposer_set_to_active_collators() {
+	ExtBuilder::with_initial_collators().execute_with(|| {
+		assert!(DKGProposals::proposers(COLLATOR_A));
+		assert!(DKGProposals::proposers(COLLATOR_B));
 	})
 }

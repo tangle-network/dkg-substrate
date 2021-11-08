@@ -22,6 +22,8 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 # Local Dependencies
 template = { package = 'pallet-template', path = '../pallets/template', default-features = false }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
+dkg-proposals = { package = 'pallet-dkg-proposals', path = '../pallets/dkg-proposals', default-features = false }
+dkg-proposal-handler = { package = 'pallet-dkg-proposal-handler', path = '../pallets/dkg-proposal-handler', default-features = false }
 
 # Substrate Dependencies
 ## Substrate Primitive Dependencies

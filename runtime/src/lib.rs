@@ -542,6 +542,29 @@ impl parachain_staking::Config for Runtime {
 	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
 }
 
+impl dkg_proposal_handler::Config for Runtime {
+	type Event = Event;
+	type Proposal = Vec<u8>;
+}
+
+parameter_types! {
+	pub const ChainIdentifier: u32 = 5;
+	pub const ProposalLifetime: BlockNumber = HOURS;
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+}
+
+impl dkg_proposals::Config for Runtime {
+	type AdminOrigin = frame_system::EnsureRoot<AccountId>;
+	type DKGAccountId = DKGAccountId;
+	type ChainId = u32;
+	type ChainIdentifier = ChainIdentifier;
+	type Event = Event;
+	type Proposal = Vec<u8>;
+	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
+	type Collators = ParachainStaking;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -573,6 +596,10 @@ construct_runtime!(
 		PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin} = 51,
 		CumulusXcm: cumulus_pallet_xcm::{Pallet, Call, Event<T>, Origin} = 52,
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 53,
+
+		//DKG
+		DKGProposalHandler: dkg_proposal_handler::{Pallet, Call, EventT>},
+		DKGProposals: dkg_proposals::{Pallet, Call, Storage, Event<T>, Config<T>}
 
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
