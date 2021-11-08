@@ -598,8 +598,8 @@ construct_runtime!(
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 53,
 
 		// DKG
-		DKGProposalHandler: dkg_proposal_handler::{Pallet, Call, EventT>},
-		DKGProposals: dkg_proposals::{Pallet, Call, Storage, Event<T>, Config<T>}
+		DKGProposalHandler: dkg_proposal_handler::{Pallet, Call, Event<T>},
+		DKGProposals: dkg_proposals::{Pallet, Call, Storage, Event<T>, Config<T>},
 
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},

@@ -62,15 +62,13 @@ use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use std::marker::PhantomData;
+	use sp_std::marker::PhantomData;
 
 	use super::*;
 	use crate::types::{
 		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
 	};
-	use frame_support::{
-		dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::GenesisBuild, PalletId,
-	};
+	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AtLeast32Bit;
 
