@@ -28,7 +28,7 @@ pub use frame_support::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		DispatchClass, IdentityFee, Weight,
 	},
-	StorageValue,
+	PalletId, StorageValue,
 };
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
@@ -549,7 +549,7 @@ impl dkg_proposal_handler::Config for Runtime {
 
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
-	pub const ProposalLifetime: BlockNumber = HOURS;
+	pub const ProposalLifetime: BlockNumber = HOURS / 4;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
 
@@ -597,7 +597,7 @@ construct_runtime!(
 		CumulusXcm: cumulus_pallet_xcm::{Pallet, Call, Event<T>, Origin} = 52,
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 53,
 
-		//DKG
+		// DKG
 		DKGProposalHandler: dkg_proposal_handler::{Pallet, Call, EventT>},
 		DKGProposals: dkg_proposals::{Pallet, Call, Storage, Event<T>, Config<T>}
 
