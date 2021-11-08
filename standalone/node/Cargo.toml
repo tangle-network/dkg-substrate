@@ -52,6 +52,9 @@ pallet-transaction-payment-rpc = { git = 'https://github.com/paritytech/substrat
 frame-benchmarking = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 frame-benchmarking-cli = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 
+# Local dependencies
+dkg-gadget = { path = "../../dkg-gadget", default-features = false }
+
 node-template-runtime = { version = "3.0.0", path = "../runtime" }
 
 [build-dependencies]

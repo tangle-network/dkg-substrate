@@ -226,7 +226,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		rpc_extensions_builder,
 		on_demand: None,
 		remote_blockchain: None,
-		backend,
+		backend: backend.clone(),
 		system_rpc_tx,
 		config,
 		telemetry: telemetry.as_mut(),
@@ -286,6 +286,21 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	// need a keystore, regardless of which protocol we use below.
 	let keystore =
 		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
+
+	let beefy_params = dkg_gadget::BeefyParams {
+		client,
+		backend,
+		key_store: keystore.clone(),
+		network: network.clone(),
+		min_block_delta: 4,
+		prometheus_registry: prometheus_registry.clone(),
+		block: None,
+	};
+
+	// Start the DKG gadget.
+	task_manager
+		.spawn_essential_handle()
+		.spawn_blocking("dkg-gadget", dkg_gadget::start_beefy_gadget::<_, _, _, _>(beefy_params));
 
 	let grandpa_config = sc_finality_grandpa::Config {
 		// FIXME #1578 make this available through chainspec
