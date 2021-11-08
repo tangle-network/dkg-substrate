@@ -131,12 +131,12 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 					(
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
-						10 * MICROUNIT,
+						10 * MILLIUNIT,
 					),
 					(
 						get_account_id_from_seed::<sr25519::Public>("Bob"),
 						get_collator_keys_from_seed("Bob"),
-						10 * MICROUNIT,
+						10 * MILLIUNIT,
 					),
 				],
 				// Nominations
