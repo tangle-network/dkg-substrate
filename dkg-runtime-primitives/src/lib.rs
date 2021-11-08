@@ -13,7 +13,7 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-// Key type for
+// Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"webb");
 
 pub mod crypto {

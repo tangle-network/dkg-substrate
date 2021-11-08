@@ -8,5 +8,5 @@ members = [
 	'runtime',
 	'standalone/*',
 	'dkg-primitives',
-	'dkg-runtime',
+	'dkg-runtime-primitives',
 ]

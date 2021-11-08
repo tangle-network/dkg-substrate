@@ -1875,7 +1875,7 @@ dependencies = [
  "bincode",
  "curv-kzen",
  "dkg-primitives",
- "dkg-runtime",
+ "dkg-runtime-primitives",
  "fnv",
  "futures 0.3.17",
  "hex",
@@ -1928,7 +1928,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkg-runtime"
+name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
  "parity-scale-codec",
@@ -4723,7 +4723,7 @@ dependencies = [
 name = "node-template-runtime"
 version = "3.0.0"
 dependencies = [
- "dkg-runtime",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",
@@ -5161,6 +5161,22 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "pallet-dkg-metadata"
+version = "0.1.0"
+dependencies = [
+ "dkg-runtime-primitives",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

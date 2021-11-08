@@ -420,7 +420,7 @@ where
 			// 	.backend
 			// 	.append_justification(
 			// 		BlockId::Number(round_key.1),
-			// 		(BEEFY_ENGINE_ID, VersionedCommitment::V1(signed_commitment.clone()).encode()),
+			// 		(DKG_ENGINE_ID, VersionedCommitment::V1(signed_commitment.clone()).encode()),
 			// 	)
 			// 	.is_err()
 			// {
