@@ -129,5 +129,7 @@ std = [
 	'template/std',
 	'pallet-authorship/std',
 	'pallet-session/std',
-	'parachain-staking/std'
+	'parachain-staking/std',
+	'dkg-proposal-handler/std',
+	'dkg-proposals/std'
 ]
