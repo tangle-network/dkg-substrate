@@ -21,6 +21,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 // A few exports that help ease life for downstream crates.
+pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 pub use frame_support::{
 	construct_runtime, match_type, parameter_types,
 	traits::{Everything, IsInVec, Randomness},
@@ -544,7 +545,7 @@ impl parachain_staking::Config for Runtime {
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
-	type DKGId = dkg_runtime_primitives::crypto::AuthorityId;
+	type DKGId = DKGId;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 }
 
