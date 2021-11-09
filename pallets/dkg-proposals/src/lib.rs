@@ -49,6 +49,7 @@ pub mod types;
 pub mod utils;
 use crate::types::{DepositNonce, ProposalStatus, ProposalVotes, ResourceId};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
+use dkg_primitives::traits::OnAuthoritySetChangeHandler;
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, Get},
@@ -196,6 +197,8 @@ pub mod pallet {
 		ProposalSucceeded { chain_id: T::ChainId, deposit_nonce: DepositNonce },
 		/// Execution of call failed
 		ProposalFailed { chain_id: T::ChainId, deposit_nonce: DepositNonce },
+		/// Proposers have been reset
+		ProposersReset { proposers: Vec<T::AccountId> },
 	}
 
 	// Errors inform users that something went wrong.
@@ -644,5 +647,21 @@ impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	#[cfg(feature = "runtime-benchmarks")]
 	fn successful_origin() -> T::Origin {
 		T::Origin::from(frame_system::RawOrigin::Signed(T::DKGAccountId::get().into_account()))
+	}
+}
+
+impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySetId, T::AccountId>
+	for Pallet<T>
+{
+	fn on_authority_set_changed(
+		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
+		authorities: Vec<T::AccountId>,
+	) -> () {
+		Proposers::<T>::remove_all(Some(Self::proposer_count()));
+		for authority in &authorities {
+			Proposers::<T>::insert(authority, true);
+		}
+		ProposerCount::<T>::put(authorities.len() as u32);
+		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities });
 	}
 }

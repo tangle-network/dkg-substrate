@@ -4,28 +4,44 @@ version = "0.0.1"
 edition = "2018"
 
 [dependencies]
-fnv = "1.0.6"
-futures = "0.3"
-log = "0.4"
-parking_lot = "0.11"
-thiserror = "1.0"
-wasm-timer = "0.2.5"
-libsecp256k1 = "0.3.5"
-sha3 = "0.9"
-hex = "0.4"
+fnv = { version = "1.0.6", optional = true }
+futures = { version = "0.3",  optional = true }
+log = { version = "0.4.14", optional = true }
+parking_lot = {version = "0.11", optional = true }
+thiserror = {version = "1.0", optional = true }
+wasm-timer = { version = "0.2.5", optional = true}
+libsecp256k1 = { version = "0.3.5", optional = true }
+sha3 = { version = "0.9", optional = true  }
+hex = { version = "0.4", optional = true }
 
-codec = { version = "2.0.0", package = "parity-scale-codec", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-bincode = "1.2.1"
+codec = { version = "2.0.0", package = "parity-scale-codec", default-features = false, features = ["derive"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
+bincode = { version = "1.2.1", optional = true }
 
-curv = { package = "curv-kzen", version = "0.7", default-features = false }
-round-based = { version = "0.1.4", features = [] }
-multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
+curv = { package = "curv-kzen", version = "0.7", optional = true }
+round-based = { version = "0.1.4", features = [], optional = true  }
+multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git", optional = true  }
 
 sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+
 
 [features]
 default = ['std']
 std = [
 	'sp-runtime/std',
+	"serde",
+	"codec/std",
+	"log",
+	"futures",
+	"libsecp256k1",
+	"fnv",
+	"sha3",
+	"hex",
+	"curv",
+	"multi-party-ecdsa",
+	"round-based",
+	"bincode",
+	"wasm-timer",
+	"thiserror",
+	"parking_lot"
 ]

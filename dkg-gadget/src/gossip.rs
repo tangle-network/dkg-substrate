@@ -27,7 +27,7 @@ use wasm_timer::Instant;
 
 use crate::types::webb_topic;
 use dkg_primitives::types::DKGMessage;
-use dkg_runtime::{crypto::Public, MmrRootHash};
+use dkg_runtime_primitives::{crypto::Public, MmrRootHash};
 
 // Limit BEEFY gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;

@@ -179,7 +179,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
-		pub dkg: DKG,
+		pub dkg: Dkg,
 	}
 }
 
@@ -545,7 +545,29 @@ impl parachain_staking::Config for Runtime {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = dkg_runtime_primitives::crypto::AuthorityId;
-	type OnAuthoritySetChangeHandler = ();
+	type OnAuthoritySetChangeHandler = DKGProposals;
+}
+
+parameter_types! {
+	pub const ChainIdentifier: u32 = 5;
+	pub const ProposalLifetime: u64 = HOURS / 5;
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+}
+
+impl pallet_dkg_proposal_handler::Config for Runtime {
+	type Event = Event;
+	type Proposal = Vec<u8>;
+}
+
+impl pallet_dkg_proposals::Config for Runtime {
+	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+	type DKGAccountId = DKGAccountId;
+	type ChainId = u32;
+	type ChainIdentifier = ChainIdentifier;
+	type Event = Event;
+	type Proposal = Vec<u8>;
+	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -573,7 +595,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Config} = 36,
+		Dkg: pallet_dkg_metadata::{Pallet, Storage, Config} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
@@ -583,6 +605,8 @@ construct_runtime!(
 
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>}
 	}
 );
 

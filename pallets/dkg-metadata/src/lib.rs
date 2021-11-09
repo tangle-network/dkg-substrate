@@ -154,7 +154,7 @@ impl<T: Config> Pallet<T> {
 			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 				dkg_runtime_primitives::AuthoritySetId,
 				T::DKGId,
-			>>::on_authority_set_change(next_id, new.clone());
+			>>::on_authority_set_changed(next_id, new.clone());
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
@@ -179,7 +179,7 @@ impl<T: Config> Pallet<T> {
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_change(0, authorities.to_vec());
+		>>::on_authority_set_changed(0, authorities.to_vec());
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
 	}

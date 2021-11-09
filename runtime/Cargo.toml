@@ -16,7 +16,7 @@ substrate-wasm-builder = { git = "https://github.com/paritytech/substrate", bran
 [dependencies]
 codec = { package = 'parity-scale-codec', version = '2.0.0', default-features = false, features = ['derive']}
 log = { version = "0.4.14", default-features = false }
-serde = { version = '1.0.119', optional = true, features = ['derive'] }
+serde = { version = '1.0.119', optional = true,  features = ['derive'] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
 # Local Dependencies
@@ -24,6 +24,8 @@ template = { package = 'pallet-template', path = '../pallets/template', default-
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
+pallet-dkg-proposals = { path = '../pallets/dkg-proposals', default-features = false }
+pallet-dkg-proposal-handler = { path = '../pallets/dkg-proposal-handler', default-features = false }
 
 # Substrate Dependencies
 ## Substrate Primitive Dependencies
@@ -131,5 +133,7 @@ std = [
 	'pallet-session/std',
 	'parachain-staking/std',
 	'pallet-dkg-metadata/std',
-	'dkg-runtime-primitives/std'
+	'dkg-runtime-primitives/std',
+	'pallet-dkg-proposals/std',
+	'pallet-dkg-proposal-handler/std'
 ]

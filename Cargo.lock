@@ -5204,6 +5204,8 @@ dependencies = [
 name = "pallet-dkg-proposals"
 version = "1.0.0"
 dependencies = [
+ "dkg-primitives",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -5837,6 +5839,8 @@ dependencies = [
  "pallet-authorship",
  "pallet-balances",
  "pallet-dkg-metadata",
+ "pallet-dkg-proposal-handler",
+ "pallet-dkg-proposals",
  "pallet-parachain-staking",
  "pallet-randomness-collective-flip",
  "pallet-session",

@@ -27,7 +27,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block;
 
-use dkg_runtime::{crypto::AuthorityId, DkgApi};
+use dkg_runtime_primitives::{crypto::AuthorityId, DkgApi};
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
