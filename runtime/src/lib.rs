@@ -654,6 +654,22 @@ impl_runtime_apis! {
 		}
 	}
 
+	impl dkg_runtime_primitives::DkgApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+			let authorities = Dkg::authorities();
+			let authority_set_id = Dkg::authority_set_id();
+
+			dkg_runtime_primitives::AuthoritySet {
+				authorities,
+				id: authority_set_id
+			}
+		}
+
+		fn signature_threshold() -> u16 {
+			Dkg::signature_threshold()
+		}
+	}
+
 	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(
 			source: TransactionSource,
