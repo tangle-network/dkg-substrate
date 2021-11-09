@@ -28,7 +28,8 @@ use sp_runtime::{
 };
 use sp_std::prelude::*;
 
-use dkg_primitives::{AuthorityIndex, AuthoritySet, ConsensusLog, DKG_ENGINE_ID};
+use dkg_primitives::{traits::OnAuthoritySetChangeHandler, DKG_ENGINE_ID};
+use dkg_runtime_primitives::{AuthorityIndex, AuthoritySet, ConsensusLog};
 
 #[cfg(test)]
 mod mock;
@@ -48,6 +49,12 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + Default + MaybeSerializeDeserialize;
+
+		/// Listener for authority set changes
+		type OnAuthoritySetChangeHandler: OnAuthoritySetChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
+			Self::DKGId,
+		>;
 	}
 
 	#[pallet::pallet]
@@ -90,7 +97,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn authority_set_id)]
 	pub(super) type AuthoritySetId<T: Config> =
-		StorageValue<_, dkg_primitives::AuthoritySetId, ValueQuery>;
+		StorageValue<_, dkg_runtime_primitives::AuthoritySetId, ValueQuery>;
 
 	/// Authorities set scheduled to be used with the next session
 	#[pallet::storage]
@@ -129,7 +136,7 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
 	pub fn authority_set() -> AuthoritySet<T::DKGId> {
-		AuthoritySet::<T::DKGId> { validators: Self::authorities(), id: Self::authority_set_id() }
+		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
 	}
 
 	pub fn sig_threshold() -> u16 {
@@ -144,10 +151,14 @@ impl<T: Config> Pallet<T> {
 
 			let next_id = Self::authority_set_id() + 1u64;
 			<AuthoritySetId<T>>::put(next_id);
+			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+				dkg_runtime_primitives::AuthoritySetId,
+				T::DKGId,
+			>>::on_authority_set_change(next_id, new.clone());
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
-				ConsensusLog::AuthoritiesChange(AuthoritySet { validators: new, id: next_id })
+				ConsensusLog::AuthoritiesChange(AuthoritySet { authorities: new, id: next_id })
 					.encode(),
 			);
 			<frame_system::Pallet<T>>::deposit_log(log);
@@ -165,6 +176,10 @@ impl<T: Config> Pallet<T> {
 
 		<Authorities<T>>::put(authorities);
 		<AuthoritySetId<T>>::put(0);
+		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		>>::on_authority_set_change(0, authorities.to_vec());
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
 	}

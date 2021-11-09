@@ -20,7 +20,8 @@
 use std::vec;
 
 use frame_support::{
-	construct_runtime, parameter_types, sp_io::TestExternalities, BasicExternalities,
+	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
+	BasicExternalities,
 };
 use sp_core::H256;
 use sp_runtime::{
@@ -33,7 +34,8 @@ use sp_runtime::{
 
 use crate as pallet_dkg_metadata;
 
-pub use dkg_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
+pub use dkg_primitives::DKG_ENGINE_ID;
+pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog};
 
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
@@ -89,6 +91,7 @@ impl frame_system::Config for Test {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type OnAuthoritySetChangeHandler = ();
 }
 
 parameter_types! {

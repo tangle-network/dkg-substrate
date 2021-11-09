@@ -20,10 +20,10 @@ pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
-	/// Identity of a BEEFY authority using ECDSA as its crypto.
+	/// Identity of a DKG authority using ECDSA as its crypto.
 	pub type AuthorityId = Public;
 
-	/// Signature for a BEEFY authority using ECDSA as its crypto.
+	/// Signature for a DKG authority using ECDSA as its crypto.
 	pub type AuthoritySignature = Signature;
 }
 

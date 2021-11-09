@@ -1923,6 +1923,7 @@ dependencies = [
  "round-based",
  "serde",
  "sha3",
+ "sp-runtime",
  "thiserror",
  "wasm-timer",
 ]
@@ -5167,16 +5168,20 @@ dependencies = [
 name = "pallet-dkg-metadata"
 version = "0.1.0"
 dependencies = [
+ "dkg-primitives",
  "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-session",
  "parity-scale-codec",
  "scale-info",
  "serde",
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-staking",
+ "sp-std",
 ]
 
 [[package]]
@@ -5820,6 +5825,7 @@ dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-timestamp",
  "cumulus-primitives-utility",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",
@@ -5830,6 +5836,7 @@ dependencies = [
  "pallet-aura",
  "pallet-authorship",
  "pallet-balances",
+ "pallet-dkg-metadata",
  "pallet-parachain-staking",
  "pallet-randomness-collective-flip",
  "pallet-session",

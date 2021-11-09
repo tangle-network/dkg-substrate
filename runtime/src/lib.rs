@@ -179,6 +179,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
+		pub dkg: DKG,
 	}
 }
 
@@ -542,6 +543,11 @@ impl parachain_staking::Config for Runtime {
 	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
 }
 
+impl pallet_dkg_metadata::Config for Runtime {
+	type DKGId = dkg_runtime_primitives::crypto::AuthorityId;
+	type OnAuthoritySetChangeHandler = ();
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -567,6 +573,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Config} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,

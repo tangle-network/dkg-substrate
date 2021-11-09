@@ -16,8 +16,8 @@
 
 use std::vec;
 
-use beefy_primitives::ValidatorSet;
 use codec::Encode;
+use dkg_runtime_primitives::AuthoritySet;
 
 use sp_core::H256;
 use sp_runtime::DigestItem;
@@ -46,7 +46,7 @@ fn genesis_session_initializes_authorities() {
 		assert_eq!(want[0], authorities[0]);
 		assert_eq!(want[1], authorities[1]);
 
-		assert!(DKGMetadata::validator_set_id() == 0);
+		assert!(DKGMetadata::authority_set_id() == 0);
 
 		let next_authorities = DKGMetadata::next_authorities();
 
@@ -61,17 +61,17 @@ fn session_change_updates_authorities() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
 		init_block(1);
 
-		assert!(0 == DKGMetadata::validator_set_id());
+		assert!(0 == DKGMetadata::authority_set_id());
 
 		// no change - no log
 		assert!(System::digest().logs.is_empty());
 
 		init_block(2);
 
-		assert!(1 == DKGMetadata::validator_set_id());
+		assert!(1 == DKGMetadata::authority_set_id());
 
-		let want = dkg_log(ConsensusLog::AuthoritiesChange(ValidatorSet {
-			validators: vec![mock_dkg_id(3), mock_dkg_id(4)],
+		let want = dkg_log(ConsensusLog::AuthoritiesChange(AuthoritySet {
+			authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
 			id: 1,
 		}));
 
@@ -105,37 +105,37 @@ fn session_change_updates_next_authorities() {
 }
 
 #[test]
-fn validator_set_at_genesis() {
+fn authority_set_at_genesis() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		let vs = DKGMetadata::validator_set();
+		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 0u64);
-		assert_eq!(vs.validators[0], want[0]);
-		assert_eq!(vs.validators[1], want[1]);
+		assert_eq!(vs.authorities[0], want[0]);
+		assert_eq!(vs.authorities[1], want[1]);
 	});
 }
 
 #[test]
-fn validator_set_updates_work() {
+fn authority_set_updates_work() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
 		init_block(1);
 
-		let vs = DKGMetadata::validator_set();
+		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 0u64);
-		assert_eq!(want[0], vs.validators[0]);
-		assert_eq!(want[1], vs.validators[1]);
+		assert_eq!(want[0], vs.authorities[0]);
+		assert_eq!(want[1], vs.authorities[1]);
 
 		init_block(2);
 
-		let vs = DKGMetadata::validator_set();
+		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 1u64);
-		assert_eq!(want[2], vs.validators[0]);
-		assert_eq!(want[3], vs.validators[1]);
+		assert_eq!(want[2], vs.authorities[0]);
+		assert_eq!(want[3], vs.authorities[1]);
 	});
 }

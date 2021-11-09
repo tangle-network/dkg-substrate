@@ -19,4 +19,6 @@ std = [
 	"scale-info/std",
 	"sp-api/std",
 	"sp-std/std",
+	"sp-core/std",
+	"sp-application-crypto/std"
 ]
