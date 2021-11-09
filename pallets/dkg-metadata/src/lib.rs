@@ -155,11 +155,11 @@ impl<T: Config> Pallet<T> {
 		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
 
+			let next_id = Self::authority_set_id() + 1u64;
 			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 				dkg_runtime_primitives::AuthoritySetId,
 				T::AccountId,
-			>>::on_authority_set_changed(0, authority_account_ids);
-			let next_id = Self::authority_set_id() + 1u64;
+			>>::on_authority_set_changed(next_id, authority_account_ids);
 			<AuthoritySetId<T>>::put(next_id);
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
