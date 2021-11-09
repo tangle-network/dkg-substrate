@@ -28,8 +28,9 @@ use sp_runtime::{
 };
 use sp_std::prelude::*;
 
-use dkg_primitives::{traits::OnAuthoritySetChangeHandler, DKG_ENGINE_ID};
-use dkg_runtime_primitives::{AuthorityIndex, AuthoritySet, ConsensusLog};
+use dkg_runtime_primitives::{
+	traits::OnAuthoritySetChangeHandler, AuthorityIndex, AuthoritySet, ConsensusLog, DKG_ENGINE_ID,
+};
 
 #[cfg(test)]
 mod mock;

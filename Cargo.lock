@@ -1923,7 +1923,6 @@ dependencies = [
  "round-based",
  "serde",
  "sha3",
- "sp-runtime",
  "thiserror",
  "wasm-timer",
 ]
@@ -5168,7 +5167,6 @@ dependencies = [
 name = "pallet-dkg-metadata"
 version = "0.1.0"
 dependencies = [
- "dkg-primitives",
  "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
@@ -5204,7 +5202,6 @@ dependencies = [
 name = "pallet-dkg-proposals"
 version = "1.0.0"
 dependencies = [
- "dkg-primitives",
  "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",

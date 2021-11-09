@@ -49,7 +49,7 @@ pub mod types;
 pub mod utils;
 use crate::types::{DepositNonce, ProposalStatus, ProposalVotes, ResourceId};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
-use dkg_primitives::traits::OnAuthoritySetChangeHandler;
+use dkg_runtime_primitives::traits::OnAuthoritySetChangeHandler;
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, Get},

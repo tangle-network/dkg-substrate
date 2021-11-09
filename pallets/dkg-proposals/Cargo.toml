@@ -15,7 +15,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 # primitives
 codec = { package = "parity-scale-codec", version = "2.3.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
-dkg-primitives = { path = "../../dkg-primitives", default-features = false }
 primitives = { path = '../../primitives', default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
@@ -48,7 +47,6 @@ std = [
 	"frame-system/std",
 	'frame-benchmarking/std',
 	"pallet-balances/std",
-	"dkg-primitives/std",
 	"dkg-runtime-primitives/std",
 ]
 runtime-benchmarks = [

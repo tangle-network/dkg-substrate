@@ -7,11 +7,16 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_std::{prelude::*, vec::Vec};
 
+pub mod traits;
+
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
+
+// Engine ID for DKG
+pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"DKG_";
 
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"webb");

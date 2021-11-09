@@ -33,9 +33,7 @@ use sp_runtime::{
 };
 
 use crate as pallet_dkg_metadata;
-
-pub use dkg_primitives::DKG_ENGINE_ID;
-pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog};
+pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
 
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
