@@ -1,3 +1,5 @@
+use sp_std::vec::Vec;
+
 pub trait OnAuthoritySetChangeHandler<AuthoritySetId, AuthorityId> {
 	fn on_authority_set_changed(
 		authority_set_id: AuthoritySetId,

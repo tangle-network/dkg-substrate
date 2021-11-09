@@ -54,7 +54,7 @@ pub mod pallet {
 		/// Listener for authority set changes
 		type OnAuthoritySetChangeHandler: OnAuthoritySetChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,
-			Self::DKGId,
+			Self::AccountId,
 		>;
 	}
 
@@ -109,6 +109,7 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
 		pub threshold: u32,
+		pub authority_ids: Vec<T::AccountId>,
 	}
 
 	#[pallet::error]
@@ -120,14 +121,14 @@ pub mod pallet {
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { authorities: Vec::new(), threshold: 0 }
+			Self { authorities: Vec::new(), threshold: 0, authority_ids: Vec::new() }
 		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			Pallet::<T>::initialize_authorities(&self.authorities);
+			Pallet::<T>::initialize_authorities(&self.authorities, &self.authority_ids);
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
 		}
@@ -144,18 +145,22 @@ impl<T: Config> Pallet<T> {
 		Self::signature_threshold()
 	}
 
-	fn change_authorities(new: Vec<T::DKGId>, queued: Vec<T::DKGId>) {
+	fn change_authorities(
+		new: Vec<T::DKGId>,
+		queued: Vec<T::DKGId>,
+		authority_account_ids: Vec<T::AccountId>,
+	) {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
 		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
 
-			let next_id = Self::authority_set_id() + 1u64;
-			<AuthoritySetId<T>>::put(next_id);
 			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 				dkg_runtime_primitives::AuthoritySetId,
-				T::DKGId,
-			>>::on_authority_set_changed(next_id, new.clone());
+				T::AccountId,
+			>>::on_authority_set_changed(0, authority_account_ids);
+			let next_id = Self::authority_set_id() + 1u64;
+			<AuthoritySetId<T>>::put(next_id);
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
@@ -168,7 +173,7 @@ impl<T: Config> Pallet<T> {
 		<NextAuthorities<T>>::put(&queued);
 	}
 
-	fn initialize_authorities(authorities: &[T::DKGId]) {
+	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
 			return
 		}
@@ -177,12 +182,12 @@ impl<T: Config> Pallet<T> {
 
 		<Authorities<T>>::put(authorities);
 		<AuthoritySetId<T>>::put(0);
-		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-			dkg_runtime_primitives::AuthoritySetId,
-			T::DKGId,
-		>>::on_authority_set_changed(0, authorities.to_vec());
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
+		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
+			T::AccountId,
+		>>::on_authority_set_changed(0, authority_account_ids.to_vec());
 	}
 }
 
@@ -197,8 +202,15 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
-		let authorities = validators.map(|(_, k)| k).collect::<Vec<_>>();
-		Self::initialize_authorities(&authorities);
+		let mut authority_account_ids = Vec::new();
+		let authorities = validators
+			.map(|(l, k)| {
+				authority_account_ids.push(l.clone());
+				k
+			})
+			.collect::<Vec<_>>();
+
+		Self::initialize_authorities(&authorities, &authority_account_ids);
 	}
 
 	fn on_new_session<'a, I: 'a>(changed: bool, validators: I, queued_validators: I)
@@ -206,10 +218,21 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
 		if changed {
-			let next_authorities = validators.map(|(_, k)| k).collect::<Vec<_>>();
+			let mut authority_account_ids = Vec::new();
+			let next_authorities = validators
+				.map(|(l, k)| {
+					authority_account_ids.push(l.clone());
+					k
+				})
+				.collect::<Vec<_>>();
+
 			let next_queued_authorities = queued_validators.map(|(_, k)| k).collect::<Vec<_>>();
 
-			Self::change_authorities(next_authorities, next_queued_authorities);
+			Self::change_authorities(
+				next_authorities.clone(),
+				next_queued_authorities,
+				authority_account_ids,
+			);
 		}
 	}
 
