@@ -40,7 +40,7 @@ use sp_runtime::{
 
 use crate::keystore::BeefyKeystore;
 
-use dkg_runtime::{
+use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	Commitment, ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID,
 };
@@ -58,7 +58,7 @@ use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::DKGMessage,
 };
-use dkg_runtime::{AuthoritySet, DkgApi};
+use dkg_runtime_primitives::{AuthoritySet, DkgApi};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WEBB";
 
