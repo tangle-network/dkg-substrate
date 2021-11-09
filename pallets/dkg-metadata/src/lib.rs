@@ -156,10 +156,12 @@ impl<T: Config> Pallet<T> {
 			<Authorities<T>>::put(&new);
 
 			let next_id = Self::authority_set_id() + 1u64;
+
 			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 				dkg_runtime_primitives::AuthoritySetId,
 				T::AccountId,
 			>>::on_authority_set_changed(next_id, authority_account_ids);
+
 			<AuthoritySetId<T>>::put(next_id);
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
@@ -184,6 +186,7 @@ impl<T: Config> Pallet<T> {
 		<AuthoritySetId<T>>::put(0);
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
+
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,
 			T::AccountId,
