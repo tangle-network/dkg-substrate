@@ -437,13 +437,13 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime::DkgApi<Block, dkg_runtime::crypto::AuthorityId> for Runtime {
-		fn authority_set() -> dkg_runtime::AuthoritySet<dkg_runtime::crypto::AuthorityId> {
+	impl dkg_runtime_primitives::DkgApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			Grandpa::grandpa_authorities().iter().map(|auth| {
 				auth
 			});
 
-			dkg_runtime::AuthoritySet::empty()
+			dkg_runtime_primitives::AuthoritySet::empty()
 		}
 
 		fn signature_threshold() -> u16 {

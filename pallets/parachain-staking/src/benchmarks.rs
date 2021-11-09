@@ -21,7 +21,6 @@ use crate::{BalanceOf, Call, Config, Pallet, Range};
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite};
 use frame_support::traits::{Currency, Get, OnFinalize, OnInitialize, ReservableCurrency};
 use frame_system::RawOrigin;
-use nimbus_primitives::EventHandler;
 use pallet_authorship::EventHandler;
 use pallet_session::SessionManager;
 use sp_runtime::{Perbill, Percent};

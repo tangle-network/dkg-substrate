@@ -1875,7 +1875,7 @@ dependencies = [
  "bincode",
  "curv-kzen",
  "dkg-primitives",
- "dkg-runtime",
+ "dkg-runtime-primitives",
  "fnv",
  "futures 0.3.17",
  "hex",
@@ -1928,7 +1928,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkg-runtime"
+name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
  "parity-scale-codec",
@@ -1936,6 +1936,7 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-core",
+ "sp-runtime",
  "sp-std",
 ]
 
@@ -4723,7 +4724,7 @@ dependencies = [
 name = "node-template-runtime"
 version = "3.0.0"
 dependencies = [
- "dkg-runtime",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",
@@ -5164,6 +5165,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-dkg-metadata"
+version = "0.1.0"
+dependencies = [
+ "dkg-runtime-primitives",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-session",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-staking",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-dkg-proposal-handler"
 version = "0.1.0"
 dependencies = [
@@ -5183,6 +5203,7 @@ dependencies = [
 name = "pallet-dkg-proposals"
 version = "1.0.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -5804,6 +5825,7 @@ dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-timestamp",
  "cumulus-primitives-utility",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",
@@ -5814,6 +5836,9 @@ dependencies = [
  "pallet-aura",
  "pallet-authorship",
  "pallet-balances",
+ "pallet-dkg-metadata",
+ "pallet-dkg-proposal-handler",
+ "pallet-dkg-proposals",
  "pallet-parachain-staking",
  "pallet-randomness-collective-flip",
  "pallet-session",

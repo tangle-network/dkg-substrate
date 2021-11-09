@@ -1,5 +1,5 @@
 [package]
-name = "dkg-runtime"
+name = "dkg-runtime-primitives"
 version = "0.0.1"
 edition = "2018"
 
@@ -11,6 +11,7 @@ sp-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v
 sp-std = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-application-crypto = { git = "https://github.com/paritytech/substrate", branch = 'polkadot-v0.9.11', default-features = false  }
+sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 
 [features]
 default = ["std"]
@@ -18,5 +19,8 @@ std = [
 	"codec/std",
 	"scale-info/std",
 	"sp-api/std",
+	"sp-runtime/std",
 	"sp-std/std",
+	"sp-core/std",
+	"sp-application-crypto/std"
 ]

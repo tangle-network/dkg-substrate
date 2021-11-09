@@ -43,7 +43,7 @@ bincode = "1.2.1"
 multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
 
 # Local dependencies
-dkg-runtime = { path = "../dkg-runtime", default-features = false }
+dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }
 dkg-primitives = { path = "../dkg-primitives", default-features = false }
 
 [dev-dependencies]

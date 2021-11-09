@@ -19,7 +19,7 @@ use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
 use log::warn;
 
-use dkg_runtime::{
+use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
 	KEY_TYPE,
 };
@@ -118,7 +118,7 @@ mod tests {
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
 	use crate::keyring::Keyring;
-	use dkg_runtime::{crypto, KEY_TYPE};
+	use dkg_runtime_primitives::{crypto, KEY_TYPE};
 
 	use super::BeefyKeystore;
 	use crate::error::Error;

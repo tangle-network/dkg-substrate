@@ -1,5 +1,5 @@
 use cumulus_primitives_core::ParaId;
-use parachain_runtime::{AccountId, AuraId, Balance, Signature, MICROUNIT, MILLIUNIT};
+use parachain_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT};
 use parachain_staking::{InflationInfo, Range};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
@@ -28,12 +28,20 @@ pub fn get_collator_keys_from_seed(seed: &str) -> AuraId {
 	get_from_seed::<AuraId>(seed)
 }
 
+/// Generate DKG keys from seed.
+///
+/// This function's return type must always match the session keys of the chain
+/// in tuple format.
+pub fn get_dkg_keys_from_seed(seed: &str) -> DKGId {
+	get_from_seed::<DKGId>(seed)
+}
+
 /// Generate the session keys from individual elements.
 ///
 /// The input must be a tuple of individual keys (a single arg for now since we
 /// have just one key).
-pub fn dkg_session_keys(keys: AuraId) -> parachain_runtime::SessionKeys {
-	parachain_runtime::SessionKeys { aura: keys }
+pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> parachain_runtime::SessionKeys {
+	parachain_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
 }
 
 /// The extensions for the [`ChainSpec`].
@@ -82,11 +90,13 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 					(
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
+						get_dkg_keys_from_seed("Alice"),
 						10 * MICROUNIT,
 					),
 					(
 						get_account_id_from_seed::<sr25519::Public>("Bob"),
 						get_collator_keys_from_seed("Bob"),
+						get_dkg_keys_from_seed("Bob"),
 						10 * MICROUNIT,
 					),
 				],
@@ -131,11 +141,13 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 					(
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
+						get_dkg_keys_from_seed("Alice"),
 						10 * MICROUNIT,
 					),
 					(
 						get_account_id_from_seed::<sr25519::Public>("Bob"),
 						get_collator_keys_from_seed("Bob"),
+						get_dkg_keys_from_seed("Bob"),
 						10 * MICROUNIT,
 					),
 				],
@@ -192,7 +204,7 @@ pub fn dkg_inflation_config() -> InflationInfo<Balance> {
 
 fn testnet_genesis(
 	root_key: AccountId,
-	candidates: Vec<(AccountId, AuraId, Balance)>,
+	candidates: Vec<(AccountId, AuraId, DKGId, Balance)>,
 	nominations: Vec<(AccountId, AccountId, Balance)>,
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
@@ -213,7 +225,7 @@ fn testnet_genesis(
 			candidates: candidates
 				.iter()
 				.cloned()
-				.map(|(account, _, bond)| (account, bond))
+				.map(|(account, _, _, bond)| (account, bond))
 				.collect(),
 			nominations,
 			inflation_config: dkg_inflation_config(),
@@ -222,11 +234,11 @@ fn testnet_genesis(
 			keys: candidates
 				.iter()
 				.cloned()
-				.map(|(acc, aura, _)| {
+				.map(|(acc, aura, dkg, _)| {
 					(
-						acc.clone(),            // account id
-						acc.clone(),            // validator id
-						dkg_session_keys(aura), // session keys
+						acc.clone(),                 // account id
+						acc.clone(),                 // validator id
+						dkg_session_keys(aura, dkg), // session keys
 					)
 				})
 				.collect(),
@@ -234,5 +246,6 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
+		dkg: parachain_runtime::DkgConfig::default(),
 	}
 }

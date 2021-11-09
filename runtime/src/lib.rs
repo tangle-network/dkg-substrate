@@ -21,6 +21,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 // A few exports that help ease life for downstream crates.
+pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 pub use frame_support::{
 	construct_runtime, match_type, parameter_types,
 	traits::{Everything, IsInVec, Randomness},
@@ -28,7 +29,7 @@ pub use frame_support::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		DispatchClass, IdentityFee, Weight,
 	},
-	StorageValue,
+	PalletId, StorageValue,
 };
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
@@ -179,6 +180,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
+		pub dkg: Dkg,
 	}
 }
 
@@ -542,6 +544,33 @@ impl parachain_staking::Config for Runtime {
 	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
 }
 
+impl pallet_dkg_metadata::Config for Runtime {
+	type DKGId = DKGId;
+	type OnAuthoritySetChangeHandler = DKGProposals;
+}
+
+parameter_types! {
+	pub const ChainIdentifier: u32 = 5;
+	pub const ProposalLifetime: BlockNumber = HOURS / 5;
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+}
+
+impl pallet_dkg_proposal_handler::Config for Runtime {
+	type Event = Event;
+	type Proposal = Vec<u8>;
+}
+
+impl pallet_dkg_proposals::Config for Runtime {
+	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+	type DKGAccountId = DKGAccountId;
+	type ChainId = u32;
+	type ChainIdentifier = ChainIdentifier;
+	type Event = Event;
+	type Proposal = Vec<u8>;
+	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -567,6 +596,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
+		Dkg: pallet_dkg_metadata::{Pallet, Storage, Config<T>} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
@@ -576,6 +606,8 @@ construct_runtime!(
 
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>}
 	}
 );
 
@@ -620,6 +652,22 @@ impl_runtime_apis! {
 			data: sp_inherents::InherentData,
 		) -> sp_inherents::CheckInherentsResult {
 			data.check_extrinsics(&block)
+		}
+	}
+
+	impl dkg_runtime_primitives::DkgApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+			let authorities = Dkg::authorities();
+			let authority_set_id = Dkg::authority_set_id();
+
+			dkg_runtime_primitives::AuthoritySet {
+				authorities,
+				id: authority_set_id
+			}
+		}
+
+		fn signature_threshold() -> u16 {
+			Dkg::signature_threshold()
 		}
 	}
 

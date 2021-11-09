@@ -25,4 +25,5 @@ frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'pol
 default = ['std']
 std = [
 	'codec/std',
+	'frame-support/std'
 ]

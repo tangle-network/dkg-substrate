@@ -22,6 +22,10 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 # Local Dependencies
 template = { package = 'pallet-template', path = '../pallets/template', default-features = false }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
+pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
+dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
+pallet-dkg-proposals = { path = '../pallets/dkg-proposals', default-features = false }
+pallet-dkg-proposal-handler = { path = '../pallets/dkg-proposal-handler', default-features = false }
 
 # Substrate Dependencies
 ## Substrate Primitive Dependencies
@@ -91,6 +95,7 @@ runtime-benchmarks = [
 std = [
 	"codec/std",
 	"serde",
+	"scale-info/std",
 	"log/std",
 	"sp-api/std",
 	"sp-std/std",
@@ -106,6 +111,7 @@ std = [
 	"frame-support/std",
 	"frame-executive/std",
 	"frame-system/std",
+	'frame-benchmarking/std',
 	"pallet-balances/std",
 	"pallet-randomness-collective-flip/std",
 	"pallet-timestamp/std",
@@ -114,6 +120,7 @@ std = [
 	"parachain-info/std",
 	"cumulus-pallet-aura-ext/std",
 	"cumulus-pallet-parachain-system/std",
+	"cumulus-pallet-dmp-queue/std",
 	"cumulus-pallet-xcmp-queue/std",
 	"cumulus-pallet-xcm/std",
 	"cumulus-primitives-core/std",
@@ -122,10 +129,16 @@ std = [
 	"xcm/std",
 	"xcm-builder/std",
 	"xcm-executor/std",
+	"pallet-xcm/std",
+	"polkadot-parachain/std",
 	"pallet-aura/std",
 	"sp-consensus-aura/std",
 	'template/std',
 	'pallet-authorship/std',
 	'pallet-session/std',
-	'parachain-staking/std'
+	'parachain-staking/std',
+	'pallet-dkg-metadata/std',
+	'dkg-runtime-primitives/std',
+	'pallet-dkg-proposals/std',
+	'pallet-dkg-proposal-handler/std'
 ]

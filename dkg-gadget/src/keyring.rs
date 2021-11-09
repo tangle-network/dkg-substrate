@@ -18,7 +18,7 @@
 
 use sp_core::{ecdsa, keccak_256, Pair};
 
-use dkg_runtime::crypto;
+use dkg_runtime_primitives::crypto;
 
 /// Set of test accounts using [`beefy_primitives::crypto`] types.
 #[allow(missing_docs)]
@@ -77,7 +77,7 @@ impl From<Keyring> for ecdsa::Pair {
 #[cfg(test)]
 mod tests {
 	use super::Keyring;
-	use dkg_runtime::crypto;
+	use dkg_runtime_primitives::crypto;
 	use sp_core::{ecdsa, keccak_256, Pair};
 
 	#[test]

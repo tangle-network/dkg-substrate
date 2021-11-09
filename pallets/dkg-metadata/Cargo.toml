@@ -1,7 +1,7 @@
 [package]
-name = 'pallet-dkg-proposal-handler'
+name = 'pallet-dkg-metadata'
 authors = ['Anonymous']
-description = 'FRAME pallet template for handling approved DKG transaction proposals'
+description = 'FRAME pallet for DKG metadata'
 version = '0.1.0'
 license = 'Unlicense'
 homepage = 'https://substrate.dev'
@@ -15,16 +15,19 @@ targets = ['x86_64-unknown-linux-gnu']
 codec = { package = 'parity-scale-codec', version = '2.0.0', features = ['derive'], default-features = false }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
-primitives = { path = '../../primitives', default-features = false }
+dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 frame-benchmarking = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false, optional = true }
 frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+sp-std = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.119" }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
-sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+pallet-session = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
+sp-staking = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 
 [features]
 default = ['std']
@@ -32,7 +35,9 @@ runtime-benchmarks = ['frame-benchmarking']
 std = [
 	'codec/std',
 	'scale-info/std',
-	'primitives/std',
+	'sp-std/std',
+	'sp-runtime/std',
+	'dkg-runtime-primitives/std',
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
