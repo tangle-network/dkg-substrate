@@ -74,7 +74,7 @@ impl<T: Config> ProposalHandlerTrait<T::Proposal> for Pallet<T> {
 			return Self::handle_ethereum_tx(&eth_transaction, action)
 		};
 
-		return Err(DispatchError::BadOrigin)
+		return Ok(())
 	}
 }
 
