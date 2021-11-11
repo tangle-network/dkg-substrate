@@ -3,10 +3,10 @@ name: Test Code
 on:
   pull_request:
     branches:
-    - master
+    - polkadot-v0.9.11
   push:
     branches:
-    - master
+    - polkadot-v0.9.11
 
 jobs:
   test-code:
@@ -16,7 +16,7 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v2
 
-      # Steps taken from https://github.com/actions/cache/blob/master/examples.md#rust---cargo
+      # Steps taken from https://github.com/actions/cache/blob/polkadot-v0.9.11/examples.md#rust---cargo
     - name: Cache cargo registry
       uses: actions/cache@v2
       with:

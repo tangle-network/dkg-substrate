@@ -10,7 +10,7 @@ use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
 };
@@ -53,6 +53,7 @@ use xcm_builder::{
 	SignedAccountId32AsNative, SovereignSignedViaLocation, TakeWeightCredit, UsingComponents,
 };
 use xcm_executor::{Config, XcmExecutor};
+use dkg_runtime_primitives::mmr::MmrLeafVersion;
 
 /// Import the template pallet.
 pub use template;
@@ -569,6 +570,42 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+}
+
+parameter_types! {
+	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
+}
+
+impl pallet_dkg_mmr::Config for Runtime {
+	type LeafVersion = LeafVersion;
+
+	type DkgAuthorityToMerkleLeaf = pallet_dkg_mmr::DkgEcdsaToEthereum;
+
+	type ParachainHeads = DummyParaHeads;
+}
+
+type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
+
+/// A DKG consensus digest item with MMR root hash.
+pub struct DepositLog;
+impl pallet_mmr::primitives::OnNewRoot<MmrHash> for DepositLog {
+	fn on_new_root(root: &Hash) {
+		let digest = DigestItem::Consensus(
+			beefy_primitives::BEEFY_ENGINE_ID,
+			codec::Encode::encode(&beefy_primitives::ConsensusLog::<BeefyId>::MmrRoot(*root)),
+		);
+		<frame_system::Pallet<Runtime>>::deposit_log(digest);
+	}
+}
+
+/// Configure Merkle Mountain Range pallet.
+impl pallet_mmr::Config for Runtime {
+	const INDEXING_PREFIX: &'static [u8] = b"mmr";
+	type Hashing = Keccak256;
+	type Hash = MmrHash;
+	type OnNewRoot = DepositLog;
+	type WeightInfo = ();
+	type LeafData = frame_system::Pallet<Self>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

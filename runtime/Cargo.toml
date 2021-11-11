@@ -23,6 +23,7 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 template = { package = 'pallet-template', path = '../pallets/template', default-features = false }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
+pallet-dkg-mmr = { path = '../pallets/dkg-mmr', default-features = false }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
 pallet-dkg-proposals = { path = '../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../pallets/dkg-proposal-handler', default-features = false }
@@ -60,6 +61,7 @@ pallet-transaction-payment = { git = 'https://github.com/paritytech/substrate', 
 pallet-transaction-payment-rpc-runtime-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 pallet-authorship = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-mmr = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.11" }
 
 
 # Cumulus Dependencies
@@ -140,5 +142,7 @@ std = [
 	'pallet-dkg-metadata/std',
 	'dkg-runtime-primitives/std',
 	'pallet-dkg-proposals/std',
-	'pallet-dkg-proposal-handler/std'
+	'pallet-dkg-proposal-handler/std',
+	'pallet-dkg-mmr/std',
+	'pallet-mmr/std'
 ]
