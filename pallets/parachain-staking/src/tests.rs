@@ -196,8 +196,11 @@ fn round_immediately_jumps_if_current_duration_exceeds_new_blocks_per_round() {
 		.execute_with(|| {
 			// default round every 5 blocks
 			roll_to(8);
+			let all_events = crate::mock::System::events();
+			let len = all_events.len();
+
 			assert_eq!(
-				last_event(),
+				all_events[len - 2 as usize].event,
 				MetaEvent::Stake(Event::NewRound {
 					block: 5,
 					round: 2,
@@ -207,8 +210,10 @@ fn round_immediately_jumps_if_current_duration_exceeds_new_blocks_per_round() {
 			);
 			assert_ok!(Stake::set_blocks_per_round(Origin::root(), 3u32));
 			roll_to(9);
+			let all_events = crate::mock::System::events();
+			let len = all_events.len();
 			assert_eq!(
-				last_event(),
+				all_events[len - 2 as usize].event,
 				MetaEvent::Stake(Event::NewRound {
 					block: 9,
 					round: 3,
