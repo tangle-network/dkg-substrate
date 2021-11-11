@@ -355,7 +355,7 @@ pub fn assert_has_event(ev: Event) -> () {
 	assert!(actual.contains(&ev))
 }
 
-pub fn assert_not_event(ev: Event) -> () {
+pub fn assert_does_not_have_event(ev: Event) -> () {
 	let actual: Vec<Event> =
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
 

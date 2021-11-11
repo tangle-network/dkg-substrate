@@ -12,7 +12,7 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, assert_not_event, new_test_ext_initialized, roll_to, ExtBuilder,
+	assert_does_not_have_event, assert_has_event, new_test_ext_initialized, roll_to, ExtBuilder,
 	ParachainStaking,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
@@ -533,7 +533,7 @@ fn should_get_initial_proposers_from_dkg() {
 fn should_not_reset_proposers_if_authorities_have_not_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		roll_to(15);
-		assert_not_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_does_not_have_event(Event::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![0, 1, 2, 3],
 		}))
 	})
