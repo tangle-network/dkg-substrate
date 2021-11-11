@@ -1,17 +1,21 @@
 #![cfg(test)]
 
 use core::panic;
+use std::vec;
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, Call, ChainIdentifier, DKGProposals, Event, Origin,
+		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
 		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
 		TEST_THRESHOLD,
 	},
 	*,
 };
-use crate::mock::new_test_ext_initialized;
-use frame_support::{assert_noop, assert_ok};
+use crate::mock::{
+	assert_has_event, assert_not_event, new_test_ext_initialized, roll_to, ExtBuilder,
+	ParachainStaking,
+};
+use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
 
@@ -515,5 +519,80 @@ fn proposal_expires() {
 			deposit_nonce: prop_id,
 			who: PROPOSER_A,
 		})]);
+	})
+}
+
+#[test]
+fn should_get_initial_proposers_from_dkg() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_eq!(DKGProposals::proposer_count(), 4);
+	})
+}
+
+#[test]
+fn should_not_reset_proposers_if_authorities_have_not_changed() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		roll_to(15);
+		assert_not_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 1, 2, 3],
+		}))
+	})
+}
+
+#[test]
+fn should_reset_proposers_if_authorities_changed() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(15);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}))
+	})
+}
+
+#[test]
+fn only_current_authorities_should_make_successful_proposals() {
+	let src_id = 1u32;
+	let r_id = derive_resource_id(src_id, b"remark");
+
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
+
+		// Whitelist chain
+		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
+		// Set and check resource ID mapped to some junk data
+		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, b"System.remark".to_vec()));
+		assert_eq!(DKGProposals::resource_exists(r_id), true);
+
+		let prop_id = 1;
+		let proposal = make_proposal(vec![10]);
+
+		// Create proposal (& vote)
+		assert_ok!(DKGProposals::acknowledge_proposal(
+			Origin::signed(1),
+			prop_id,
+			src_id,
+			r_id,
+			proposal.clone(),
+		));
+
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(15);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}));
+
+		// Create proposal (& vote)
+		assert_err!(
+			DKGProposals::reject_proposal(
+				Origin::signed(1),
+				prop_id,
+				src_id,
+				r_id,
+				proposal.clone(),
+			),
+			crate::Error::<Test>::MustBeProposer
+		);
 	})
 }

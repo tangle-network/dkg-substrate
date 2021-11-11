@@ -33,7 +33,7 @@ use dkg_runtime_primitives::{
 };
 
 #[cfg(test)]
-mod mock;
+pub mod mock;
 
 #[cfg(test)]
 mod tests;
