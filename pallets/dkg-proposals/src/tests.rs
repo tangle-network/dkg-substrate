@@ -542,6 +542,21 @@ fn should_not_reset_proposers_if_authorities_have_not_changed() {
 	})
 }
 
+// Should update proposers if new collator set has changed during a session change
+#[test]
+fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_eq!(DKGProposals::proposer_count(), 4);
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(10);
+		assert_has_event(Event::Session(pallet_session::Event::NewSession(1)));
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}));
+		assert_eq!(DKGProposals::proposer_count(), 3);
+	})
+}
+
 // Whenever the collator set changes, which in turn would cause the DKG authorities to change, the proposers to should also be changed.
 #[test]
 fn should_reset_proposers_if_authorities_changed() {
