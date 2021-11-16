@@ -62,7 +62,7 @@ use sp_runtime::{
 	traits::{AccountIdConversion, Dispatchable},
 	RuntimeDebug,
 };
-use sp_std::prelude::*;
+use sp_std::{convert::TryFrom, prelude::*};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -458,6 +458,15 @@ impl<T: Config> Pallet<T> {
 	/// Checks if a chain exists as a whitelisted destination
 	pub fn chain_whitelisted(id: T::ChainId) -> bool {
 		return Self::chains(id) != None
+	}
+
+	/// Checks if specified proposal exists in the queue
+	pub fn proposal_exists(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
+		let src_id = match T::ChainId::try_from(chain_id) {
+			Ok(v) => v,
+			Err(_) => return false,
+		};
+		return Votes::<T>::contains_key(src_id, (nonce, prop))
 	}
 
 	// *** Admin methods ***

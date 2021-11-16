@@ -5211,6 +5211,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-dkg-proposals",
  "parity-scale-codec",
  "primitives",
  "scale-info",
@@ -5218,6 +5219,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -7446,6 +7448,7 @@ dependencies = [
  "ethereum-types",
  "frame-support",
  "parity-scale-codec",
+ "scale-info",
  "sp-std",
 ]
 

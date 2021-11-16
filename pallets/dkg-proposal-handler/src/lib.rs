@@ -24,17 +24,17 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
+	use frame_support::{
+		dispatch::{DispatchErrorWithPostInfo, DispatchResultWithPostInfo, PostDispatchInfo},
+		pallet_prelude::*,
+	};
 	use frame_system::pallet_prelude::*;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_dkg_proposals::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-
-		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend;
 	}
 
 	#[pallet::pallet]
@@ -57,13 +57,41 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+		/// Proposal format is invalid
+		ProposalFormatInvalid,
+		/// Proposal signature is invalid
+		ProposalSignatureInvalid,
+		/// No proposal with the ID was found
+		ProposalDoesNotExist,
+		/// Chain id is invalid
+		ChainIdInvalid,
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {}
+	impl<T: Config> Pallet<T> {
+		#[pallet::weight(0)]
+		pub fn submit_signed_proposal(
+			origin: OriginFor<T>,
+			prop: T::Proposal,
+		) -> DispatchResultWithPostInfo {
+			let encoded_proposal = prop.encode();
+			let eth_transaction = match TransactionV2::decode(&mut &encoded_proposal[..]) {
+				Ok(tx) => tx,
+				Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
+			};
+			if let Err(err) = Self::validate_proposal_exists(&prop, &eth_transaction) {
+				return Err(err)?
+			}
+			if let Err(err) = Self::validate_ethereum_tx_signature(&eth_transaction) {
+				return Err(err)?
+			}
+
+			Ok(().into())
+		}
+	}
 }
 
 impl<T: Config> ProposalHandlerTrait<T::Proposal> for Pallet<T> {
@@ -79,6 +107,8 @@ impl<T: Config> ProposalHandlerTrait<T::Proposal> for Pallet<T> {
 }
 
 impl<T: Config> Pallet<T> {
+	// *** Handler methods ***
+
 	fn handle_ethereum_tx(
 		eth_transaction: &TransactionV2,
 		action: ProposalAction,
@@ -91,7 +121,49 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	// *** Validation methods ***
+
 	fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> DispatchResult {
+		return match eth_transaction {
+			TransactionV2::Legacy(tx) => Ok(()),
+			TransactionV2::EIP2930(tx) => Ok(()),
+			TransactionV2::EIP1559(tx) => Ok(()),
+		}
+	}
+
+	fn validate_proposal_exists(
+		prop: &T::Proposal,
+		decoded_prop: &TransactionV2,
+	) -> DispatchResult {
+		let (chain_id, nonce, msg_hash) = match decoded_prop {
+			TransactionV2::Legacy(tx) => {
+				let chain_id: u64 = 0;
+				let nonce = tx.nonce.as_u64();
+				let hash = LegacyTransactionMessage::from(tx.clone()).hash();
+				(chain_id, nonce, hash)
+			},
+			TransactionV2::EIP2930(tx) => {
+				let chain_id: u64 = tx.chain_id;
+				let nonce = tx.nonce.as_u64();
+				let hash = EIP2930TransactionMessage::from(tx.clone()).hash();
+				(chain_id, nonce, hash)
+			},
+			TransactionV2::EIP1559(tx) => {
+				let chain_id: u64 = tx.chain_id;
+				let nonce = tx.nonce.as_u64();
+				let hash = EIP1559TransactionMessage::from(tx.clone()).hash();
+				(chain_id, nonce, hash)
+			},
+		};
+
+		if !pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone()) {
+			return Err(Error::<T>::ProposalDoesNotExist)?
+		};
+
+		Ok(())
+	}
+
+	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> DispatchResult {
 		let (sig_r, sig_s, sig_v, msg_hash) = match eth_transaction {
 			TransactionV2::Legacy(tx) => {
 				let r = tx.signature.r().clone();
@@ -125,7 +197,7 @@ impl<T: Config> Pallet<T> {
 
 		return match sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg) {
 			Ok(_) => Ok(()),
-			Err(_) => Err(DispatchError::BadOrigin),
+			Err(_) => Err(Error::<T>::ProposalSignatureInvalid)?,
 		}
 	}
 }

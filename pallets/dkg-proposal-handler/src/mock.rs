@@ -27,6 +27,12 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 }
 
+parameter_types! {
+	pub const ChainIdentifier: u32 = 5;
+	pub const ProposalLifetime: u64 = 50;
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+}
+
 impl system::Config for Test {
 	type BaseCallFilter = Everything;
 	type BlockWeights = ();
@@ -55,7 +61,17 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
+}
+
+impl pallet_dkg_proposals::Config for Test {
+	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+	type DKGAccountId = DKGAccountId;
+	type ChainId = u32;
+	type ChainIdentifier = ChainIdentifier;
+	type Event = Event;
 	type Proposal = Vec<u8>;
+	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 // Build genesis storage according to the mock runtime.

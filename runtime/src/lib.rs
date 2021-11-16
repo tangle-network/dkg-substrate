@@ -557,7 +557,6 @@ parameter_types! {
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type Proposal = Vec<u8>;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
