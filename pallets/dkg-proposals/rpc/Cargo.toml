@@ -1,0 +1,28 @@
+[package]
+name = "dkg-proposals-rpc-primitives"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jsonrpc-core = "18.0.0"
+jsonrpc-core-client = "18.0.0"
+jsonrpc-derive = "18.0.0"
+sc-rpc = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.11" }
+
+codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
+sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.11" }
+sp-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.11" }
+sp-blockchain = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.11" }
+sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.11" }
+
+pallet-dkg-proposals-runtime-api = { path = "./runtime-api", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "codec/std",
+    "pallet-dkg-proposals-runtime-api/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-api/std"
+]
