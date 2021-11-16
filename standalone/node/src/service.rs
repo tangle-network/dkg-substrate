@@ -287,7 +287,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	let keystore =
 		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
 
-	let beefy_params = dkg_gadget::BeefyParams {
+	let dkg_params = dkg_gadget::DKGParams {
 		client,
 		backend,
 		key_store: keystore.clone(),
@@ -300,7 +300,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	// Start the DKG gadget.
 	task_manager
 		.spawn_essential_handle()
-		.spawn_blocking("dkg-gadget", dkg_gadget::start_beefy_gadget::<_, _, _, _>(beefy_params));
+		.spawn_blocking("dkg-gadget", dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params));
 
 	let grandpa_config = sc_finality_grandpa::Config {
 		// FIXME #1578 make this available through chainspec

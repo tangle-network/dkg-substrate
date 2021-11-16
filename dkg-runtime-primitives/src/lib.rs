@@ -73,7 +73,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DkgApi<AuthorityId> where
+	pub trait DKGApi<AuthorityId> where
 		AuthorityId: Codec + PartialEq,
 	{
 		/// Return the current active authority set

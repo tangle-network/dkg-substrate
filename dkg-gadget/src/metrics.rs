@@ -14,52 +14,52 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! BEEFY Prometheus metrics definition
+//! DKG Prometheus metrics definition
 
 use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 
-/// BEEFY metrics exposed through Prometheus
+/// DKG metrics exposed through Prometheus
 pub(crate) struct Metrics {
 	/// Current active validator set id
-	pub beefy_validator_set_id: Gauge<U64>,
+	pub dkg_validator_set_id: Gauge<U64>,
 	/// Total number of votes sent by this node
-	pub beefy_votes_sent: Counter<U64>,
+	pub dkg_votes_sent: Counter<U64>,
 	/// Most recent concluded voting round
-	pub beefy_round_concluded: Gauge<U64>,
-	/// Best block finalized by BEEFY
-	pub beefy_best_block: Gauge<U64>,
-	/// Next block BEEFY should vote on
-	pub beefy_should_vote_on: Gauge<U64>,
+	pub dkg_round_concluded: Gauge<U64>,
+	/// Best block finalized by DKG
+	pub dkg_best_block: Gauge<U64>,
+	/// Next block DKG should vote on
+	pub dkg_should_vote_on: Gauge<U64>,
 	/// Number of sessions without a signed commitment
-	pub beefy_skipped_sessions: Counter<U64>,
+	pub dkg_skipped_sessions: Counter<U64>,
 }
 
 impl Metrics {
 	pub(crate) fn register(registry: &Registry) -> Result<Self, PrometheusError> {
 		Ok(Self {
-			beefy_validator_set_id: register(
-				Gauge::new("beefy_validator_set_id", "Current BEEFY active validator set id.")?,
+			dkg_validator_set_id: register(
+				Gauge::new("dkg_validator_set_id", "Current DKG active validator set id.")?,
 				registry,
 			)?,
-			beefy_votes_sent: register(
-				Counter::new("beefy_votes_sent", "Number of votes sent by this node")?,
+			dkg_votes_sent: register(
+				Counter::new("dkg_votes_sent", "Number of votes sent by this node")?,
 				registry,
 			)?,
-			beefy_round_concluded: register(
-				Gauge::new("beefy_round_concluded", "Voting round, that has been concluded")?,
+			dkg_round_concluded: register(
+				Gauge::new("dkg_round_concluded", "Voting round, that has been concluded")?,
 				registry,
 			)?,
-			beefy_best_block: register(
-				Gauge::new("beefy_best_block", "Best block finalized by BEEFY")?,
+			dkg_best_block: register(
+				Gauge::new("dkg_best_block", "Best block finalized by DKG")?,
 				registry,
 			)?,
-			beefy_should_vote_on: register(
-				Gauge::new("beefy_should_vote_on", "Next block, BEEFY should vote on")?,
+			dkg_should_vote_on: register(
+				Gauge::new("dkg_should_vote_on", "Next block, DKG should vote on")?,
 				registry,
 			)?,
-			beefy_skipped_sessions: register(
+			dkg_skipped_sessions: register(
 				Counter::new(
-					"beefy_skipped_sessions",
+					"dkg_skipped_sessions",
 					"Number of sessions without a signed commitment",
 				)?,
 				registry,

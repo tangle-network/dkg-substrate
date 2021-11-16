@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! BEEFY gadget specific errors
+//! WEBB gadget specific errors
 //!
-//! Used for BEEFY gadget interal error handling only
+//! Used for WEBB gadget interal error handling only
 
 use std::fmt::Debug;
 
