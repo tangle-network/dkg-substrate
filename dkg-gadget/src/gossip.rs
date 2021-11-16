@@ -25,11 +25,11 @@ use log::{debug, error, trace};
 use parking_lot::{Mutex, RwLock};
 use wasm_timer::Instant;
 
-use crate::types::webb_topic;
+use crate::types::dkg_topic;
 use dkg_primitives::types::DKGMessage;
 use dkg_runtime_primitives::{crypto::Public, MmrRootHash};
 
-// Limit WEBB gossip by keeping only a bound number of voting rounds alive.
+// Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
 
 // Timeout for rebroadcasting messages.
@@ -40,14 +40,14 @@ pub type MessageHash = [u8; 8];
 
 type KnownVotes<B> = BTreeMap<NumberFor<B>, fnv::FnvHashSet<MessageHash>>;
 
-/// WEBB gossip validator
+/// DKG gossip validator
 ///
-/// Validate WEBB gossip messages and limit the number of live WEBB voting rounds.
+/// Validate DKG gossip messages and limit the number of live DKG voting rounds.
 ///
 /// Allows messages from last [`MAX_LIVE_GOSSIP_ROUNDS`] to flow, everything else gets
 /// rejected/expired.
 ///
-/// All messaging is handled in a single WEBB global topic.
+/// All messaging is handled in a single DKG global topic.
 pub(crate) struct GossipValidator<B>
 where
 	B: Block,
@@ -63,12 +63,11 @@ where
 {
 	pub fn new() -> GossipValidator<B> {
 		GossipValidator {
-			topic: webb_topic::<B>(),
+			topic: dkg_topic::<B>(),
 			known_votes: RwLock::new(BTreeMap::new()),
 			next_rebroadcast: Mutex::new(Instant::now() + REBROADCAST_AFTER),
 		}
 	}
-
 
 	/// Note a voting round.
 	///
@@ -134,11 +133,11 @@ where
 		trace!(target: "dkg", "🕸️  Got a message: {:?}, from: {:?}", data_copy, sender);
 		match DKGMessage::<Public, (MmrRootHash, NumberFor<B>)>::decode(&mut data_copy) {
 			Ok(msg) => {
-				trace!(target: "dkg", "🕸️  Got webb dkg message: {:?}, from: {:?}", msg, sender);
-				return ValidationResult::ProcessAndKeep(webb_topic::<B>())
+				trace!(target: "dkg", "🕸️  Got dkg message: {:?}, from: {:?}", msg, sender);
+				return ValidationResult::ProcessAndKeep(dkg_topic::<B>())
 			},
 			Err(e) => {
-				error!(target: "dkg", "🕸️  Got invalid webb dkg message: {:?}, from: {:?}", e, sender);
+				error!(target: "dkg", "🕸️  Got invalid dkg message: {:?}, from: {:?}", e, sender);
 			},
 		}
 

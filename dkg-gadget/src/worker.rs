@@ -50,7 +50,7 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	types::webb_topic,
+	types::dkg_topic,
 	Client,
 };
 
@@ -60,7 +60,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
-pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WEBB";
+pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 pub(crate) struct WorkerParams<B, BE, C>
 where
@@ -97,7 +97,7 @@ where
 	/// Best block we received a GRANDPA notification for
 	best_grandpa_block: NumberFor<B>,
 	/// Best block a DKG voting round has been concluded for
-	best_webb_block: Option<NumberFor<B>>,
+	best_dkg_block: Option<NumberFor<B>>,
 	/// Current validator set id
 	current_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
@@ -144,7 +144,7 @@ where
 			rounds: MultiPartyECDSARounds::new(0, 0, 1),
 			finality_notifications: client.finality_notification_stream(),
 			best_grandpa_block: client.info().finalized_number,
-			best_webb_block: None,
+			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			last_signed_id: 0,
 			dkg_state,
@@ -191,14 +191,14 @@ where
 
 	/// Return `true`, if we should vote on block `number`
 	fn should_vote_on(&self, number: NumberFor<B>) -> bool {
-		let best_webb_block = if let Some(block) = self.best_webb_block {
+		let best_dkg_block = if let Some(block) = self.best_dkg_block {
 			block
 		} else {
 			debug!(target: "dkg", "🕸️  Missing best BEEFY block - won't vote for: {:?}", number);
 			return false
 		};
 
-		let target = vote_target(self.best_grandpa_block, best_webb_block, self.min_block_delta);
+		let target = vote_target(self.best_grandpa_block, best_dkg_block, self.min_block_delta);
 
 		trace!(target: "dkg", "🕸️  should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
 
@@ -265,7 +265,7 @@ where
 			// the currently active DKG voting round by starting a new one. This is
 			// temporary and needs to be replaced by proper round life cycle handling.
 			if active.id != self.current_validator_set.id ||
-				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_webb_block.is_none())
+				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
 				debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active);
 				metric_set!(self, dkg_validator_set_id, active.id);
@@ -282,7 +282,7 @@ where
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
-				self.best_webb_block = Some(*notification.header.number());
+				self.best_dkg_block = Some(*notification.header.number());
 
 				// this metric is kind of 'fake'. Best DKG block should only be updated once we have a
 				// signed commitment for the block. Remove once the above TODO is done.
@@ -431,12 +431,12 @@ where
 
 			// self.signed_commitment_sender.notify(signed_commitment);
 
-			if let Some(best) = self.best_webb_block {
+			if let Some(best) = self.best_dkg_block {
 				if round_key.1 > best {
-					self.best_webb_block = Some(round_key.1);
+					self.best_dkg_block = Some(round_key.1);
 				}
 			} else {
-				self.best_webb_block = Some(round_key.1);
+				self.best_dkg_block = Some(round_key.1);
 			}
 
 			metric_set!(self, dkg_best_block, round_key.1);
@@ -478,7 +478,7 @@ where
 			);
 
 			self.gossip_engine.lock().gossip_message(
-				webb_topic::<B>(),
+				dkg_topic::<B>(),
 				encoded_dkg_message.clone(),
 				true,
 			);
@@ -507,8 +507,8 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let mut webb_dkg =
-			Box::pin(self.gossip_engine.lock().messages_for(webb_topic::<B>()).filter_map(
+		let mut dkg =
+			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
@@ -531,7 +531,7 @@ where
 						return;
 					}
 				},
-				dkg_msg = webb_dkg.next().fuse() => {
+				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						self.process_incoming_dkg_message(dkg_msg);
 					} else {
@@ -561,7 +561,7 @@ where
 	})
 }
 
-/// Scan the `header` digest log for a WEBB validator set change. Return either the new
+/// Scan the `header` digest log for a DKG validator set change. Return either the new
 /// validator set or `None` in case no validator set change has been signaled.
 fn find_authorities_change<B>(header: &B::Header) -> Option<AuthoritySet<AuthorityId>>
 where
@@ -578,13 +578,13 @@ where
 }
 
 /// Calculate next block number to vote on
-fn vote_target<N>(best_grandpa: N, best_webb: N, min_delta: u32) -> N
+fn vote_target<N>(best_grandpa: N, best_dkg: N, min_delta: u32) -> N
 where
 	N: AtLeast32Bit + Copy + Debug,
 {
-	let diff = best_grandpa.saturating_sub(best_webb);
+	let diff = best_grandpa.saturating_sub(best_dkg);
 	let diff = diff.saturated_into::<u32>();
-	let target = best_webb + min_delta.max(diff.next_power_of_two()).into();
+	let target = best_dkg + min_delta.max(diff.next_power_of_two()).into();
 
 	trace!(
 		target: "dkg",

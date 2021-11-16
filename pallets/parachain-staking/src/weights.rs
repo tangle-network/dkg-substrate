@@ -76,8 +76,8 @@ pub trait WeightInfo {
 
 /// Weights for parachain_staking using the Substrate node and recommended
 /// hardware.
-pub struct WebbWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
+pub struct SubstrateWeight<T>(PhantomData<T>);
+impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn set_staking_expectations() -> Weight {
 		(20_719_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(5 as Weight))

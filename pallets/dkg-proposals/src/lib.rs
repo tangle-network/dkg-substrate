@@ -26,7 +26,7 @@
 //!
 //! ### Goals
 //!
-//! The bridge system in Webb is designed to make the following
+//! The DKG proposal system is designed to make the following
 //! possible:
 //!
 //! * Define.
@@ -67,9 +67,7 @@ use sp_std::prelude::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{
-		ProposalNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
-	};
+	use crate::types::{ProposalNonce, ProposalVotes, ResourceId, DKG_DEFAULT_PROPOSER_THRESHOLD};
 	use frame_support::{
 		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
 		pallet_prelude::*,
@@ -124,7 +122,7 @@ pub mod pallet {
 
 	#[pallet::type_value]
 	pub fn DefaultForProposerThreshold() -> u32 {
-		DARKWEBB_DEFAULT_PROPOSER_THRESHOLD
+		DKG_DEFAULT_PROPOSER_THRESHOLD
 	}
 
 	/// Number of votes required for a proposal to execute

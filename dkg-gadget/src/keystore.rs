@@ -26,7 +26,7 @@ use dkg_runtime_primitives::{
 
 use crate::error;
 
-/// A WEBB specific keystore implemented as a `Newtype`. This is basically a
+/// A DKG specific keystore implemented as a `Newtype`. This is basically a
 /// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize
 /// common cryptographic functionality.
 pub(crate) struct DKGKeystore(Option<SyncCryptoStorePtr>);
@@ -246,7 +246,7 @@ mod tests {
 		let _ = add_key(TEST_TYPE, None);
 		let _ = add_key(TEST_TYPE, None);
 
-		// WEBB keys
+		// DKG keys
 		let _ = add_key(KEY_TYPE, Some(Keyring::Dave.to_seed().as_str()));
 		let _ = add_key(KEY_TYPE, Some(Keyring::Eve.to_seed().as_str()));
 
