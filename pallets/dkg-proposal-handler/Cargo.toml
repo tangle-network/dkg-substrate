@@ -21,7 +21,7 @@ frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'pol
 frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-std = { git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.11', default-features = false }
-sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false, features = ["full_crypto"] }
 
 [dev-dependencies]
 pallet-dkg-proposals = { path = '../dkg-proposals', default-features = false }
