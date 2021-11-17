@@ -2,4 +2,5 @@
 
 pub mod proposal;
 pub use ethereum::*;
+pub use ethereum_types::*;
 pub use proposal::*;

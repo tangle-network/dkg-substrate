@@ -18,7 +18,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -62,7 +62,7 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
-    type Proposals = DKGProposals;
+	type Proposals = DKGProposals;
 }
 
 impl pallet_dkg_proposals::Config for Test {

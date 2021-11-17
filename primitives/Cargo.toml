@@ -31,5 +31,5 @@ sp-std = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v
 default = ['std']
 std = [
 	'codec/std',
-	'frame-support/std'
+	'frame-support/std',
 ]
