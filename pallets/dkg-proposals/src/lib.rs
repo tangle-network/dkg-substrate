@@ -47,7 +47,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use crate::types::{DepositNonce, ProposalStatus, ProposalVotes, ResourceId};
+use crate::types::{ProposalStatus, ProposalVotes, ResourceId};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::traits::OnAuthoritySetChangeHandler;
 use frame_support::{
@@ -56,7 +56,7 @@ use frame_support::{
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
-use primitives::ProposalHandlerTrait;
+use primitives::{ProposalHandlerTrait, ProposalsTrait, DepositNonce};
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::{AccountIdConversion, Dispatchable},
@@ -68,7 +68,7 @@ use sp_std::{convert::TryFrom, prelude::*};
 pub mod pallet {
 	use super::*;
 	use crate::types::{
-		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
+		ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
 	};
 	use frame_support::{
 		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
@@ -431,6 +431,27 @@ pub mod pallet {
 	}
 }
 
+impl<T: Config> ProposalsTrait<T::Proposal> for Pallet<T> {
+	/// Checks if specified proposal exists in the queue
+	fn proposal_exists(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
+		let src_id = match T::ChainId::try_from(chain_id) {
+			Ok(v) => v,
+			Err(_) => return false,
+		};
+		return Votes::<T>::contains_key(src_id, (nonce, prop))
+	}
+
+	/// Removes specified proposal from the queue
+	fn remove_proposal(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
+		let src_id = match T::ChainId::try_from(chain_id) {
+			Ok(v) => v,
+			Err(_) => return false,
+		};
+		Votes::<T>::remove(src_id, (nonce, prop));
+		return true
+	}
+}
+
 impl<T: Config> Pallet<T> {
 	// *** Utility methods ***
 
@@ -458,25 +479,6 @@ impl<T: Config> Pallet<T> {
 	/// Checks if a chain exists as a whitelisted destination
 	pub fn chain_whitelisted(id: T::ChainId) -> bool {
 		return Self::chains(id) != None
-	}
-
-	/// Checks if specified proposal exists in the queue
-	pub fn proposal_exists(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
-		let src_id = match T::ChainId::try_from(chain_id) {
-			Ok(v) => v,
-			Err(_) => return false,
-		};
-		return Votes::<T>::contains_key(src_id, (nonce, prop))
-	}
-
-	/// Checks if specified proposal exists in the queue
-	pub fn remove_proposal(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
-		let src_id = match T::ChainId::try_from(chain_id) {
-			Ok(v) => v,
-			Err(_) => return false,
-		};
-		Votes::<T>::remove(src_id, (nonce, prop));
-		return true
 	}
 
 	// *** Admin methods ***

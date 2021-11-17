@@ -105,10 +105,6 @@ parameter_types! {
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
 
-impl pallet_dkg_proposal_handler::Config for Test {
-	type Event = Event;
-}
-
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = dkg_runtime_primitives::crypto::AuthorityId;
 	type OnAuthoritySetChangeHandler = DKGProposals;
@@ -191,7 +187,12 @@ impl pallet_parachain_staking::Config for Test {
 	type WeightInfo = ();
 }
 
-impl Config for Test {
+impl pallet_dkg_proposal_handler::Config for Test {
+	type Event = Event;
+	type Proposals = DKGProposals;
+}
+
+impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
 	type ChainId = u32;

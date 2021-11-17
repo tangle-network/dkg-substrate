@@ -1,5 +1,5 @@
 use crate as pallet_dkg_proposal_handler;
-use frame_support::{parameter_types, traits::Everything};
+use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -18,6 +18,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -61,6 +62,7 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
+    type Proposals = DKGProposals;
 }
 
 impl pallet_dkg_proposals::Config for Test {

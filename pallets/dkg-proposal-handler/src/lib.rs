@@ -13,10 +13,9 @@ mod tests;
 
 use codec::{EncodeAppend, EncodeLike};
 use frame_support::pallet_prelude::*;
-use pallet_dkg_proposals::types::DepositNonce;
 use primitives::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
-	ProposalHandlerTrait, TransactionV2,
+	ProposalHandlerTrait, TransactionV2, DepositNonce, ProposalsTrait
 };
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -31,12 +30,15 @@ pub mod pallet {
 		pallet_prelude::*,
 	};
 	use frame_system::pallet_prelude::*;
+use primitives::ProposalsTrait;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config + pallet_dkg_proposals::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+		type Proposals: ProposalsTrait<Self::Proposal>;
 	}
 
 	#[pallet::pallet]
@@ -153,7 +155,7 @@ impl<T: Config> Pallet<T> {
 
 	fn validate_proposal_exists(prop: &T::Proposal, decoded_prop: &TransactionV2) -> bool {
 		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
-		return pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone())
+		return T::Proposals::proposal_exists(chain_id, nonce, prop.clone())
 	}
 
 	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
@@ -195,7 +197,7 @@ impl<T: Config> Pallet<T> {
 
 	fn remove_proposal(prop: &T::Proposal, decoded_prop: &TransactionV2) -> bool {
 		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
-		return pallet_dkg_proposals::Pallet::<T>::remove_proposal(chain_id, nonce, prop.clone())
+		return T::Proposals::remove_proposal(chain_id, nonce, prop.clone())
 	}
 
 	fn extract_chain_id_and_nonce(
