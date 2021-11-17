@@ -47,6 +47,12 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
+	// /// All unsigned proposals.
+	// #[pallet::storage]
+	// #[pallet::getter(fn signed_proposals)]
+	// pub type UnsignedProposalQueue<T: Config> =
+	// 	StorageDoubleMap<_, Blake2_256, u32, Blake2_256, (DepositNonce, ProposalType), ()>;
+
 	/// All signed proposals.
 	/// The key is the hash of the call and the deposit ID, to ensure it's
 	/// unique.
@@ -101,6 +107,7 @@ pub mod pallet {
 				Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 
+			// TODO: should validate that the propsoal exists in the unsigned queue on this pallet
 			ensure!(
 				Self::validate_proposal_exists(&prop, &eth_transaction),
 				Error::<T>::ProposalDoesNotExist
@@ -109,13 +116,12 @@ pub mod pallet {
 				Self::validate_proposal_signature(&data, &signature),
 				Error::<T>::ProposalSignatureInvalid
 			);
-			ensure!(Self::remove_proposal(&prop, &eth_transaction), Error::<T>::ChainIdInvalid);
+
+			// TODO: Remove from unsigned queue
+			// ensure!(Self::remove_proposal(&prop, &eth_transaction), Error::<T>::ChainIdInvalid);
 
 			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction);
-			let src_id = match u32::try_from(chain_id) {
-				Ok(v) => v,
-				Err(_) => return Err(Error::<T>::ChainIdInvalid)?,
-			};
+			let src_id = chain_id as u32;
 			SignedProposals::<T>::insert(src_id, (nonce, prop.clone()), ());
 
 			Ok(().into())
@@ -130,6 +136,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		if let Ok(eth_transaction) = TransactionV2::decode(&mut &encoded_proposal[..]) {
 			return Self::handle_ethereum_tx(&eth_transaction, action)
 		};
+
+		// TODO: Remove proposal from dkg-proposals
+		// ensure!(Self::remove_proposal(&prop, &eth_transaction), Error::<T>::ChainIdInvalid);
 
 		return Ok(())
 	}
