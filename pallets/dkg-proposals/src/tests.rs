@@ -1,17 +1,21 @@
 #![cfg(test)]
 
 use core::panic;
+use std::vec;
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, Call, ChainIdentifier, DKGProposals, Event, Origin,
+		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
 		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
 		TEST_THRESHOLD,
 	},
 	*,
 };
-use crate::mock::new_test_ext_initialized;
-use frame_support::{assert_noop, assert_ok};
+use crate::mock::{
+	assert_does_not_have_event, assert_has_event, new_test_ext_initialized, roll_to, ExtBuilder,
+	ParachainStaking,
+};
+use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
 
@@ -515,5 +519,112 @@ fn proposal_expires() {
 			deposit_nonce: prop_id,
 			who: PROPOSER_A,
 		})]);
+	})
+}
+
+// This test checks if the proposers are set after the DKG authorities are initialized in the genesis session
+#[test]
+fn should_get_initial_proposers_from_dkg() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_eq!(DKGProposals::proposer_count(), 4);
+	})
+}
+
+// In the DKG, when the session changes but the validators remain the same, it does not change the authority set, so the proposers should also not be reset.
+// This test checks that behaviour
+#[test]
+fn should_not_reset_proposers_if_authorities_have_not_changed() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		roll_to(15);
+		assert_does_not_have_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 1, 2, 3],
+		}))
+	})
+}
+
+// Should update proposers if new collator set has changed during a session change
+#[test]
+fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_eq!(DKGProposals::proposer_count(), 4);
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(10);
+		assert_has_event(Event::Session(pallet_session::Event::NewSession(1)));
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}));
+		assert_eq!(DKGProposals::proposer_count(), 3);
+	})
+}
+
+// Whenever the collator set changes, which in turn would cause the DKG authorities to change, the proposers to should also be changed.
+#[test]
+fn should_reset_proposers_if_authorities_changed() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(15);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}))
+	})
+}
+
+// This tess that only accounts in the proposer set are allowed to make proposals,
+//  when the authority set changes, if an authority has been removed from the set, they should not be able to make proposals anymore.
+#[test]
+fn only_current_authorities_should_make_successful_proposals() {
+	let src_id = 1u32;
+	let r_id = derive_resource_id(src_id, b"remark");
+
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
+
+		// Whitelist chain
+		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
+		// Set and check resource ID mapped to some junk data
+		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, b"System.remark".to_vec()));
+		assert_eq!(DKGProposals::resource_exists(r_id), true);
+
+		let prop_id = 1;
+		let proposal = make_proposal(vec![10]);
+
+		assert_err!(
+			DKGProposals::reject_proposal(
+				Origin::signed(5),
+				prop_id,
+				src_id,
+				r_id,
+				proposal.clone(),
+			),
+			crate::Error::<Test>::MustBeProposer
+		);
+
+		// Create proposal (& vote)
+		assert_ok!(DKGProposals::acknowledge_proposal(
+			Origin::signed(1),
+			prop_id,
+			src_id,
+			r_id,
+			proposal.clone(),
+		));
+
+		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		roll_to(15);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![0, 2, 3],
+		}));
+
+		// Create proposal (& vote)
+		assert_err!(
+			DKGProposals::reject_proposal(
+				Origin::signed(1),
+				prop_id,
+				src_id,
+				r_id,
+				proposal.clone(),
+			),
+			crate::Error::<Test>::MustBeProposer
+		);
 	})
 }
