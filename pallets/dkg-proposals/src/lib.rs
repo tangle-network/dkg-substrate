@@ -476,7 +476,7 @@ impl<T: Config> Pallet<T> {
 			Err(_) => return false,
 		};
 		Votes::<T>::remove(src_id, (nonce, prop));
-		return true;
+		return true
 	}
 
 	// *** Admin methods ***

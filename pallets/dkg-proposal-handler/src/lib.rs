@@ -13,11 +13,11 @@ mod tests;
 
 use codec::{EncodeAppend, EncodeLike};
 use frame_support::pallet_prelude::*;
+use pallet_dkg_proposals::types::DepositNonce;
 use primitives::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
 	ProposalHandlerTrait, TransactionV2,
 };
-use pallet_dkg_proposals::types::DepositNonce;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -25,12 +25,12 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use core::convert::TryFrom;
 	use frame_support::{
 		dispatch::{DispatchErrorWithPostInfo, DispatchResultWithPostInfo, PostDispatchInfo},
 		pallet_prelude::*,
 	};
 	use frame_system::pallet_prelude::*;
-	use core::convert::TryFrom;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -48,14 +48,8 @@ pub mod pallet {
 	/// unique.
 	#[pallet::storage]
 	#[pallet::getter(fn signed_proposals)]
-	pub type SignedProposals<T: Config> = StorageDoubleMap<
-		_,
-		Blake2_256,
-		T::ChainId,
-		Blake2_256,
-		(DepositNonce, T::Proposal),
-		(),
-	>;
+	pub type SignedProposals<T: Config> =
+		StorageDoubleMap<_, Blake2_256, T::ChainId, Blake2_256, (DepositNonce, T::Proposal), ()>;
 
 	#[pallet::event]
 	//#[pallet::metadata(T::AccountId = "AccountId")]
@@ -100,8 +94,14 @@ pub mod pallet {
 				Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 
-			ensure!(Self::validate_proposal_exists(&prop, &eth_transaction), Error::<T>::ProposalDoesNotExist);
-			ensure!(Self::validate_ethereum_tx_signature(&eth_transaction), Error::<T>::ProposalSignatureInvalid);
+			ensure!(
+				Self::validate_proposal_exists(&prop, &eth_transaction),
+				Error::<T>::ProposalDoesNotExist
+			);
+			ensure!(
+				Self::validate_ethereum_tx_signature(&eth_transaction),
+				Error::<T>::ProposalSignatureInvalid
+			);
 			ensure!(Self::remove_proposal(&prop, &eth_transaction), Error::<T>::ChainIdInvalid);
 
 			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&prop, &eth_transaction);
@@ -151,12 +151,9 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	fn validate_proposal_exists(
-		prop: &T::Proposal,
-		decoded_prop: &TransactionV2,
-	) -> bool {
+	fn validate_proposal_exists(prop: &T::Proposal, decoded_prop: &TransactionV2) -> bool {
 		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
-		return pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone());
+		return pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone())
 	}
 
 	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
@@ -191,17 +188,14 @@ impl<T: Config> Pallet<T> {
 		sig[64] = sig_v;
 		msg.copy_from_slice(&msg_hash[..]);
 
-		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg).is_ok();
+		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg).is_ok()
 	}
 
 	// *** Utility methods ***
 
-	fn remove_proposal(
-		prop: &T::Proposal,
-		decoded_prop: &TransactionV2,
-	) -> bool {
+	fn remove_proposal(prop: &T::Proposal, decoded_prop: &TransactionV2) -> bool {
 		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
-		return pallet_dkg_proposals::Pallet::<T>::remove_proposal(chain_id, nonce, prop.clone());
+		return pallet_dkg_proposals::Pallet::<T>::remove_proposal(chain_id, nonce, prop.clone())
 	}
 
 	fn extract_chain_id_and_nonce(
@@ -224,6 +218,6 @@ impl<T: Config> Pallet<T> {
 				let nonce = tx.nonce.as_u64();
 				(chain_id, nonce)
 			},
-		};
+		}
 	}
 }
