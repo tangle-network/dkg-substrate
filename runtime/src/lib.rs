@@ -591,7 +591,7 @@ impl pallet_mmr::Config for Runtime {
 	const INDEXING_PREFIX: &'static [u8] = b"mmr";
 	type Hashing = Keccak256;
 	type Hash = MmrHash;
-	type OnNewRoot = DepositLog;
+	type OnNewRoot = pallet_dkg_mmr::DepositDkgDigest<Runtime>;
 	type WeightInfo = ();
 	type LeafData = DKGMmr;
 }
