@@ -6,7 +6,7 @@ pub type KeygenSetId = u64;
 /// A typedef for signer set id
 pub type SignerSetId = u64;
 
-/// WEBB DKG (distributed key generation) message.
+/// DKG (distributed key generation) message.
 ///
 /// A message wrapper intended to be passed between the nodes
 #[derive(Debug, Clone, Decode, Encode)]

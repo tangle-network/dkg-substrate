@@ -541,7 +541,7 @@ impl parachain_staking::Config for Runtime {
 	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
 	type RevokeNominationDelay = RevokeNominationDelay;
 	type RewardPaymentDelay = RewardPaymentDelay;
-	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
+	type WeightInfo = parachain_staking::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
@@ -655,7 +655,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DkgApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			let authorities = Dkg::authorities();
 			let authority_set_id = Dkg::authority_set_id();

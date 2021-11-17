@@ -27,7 +27,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block;
 
-use dkg_runtime_primitives::{crypto::AuthorityId, DkgApi};
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
@@ -38,18 +38,18 @@ mod metrics;
 mod types;
 mod worker;
 
-pub const BEEFY_PROTOCOL_NAME: &str = "/paritytech/beefy/1";
+pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
-pub fn beefy_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
+pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
 	let mut cfg =
-		sc_network::config::NonDefaultSetConfig::new(BEEFY_PROTOCOL_NAME.into(), 1024 * 1024);
+		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
 	cfg.allow_non_reserved(25, 25);
 	cfg
 }
 
-/// A convenience BEEFY client trait that defines all the type bounds a BEEFY client
+/// A convenience DKG client trait that defines all the type bounds a DKG client
 /// has to satisfy. Ideally that should actually be a trait alias. Unfortunately as
 /// of today, Rust does not allow a type alias to be used as a trait bound. Tracking
 /// issue is <https://github.com/rust-lang/rust/issues/41517>.
@@ -76,16 +76,16 @@ where
 	// empty
 }
 
-/// BEEFY gadget initialization parameters.
-pub struct BeefyParams<B, BE, C, N>
+/// DKG gadget initialization parameters.
+pub struct DKGParams<B, BE, C, N>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
-	/// BEEFY client
+	/// DKG client
 	pub client: Arc<C>,
 	/// Client Backend
 	pub backend: Arc<BE>,
@@ -93,7 +93,7 @@ where
 	pub key_store: Option<SyncCryptoStorePtr>,
 	/// Gossip network
 	pub network: N,
-	/// Minimal delta between blocks, BEEFY should vote for
+	/// Minimal delta between blocks, DKG should vote for
 	pub min_block_delta: u32,
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
@@ -101,18 +101,18 @@ where
 	pub block: Option<B>,
 }
 
-/// Start the BEEFY gadget.
+/// Start the DKG gadget.
 ///
-/// This is a thin shim around running and awaiting a BEEFY worker.
-pub async fn start_beefy_gadget<B, BE, C, N>(beefy_params: BeefyParams<B, BE, C, N>)
+/// This is a thin shim around running and awaiting a DKG worker.
+pub async fn start_dkg_gadget<B, BE, C, N>(dkg_params: DKGParams<B, BE, C, N>)
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
-	let BeefyParams {
+	let DKGParams {
 		client,
 		backend,
 		key_store,
@@ -120,21 +120,21 @@ where
 		min_block_delta,
 		prometheus_registry,
 		block,
-	} = beefy_params;
+	} = dkg_params;
 
 	let gossip_validator = Arc::new(gossip::GossipValidator::new());
 	let gossip_engine =
-		GossipEngine::new(network, BEEFY_PROTOCOL_NAME, gossip_validator.clone(), None);
+		GossipEngine::new(network, DKG_PROTOCOL_NAME, gossip_validator.clone(), None);
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
 			|result| match result {
 				Ok(metrics) => {
-					debug!(target: "beefy", "🥩 Registered metrics");
+					debug!(target: "dkg", "🕸️  Registered metrics");
 					Some(metrics)
 				},
 				Err(err) => {
-					debug!(target: "beefy", "🥩 Failed to register metrics: {:?}", err);
+					debug!(target: "dkg", "🕸️  Failed to register metrics: {:?}", err);
 					None
 				},
 			},
@@ -156,7 +156,7 @@ where
 		},
 	};
 
-	let worker = worker::BeefyWorker::<_, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);
 
 	worker.run().await
 }

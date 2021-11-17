@@ -19,7 +19,7 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"DKG_";
 
 // Key type for DKG keys
-pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"webb");
+pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
@@ -73,7 +73,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DkgApi<AuthorityId> where
+	pub trait DKGApi<AuthorityId> where
 		AuthorityId: Codec + PartialEq,
 	{
 		/// Return the current active authority set

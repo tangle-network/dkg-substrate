@@ -20,7 +20,7 @@ use sp_core::{ecdsa, keccak_256, Pair};
 
 use dkg_runtime_primitives::crypto;
 
-/// Set of test accounts using [`beefy_primitives::crypto`] types.
+/// Set of test accounts using [`dkg_primitives::crypto`] types.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter)]
 pub enum Keyring {

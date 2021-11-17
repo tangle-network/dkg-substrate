@@ -26,12 +26,12 @@ use dkg_runtime_primitives::{
 
 use crate::error;
 
-/// A BEEFY specific keystore implemented as a `Newtype`. This is basically a
+/// A DKG specific keystore implemented as a `Newtype`. This is basically a
 /// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize
 /// common cryptographic functionality.
-pub(crate) struct BeefyKeystore(Option<SyncCryptoStorePtr>);
+pub(crate) struct DKGKeystore(Option<SyncCryptoStorePtr>);
 
-impl BeefyKeystore {
+impl DKGKeystore {
 	/// Check if the keystore contains a private key for one of the public keys
 	/// contained in `keys`. A public key with a matching private key is known
 	/// as a local authority id.
@@ -49,7 +49,7 @@ impl BeefyKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "beefy", "🥩 Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg", "🕸️  Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()
@@ -79,7 +79,7 @@ impl BeefyKeystore {
 		Ok(sig)
 	}
 
-	/// Returns a vector of [`beefy_primitives::crypto::Public`] keys which are currently supported (i.e. found
+	/// Returns a vector of [`dkg_runtime_primitives::crypto::Public`] keys which are currently supported (i.e. found
 	/// in the keystore).
 	pub fn public_keys(&self) -> Result<Vec<Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
@@ -104,9 +104,9 @@ impl BeefyKeystore {
 	}
 }
 
-impl From<Option<SyncCryptoStorePtr>> for BeefyKeystore {
-	fn from(store: Option<SyncCryptoStorePtr>) -> BeefyKeystore {
-		BeefyKeystore(store)
+impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
+	fn from(store: Option<SyncCryptoStorePtr>) -> DKGKeystore {
+		DKGKeystore(store)
 	}
 }
 
@@ -120,7 +120,7 @@ mod tests {
 	use crate::keyring::Keyring;
 	use dkg_runtime_primitives::{crypto, KEY_TYPE};
 
-	use super::BeefyKeystore;
+	use super::DKGKeystore;
 	use crate::error::Error;
 
 	fn keystore() -> SyncCryptoStorePtr {
@@ -140,7 +140,7 @@ mod tests {
 		let bob = Keyring::Bob.public();
 		let charlie = Keyring::Charlie.public();
 
-		let store: BeefyKeystore = Some(store).into();
+		let store: DKGKeystore = Some(store).into();
 
 		let mut keys = vec![bob, charlie];
 
@@ -163,7 +163,7 @@ mod tests {
 				.unwrap()
 				.into();
 
-		let store: BeefyKeystore = Some(store).into();
+		let store: DKGKeystore = Some(store).into();
 
 		let msg = b"are you involved or commited?";
 
@@ -182,7 +182,7 @@ mod tests {
 				.ok()
 				.unwrap();
 
-		let store: BeefyKeystore = Some(store).into();
+		let store: DKGKeystore = Some(store).into();
 
 		let alice = Keyring::Alice.public();
 
@@ -195,7 +195,7 @@ mod tests {
 
 	#[test]
 	fn sign_no_keystore() {
-		let store: BeefyKeystore = None.into();
+		let store: DKGKeystore = None.into();
 
 		let alice = Keyring::Alice.public();
 		let msg = b"are you involved or commited";
@@ -215,16 +215,16 @@ mod tests {
 				.unwrap()
 				.into();
 
-		let store: BeefyKeystore = Some(store).into();
+		let store: DKGKeystore = Some(store).into();
 
 		// `msg` and `sig` match
 		let msg = b"are you involved or commited?";
 		let sig = store.sign(&alice, msg).unwrap();
-		assert!(BeefyKeystore::verify(&alice, &sig, msg));
+		assert!(DKGKeystore::verify(&alice, &sig, msg));
 
 		// `msg and `sig` don't match
 		let msg = b"you are just involved";
-		assert!(!BeefyKeystore::verify(&alice, &sig, msg));
+		assert!(!DKGKeystore::verify(&alice, &sig, msg));
 	}
 
 	// Note that we use keys with and without a seed for this test.
@@ -246,14 +246,14 @@ mod tests {
 		let _ = add_key(TEST_TYPE, None);
 		let _ = add_key(TEST_TYPE, None);
 
-		// BEEFY keys
+		// DKG keys
 		let _ = add_key(KEY_TYPE, Some(Keyring::Dave.to_seed().as_str()));
 		let _ = add_key(KEY_TYPE, Some(Keyring::Eve.to_seed().as_str()));
 
 		let key1: crypto::Public = add_key(KEY_TYPE, None).into();
 		let key2: crypto::Public = add_key(KEY_TYPE, None).into();
 
-		let store: BeefyKeystore = Some(store).into();
+		let store: DKGKeystore = Some(store).into();
 
 		let keys = store.public_keys().ok().unwrap();
 
