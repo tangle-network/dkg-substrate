@@ -3,10 +3,10 @@ name: Check Links
 on:
   pull_request:
     branches:
-    - polkadot-v0.9.11
+    - master
   push:
     branches:
-    - polkadot-v0.9.11
+    - master
 
 jobs:
   markdown-link-check:

@@ -342,7 +342,7 @@ register a parathread/parachain on a relay chain.
 > You should test locally registering your parachain successfully before attempting to connect to
 > any running relay chain network!
 
-Find `chainspec` files to connect to live networks [here](https://github.com/paritytech/polkadot/tree/polkadot-v0.9.11/node/service/res).
+Find `chainspec` files to connect to live networks [here](https://github.com/paritytech/polkadot/tree/master/node/service/res).
 You want to be sure to use the correct git release tag in these files, as they change from time
 to time and _must_ match the live network!
 
