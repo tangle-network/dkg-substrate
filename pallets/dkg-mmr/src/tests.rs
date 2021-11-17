@@ -16,11 +16,11 @@
 
 use std::vec;
 
+use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	mmr::{DkgNextAuthoritySet, MmrLeafVersion},
 	AuthoritySet,
 };
-use codec::{Decode, Encode};
 use hex_literal::hex;
 
 use sp_core::H256;
@@ -111,9 +111,13 @@ fn should_contain_valid_leaf_data() {
 			dkg_next_authority_set: DkgNextAuthoritySet {
 				id: 1,
 				len: 2,
-				root: hex!("01b1a742589773fc054c8f5021a456316ffcec0370b25678b0696e116d1ef9ae").into(),
+				root: hex!("01b1a742589773fc054c8f5021a456316ffcec0370b25678b0696e116d1ef9ae")
+					.into(),
 			},
-			parachain_heads: hex!("ed893c8f8cc87195a5d4d2805b011506322036bcace79642aa3e94ab431e442e").into(),
+			parachain_heads: hex!(
+				"ed893c8f8cc87195a5d4d2805b011506322036bcace79642aa3e94ab431e442e"
+			)
+			.into(),
 		}
 	);
 
@@ -131,9 +135,13 @@ fn should_contain_valid_leaf_data() {
 			dkg_next_authority_set: DkgNextAuthoritySet {
 				id: 2,
 				len: 2,
-				root: hex!("9c6b2c1b0d0b25a008e6c882cc7b415f309965c72ad2b944ac0931048ca31cd5").into(),
+				root: hex!("9c6b2c1b0d0b25a008e6c882cc7b415f309965c72ad2b944ac0931048ca31cd5")
+					.into(),
 			},
-			parachain_heads: hex!("ed893c8f8cc87195a5d4d2805b011506322036bcace79642aa3e94ab431e442e").into(),
+			parachain_heads: hex!(
+				"ed893c8f8cc87195a5d4d2805b011506322036bcace79642aa3e94ab431e442e"
+			)
+			.into(),
 		}
 	);
 }

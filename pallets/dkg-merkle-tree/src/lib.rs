@@ -112,7 +112,7 @@ where
 				// swap collections to avoid allocations
 				upper = next;
 				next = t;
-			}
+			},
 		};
 	}
 }
@@ -197,10 +197,7 @@ where
 
 	impl ProofCollection {
 		fn new(position: usize) -> Self {
-			ProofCollection {
-				proof: Default::default(),
-				position,
-			}
+			ProofCollection { proof: Default::default(), position }
 		}
 	}
 
@@ -237,13 +234,7 @@ where
 		collect_proof.proof.iter().map(hex::encode).collect::<Vec<_>>()
 	);
 
-	MerkleProof {
-		root,
-		proof: collect_proof.proof,
-		number_of_leaves,
-		leaf_index,
-		leaf,
-	}
+	MerkleProof { root, proof: collect_proof.proof, number_of_leaves, leaf_index, leaf }
 }
 
 /// Leaf node for proof verification.
@@ -277,14 +268,20 @@ impl<'a> From<Hash> for Leaf<'a> {
 /// concatenating and hashing end up with given root hash.
 ///
 /// The proof must not contain the root hash.
-pub fn verify_proof<'a, H, P, L>(root: &'a Hash, proof: P, number_of_leaves: usize, leaf_index: usize, leaf: L) -> bool
+pub fn verify_proof<'a, H, P, L>(
+	root: &'a Hash,
+	proof: P,
+	number_of_leaves: usize,
+	leaf_index: usize,
+	leaf: L,
+) -> bool
 where
 	H: Hasher,
 	P: IntoIterator<Item = Hash>,
 	L: Into<Leaf<'a>>,
 {
 	if leaf_index >= number_of_leaves {
-		return false;
+		return false
 	}
 
 	let leaf_hash = match leaf.into() {
@@ -325,7 +322,11 @@ where
 ///
 /// In case only one element is provided it is returned via `Ok` result, in any other case (also an
 /// empty iterator) an `Err` with the inner nodes of upper layer is returned.
-fn merkelize_row<H, V, I>(mut iter: I, mut next: Vec<Hash>, visitor: &mut V) -> Result<Hash, Vec<Hash>>
+fn merkelize_row<H, V, I>(
+	mut iter: I,
+	mut next: Vec<Hash>,
+	visitor: &mut V,
+) -> Result<Hash, Vec<Hash>>
 where
 	H: Hasher,
 	V: Visitor,
@@ -343,11 +344,7 @@ where
 		visitor.visit(index, &a, &b);
 
 		#[cfg(feature = "debug")]
-		log::debug!(
-			"  {:?}\n  {:?}",
-			a.as_ref().map(hex::encode),
-			b.as_ref().map(hex::encode)
-		);
+		log::debug!("  {:?}\n  {:?}", a.as_ref().map(hex::encode), b.as_ref().map(hex::encode));
 
 		index += 2;
 		match (a, b) {
@@ -356,15 +353,15 @@ where
 				combined[32..64].copy_from_slice(&b);
 
 				next.push(H::hash(&combined));
-			}
+			},
 			// Odd number of items. Promote the item to the upper layer.
 			(Some(a), None) if !next.is_empty() => {
 				next.push(a);
-			}
+			},
 			// Last item = root.
 			(Some(a), None) => {
-				return Ok(a);
-			}
+				return Ok(a)
+			},
 			// Finish up, no more items.
 			_ => {
 				#[cfg(feature = "debug")]
@@ -372,8 +369,8 @@ where
 					"[merkelize_row] Next: {:?}",
 					next.iter().map(hex::encode).collect::<Vec<_>>()
 				);
-				return Err(next);
-			}
+				return Err(next)
+			},
 		}
 	}
 }

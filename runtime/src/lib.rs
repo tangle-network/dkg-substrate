@@ -43,6 +43,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{MultiAddress, Perbill, Percent, Permill};
 
 // XCM Imports
+use dkg_runtime_primitives::mmr::MmrLeafVersion;
 use pallet_xcm::XcmPassthrough;
 use polkadot_parachain::primitives::Sibling;
 use xcm::latest::prelude::*;
@@ -53,7 +54,6 @@ use xcm_builder::{
 	SignedAccountId32AsNative, SovereignSignedViaLocation, TakeWeightCredit, UsingComponents,
 };
 use xcm_executor::{Config, XcmExecutor};
-use dkg_runtime_primitives::mmr::MmrLeafVersion;
 
 /// Import the template pallet.
 pub use template;
@@ -581,22 +581,10 @@ impl pallet_dkg_mmr::Config for Runtime {
 
 	type DkgAuthorityToMerkleLeaf = pallet_dkg_mmr::DkgEcdsaToEthereum;
 
-	type ParachainHeads = DummyParaHeads;
+	type ParachainHeads = ();
 }
 
 type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
-
-/// A DKG consensus digest item with MMR root hash.
-pub struct DepositLog;
-impl pallet_mmr::primitives::OnNewRoot<MmrHash> for DepositLog {
-	fn on_new_root(root: &Hash) {
-		let digest = DigestItem::Consensus(
-			beefy_primitives::BEEFY_ENGINE_ID,
-			codec::Encode::encode(&beefy_primitives::ConsensusLog::<BeefyId>::MmrRoot(*root)),
-		);
-		<frame_system::Pallet<Runtime>>::deposit_log(digest);
-	}
-}
 
 /// Configure Merkle Mountain Range pallet.
 impl pallet_mmr::Config for Runtime {
@@ -605,7 +593,7 @@ impl pallet_mmr::Config for Runtime {
 	type Hash = MmrHash;
 	type OnNewRoot = DepositLog;
 	type WeightInfo = ();
-	type LeafData = frame_system::Pallet<Self>;
+	type LeafData = DKGMmr;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -644,7 +632,9 @@ construct_runtime!(
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>}
+		Mmr: pallet_mmr::{Pallet, Storage},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		DKGMmr: pallet_dkg_mmr::{Pallet, Storage}
 	}
 );
 

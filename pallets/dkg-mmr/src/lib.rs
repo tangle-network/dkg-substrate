@@ -51,7 +51,8 @@ mod tests;
 /// A DKG consensus digest item with MMR root hash.
 pub struct DepositDkgDigest<T>(sp_std::marker::PhantomData<T>);
 
-impl<T> pallet_mmr::primitives::OnNewRoot<dkg_runtime_primitives::MmrRootHash> for DepositDkgDigest<T>
+impl<T> pallet_mmr::primitives::OnNewRoot<dkg_runtime_primitives::MmrRootHash>
+	for DepositDkgDigest<T>
 where
 	T: pallet_mmr::Config<Hash = dkg_runtime_primitives::MmrRootHash>,
 	T: pallet_dkg_metadata::Config,
@@ -59,9 +60,9 @@ where
 	fn on_new_root(root: &<T as pallet_mmr::Config>::Hash) {
 		let digest = sp_runtime::generic::DigestItem::Consensus(
 			dkg_runtime_primitives::DKG_ENGINE_ID,
-			codec::Encode::encode(
-				&dkg_runtime_primitives::ConsensusLog::<<T as pallet_dkg_metadata::Config>::DKGId>::MmrRoot(*root),
-			),
+			codec::Encode::encode(&dkg_runtime_primitives::ConsensusLog::<
+				<T as pallet_dkg_metadata::Config>::DKGId,
+			>::MmrRoot(*root)),
 		);
 		<frame_system::Pallet<T>>::deposit_log(digest);
 	}
@@ -74,15 +75,18 @@ impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DkgEcdsaT
 		use sp_core::crypto::Public;
 		let compressed_key = a.as_slice();
 
-		libsecp256k1::PublicKey::parse_slice(compressed_key, Some(libsecp256k1::PublicKeyFormat::Compressed))
-			// uncompress the key
-			.map(|pub_key| pub_key.serialize().to_vec())
-			// now convert to ETH address
-			.map(|uncompressed| sp_io::hashing::keccak_256(&uncompressed[1..])[12..].to_vec())
-			.map_err(|_| {
-				log::error!(target: "runtime::dkg", "Invalid DKG PublicKey format!");
-			})
-			.unwrap_or_default()
+		libsecp256k1::PublicKey::parse_slice(
+			compressed_key,
+			Some(libsecp256k1::PublicKeyFormat::Compressed),
+		)
+		// uncompress the key
+		.map(|pub_key| pub_key.serialize().to_vec())
+		// now convert to ETH address
+		.map(|uncompressed| sp_io::hashing::keccak_256(&uncompressed[1..])[12..].to_vec())
+		.map_err(|_| {
+			log::error!(target: "runtime::dkg", "Invalid DKG PublicKey format!");
+		})
+		.unwrap_or_default()
 	}
 }
 
@@ -133,7 +137,10 @@ pub mod pallet {
 		/// and later to Ethereum Addresses (160 bits) to simplify using them on Ethereum chain,
 		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
 		/// efficiency reasons.
-		type DkgAuthorityToMerkleLeaf: Convert<<Self as pallet_dkg_metadata::Config>::DKGId, Vec<u8>>;
+		type DkgAuthorityToMerkleLeaf: Convert<
+			<Self as pallet_dkg_metadata::Config>::DKGId,
+			Vec<u8>,
+		>;
 
 		/// Retrieve a list of current parachain heads.
 		///
@@ -148,15 +155,19 @@ pub mod pallet {
 	/// This storage entry is used as cache for calls to [`update_dkg_next_authority_set`].
 	#[pallet::storage]
 	#[pallet::getter(fn dkg_next_authorities)]
-	pub type DkgNextAuthorities<T: Config> = StorageValue<_, DkgNextAuthoritySet<MerkleRootOf<T>>, ValueQuery>;
+	pub type DkgNextAuthorities<T: Config> =
+		StorageValue<_, DkgNextAuthoritySet<MerkleRootOf<T>>, ValueQuery>;
 }
 
 impl<T: Config> LeafDataProvider for Pallet<T>
 where
 	MerkleRootOf<T>: From<pallet_dkg_merkle_tree::Hash> + Into<pallet_dkg_merkle_tree::Hash>,
 {
-	type LeafData =
-		MmrLeaf<<T as frame_system::Config>::BlockNumber, <T as frame_system::Config>::Hash, MerkleRootOf<T>>;
+	type LeafData = MmrLeaf<
+		<T as frame_system::Config>::BlockNumber,
+		<T as frame_system::Config>::Hash,
+		MerkleRootOf<T>,
+	>;
 
 	fn leaf_data() -> Self::LeafData {
 		MmrLeaf {
@@ -210,7 +221,7 @@ where
 		let current_next = Self::dkg_next_authorities();
 		// avoid computing the merkle tree if validator set id didn't change.
 		if id == current_next.id {
-			return current_next;
+			return current_next
 		}
 
 		let dkg_addresses = pallet_dkg_metadata::Pallet::<T>::next_authorities()

@@ -7,8 +7,8 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_std::{prelude::*, vec::Vec};
 
-pub mod traits;
 pub mod mmr;
+pub mod traits;
 
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;

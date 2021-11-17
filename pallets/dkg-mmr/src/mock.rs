@@ -20,7 +20,10 @@
 use std::vec;
 
 use dkg_runtime_primitives::mmr::MmrLeafVersion;
-use frame_support::{construct_runtime, parameter_types, sp_io::TestExternalities, BasicExternalities, traits::GenesisBuild};
+use frame_support::{
+	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
+	BasicExternalities,
+};
 use sp_core::{Hasher, H256};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
@@ -129,7 +132,7 @@ impl pallet_mmr::Config for Test {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-    type OnAuthoritySetChangeHandler = ();
+	type OnAuthoritySetChangeHandler = ();
 }
 
 parameter_types! {
