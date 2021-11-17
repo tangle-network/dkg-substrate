@@ -35,6 +35,8 @@ std = [
 	'codec/std',
 	'scale-info/std',
 	'primitives/std',
+	'sp-core/std',
+	'sp-std/std',
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',

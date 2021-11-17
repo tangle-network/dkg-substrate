@@ -17,8 +17,8 @@ use primitives::{
 	DepositNonce, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	ProposalAction, ProposalHandlerTrait, ProposalType, ProposalsTrait, TransactionV2, H256,
 };
-use sp_std::vec::Vec;
 use sp_core::keccak_256;
+use sp_std::vec::Vec;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -171,7 +171,7 @@ impl<T: Config> Pallet<T> {
 		// let data_hash = keccak_256(&data);
 		// hash.copy_from_slice(&data_hash[..]);
 
-		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash).is_ok();
+		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash).is_ok()
 	}
 
 	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
