@@ -17,6 +17,7 @@ use primitives::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
 	ProposalHandlerTrait, TransactionV2,
 };
+use pallet_dkg_proposals::types::DepositNonce;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -29,6 +30,7 @@ pub mod pallet {
 		pallet_prelude::*,
 	};
 	use frame_system::pallet_prelude::*;
+	use core::convert::TryFrom;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -40,6 +42,20 @@ pub mod pallet {
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
+
+	/// All signed proposals.
+	/// The key is the hash of the call and the deposit ID, to ensure it's
+	/// unique.
+	#[pallet::storage]
+	#[pallet::getter(fn signed_proposals)]
+	pub type SignedProposals<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_256,
+		T::ChainId,
+		Blake2_256,
+		(DepositNonce, T::Proposal),
+		(),
+	>;
 
 	#[pallet::event]
 	//#[pallet::metadata(T::AccountId = "AccountId")]
@@ -78,16 +94,22 @@ pub mod pallet {
 			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			let encoded_proposal = prop.encode();
+
 			let eth_transaction = match TransactionV2::decode(&mut &encoded_proposal[..]) {
 				Ok(tx) => tx,
 				Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
-			if let Err(err) = Self::validate_proposal_exists(&prop, &eth_transaction) {
-				return Err(err)?
-			}
-			if let Err(err) = Self::validate_ethereum_tx_signature(&eth_transaction) {
-				return Err(err)?
-			}
+
+			ensure!(Self::validate_proposal_exists(&prop, &eth_transaction), Error::<T>::ProposalDoesNotExist);
+			ensure!(Self::validate_ethereum_tx_signature(&eth_transaction), Error::<T>::ProposalSignatureInvalid);
+			ensure!(Self::remove_proposal(&prop, &eth_transaction), Error::<T>::ChainIdInvalid);
+
+			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&prop, &eth_transaction);
+			let src_id = match T::ChainId::try_from(chain_id) {
+				Ok(v) => v,
+				Err(_) => return Err(Error::<T>::ChainIdInvalid)?,
+			};
+			SignedProposals::<T>::insert(src_id, (nonce, prop.clone()), ());
 
 			Ok(().into())
 		}
@@ -113,9 +135,7 @@ impl<T: Config> Pallet<T> {
 		eth_transaction: &TransactionV2,
 		action: ProposalAction,
 	) -> DispatchResult {
-		if let Err(err) = Self::validate_ethereum_tx(eth_transaction) {
-			return Err(err)
-		}
+		ensure!(Self::validate_ethereum_tx(eth_transaction), Error::<T>::ProposalFormatInvalid);
 
 		// TODO: handle validated tx
 		Ok(())
@@ -123,47 +143,23 @@ impl<T: Config> Pallet<T> {
 
 	// *** Validation methods ***
 
-	fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> DispatchResult {
+	fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> bool {
 		return match eth_transaction {
-			TransactionV2::Legacy(tx) => Ok(()),
-			TransactionV2::EIP2930(tx) => Ok(()),
-			TransactionV2::EIP1559(tx) => Ok(()),
+			TransactionV2::Legacy(tx) => true,
+			TransactionV2::EIP2930(tx) => true,
+			TransactionV2::EIP1559(tx) => true,
 		}
 	}
 
 	fn validate_proposal_exists(
 		prop: &T::Proposal,
 		decoded_prop: &TransactionV2,
-	) -> DispatchResult {
-		let (chain_id, nonce, msg_hash) = match decoded_prop {
-			TransactionV2::Legacy(tx) => {
-				let chain_id: u64 = 0;
-				let nonce = tx.nonce.as_u64();
-				let hash = LegacyTransactionMessage::from(tx.clone()).hash();
-				(chain_id, nonce, hash)
-			},
-			TransactionV2::EIP2930(tx) => {
-				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
-				let hash = EIP2930TransactionMessage::from(tx.clone()).hash();
-				(chain_id, nonce, hash)
-			},
-			TransactionV2::EIP1559(tx) => {
-				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
-				let hash = EIP1559TransactionMessage::from(tx.clone()).hash();
-				(chain_id, nonce, hash)
-			},
-		};
-
-		if !pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone()) {
-			return Err(Error::<T>::ProposalDoesNotExist)?
-		};
-
-		Ok(())
+	) -> bool {
+		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
+		return pallet_dkg_proposals::Pallet::<T>::proposal_exists(chain_id, nonce, prop.clone());
 	}
 
-	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> DispatchResult {
+	fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
 		let (sig_r, sig_s, sig_v, msg_hash) = match eth_transaction {
 			TransactionV2::Legacy(tx) => {
 				let r = tx.signature.r().clone();
@@ -195,9 +191,39 @@ impl<T: Config> Pallet<T> {
 		sig[64] = sig_v;
 		msg.copy_from_slice(&msg_hash[..]);
 
-		return match sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg) {
-			Ok(_) => Ok(()),
-			Err(_) => Err(Error::<T>::ProposalSignatureInvalid)?,
-		}
+		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg).is_ok();
+	}
+
+	// *** Utility methods ***
+
+	fn remove_proposal(
+		prop: &T::Proposal,
+		decoded_prop: &TransactionV2,
+	) -> bool {
+		let (chain_id, nonce) = Self::extract_chain_id_and_nonce(prop, decoded_prop);
+		return pallet_dkg_proposals::Pallet::<T>::remove_proposal(chain_id, nonce, prop.clone());
+	}
+
+	fn extract_chain_id_and_nonce(
+		prop: &T::Proposal,
+		decoded_prop: &TransactionV2,
+	) -> (u64, DepositNonce) {
+		return match decoded_prop {
+			TransactionV2::Legacy(tx) => {
+				let chain_id: u64 = 0;
+				let nonce = tx.nonce.as_u64();
+				(chain_id, nonce)
+			},
+			TransactionV2::EIP2930(tx) => {
+				let chain_id: u64 = tx.chain_id;
+				let nonce = tx.nonce.as_u64();
+				(chain_id, nonce)
+			},
+			TransactionV2::EIP1559(tx) => {
+				let chain_id: u64 = tx.chain_id;
+				let nonce = tx.nonce.as_u64();
+				(chain_id, nonce)
+			},
+		};
 	}
 }

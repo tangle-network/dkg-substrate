@@ -469,6 +469,16 @@ impl<T: Config> Pallet<T> {
 		return Votes::<T>::contains_key(src_id, (nonce, prop))
 	}
 
+	/// Checks if specified proposal exists in the queue
+	pub fn remove_proposal(chain_id: u64, nonce: DepositNonce, prop: T::Proposal) -> bool {
+		let src_id = match T::ChainId::try_from(chain_id) {
+			Ok(v) => v,
+			Err(_) => return false,
+		};
+		Votes::<T>::remove(src_id, (nonce, prop));
+		return true;
+	}
+
 	// *** Admin methods ***
 
 	/// Set a new voting threshold
