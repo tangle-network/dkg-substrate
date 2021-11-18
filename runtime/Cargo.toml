@@ -1,5 +1,5 @@
 [package]
-name = 'parachain-runtime'
+name = 'dkg-runtime'
 authors = ['Anonymous']
 description = 'A new Cumulus FRAME-based Substrate Runtime, ready for hacking.'
 license = 'Unlicense'

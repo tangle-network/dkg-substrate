@@ -1,5 +1,5 @@
 [package]
-name = 'parachain-collator'
+name = 'dkg_node'
 authors = ['Anonymous']
 description = 'A new Cumulus FRAME-based Substrate node, ready for hacking.'
 license = 'Unlicense'
@@ -16,11 +16,11 @@ targets = ['x86_64-unknown-linux-gnu']
 substrate-build-script-utils = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 
 [[bin]]
-name = 'parachain-collator'
+name = 'dkg_node'
 
 [features]
 default = []
-runtime-benchmarks = ['parachain-runtime/runtime-benchmarks']
+runtime-benchmarks = ['dkg-runtime/runtime-benchmarks']
 
 [dependencies]
 derive_more = '0.99.2'
@@ -34,7 +34,7 @@ hex-literal = '0.3.1'
 jsonrpc-core = '18.0.0'
 
 # Local Dependencies
-parachain-runtime = { path = '../runtime' }
+dkg-runtime = { path = '../runtime' }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 
 # Substrate Dependencies

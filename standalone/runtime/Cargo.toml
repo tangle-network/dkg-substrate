@@ -1,5 +1,5 @@
 [package]
-name = "node-template-runtime"
+name = "dkg-standalone-runtime"
 version = "3.0.0"
 description = 'A fresh FRAME-based Substrate runtime, ready for hacking.'
 authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
@@ -7,7 +7,7 @@ homepage = "https://substrate.io/"
 edition = "2021"
 license = "Unlicense"
 publish = false
-repository = "https://github.com/substrate-developer-hub/substrate-node-template/"
+repository = "https://github.com/substrate-developer-hub/substrate-dkg-standalone-node/"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
