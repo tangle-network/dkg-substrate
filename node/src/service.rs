@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 // Local Runtime Types
-use parachain_runtime::{AccountId, Balance, Index as Nonce, RuntimeApi};
+use dkg_runtime::{AccountId, Balance, Index as Nonce, RuntimeApi};
 
 // Cumulus Imports
 use cumulus_client_consensus_aura::{
@@ -39,14 +39,14 @@ impl sc_executor::NativeExecutionDispatch for RuntimeExecutor {
 	type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
 	fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-		parachain_runtime::api::dispatch(method, data)
+		dkg_runtime::api::dispatch(method, data)
 	}
 
 	fn native_version() -> sc_executor::NativeVersion {
-		parachain_runtime::native_version()
+		dkg_runtime::native_version()
 	}
 }
-pub type ParachainRuntimeExecutor = NativeElseWasmExecutor<RuntimeExecutor>;
+pub type DKGRuntimeExecutor = NativeElseWasmExecutor<RuntimeExecutor>;
 
 /// Starts a `ServiceBuilder` for a full service.
 ///
@@ -341,15 +341,12 @@ where
 
 /// Build the import queue for the the parachain runtime.
 pub fn parachain_build_import_queue(
-	client: Arc<TFullClient<Block, RuntimeApi, ParachainRuntimeExecutor>>,
+	client: Arc<TFullClient<Block, RuntimeApi, DKGRuntimeExecutor>>,
 	config: &Configuration,
 	telemetry: Option<TelemetryHandle>,
 	task_manager: &TaskManager,
 ) -> Result<
-	sc_consensus::DefaultImportQueue<
-		Block,
-		TFullClient<Block, RuntimeApi, ParachainRuntimeExecutor>,
-	>,
+	sc_consensus::DefaultImportQueue<Block, TFullClient<Block, RuntimeApi, DKGRuntimeExecutor>>,
 	sc_service::Error,
 > {
 	let slot_duration = cumulus_client_consensus_aura::slot_duration(&*client)?;
@@ -389,10 +386,8 @@ pub async fn start_node(
 	parachain_config: Configuration,
 	polkadot_config: Configuration,
 	id: ParaId,
-) -> sc_service::error::Result<(
-	TaskManager,
-	Arc<TFullClient<Block, RuntimeApi, ParachainRuntimeExecutor>>,
-)> {
+) -> sc_service::error::Result<(TaskManager, Arc<TFullClient<Block, RuntimeApi, DKGRuntimeExecutor>>)>
+{
 	start_node_impl::<RuntimeApi, RuntimeExecutor, _, _, _>(
 		parachain_config,
 		polkadot_config,

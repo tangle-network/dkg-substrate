@@ -276,8 +276,8 @@ where
 	}
 
 	pub fn get_public_key(&self) -> Option<Secp256k1Point> {
-		if let Some(offline) = &self.completed_offline_stage {
-			Some(offline.public_key().clone())
+		if let Some(local_key) = &self.local_key {
+			Some(local_key.public_key().clone())
 		} else {
 			None
 		}
@@ -665,8 +665,15 @@ mod tests {
 				return false
 			}
 		}
-
 		true
+	}
+
+	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64, String>>) {
+		for party in parties.iter() {
+			if party.get_public_key().is_none() {
+				panic!("No public key for party {}", party.party_index)
+			}
+		}
 	}
 
 	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64, String>>) -> bool {
@@ -683,7 +690,6 @@ mod tests {
 				return false
 			}
 		}
-
 		true
 	}
 
@@ -772,6 +778,7 @@ mod tests {
 		// Running Keygen stage
 		println!("Running Keygen");
 		run_simulation(&mut parties, check_all_reached_offline_ready);
+		check_all_parties_have_public_key(&mut &parties);
 
 		// Running Offline stage
 		println!("Running Offline");
@@ -804,7 +811,7 @@ mod tests {
 	}
 
 	#[test]
-	fn simulate_multi_party_t9_n10() {
-		simulate_multi_party(9, 10, (1..=10).collect());
+	fn simulate_multi_party_t3_n5() {
+		simulate_multi_party(3, 5, (1..=5).collect());
 	}
 }
