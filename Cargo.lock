@@ -7450,6 +7450,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-std",
+ "tiny-keccak",
 ]
 
 [[package]]

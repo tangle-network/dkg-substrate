@@ -56,23 +56,16 @@ use frame_support::{
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
-use primitives::{DepositNonce, ProposalHandlerTrait, ProposalType, ProposalsTrait};
+use primitives::{DepositNonce, ProposalHandlerTrait};
 use scale_info::TypeInfo;
-use sp_runtime::{
-	traits::{AccountIdConversion, Dispatchable},
-	RuntimeDebug,
-};
-use sp_std::{convert::TryFrom, prelude::*};
+use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
+use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use crate::types::{ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD};
-	use frame_support::{
-		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
-		pallet_prelude::*,
-		PalletId,
-	};
+	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AtLeast32Bit;
 
@@ -151,7 +144,7 @@ pub mod pallet {
 		Blake2_256,
 		T::ChainId,
 		Blake2_256,
-		(DepositNonce, ProposalType),
+		(DepositNonce, T::Proposal),
 		ProposalVotes<T::AccountId, T::BlockNumber>,
 	>;
 
@@ -166,7 +159,7 @@ pub mod pallet {
 		_,
 		Blake2_256,
 		u8, // some priority over proposals in the queue: 0 is highest priority
-		Vec<ProposalType>,
+		Vec<T::Proposal>,
 	>;
 
 	// Pallets use events to inform users when important changes are made.
@@ -375,7 +368,7 @@ pub mod pallet {
 			nonce: DepositNonce,
 			src_id: T::ChainId,
 			r_id: ResourceId,
-			prop: ProposalType,
+			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
@@ -396,7 +389,7 @@ pub mod pallet {
 			nonce: DepositNonce,
 			src_id: T::ChainId,
 			r_id: ResourceId,
-			prop: ProposalType,
+			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
@@ -420,33 +413,12 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			nonce: DepositNonce,
 			src_id: T::ChainId,
-			prop: ProposalType,
+			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
 
 			Self::try_resolve_proposal(nonce, src_id, prop)
 		}
-	}
-}
-
-impl<T: Config> ProposalsTrait for Pallet<T> {
-	/// Checks if specified proposal exists in the queue
-	fn proposal_exists(chain_id: u64, nonce: DepositNonce, prop: ProposalType) -> bool {
-		let src_id = match T::ChainId::try_from(chain_id) {
-			Ok(v) => v,
-			Err(_) => return false,
-		};
-		return Votes::<T>::contains_key(src_id, (nonce, prop))
-	}
-
-	/// Removes specified proposal from the queue
-	fn remove_proposal(chain_id: u64, nonce: DepositNonce, prop: ProposalType) -> bool {
-		let src_id = match T::ChainId::try_from(chain_id) {
-			Ok(v) => v,
-			Err(_) => return false,
-		};
-		Votes::<T>::remove(src_id, (nonce, prop));
-		return true
 	}
 }
 
@@ -539,7 +511,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: DepositNonce,
 		src_id: T::ChainId,
-		prop: ProposalType,
+		prop: T::Proposal,
 		in_favour: bool,
 	) -> DispatchResultWithPostInfo {
 		let now = <frame_system::Pallet<T>>::block_number();
@@ -582,7 +554,7 @@ impl<T: Config> Pallet<T> {
 	fn try_resolve_proposal(
 		nonce: DepositNonce,
 		src_id: T::ChainId,
-		prop: ProposalType,
+		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		if let Some(mut votes) = Votes::<T>::get(src_id, (nonce, prop.clone())) {
 			let now = <frame_system::Pallet<T>>::block_number();
@@ -609,7 +581,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: DepositNonce,
 		src_id: T::ChainId,
-		prop: ProposalType,
+		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::commit_vote(who, nonce, src_id, prop.clone(), true)?;
 		Self::try_resolve_proposal(nonce, src_id, prop)
@@ -621,7 +593,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: DepositNonce,
 		src_id: T::ChainId,
-		prop: ProposalType,
+		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::commit_vote(who, nonce, src_id, prop.clone(), false)?;
 		Self::try_resolve_proposal(nonce, src_id, prop)
@@ -631,10 +603,10 @@ impl<T: Config> Pallet<T> {
 	fn finalize_execution(
 		src_id: T::ChainId,
 		nonce: DepositNonce,
-		prop: ProposalType,
+		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, deposit_nonce: nonce });
-		// T::ProposalHandler::handle_proposal(prop, primitives::ProposalAction::Sign(0))?;
+		T::ProposalHandler::handle_proposal(prop.encode(), primitives::ProposalAction::Sign(0))?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, deposit_nonce: nonce });
 		Ok(().into())
 	}

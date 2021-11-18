@@ -62,7 +62,7 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
-	type Proposals = DKGProposals;
+	type ChainId = u32;
 }
 
 impl pallet_dkg_proposals::Config for Test {

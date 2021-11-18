@@ -15,12 +15,7 @@ pub enum ProposalType {
 
 pub trait ProposalHandlerTrait {
 	fn handle_proposal(
-		proposal: ProposalType,
+		proposal: Vec<u8>,
 		action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult;
-}
-
-pub trait ProposalsTrait {
-	fn proposal_exists(chain_id: u64, nonce: DepositNonce, prop: ProposalType) -> bool;
-	fn remove_proposal(chain_id: u64, nonce: DepositNonce, prop: ProposalType) -> bool;
 }

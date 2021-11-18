@@ -6,7 +6,7 @@ version = '0.1.0'
 license = 'Unlicense'
 homepage = 'https://substrate.dev'
 repository = 'https://github.com/paritytech/substrate/'
-edition = '2021'
+edition = '2018'
 
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
@@ -21,12 +21,12 @@ frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'pol
 frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-std = { git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.11', default-features = false }
-sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false, features = ["full_crypto"] }
+sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 
 [dev-dependencies]
 pallet-dkg-proposals = { path = '../dkg-proposals', default-features = false }
 serde = { version = "1.0.119" }
-sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false, features = ["full_crypto"] }
 
 [features]
 default = ['std']
@@ -35,8 +35,8 @@ std = [
 	'codec/std',
 	'scale-info/std',
 	'primitives/std',
-	'sp-core/std',
 	'sp-std/std',
+	'sp-runtime/std',
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
