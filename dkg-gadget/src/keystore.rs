@@ -49,7 +49,7 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "DKG", "🥩 Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg", "🕸️  Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()
@@ -79,7 +79,7 @@ impl DKGKeystore {
 		Ok(sig)
 	}
 
-	/// Returns a vector of [`dkg_primitives::crypto::Public`] keys which are currently supported (i.e. found
+	/// Returns a vector of [`dkg_runtime_primitives::crypto::Public`] keys which are currently supported (i.e. found
 	/// in the keystore).
 	pub fn public_keys(&self) -> Result<Vec<Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;

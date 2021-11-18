@@ -26,7 +26,7 @@
 //!
 //! ### Goals
 //!
-//! The bridge system in Webb is designed to make the following
+//! The DKG proposal system is designed to make the following
 //! possible:
 //!
 //! * Define.
@@ -47,7 +47,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use crate::types::{DepositNonce, ProposalStatus, ProposalVotes, ResourceId};
+use crate::types::{ProposalNonce, ProposalStatus, ProposalVotes, ResourceId};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::traits::OnAuthoritySetChangeHandler;
 use frame_support::{
@@ -67,9 +67,7 @@ use sp_std::prelude::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{
-		DepositNonce, ProposalVotes, ResourceId, DARKWEBB_DEFAULT_PROPOSER_THRESHOLD,
-	};
+	use crate::types::{ProposalNonce, ProposalVotes, ResourceId, DKG_DEFAULT_PROPOSER_THRESHOLD};
 	use frame_support::{
 		dispatch::{DispatchResultWithPostInfo, Dispatchable, GetDispatchInfo},
 		pallet_prelude::*,
@@ -120,11 +118,11 @@ pub mod pallet {
 	/// All whitelisted chains and their respective transaction counts
 	#[pallet::storage]
 	#[pallet::getter(fn chains)]
-	pub type ChainNonces<T: Config> = StorageMap<_, Blake2_256, T::ChainId, DepositNonce>;
+	pub type ChainNonces<T: Config> = StorageMap<_, Blake2_256, T::ChainId, ProposalNonce>;
 
 	#[pallet::type_value]
 	pub fn DefaultForProposerThreshold() -> u32 {
-		DARKWEBB_DEFAULT_PROPOSER_THRESHOLD
+		DKG_DEFAULT_PROPOSER_THRESHOLD
 	}
 
 	/// Number of votes required for a proposal to execute
@@ -153,7 +151,7 @@ pub mod pallet {
 		Blake2_256,
 		T::ChainId,
 		Blake2_256,
-		(DepositNonce, T::Proposal),
+		(ProposalNonce, T::Proposal),
 		ProposalVotes<T::AccountId, T::BlockNumber>,
 	>;
 
@@ -186,17 +184,17 @@ pub mod pallet {
 		/// Proposer removed from set
 		ProposerRemoved { proposer_id: T::AccountId },
 		/// Vote submitted in favour of proposal
-		VoteFor { chain_id: T::ChainId, deposit_nonce: DepositNonce, who: T::AccountId },
+		VoteFor { chain_id: T::ChainId, proposal_nonce: ProposalNonce, who: T::AccountId },
 		/// Vot submitted against proposal
-		VoteAgainst { chain_id: T::ChainId, deposit_nonce: DepositNonce, who: T::AccountId },
+		VoteAgainst { chain_id: T::ChainId, proposal_nonce: ProposalNonce, who: T::AccountId },
 		/// Voting successful for a proposal
-		ProposalApproved { chain_id: T::ChainId, deposit_nonce: DepositNonce },
+		ProposalApproved { chain_id: T::ChainId, proposal_nonce: ProposalNonce },
 		/// Voting rejected a proposal
-		ProposalRejected { chain_id: T::ChainId, deposit_nonce: DepositNonce },
+		ProposalRejected { chain_id: T::ChainId, proposal_nonce: ProposalNonce },
 		/// Execution of call succeeded
-		ProposalSucceeded { chain_id: T::ChainId, deposit_nonce: DepositNonce },
+		ProposalSucceeded { chain_id: T::ChainId, proposal_nonce: ProposalNonce },
 		/// Execution of call failed
-		ProposalFailed { chain_id: T::ChainId, deposit_nonce: DepositNonce },
+		ProposalFailed { chain_id: T::ChainId, proposal_nonce: ProposalNonce },
 		/// Proposers have been reset
 		ProposersReset { proposers: Vec<T::AccountId> },
 	}
@@ -374,7 +372,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
-			nonce: DepositNonce,
+			nonce: ProposalNonce,
 			src_id: T::ChainId,
 			r_id: ResourceId,
 			prop: T::Proposal,
@@ -395,7 +393,7 @@ pub mod pallet {
 		#[pallet::weight(195_000_000)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
-			nonce: DepositNonce,
+			nonce: ProposalNonce,
 			src_id: T::ChainId,
 			r_id: ResourceId,
 			prop: T::Proposal,
@@ -420,7 +418,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
-			nonce: DepositNonce,
+			nonce: ProposalNonce,
 			src_id: T::ChainId,
 			prop: T::Proposal,
 		) -> DispatchResultWithPostInfo {
@@ -452,12 +450,12 @@ impl<T: Config> Pallet<T> {
 
 	/// Asserts if a resource is registered
 	pub fn resource_exists(id: ResourceId) -> bool {
-		return Self::resources(id) != None
+		return Resources::<T>::contains_key(id)
 	}
 
 	/// Checks if a chain exists as a whitelisted destination
 	pub fn chain_whitelisted(id: T::ChainId) -> bool {
-		return Self::chains(id) != None
+		return ChainNonces::<T>::contains_key(id)
 	}
 
 	// *** Admin methods ***
@@ -518,7 +516,7 @@ impl<T: Config> Pallet<T> {
 	/// created.
 	fn commit_vote(
 		who: T::AccountId,
-		nonce: DepositNonce,
+		nonce: ProposalNonce,
 		src_id: T::ChainId,
 		prop: T::Proposal,
 		in_favour: bool,
@@ -542,14 +540,14 @@ impl<T: Config> Pallet<T> {
 			votes.votes_for.push(who.clone());
 			Self::deposit_event(Event::VoteFor {
 				chain_id: src_id,
-				deposit_nonce: nonce,
+				proposal_nonce: nonce,
 				who: who.clone(),
 			});
 		} else {
 			votes.votes_against.push(who.clone());
 			Self::deposit_event(Event::VoteAgainst {
 				chain_id: src_id,
-				deposit_nonce: nonce,
+				proposal_nonce: nonce,
 				who: who.clone(),
 			});
 		}
@@ -561,7 +559,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Attempts to finalize or cancel the proposal if the vote count allows.
 	fn try_resolve_proposal(
-		nonce: DepositNonce,
+		nonce: ProposalNonce,
 		src_id: T::ChainId,
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
@@ -588,7 +586,7 @@ impl<T: Config> Pallet<T> {
 	/// threshold is met.
 	fn vote_for(
 		who: T::AccountId,
-		nonce: DepositNonce,
+		nonce: ProposalNonce,
 		src_id: T::ChainId,
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
@@ -600,7 +598,7 @@ impl<T: Config> Pallet<T> {
 	/// (proposers.len() - threshold) votes against exist.
 	fn vote_against(
 		who: T::AccountId,
-		nonce: DepositNonce,
+		nonce: ProposalNonce,
 		src_id: T::ChainId,
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
@@ -611,18 +609,18 @@ impl<T: Config> Pallet<T> {
 	/// Execute the proposal and signals the result as an event
 	fn finalize_execution(
 		src_id: T::ChainId,
-		nonce: DepositNonce,
+		nonce: ProposalNonce,
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
-		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, deposit_nonce: nonce });
+		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
 		T::ProposalHandler::handle_proposal(prop, primitives::ProposalAction::Sign(0))?;
-		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, deposit_nonce: nonce });
+		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, proposal_nonce: nonce });
 		Ok(().into())
 	}
 
 	/// Cancels a proposal.
-	fn cancel_execution(src_id: T::ChainId, nonce: DepositNonce) -> DispatchResultWithPostInfo {
-		Self::deposit_event(Event::ProposalRejected { chain_id: src_id, deposit_nonce: nonce });
+	fn cancel_execution(src_id: T::ChainId, nonce: ProposalNonce) -> DispatchResultWithPostInfo {
+		Self::deposit_event(Event::ProposalRejected { chain_id: src_id, proposal_nonce: nonce });
 		Ok(().into())
 	}
 }

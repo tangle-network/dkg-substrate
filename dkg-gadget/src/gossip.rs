@@ -25,7 +25,7 @@ use log::{debug, error, trace};
 use parking_lot::{Mutex, RwLock};
 use wasm_timer::Instant;
 
-use crate::types::webb_topic;
+use crate::types::dkg_topic;
 use dkg_primitives::types::DKGMessage;
 use dkg_runtime_primitives::{crypto::Public, MmrRootHash};
 
@@ -34,14 +34,6 @@ const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
 
 // Timeout for rebroadcasting messages.
 const REBROADCAST_AFTER: Duration = Duration::from_secs(60 * 5);
-
-/// Gossip engine messages topic
-pub(crate) fn topic<B: Block>() -> B::Hash
-where
-	B: Block,
-{
-	<<B::Header as Header>::Hashing as Hash>::hash(b"DKG")
-}
 
 /// A type that represents hash of the message.
 pub type MessageHash = [u8; 8];
@@ -71,7 +63,7 @@ where
 {
 	pub fn new() -> GossipValidator<B> {
 		GossipValidator {
-			topic: topic::<B>(),
+			topic: dkg_topic::<B>(),
 			known_votes: RwLock::new(BTreeMap::new()),
 			next_rebroadcast: Mutex::new(Instant::now() + REBROADCAST_AFTER),
 		}
@@ -84,7 +76,7 @@ where
 	/// We retain the [`MAX_LIVE_GOSSIP_ROUNDS`] most **recent** voting rounds as live.
 	/// As long as a voting round is live, it will be gossiped to peer nodes.
 	pub(crate) fn note_round(&self, round: NumberFor<B>) {
-		debug!(target: "DKG", "🥩 About to note round #{}", round);
+		debug!(target: "dkg", "🕸️  About to note round #{}", round);
 
 		let mut live = self.known_votes.write();
 
@@ -135,17 +127,17 @@ where
 		&self,
 		_context: &mut dyn ValidatorContext<B>,
 		sender: &PeerId,
-		mut data: &[u8],
+		data: &[u8],
 	) -> ValidationResult<B::Hash> {
 		let mut data_copy = data;
-		trace!(target: "webb", "🕸️  Got a message: {:?}, from: {:?}", data_copy, sender);
+		trace!(target: "dkg", "🕸️  Got a message: {:?}, from: {:?}", data_copy, sender);
 		match DKGMessage::<Public, (MmrRootHash, NumberFor<B>)>::decode(&mut data_copy) {
 			Ok(msg) => {
-				trace!(target: "webb", "🕸️  Got webb dkg message: {:?}, from: {:?}", msg, sender);
-				return ValidationResult::ProcessAndKeep(webb_topic::<B>())
+				trace!(target: "dkg", "🕸️  Got dkg message: {:?}, from: {:?}", msg, sender);
+				return ValidationResult::ProcessAndKeep(dkg_topic::<B>())
 			},
 			Err(e) => {
-				error!(target: "webb", "🕸️  Got invalid webb dkg message: {:?}, from: {:?}", e, sender);
+				error!(target: "dkg", "🕸️  Got invalid dkg message: {:?}, from: {:?}", e, sender);
 			},
 		}
 

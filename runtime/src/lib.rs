@@ -542,7 +542,7 @@ impl parachain_staking::Config for Runtime {
 	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
 	type RevokeNominationDelay = RevokeNominationDelay;
 	type RewardPaymentDelay = RewardPaymentDelay;
-	type WeightInfo = parachain_staking::weights::WebbWeight<Runtime>;
+	type WeightInfo = parachain_staking::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {

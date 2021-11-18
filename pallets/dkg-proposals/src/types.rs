@@ -3,9 +3,9 @@ use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::prelude::*;
 
-pub const DARKWEBB_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
+pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 
-pub type DepositNonce = u64;
+pub type ProposalNonce = u64;
 pub type ResourceId = [u8; 32];
 
 #[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]

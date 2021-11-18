@@ -1,3 +1,32 @@
+# DKG
+## Running the DKG
+
+Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-substrate-node`. We will call those nodes `Alice`, `Bob` and
+`Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
+account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
+for our testnet.
+
+`Alice` is our bootnode is is started like so:
+
+```
+$ RUST_LOG=dkg=trace ./target/debug/node-template --tmp --alice
+```
+
+`Bob` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/debug/node-template --tmp --bob
+```
+
+`Charlie` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/debug/node-template --tmp --charlie
+```
+
+Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
+instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
+
 # Substrate Cumulus Parachain Template
 
 A new [Cumulus](https://github.com/paritytech/cumulus/)-based Substrate node, ready for hacking :cloud:

@@ -38,7 +38,7 @@ mod metrics;
 mod types;
 mod worker;
 
-pub const DKG_PROTOCOL_NAME: &str = "/webb/DKG/1";
+pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
@@ -130,11 +130,11 @@ where
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
 			|result| match result {
 				Ok(metrics) => {
-					debug!(target: "DKG", "🥩 Registered metrics");
+					debug!(target: "dkg", "🕸️  Registered metrics");
 					Some(metrics)
 				},
 				Err(err) => {
-					debug!(target: "DKG", "🥩 Failed to register metrics: {:?}", err);
+					debug!(target: "dkg", "🕸️  Failed to register metrics: {:?}", err);
 					None
 				},
 			},

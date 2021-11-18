@@ -50,7 +50,7 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	types::webb_topic,
+	types::dkg_topic,
 	Client,
 };
 
@@ -60,7 +60,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
-pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WEBB";
+pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 pub(crate) struct WorkerParams<B, BE, C>
 where
@@ -168,7 +168,7 @@ where
 			self.client.runtime_api().authority_set(&at).ok()
 		};
 
-		trace!(target: "webb", "🕸️  active validator set: {:?}", new);
+		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		let set = new.unwrap_or_else(|| panic!("Help"));
 		let public = self
@@ -194,13 +194,13 @@ where
 		let best_dkg_block = if let Some(block) = self.best_dkg_block {
 			block
 		} else {
-			debug!(target: "DKG", "🥩 Missing best DKG block - won't vote for: {:?}", number);
+			debug!(target: "dkg", "🕸️  Missing best DKG block - won't vote for: {:?}", number);
 			return false
 		};
 
 		let target = vote_target(self.best_grandpa_block, best_dkg_block, self.min_block_delta);
 
-		trace!(target: "DKG", "🥩 should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
+		trace!(target: "dkg", "🕸️  should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
 
 		metric_set!(self, dkg_should_vote_on, target);
 
@@ -222,7 +222,7 @@ where
 			self.client.runtime_api().authority_set(&at).ok()
 		};
 
-		trace!(target: "DKG", "🥩 active validator set: {:?}", new);
+		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		new
 	}
@@ -246,14 +246,14 @@ where
 		let missing: Vec<_> = store.difference(&active).cloned().collect();
 
 		if !missing.is_empty() {
-			debug!(target: "DKG", "🥩 for block {:?} public key missing in validator set: {:?}", block, missing);
+			debug!(target: "dkg", "🕸️  for block {:?} public key missing in validator set: {:?}", block, missing);
 		}
 
 		Ok(())
 	}
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
-		trace!(target: "DKG", "🥩 Finality notification: {:?}", notification);
+		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
 
 		// update best GRANDPA finalized block we have seen
 		self.best_grandpa_block = *notification.header.number();
@@ -267,7 +267,7 @@ where
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
-				debug!(target: "DKG", "🥩 New active validator set id: {:?}", active);
+				debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active);
 				metric_set!(self, dkg_validator_set_id, active.id);
 
 				// DKG should produce a signed commitment for each session
@@ -280,7 +280,7 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 
-				debug!(target: "DKG", "🥩 New Rounds for id: {:?}", active.id);
+				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
 				self.best_dkg_block = Some(*notification.header.number());
 
@@ -304,7 +304,7 @@ where
 				);
 
 				match self.rounds.start_keygen(active.clone().id) {
-					Ok(()) => info!(target: "webb", "Keygen started successfully"),
+					Ok(()) => info!(target: "dkg", "Keygen started successfully"),
 					Err(err) => error!("Error starting keygen {}", err),
 				}
 
@@ -322,10 +322,10 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
-				debug!(target: "DKG", "🥩 Local authority id: {:?}", id);
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 				id
 			} else {
-				debug!(target: "DKG", "🥩 Missing validator id - can't vote for: {:?}", notification.header.hash());
+				debug!(target: "dkg", "🕸️  Missing validator id - can't vote for: {:?}", notification.header.hash());
 				return
 			};
 
@@ -333,7 +333,7 @@ where
 				if let Some(hash) = find_mmr_root_digest::<B, Public>(&notification.header) {
 					hash
 				} else {
-					warn!(target: "DKG", "🥩 No MMR root digest found for: {:?}", notification.header.hash());
+					warn!(target: "dkg", "🕸️  No MMR root digest found for: {:?}", notification.header.hash());
 					return
 				};
 			let block_number = notification.header.number().clone();
@@ -344,15 +344,15 @@ where
 				validator_set_id: self.current_validator_set.id.clone(),
 			};
 
-			trace!(target: "webb", "🕸️  Created commitment");
+			trace!(target: "dkg", "🕸️  Created commitment");
 			if self.rounds.is_ready_to_vote() {
-				trace!(target: "webb", "🕸️  Signing commitment");
+				trace!(target: "dkg", "🕸️  Signing commitment");
 
 				self.rounds.vote((mmr_root, block_number), commitment).unwrap();
 
 				self.send_outgoing_dkg_messages();
 			} else {
-				debug!(target: "webb", "Not ready to sign, skipping")
+				debug!(target: "dkg", "Not ready to sign, skipping")
 			}
 		}
 	}
@@ -377,7 +377,7 @@ where
 	// 	sig_vec.extend(&[v]);
 
 	// 	if 65 != sig_vec.len() {
-	// 		warn!(target: "webb", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+	// 		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
 	// 		return None
 	// 	}
 
@@ -386,11 +386,11 @@ where
 
 	// 	return match ecdsa::Signature(dkg_sig_arr).try_into() {
 	// 		Ok(sig) => {
-	// 			debug!(target: "webb", "🕸️  Converted signature {:?}", &sig);
+	// 			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
 	// 			Some(sig)
 	// 		},
 	// 		Err(err) => {
-	// 			warn!(target: "webb", "🕸️  Error converting signature {:?}", err);
+	// 			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
 	// 			None
 	// 		},
 	// 	}
@@ -414,7 +414,7 @@ where
 			// let signed_commitment =
 			// 	SignedCommitment { commitment: finished_round.payload.clone(), signatures };
 
-			// info!(target: "webb", "🕸️  Round #{} concluded, committed: {:?}.", round_key.1, &signed_commitment);
+			// info!(target: "dkg", "🕸️  Round #{} concluded, committed: {:?}.", round_key.1, &signed_commitment);
 
 			// if self
 			// 	.backend
@@ -426,7 +426,7 @@ where
 			// {
 			// 	// just a trace, because until the round lifecycle is improved, we will
 			// 	// conclude certain rounds multiple times.
-			// 	trace!(target: "DKG", "🥩 Failed to append justification: {:?}", signed_commitment);
+			// 	trace!(target: "dkg", "🕸️  Failed to append justification: {:?}", signed_commitment);
 			// }
 
 			// self.signed_commitment_sender.notify(signed_commitment);
@@ -444,11 +444,11 @@ where
 	}
 
 	fn send_outgoing_dkg_messages(&mut self) {
-		debug!(target: "webb", "🕸️  Try sending DKG messages");
+		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 		let authority_id = if let Some(id) =
 			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 		{
-			debug!(target: "webb", "🕸️  Local authority id: {:?}", id);
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			id
 		} else {
 			panic!("error");
@@ -462,7 +462,7 @@ where
 			let signer_set_id = self.current_validator_set.id;
 			let s_l = (1..=self.rounds.dkg_params().2).collect();
 			match self.rounds.reset_signers(signer_set_id, s_l) {
-				Ok(()) => info!(target: "webb", "🕸️  Reset signers"),
+				Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
 				Err(err) => error!("Error resetting signers {}", err),
 			}
 		}
@@ -471,18 +471,18 @@ where
 			let dkg_message = DKGMessage { id: authority_id.clone(), payload: message };
 			let encoded_dkg_message = dkg_message.encode();
 			debug!(
-				target: "webb",
+				target: "dkg",
 				"🕸️  DKG Message: {:?}, encoded: {:?}",
 				dkg_message,
 				encoded_dkg_message
 			);
 
 			self.gossip_engine.lock().gossip_message(
-				webb_topic::<B>(),
+				dkg_topic::<B>(),
 				encoded_dkg_message.clone(),
 				true,
 			);
-			trace!(target: "webb", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+			trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
 		}
 	}
 
@@ -490,16 +490,16 @@ where
 		&mut self,
 		dkg_msg: DKGMessage<Public, (MmrRootHash, NumberFor<B>)>,
 	) {
-		debug!(target: "webb", "🕸️  Process DKG message {}", &dkg_msg);
+		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
 		match self.rounds.handle_incoming(dkg_msg.payload) {
 			Ok(()) => (),
-			Err(err) => debug!(target: "webb", "🕸️  Error while handling DKG message {:?}", err),
+			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		}
 		self.send_outgoing_dkg_messages();
 
 		if self.rounds.is_ready_to_vote() {
-			debug!(target: "webb", "🕸️  DKG is ready to sign");
+			debug!(target: "dkg", "🕸️  DKG is ready to sign");
 			self.dkg_state.accepted = true;
 		}
 
@@ -507,10 +507,10 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let mut webb_dkg =
-			Box::pin(self.gossip_engine.lock().messages_for(webb_topic::<B>()).filter_map(
+		let mut dkg =
+			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
-					// debug!(target: "webb", "🕸️  Got message: {:?}", notification);
+					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
 					DKGMessage::<Public, (MmrRootHash, NumberFor<B>)>::decode(
 						&mut &notification.message[..],
@@ -531,7 +531,7 @@ where
 						return;
 					}
 				},
-				dkg_msg = webb_dkg.next().fuse() => {
+				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						self.process_incoming_dkg_message(dkg_msg);
 					} else {
@@ -539,7 +539,7 @@ where
 					}
 				},
 				_ = gossip_engine.fuse() => {
-					error!(target: "DKG", "🥩 Gossip engine has terminated.");
+					error!(target: "dkg", "🕸️  Gossip engine has terminated.");
 					return;
 				}
 			}
@@ -587,7 +587,7 @@ where
 	let target = best_dkg + min_delta.max(diff.next_power_of_two()).into();
 
 	trace!(
-		target: "DKG",
+		target: "dkg",
 		"🥩 vote target - diff: {:?}, next_power_of_two: {:?}, target block: #{:?}",
 		diff,
 		diff.next_power_of_two(),

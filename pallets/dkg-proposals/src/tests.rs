@@ -253,26 +253,26 @@ fn create_sucessful_proposal() {
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_A,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_B,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_C,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 			}),
 		]);
 	})
@@ -344,22 +344,22 @@ fn create_unsucessful_proposal() {
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_A,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_B,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_C,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 			}),
 		]);
 	})
@@ -417,7 +417,7 @@ fn execute_after_threshold_change() {
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 				who: PROPOSER_A,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
@@ -425,11 +425,11 @@ fn execute_after_threshold_change() {
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: src_id,
-				deposit_nonce: prop_id,
+				proposal_nonce: prop_id,
 			}),
 		]);
 	})
@@ -516,7 +516,7 @@ fn proposal_expires() {
 
 		assert_events(vec![Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 			chain_id: src_id,
-			deposit_nonce: prop_id,
+			proposal_nonce: prop_id,
 			who: PROPOSER_A,
 		})]);
 	})
