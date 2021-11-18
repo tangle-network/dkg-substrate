@@ -1,6 +1,8 @@
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
 
+pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
+
 pub type ProposalNonce = u64;
 pub enum ProposalAction {
 	// sign the proposal with some priority
