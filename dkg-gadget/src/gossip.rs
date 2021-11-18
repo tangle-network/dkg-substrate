@@ -29,7 +29,7 @@ use crate::types::webb_topic;
 use dkg_primitives::types::DKGMessage;
 use dkg_runtime_primitives::{crypto::Public, MmrRootHash};
 
-// Limit BEEFY gossip by keeping only a bound number of voting rounds alive.
+// Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
 
 // Timeout for rebroadcasting messages.
@@ -40,7 +40,7 @@ pub(crate) fn topic<B: Block>() -> B::Hash
 where
 	B: Block,
 {
-	<<B::Header as Header>::Hashing as Hash>::hash(b"beefy")
+	<<B::Header as Header>::Hashing as Hash>::hash(b"DKG")
 }
 
 /// A type that represents hash of the message.
@@ -48,14 +48,14 @@ pub type MessageHash = [u8; 8];
 
 type KnownVotes<B> = BTreeMap<NumberFor<B>, fnv::FnvHashSet<MessageHash>>;
 
-/// BEEFY gossip validator
+/// DKG gossip validator
 ///
-/// Validate BEEFY gossip messages and limit the number of live BEEFY voting rounds.
+/// Validate DKG gossip messages and limit the number of live DKG voting rounds.
 ///
 /// Allows messages from last [`MAX_LIVE_GOSSIP_ROUNDS`] to flow, everything else gets
 /// rejected/expired.
 ///
-/// All messaging is handled in a single BEEFY global topic.
+/// All messaging is handled in a single DKG global topic.
 pub(crate) struct GossipValidator<B>
 where
 	B: Block,
@@ -84,7 +84,7 @@ where
 	/// We retain the [`MAX_LIVE_GOSSIP_ROUNDS`] most **recent** voting rounds as live.
 	/// As long as a voting round is live, it will be gossiped to peer nodes.
 	pub(crate) fn note_round(&self, round: NumberFor<B>) {
-		debug!(target: "beefy", "🥩 About to note round #{}", round);
+		debug!(target: "DKG", "🥩 About to note round #{}", round);
 
 		let mut live = self.known_votes.write();
 

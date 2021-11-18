@@ -38,7 +38,7 @@ use sp_runtime::{
 	SaturatedConversion,
 };
 
-use crate::keystore::BeefyKeystore;
+use crate::keystore::DKGKeystore;
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
@@ -68,7 +68,7 @@ where
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
-	pub key_store: BeefyKeystore,
+	pub key_store: DKGKeystore,
 	pub gossip_engine: GossipEngine<B>,
 	pub gossip_validator: Arc<GossipValidator<B>>,
 	pub min_block_delta: u32,
@@ -76,8 +76,8 @@ where
 	pub dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
 }
 
-/// A BEEFY worker plays the BEEFY protocol
-pub(crate) struct BeefyWorker<B, C, BE>
+/// A DKG worker plays the DKG protocol
+pub(crate) struct DKGWorker<B, C, BE>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -85,10 +85,10 @@ where
 {
 	client: Arc<C>,
 	backend: Arc<BE>,
-	key_store: BeefyKeystore,
+	key_store: DKGKeystore,
 	gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	gossip_validator: Arc<GossipValidator<B>>,
-	/// Min delta in block numbers between two blocks, BEEFY should vote on
+	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
 	rounds:
@@ -96,8 +96,8 @@ where
 	finality_notifications: FinalityNotifications<B>,
 	/// Best block we received a GRANDPA notification for
 	best_grandpa_block: NumberFor<B>,
-	/// Best block a BEEFY voting round has been concluded for
-	best_beefy_block: Option<NumberFor<B>>,
+	/// Best block a DKG voting round has been concluded for
+	best_dkg_block: Option<NumberFor<B>>,
 	/// Current validator set id
 	current_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
@@ -108,19 +108,19 @@ where
 	dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
 }
 
-impl<B, C, BE> BeefyWorker<B, C, BE>
+impl<B, C, BE> DKGWorker<B, C, BE>
 where
 	B: Block + Codec,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId>,
 {
-	/// Return a new BEEFY worker instance.
+	/// Return a new DKG worker instance.
 	///
-	/// Note that a BEEFY worker is only fully functional if a corresponding
-	/// BEEFY pallet has been deployed on-chain.
+	/// Note that a DKG worker is only fully functional if a corresponding
+	/// DKG pallet has been deployed on-chain.
 	///
-	/// The BEEFY pallet is needed in order to keep track of the BEEFY authority set.
+	/// The DKG pallet is needed in order to keep track of the DKG authority set.
 	pub(crate) fn new(worker_params: WorkerParams<B, BE, C>) -> Self {
 		let WorkerParams {
 			client,
@@ -133,7 +133,7 @@ where
 			dkg_state,
 		} = worker_params;
 
-		BeefyWorker {
+		DKGWorker {
 			client: client.clone(),
 			backend,
 			key_store,
@@ -144,7 +144,7 @@ where
 			rounds: MultiPartyECDSARounds::new(0, 0, 1),
 			finality_notifications: client.finality_notification_stream(),
 			best_grandpa_block: client.info().finalized_number,
-			best_beefy_block: None,
+			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			last_signed_id: 0,
 			dkg_state,
@@ -153,7 +153,7 @@ where
 	}
 }
 
-impl<B, C, BE> BeefyWorker<B, C, BE>
+impl<B, C, BE> DKGWorker<B, C, BE>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -191,18 +191,18 @@ where
 
 	/// Return `true`, if we should vote on block `number`
 	fn should_vote_on(&self, number: NumberFor<B>) -> bool {
-		let best_beefy_block = if let Some(block) = self.best_beefy_block {
+		let best_dkg_block = if let Some(block) = self.best_dkg_block {
 			block
 		} else {
-			debug!(target: "beefy", "🥩 Missing best BEEFY block - won't vote for: {:?}", number);
+			debug!(target: "DKG", "🥩 Missing best DKG block - won't vote for: {:?}", number);
 			return false
 		};
 
-		let target = vote_target(self.best_grandpa_block, best_beefy_block, self.min_block_delta);
+		let target = vote_target(self.best_grandpa_block, best_dkg_block, self.min_block_delta);
 
-		trace!(target: "beefy", "🥩 should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
+		trace!(target: "DKG", "🥩 should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
 
-		metric_set!(self, beefy_should_vote_on, target);
+		metric_set!(self, dkg_should_vote_on, target);
 
 		number == target
 	}
@@ -210,10 +210,10 @@ where
 	/// Return the current active validator set at header `header`.
 	///
 	/// Note that the validator set could be `None`. This is the case if we don't find
-	/// a BEEFY authority set change and we can't fetch the authority set from the
-	/// BEEFY on-chain state.
+	/// a DKG authority set change and we can't fetch the authority set from the
+	/// DKG on-chain state.
 	///
-	/// Such a failure is usually an indication that the BEEFY pallet has not been deployed (yet).
+	/// Such a failure is usually an indication that the DKG pallet has not been deployed (yet).
 	fn validator_set(&self, header: &B::Header) -> Option<AuthoritySet<Public>> {
 		let new = if let Some(new) = find_authorities_change::<B>(header) {
 			Some(new)
@@ -222,7 +222,7 @@ where
 			self.client.runtime_api().authority_set(&at).ok()
 		};
 
-		trace!(target: "beefy", "🥩 active validator set: {:?}", new);
+		trace!(target: "DKG", "🥩 active validator set: {:?}", new);
 
 		new
 	}
@@ -246,14 +246,14 @@ where
 		let missing: Vec<_> = store.difference(&active).cloned().collect();
 
 		if !missing.is_empty() {
-			debug!(target: "beefy", "🥩 for block {:?} public key missing in validator set: {:?}", block, missing);
+			debug!(target: "DKG", "🥩 for block {:?} public key missing in validator set: {:?}", block, missing);
 		}
 
 		Ok(())
 	}
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
-		trace!(target: "beefy", "🥩 Finality notification: {:?}", notification);
+		trace!(target: "DKG", "🥩 Finality notification: {:?}", notification);
 
 		// update best GRANDPA finalized block we have seen
 		self.best_grandpa_block = *notification.header.number();
@@ -262,17 +262,17 @@ where
 			// Authority set change or genesis set id triggers new voting rounds
 			//
 			// TODO: (adoerr) Enacting a new authority set will also implicitly 'conclude'
-			// the currently active BEEFY voting round by starting a new one. This is
+			// the currently active DKG voting round by starting a new one. This is
 			// temporary and needs to be replaced by proper round life cycle handling.
 			if active.id != self.current_validator_set.id ||
-				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_beefy_block.is_none())
+				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
-				debug!(target: "beefy", "🥩 New active validator set id: {:?}", active);
-				metric_set!(self, beefy_validator_set_id, active.id);
+				debug!(target: "DKG", "🥩 New active validator set id: {:?}", active);
+				metric_set!(self, dkg_validator_set_id, active.id);
 
-				// BEEFY should produce a signed commitment for each session
+				// DKG should produce a signed commitment for each session
 				if active.id != self.last_signed_id + 1 && active.id != GENESIS_AUTHORITY_SET_ID {
-					metric_inc!(self, beefy_skipped_sessions);
+					metric_inc!(self, dkg_skipped_sessions);
 				}
 
 				// verify the new validator set
@@ -280,13 +280,13 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 
-				debug!(target: "beefy", "🥩 New Rounds for id: {:?}", active.id);
+				debug!(target: "DKG", "🥩 New Rounds for id: {:?}", active.id);
 
-				self.best_beefy_block = Some(*notification.header.number());
+				self.best_dkg_block = Some(*notification.header.number());
 
-				// this metric is kind of 'fake'. Best BEEFY block should only be updated once we have a
+				// this metric is kind of 'fake'. Best DKG block should only be updated once we have a
 				// signed commitment for the block. Remove once the above TODO is done.
-				metric_set!(self, beefy_best_block, *notification.header.number());
+				metric_set!(self, dkg_best_block, *notification.header.number());
 
 				// Setting up new DKG
 				let party_inx = self.get_authority_index(&notification.header).unwrap() + 1;
@@ -322,10 +322,10 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
-				debug!(target: "beefy", "🥩 Local authority id: {:?}", id);
+				debug!(target: "DKG", "🥩 Local authority id: {:?}", id);
 				id
 			} else {
-				debug!(target: "beefy", "🥩 Missing validator id - can't vote for: {:?}", notification.header.hash());
+				debug!(target: "DKG", "🥩 Missing validator id - can't vote for: {:?}", notification.header.hash());
 				return
 			};
 
@@ -333,7 +333,7 @@ where
 				if let Some(hash) = find_mmr_root_digest::<B, Public>(&notification.header) {
 					hash
 				} else {
-					warn!(target: "beefy", "🥩 No MMR root digest found for: {:?}", notification.header.hash());
+					warn!(target: "DKG", "🥩 No MMR root digest found for: {:?}", notification.header.hash());
 					return
 				};
 			let block_number = notification.header.number().clone();
@@ -426,20 +426,20 @@ where
 			// {
 			// 	// just a trace, because until the round lifecycle is improved, we will
 			// 	// conclude certain rounds multiple times.
-			// 	trace!(target: "beefy", "🥩 Failed to append justification: {:?}", signed_commitment);
+			// 	trace!(target: "DKG", "🥩 Failed to append justification: {:?}", signed_commitment);
 			// }
 
 			// self.signed_commitment_sender.notify(signed_commitment);
 
-			if let Some(best) = self.best_beefy_block {
+			if let Some(best) = self.best_dkg_block {
 				if round_key.1 > best {
-					self.best_beefy_block = Some(round_key.1);
+					self.best_dkg_block = Some(round_key.1);
 				}
 			} else {
-				self.best_beefy_block = Some(round_key.1);
+				self.best_dkg_block = Some(round_key.1);
 			}
 
-			metric_set!(self, beefy_best_block, round_key.1);
+			metric_set!(self, dkg_best_block, round_key.1);
 		}
 	}
 
@@ -539,7 +539,7 @@ where
 					}
 				},
 				_ = gossip_engine.fuse() => {
-					error!(target: "beefy", "🥩 Gossip engine has terminated.");
+					error!(target: "DKG", "🥩 Gossip engine has terminated.");
 					return;
 				}
 			}
@@ -561,7 +561,7 @@ where
 	})
 }
 
-/// Scan the `header` digest log for a BEEFY validator set change. Return either the new
+/// Scan the `header` digest log for a DKG validator set change. Return either the new
 /// validator set or `None` in case no validator set change has been signaled.
 fn find_authorities_change<B>(header: &B::Header) -> Option<AuthoritySet<AuthorityId>>
 where
@@ -578,16 +578,16 @@ where
 }
 
 /// Calculate next block number to vote on
-fn vote_target<N>(best_grandpa: N, best_beefy: N, min_delta: u32) -> N
+fn vote_target<N>(best_grandpa: N, best_dkg: N, min_delta: u32) -> N
 where
 	N: AtLeast32Bit + Copy + Debug,
 {
-	let diff = best_grandpa.saturating_sub(best_beefy);
+	let diff = best_grandpa.saturating_sub(best_dkg);
 	let diff = diff.saturated_into::<u32>();
-	let target = best_beefy + min_delta.max(diff.next_power_of_two()).into();
+	let target = best_dkg + min_delta.max(diff.next_power_of_two()).into();
 
 	trace!(
-		target: "beefy",
+		target: "DKG",
 		"🥩 vote target - diff: {:?}, next_power_of_two: {:?}, target block: #{:?}",
 		diff,
 		diff.next_power_of_two(),
