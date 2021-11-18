@@ -42,7 +42,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/paritytech/DKG/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
-pub fn DKG_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
+pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
 	let mut cfg =
 		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
 	cfg.allow_non_reserved(25, 25);
