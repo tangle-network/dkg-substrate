@@ -27,7 +27,10 @@ use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 
-use sc_client_api::{Backend, FinalityNotification, FinalityNotifications};
+use sc_client_api::{
+	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
+	ImportNotifications,
+};
 use sc_network_gossip::GossipEngine;
 
 use sp_api::BlockId;
@@ -93,6 +96,10 @@ where
 	metrics: Option<Metrics>,
 	rounds:
 		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
+	next_rounds: Option<
+		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
+	>,
+	block_import_notification: ImportNotifications<B>,
 	finality_notifications: FinalityNotifications<B>,
 	/// Best block we received a GRANDPA notification for
 	best_grandpa_block: NumberFor<B>,
@@ -142,6 +149,8 @@ where
 			min_block_delta,
 			metrics,
 			rounds: MultiPartyECDSARounds::new(0, 0, 1),
+			next_rounds: None,
+			block_import_notification: client.import_notification_stream(),
 			finality_notifications: client.finality_notification_stream(),
 			best_grandpa_block: client.info().finalized_number,
 			best_dkg_block: None,
@@ -161,7 +170,7 @@ where
 	C::Api: DKGApi<B, AuthorityId>,
 {
 	fn get_authority_index(&self, header: &B::Header) -> Option<usize> {
-		let new = if let Some(new) = find_authorities_change::<B>(header) {
+		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
 		} else {
 			let at = BlockId::hash(header.hash());
@@ -215,7 +224,7 @@ where
 	///
 	/// Such a failure is usually an indication that the DKG pallet has not been deployed (yet).
 	fn validator_set(&self, header: &B::Header) -> Option<AuthoritySet<Public>> {
-		let new = if let Some(new) = find_authorities_change::<B>(header) {
+		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
 		} else {
 			let at = BlockId::hash(header.hash());
@@ -250,6 +259,40 @@ where
 		}
 
 		Ok(())
+	}
+
+	fn handle_block_import_notification(&mut self, notification: BlockImportNotification<B>) {
+		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
+		let header = &notification.header;
+
+		// Find the Next Authorities set in header digest
+		if let Some((.., queued)) = find_authorities_change::<B>(header) {
+			let public = self
+				.key_store
+				.authority_id(&self.key_store.public_keys().unwrap())
+				.unwrap_or_else(|| panic!("Halp"));
+
+			if queued.authorities.contains(&public) {
+				// Setting up new DKG
+				let party_inx = find_index::<AuthorityId>(&queued.authorities, &public).unwrap();
+				let thresh = self.get_threshold(header).unwrap();
+				let n = queued.authorities.len();
+
+				let mut next_rounds = MultiPartyECDSARounds::new(
+					u16::try_from(party_inx).unwrap(),
+					thresh,
+					u16::try_from(n).unwrap(),
+				);
+
+				match next_rounds.start_keygen(queued.id.clone()) {
+					Ok(()) =>
+						info!(target: "dkg", "Keygen started for next authority set successfully"),
+					Err(err) => error!("Error starting keygen {}", err),
+				}
+
+				self.next_rounds = Some(next_rounds);
+			}
+		}
 	}
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
@@ -531,6 +574,13 @@ where
 						return;
 					}
 				},
+				notification = self.block_import_notification.next().fuse() => {
+					if let Some(notification) = notification {
+						self.handle_block_import_notification(notification);
+					} else {
+						return;
+					}
+				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						self.process_incoming_dkg_message(dkg_msg);
@@ -545,6 +595,15 @@ where
 			}
 		}
 	}
+}
+
+fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
+	for (i, v) in queue.iter().enumerate() {
+		if value == v {
+			return Some(i)
+		}
+	}
+	None
 }
 
 /// Extract the MMR root hash from a digest in the given header, if it exists.
@@ -563,14 +622,19 @@ where
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
 /// validator set or `None` in case no validator set change has been signaled.
-fn find_authorities_change<B>(header: &B::Header) -> Option<AuthoritySet<AuthorityId>>
+fn find_authorities_change<B>(
+	header: &B::Header,
+) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)>
 where
 	B: Block,
 {
 	let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
 
 	let filter = |log: ConsensusLog<AuthorityId>| match log {
-		ConsensusLog::AuthoritiesChange(validator_set) => Some(validator_set),
+		ConsensusLog::AuthoritiesChange {
+			next_authorities: validator_set,
+			next_queued_authorities,
+		} => Some((validator_set, next_queued_authorities)),
 		_ => None,
 	};
 

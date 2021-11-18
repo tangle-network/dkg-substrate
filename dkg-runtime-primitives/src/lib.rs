@@ -16,7 +16,7 @@ pub type MmrRootHash = H256;
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
 // Engine ID for DKG
-pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"DKG_";
+pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
@@ -62,7 +62,10 @@ pub type AuthorityIndex = u32;
 pub enum ConsensusLog<AuthorityId: Codec> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange(AuthoritySet<AuthorityId>),
+	AuthoritiesChange {
+		next_authorities: AuthoritySet<AuthorityId>,
+		next_queued_authorities: AuthoritySet<AuthorityId>,
+	},
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
@@ -80,5 +83,7 @@ sp_api::decl_runtime_apis! {
 		fn authority_set() -> AuthoritySet<AuthorityId>;
 		/// Return the current signature threshold for the DKG
 		fn signature_threshold() -> u16;
+		/// Return the next authorities active authority set
+		fn next_authority_set() -> AuthoritySet<AuthorityId>;
 	}
 }

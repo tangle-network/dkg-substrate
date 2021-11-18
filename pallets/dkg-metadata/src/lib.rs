@@ -166,8 +166,14 @@ impl<T: Config> Pallet<T> {
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
-				ConsensusLog::AuthoritiesChange(AuthoritySet { authorities: new, id: next_id })
-					.encode(),
+				ConsensusLog::AuthoritiesChange {
+					next_authorities: AuthoritySet { authorities: new, id: next_id },
+					next_queued_authorities: AuthoritySet {
+						authorities: queued.clone(),
+						id: next_id + 1u64,
+					},
+				}
+				.encode(),
 			);
 			<frame_system::Pallet<T>>::deposit_log(log);
 		}

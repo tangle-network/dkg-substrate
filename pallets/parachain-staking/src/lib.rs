@@ -2139,6 +2139,9 @@ pub mod pallet {
 	impl<T: Config> ShouldEndSession<T::BlockNumber> for Pallet<T> {
 		fn should_end_session(now: T::BlockNumber) -> bool {
 			let round = <Round<T>>::get();
+			if (round.first == 0u32.into()) & (now == 0u32.into()) {
+				return false
+			}
 			round.first == now
 		}
 	}
