@@ -10,7 +10,7 @@ use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
 };
@@ -43,6 +43,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{MultiAddress, Perbill, Percent, Permill};
 
 // XCM Imports
+use dkg_runtime_primitives::mmr::MmrLeafVersion;
 use pallet_xcm::XcmPassthrough;
 use polkadot_parachain::primitives::Sibling;
 use xcm::latest::prelude::*;
@@ -180,7 +181,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
-		pub dkg: Dkg,
+		pub dkg: DKG,
 	}
 }
 
@@ -571,6 +572,28 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type ProposalHandler = DKGProposalHandler;
 }
 
+parameter_types! {
+	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
+}
+
+impl pallet_dkg_mmr::Config for Runtime {
+	type LeafVersion = LeafVersion;
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_mmr::DKGEcdsaToEthereum;
+	type ParachainHeads = ();
+}
+
+type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
+
+/// Configure Merkle Mountain Range pallet.
+impl pallet_mmr::Config for Runtime {
+	const INDEXING_PREFIX: &'static [u8] = b"mmr";
+	type Hashing = Keccak256;
+	type Hash = MmrHash;
+	type OnNewRoot = pallet_dkg_mmr::DepositDKGDigest<Runtime>;
+	type WeightInfo = ();
+	type LeafData = DKGMMR;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -596,7 +619,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
-		Dkg: pallet_dkg_metadata::{Pallet, Storage, Config<T>} = 36,
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Config<T>} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
@@ -607,7 +630,9 @@ construct_runtime!(
 		//Template
 		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>}
+		MMR: pallet_mmr::{Pallet, Storage},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		DKGMMR: pallet_dkg_mmr::{Pallet, Storage}
 	}
 );
 
@@ -657,8 +682,8 @@ impl_runtime_apis! {
 
 	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
-			let authorities = Dkg::authorities();
-			let authority_set_id = Dkg::authority_set_id();
+			let authorities = DKG::authorities();
+			let authority_set_id = DKG::authority_set_id();
 
 			dkg_runtime_primitives::AuthoritySet {
 				authorities,
@@ -667,7 +692,7 @@ impl_runtime_apis! {
 		}
 
 		fn signature_threshold() -> u16 {
-			Dkg::signature_threshold()
+			DKG::signature_threshold()
 		}
 	}
 

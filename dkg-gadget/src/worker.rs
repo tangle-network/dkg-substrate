@@ -194,7 +194,7 @@ where
 		let best_dkg_block = if let Some(block) = self.best_dkg_block {
 			block
 		} else {
-			debug!(target: "dkg", "🕸️  Missing best BEEFY block - won't vote for: {:?}", number);
+			debug!(target: "dkg", "🕸️  Missing best DKG block - won't vote for: {:?}", number);
 			return false
 		};
 
