@@ -1,11 +1,11 @@
 [package]
 name = 'dkg_node'
-authors = ['Anonymous']
+authors = ['Webb tools']
 description = 'A new Cumulus FRAME-based Substrate node, ready for hacking.'
 license = 'Unlicense'
 version = '3.0.0'
-homepage = 'https://substrate.dev'
-repository = 'https://github.com/substrate-developer-hub/substrate-parachain-template'
+homepage = 'https://webb.tools'
+repository = "https://github.com/webb-tools/dkg-substrate"
 edition = '2018'
 build = 'build.rs'
 

@@ -2,12 +2,12 @@
 name = "dkg-standalone-node"
 version = "3.0.0"
 description = "A fresh FRAME-based Substrate node, ready for hacking."
-authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
-homepage = "https://substrate.io/"
+authors = ["Webb tools"]
+homepage = "https://webb.tools/"
 edition = "2021"
 license = "Unlicense"
 publish = false
-repository = "https://github.com/substrate-developer-hub/substrate-dkg-standalone-node/"
+repository = "https://github.com/webb-tools/dkg-substrate"
 build = "build.rs"
 
 [package.metadata.docs.rs]
