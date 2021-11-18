@@ -804,7 +804,7 @@ mod tests {
 	}
 
 	#[test]
-	fn simulate_multi_party_t9_n10() {
-		simulate_multi_party(9, 10, (1..=10).collect());
+	fn simulate_multi_party_t3_n5() {
+		simulate_multi_party(3, 5, (1..=5).collect());
 	}
 }

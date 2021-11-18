@@ -1,5 +1,5 @@
 use crate as pallet_dkg_proposal_handler;
-use frame_support::{parameter_types, traits::Everything};
+use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -18,6 +18,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -25,6 +26,12 @@ frame_support::construct_runtime!(
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
 	pub const SS58Prefix: u8 = 42;
+}
+
+parameter_types! {
+	pub const ChainIdentifier: u32 = 5;
+	pub const ProposalLifetime: u64 = 50;
+	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
 
 impl system::Config for Test {
@@ -55,7 +62,18 @@ impl system::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
+	type ChainId = u32;
+}
+
+impl pallet_dkg_proposals::Config for Test {
+	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+	type DKGAccountId = DKGAccountId;
+	type ChainId = u32;
+	type ChainIdentifier = ChainIdentifier;
+	type Event = Event;
 	type Proposal = Vec<u8>;
+	type ProposalLifetime = ProposalLifetime;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 // Build genesis storage according to the mock runtime.
