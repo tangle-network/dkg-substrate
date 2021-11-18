@@ -58,7 +58,7 @@ use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::DKGMessage,
 };
-use dkg_runtime_primitives::{AuthoritySet, DkgApi};
+use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WEBB";
 
@@ -113,7 +113,7 @@ where
 	B: Block + Codec,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 {
 	/// Return a new BEEFY worker instance.
 	///
@@ -158,7 +158,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 {
 	fn get_authority_index(&self, header: &B::Header) -> Option<usize> {
 		let new = if let Some(new) = find_authorities_change::<B>(header) {

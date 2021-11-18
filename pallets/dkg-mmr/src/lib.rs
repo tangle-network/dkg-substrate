@@ -35,7 +35,7 @@
 use sp_runtime::traits::{Convert, Hash};
 use sp_std::prelude::*;
 
-use dkg_runtime_primitives::mmr::{DkgNextAuthoritySet, MmrLeaf, MmrLeafVersion};
+use dkg_runtime_primitives::mmr::{DKGNextAuthoritySet, MmrLeaf, MmrLeafVersion};
 use pallet_mmr::primitives::LeafDataProvider;
 
 use codec::Encode;
@@ -49,10 +49,10 @@ mod mock;
 mod tests;
 
 /// A DKG consensus digest item with MMR root hash.
-pub struct DepositDkgDigest<T>(sp_std::marker::PhantomData<T>);
+pub struct DepositDKGDigest<T>(sp_std::marker::PhantomData<T>);
 
 impl<T> pallet_mmr::primitives::OnNewRoot<dkg_runtime_primitives::MmrRootHash>
-	for DepositDkgDigest<T>
+	for DepositDKGDigest<T>
 where
 	T: pallet_mmr::Config<Hash = dkg_runtime_primitives::MmrRootHash>,
 	T: pallet_dkg_metadata::Config,
@@ -69,8 +69,8 @@ where
 }
 
 /// Convert DKG secp256k1 public keys into Ethereum addresses
-pub struct DkgEcdsaToEthereum;
-impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DkgEcdsaToEthereum {
+pub struct DKGEcdsaToEthereum;
+impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
 		use sp_core::crypto::Public;
 		let compressed_key = a.as_slice();
@@ -137,7 +137,7 @@ pub mod pallet {
 		/// and later to Ethereum Addresses (160 bits) to simplify using them on Ethereum chain,
 		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
 		/// efficiency reasons.
-		type DkgAuthorityToMerkleLeaf: Convert<
+		type DKGAuthorityToMerkleLeaf: Convert<
 			<Self as pallet_dkg_metadata::Config>::DKGId,
 			Vec<u8>,
 		>;
@@ -155,13 +155,13 @@ pub mod pallet {
 	/// This storage entry is used as cache for calls to [`update_dkg_next_authority_set`].
 	#[pallet::storage]
 	#[pallet::getter(fn dkg_next_authorities)]
-	pub type DkgNextAuthorities<T: Config> =
-		StorageValue<_, DkgNextAuthoritySet<MerkleRootOf<T>>, ValueQuery>;
+	pub type DKGNextAuthorities<T: Config> =
+		StorageValue<_, DKGNextAuthoritySet<MerkleRootOf<T>>, ValueQuery>;
 }
 
 impl<T: Config> LeafDataProvider for Pallet<T>
 where
-	MerkleRootOf<T>: From<pallet_dkg_merkle_tree::Hash> + Into<pallet_dkg_merkle_tree::Hash>,
+	MerkleRootOf<T>: From<dkg_merkle_tree::Hash> + Into<dkg_merkle_tree::Hash>,
 {
 	type LeafData = MmrLeaf<
 		<T as frame_system::Config>::BlockNumber,
@@ -179,18 +179,18 @@ where
 	}
 }
 
-impl<T: Config> pallet_dkg_merkle_tree::Hasher for Pallet<T>
+impl<T: Config> dkg_merkle_tree::Hasher for Pallet<T>
 where
-	MerkleRootOf<T>: Into<pallet_dkg_merkle_tree::Hash>,
+	MerkleRootOf<T>: Into<dkg_merkle_tree::Hash>,
 {
-	fn hash(data: &[u8]) -> pallet_dkg_merkle_tree::Hash {
+	fn hash(data: &[u8]) -> dkg_merkle_tree::Hash {
 		<T as pallet_mmr::Config>::Hashing::hash(data).into()
 	}
 }
 
 impl<T: Config> Pallet<T>
 where
-	MerkleRootOf<T>: From<pallet_dkg_merkle_tree::Hash> + Into<pallet_dkg_merkle_tree::Hash>,
+	MerkleRootOf<T>: From<dkg_merkle_tree::Hash> + Into<dkg_merkle_tree::Hash>,
 {
 	/// Returns latest root hash of a merkle tree constructed from all active parachain headers.
 	///
@@ -205,7 +205,7 @@ where
 		let mut para_heads = T::ParachainHeads::parachain_heads();
 		para_heads.sort();
 		let para_heads = para_heads.into_iter().map(|pair| pair.encode());
-		pallet_dkg_merkle_tree::merkle_root::<Self, _, _>(para_heads).into()
+		dkg_merkle_tree::merkle_root::<Self, _, _>(para_heads).into()
 	}
 
 	/// Returns details of the next DKG authority set.
@@ -216,7 +216,7 @@ where
 	///
 	/// This function will use a storage-cached entry in case the set didn't change, or compute and cache
 	/// new one in case it did.
-	fn update_dkg_next_authority_set() -> DkgNextAuthoritySet<MerkleRootOf<T>> {
+	fn update_dkg_next_authority_set() -> DKGNextAuthoritySet<MerkleRootOf<T>> {
 		let id = pallet_dkg_metadata::Pallet::<T>::authority_set_id() + 1;
 		let current_next = Self::dkg_next_authorities();
 		// avoid computing the merkle tree if validator set id didn't change.
@@ -226,13 +226,13 @@ where
 
 		let dkg_addresses = pallet_dkg_metadata::Pallet::<T>::next_authorities()
 			.into_iter()
-			.map(T::DkgAuthorityToMerkleLeaf::convert)
+			.map(T::DKGAuthorityToMerkleLeaf::convert)
 			.collect::<Vec<_>>();
 		let len = dkg_addresses.len() as u32;
-		let root = pallet_dkg_merkle_tree::merkle_root::<Self, _, _>(dkg_addresses).into();
-		let next_set = DkgNextAuthoritySet { id, len, root };
+		let root = dkg_merkle_tree::merkle_root::<Self, _, _>(dkg_addresses).into();
+		let next_set = DKGNextAuthoritySet { id, len, root };
 		// cache the result
-		DkgNextAuthorities::<T>::put(&next_set);
+		DKGNextAuthorities::<T>::put(&next_set);
 		next_set
 	}
 }

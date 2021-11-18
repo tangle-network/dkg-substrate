@@ -1907,6 +1907,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkg-merkle-tree"
+version = "0.1.0"
+dependencies = [
+ "env_logger 0.9.0",
+ "hex",
+ "hex-literal",
+ "log",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "dkg-primitives"
 version = "0.0.1"
 dependencies = [
@@ -5186,17 +5197,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-dkg-merkle-tree"
-version = "0.1.0"
-dependencies = [
- "env_logger 0.9.0",
- "hex",
- "hex-literal",
- "log",
- "tiny-keccak",
-]
-
-[[package]]
 name = "pallet-dkg-metadata"
 version = "0.1.0"
 dependencies = [
@@ -5219,6 +5219,7 @@ dependencies = [
 name = "pallet-dkg-mmr"
 version = "0.1.0"
 dependencies = [
+ "dkg-merkle-tree",
  "dkg-runtime-primitives",
  "frame-support",
  "frame-system",
@@ -5226,7 +5227,6 @@ dependencies = [
  "hex-literal",
  "libsecp256k1 0.6.0",
  "log",
- "pallet-dkg-merkle-tree",
  "pallet-dkg-metadata",
  "pallet-mmr",
  "pallet-mmr-primitives",

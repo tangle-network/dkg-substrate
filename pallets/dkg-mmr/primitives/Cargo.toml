@@ -1,5 +1,5 @@
 [package]
-name = "pallet-dkg-merkle-tree"
+name = "dkg-merkle-tree"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
@@ -17,7 +17,7 @@ hex = "0.4"
 hex-literal = "0.3"
 
 [features]
-debug = ["hex", "log"]
+debug = ["hex", "hex/std", "log"]
 default = ["std", "debug", "keccak"]
 keccak = ["tiny-keccak"]
 std = []

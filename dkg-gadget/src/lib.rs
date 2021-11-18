@@ -27,7 +27,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block;
 
-use dkg_runtime_primitives::{crypto::AuthorityId, DkgApi};
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
@@ -82,7 +82,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
 	/// BEEFY client
@@ -109,7 +109,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DkgApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
 	let BeefyParams {

@@ -54,9 +54,9 @@ construct_runtime!(
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		Mmr: pallet_mmr::{Pallet, Storage},
-		Dkg: pallet_dkg_metadata::{Pallet, Config<T>, Storage},
-		DkgMmr: pallet_dkg_mmr::{Pallet, Storage},
+		MMR: pallet_mmr::{Pallet, Storage},
+		DKG: pallet_dkg_metadata::{Pallet, Config<T>, Storage},
+		DKGMmr: pallet_dkg_mmr::{Pallet, Storage},
 	}
 );
 
@@ -118,15 +118,10 @@ pub type MmrLeaf = dkg_runtime_primitives::mmr::MmrLeaf<
 
 impl pallet_mmr::Config for Test {
 	const INDEXING_PREFIX: &'static [u8] = b"mmr";
-
 	type Hashing = Keccak256;
-
 	type Hash = <Keccak256 as Hasher>::Out;
-
-	type LeafData = DkgMmr;
-
-	type OnNewRoot = pallet_dkg_mmr::DepositDkgDigest<Test>;
-
+	type LeafData = DKGMmr;
+	type OnNewRoot = pallet_dkg_mmr::DepositDKGDigest<Test>;
 	type WeightInfo = ();
 }
 
@@ -141,9 +136,7 @@ parameter_types! {
 
 impl pallet_dkg_mmr::Config for Test {
 	type LeafVersion = LeafVersion;
-
-	type DkgAuthorityToMerkleLeaf = pallet_dkg_mmr::DkgEcdsaToEthereum;
-
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_mmr::DKGEcdsaToEthereum;
 	type ParachainHeads = DummyParaHeads;
 }
 

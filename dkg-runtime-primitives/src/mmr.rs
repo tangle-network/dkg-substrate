@@ -39,7 +39,7 @@ pub struct MmrLeaf<BlockNumber, Hash, MerkleRoot> {
 	/// Current block parent number and hash.
 	pub parent_number_and_hash: (BlockNumber, Hash),
 	/// A merkle root of the next DKG authority set.
-	pub dkg_next_authority_set: DkgNextAuthoritySet<MerkleRoot>,
+	pub dkg_next_authority_set: DKGNextAuthoritySet<MerkleRoot>,
 	/// A merkle root of all registered parachain heads.
 	pub parachain_heads: MerkleRoot,
 }
@@ -81,7 +81,7 @@ impl MmrLeafVersion {
 
 /// Details of the next DKG authority set.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Encode, Decode, TypeInfo)]
-pub struct DkgNextAuthoritySet<MerkleRoot> {
+pub struct DKGNextAuthoritySet<MerkleRoot> {
 	/// Id of the next set.
 	///
 	/// Id is required to correlate DKG signed commitments with the validator set.

@@ -18,7 +18,7 @@ use std::vec;
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
-	mmr::{DkgNextAuthoritySet, MmrLeafVersion},
+	mmr::{DKGNextAuthoritySet, MmrLeafVersion},
 	AuthoritySet,
 };
 use hex_literal::hex;
@@ -34,9 +34,9 @@ use crate::mock::*;
 fn init_block(block: u64) {
 	System::set_block_number(block);
 	Session::on_initialize(block);
-	Mmr::on_initialize(block);
-	Dkg::on_initialize(block);
-	DkgMmr::on_initialize(block);
+	MMR::on_initialize(block);
+	DKG::on_initialize(block);
+	DKGMmr::on_initialize(block);
 }
 
 pub fn dkg_log(log: ConsensusLog<DKGId>) -> DigestItem<H256> {
@@ -108,7 +108,7 @@ fn should_contain_valid_leaf_data() {
 		MmrLeaf {
 			version: MmrLeafVersion::new(1, 5),
 			parent_number_and_hash: (0_u64, H256::repeat_byte(0x45)),
-			dkg_next_authority_set: DkgNextAuthoritySet {
+			dkg_next_authority_set: DKGNextAuthoritySet {
 				id: 1,
 				len: 2,
 				root: hex!("01b1a742589773fc054c8f5021a456316ffcec0370b25678b0696e116d1ef9ae")
@@ -132,7 +132,7 @@ fn should_contain_valid_leaf_data() {
 		MmrLeaf {
 			version: MmrLeafVersion::new(1, 5),
 			parent_number_and_hash: (1_u64, H256::repeat_byte(0x45)),
-			dkg_next_authority_set: DkgNextAuthoritySet {
+			dkg_next_authority_set: DKGNextAuthoritySet {
 				id: 2,
 				len: 2,
 				root: hex!("9c6b2c1b0d0b25a008e6c882cc7b415f309965c72ad2b944ac0931048ca31cd5")

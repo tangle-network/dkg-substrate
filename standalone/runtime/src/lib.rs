@@ -437,7 +437,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DkgApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			Grandpa::grandpa_authorities().iter().map(|auth| {
 				auth

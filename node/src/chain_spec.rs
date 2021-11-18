@@ -246,6 +246,6 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: parachain_runtime::DkgConfig::default(),
+		dkg: parachain_runtime::DKGConfig::default(),
 	}
 }
