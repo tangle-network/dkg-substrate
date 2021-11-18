@@ -1,11 +1,11 @@
 [package]
-name = 'parachain-runtime'
-authors = ['Anonymous']
+name = 'dkg-runtime'
+authors = ['Webb tools']
 description = 'A new Cumulus FRAME-based Substrate Runtime, ready for hacking.'
 license = 'Unlicense'
 version = '3.0.0'
-homepage = 'https://substrate.dev'
-repository = 'https://github.com/substrate-developer-hub/substrate-parachain-template'
+homepage = 'https://webb.tools'
+repository = "https://github.com/webb-tools/dkg-substrate"
 edition = '2018'
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
@@ -23,6 +23,7 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 template = { package = 'pallet-template', path = '../pallets/template', default-features = false }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
+pallet-dkg-mmr = { path = '../pallets/dkg-mmr', default-features = false }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
 pallet-dkg-proposals = { path = '../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../pallets/dkg-proposal-handler', default-features = false }
@@ -60,6 +61,7 @@ pallet-transaction-payment = { git = 'https://github.com/paritytech/substrate', 
 pallet-transaction-payment-rpc-runtime-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 pallet-authorship = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false }
+pallet-mmr = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.11" }
 
 
 # Cumulus Dependencies
@@ -140,5 +142,7 @@ std = [
 	'pallet-dkg-metadata/std',
 	'dkg-runtime-primitives/std',
 	'pallet-dkg-proposals/std',
-	'pallet-dkg-proposal-handler/std'
+	'pallet-dkg-proposal-handler/std',
+	'pallet-dkg-mmr/std',
+	'pallet-mmr/std'
 ]

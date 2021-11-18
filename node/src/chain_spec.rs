@@ -1,5 +1,5 @@
 use cumulus_primitives_core::ParaId;
-use parachain_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT};
+use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT};
 use parachain_staking::{InflationInfo, Range};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
@@ -11,7 +11,7 @@ use sp_runtime::{
 };
 
 /// Specialized `ChainSpec` for the normal parachain runtime.
-pub type ChainSpec = sc_service::GenericChainSpec<parachain_runtime::GenesisConfig, Extensions>;
+pub type ChainSpec = sc_service::GenericChainSpec<dkg_runtime::GenesisConfig, Extensions>;
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -40,8 +40,8 @@ pub fn get_dkg_keys_from_seed(seed: &str) -> DKGId {
 ///
 /// The input must be a tuple of individual keys (a single arg for now since we
 /// have just one key).
-pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> parachain_runtime::SessionKeys {
-	parachain_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
+pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> dkg_runtime::SessionKeys {
+	dkg_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
 }
 
 /// The extensions for the [`ChainSpec`].
@@ -208,20 +208,20 @@ fn testnet_genesis(
 	nominations: Vec<(AccountId, AccountId, Balance)>,
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
-) -> parachain_runtime::GenesisConfig {
-	parachain_runtime::GenesisConfig {
-		system: parachain_runtime::SystemConfig {
-			code: parachain_runtime::WASM_BINARY
+) -> dkg_runtime::GenesisConfig {
+	dkg_runtime::GenesisConfig {
+		system: dkg_runtime::SystemConfig {
+			code: dkg_runtime::WASM_BINARY
 				.expect("WASM binary was not build, please build it!")
 				.to_vec(),
 			changes_trie_config: Default::default(),
 		},
-		balances: parachain_runtime::BalancesConfig {
+		balances: dkg_runtime::BalancesConfig {
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
-		sudo: parachain_runtime::SudoConfig { key: root_key },
-		parachain_info: parachain_runtime::ParachainInfoConfig { parachain_id: id },
-		parachain_staking: parachain_runtime::ParachainStakingConfig {
+		sudo: dkg_runtime::SudoConfig { key: root_key },
+		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
+		parachain_staking: dkg_runtime::ParachainStakingConfig {
 			candidates: candidates
 				.iter()
 				.cloned()
@@ -230,7 +230,7 @@ fn testnet_genesis(
 			nominations,
 			inflation_config: dkg_inflation_config(),
 		},
-		session: parachain_runtime::SessionConfig {
+		session: dkg_runtime::SessionConfig {
 			keys: candidates
 				.iter()
 				.cloned()
@@ -246,6 +246,6 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: parachain_runtime::DkgConfig::default(),
+		dkg: dkg_runtime::DKGConfig::default(),
 	}
 }
