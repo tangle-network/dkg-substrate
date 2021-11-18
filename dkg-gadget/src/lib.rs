@@ -38,7 +38,7 @@ mod metrics;
 mod types;
 mod worker;
 
-pub const DKG_PROTOCOL_NAME: &str = "/paritytech/DKG/1";
+pub const DKG_PROTOCOL_NAME: &str = "/webb/DKG/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
