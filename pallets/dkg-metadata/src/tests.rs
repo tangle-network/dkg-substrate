@@ -75,7 +75,10 @@ fn session_change_updates_authorities() {
 				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
 				id: 1,
 			},
-			next_queued_authorities: Default::default(),
+			next_queued_authorities: AuthoritySet {
+				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
+				id: 2,
+			},
 		});
 
 		let log = System::digest().logs[0].clone();

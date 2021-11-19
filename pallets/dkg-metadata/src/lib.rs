@@ -44,7 +44,7 @@ pub use pallet::*;
 pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame_system::{ensure_signed, pallet_prelude::*};
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -81,6 +81,18 @@ pub mod pallet {
 				*threshold = new_threshold.clone();
 				Ok(().into())
 			})
+		}
+
+		#[pallet::weight(0)]
+		pub fn submit_public_key(
+			origin: OriginFor<T>,
+			pub_key: Vec<u8>
+		) -> DispatchResultWithPostInfo {
+		
+			let origin = ensure_signed(origin)?;
+
+			Ok(().into())
+		
 		}
 	}
 
