@@ -19,7 +19,8 @@
 use core::convert::TryFrom;
 use curv::{arithmetic::Converter, elliptic::curves::traits::ECScalar};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
-use sp_core::ecdsa;
+use round_based::StateMachine;
+use sp_core::{ecdsa, H256};
 use std::{collections::BTreeSet, convert::TryInto, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use codec::{Codec, Decode, Encode};
@@ -59,7 +60,7 @@ use crate::{
 
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
-	types::DKGMessage,
+	types::{DKGMessage, DKGSignedPayload},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -99,7 +100,6 @@ where
 	next_rounds: Option<
 		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
 	>,
-	block_import_notification: ImportNotifications<B>,
 	finality_notifications: FinalityNotifications<B>,
 	/// Best block we received a GRANDPA notification for
 	best_grandpa_block: NumberFor<B>,
@@ -107,6 +107,8 @@ where
 	best_dkg_block: Option<NumberFor<B>>,
 	/// Current validator set id
 	current_validator_set: AuthoritySet<Public>,
+	/// Queued validator set id
+	queued_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
 	last_signed_id: u64,
 	// keep rustc happy
@@ -150,11 +152,11 @@ where
 			metrics,
 			rounds: MultiPartyECDSARounds::new(0, 0, 1),
 			next_rounds: None,
-			block_import_notification: client.import_notification_stream(),
 			finality_notifications: client.finality_notification_stream(),
 			best_grandpa_block: client.info().finalized_number,
 			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
+			queued_validator_set: AuthoritySet::empty(),
 			last_signed_id: 0,
 			dkg_state,
 			_backend: PhantomData,
@@ -216,19 +218,25 @@ where
 		number == target
 	}
 
-	/// Return the current active validator set at header `header`.
+	/// Return the next and queued validator set at header `header`.
 	///
 	/// Note that the validator set could be `None`. This is the case if we don't find
 	/// a DKG authority set change and we can't fetch the authority set from the
 	/// DKG on-chain state.
 	///
 	/// Such a failure is usually an indication that the DKG pallet has not been deployed (yet).
-	fn validator_set(&self, header: &B::Header) -> Option<AuthoritySet<Public>> {
-		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
-			Some(new)
+	fn validator_set(
+		&self,
+		header: &B::Header,
+	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
+			Some((new, queued))
 		} else {
 			let at = BlockId::hash(header.hash());
-			self.client.runtime_api().authority_set(&at).ok()
+			Some((
+				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default(),
+				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default(),
+			))
 		};
 
 		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
@@ -261,36 +269,54 @@ where
 		Ok(())
 	}
 
-	fn handle_block_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
-		let header = &notification.header;
+	fn handle_dkg_processing(
+		&mut self,
+		header: &B::Header,
+		next_authorities: AuthoritySet<Public>,
+		queued: AuthoritySet<Public>,
+	) {
+		let public = self
+			.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"));
 
-		// Find the Next Authorities set in header digest
-		if let Some((.., queued)) = find_authorities_change::<B>(header) {
-			let public = self
-				.key_store
-				.authority_id(&self.key_store.public_keys().unwrap())
-				.unwrap_or_else(|| panic!("Halp"));
+		let thresh = self.get_threshold(header).unwrap();
 
-			if queued.authorities.contains(&public) {
-				// Setting up new DKG
-				let party_inx = find_index::<AuthorityId>(&queued.authorities, &public).unwrap();
-				let thresh = self.get_threshold(header).unwrap();
-				let n = queued.authorities.len();
+		let set_up_rounds = |authority_set: &AuthoritySet<Public>, public: &Public| {
+			let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap();
 
-				let mut next_rounds = MultiPartyECDSARounds::new(
-					u16::try_from(party_inx).unwrap(),
-					thresh,
-					u16::try_from(n).unwrap(),
-				);
+			let n = authority_set.authorities.len();
 
-				match next_rounds.start_keygen(queued.id.clone()) {
-					Ok(()) =>
-						info!(target: "dkg", "Keygen started for next authority set successfully"),
-					Err(err) => error!("Error starting keygen {}", err),
-				}
+			let rounds = MultiPartyECDSARounds::new(
+				u16::try_from(party_inx).unwrap(),
+				thresh,
+				u16::try_from(n).unwrap(),
+			);
 
-				self.next_rounds = Some(next_rounds);
+			rounds
+		};
+
+		self.rounds = self
+			.next_rounds
+			.take()
+			.unwrap_or_else(|| set_up_rounds(&next_authorities, &public));
+
+		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
+			match self.rounds.start_keygen(next_authorities.id.clone()) {
+				Ok(()) =>
+					info!(target: "dkg", "Keygen started for next authority set successfully"),
+				Err(err) => error!("Error starting keygen {}", err),
+			}
+		}
+
+		if queued.authorities.contains(&public) {
+			// Setting up DKG for queued authorities
+			self.next_rounds = Some(set_up_rounds(&queued, &public));
+
+			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
+				Ok(()) =>
+					info!(target: "dkg", "Keygen started for next authority set successfully"),
+				Err(err) => error!("Error starting keygen {}", err),
 			}
 		}
 	}
@@ -301,7 +327,7 @@ where
 		// update best GRANDPA finalized block we have seen
 		self.best_grandpa_block = *notification.header.number();
 
-		if let Some(active) = self.validator_set(&notification.header) {
+		if let Some((active, queued)) = self.validator_set(&notification.header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
 			// TODO: (adoerr) Enacting a new authority set will also implicitly 'conclude'
@@ -322,6 +348,7 @@ where
 				let _ = self.verify_validator_set(notification.header.number(), active.clone());
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
+				self.queued_validator_set = queued.clone();
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -331,25 +358,8 @@ where
 				// signed commitment for the block. Remove once the above TODO is done.
 				metric_set!(self, dkg_best_block, *notification.header.number());
 
-				// Setting up new DKG
-				let party_inx = self.get_authority_index(&notification.header).unwrap() + 1;
-				let thresh = self.get_threshold(&notification.header).unwrap();
-				let n = active.authorities.len();
-
-				if let Some(dkg) = self.dkg_state.curr_dkg.take() {
-					self.dkg_state.past_dkg = Some(dkg);
-				}
-
-				self.rounds = MultiPartyECDSARounds::new(
-					u16::try_from(party_inx).unwrap(),
-					thresh,
-					u16::try_from(n).unwrap(),
-				);
-
-				match self.rounds.start_keygen(active.clone().id) {
-					Ok(()) => info!(target: "dkg", "Keygen started successfully"),
-					Err(err) => error!("Error starting keygen {}", err),
-				}
+				// Setting up the DKG
+				self.handle_dkg_processing(&notification.header, active.clone(), queued.clone());
 
 				self.send_outgoing_dkg_messages();
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
@@ -440,7 +450,10 @@ where
 	// }
 
 	fn process_finished_rounds(&mut self) {
-		for finished_round in self.rounds.get_finished_rounds() {
+		let mut handle_finished_round = |finished_round: DKGSignedPayload<
+			(H256, <<B as Block>::Header as Header>::Number),
+			Commitment<<<B as Block>::Header as Header>::Number, H256>,
+		>| {
 			// id is stored for skipped session metric calculation
 			self.last_signed_id = self.current_validator_set.id;
 
@@ -483,49 +496,82 @@ where
 			}
 
 			metric_set!(self, dkg_best_block, round_key.1);
+		};
+
+		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
+			for finished_round in self.rounds.get_finished_rounds() {
+				handle_finished_round(finished_round);
+			}
+		} else {
+			if let Some(mut next_rounds) = self.next_rounds.take() {
+				for finished_round in next_rounds.get_finished_rounds() {
+					handle_finished_round(finished_round);
+				}
+				self.next_rounds = Some(next_rounds)
+			}
 		}
 	}
 
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
-		let authority_id = if let Some(id) =
-			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
-		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
-			id
-		} else {
-			panic!("error");
+
+		let send_messages = |rounds: &mut MultiPartyECDSARounds<
+			(H256, <<B as Block>::Header as Header>::Number),
+			Commitment<<<B as Block>::Header as Header>::Number, H256>,
+		>,
+		                     authority_id: Public| {
+			rounds.proceed();
+
+			// TODO: run this in a different place, tied to certain number of blocks probably
+			if rounds.is_offline_ready() {
+				// TODO: use deterministic random signers set
+				let signer_set_id = self.current_validator_set.id;
+				let s_l = (1..=rounds.dkg_params().2).collect();
+				match rounds.reset_signers(signer_set_id, s_l) {
+					Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
+					Err(err) => error!("Error resetting signers {}", err),
+				}
+			}
+
+			for message in rounds.get_outgoing_messages() {
+				let dkg_message = DKGMessage { id: authority_id.clone(), payload: message };
+				let encoded_dkg_message = dkg_message.encode();
+				debug!(
+					target: "dkg",
+					"🕸️  DKG Message: {:?}, encoded: {:?}",
+					dkg_message,
+					encoded_dkg_message
+				);
+
+				self.gossip_engine.lock().gossip_message(
+					dkg_topic::<B>(),
+					encoded_dkg_message.clone(),
+					true,
+				);
+				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+			}
 		};
 
-		self.rounds.proceed();
-
-		// TODO: run this in a different place, tied to certain number of blocks probably
-		if self.rounds.is_offline_ready() {
-			// TODO: use deterministic random signers set
-			let signer_set_id = self.current_validator_set.id;
-			let s_l = (1..=self.rounds.dkg_params().2).collect();
-			match self.rounds.reset_signers(signer_set_id, s_l) {
-				Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
-				Err(err) => error!("Error resetting signers {}", err),
+		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
+			if let Some(id) =
+				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
+			{
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+				send_messages(&mut self.rounds, id);
+			} else {
+				panic!("error");
 			}
-		}
-
-		for message in self.rounds.get_outgoing_messages() {
-			let dkg_message = DKGMessage { id: authority_id.clone(), payload: message };
-			let encoded_dkg_message = dkg_message.encode();
-			debug!(
-				target: "dkg",
-				"🕸️  DKG Message: {:?}, encoded: {:?}",
-				dkg_message,
-				encoded_dkg_message
-			);
-
-			self.gossip_engine.lock().gossip_message(
-				dkg_topic::<B>(),
-				encoded_dkg_message.clone(),
-				true,
-			);
-			trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+		} else {
+			if let Some(id) =
+				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
+			{
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+				if let Some(next_rounds) = self.next_rounds.as_mut() {
+					send_messages(next_rounds, id);
+				}
+			} else {
+				panic!("error");
+			}
 		}
 	}
 
@@ -535,15 +581,34 @@ where
 	) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
-		match self.rounds.handle_incoming(dkg_msg.payload) {
-			Ok(()) => (),
-			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-		}
-		self.send_outgoing_dkg_messages();
+		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
+			match self.rounds.handle_incoming(dkg_msg.payload) {
+				Ok(()) => (),
+				Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+			}
+			self.send_outgoing_dkg_messages();
 
-		if self.rounds.is_ready_to_vote() {
-			debug!(target: "dkg", "🕸️  DKG is ready to sign");
-			self.dkg_state.accepted = true;
+			if self.rounds.is_ready_to_vote() {
+				debug!(target: "dkg", "🕸️  DKG is ready to sign");
+				self.dkg_state.accepted = true;
+			}
+		} else {
+			if let Some(mut next_rounds) = self.next_rounds.take() {
+				match next_rounds.handle_incoming(dkg_msg.payload) {
+					Ok(()) => (),
+					Err(err) =>
+						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+				}
+
+				self.next_rounds = Some(next_rounds);
+
+				self.send_outgoing_dkg_messages();
+
+				if self.next_rounds.as_mut().unwrap().is_ready_to_vote() {
+					debug!(target: "dkg", "🕸️  DKG is ready to sign");
+					self.dkg_state.accepted = true;
+				}
+			}
 		}
 
 		self.process_finished_rounds();
@@ -570,13 +635,6 @@ where
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
 						self.handle_finality_notification(notification);
-					} else {
-						return;
-					}
-				},
-				notification = self.block_import_notification.next().fuse() => {
-					if let Some(notification) = notification {
-						self.handle_block_import_notification(notification);
 					} else {
 						return;
 					}

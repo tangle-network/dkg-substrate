@@ -35,7 +35,7 @@ pub mod crypto {
 
 pub type AuthoritySetId = u64;
 
-#[derive(Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
+#[derive(Decode, Encode, Default, Debug, PartialEq, Clone, TypeInfo)]
 pub struct AuthoritySet<AuthorityId> {
 	/// Public keys of the validator set elements
 	pub authorities: Vec<AuthorityId>,
@@ -85,6 +85,6 @@ sp_api::decl_runtime_apis! {
 		/// Return the current signature threshold for the DKG
 		fn signature_threshold() -> u16;
 		/// Return the next authorities active authority set
-		fn next_authority_set() -> AuthoritySet<AuthorityId>;
+		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
 	}
 }
