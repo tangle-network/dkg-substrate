@@ -356,6 +356,7 @@ where
 			match keygen.pick_output() {
 				Some(Ok(k)) => {
 					self.local_key = Some(k);
+
 					info!(target: "dkg", "🕸️  local share key is extracted");
 					return true
 				},

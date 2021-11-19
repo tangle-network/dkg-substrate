@@ -24,6 +24,8 @@ pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::Ke
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
+	use sp_core::ecdsa::Signature as ECDSASignature;
+	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
 	/// Identity of a DKG authority using ECDSA as its crypto.
@@ -31,6 +33,22 @@ pub mod crypto {
 
 	/// Signature for a DKG authority using ECDSA as its crypto.
 	pub type AuthoritySignature = Signature;
+
+	pub struct OffchainAuthId;
+
+	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OffchainAuthId {
+		type RuntimeAppPublic = AuthorityId;
+		type GenericSignature = sp_core::ecdsa::Signature;
+		type GenericPublic = sp_core::ecdsa::Public;
+	}
+
+	impl frame_system::offchain::AppCrypto<<ECDSASignature as Verify>::Signer, ECDSASignature>
+		for OffchainAuthId
+	{
+		type RuntimeAppPublic = AuthorityId;
+		type GenericSignature = sp_core::ecdsa::Signature;
+		type GenericPublic = sp_core::ecdsa::Public;
+	}
 }
 
 pub type AuthoritySetId = u64;
@@ -86,5 +104,7 @@ sp_api::decl_runtime_apis! {
 		fn signature_threshold() -> u16;
 		/// Return the next authorities active authority set
 		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
+		/// Add public key to offchain storage
+		fn set_dkg_pub_key(key: Vec<u8>) -> ();
 	}
 }

@@ -17,7 +17,10 @@
 #![allow(clippy::collapsible_match)]
 
 use core::convert::TryFrom;
-use curv::{arithmetic::Converter, elliptic::curves::traits::ECScalar};
+use curv::{
+	arithmetic::Converter,
+	elliptic::curves::traits::{ECPoint, ECScalar},
+};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
 use sp_core::{ecdsa, H256};
 use std::{collections::BTreeSet, convert::TryInto, fmt::Debug, marker::PhantomData, sync::Arc};
@@ -101,6 +104,8 @@ where
 	best_grandpa_block: NumberFor<B>,
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
+	/// Latest block header
+	latest_header: Option<B::Header>,
 	/// Current validator set
 	current_validator_set: AuthoritySet<Public>,
 	/// Queued validator set
@@ -153,6 +158,7 @@ where
 			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			queued_validator_set: AuthoritySet::empty(),
+			latest_header: None,
 			last_signed_id: 0,
 			dkg_state,
 			_backend: PhantomData,
@@ -345,6 +351,7 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
+				self.latest_header = Some(notification.header.clone());
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -517,6 +524,17 @@ where
 		>,
 		                     authority_id: Public| {
 			rounds.proceed();
+
+			if rounds.is_offline_ready() {
+				let at = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
+				let pub_key = rounds
+					.get_public_key()
+					.unwrap()
+					.get_element()
+					.serialize_uncompressed()
+					.to_vec();
+				let _res = self.client.runtime_api().set_dkg_pub_key(&at, pub_key);
+			}
 
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {

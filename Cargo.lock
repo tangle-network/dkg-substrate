@@ -1996,6 +1996,7 @@ dependencies = [
 name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
+ "frame-system",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
