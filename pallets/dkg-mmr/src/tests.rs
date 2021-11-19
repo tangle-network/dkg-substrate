@@ -83,10 +83,13 @@ fn should_contain_mmr_digest() {
 				dkg_log(ConsensusLog::MmrRoot(
 					hex!("f3e3afbfa69e89cd1e99f8d3570155962f3346d1d8758dc079be49ef70387758").into()
 				)),
-				dkg_log(ConsensusLog::AuthoritiesChange(AuthoritySet {
-					authorities: vec![mock_dkg_id(3), mock_dkg_id(4),],
-					id: 1,
-				})),
+				dkg_log(ConsensusLog::AuthoritiesChange {
+					next_authorities: AuthoritySet {
+						authorities: vec![mock_dkg_id(3), mock_dkg_id(4),],
+						id: 1,
+					},
+					next_queued_authorities: Default::default()
+				}),
 				dkg_log(ConsensusLog::MmrRoot(
 					hex!("7d4ae4524bae75d52b63f08eab173b0c263eb95ae2c55c3a1d871241bd0cc559").into()
 				)),

@@ -70,10 +70,13 @@ fn session_change_updates_authorities() {
 
 		assert!(1 == DKGMetadata::authority_set_id());
 
-		let want = dkg_log(ConsensusLog::AuthoritiesChange(AuthoritySet {
-			authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
-			id: 1,
-		}));
+		let want = dkg_log(ConsensusLog::AuthoritiesChange {
+			next_authorities: AuthoritySet {
+				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
+				id: 1,
+			},
+			next_queued_authorities: Default::default(),
+		});
 
 		let log = System::digest().logs[0].clone();
 
