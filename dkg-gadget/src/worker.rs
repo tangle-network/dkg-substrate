@@ -19,7 +19,6 @@
 use core::convert::TryFrom;
 use curv::{arithmetic::Converter, elliptic::curves::traits::ECScalar};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
-use round_based::StateMachine;
 use sp_core::{ecdsa, H256};
 use std::{collections::BTreeSet, convert::TryInto, fmt::Debug, marker::PhantomData, sync::Arc};
 
@@ -29,8 +28,7 @@ use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 
 use sc_client_api::{
-	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
-	ImportNotifications,
+	Backend, FinalityNotification, FinalityNotifications
 };
 use sc_network_gossip::GossipEngine;
 
@@ -105,9 +103,9 @@ where
 	best_grandpa_block: NumberFor<B>,
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
-	/// Current validator set id
+	/// Current validator set
 	current_validator_set: AuthoritySet<Public>,
-	/// Queued validator set id
+	/// Queued validator set
 	queued_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
 	last_signed_id: u64,
