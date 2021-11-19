@@ -757,7 +757,7 @@ impl_runtime_apis! {
 		}
 
 		fn set_dkg_pub_key(key: Vec<u8>) -> () {
-			DKG::set_pub_key_offchain(key);
+			DKG::set_local_pub_key(key);
 		}
 	}
 

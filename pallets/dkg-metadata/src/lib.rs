@@ -172,6 +172,11 @@ pub mod pallet {
 	pub(super) type NextAuthoritiesAccounts<T: Config> =
 		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
+	/// Public key derived by local node in the keygen
+	#[pallet::storage]
+	#[pallet::getter(fn local_node_key)]
+	pub(super) type LocalNodePubKey<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
@@ -239,19 +244,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn set_pub_key_offchain(key: Vec<u8>) -> () {
-		let val =
-			sp_runtime::offchain::storage::StorageValueRef::persistent(b"dkg_metadata::pub_key");
-		let _res = val.mutate::<Vec<u8>, (), _>(
-			|pub_key: Result<
-				Option<Vec<u8>>,
-				sp_runtime::offchain::storage::StorageRetrievalError,
-			>| {
-				match pub_key {
-					_ => Ok(key),
-				}
-			},
-		);
+	pub fn set_local_pub_key(key: Vec<u8>) -> () {
+		LocalNodePubKey::<T>::put(key)
 	}
 
 	fn change_authorities(
@@ -318,28 +312,23 @@ impl<T: Config> Pallet<T> {
 			_ => Ok(block_number),
 		});
 
-		let mut pub_key_ref =
-			sp_runtime::offchain::storage::StorageValueRef::persistent(b"dkg_metadata::pub_key");
+		let pub_key = Self::local_node_key();
 
 		match res {
 			Ok(_block_number) => {
-				let pub_key = pub_key_ref.get::<Vec<u8>>();
-
-				if let Ok(Some(ref key)) = pub_key {
-					let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
-					if !signer.can_sign() {
-						return Err(
+				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+				if !signer.can_sign() {
+					return Err(
 							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
 						)?
-					}
+				}
 
-					if !key.is_empty() {
-						let _ = signer.send_signed_transaction(|_account| {
-							Call::submit_public_key { pub_key: key.clone() }
-						});
+				if !pub_key.is_empty() {
+					let _ = signer.send_signed_transaction(|_account| Call::submit_public_key {
+						pub_key: pub_key.clone(),
+					});
 
-						pub_key_ref.clear();
-					}
+					LocalNodePubKey::<T>::kill();
 				}
 
 				return Ok(())

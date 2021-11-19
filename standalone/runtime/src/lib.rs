@@ -453,6 +453,10 @@ impl_runtime_apis! {
 		fn signature_threshold() -> u16 {
 			2
 		}
+
+		fn set_dkg_pub_key(key: Vec<u8>) -> () {
+
+		}
 	}
 
 	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
