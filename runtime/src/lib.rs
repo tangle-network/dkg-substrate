@@ -691,6 +691,16 @@ impl_runtime_apis! {
 			}
 		}
 
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+			let queued_authorities = DKG::next_authorities();
+			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
+
+			dkg_runtime_primitives::AuthoritySet {
+				authorities: queued_authorities,
+				id: queued_authority_set_id
+			}
+		}
+
 		fn signature_threshold() -> u16 {
 			DKG::signature_threshold()
 		}

@@ -446,6 +446,10 @@ impl_runtime_apis! {
 			dkg_runtime_primitives::AuthoritySet::empty()
 		}
 
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+			dkg_runtime_primitives::AuthoritySet::empty()
+		}
+
 		fn signature_threshold() -> u16 {
 			2
 		}

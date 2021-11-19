@@ -27,9 +27,7 @@ use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 
-use sc_client_api::{
-	Backend, FinalityNotification, FinalityNotifications
-};
+use sc_client_api::{Backend, FinalityNotification, FinalityNotifications};
 use sc_network_gossip::GossipEngine;
 
 use sp_api::BlockId;
