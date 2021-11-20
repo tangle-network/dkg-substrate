@@ -12,8 +12,8 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_does_not_have_event, assert_has_event, new_test_ext_initialized, roll_to, ExtBuilder,
-	ParachainStaking,
+	assert_does_not_have_event, assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to,
+	ExtBuilder, ParachainStaking,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
 
@@ -37,11 +37,14 @@ fn derive_ids() {
 	assert_eq!(r_id, expected);
 }
 
+pub const USER_A: u8 = 0x1;
+pub const USER_B: u8 = 0x5;
+
 #[test]
 fn complete_proposal_approved() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![1, 2],
-		votes_against: vec![3],
+		votes_for: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
+		votes_against: vec![mock_pub_key(PROPOSER_C)],
 		status: ProposalStatus::Initiated,
 		expiry: ProposalLifetime::get(),
 	};
@@ -53,8 +56,8 @@ fn complete_proposal_approved() {
 #[test]
 fn complete_proposal_rejected() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![1],
-		votes_against: vec![2, 3],
+		votes_for: vec![mock_pub_key(USER_A)],
+		votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		status: ProposalStatus::Initiated,
 		expiry: ProposalLifetime::get(),
 	};
@@ -66,7 +69,7 @@ fn complete_proposal_rejected() {
 #[test]
 fn complete_proposal_bad_threshold() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![1, 2],
+		votes_for: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
 		votes_against: vec![],
 		status: ProposalStatus::Initiated,
 		expiry: ProposalLifetime::get(),
@@ -77,7 +80,7 @@ fn complete_proposal_bad_threshold() {
 
 	let mut prop = ProposalVotes {
 		votes_for: vec![],
-		votes_against: vec![1, 2],
+		votes_against: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
 		status: ProposalStatus::Initiated,
 		expiry: ProposalLifetime::get(),
 	};
@@ -149,38 +152,38 @@ fn add_remove_relayer() {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
 		assert_eq!(DKGProposals::proposer_count(), 0);
 
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_A));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_B));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_C));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
 		assert_eq!(DKGProposals::proposer_count(), 3);
 
 		// Already exists
 		assert_noop!(
-			DKGProposals::add_proposer(Origin::root(), PROPOSER_A),
+			DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)),
 			Error::<Test>::ProposerAlreadyExists
 		);
 
 		// Confirm removal
-		assert_ok!(DKGProposals::remove_proposer(Origin::root(), PROPOSER_B));
+		assert_ok!(DKGProposals::remove_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
 		assert_eq!(DKGProposals::proposer_count(), 2);
 		assert_noop!(
-			DKGProposals::remove_proposer(Origin::root(), PROPOSER_B),
+			DKGProposals::remove_proposer(Origin::root(), mock_pub_key(PROPOSER_B)),
 			Error::<Test>::ProposerInvalid
 		);
 		assert_eq!(DKGProposals::proposer_count(), 2);
 
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: PROPOSER_A,
+				proposer_id: mock_pub_key(PROPOSER_A),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: PROPOSER_B,
+				proposer_id: mock_pub_key(PROPOSER_B),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: PROPOSER_C,
+				proposer_id: mock_pub_key(PROPOSER_C),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerRemoved {
-				proposer_id: PROPOSER_B,
+				proposer_id: mock_pub_key(PROPOSER_B),
 			}),
 		]);
 	})
@@ -201,7 +204,7 @@ fn create_sucessful_proposal() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(PROPOSER_A),
+			Origin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			src_id,
 			r_id,
@@ -209,7 +212,7 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -218,7 +221,7 @@ fn create_sucessful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(PROPOSER_B),
+			Origin::signed(mock_pub_key(PROPOSER_B)),
 			prop_id,
 			src_id,
 			r_id,
@@ -226,8 +229,8 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
-			votes_against: vec![PROPOSER_B],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
+			votes_against: vec![mock_pub_key(PROPOSER_B)],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -235,7 +238,7 @@ fn create_sucessful_proposal() {
 
 		// Third relayer votes in favour
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(PROPOSER_C),
+			Origin::signed(mock_pub_key(PROPOSER_C)),
 			prop_id,
 			src_id,
 			r_id,
@@ -243,8 +246,8 @@ fn create_sucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A, PROPOSER_C],
-			votes_against: vec![PROPOSER_B],
+			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_C)],
+			votes_against: vec![mock_pub_key(PROPOSER_B)],
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -254,17 +257,17 @@ fn create_sucessful_proposal() {
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_A,
+				who: mock_pub_key(PROPOSER_A),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_B,
+				who: mock_pub_key(PROPOSER_B),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_C,
+				who: mock_pub_key(PROPOSER_C),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: src_id,
@@ -289,7 +292,7 @@ fn create_unsucessful_proposal() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(PROPOSER_A),
+			Origin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			src_id,
 			r_id,
@@ -297,7 +300,7 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -306,7 +309,7 @@ fn create_unsucessful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(PROPOSER_B),
+			Origin::signed(mock_pub_key(PROPOSER_B)),
 			prop_id,
 			src_id,
 			r_id,
@@ -314,8 +317,8 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
-			votes_against: vec![PROPOSER_B],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
+			votes_against: vec![mock_pub_key(PROPOSER_B)],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -323,7 +326,7 @@ fn create_unsucessful_proposal() {
 
 		// Third relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(PROPOSER_C),
+			Origin::signed(mock_pub_key(PROPOSER_C)),
 			prop_id,
 			src_id,
 			r_id,
@@ -331,31 +334,31 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
-			votes_against: vec![PROPOSER_B, PROPOSER_C],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
+			votes_against: vec![mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
 			status: ProposalStatus::Rejected,
 			expiry: ProposalLifetime::get() + 1,
 		};
 		assert_eq!(prop, expected);
 
-		assert_eq!(Balances::free_balance(PROPOSER_B), 0);
+		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
 
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_A,
+				who: mock_pub_key(PROPOSER_A),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_B,
+				who: mock_pub_key(PROPOSER_B),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_C,
+				who: mock_pub_key(PROPOSER_C),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
 				chain_id: src_id,
@@ -376,7 +379,7 @@ fn execute_after_threshold_change() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(PROPOSER_A),
+			Origin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			src_id,
 			r_id,
@@ -384,7 +387,7 @@ fn execute_after_threshold_change() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -396,7 +399,7 @@ fn execute_after_threshold_change() {
 
 		// Attempt to execute
 		assert_ok!(DKGProposals::eval_vote_state(
-			Origin::signed(PROPOSER_A),
+			Origin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			src_id,
 			proposal.clone(),
@@ -404,21 +407,21 @@ fn execute_after_threshold_change() {
 
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
 		assert_eq!(prop, expected);
 
-		assert_eq!(Balances::free_balance(PROPOSER_B), 0);
+		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
 
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id,
 				proposal_nonce: prop_id,
-				who: PROPOSER_A,
+				who: mock_pub_key(PROPOSER_A),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: 1,
@@ -446,7 +449,7 @@ fn proposal_expires() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(PROPOSER_A),
+			Origin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			src_id,
 			r_id,
@@ -454,7 +457,7 @@ fn proposal_expires() {
 		));
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -466,7 +469,7 @@ fn proposal_expires() {
 
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -476,7 +479,7 @@ fn proposal_expires() {
 		// Attempt to submit a vote should fail
 		assert_noop!(
 			DKGProposals::reject_proposal(
-				Origin::signed(PROPOSER_B),
+				Origin::signed(mock_pub_key(PROPOSER_B)),
 				prop_id,
 				src_id,
 				r_id,
@@ -488,7 +491,7 @@ fn proposal_expires() {
 		// Proposal state should remain unchanged
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -498,7 +501,7 @@ fn proposal_expires() {
 		// eval_vote_state should have no effect
 		assert_noop!(
 			DKGProposals::eval_vote_state(
-				Origin::signed(PROPOSER_C),
+				Origin::signed(mock_pub_key(PROPOSER_C)),
 				prop_id,
 				src_id,
 				proposal.clone(),
@@ -507,7 +510,7 @@ fn proposal_expires() {
 		);
 		let prop = DKGProposals::votes(src_id, (prop_id.clone(), proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![PROPOSER_A],
+			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
@@ -517,7 +520,7 @@ fn proposal_expires() {
 		assert_events(vec![Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 			chain_id: src_id,
 			proposal_nonce: prop_id,
-			who: PROPOSER_A,
+			who: mock_pub_key(PROPOSER_A),
 		})]);
 	})
 }
@@ -537,7 +540,12 @@ fn should_not_reset_proposers_if_authorities_have_not_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		roll_to(15);
 		assert_does_not_have_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![0, 1, 2, 3],
+			proposers: vec![
+				mock_pub_key(0),
+				mock_pub_key(USER_A),
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+			],
 		}))
 	})
 }
@@ -547,11 +555,11 @@ fn should_not_reset_proposers_if_authorities_have_not_changed() {
 fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_eq!(DKGProposals::proposer_count(), 4);
-		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(10);
 		assert_has_event(Event::Session(pallet_session::Event::NewSession(1)));
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![0, 2, 3],
+			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}));
 		assert_eq!(DKGProposals::proposer_count(), 3);
 	})
@@ -561,10 +569,10 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 #[test]
 fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
-		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![0, 2, 3],
+			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}))
 	})
 }
@@ -591,7 +599,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(5),
+				Origin::signed(mock_pub_key(USER_B)),
 				prop_id,
 				src_id,
 				r_id,
@@ -602,23 +610,23 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(1),
+			Origin::signed(mock_pub_key(USER_A)),
 			prop_id,
 			src_id,
 			r_id,
 			proposal.clone(),
 		));
 
-		ParachainStaking::leave_candidates(Origin::signed(1), 4).unwrap();
+		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![0, 2, 3],
+			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}));
 
 		// Create proposal (& vote)
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(1),
+				Origin::signed(mock_pub_key(USER_A)),
 				prop_id,
 				src_id,
 				r_id,
