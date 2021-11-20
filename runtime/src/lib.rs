@@ -10,7 +10,10 @@ use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256, Verify},
+	traits::{
+		AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256, StaticLookup,
+		Verify,
+	},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
@@ -84,6 +87,7 @@ pub type BlockId = generic::BlockId<Block>;
 /// The SignedExtension to the basic transaction logic.
 pub type SignedExtra = (
 	frame_system::CheckSpecVersion<Runtime>,
+	frame_system::CheckTxVersion<Runtime>,
 	frame_system::CheckGenesis<Runtime>,
 	frame_system::CheckEra<Runtime>,
 	frame_system::CheckNonce<Runtime>,
@@ -193,7 +197,7 @@ impl frame_system::Config for Runtime {
 	/// The aggregated dispatch type that is available for extrinsics.
 	type Call = Call;
 	/// The lookup mechanism to get account ID from whatever is passed in dispatchers.
-	type Lookup = AccountIdLookup<AccountId, ()>;
+	type Lookup = AccountIdLookup<AccountId, Index>;
 	/// The index type for storing how many extrinsics an account has signed.
 	type Index = Index;
 	/// The index type for blocks.
@@ -604,30 +608,38 @@ where
 {
 	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
 		call: Call,
-		public: <Signature as sp_runtime::traits::Verify>::Signer,
+		public: <Signature as traits::Verify>::Signer,
 		account: AccountId,
-		index: Index,
-	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-		let period = BlockHashCount::get() as u64;
-		let current_block = System::block_number().saturated_into::<u64>().saturating_sub(1);
+		nonce: Index,
+	) -> Option<(Call, <UncheckedExtrinsic as traits::Extrinsic>::SignaturePayload)> {
 		let tip = 0;
-		let extra: SignedExtra = (
+		// take the biggest period possible.
+		let period =
+			BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
+		let current_block = System::block_number()
+			.saturated_into::<u64>()
+			// The `System::block_number` is initialized with `n+1`,
+			// so the actual block number is `n`.
+			.saturating_sub(1);
+		let era = Era::mortal(period, current_block);
+		let extra = (
 			frame_system::CheckSpecVersion::<Runtime>::new(),
+			frame_system::CheckTxVersion::<Runtime>::new(),
 			frame_system::CheckGenesis::<Runtime>::new(),
-			frame_system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
-			frame_system::CheckNonce::<Runtime>::from(index),
+			frame_system::CheckEra::<Runtime>::from(era),
+			frame_system::CheckNonce::<Runtime>::from(nonce),
 			frame_system::CheckWeight::<Runtime>::new(),
 			pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
 		);
-
-		#[cfg_attr(not(feature = "std"), allow(unused_variables))]
-		let raw_payload = SignedPayload::new(call, extra).map_err(|e| {}).ok()?;
-
+		let raw_payload = SignedPayload::new(call, extra)
+			.map_err(|e| {
+				log::warn!("Unable to create signed payload: {:?}", e);
+			})
+			.ok()?;
 		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
-
-		let address: AccountId = account;
+		let address = AccountIdLookup::<AccountId, Index>::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (address, signature, extra)))
+		Some((call, (address, signature.into(), extra)))
 	}
 }
 
