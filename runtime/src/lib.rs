@@ -670,7 +670,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Config<T>} = 36,
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Config<T>} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
