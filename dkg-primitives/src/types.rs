@@ -5,6 +5,8 @@ use std::fmt;
 pub type KeygenSetId = u64;
 /// A typedef for signer set id
 pub type SignerSetId = u64;
+/// A typedef for keygen set id
+pub type RoundId = u64;
 
 /// DKG (distributed key generation) message.
 ///
@@ -16,6 +18,8 @@ pub struct DKGMessage<AuthorityId, Key> {
 	pub id: AuthorityId,
 	/// DKG message contents
 	pub payload: DKGMsgPayload<Key>,
+	/// Indentifier for the message
+	pub round_id: RoundId,
 }
 
 impl<ID, K> fmt::Display for DKGMessage<ID, K> {

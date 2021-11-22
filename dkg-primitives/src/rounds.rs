@@ -27,6 +27,7 @@ pub struct DKGState<K, P> {
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
 pub struct MultiPartyECDSARounds<SignPayloadKey, SignPayload> {
+	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
@@ -60,13 +61,14 @@ where
 {
 	/// Public ///
 
-	pub fn new(party_index: u16, threshold: u16, parties: u16) -> Self {
+	pub fn new(party_index: u16, threshold: u16, parties: u16, round_id: RoundId) -> Self {
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
 		Self {
 			party_index,
 			threshold,
 			parties,
+			round_id,
 			keygen_set_id: 0,
 			signer_set_id: 0,
 			stage: Stage::KeygenReady,
@@ -281,6 +283,10 @@ where
 		} else {
 			None
 		}
+	}
+
+	pub fn get_id(&self) -> RoundId {
+		self.round_id
 	}
 }
 
@@ -770,7 +776,7 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u64, String>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);

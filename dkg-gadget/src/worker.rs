@@ -157,7 +157,7 @@ where
 			gossip_validator,
 			min_block_delta,
 			metrics,
-			rounds: MultiPartyECDSARounds::new(0, 0, 1),
+			rounds: MultiPartyECDSARounds::new(0, 0, 1, 0),
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
 			block_import_notification: client.import_notification_stream(),
@@ -301,6 +301,7 @@ where
 				u16::try_from(party_inx).unwrap(),
 				thresh,
 				u16::try_from(n).unwrap(),
+				authority_set.id.clone(),
 			);
 
 			rounds
@@ -564,7 +565,11 @@ where
 			}
 
 			for message in rounds.get_outgoing_messages() {
-				let dkg_message = DKGMessage { id: authority_id.clone(), payload: message };
+				let dkg_message = DKGMessage {
+					id: authority_id.clone(),
+					payload: message,
+					round_id: rounds.get_id(),
+				};
 				let encoded_dkg_message = dkg_message.encode();
 				debug!(
 					target: "dkg",
@@ -611,18 +616,20 @@ where
 	) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
-		match self.rounds.handle_incoming(dkg_msg.payload.clone()) {
-			Ok(()) => (),
-			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+		if dkg_msg.round_id == self.rounds.get_id() {
+			match self.rounds.handle_incoming(dkg_msg.payload.clone()) {
+				Ok(()) => (),
+				Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+			}
+
+			if self.rounds.is_ready_to_vote() {
+				debug!(target: "dkg", "🕸️  DKG is ready to sign");
+				self.dkg_state.accepted = true;
+			}
 		}
 
-		if self.rounds.is_ready_to_vote() {
-			debug!(target: "dkg", "🕸️  DKG is ready to sign");
-			self.dkg_state.accepted = true;
-		}
-
-		if self.queued_keygen_in_progress {
-			if let Some(mut next_rounds) = self.next_rounds.take() {
+		if let Some(mut next_rounds) = self.next_rounds.take() {
+			if next_rounds.get_id() == dkg_msg.round_id {
 				match next_rounds.handle_incoming(dkg_msg.payload) {
 					Ok(()) => (),
 					Err(err) =>
