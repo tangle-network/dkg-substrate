@@ -139,7 +139,7 @@ pub mod pallet {
 	pub type ActivePublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
 
-	/// Holds public key for immedaiate past session
+	/// Holds public key for immediate past session
 	#[pallet::storage]
 	#[pallet::getter(fn proposers)]
 	pub type PreviousPublicKey<T: Config> =
