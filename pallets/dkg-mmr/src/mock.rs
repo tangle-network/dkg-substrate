@@ -24,12 +24,15 @@ use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
 };
-use sp_core::{Hasher, H256};
+use sp_core::{ecdsa::Signature, Hasher, H256};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
-	testing::Header,
-	traits::{BlakeTwo256, ConvertInto, IdentityLookup, Keccak256, OpaqueKeys},
+	testing::{Header, TestXt},
+	traits::{
+		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
+		Keccak256, OpaqueKeys, Verify,
+	},
 	Perbill,
 };
 
@@ -55,7 +58,7 @@ construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		MMR: pallet_mmr::{Pallet, Storage},
-		DKG: pallet_dkg_metadata::{Pallet, Config<T>, Storage},
+		DKG: pallet_dkg_metadata::{Pallet, Config<T>, Call, Storage},
 		DKGMmr: pallet_dkg_mmr::{Pallet, Storage},
 	}
 );
@@ -64,6 +67,8 @@ parameter_types! {
 	pub const BlockHashCount: u64 = 250;
 	pub const SS58Prefix: u8 = 42;
 }
+
+type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 impl frame_system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
@@ -76,7 +81,7 @@ impl frame_system::Config for Test {
 	type Hash = H256;
 	type Call = Call;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type Event = Event;
@@ -99,7 +104,7 @@ parameter_types! {
 
 impl pallet_session::Config for Test {
 	type Event = Event;
-	type ValidatorId = u64;
+	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
@@ -125,12 +130,44 @@ impl pallet_mmr::Config for Test {
 	type WeightInfo = ();
 }
 
+type Extrinsic = TestXt<Call, ()>;
+
+impl frame_system::offchain::SigningTypes for Test {
+	type Public = Public;
+	type Signature = Signature;
+}
+
+impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	type OverarchingCall = Call;
+	type Extrinsic = Extrinsic;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+		call: Call,
+		_public: Public,
+		_account: AccountId,
+		nonce: u64,
+	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+		Some((call, (nonce, ())))
+	}
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type OnAuthoritySetChangeHandler = ();
+	type GracePeriod = GracePeriod;
+	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 parameter_types! {
+	pub const GracePeriod: u64 = 10;
 	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
 }
 
@@ -148,14 +185,14 @@ impl pallet_dkg_mmr::ParachainHeadsProvider for DummyParaHeads {
 }
 
 pub struct MockSessionManager;
-impl pallet_session::SessionManager<u64> for MockSessionManager {
+impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 	fn end_session(_: sp_staking::SessionIndex) {}
 	fn start_session(_: sp_staking::SessionIndex) {}
-	fn new_session(idx: sp_staking::SessionIndex) -> Option<Vec<u64>> {
+	fn new_session(idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
 		if idx == 0 || idx == 1 {
-			Some(vec![1, 2])
+			Some(vec![mock_pub_key(1), mock_pub_key(2)])
 		} else if idx == 2 {
-			Some(vec![3, 4])
+			Some(vec![mock_pub_key(3), mock_pub_key(4)])
 		} else {
 			None
 		}
@@ -166,26 +203,28 @@ impl pallet_session::SessionManager<u64> for MockSessionManager {
 // of `to_public_key()` assumes, that a public key is 32 bytes long. This is true for
 // ed25519 and sr25519 but *not* for ecdsa. An ecdsa public key is 33 bytes.
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	let buf: [u8; 33] = [id; 33];
-	let pk = Public::from_raw(buf);
-	DKGId::from(pk)
+	DKGId::from(mock_pub_key(id))
 }
 
-pub fn mock_authorities(vec: Vec<u8>) -> Vec<(u64, DKGId)> {
-	vec.into_iter().map(|id| ((id as u64), mock_dkg_id(id))).collect()
+pub fn mock_pub_key(id: u8) -> AccountId {
+	Public::from_raw([id; 33])
+}
+
+pub fn mock_authorities(vec: Vec<u8>) -> Vec<(AccountId, DKGId)> {
+	vec.into_iter().map(|id| (mock_pub_key(id), mock_dkg_id(id))).collect()
 }
 
 pub fn new_test_ext(ids: Vec<u8>) -> TestExternalities {
 	new_test_ext_raw_authorities(mock_authorities(ids))
 }
 
-pub fn new_test_ext_raw_authorities(authorities: Vec<(u64, DKGId)>) -> TestExternalities {
+pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> TestExternalities {
 	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
 	let session_keys: Vec<_> = authorities
 		.iter()
 		.enumerate()
-		.map(|(_, id)| (id.0 as u64, id.0 as u64, MockSessionKeys { dummy: id.1.clone() }))
+		.map(|(_, id)| (id.0.clone(), id.0.clone(), MockSessionKeys { dummy: id.1.clone() }))
 		.collect();
 
 	BasicExternalities::execute_with_storage(&mut t, || {

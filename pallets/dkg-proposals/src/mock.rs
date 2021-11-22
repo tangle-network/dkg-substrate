@@ -10,11 +10,14 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::H256;
+use sp_core::{ecdsa::Signature, H256};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
-	testing::Header,
-	traits::{AccountIdConversion, BlakeTwo256, ConvertInto, IdentityLookup, OpaqueKeys},
+	testing::{Header, TestXt},
+	traits::{
+		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
+		IdentityLookup, OpaqueKeys, Verify,
+	},
 	Perbill, Percent,
 };
 
@@ -53,9 +56,11 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 }
 
+type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+
 impl system::Config for Test {
 	type AccountData = pallet_balances::AccountData<u64>;
-	type AccountId = u64;
+	type AccountId = AccountId;
 	type BaseCallFilter = frame_support::traits::Everything;
 	type BlockHashCount = BlockHashCount;
 	type BlockLength = ();
@@ -105,12 +110,44 @@ parameter_types! {
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
 
+type Extrinsic = TestXt<Call, ()>;
+
+impl frame_system::offchain::SigningTypes for Test {
+	type Public = Public;
+	type Signature = Signature;
+}
+
+impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	type OverarchingCall = Call;
+	type Extrinsic = Extrinsic;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+		call: Call,
+		_public: Public,
+		_account: AccountId,
+		nonce: u64,
+	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+		Some((call, (nonce, ())))
+	}
+}
+
 impl pallet_dkg_metadata::Config for Test {
-	type DKGId = dkg_runtime_primitives::crypto::AuthorityId;
+	type DKGId = DKGId;
 	type OnAuthoritySetChangeHandler = DKGProposals;
+	type GracePeriod = GracePeriod;
+	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 parameter_types! {
+	pub const GracePeriod: u64 = 10;
 	pub const MinimumPeriod: u64 = 1;
 }
 
@@ -137,7 +174,7 @@ parameter_types! {
 
 impl pallet_session::Config for Test {
 	type Event = Event;
-	type ValidatorId = u64;
+	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = ParachainStaking;
 	type NextSessionRotation = ParachainStaking;
@@ -181,7 +218,7 @@ impl pallet_parachain_staking::Config for Test {
 	type MinNomination = MinNomination;
 	type MinNominatorStk = MinNominatorStk;
 	type MinSelectedCandidates = MinSelectedCandidates;
-	type MonetaryGovernanceOrigin = frame_system::EnsureRoot<u64>;
+	type MonetaryGovernanceOrigin = frame_system::EnsureRoot<AccountId>;
 	type RevokeNominationDelay = RevokeNominationDelay;
 	type RewardPaymentDelay = RewardPaymentDelay;
 	type WeightInfo = ();
@@ -204,9 +241,11 @@ impl pallet_dkg_proposals::Config for Test {
 }
 
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	let buf: [u8; 33] = [id; 33];
-	let pk = Public::from_raw(buf);
-	DKGId::from(pk)
+	DKGId::from(mock_pub_key(id))
+}
+
+pub fn mock_pub_key(id: u8) -> AccountId {
+	Public::from_raw([id; 33])
 }
 
 pub(crate) fn roll_to(n: u64) {
@@ -231,9 +270,9 @@ pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
 }
 
 // pub const BRIDGE_ID: u64 =
-pub const PROPOSER_A: u64 = 0x2;
-pub const PROPOSER_B: u64 = 0x3;
-pub const PROPOSER_C: u64 = 0x4;
+pub const PROPOSER_A: u8 = 2;
+pub const PROPOSER_B: u8 = 3;
+pub const PROPOSER_C: u8 = 4;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
@@ -255,19 +294,19 @@ impl ExtBuilder {
 		let dkg_id = PalletId(*b"dw/dkgac").into_account();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		let candidates = vec![
-			(0, mock_dkg_id(0), 1000),
-			(1, mock_dkg_id(1), 1000),
-			(2, mock_dkg_id(2), 1000),
-			(3, mock_dkg_id(3), 1000),
+			(mock_pub_key(0), mock_dkg_id(0), 1000),
+			(mock_pub_key(1), mock_dkg_id(1), 1000),
+			(mock_pub_key(2), mock_dkg_id(2), 1000),
+			(mock_pub_key(3), mock_dkg_id(3), 1000),
 		];
 		pallet_balances::GenesisConfig::<Test> {
 			balances: vec![
 				(dkg_id, ENDOWED_BALANCE),
-				(0, ENDOWED_BALANCE),
-				(1, ENDOWED_BALANCE),
-				(2, ENDOWED_BALANCE),
-				(3, ENDOWED_BALANCE),
-				(4, ENDOWED_BALANCE),
+				(mock_pub_key(0), ENDOWED_BALANCE),
+				(mock_pub_key(1), ENDOWED_BALANCE),
+				(mock_pub_key(2), ENDOWED_BALANCE),
+				(mock_pub_key(3), ENDOWED_BALANCE),
+				(mock_pub_key(4), ENDOWED_BALANCE),
 			],
 		}
 		.assimilate_storage(&mut t)
@@ -321,9 +360,9 @@ pub fn new_test_ext_initialized(
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
 		// Add proposers
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_A));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_B));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), PROPOSER_C));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
 		// Whitelist chain
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
 		// Set and check resource ID mapped to some junk data
