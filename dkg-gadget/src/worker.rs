@@ -120,6 +120,8 @@ where
 	_backend: PhantomData<BE>,
 	// dkg state
 	dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
+	// setting up queued authorities keygen
+	queued_keygen_in_progress: bool,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -166,6 +168,7 @@ where
 			latest_header: None,
 			last_signed_id: 0,
 			dkg_state,
+			queued_keygen_in_progress: false,
 			_backend: PhantomData,
 		}
 	}
@@ -321,8 +324,10 @@ where
 			self.next_rounds = Some(set_up_rounds(&queued, &public));
 
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
-				Ok(()) =>
-					info!(target: "dkg", "Keygen started for next authority set successfully"),
+				Ok(()) => {
+					info!(target: "dkg", "Keygen started for next authority set successfully");
+					self.queued_keygen_in_progress = true;
+				},
 				Err(err) => error!("Error starting keygen {}", err),
 			}
 		}
@@ -514,17 +519,15 @@ where
 			metric_set!(self, dkg_best_block, round_key.1);
 		};
 
-		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
-			for finished_round in self.rounds.get_finished_rounds() {
+		for finished_round in self.rounds.get_finished_rounds() {
+			handle_finished_round(finished_round);
+		}
+
+		if let Some(mut next_rounds) = self.next_rounds.take() {
+			for finished_round in next_rounds.get_finished_rounds() {
 				handle_finished_round(finished_round);
 			}
-		} else {
-			if let Some(mut next_rounds) = self.next_rounds.take() {
-				for finished_round in next_rounds.get_finished_rounds() {
-					handle_finished_round(finished_round);
-				}
-				self.next_rounds = Some(next_rounds)
-			}
+			self.next_rounds = Some(next_rounds)
 		}
 	}
 
@@ -579,16 +582,16 @@ where
 			}
 		};
 
-		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
-			if let Some(id) =
-				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
-			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
-				send_messages(&mut self.rounds, id);
-			} else {
-				panic!("error");
-			}
+		if let Some(id) =
+			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
+		{
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+			send_messages(&mut self.rounds, id);
 		} else {
+			panic!("error");
+		}
+
+		if self.queued_keygen_in_progress {
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
 			{
@@ -608,18 +611,17 @@ where
 	) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
-		if self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID {
-			match self.rounds.handle_incoming(dkg_msg.payload) {
-				Ok(()) => (),
-				Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-			}
-			self.send_outgoing_dkg_messages();
+		match self.rounds.handle_incoming(dkg_msg.payload.clone()) {
+			Ok(()) => (),
+			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+		}
 
-			if self.rounds.is_ready_to_vote() {
-				debug!(target: "dkg", "🕸️  DKG is ready to sign");
-				self.dkg_state.accepted = true;
-			}
-		} else {
+		if self.rounds.is_ready_to_vote() {
+			debug!(target: "dkg", "🕸️  DKG is ready to sign");
+			self.dkg_state.accepted = true;
+		}
+
+		if self.queued_keygen_in_progress {
 			if let Some(mut next_rounds) = self.next_rounds.take() {
 				match next_rounds.handle_incoming(dkg_msg.payload) {
 					Ok(()) => (),
@@ -629,14 +631,14 @@ where
 
 				self.next_rounds = Some(next_rounds);
 
-				self.send_outgoing_dkg_messages();
-
 				if self.next_rounds.as_mut().unwrap().is_ready_to_vote() {
-					debug!(target: "dkg", "🕸️  DKG is ready to sign");
-					self.dkg_state.accepted = true;
+					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					self.queued_keygen_in_progress = false;
 				}
 			}
 		}
+
+		self.send_outgoing_dkg_messages();
 
 		self.process_finished_rounds();
 	}
