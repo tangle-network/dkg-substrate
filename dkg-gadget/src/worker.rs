@@ -30,7 +30,10 @@ use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 
-use sc_client_api::{Backend, FinalityNotification, FinalityNotifications};
+use sc_client_api::{
+	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
+	ImportNotifications,
+};
 use sc_network_gossip::GossipEngine;
 
 use sp_api::BlockId;
@@ -100,6 +103,7 @@ where
 		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
 	>,
 	finality_notifications: FinalityNotifications<B>,
+	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
 	best_grandpa_block: NumberFor<B>,
 	/// Best block a DKG voting round has been concluded for
@@ -154,6 +158,7 @@ where
 			rounds: MultiPartyECDSARounds::new(0, 0, 1),
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
+			block_import_notification: client.import_notification_stream(),
 			best_grandpa_block: client.info().finalized_number,
 			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
@@ -323,13 +328,8 @@ where
 		}
 	}
 
-	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
-		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
-
-		// update best GRANDPA finalized block we have seen
-		self.best_grandpa_block = *notification.header.number();
-
-		if let Some((active, queued)) = self.validator_set(&notification.header) {
+	fn process_block_notification(&mut self, header: &B::Header) {
+		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
 			// TODO: (adoerr) Enacting a new authority set will also implicitly 'conclude'
@@ -347,22 +347,22 @@ where
 				}
 
 				// verify the new validator set
-				let _ = self.verify_validator_set(notification.header.number(), active.clone());
+				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-				self.latest_header = Some(notification.header.clone());
+				self.latest_header = Some(header.clone());
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
-				self.best_dkg_block = Some(*notification.header.number());
+				self.best_dkg_block = Some(*header.number());
 
 				// this metric is kind of 'fake'. Best DKG block should only be updated once we have a
 				// signed commitment for the block. Remove once the above TODO is done.
-				metric_set!(self, dkg_best_block, *notification.header.number());
+				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
-				self.handle_dkg_processing(&notification.header, active.clone(), queued.clone());
+				self.handle_dkg_processing(&header, active.clone(), queued.clone());
 
 				self.send_outgoing_dkg_messages();
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
@@ -374,25 +374,24 @@ where
 			}
 		}
 
-		if self.should_vote_on(*notification.header.number()) {
+		if self.should_vote_on(*header.number()) {
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
 				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 				id
 			} else {
-				debug!(target: "dkg", "🕸️  Missing validator id - can't vote for: {:?}", notification.header.hash());
+				debug!(target: "dkg", "🕸️  Missing validator id - can't vote for: {:?}", header.hash());
 				return
 			};
 
-			let mmr_root =
-				if let Some(hash) = find_mmr_root_digest::<B, Public>(&notification.header) {
-					hash
-				} else {
-					warn!(target: "dkg", "🕸️  No MMR root digest found for: {:?}", notification.header.hash());
-					return
-				};
-			let block_number = notification.header.number().clone();
+			let mmr_root = if let Some(hash) = find_mmr_root_digest::<B, Public>(header) {
+				hash
+			} else {
+				warn!(target: "dkg", "🕸️  No MMR root digest found for: {:?}", header.hash());
+				return
+			};
+			let block_number = header.number().clone();
 
 			let commitment = Commitment {
 				payload: mmr_root.clone(),
@@ -411,6 +410,20 @@ where
 				debug!(target: "dkg", "Not ready to sign, skipping")
 			}
 		}
+	}
+
+	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
+		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
+		self.process_block_notification(&notification.header);
+	}
+
+	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
+		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+
+		// update best GRANDPA finalized block we have seen
+		self.best_grandpa_block = *notification.header.number();
+
+		self.process_block_notification(&notification.header);
 	}
 
 	// fn convert_signature(&mut self, sig_recid: &SignatureRecid) -> Option<Signature> {
@@ -649,6 +662,13 @@ where
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
 						self.handle_finality_notification(notification);
+					} else {
+						return;
+					}
+				},
+				notification = self.block_import_notification.next().fuse() => {
+					if let Some(notification) = notification {
+						self.handle_import_notifications(notification);
 					} else {
 						return;
 					}
