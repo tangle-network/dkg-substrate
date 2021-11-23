@@ -1,16 +1,12 @@
 use bincode;
 use codec::Encode;
-use curv::{
-	arithmetic::Converter,
-	cryptographic_primitives::hashing::{hash_sha256::HSha256, traits::Hash as CurvHash},
-	elliptic::curves::secp256_k1::Secp256k1Point,
-	BigInt,
-};
+use curv::{arithmetic::Converter, elliptic::curves::secp256_k1::Secp256k1Point, BigInt};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use std::collections::BTreeMap;
 
 use crate::types::*;
+use dkg_runtime_primitives::keccak_256;
 
 pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::*,
@@ -18,15 +14,15 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 };
 
 /// DKG State tracker
-pub struct DKGState<K, P> {
+pub struct DKGState<K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<K, P>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<K, P>>,
+	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
+	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
 }
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
-pub struct MultiPartyECDSARounds<SignPayloadKey, SignPayload> {
+pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
@@ -49,15 +45,14 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, SignPayload> {
 	completed_offline_stage: Option<CompletedOfflineStage>,
 
 	// Signing rounds
-	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<SignPayload>>,
+	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<Vec<u8>>>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage<SignPayloadKey>>,
-	finished_rounds: Vec<DKGSignedPayload<SignPayloadKey, SignPayload>>,
+	finished_rounds: Vec<DKGSignedPayload<SignPayloadKey>>,
 }
 
-impl<K, P> MultiPartyECDSARounds<K, P>
+impl<K> MultiPartyECDSARounds<K>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
-	P: Encode + core::fmt::Debug,
 {
 	/// Public ///
 
@@ -226,10 +221,10 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: K, data: P) -> Result<(), String> {
+	pub fn vote(&mut self, round_key: K, data: Vec<u8>) -> Result<(), String> {
 		if let Some(completed_offline) = self.completed_offline_stage.as_mut() {
 			let round = self.rounds.entry(round_key).or_default();
-			let hash = HSha256::create_hash(&[&BigInt::from_bytes(&data.encode())]);
+			let hash = BigInt::from_bytes(&keccak_256(&data));
 
 			match SignManual::new(hash, completed_offline.clone()) {
 				Ok((sign_manual, sig)) => {
@@ -269,7 +264,7 @@ where
 		!self.finished_rounds.is_empty()
 	}
 
-	pub fn get_finished_rounds(&mut self) -> Vec<DKGSignedPayload<K, P>> {
+	pub fn get_finished_rounds(&mut self) -> Vec<DKGSignedPayload<K>> {
 		std::mem::take(&mut self.finished_rounds)
 	}
 
@@ -288,12 +283,15 @@ where
 	pub fn get_id(&self) -> RoundId {
 		self.round_id
 	}
+
+	pub fn has_vote_in_process(&self, round_key: K) -> bool {
+		return self.rounds.contains_key(&round_key)
+	}
 }
 
-impl<K, P> MultiPartyECDSARounds<K, P>
+impl<K> MultiPartyECDSARounds<K>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
-	P: Encode + core::fmt::Debug,
 {
 	/// Internal ///
 
@@ -657,14 +655,14 @@ impl<P> DKGRoundTracker<P> {
 
 #[cfg(test)]
 mod tests {
-	use super::{HSha256, MultiPartyECDSARounds, Stage};
+	use super::{keccak_256, MultiPartyECDSARounds, Stage};
 	use bincode;
 	use codec::Encode;
-	use curv::{arithmetic::Converter, cryptographic_primitives::hashing::traits::Hash, BigInt};
+	use curv::{arithmetic::Converter, BigInt};
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 
 	fn check_all_reached_stage(
-		parties: &Vec<MultiPartyECDSARounds<u64, String>>,
+		parties: &Vec<MultiPartyECDSARounds<u64>>,
 		target_stage: Stage,
 	) -> bool {
 		for party in parties.iter() {
@@ -675,7 +673,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64, String>>) {
+	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64>>) {
 		for party in parties.iter() {
 			if party.get_public_key().is_none() {
 				panic!("No public key for party {}", party.party_index)
@@ -683,15 +681,15 @@ mod tests {
 		}
 	}
 
-	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64, String>>) -> bool {
+	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
 		check_all_reached_stage(parties, Stage::OfflineReady)
 	}
 
-	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64, String>>) -> bool {
+	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
 		check_all_reached_stage(parties, Stage::ManualReady)
 	}
 
-	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64, String>>) -> bool {
+	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
 		for party in parties.iter() {
 			if !party.has_finished_rounds() {
 				return false
@@ -700,7 +698,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64, String>>) {
+	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64>>) {
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
 
@@ -709,7 +707,7 @@ mod tests {
 
 				let sig = bincode::deserialize(&finished_round.signature).unwrap();
 				let pub_k = party.get_public_key().unwrap();
-				let message = HSha256::create_hash(&[&BigInt::from_bytes(&"Webb".encode())]);
+				let message = BigInt::from_bytes(&keccak_256(&"Webb".encode()));
 
 				if !verify(&sig, &pub_k, &message).is_ok() {
 					panic!("Invalid signature for party {}", party.party_index);
@@ -730,9 +728,9 @@ mod tests {
 		println!("All signatures are correct");
 	}
 
-	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64, String>>, stop_condition: C)
+	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64>>, stop_condition: C)
 	where
-		C: Fn(&Vec<MultiPartyECDSARounds<u64, String>>) -> bool,
+		C: Fn(&Vec<MultiPartyECDSARounds<u64>>) -> bool,
 	{
 		println!("Simulation starts");
 
@@ -773,7 +771,7 @@ mod tests {
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64, String>> = vec![];
+		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
 
 		for i in 1..=n {
 			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);
@@ -804,7 +802,7 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
 			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
-			party.vote(1, "Webb".to_string()).unwrap();
+			party.vote(1, "Webb".encode()).unwrap();
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
 
