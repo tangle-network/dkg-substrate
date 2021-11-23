@@ -1918,6 +1918,7 @@ version = "0.0.1"
 dependencies = [
  "bincode",
  "curv-kzen",
+ "dkg-runtime-primitives",
  "fnv",
  "futures 0.3.17",
  "hex",
@@ -1929,6 +1930,7 @@ dependencies = [
  "round-based",
  "serde",
  "sha3",
+ "sp-core",
  "thiserror",
  "wasm-timer",
 ]
@@ -2003,6 +2005,7 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

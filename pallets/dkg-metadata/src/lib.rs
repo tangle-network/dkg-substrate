@@ -163,15 +163,6 @@ pub mod pallet {
 
 			ensure!(signature != Vec::<u8>::default(), Error::<T>::InvalidSignature);
 
-			ensure!(
-				Self::pending_dkg_signatures(origin.clone()) == Vec::<u8>::default(),
-				Error::<T>::AlreadySubmittedSignature
-			);
-
-			PendingDKGPublicKeySignatures::<T>::insert(origin, signature);
-
-			Self::vote_public_key_signature();
-
 			Ok(().into())
 		}
 	}
@@ -186,12 +177,6 @@ pub mod pallet {
 	#[pallet::getter(fn next_public_key_signature)]
 	pub type NextPublicKeySignature<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
-
-	/// Tracks public key signature submitted by current authorities
-	#[pallet::storage]
-	#[pallet::getter(fn pending_dkg_signatures)]
-	pub type PendingDKGPublicKeySignatures<T: Config> =
-		CountedStorageMap<_, Blake2_256, T::AccountId, Vec<u8>, ValueQuery>;
 
 	/// Session progress required to kickstart refresh process
 	#[pallet::storage]
@@ -344,41 +329,6 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// For every public key signature submitted by the queued authorities,
-	/// this function goes through them and finds the submitted public
-	/// key signature that has the highest number of ocurrences based on the signature threshold
-	pub fn vote_public_key_signature() -> () {
-		let mut dict: BTreeMap<Vec<u8>, Vec<T::AccountId>> = BTreeMap::new();
-		let authority_accounts = Self::next_authorities_accounts();
-		let num_of_authorities = authority_accounts.len();
-
-		for origin in authority_accounts.iter() {
-			let key = Self::pending_dkg_signatures(origin);
-			let mut temp = dict.remove(&key).unwrap_or_default();
-			temp.push(origin.clone());
-			dict.insert(key.clone(), temp);
-		}
-
-		let thresh = Self::signature_threshold();
-
-		for (key, accounts) in dict.iter() {
-			if accounts.len() >= thresh as usize {
-				NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-				let pending_submissions = PendingDKGPublicKeySignatures::<T>::count() as usize;
-
-				if num_of_authorities == pending_submissions {
-					PendingDKGPublicKeySignatures::<T>::remove_all();
-				}
-
-				for acc in &authority_accounts {
-					if !accounts.contains(acc) {
-						// TODO Slash account for posting a wrong signature
-					}
-				}
-			}
-		}
-	}
-
 	fn change_authorities(
 		new: Vec<T::DKGId>,
 		queued: Vec<T::DKGId>,
@@ -519,6 +469,10 @@ impl<T: Config> Pallet<T> {
 			return (delay >= session_progress) && next_dkg_public_key_signature.is_none()
 		}
 		false
+	}
+
+	pub fn verify_pub_key_signature() -> bool {
+		true
 	}
 }
 

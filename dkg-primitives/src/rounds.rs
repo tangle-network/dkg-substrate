@@ -3,11 +3,12 @@ use codec::Encode;
 use curv::{
 	arithmetic::Converter,
 	cryptographic_primitives::hashing::{hash_sha256::HSha256, traits::Hash as CurvHash},
-	elliptic::curves::secp256_k1::Secp256k1Point,
+	elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar},
 	BigInt,
 };
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
+use sp_core::ecdsa::Signature;
 use std::collections::BTreeMap;
 
 use crate::types::*;
@@ -56,7 +57,7 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, SignPayload> {
 
 impl<K, P> MultiPartyECDSARounds<K, P>
 where
-	K: Ord + Encode + Copy + core::fmt::Debug,
+	K: Ord + Encode + Clone + core::fmt::Debug,
 	P: Encode + core::fmt::Debug,
 {
 	/// Public ///
@@ -228,7 +229,7 @@ where
 
 	pub fn vote(&mut self, round_key: K, data: P) -> Result<(), String> {
 		if let Some(completed_offline) = self.completed_offline_stage.as_mut() {
-			let round = self.rounds.entry(round_key).or_default();
+			let round = self.rounds.entry(round_key.clone()).or_default();
 			let hash = HSha256::create_hash(&[&BigInt::from_bytes(&data.encode())]);
 
 			match SignManual::new(hash, completed_offline.clone()) {
@@ -292,7 +293,7 @@ where
 
 impl<K, P> MultiPartyECDSARounds<K, P>
 where
-	K: Ord + Encode + Copy + core::fmt::Debug,
+	K: Ord + Encode + Clone + core::fmt::Debug,
 	P: Encode + core::fmt::Debug,
 {
 	/// Internal ///
@@ -396,7 +397,7 @@ where
 
 		for (round_key, round) in self.rounds.iter() {
 			if round.is_done(self.threshold.into()) {
-				finished.push(*round_key);
+				finished.push(round_key.clone());
 			}
 		}
 
@@ -411,7 +412,7 @@ where
 					match bincode::serialize(&sig) {
 						Ok(signature) => {
 							let signed_payload =
-								DKGSignedPayload { key: *round_key, payload, signature };
+								DKGSignedPayload { key: round_key.clone(), payload, signature };
 
 							self.finished_rounds.push(signed_payload);
 
@@ -655,13 +656,54 @@ impl<P> DKGRoundTracker<P> {
 	}
 }
 
+pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
+	let r = sig_recid.r.to_big_int().to_bytes();
+	let s = sig_recid.s.to_big_int().to_bytes();
+	let v = sig_recid.recid;
+
+	let mut sig_vec: Vec<u8> = Vec::new();
+
+	for _ in 0..(32 - r.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&r);
+
+	for _ in 0..(32 - s.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&s);
+
+	sig_vec.extend(&[v]);
+
+	if 65 != sig_vec.len() {
+		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+		return None
+	}
+
+	let mut dkg_sig_arr: [u8; 65] = [0; 65];
+	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
+
+	return match Signature(dkg_sig_arr).try_into() {
+		Ok(sig) => {
+			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
+			Some(sig)
+		},
+		Err(err) => {
+			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
+			None
+		},
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{HSha256, MultiPartyECDSARounds, Stage};
+	use super::{convert_signature, HSha256, MultiPartyECDSARounds, Stage};
 	use bincode;
 	use codec::Encode;
 	use curv::{arithmetic::Converter, cryptographic_primitives::hashing::traits::Hash, BigInt};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::{
+		verify, SignatureRecid,
+	};
 
 	fn check_all_reached_stage(
 		parties: &Vec<MultiPartyECDSARounds<u64, String>>,
@@ -700,6 +742,16 @@ mod tests {
 		true
 	}
 
+	fn convert_signatures_test_correctness(sig_recid: &SignatureRecid, msg: &Vec<u8>) {
+		let sig = convert_signature(sig_recid);
+		if let Some(sig) = sig {
+			let sig_bytes = sig.encode();
+			assert!(dkg_runtime_primitives::utils::validate_ecdsa_signature(&msg, &sig_bytes))
+		} else {
+			panic!("Failed to extract signature")
+		}
+	}
+
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64, String>>) {
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
@@ -714,6 +766,7 @@ mod tests {
 				if !verify(&sig, &pub_k, &message).is_ok() {
 					panic!("Invalid signature for party {}", party.party_index);
 				}
+				convert_signatures_test_correctness(&sig, &"Webb".encode());
 				println!("Party {}; sig: {:?}", party.party_index, &sig);
 			} else {
 				panic!("No signature extracted")

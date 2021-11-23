@@ -50,8 +50,8 @@ use sp_runtime::{
 use crate::keystore::DKGKeystore;
 
 use dkg_runtime_primitives::{
-	crypto::{AuthorityId, Public},
-	Commitment, ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY,
+	crypto::{AuthorityId, Public, Signature},
+	Commitment, ConsensusLog, MmrRootHash, VoteType, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY,
 	OFFCHAIN_PUBLIC_KEY_SIG,
 };
 
@@ -101,11 +101,9 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds:
-		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
-	next_rounds: Option<
-		MultiPartyECDSARounds<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
-	>,
+	rounds: MultiPartyECDSARounds<(VoteType, NumberFor<B>), Commitment<NumberFor<B>, VoteType>>,
+	next_rounds:
+		Option<MultiPartyECDSARounds<(VoteType, NumberFor<B>), Commitment<NumberFor<B>, VoteType>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
@@ -128,8 +126,6 @@ where
 	queued_keygen_in_progress: bool,
 	// public key refresh in progress
 	refresh_in_progress: bool,
-	// public key refresh in progress
-	refresh_public_key: Option<H256>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -178,7 +174,6 @@ where
 			dkg_state,
 			queued_keygen_in_progress: false,
 			refresh_in_progress: false,
-			refresh_public_key: None,
 			_backend: PhantomData,
 		}
 	}
@@ -371,7 +366,6 @@ where
 
 				// Reset refresh status
 				self.refresh_in_progress = false;
-				self.refresh_public_key = None;
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -414,7 +408,7 @@ where
 			let block_number = header.number().clone();
 
 			let commitment = Commitment {
-				payload: mmr_root.clone(),
+				payload: VoteType::BlockVote { root_hash: mmr_root.clone() },
 				block_number: block_number.clone(),
 				validator_set_id: self.current_validator_set.id.clone(),
 			};
@@ -423,7 +417,12 @@ where
 			if self.rounds.is_ready_to_vote() {
 				trace!(target: "dkg", "🕸️  Signing commitment");
 
-				self.rounds.vote((mmr_root, block_number), commitment).unwrap();
+				self.rounds
+					.vote(
+						(VoteType::BlockVote { root_hash: mmr_root.clone() }, block_number),
+						commitment,
+					)
+					.unwrap();
 
 				self.send_outgoing_dkg_messages();
 			} else {
@@ -438,18 +437,17 @@ where
 				self.refresh_in_progress = true;
 				let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
 				if let Ok(pub_key) = pub_key {
-					let pub_key_hash = derive_refresh_round_payload(&pub_key);
-					self.refresh_public_key = Some(pub_key_hash.clone());
-
 					let block_number = header.number().clone();
 
 					let commitment = Commitment {
-						payload: pub_key_hash.clone(),
+						payload: VoteType::RefreshVote { pub_key: pub_key.clone() },
 						block_number: block_number.clone(),
 						validator_set_id: self.current_validator_set.id.clone(),
 					};
 
-					let _ = self.rounds.vote((pub_key_hash, block_number), commitment);
+					let _ = self
+						.rounds
+						.vote((VoteType::RefreshVote { pub_key }, block_number), commitment);
 				}
 			}
 		}
@@ -469,56 +467,17 @@ where
 		self.process_block_notification(&notification.header);
 	}
 
-	// fn convert_signature(&mut self, sig_recid: &SignatureRecid) -> Option<Signature> {
-	// 	let r = sig_recid.r.to_big_int().to_bytes();
-	// 	let s = sig_recid.s.to_big_int().to_bytes();
-	// 	let v = sig_recid.recid;
-
-	// 	let mut sig_vec: Vec<u8> = Vec::new();
-
-	// 	for _ in 0..(32 - r.len()) {
-	// 		sig_vec.extend(&[0]);
-	// 	}
-	// 	sig_vec.extend_from_slice(&r);
-
-	// 	for _ in 0..(32 - s.len()) {
-	// 		sig_vec.extend(&[0]);
-	// 	}
-	// 	sig_vec.extend_from_slice(&s);
-
-	// 	sig_vec.extend(&[v]);
-
-	// 	if 65 != sig_vec.len() {
-	// 		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
-	// 		return None
-	// 	}
-
-	// 	let mut dkg_sig_arr: [u8; 65] = [0; 65];
-	// 	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
-
-	// 	return match ecdsa::Signature(dkg_sig_arr).try_into() {
-	// 		Ok(sig) => {
-	// 			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
-	// 			Some(sig)
-	// 		},
-	// 		Err(err) => {
-	// 			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
-	// 			None
-	// 		},
-	// 	}
-	// }
-
 	fn process_finished_rounds(&mut self) {
 		let mut handle_finished_round = |finished_round: DKGSignedPayload<
-			(H256, <<B as Block>::Header as Header>::Number),
-			Commitment<<<B as Block>::Header as Header>::Number, H256>,
+			(VoteType, <<B as Block>::Header as Header>::Number),
+			Commitment<<<B as Block>::Header as Header>::Number, VoteType>,
 		>| {
 			// id is stored for skipped session metric calculation
 			self.last_signed_id = self.current_validator_set.id;
 
 			let round_key = finished_round.key;
 
-			if round_key.0 == self.refresh_public_key.unwrap_or_default() {
+			if let VoteType::RefreshVote { pub_key } = round_key.0 {
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
@@ -580,8 +539,8 @@ where
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<
-			(H256, <<B as Block>::Header as Header>::Number),
-			Commitment<<<B as Block>::Header as Header>::Number, H256>,
+			(VoteType, <<B as Block>::Header as Header>::Number),
+			Commitment<<<B as Block>::Header as Header>::Number, VoteType>,
 		>,
 		                     authority_id: Public| {
 			rounds.proceed();
@@ -645,7 +604,7 @@ where
 
 	fn process_incoming_dkg_message(
 		&mut self,
-		dkg_msg: DKGMessage<Public, (MmrRootHash, NumberFor<B>)>,
+		dkg_msg: DKGMessage<Public, (VoteType, NumberFor<B>)>,
 	) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
@@ -705,7 +664,7 @@ where
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
-					DKGMessage::<Public, (MmrRootHash, NumberFor<B>)>::decode(
+					DKGMessage::<Public, (VoteType, NumberFor<B>)>::decode(
 						&mut &notification.message[..],
 					)
 					.ok()
@@ -754,11 +713,6 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 		}
 	}
 	None
-}
-
-fn derive_refresh_round_payload(data: &[u8]) -> H256 {
-	let bytes = sp_io::hashing::twox_256(data);
-	H256::from(&bytes)
 }
 
 /// Extract the MMR root hash from a digest in the given header, if it exists.

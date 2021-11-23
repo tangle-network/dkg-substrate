@@ -9,6 +9,7 @@ use sp_std::{prelude::*, vec::Vec};
 
 pub mod mmr;
 pub mod traits;
+pub mod utils;
 
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
@@ -79,6 +80,13 @@ pub struct Commitment<TBlockNumber, TPayload> {
 	pub payload: TPayload,
 	pub block_number: TBlockNumber,
 	pub validator_set_id: AuthoritySetId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, PartialOrd, Ord)]
+pub enum VoteType {
+	BlockVote { root_hash: MmrRootHash },
+	RefreshVote { pub_key: Vec<u8> },
+	ProposalVote { proposal_hash: Vec<u8> },
 }
 
 pub type AuthorityIndex = u32;
