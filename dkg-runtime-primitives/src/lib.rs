@@ -123,7 +123,5 @@ sp_api::decl_runtime_apis! {
 		fn set_dkg_pub_key(key: Vec<u8>) -> ();
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
-		/// Submit signed proposal
-		fn add_signed_proposal(proposal: ProposalType);
 	}
 }

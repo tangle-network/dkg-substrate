@@ -776,10 +776,6 @@ impl_runtime_apis! {
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
-
-		fn add_signed_proposal(proposal: ProposalType) {
-			DKGProposalHandler::add_signed_proposal(proposal);
-		}
 	}
 
 	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {

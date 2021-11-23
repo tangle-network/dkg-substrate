@@ -463,10 +463,6 @@ impl_runtime_apis! {
 			// DKGProposalHandler::get_unsigned_proposals()
 			Vec::new()
 		}
-
-		fn add_signed_proposal(proposal: ProposalType) {
-			// DKGProposalHandler::add_signed_proposal(proposal)
-		}
 	}
 
 	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {

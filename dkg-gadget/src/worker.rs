@@ -534,15 +534,13 @@ where
 	}
 
 	fn process_signed_proposal(&mut self, signed_payload: DKGSignedPayload<DKGPayloadKey>) {
-		let at = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
 		let signed_proposal = ProposalType::EVMSigned {
 			data: signed_payload.payload,
 			signature: signed_payload.signature,
 		};
 
-		if let Err(err) = self.client.runtime_api().add_signed_proposal(&at, signed_proposal) {
-			error!(target: "dkg", "🕸️  error adding new signed proposal: {}", err);
-		}
+		// TODO: Submit signed proposal extrinsic either using offchain context or directly w/ subxt
+		// let at: Block = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
 	}
 
 	// *** Main run loop ***
