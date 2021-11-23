@@ -754,7 +754,7 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> {
 			let queued_authorities = DKG::next_authorities();
 			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 
@@ -768,8 +768,12 @@ impl_runtime_apis! {
 			DKG::signature_threshold()
 		}
 
-		fn set_dkg_pub_key(key: Vec<u8>) -> () {
-			DKG::set_local_pub_key(key);
+		fn should_refresh(block_number: BlockNumber) -> bool {
+			DKG::should_refresh(block_number)
+		}
+
+		fn next_dkg_pub_key() -> Vec<u8> {
+			DKG::next_dkg_public_key()
 		}
 	}
 

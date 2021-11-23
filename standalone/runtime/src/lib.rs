@@ -437,7 +437,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			Grandpa::grandpa_authorities().iter().map(|auth| {
 				auth
@@ -454,8 +454,12 @@ impl_runtime_apis! {
 			2
 		}
 
-		fn set_dkg_pub_key(key: Vec<u8>) -> () {
+		fn should_refresh(_block_number: BlockNumber) -> bool {
+			true
+		}
 
+		fn next_dkg_pub_key() -> Vec<u8> {
+			Default::default()
 		}
 	}
 

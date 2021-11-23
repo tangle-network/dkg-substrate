@@ -536,7 +536,7 @@ source = "git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.11#57
 [[package]]
 name = "beefy-merkle-tree"
 version = "4.0.0-dev"
-source = "git+https://github.com/paritytech/substrate#0214f26b5fb6afb89b5322aa59e18b1d19e88a54"
+source = "git+https://github.com/paritytech/substrate#c0da7c3d47def8600c9d3ef55617790d81b7d8bb"
 
 [[package]]
 name = "beefy-primitives"
@@ -1903,6 +1903,7 @@ dependencies = [
  "sp-arithmetic",
  "sp-blockchain",
  "sp-core",
+ "sp-io",
  "sp-keystore",
  "sp-runtime",
  "strum 0.21.0",

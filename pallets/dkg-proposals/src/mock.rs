@@ -144,6 +144,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 }
 
 parameter_types! {

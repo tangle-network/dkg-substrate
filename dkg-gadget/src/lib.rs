@@ -25,7 +25,7 @@ use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::Block;
+use sp_runtime::traits::{Block, Header};
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sp_keystore::SyncCryptoStorePtr;
@@ -82,7 +82,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
 	/// DKG client
@@ -109,7 +109,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
 	let DKGParams {

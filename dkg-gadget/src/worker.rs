@@ -36,7 +36,10 @@ use sc_client_api::{
 };
 use sc_network_gossip::GossipEngine;
 
-use sp_api::BlockId;
+use sp_api::{
+	offchain::{OffchainStorage, STORAGE_PREFIX},
+	BlockId,
+};
 use sp_arithmetic::traits::AtLeast32Bit;
 use sp_runtime::{
 	generic::OpaqueDigestItemId,
@@ -48,7 +51,8 @@ use crate::keystore::DKGKeystore;
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	Commitment, ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID,
+	Commitment, ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY,
+	OFFCHAIN_PUBLIC_KEY_SIG,
 };
 
 use crate::{
@@ -122,6 +126,10 @@ where
 	dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
+	// public key refresh in progress
+	refresh_in_progress: bool,
+	// public key refresh in progress
+	refresh_public_key: Option<H256>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -129,7 +137,7 @@ where
 	B: Block + Codec,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -169,6 +177,8 @@ where
 			last_signed_id: 0,
 			dkg_state,
 			queued_keygen_in_progress: false,
+			refresh_in_progress: false,
+			refresh_public_key: None,
 			_backend: PhantomData,
 		}
 	}
@@ -179,7 +189,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	fn get_authority_index(&self, header: &B::Header) -> Option<usize> {
 		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
@@ -359,6 +369,10 @@ where
 				self.queued_validator_set = queued.clone();
 				self.latest_header = Some(header.clone());
 
+				// Reset refresh status
+				self.refresh_in_progress = false;
+				self.refresh_public_key = None;
+
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
 				self.best_dkg_block = Some(*header.number());
@@ -414,6 +428,29 @@ where
 				self.send_outgoing_dkg_messages();
 			} else {
 				debug!(target: "dkg", "Not ready to sign, skipping")
+			}
+		}
+
+		let at = BlockId::hash(header.hash());
+		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
+		if let Ok(true) = should_refresh {
+			if !self.refresh_in_progress {
+				self.refresh_in_progress = true;
+				let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+				if let Ok(pub_key) = pub_key {
+					let pub_key_hash = derive_refresh_round_payload(&pub_key);
+					self.refresh_public_key = Some(pub_key_hash.clone());
+
+					let block_number = header.number().clone();
+
+					let commitment = Commitment {
+						payload: pub_key_hash.clone(),
+						block_number: block_number.clone(),
+						validator_set_id: self.current_validator_set.id.clone(),
+					};
+
+					let _ = self.rounds.vote((pub_key_hash, block_number), commitment);
+				}
 			}
 		}
 	}
@@ -480,6 +517,20 @@ where
 			self.last_signed_id = self.current_validator_set.id;
 
 			let round_key = finished_round.key;
+
+			if round_key.0 == self.refresh_public_key.unwrap_or_default() {
+				let offchain = self.backend.offchain_storage();
+
+				if let Some(mut offchain) = offchain {
+					offchain.set(
+						STORAGE_PREFIX,
+						OFFCHAIN_PUBLIC_KEY_SIG,
+						&finished_round.signature,
+					);
+				}
+				return
+			}
+
 			let sig_recid: SignatureRecid =
 				bincode::deserialize(&finished_round.signature).unwrap();
 			// let signature = self.convert_signature(&sig_recid);
@@ -523,13 +574,6 @@ where
 		for finished_round in self.rounds.get_finished_rounds() {
 			handle_finished_round(finished_round);
 		}
-
-		if let Some(mut next_rounds) = self.next_rounds.take() {
-			for finished_round in next_rounds.get_finished_rounds() {
-				handle_finished_round(finished_round);
-			}
-			self.next_rounds = Some(next_rounds)
-		}
 	}
 
 	fn send_outgoing_dkg_messages(&mut self) {
@@ -541,17 +585,6 @@ where
 		>,
 		                     authority_id: Public| {
 			rounds.proceed();
-
-			if rounds.is_offline_ready() {
-				let at = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
-				let pub_key = rounds
-					.get_public_key()
-					.unwrap()
-					.get_element()
-					.serialize_uncompressed()
-					.to_vec();
-				let _res = self.client.runtime_api().set_dkg_pub_key(&at, pub_key);
-			}
 
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {
@@ -638,9 +671,25 @@ where
 
 				self.next_rounds = Some(next_rounds);
 
-				if self.next_rounds.as_mut().unwrap().is_ready_to_vote() {
+				let is_ready_to_vote = self.next_rounds.as_mut().unwrap().is_ready_to_vote();
+
+				if is_ready_to_vote {
 					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					self.queued_keygen_in_progress = false;
+					let pub_key = self
+						.next_rounds
+						.as_mut()
+						.unwrap()
+						.get_public_key()
+						.unwrap()
+						.get_element()
+						.serialize_uncompressed()
+						.to_vec();
+					let offchain = self.backend.offchain_storage();
+
+					if let Some(mut offchain) = offchain {
+						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY, &pub_key);
+					}
 				}
 			}
 		}
@@ -705,6 +754,11 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 		}
 	}
 	None
+}
+
+fn derive_refresh_round_payload(data: &[u8]) -> H256 {
+	let bytes = sp_io::hashing::twox_256(data);
+	H256::from(&bytes)
 }
 
 /// Extract the MMR root hash from a digest in the given header, if it exists.
