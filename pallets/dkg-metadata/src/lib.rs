@@ -402,7 +402,7 @@ impl<T: Config> Pallet<T> {
 			Ok(_block_number) => {
 				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
 				if !signer.can_sign() {
-					return Err(
+					Err(
 							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
 						)?
 				}
@@ -419,7 +419,7 @@ impl<T: Config> Pallet<T> {
 
 				return Ok(())
 			},
-			_ => return Err("Already submitted public key")?,
+			_ => Err("Already submitted public key")?,
 		}
 	}
 
@@ -440,7 +440,7 @@ impl<T: Config> Pallet<T> {
 			Ok(_block_number) => {
 				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
 				if !signer.can_sign() {
-					return Err(
+					Err(
 							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
 						)?
 				}
@@ -457,7 +457,7 @@ impl<T: Config> Pallet<T> {
 
 				return Ok(())
 			},
-			_ => return Err("Already submitted public key signature")?,
+			_ => Err("Already submitted public key signature")?,
 		}
 	}
 
