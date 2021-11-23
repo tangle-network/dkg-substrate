@@ -6,6 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use dkg_runtime_primitives::{ProposalNonce, ProposalType};
 use frame_support::traits::Everything;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -456,6 +457,11 @@ impl_runtime_apis! {
 
 		fn set_dkg_pub_key(key: Vec<u8>) -> () {
 
+		}
+
+		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+			// DKGProposalHandler::get_unsigned_proposals()
+			Vec::new()
 		}
 	}
 

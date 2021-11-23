@@ -1917,6 +1917,7 @@ version = "0.0.1"
 dependencies = [
  "bincode",
  "curv-kzen",
+ "dkg-runtime-primitives",
  "fnv",
  "futures 0.3.17",
  "hex",
@@ -1996,6 +1997,9 @@ dependencies = [
 name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
+ "ethereum",
+ "ethereum-types",
+ "frame-support",
  "frame-system",
  "parity-scale-codec",
  "scale-info",
@@ -2004,6 +2008,7 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "sp-std",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -5361,12 +5366,12 @@ dependencies = [
 name = "pallet-dkg-proposal-handler"
 version = "0.1.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-dkg-proposals",
  "parity-scale-codec",
- "primitives",
  "scale-info",
  "serde",
  "sp-core",
@@ -5392,7 +5397,6 @@ dependencies = [
  "pallet-session",
  "pallet-timestamp",
  "parity-scale-codec",
- "primitives",
  "scale-info",
  "sp-consensus-aura",
  "sp-core",
@@ -7472,19 +7476,6 @@ dependencies = [
  "impl-serde",
  "scale-info",
  "uint",
-]
-
-[[package]]
-name = "primitives"
-version = "0.1.0"
-dependencies = [
- "ethereum",
- "ethereum-types",
- "frame-support",
- "parity-scale-codec",
- "scale-info",
- "sp-std",
- "tiny-keccak",
 ]
 
 [[package]]

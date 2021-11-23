@@ -7,6 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
+use dkg_runtime_primitives::{ProposalNonce, ProposalType};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -770,6 +771,10 @@ impl_runtime_apis! {
 
 		fn set_dkg_pub_key(key: Vec<u8>) -> () {
 			DKG::set_local_pub_key(key);
+		}
+
+		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+			DKGProposalHandler::get_unsigned_proposals()
 		}
 	}
 

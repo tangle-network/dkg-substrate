@@ -21,3 +21,5 @@ bincode = "1.2.1"
 curv = { package = "curv-kzen", version = "0.7", default-features = false }
 round-based = { version = "0.1.4", features = [] }
 multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
+
+dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }
