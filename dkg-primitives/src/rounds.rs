@@ -409,16 +409,19 @@ where
 				let payload = round.payload;
 
 				if let (Some(payload), Some(sig)) = (payload, sig) {
-					match bincode::serialize(&sig) {
-						Ok(signature) => {
-							let signed_payload =
-								DKGSignedPayload { key: round_key.clone(), payload, signature };
+					match convert_signature(&sig) {
+						Some(signature) => {
+							let signed_payload = DKGSignedPayload {
+								key: round_key.clone(),
+								payload,
+								signature: signature.encode(),
+							};
 
 							self.finished_rounds.push(signed_payload);
 
 							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", &round_key);
 						},
-						Err(err) => debug!("Error serializing signature {}", err.to_string()),
+						_ => debug!("Error serializing signature {}", err.to_string()),
 					}
 				}
 			}

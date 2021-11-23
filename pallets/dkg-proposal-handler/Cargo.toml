@@ -16,6 +16,7 @@ codec = { package = 'parity-scale-codec', version = '2.0.0', features = ['derive
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
 primitives = { path = '../../primitives', default-features = false }
+dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 frame-benchmarking = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false, optional = true }
 frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
@@ -40,4 +41,5 @@ std = [
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
+	'dkg-runtime-primitives/std'
 ]

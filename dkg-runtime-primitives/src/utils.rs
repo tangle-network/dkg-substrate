@@ -1,11 +1,12 @@
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
+use sp_std::vec::Vec;
 
 pub const SIGNATURE_LENGTH: usize = 65;
 
 pub fn validate_ecdsa_signature(data: &Vec<u8>, signature: &Vec<u8>) -> bool {
 	if signature.len() == SIGNATURE_LENGTH {
 		let mut sig = [0u8; SIGNATURE_LENGTH];
-		sig[0..(SIGNATURE_LENGTH - 1)].copy_from_slice(&signature[..]);
+		sig[..SIGNATURE_LENGTH].copy_from_slice(&signature);
 
 		let hash = keccak_256(&data);
 
@@ -21,7 +22,7 @@ pub fn recover_ecdsa_pub_key(
 ) -> Result<Vec<u8>, EcdsaVerifyError> {
 	if signature.len() == SIGNATURE_LENGTH {
 		let mut sig = [0u8; SIGNATURE_LENGTH];
-		sig[0..(SIGNATURE_LENGTH - 1)].copy_from_slice(&signature[..]);
+		sig[..SIGNATURE_LENGTH].copy_from_slice(&signature);
 
 		let hash = keccak_256(&data);
 

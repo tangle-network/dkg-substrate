@@ -5365,6 +5365,7 @@ dependencies = [
 name = "pallet-dkg-proposal-handler"
 version = "0.1.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

@@ -19,6 +19,8 @@
 use codec::Encode;
 
 use frame_support::{
+	dispatch::DispatchResultWithPostInfo,
+	ensure,
 	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
 	Parameter,
 };
@@ -49,7 +51,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{ensure, pallet_prelude::*};
 	use frame_system::{
 		ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction},
@@ -163,7 +165,7 @@ pub mod pallet {
 
 			ensure!(signature != Vec::<u8>::default(), Error::<T>::InvalidSignature);
 
-			Ok(().into())
+			Self::verify_pub_key_signature(&signature)
 		}
 	}
 
@@ -364,7 +366,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		<NextAuthorities<T>>::put(&queued);
-		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts)
+		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
@@ -471,8 +473,27 @@ impl<T: Config> Pallet<T> {
 		false
 	}
 
-	pub fn verify_pub_key_signature() -> bool {
-		true
+	pub fn verify_pub_key_signature(signature: &Vec<u8>) -> DispatchResultWithPostInfo {
+		if let Some(pub_key) = Self::next_dkg_public_key() {
+			let recovered_pub_key = match dkg_runtime_primitives::utils::recover_ecdsa_pub_key(
+				&pub_key.1, &signature,
+			) {
+				Ok(key) => key,
+				Err(_) => Err(Error::<T>::InvalidSignature)?,
+			};
+
+			if recovered_pub_key != Self::dkg_public_key().1 {
+				// TODO probably a slashing condition
+
+				Err(Error::<T>::InvalidSignature)?;
+			}
+
+			if Self::next_dkg_public_key().is_none() {
+				NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature));
+			}
+		}
+
+		Ok(().into())
 	}
 }
 
