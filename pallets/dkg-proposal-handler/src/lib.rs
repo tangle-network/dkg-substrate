@@ -11,12 +11,13 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-use frame_support::pallet_prelude::*;
-use primitives::{
+use dkg_runtime_primitives::{
 	keccak_256, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
 	PROPOSAL_SIGNATURE_LENGTH,
 };
+use frame_support::pallet_prelude::*;
+use frame_system::{pallet_prelude::OriginFor, Origin};
 use sp_std::{convert::TryFrom, vec::Vec};
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -25,9 +26,9 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use dkg_runtime_primitives::ProposalType;
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::pallet_prelude::*;
-	use primitives::ProposalType;
 	use sp_runtime::traits::AtLeast32Bit;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -46,14 +47,26 @@ pub mod pallet {
 	// /// All unsigned proposals.
 	#[pallet::storage]
 	#[pallet::getter(fn unsigned_proposals)]
-	pub type UnsignedProposalQueue<T: Config> =
-		StorageDoubleMap<_, Blake2_256, T::ChainId, Blake2_256, ProposalNonce, ProposalType>;
+	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		T::ChainId,
+		Blake2_128Concat,
+		ProposalNonce,
+		ProposalType,
+	>;
 
 	/// All signed proposals.
 	#[pallet::storage]
 	#[pallet::getter(fn signed_proposals)]
-	pub type SignedProposals<T: Config> =
-		StorageDoubleMap<_, Blake2_256, T::ChainId, Blake2_256, ProposalNonce, ProposalType>;
+	pub type SignedProposals<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		T::ChainId,
+		Blake2_128Concat,
+		ProposalNonce,
+		ProposalType,
+	>;
 
 	#[pallet::event]
 	//#[pallet::metadata(T::AccountId = "AccountId")]
@@ -91,33 +104,6 @@ pub mod pallet {
 			_origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
-			let (data, signature) = match prop {
-				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
-				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
-			};
-
-			if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-				ensure!(
-					Self::validate_ethereum_tx(&eth_transaction),
-					Error::<T>::ProposalFormatInvalid
-				);
-
-				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
-
-				ensure!(
-					UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
-					Error::<T>::ProposalDoesNotExist
-				);
-				ensure!(
-					Self::validate_proposal_signature(&data, &signature),
-					Error::<T>::ProposalSignatureInvalid
-				);
-
-				SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
-
-				UnsignedProposalQueue::<T>::remove(chain_id, nonce);
-			}
-
 			Ok(().into())
 		}
 	}
@@ -141,6 +127,45 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 }
 
 impl<T: Config> Pallet<T> {
+	// *** API methods ***
+
+	pub fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+		return UnsignedProposalQueue::<T>::iter()
+			.map(|entry| (entry.1, entry.2.clone()))
+			.collect()
+	}
+
+	pub fn add_signed_proposal(prop: ProposalType) -> DispatchResultWithPostInfo {
+		let (data, signature) = match prop {
+			ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
+			_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
+		};
+
+		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+			ensure!(
+				Self::validate_ethereum_tx(&eth_transaction),
+				Error::<T>::ProposalFormatInvalid
+			);
+
+			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
+
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
+				Error::<T>::ProposalDoesNotExist
+			);
+			ensure!(
+				Self::validate_proposal_signature(&data, &signature),
+				Error::<T>::ProposalSignatureInvalid
+			);
+
+			SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
+
+			UnsignedProposalQueue::<T>::remove(chain_id, nonce);
+		}
+
+		Ok(().into())
+	}
+
 	// *** Validation methods ***
 
 	fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> bool {

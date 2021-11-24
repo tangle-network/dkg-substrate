@@ -2,14 +2,28 @@
 // NOTE: needed to silence warnings about generated code in `decl_runtime_apis`
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
+pub mod mmr;
+pub mod proposal;
+pub mod traits;
+
+pub use ethereum::*;
+pub use ethereum_types::*;
+pub use proposal::*;
+
 use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_std::{prelude::*, vec::Vec};
+use tiny_keccak::{Hasher, Keccak};
 
-pub mod mmr;
-pub mod traits;
-pub mod utils;
+/// Utility fn to calculate keccak 256 has
+pub fn keccak_256(data: &[u8]) -> [u8; 32] {
+	let mut keccak = Keccak::v256();
+	keccak.update(data);
+	let mut output = [0u8; 32];
+	keccak.finalize(&mut output);
+	output
+}
 
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
@@ -123,5 +137,7 @@ sp_api::decl_runtime_apis! {
 		fn should_refresh(_block_number: BlockNumber) -> bool;
 		/// Fetch DKG public key for queued authorities
 		fn next_dkg_pub_key() -> Vec<u8>;
+		/// Get list of unsigned proposals
+		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
 	}
 }

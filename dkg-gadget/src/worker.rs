@@ -17,17 +17,12 @@
 #![allow(clippy::collapsible_match)]
 
 use core::convert::TryFrom;
-use curv::{
-	arithmetic::Converter,
-	elliptic::curves::traits::{ECPoint, ECScalar},
-};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
-use sp_core::{ecdsa, H256};
-use std::{collections::BTreeSet, convert::TryInto, fmt::Debug, marker::PhantomData, sync::Arc};
+use curv::elliptic::curves::traits::ECPoint;
+use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
 
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, trace};
 use parking_lot::Mutex;
 
 use sc_client_api::{
@@ -40,18 +35,19 @@ use sp_api::{
 	offchain::{OffchainStorage, STORAGE_PREFIX},
 	BlockId,
 };
-use sp_arithmetic::traits::AtLeast32Bit;
+
 use sp_runtime::{
 	generic::OpaqueDigestItemId,
-	traits::{Block, Hash, Header, NumberFor},
-	SaturatedConversion,
+	traits::{Block, Header, NumberFor},
 };
+
+use dkg_primitives::ProposalType;
 
 use crate::keystore::DKGKeystore;
 
 use dkg_runtime_primitives::{
-	crypto::{AuthorityId, Public, Signature},
-	Commitment, ConsensusLog, MmrRootHash, VoteType, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY,
+	crypto::{AuthorityId, Public},
+	ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY,
 	OFFCHAIN_PUBLIC_KEY_SIG,
 };
 
@@ -66,7 +62,7 @@ use crate::{
 
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
-	types::{DKGMessage, DKGSignedPayload},
+	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -83,7 +79,7 @@ where
 	pub gossip_validator: Arc<GossipValidator<B>>,
 	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
-	pub dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
+	pub dkg_state: DKGState<DKGPayloadKey>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -101,9 +97,8 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: MultiPartyECDSARounds<(VoteType, NumberFor<B>), Commitment<NumberFor<B>, VoteType>>,
-	next_rounds:
-		Option<MultiPartyECDSARounds<(VoteType, NumberFor<B>), Commitment<NumberFor<B>, VoteType>>>,
+	rounds: MultiPartyECDSARounds<DKGPayloadKey>,
+	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
@@ -121,7 +116,7 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 	// dkg state
-	dkg_state: DKGState<(MmrRootHash, NumberFor<B>), Commitment<NumberFor<B>, MmrRootHash>>,
+	dkg_state: DKGState<DKGPayloadKey>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
 	// public key refresh in progress
@@ -213,24 +208,6 @@ where
 	fn get_threshold(&self, header: &B::Header) -> Option<u16> {
 		let at = BlockId::hash(header.hash());
 		return self.client.runtime_api().signature_threshold(&at).ok()
-	}
-
-	/// Return `true`, if we should vote on block `number`
-	fn should_vote_on(&self, number: NumberFor<B>) -> bool {
-		let best_dkg_block = if let Some(block) = self.best_dkg_block {
-			block
-		} else {
-			debug!(target: "dkg", "🕸️  Missing best DKG block - won't vote for: {:?}", number);
-			return false
-		};
-
-		let target = vote_target(self.best_grandpa_block, best_dkg_block, self.min_block_delta);
-
-		trace!(target: "dkg", "🕸️  should_vote_on: #{:?}, next_block_to_vote_on: #{:?}", number, target);
-
-		metric_set!(self, dkg_should_vote_on, target);
-
-		number == target
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -339,6 +316,8 @@ where
 		}
 	}
 
+	// *** Block notifications ***
+
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -388,69 +367,29 @@ where
 			}
 		}
 
-		if self.should_vote_on(*header.number()) {
-			if let Some(id) =
-				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
-			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
-				id
-			} else {
-				debug!(target: "dkg", "🕸️  Missing validator id - can't vote for: {:?}", header.hash());
-				return
-			};
+		// let at = BlockId::hash(header.hash());
+		// let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
+		// if let Ok(true) = should_refresh {
+		// 	if !self.refresh_in_progress {
+		// 		self.refresh_in_progress = true;
+		// 		let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+		// 		if let Ok(pub_key) = pub_key {
+		// 			let block_number = header.number().clone();
 
-			let mmr_root = if let Some(hash) = find_mmr_root_digest::<B, Public>(header) {
-				hash
-			} else {
-				warn!(target: "dkg", "🕸️  No MMR root digest found for: {:?}", header.hash());
-				return
-			};
-			let block_number = header.number().clone();
+		// 			let commitment = Commitment {
+		// 				payload: VoteType::RefreshVote { pub_key: pub_key.clone() },
+		// 				block_number: block_number.clone(),
+		// 				validator_set_id: self.current_validator_set.id.clone(),
+		// 			};
 
-			let commitment = Commitment {
-				payload: VoteType::BlockVote { root_hash: mmr_root.clone() },
-				block_number: block_number.clone(),
-				validator_set_id: self.current_validator_set.id.clone(),
-			};
+		// 			let _ = self
+		// 				.rounds
+		// 				.vote((VoteType::RefreshVote { pub_key }, block_number), commitment);
+		// 		}
+		// 	}
+		// }
 
-			trace!(target: "dkg", "🕸️  Created commitment");
-			if self.rounds.is_ready_to_vote() {
-				trace!(target: "dkg", "🕸️  Signing commitment");
-
-				self.rounds
-					.vote(
-						(VoteType::BlockVote { root_hash: mmr_root.clone() }, block_number),
-						commitment,
-					)
-					.unwrap();
-
-				self.send_outgoing_dkg_messages();
-			} else {
-				debug!(target: "dkg", "Not ready to sign, skipping")
-			}
-		}
-
-		let at = BlockId::hash(header.hash());
-		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
-		if let Ok(true) = should_refresh {
-			if !self.refresh_in_progress {
-				self.refresh_in_progress = true;
-				let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-				if let Ok(pub_key) = pub_key {
-					let block_number = header.number().clone();
-
-					let commitment = Commitment {
-						payload: VoteType::RefreshVote { pub_key: pub_key.clone() },
-						block_number: block_number.clone(),
-						validator_set_id: self.current_validator_set.id.clone(),
-					};
-
-					let _ = self
-						.rounds
-						.vote((VoteType::RefreshVote { pub_key }, block_number), commitment);
-				}
-			}
-		}
+		self.process_unsigned_proposals(&header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
@@ -467,81 +406,12 @@ where
 		self.process_block_notification(&notification.header);
 	}
 
-	fn process_finished_rounds(&mut self) {
-		let mut handle_finished_round = |finished_round: DKGSignedPayload<
-			(VoteType, <<B as Block>::Header as Header>::Number),
-			Commitment<<<B as Block>::Header as Header>::Number, VoteType>,
-		>| {
-			// id is stored for skipped session metric calculation
-			self.last_signed_id = self.current_validator_set.id;
-
-			let round_key = finished_round.key;
-
-			if let VoteType::RefreshVote { pub_key } = round_key.0 {
-				let offchain = self.backend.offchain_storage();
-
-				if let Some(mut offchain) = offchain {
-					offchain.set(
-						STORAGE_PREFIX,
-						OFFCHAIN_PUBLIC_KEY_SIG,
-						&finished_round.signature,
-					);
-				}
-				return
-			}
-
-			let sig_recid: SignatureRecid =
-				bincode::deserialize(&finished_round.signature).unwrap();
-			// let signature = self.convert_signature(&sig_recid);
-
-			// let mut signatures: Vec<Option<Signature>> = vec![];
-			// if signature.is_some() {
-			// 	signatures.push(signature);
-			// }
-
-			// let signed_commitment =
-			// 	SignedCommitment { commitment: finished_round.payload.clone(), signatures };
-
-			// info!(target: "dkg", "🕸️  Round #{} concluded, committed: {:?}.", round_key.1, &signed_commitment);
-
-			// if self
-			// 	.backend
-			// 	.append_justification(
-			// 		BlockId::Number(round_key.1),
-			// 		(DKG_ENGINE_ID, VersionedCommitment::V1(signed_commitment.clone()).encode()),
-			// 	)
-			// 	.is_err()
-			// {
-			// 	// just a trace, because until the round lifecycle is improved, we will
-			// 	// conclude certain rounds multiple times.
-			// 	trace!(target: "dkg", "🕸️  Failed to append justification: {:?}", signed_commitment);
-			// }
-
-			// self.signed_commitment_sender.notify(signed_commitment);
-
-			if let Some(best) = self.best_dkg_block {
-				if round_key.1 > best {
-					self.best_dkg_block = Some(round_key.1);
-				}
-			} else {
-				self.best_dkg_block = Some(round_key.1);
-			}
-
-			metric_set!(self, dkg_best_block, round_key.1);
-		};
-
-		for finished_round in self.rounds.get_finished_rounds() {
-			handle_finished_round(finished_round);
-		}
-	}
+	// *** DKG rounds ***
 
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
-		let send_messages = |rounds: &mut MultiPartyECDSARounds<
-			(VoteType, <<B as Block>::Header as Header>::Number),
-			Commitment<<<B as Block>::Header as Header>::Number, VoteType>,
-		>,
+		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
 		                     authority_id: Public| {
 			rounds.proceed();
 
@@ -602,10 +472,7 @@ where
 		}
 	}
 
-	fn process_incoming_dkg_message(
-		&mut self,
-		dkg_msg: DKGMessage<Public, (VoteType, NumberFor<B>)>,
-	) {
+	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
 		if dkg_msg.round_id == self.rounds.get_id() {
@@ -632,7 +499,7 @@ where
 
 				let is_ready_to_vote = self.next_rounds.as_mut().unwrap().is_ready_to_vote();
 
-				if is_ready_to_vote {
+				if is_ready_to_vote && self.queued_keygen_in_progress {
 					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					self.queued_keygen_in_progress = false;
 					let pub_key = self
@@ -658,16 +525,84 @@ where
 		self.process_finished_rounds();
 	}
 
+	fn process_finished_rounds(&mut self) {
+		for finished_round in self.rounds.get_finished_rounds() {
+			self.handle_finished_round(finished_round);
+		}
+
+		if let Some(mut next_rounds) = self.next_rounds.take() {
+			for finished_round in next_rounds.get_finished_rounds() {
+				self.handle_finished_round(finished_round);
+			}
+			self.next_rounds = Some(next_rounds)
+		}
+	}
+
+	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload<DKGPayloadKey>) {
+		match finished_round.key {
+			DKGPayloadKey::EVMProposal(_nonce) => {
+				self.process_signed_proposal(finished_round);
+			},
+			/* TODO: handle other key types */
+
+			/* if let VoteType::RefreshVote { pub_key } = round_key.0 {
+			 * 	let offchain = self.backend.offchain_storage(); */
+
+			/* 	if let Some(mut offchain) = offchain {
+			 * 		offchain.set(
+			 * 			STORAGE_PREFIX,
+			 * 			OFFCHAIN_PUBLIC_KEY_SIG,
+			 * 			&finished_round.signature,
+			 * 		);
+			 * 	}
+			 * 	return
+			 * } */
+		};
+	}
+
+	// *** Proposals handling ***
+
+	fn process_unsigned_proposals(&mut self, header: &B::Header) {
+		let at = BlockId::hash(header.hash());
+		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
+			Ok(res) => res,
+			Err(_) => return,
+		};
+
+		for (nonce, proposal) in unsigned_proposals {
+			let key = DKGPayloadKey::EVMProposal(nonce);
+			let data = match proposal {
+				ProposalType::EVMUnsigned { ref data } => data.clone(),
+				_ => continue,
+			};
+
+			if !self.rounds.has_vote_in_process(key) {
+				if let Err(err) = self.rounds.vote(key, data) {
+					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+				}
+			}
+		}
+	}
+
+	fn process_signed_proposal(&mut self, signed_payload: DKGSignedPayload<DKGPayloadKey>) {
+		let signed_proposal = ProposalType::EVMSigned {
+			data: signed_payload.payload,
+			signature: signed_payload.signature,
+		};
+
+		// TODO: Submit signed proposal extrinsic either using offchain context or directly w/ subxt
+		// let at: Block = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
+	}
+
+	// *** Main run loop ***
+
 	pub(crate) async fn run(mut self) {
 		let mut dkg =
 			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
-					DKGMessage::<Public, (VoteType, NumberFor<B>)>::decode(
-						&mut &notification.message[..],
-					)
-					.ok()
+					DKGMessage::<Public, DKGPayloadKey>::decode(&mut &notification.message[..]).ok()
 				},
 			));
 
@@ -750,115 +685,11 @@ where
 	header.digest().convert_first(|l| l.try_to(id).and_then(filter))
 }
 
-/// Calculate next block number to vote on
-fn vote_target<N>(best_grandpa: N, best_dkg: N, min_delta: u32) -> N
-where
-	N: AtLeast32Bit + Copy + Debug,
-{
-	let diff = best_grandpa.saturating_sub(best_dkg);
-	let diff = diff.saturated_into::<u32>();
-	let target = best_dkg + min_delta.max(diff.next_power_of_two()).into();
-
-	trace!(
-		target: "dkg",
-		"🥩 vote target - diff: {:?}, next_power_of_two: {:?}, target block: #{:?}",
-		diff,
-		diff.next_power_of_two(),
-		target,
-	);
-
-	target
-}
-
 #[cfg(test)]
 mod tests {
-	use super::vote_target;
 
 	#[test]
-	fn vote_on_min_block_delta() {
-		let t = vote_target(1u32, 0, 4);
-		assert_eq!(4, t);
-		let t = vote_target(2u32, 0, 4);
-		assert_eq!(4, t);
-		let t = vote_target(3u32, 0, 4);
-		assert_eq!(4, t);
-		let t = vote_target(4u32, 0, 4);
-		assert_eq!(4, t);
-
-		let t = vote_target(4u32, 4, 4);
-		assert_eq!(8, t);
-
-		let t = vote_target(10u32, 10, 4);
-		assert_eq!(14, t);
-		let t = vote_target(11u32, 10, 4);
-		assert_eq!(14, t);
-		let t = vote_target(12u32, 10, 4);
-		assert_eq!(14, t);
-		let t = vote_target(13u32, 10, 4);
-		assert_eq!(14, t);
-
-		let t = vote_target(10u32, 10, 8);
-		assert_eq!(18, t);
-		let t = vote_target(11u32, 10, 8);
-		assert_eq!(18, t);
-		let t = vote_target(12u32, 10, 8);
-		assert_eq!(18, t);
-		let t = vote_target(13u32, 10, 8);
-		assert_eq!(18, t);
-	}
-
-	#[test]
-	fn vote_on_power_of_two() {
-		let t = vote_target(1008u32, 1000, 4);
-		assert_eq!(1008, t);
-
-		let t = vote_target(1016u32, 1000, 4);
-		assert_eq!(1016, t);
-
-		let t = vote_target(1032u32, 1000, 4);
-		assert_eq!(1032, t);
-
-		let t = vote_target(1064u32, 1000, 4);
-		assert_eq!(1064, t);
-
-		let t = vote_target(1128u32, 1000, 4);
-		assert_eq!(1128, t);
-
-		let t = vote_target(1256u32, 1000, 4);
-		assert_eq!(1256, t);
-
-		let t = vote_target(1512u32, 1000, 4);
-		assert_eq!(1512, t);
-
-		let t = vote_target(1024u32, 0, 4);
-		assert_eq!(1024, t);
-	}
-
-	#[test]
-	fn vote_on_target_block() {
-		let t = vote_target(1008u32, 1002, 4);
-		assert_eq!(1010, t);
-		let t = vote_target(1010u32, 1002, 4);
-		assert_eq!(1010, t);
-
-		let t = vote_target(1016u32, 1006, 4);
-		assert_eq!(1022, t);
-		let t = vote_target(1022u32, 1006, 4);
-		assert_eq!(1022, t);
-
-		let t = vote_target(1032u32, 1012, 4);
-		assert_eq!(1044, t);
-		let t = vote_target(1044u32, 1012, 4);
-		assert_eq!(1044, t);
-
-		let t = vote_target(1064u32, 1014, 4);
-		assert_eq!(1078, t);
-		let t = vote_target(1078u32, 1014, 4);
-		assert_eq!(1078, t);
-
-		let t = vote_target(1128u32, 1008, 4);
-		assert_eq!(1136, t);
-		let t = vote_target(1136u32, 1008, 4);
-		assert_eq!(1136, t);
+	fn dummy_test() {
+		assert_eq!(1, 1)
 	}
 }

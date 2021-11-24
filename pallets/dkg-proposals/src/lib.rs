@@ -49,14 +49,15 @@ pub mod types;
 pub mod utils;
 use crate::types::{ProposalStatus, ProposalVotes, ResourceId};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
-use dkg_runtime_primitives::traits::OnAuthoritySetChangeHandler;
+use dkg_runtime_primitives::{
+	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce,
+};
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, Get},
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
-use primitives::{ProposalHandlerTrait, ProposalNonce};
 use scale_info::TypeInfo;
 use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
 use sp_std::prelude::*;
@@ -65,9 +66,9 @@ use sp_std::prelude::*;
 pub mod pallet {
 	use super::*;
 	use crate::types::{ProposalVotes, ResourceId, DKG_DEFAULT_PROPOSER_THRESHOLD};
+	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
-	use primitives::ProposalNonce;
 	use sp_runtime::traits::AtLeast32Bit;
 
 	#[pallet::pallet]
@@ -607,7 +608,10 @@ impl<T: Config> Pallet<T> {
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
-		T::ProposalHandler::handle_proposal(prop.encode(), primitives::ProposalAction::Sign(0))?;
+		T::ProposalHandler::handle_proposal(
+			prop.encode(),
+			dkg_runtime_primitives::ProposalAction::Sign(0),
+		)?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, proposal_nonce: nonce });
 		Ok(().into())
 	}

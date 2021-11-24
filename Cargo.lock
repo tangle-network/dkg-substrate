@@ -1999,6 +1999,9 @@ dependencies = [
 name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
+ "ethereum",
+ "ethereum-types",
+ "frame-support",
  "frame-system",
  "parity-scale-codec",
  "scale-info",
@@ -2008,6 +2011,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -5371,7 +5375,6 @@ dependencies = [
  "frame-system",
  "pallet-dkg-proposals",
  "parity-scale-codec",
- "primitives",
  "scale-info",
  "serde",
  "sp-core",
@@ -5397,7 +5400,6 @@ dependencies = [
  "pallet-session",
  "pallet-timestamp",
  "parity-scale-codec",
- "primitives",
  "scale-info",
  "sp-consensus-aura",
  "sp-core",
@@ -7477,19 +7479,6 @@ dependencies = [
  "impl-serde",
  "scale-info",
  "uint",
-]
-
-[[package]]
-name = "primitives"
-version = "0.1.0"
-dependencies = [
- "ethereum",
- "ethereum-types",
- "frame-support",
- "parity-scale-codec",
- "scale-info",
- "sp-std",
- "tiny-keccak",
 ]
 
 [[package]]

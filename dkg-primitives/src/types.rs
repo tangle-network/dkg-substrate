@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use dkg_runtime_primitives::{ProposalNonce, ProposalType};
 use std::fmt;
 
 /// A typedef for keygen set id
@@ -46,7 +47,7 @@ pub enum DKGMsgPayload<Key> {
 pub struct DKGKeygenMessage {
 	/// Keygen set epoch id
 	pub keygen_set_id: KeygenSetId,
-	/// Node signature
+	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
 }
 
@@ -55,7 +56,7 @@ pub struct DKGKeygenMessage {
 pub struct DKGOfflineMessage {
 	/// Signer set epoch id
 	pub signer_set_id: SignerSetId,
-	/// Node signature
+	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
 }
 
@@ -66,20 +67,25 @@ pub struct DKGVoteMessage<Key> {
 	pub party_ind: u16,
 	/// Key for the vote signature created for
 	pub round_key: Key,
-	/// Node signature
+	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGSignedPayload<Key, Payload> {
+pub struct DKGSignedPayload<Key> {
 	/// Payload key
 	pub key: Key,
 	/// The payload signatures are collected for.
-	pub payload: Payload,
+	pub payload: Vec<u8>,
 	/// Signature for the payload
-	/// SignatureRecid serialized as Vec<u8>, since SignatureRecid does not support codec
 	pub signature: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Decode, Encode, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub enum DKGPayloadKey {
+	EVMProposal(ProposalNonce), // TODO: new voting types here
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
