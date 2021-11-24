@@ -13,7 +13,7 @@ pub use proposal::*;
 use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
-use sp_std::{prelude::*, vec::Vec};
+use sp_std::{collections::vec_deque::VecDeque, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 
 /// Utility fn to calculate keccak 256 has
@@ -36,6 +36,20 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
+
+// Key for offchain signed proposals storage
+pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_proposals";
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct OffchainSignedProposals {
+	pub proposals: VecDeque<ProposalType>,
+}
+
+impl Default for OffchainSignedProposals {
+	fn default() -> Self {
+		Self { proposals: VecDeque::default() }
+	}
+}
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};

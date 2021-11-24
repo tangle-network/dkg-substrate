@@ -31,19 +31,22 @@ use sc_client_api::{
 };
 use sc_network_gossip::GossipEngine;
 
-use sp_api::BlockId;
+use sp_api::{
+	offchain::{OffchainStorage, STORAGE_PREFIX},
+	BlockId,
+};
 use sp_runtime::{
 	generic::OpaqueDigestItemId,
 	traits::{Block, Header, NumberFor},
 };
 
-use dkg_primitives::ProposalType;
-
 use crate::keystore::DKGKeystore;
+use dkg_primitives::ProposalType;
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	ConsensusLog, MmrRootHash, GENESIS_AUTHORITY_SET_ID,
+	ConsensusLog, MmrRootHash, OffchainSignedProposals, GENESIS_AUTHORITY_SET_ID,
+	OFFCHAIN_SIGNED_PROPOSALS,
 };
 
 use crate::{
@@ -62,6 +65,8 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
+
+pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub(crate) struct WorkerParams<B, BE, C>
 where
@@ -534,13 +539,35 @@ where
 	}
 
 	fn process_signed_proposal(&mut self, signed_payload: DKGSignedPayload<DKGPayloadKey>) {
+		trace!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+
 		let signed_proposal = ProposalType::EVMSigned {
 			data: signed_payload.payload,
 			signature: signed_payload.signature,
 		};
 
-		// TODO: Submit signed proposal extrinsic either using offchain context or directly w/ subxt
-		// let at: Block = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
+		if let Some(mut offchain) = self.backend.offchain_storage() {
+			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
+
+			let mut prop_wrapper = match old_val.clone() {
+				Some(ser_props) => OffchainSignedProposals::decode(&mut &ser_props[..]).unwrap(),
+				None => OffchainSignedProposals::default(),
+			};
+
+			prop_wrapper.proposals.push_back(signed_proposal);
+
+			for _i in 1..STORAGE_SET_RETRY_NUM {
+				if offchain.compare_and_set(
+					STORAGE_PREFIX,
+					OFFCHAIN_SIGNED_PROPOSALS,
+					old_val.as_deref(),
+					&prop_wrapper.encode(),
+				) {
+					trace!(target: "dkg", "🕸️  Successfully saved signed proposal in offchain starage");
+					break
+				}
+			}
+		}
 	}
 
 	// *** Main run loop ***

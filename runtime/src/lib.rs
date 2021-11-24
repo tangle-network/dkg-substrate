@@ -569,6 +569,8 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
+	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type GracePeriod = BlocksPerRound;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
