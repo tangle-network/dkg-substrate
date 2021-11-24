@@ -468,7 +468,7 @@ impl<T: Config> Pallet<T> {
 		if let Some(session_progress) = session_progress {
 			let delay = RefreshDelay::<T>::get();
 			let next_dkg_public_key_signature = Self::next_public_key_signature();
-			return (delay >= session_progress) && next_dkg_public_key_signature.is_none()
+			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
 		}
 		false
 	}
@@ -506,6 +506,7 @@ impl<T: Config> Pallet<T> {
 		if next_pub_key.is_some() && next_pub_key_signature.is_some() {
 			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
 			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap().1);
+			PreviousPublicKey::<T>::put(dkg_pub_key.clone().unwrap());
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
