@@ -184,12 +184,8 @@ fn testnet_genesis(
 				.collect(),
 			..Default::default()
 		},
-		aura: AuraConfig {
-			authorities: initial_authorities.iter().map(|x| (x.1.clone())).collect(),
-		},
-		grandpa: GrandpaConfig {
-			authorities: initial_authorities.iter().map(|x| (x.2.clone(), 1)).collect(),
-		},
+		aura: Default::default(),
+		grandpa: Default::default(),
 		sudo: SudoConfig {
 			// Assign network admin rights.
 			key: root_key,
