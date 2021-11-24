@@ -379,6 +379,7 @@ impl<T: Config> Pallet<T> {
 		<AuthoritySetId<T>>::put(0);
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
+		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,

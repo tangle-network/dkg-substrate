@@ -1,5 +1,5 @@
 [package]
-name = 'dkg_node'
+name = 'dkg-node'
 authors = ['Webb tools']
 description = 'A new Cumulus FRAME-based Substrate node, ready for hacking.'
 license = 'Unlicense'
@@ -16,7 +16,7 @@ targets = ['x86_64-unknown-linux-gnu']
 substrate-build-script-utils = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 
 [[bin]]
-name = 'dkg_node'
+name = 'dkg-node'
 
 [features]
 default = []
