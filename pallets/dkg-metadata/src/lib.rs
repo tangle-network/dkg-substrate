@@ -506,7 +506,7 @@ impl<T: Config> Pallet<T> {
 		if next_pub_key.is_some() && next_pub_key_signature.is_some() {
 			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
 			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap().1);
-			PreviousPublicKey::<T>::put(dkg_pub_key.clone().unwrap());
+			PreviousPublicKey::<T>::put(dkg_pub_key.clone());
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
