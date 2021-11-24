@@ -25,14 +25,13 @@ use frame_support::{
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 
-use core::convert::TryFrom;
 use sp_runtime::{
 	generic::DigestItem,
 	offchain::storage::StorageValueRef,
 	traits::{IsMember, Member},
 	RuntimeAppPublic,
 };
-use sp_std::{collections::btree_map::BTreeMap, prelude::*};
+use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, AuthorityIndex, AuthoritySet, ConsensusLog, DKG_ENGINE_ID,
@@ -118,7 +117,7 @@ pub mod pallet {
 			ensure!(new_delay <= 100, Error::<T>::InvalidRefreshDelay);
 
 			// set the new delay
-			RefreshDelay::<T>::put(Permill::from_float((new_delay as f64) / 100.0));
+			RefreshDelay::<T>::put(Permill::from_percent(new_delay as u32));
 
 			Ok(().into())
 		}
@@ -280,7 +279,7 @@ pub mod pallet {
 			Pallet::<T>::initialize_authorities(&self.authorities, &self.authority_ids);
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
-			RefreshDelay::<T>::put(Permill::from_float(0.0));
+			RefreshDelay::<T>::put(Permill::from_percent(0u32));
 		}
 	}
 }

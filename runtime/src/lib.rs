@@ -745,7 +745,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			let authorities = DKG::authorities();
 			let authority_set_id = DKG::authority_set_id();
@@ -756,7 +756,7 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> {
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			let queued_authorities = DKG::next_authorities();
 			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 
@@ -774,8 +774,11 @@ impl_runtime_apis! {
 			DKG::should_refresh(block_number)
 		}
 
-		fn next_dkg_pub_key() -> Vec<u8> {
-			DKG::next_dkg_public_key()
+		fn next_dkg_pub_key() -> Option<Vec<u8>> {
+			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
+				return Some(pub_key)
+			}
+			return None
 		}
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {

@@ -459,8 +459,8 @@ impl_runtime_apis! {
 			true
 		}
 
-		fn next_dkg_pub_key() -> Vec<u8> {
-			Default::default()
+		fn next_dkg_pub_key() -> Option<Vec<u8>> {
+			None
 		}
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {

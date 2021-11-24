@@ -542,7 +542,7 @@ where
 		if let Ok(true) = should_refresh {
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-			if let Ok(pub_key) = pub_key {
+			if let Ok(Some(pub_key)) = pub_key {
 				let _ = self
 					.rounds
 					.vote(DKGPayloadKey::RefreshVote(self.current_validator_set.id + 164), pub_key);

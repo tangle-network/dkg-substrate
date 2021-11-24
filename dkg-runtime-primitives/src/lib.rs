@@ -138,7 +138,7 @@ sp_api::decl_runtime_apis! {
 		/// Check if refresh process should start
 		fn should_refresh(_block_number: BlockNumber) -> bool;
 		/// Fetch DKG public key for queued authorities
-		fn next_dkg_pub_key() -> Vec<u8>;
+		fn next_dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
 	}
