@@ -350,7 +350,9 @@ where
 				// Setting up the DKG
 				self.handle_dkg_processing(&header, active.clone(), queued.clone());
 
-				self.send_outgoing_dkg_messages();
+				if !self.current_validator_set.authorities.is_empty() {
+					self.send_outgoing_dkg_messages();
+				}
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
 			} else {
 				// if the DKG has not been prepared / terminated, continue preparing it
