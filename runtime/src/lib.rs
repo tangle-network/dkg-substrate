@@ -558,6 +558,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = BlocksPerRound;
+	type NextSessionRotation = ParachainStaking;
 }
 
 parameter_types! {

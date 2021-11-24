@@ -20,7 +20,6 @@ use codec::Encode;
 
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
-	ensure,
 	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
 	Parameter,
 };
@@ -367,6 +366,7 @@ impl<T: Config> Pallet<T> {
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
+		Self::refresh_dkg_keys();
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
@@ -494,6 +494,34 @@ impl<T: Config> Pallet<T> {
 		}
 
 		Ok(().into())
+	}
+
+	pub fn refresh_dkg_keys() {
+		let next_pub_key = Self::next_dkg_public_key();
+		let next_pub_key_signature = Self::next_public_key_signature();
+		let dkg_pub_key = Self::dkg_public_key();
+		let pub_key_signature = Self::public_key_signature();
+		NextDKGPublicKey::<T>::kill();
+		NextPublicKeySignature::<T>::kill();
+		if next_pub_key.is_some() && next_pub_key_signature.is_some() {
+			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
+			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap().1);
+			UsedSignatures::<T>::mutate(|val| {
+				val.push(pub_key_signature.clone());
+			});
+
+			let log: DigestItem<T::Hash> = DigestItem::Consensus(
+				DKG_ENGINE_ID,
+				ConsensusLog::<dkg_runtime_primitives::AuthoritySetId>::KeyRefresh {
+					old_key_signature: pub_key_signature,
+					new_key_signature: next_pub_key_signature.unwrap().1,
+					old_public_key: dkg_pub_key.1,
+					new_public_key: next_pub_key.unwrap().1,
+				}
+				.encode(),
+			);
+			<frame_system::Pallet<T>>::deposit_log(log);
+		}
 	}
 }
 

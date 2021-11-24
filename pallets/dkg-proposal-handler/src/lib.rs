@@ -12,9 +12,8 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	keccak_256, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
-	PROPOSAL_SIGNATURE_LENGTH,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
+	ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{pallet_prelude::OriginFor, Origin};

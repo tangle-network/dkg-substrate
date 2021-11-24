@@ -1,6 +1,10 @@
 use bincode;
 use codec::Encode;
-use curv::{BigInt, arithmetic::Converter, elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar}};
+use curv::{
+	arithmetic::Converter,
+	elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar},
+	BigInt,
+};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
@@ -413,6 +417,7 @@ where
 								key: round_key.clone(),
 								payload,
 								signature: signature.encode(),
+								signature_recid: bincode::serialize(&sig).unwrap_or_default(),
 							};
 
 							self.finished_rounds.push(signed_payload);
@@ -702,7 +707,9 @@ mod tests {
 	use bincode;
 	use codec::Encode;
 	use curv::{arithmetic::Converter, BigInt};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::{SignatureRecid, verify};
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::{
+		verify, SignatureRecid,
+	};
 
 	fn check_all_reached_stage(
 		parties: &Vec<MultiPartyECDSARounds<u64>>,
@@ -758,7 +765,7 @@ mod tests {
 			if finished_rounds.len() == 1 {
 				let finished_round = finished_rounds.remove(0);
 
-				let sig = bincode::deserialize(&finished_round.signature).unwrap();
+				let sig = bincode::deserialize(&finished_round.signature_recid).unwrap();
 				let pub_k = party.get_public_key().unwrap();
 				let message = BigInt::from_bytes(&keccak_256(&"Webb".encode()));
 

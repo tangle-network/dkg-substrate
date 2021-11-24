@@ -120,6 +120,14 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	/// MMR root hash.
 	#[codec(index = 3)]
 	MmrRoot(MmrRootHash),
+	/// The authority keys have changed
+	#[codec(index = 4)]
+	KeyRefresh {
+		old_public_key: Vec<u8>,
+		new_public_key: Vec<u8>,
+		old_key_signature: Vec<u8>,
+		new_key_signature: Vec<u8>,
+	},
 }
 
 sp_api::decl_runtime_apis! {

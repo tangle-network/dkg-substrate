@@ -80,12 +80,15 @@ pub struct DKGSignedPayload<Key> {
 	pub payload: Vec<u8>,
 	/// Signature for the payload
 	pub signature: Vec<u8>,
+	/// Bytes representation of the signature recid
+	pub signature_recid: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce), // TODO: new voting types here
+	RefreshVote(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

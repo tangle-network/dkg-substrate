@@ -261,7 +261,7 @@ where
 		Ok(())
 	}
 
-	fn handle_dkg_processing(
+	fn handle_dkg_setup(
 		&mut self,
 		header: &B::Header,
 		next_authorities: AuthoritySet<Public>,
@@ -319,6 +319,8 @@ where
 	// *** Block notifications ***
 
 	fn process_block_notification(&mut self, header: &B::Header) {
+		self.latest_header = Some(header.clone());
+
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
@@ -341,7 +343,6 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-				self.latest_header = Some(header.clone());
 
 				// Reset refresh status
 				self.refresh_in_progress = false;
@@ -355,7 +356,7 @@ where
 				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
-				self.handle_dkg_processing(&header, active.clone(), queued.clone());
+				self.handle_dkg_setup(&header, active.clone(), queued.clone());
 
 				self.send_outgoing_dkg_messages();
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
@@ -367,28 +368,7 @@ where
 			}
 		}
 
-		// let at = BlockId::hash(header.hash());
-		// let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
-		// if let Ok(true) = should_refresh {
-		// 	if !self.refresh_in_progress {
-		// 		self.refresh_in_progress = true;
-		// 		let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-		// 		if let Ok(pub_key) = pub_key {
-		// 			let block_number = header.number().clone();
-
-		// 			let commitment = Commitment {
-		// 				payload: VoteType::RefreshVote { pub_key: pub_key.clone() },
-		// 				block_number: block_number.clone(),
-		// 				validator_set_id: self.current_validator_set.id.clone(),
-		// 			};
-
-		// 			let _ = self
-		// 				.rounds
-		// 				.vote((VoteType::RefreshVote { pub_key }, block_number), commitment);
-		// 		}
-		// 	}
-		// }
-
+		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
 	}
 
@@ -529,13 +509,6 @@ where
 		for finished_round in self.rounds.get_finished_rounds() {
 			self.handle_finished_round(finished_round);
 		}
-
-		if let Some(mut next_rounds) = self.next_rounds.take() {
-			for finished_round in next_rounds.get_finished_rounds() {
-				self.handle_finished_round(finished_round);
-			}
-			self.next_rounds = Some(next_rounds)
-		}
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload<DKGPayloadKey>) {
@@ -543,21 +516,38 @@ where
 			DKGPayloadKey::EVMProposal(_nonce) => {
 				self.process_signed_proposal(finished_round);
 			},
-			/* TODO: handle other key types */
+			DKGPayloadKey::RefreshVote(_nonce) => {
+				let offchain = self.backend.offchain_storage();
 
-			/* if let VoteType::RefreshVote { pub_key } = round_key.0 {
-			 * 	let offchain = self.backend.offchain_storage(); */
-
-			/* 	if let Some(mut offchain) = offchain {
-			 * 		offchain.set(
-			 * 			STORAGE_PREFIX,
-			 * 			OFFCHAIN_PUBLIC_KEY_SIG,
-			 * 			&finished_round.signature,
-			 * 		);
-			 * 	}
-			 * 	return
-			 * } */
+				if let Some(mut offchain) = offchain {
+					offchain.set(
+						STORAGE_PREFIX,
+						OFFCHAIN_PUBLIC_KEY_SIG,
+						&finished_round.signature,
+					);
+				}
+			}, // TODO: handle other key types
 		};
+	}
+
+	// *** Refresh Vote ***
+
+	fn check_refresh(&mut self, header: &B::Header) {
+		if self.refresh_in_progress {
+			return
+		}
+
+		let at = BlockId::hash(header.hash());
+		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
+		if let Ok(true) = should_refresh {
+			self.refresh_in_progress = true;
+			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+			if let Ok(pub_key) = pub_key {
+				let _ = self
+					.rounds
+					.vote(DKGPayloadKey::RefreshVote(self.current_validator_set.id + 164), pub_key);
+			}
+		}
 	}
 
 	// *** Proposals handling ***
