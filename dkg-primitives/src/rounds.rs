@@ -1,6 +1,6 @@
 use bincode;
 use codec::Encode;
-use curv::{arithmetic::Converter, elliptic::curves::secp256_k1::Secp256k1Point, BigInt};
+use curv::{BigInt, arithmetic::Converter, elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar}};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
@@ -419,7 +419,7 @@ where
 
 							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", &round_key);
 						},
-						_ => debug!("Error serializing signature {}", err.to_string()),
+						_ => debug!("Error serializing signature"),
 					}
 				}
 			}
@@ -702,7 +702,7 @@ mod tests {
 	use bincode;
 	use codec::Encode;
 	use curv::{arithmetic::Converter, BigInt};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::{SignatureRecid, verify};
 
 	fn check_all_reached_stage(
 		parties: &Vec<MultiPartyECDSARounds<u64>>,

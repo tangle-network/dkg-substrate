@@ -5,6 +5,7 @@
 pub mod mmr;
 pub mod proposal;
 pub mod traits;
+pub mod utils;
 
 pub use ethereum::*;
 pub use ethereum_types::*;
