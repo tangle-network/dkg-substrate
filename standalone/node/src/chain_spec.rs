@@ -1,7 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
 	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, GenesisConfig, GrandpaConfig, Perbill,
-	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig, WASM_BINARY,
+	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
+	MAX_NOMINATIONS, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -33,9 +34,13 @@ where
 }
 
 /// Generate an Aura authority key.
-pub fn authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId, DKGId) {
+pub fn authority_keys_from_seed(
+	s: &str,
+	c: &str,
+) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
 		get_account_id_from_seed::<sr25519::Public>(s),
+		get_account_id_from_seed::<sr25519::Public>(c),
 		get_from_seed::<AuraId>(s),
 		get_from_seed::<GrandpaId>(s),
 		get_from_seed::<DKGId>(s),
@@ -67,7 +72,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			testnet_genesis(
 				wasm_binary,
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice")],
+				vec![authority_keys_from_seed("Alice", "Alice//stash")],
+				vec![],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
@@ -106,7 +112,11 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			testnet_genesis(
 				wasm_binary,
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
+				vec![
+					authority_keys_from_seed("Alice", "Alice//stash"),
+					authority_keys_from_seed("Bob", "Bob//stash"),
+				],
+				vec![],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
@@ -143,13 +153,33 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 /// Configure initial storage state for FRAME modules.
 fn testnet_genesis(
 	wasm_binary: &[u8],
-	initial_authorities: Vec<(AccountId, AuraId, GrandpaId, DKGId)>,
+	initial_authorities: Vec<(AccountId, AccountId, AuraId, GrandpaId, DKGId)>,
+	initial_nominators: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
 ) -> GenesisConfig {
 	const ENDOWMENT: Balance = 10_000_000 * DOLLARS;
 	const STASH: Balance = ENDOWMENT / 1000;
+
+	// stakers: all validators and nominators.
+	let mut rng = rand::thread_rng();
+	let stakers = initial_authorities
+		.iter()
+		.map(|x| (x.0.clone(), x.1.clone(), STASH, StakerStatus::Validator))
+		.chain(initial_nominators.iter().map(|x| {
+			use rand::{seq::SliceRandom, Rng};
+			let limit = (MAX_NOMINATIONS as usize).min(initial_authorities.len());
+			let count = rng.gen::<usize>() % limit;
+			let nominations = initial_authorities
+				.as_slice()
+				.choose_multiple(&mut rng, count)
+				.into_iter()
+				.map(|choice| choice.0.clone())
+				.collect::<Vec<_>>();
+			(x.clone(), x.clone(), STASH, StakerStatus::Nominator(nominations))
+		}))
+		.collect::<Vec<_>>();
 
 	GenesisConfig {
 		system: SystemConfig {
@@ -168,7 +198,7 @@ fn testnet_genesis(
 					(
 						x.0.clone(),
 						x.0.clone(),
-						dkg_session_keys(x.2.clone(), x.1.clone(), x.3.clone()),
+						dkg_session_keys(x.3.clone(), x.2.clone(), x.4.clone()),
 					)
 				})
 				.collect::<Vec<_>>(),
@@ -178,10 +208,7 @@ fn testnet_genesis(
 			minimum_validator_count: initial_authorities.len() as u32,
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect(),
 			slash_reward_fraction: Perbill::from_percent(10),
-			stakers: initial_authorities
-				.iter()
-				.map(|x| (x.0.clone(), x.0.clone(), STASH, StakerStatus::Validator))
-				.collect(),
+			stakers,
 			..Default::default()
 		},
 		aura: Default::default(),

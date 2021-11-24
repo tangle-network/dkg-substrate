@@ -259,6 +259,10 @@ where
 		next_authorities: AuthoritySet<Public>,
 		queued: AuthoritySet<Public>,
 	) {
+		if next_authorities.authorities.is_empty() {
+			return
+		}
+
 		let public = self
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())

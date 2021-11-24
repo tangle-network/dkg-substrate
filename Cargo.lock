@@ -2021,6 +2021,7 @@ dependencies = [
  "frame-benchmarking-cli",
  "jsonrpc-core",
  "pallet-transaction-payment-rpc",
+ "rand 0.7.3",
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
