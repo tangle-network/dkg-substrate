@@ -417,7 +417,6 @@ where
 								key: round_key.clone(),
 								payload,
 								signature: signature.encode(),
-								signature_recid: bincode::serialize(&sig).unwrap_or_default(),
 							};
 
 							self.finished_rounds.push(signed_payload);
@@ -703,13 +702,8 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use super::{convert_signature, keccak_256, MultiPartyECDSARounds, Stage};
-	use bincode;
+	use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
-	use curv::{arithmetic::Converter, BigInt};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::{
-		verify, SignatureRecid,
-	};
 
 	fn check_all_reached_stage(
 		parties: &Vec<MultiPartyECDSARounds<u64>>,
@@ -748,16 +742,6 @@ mod tests {
 		true
 	}
 
-	fn convert_signatures_test_correctness(sig_recid: &SignatureRecid, msg: &Vec<u8>) {
-		let sig = convert_signature(sig_recid);
-		if let Some(sig) = sig {
-			let sig_bytes = sig.encode();
-			assert!(dkg_runtime_primitives::utils::validate_ecdsa_signature(&msg, &sig_bytes))
-		} else {
-			panic!("Failed to extract signature")
-		}
-	}
-
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64>>) {
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
@@ -765,15 +749,18 @@ mod tests {
 			if finished_rounds.len() == 1 {
 				let finished_round = finished_rounds.remove(0);
 
-				let sig = bincode::deserialize(&finished_round.signature_recid).unwrap();
-				let pub_k = party.get_public_key().unwrap();
-				let message = BigInt::from_bytes(&keccak_256(&"Webb".encode()));
+				let message = b"Webb".encode();
 
-				if !verify(&sig, &pub_k, &message).is_ok() {
-					panic!("Invalid signature for party {}", party.party_index);
-				}
-				convert_signatures_test_correctness(&sig, &"Webb".encode());
-				println!("Party {}; sig: {:?}", party.party_index, &sig);
+				assert!(
+					dkg_runtime_primitives::utils::validate_ecdsa_signature(
+						&message,
+						&finished_round.signature
+					),
+					"Invalid signature for party {}",
+					party.party_index
+				);
+
+				println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
 			} else {
 				panic!("No signature extracted")
 			}

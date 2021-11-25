@@ -78,10 +78,8 @@ pub struct DKGSignedPayload<Key> {
 	pub key: Key,
 	/// The payload signatures are collected for.
 	pub payload: Vec<u8>,
-	/// Signature for the payload
+	/// Runtime compatible signature for the payload
 	pub signature: Vec<u8>,
-	/// Bytes representation of the signature recid
-	pub signature_recid: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -302,6 +302,8 @@ where
 			}
 		}
 
+		// If current node is part of the queued authorities
+		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
 			self.next_rounds = Some(set_up_rounds(&queued, &public));
@@ -438,6 +440,7 @@ where
 			panic!("error");
 		}
 
+		// Check if a there's a key gen process running for the queued authority set
 		if self.queued_keygen_in_progress {
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
@@ -531,7 +534,9 @@ where
 	}
 
 	// *** Refresh Vote ***
-
+	// Return if a refresh has been started in this worker,
+	// if not check if it's rime for refresh and start signing the public key
+	// for queued authorities
 	fn check_refresh(&mut self, header: &B::Header) {
 		if self.refresh_in_progress {
 			return
