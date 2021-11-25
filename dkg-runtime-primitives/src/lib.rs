@@ -43,7 +43,6 @@ pub const OFFCHAIN_PUBLIC_KEY: &[u8] = b"dkg-metadata::public_key";
 
 // Key for offchain storage of derived public key signature
 pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
-
 // Key for offchain signed proposals storage
 pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_proposals";
 
