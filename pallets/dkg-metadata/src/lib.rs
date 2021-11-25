@@ -405,15 +405,23 @@ impl<T: Config> Pallet<T> {
 
 		match res {
 			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
-				if !signer.can_sign() {
-					Err(
-							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-						)?
-				}
-
 				if let Ok(Some(pub_key)) = pub_key {
+					// Clear offchain storage after each successful read since the outcome
+					// of this function is either a successful submission or a failure
+					// if data  has already been submitted
+					pub_key_ref.clear();
+
+					if !Self::should_submit_key() {
+						return Ok(())
+					}
+
 					if !pub_key.is_empty() {
+						let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+						if !signer.can_sign() {
+							Err(
+									"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+								)?
+						}
 						let _ = signer.send_signed_transaction(|_account| {
 							Call::submit_public_key { pub_key: pub_key.clone() }
 						});
@@ -434,6 +442,14 @@ impl<T: Config> Pallet<T> {
 			return offchain_signature != &onchain_signature
 		}
 		true
+	}
+
+	fn should_submit_key() -> bool {
+		// If next dkg public key  has been set
+		// it means the vote threshold in favour of that key has been reached
+		// no need to submit another extrinsic
+		let onchain_key = Self::next_dkg_public_key();
+		onchain_key.is_none()
 	}
 
 	fn submit_public_key_signature_onchain(

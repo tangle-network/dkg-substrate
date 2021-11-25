@@ -198,6 +198,45 @@ fn should_submit_public_key() {
 }
 
 #[test]
+fn should_not_submit_next_public_key_if_it_has_been_set_onchain() {
+	const PHRASE: &str =
+		"news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+	let pub_key = vec![0u8; 65];
+	let onchain_key = vec![2u8; 65];
+
+	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
+	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = KeyStore::new();
+
+	SyncCryptoStore::ecdsa_generate_new(
+		&keystore,
+		dkg_runtime_primitives::crypto::Public::ID,
+		Some(PHRASE),
+	)
+	.unwrap();
+
+	let mut t = sp_io::TestExternalities::default();
+	t.register_extension(OffchainDbExt::new(offchain.clone()));
+	t.register_extension(OffchainWorkerExt::new(offchain));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
+
+	t.execute_with(|| {
+		let pub_key_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY);
+
+		crate::pallet::NextDKGPublicKey::<Test>::put((0, &onchain_key));
+
+		pub_key_ref.set(&pub_key);
+
+		assert_ok!(DKGMetadata::submit_public_key_onchain(0));
+
+		assert!(pool_state.read().transactions.is_empty());
+
+		assert_eq!(pub_key_ref.get::<Vec<u8>>(), Ok(None));
+	});
+}
+
+#[test]
 fn should_submit_non_existing_public_key_signature() {
 	const PHRASE: &str =
 		"news slush supreme milk chapter athlete soap sausage put clutch what kitten";
