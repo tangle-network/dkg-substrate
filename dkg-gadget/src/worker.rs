@@ -46,7 +46,7 @@ use dkg_primitives::ProposalType;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	ConsensusLog, MmrRootHash, OffchainSignedProposals, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_SIGNED_PROPOSALS,
+	OFFCHAIN_PUBLIC_KEY, OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS,
 };
 
 use crate::{

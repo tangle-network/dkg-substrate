@@ -228,7 +228,6 @@ impl pallet_parachain_staking::Config for Test {
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 

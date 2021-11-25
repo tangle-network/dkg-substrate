@@ -12,9 +12,9 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	keccak_256, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType,
-	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS, PROPOSAL_SIGNATURE_LENGTH,
+	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -45,9 +45,6 @@ pub mod pallet {
 
 		/// The identifier type for an offchain worker.
 		type OffChainAuthorityId: AppCrypto<Self::Public, Self::Signature>;
-
-		#[pallet::constant]
-		type GracePeriod: Get<Self::BlockNumber>;
 	}
 
 	#[pallet::pallet]
