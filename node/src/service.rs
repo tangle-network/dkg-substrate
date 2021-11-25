@@ -191,7 +191,12 @@ where
 		+ sp_block_builder::BlockBuilder<Block>
 		+ cumulus_primitives_core::CollectCollationInfo<Block>
 		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
+		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+		+ dkg_runtime_primitives::DKGApi<
+			Block,
+			dkg_runtime_primitives::crypto::AuthorityId,
+			dkg_runtime::BlockNumber,
+		>,
 	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
 	Executor: sc_executor::NativeExecutionDispatch + 'static,
 	RB: Fn(
@@ -293,6 +298,21 @@ where
 		let network = network.clone();
 		Arc::new(move |hash, data| network.announce_block(hash, data))
 	};
+
+	let dkg_params = dkg_gadget::DKGParams {
+		client: client.clone(),
+		backend: backend.clone(),
+		key_store: Some(params.keystore_container.sync_keystore()),
+		network: network.clone(),
+		min_block_delta: 4,
+		prometheus_registry: prometheus_registry.clone(),
+		block: None,
+	};
+
+	// Start the DKG gadget.
+	task_manager
+		.spawn_essential_handle()
+		.spawn_blocking("dkg-gadget", dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params));
 
 	if validator {
 		let parachain_consensus = build_consensus(
