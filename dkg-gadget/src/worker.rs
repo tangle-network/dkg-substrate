@@ -46,7 +46,7 @@ use dkg_primitives::ProposalType;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	ConsensusLog, MmrRootHash, OffchainSignedProposals, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_SIGNED_PROPOSALS,
+	OFFCHAIN_SIGNED_PROPOSALS, OFFCHAIN_PUBLIC_KEY, OFFCHAIN_PUBLIC_KEY_SIG,
 };
 
 use crate::{
@@ -119,6 +119,8 @@ where
 	dkg_state: DKGState<DKGPayloadKey>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
+	// public key refresh in progress
+	refresh_in_progress: bool,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -126,7 +128,7 @@ where
 	B: Block + Codec,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -166,6 +168,7 @@ where
 			last_signed_id: 0,
 			dkg_state,
 			queued_keygen_in_progress: false,
+			refresh_in_progress: false,
 			_backend: PhantomData,
 		}
 	}
@@ -176,9 +179,9 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	fn get_authority_index(&self, header: &B::Header) -> Option<usize> {
+	fn _get_authority_index(&self, header: &B::Header) -> Option<usize> {
 		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
 		} else {
@@ -258,12 +261,16 @@ where
 		Ok(())
 	}
 
-	fn handle_dkg_processing(
+	fn handle_dkg_setup(
 		&mut self,
 		header: &B::Header,
 		next_authorities: AuthoritySet<Public>,
 		queued: AuthoritySet<Public>,
 	) {
+		if next_authorities.authorities.is_empty() {
+			return
+		}
+
 		let public = self
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
@@ -299,6 +306,8 @@ where
 			}
 		}
 
+		// If current node is part of the queued authorities
+		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
 			self.next_rounds = Some(set_up_rounds(&queued, &public));
@@ -316,6 +325,8 @@ where
 	// *** Block notifications ***
 
 	fn process_block_notification(&mut self, header: &B::Header) {
+		self.latest_header = Some(header.clone());
+
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
@@ -338,7 +349,9 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-				self.latest_header = Some(header.clone());
+
+				// Reset refresh status
+				self.refresh_in_progress = false;
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -349,9 +362,11 @@ where
 				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
-				self.handle_dkg_processing(&header, active.clone(), queued.clone());
+				self.handle_dkg_setup(&header, active.clone(), queued.clone());
 
-				self.send_outgoing_dkg_messages();
+				if !self.current_validator_set.authorities.is_empty() {
+					self.send_outgoing_dkg_messages();
+				}
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
 			} else {
 				// if the DKG has not been prepared / terminated, continue preparing it
@@ -361,6 +376,7 @@ where
 			}
 		}
 
+		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
 	}
 
@@ -386,17 +402,6 @@ where
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
 		                     authority_id: Public| {
 			rounds.proceed();
-
-			if rounds.is_offline_ready() {
-				let at = BlockId::hash(self.latest_header.as_ref().unwrap().hash());
-				let pub_key = rounds
-					.get_public_key()
-					.unwrap()
-					.get_element()
-					.serialize_uncompressed()
-					.to_vec();
-				let _res = self.client.runtime_api().set_dkg_pub_key(&at, pub_key);
-			}
 
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {
@@ -441,6 +446,7 @@ where
 			panic!("error");
 		}
 
+		// Check if a there's a key gen process running for the queued authority set
 		if self.queued_keygen_in_progress {
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
@@ -480,9 +486,25 @@ where
 
 				self.next_rounds = Some(next_rounds);
 
-				if self.next_rounds.as_mut().unwrap().is_ready_to_vote() {
+				let is_ready_to_vote = self.next_rounds.as_mut().unwrap().is_ready_to_vote();
+
+				if is_ready_to_vote && self.queued_keygen_in_progress {
 					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					self.queued_keygen_in_progress = false;
+					let pub_key = self
+						.next_rounds
+						.as_mut()
+						.unwrap()
+						.get_public_key()
+						.unwrap()
+						.get_element()
+						.serialize_uncompressed()
+						.to_vec();
+					let offchain = self.backend.offchain_storage();
+
+					if let Some(mut offchain) = offchain {
+						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY, &pub_key);
+					}
 				}
 			}
 		}
@@ -496,13 +518,6 @@ where
 		for finished_round in self.rounds.get_finished_rounds() {
 			self.handle_finished_round(finished_round);
 		}
-
-		if let Some(mut next_rounds) = self.next_rounds.take() {
-			for finished_round in next_rounds.get_finished_rounds() {
-				self.handle_finished_round(finished_round);
-			}
-			self.next_rounds = Some(next_rounds)
-		}
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload<DKGPayloadKey>) {
@@ -510,8 +525,40 @@ where
 			DKGPayloadKey::EVMProposal(_nonce) => {
 				self.process_signed_proposal(finished_round);
 			},
-			// TODO: handle other key types
+			DKGPayloadKey::RefreshVote(_nonce) => {
+				let offchain = self.backend.offchain_storage();
+
+				if let Some(mut offchain) = offchain {
+					offchain.set(
+						STORAGE_PREFIX,
+						OFFCHAIN_PUBLIC_KEY_SIG,
+						&finished_round.signature,
+					);
+				}
+			}, // TODO: handle other key types
 		};
+	}
+
+	// *** Refresh Vote ***
+	// Return if a refresh has been started in this worker,
+	// if not check if it's rime for refresh and start signing the public key
+	// for queued authorities
+	fn check_refresh(&mut self, header: &B::Header) {
+		if self.refresh_in_progress {
+			return
+		}
+
+		let at = BlockId::hash(header.hash());
+		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
+		if let Ok(true) = should_refresh {
+			self.refresh_in_progress = true;
+			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+			if let Ok(Some(pub_key)) = pub_key {
+				let _ = self
+					.rounds
+					.vote(DKGPayloadKey::RefreshVote(self.current_validator_set.id + 164), pub_key);
+			}
+		}
 	}
 
 	// *** Proposals handling ***

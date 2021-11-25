@@ -1,5 +1,5 @@
 [package]
-name = 'dkg_node'
+name = 'dkg-node'
 authors = ['Webb tools']
 description = 'A new Cumulus FRAME-based Substrate node, ready for hacking.'
 license = 'Unlicense'
@@ -16,7 +16,7 @@ targets = ['x86_64-unknown-linux-gnu']
 substrate-build-script-utils = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11' }
 
 [[bin]]
-name = 'dkg_node'
+name = 'dkg-node'
 
 [features]
 default = []
@@ -35,6 +35,8 @@ jsonrpc-core = '18.0.0'
 
 # Local Dependencies
 dkg-runtime = { path = '../runtime' }
+dkg-runtime-primitives = { path = '../dkg-runtime-primitives' }
+dkg-gadget = { path = '../dkg-gadget' }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 
 # Substrate Dependencies

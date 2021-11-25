@@ -1,8 +1,13 @@
 use bincode;
 use codec::Encode;
-use curv::{arithmetic::Converter, elliptic::curves::secp256_k1::Secp256k1Point, BigInt};
+use curv::{
+	arithmetic::Converter,
+	elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar},
+	BigInt,
+};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
+use sp_core::ecdsa::Signature;
 use std::collections::BTreeMap;
 
 use crate::types::*;
@@ -394,7 +399,7 @@ where
 
 		for (round_key, round) in self.rounds.iter() {
 			if round.is_done(self.threshold.into()) {
-				finished.push(*round_key);
+				finished.push(round_key.clone());
 			}
 		}
 
@@ -406,16 +411,19 @@ where
 				let payload = round.payload;
 
 				if let (Some(payload), Some(sig)) = (payload, sig) {
-					match bincode::serialize(&sig) {
-						Ok(signature) => {
-							let signed_payload =
-								DKGSignedPayload { key: *round_key, payload, signature };
+					match convert_signature(&sig) {
+						Some(signature) => {
+							let signed_payload = DKGSignedPayload {
+								key: round_key.clone(),
+								payload,
+								signature: signature.encode(),
+							};
 
 							self.finished_rounds.push(signed_payload);
 
 							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", &round_key);
 						},
-						Err(err) => debug!("Error serializing signature {}", err.to_string()),
+						_ => debug!("Error serializing signature"),
 					}
 				}
 			}
@@ -653,13 +661,49 @@ impl<P> DKGRoundTracker<P> {
 	}
 }
 
+pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
+	let r = sig_recid.r.to_big_int().to_bytes();
+	let s = sig_recid.s.to_big_int().to_bytes();
+	let v = sig_recid.recid;
+
+	let mut sig_vec: Vec<u8> = Vec::new();
+
+	for _ in 0..(32 - r.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&r);
+
+	for _ in 0..(32 - s.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&s);
+
+	sig_vec.extend(&[v]);
+
+	if 65 != sig_vec.len() {
+		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+		return None
+	}
+
+	let mut dkg_sig_arr: [u8; 65] = [0; 65];
+	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
+
+	return match Signature(dkg_sig_arr).try_into() {
+		Ok(sig) => {
+			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
+			Some(sig)
+		},
+		Err(err) => {
+			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
+			None
+		},
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{keccak_256, MultiPartyECDSARounds, Stage};
-	use bincode;
+	use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
-	use curv::{arithmetic::Converter, BigInt};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 
 	fn check_all_reached_stage(
 		parties: &Vec<MultiPartyECDSARounds<u64>>,
@@ -705,14 +749,18 @@ mod tests {
 			if finished_rounds.len() == 1 {
 				let finished_round = finished_rounds.remove(0);
 
-				let sig = bincode::deserialize(&finished_round.signature).unwrap();
-				let pub_k = party.get_public_key().unwrap();
-				let message = BigInt::from_bytes(&keccak_256(&"Webb".encode()));
+				let message = b"Webb".encode();
 
-				if !verify(&sig, &pub_k, &message).is_ok() {
-					panic!("Invalid signature for party {}", party.party_index);
-				}
-				println!("Party {}; sig: {:?}", party.party_index, &sig);
+				assert!(
+					dkg_runtime_primitives::utils::validate_ecdsa_signature(
+						&message,
+						&finished_round.signature
+					),
+					"Invalid signature for party {}",
+					party.party_index
+				);
+
+				println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
 			} else {
 				panic!("No signature extracted")
 			}

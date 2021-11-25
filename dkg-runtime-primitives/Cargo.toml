@@ -11,6 +11,7 @@ ethereum = { version = "0.9.0", default-features = false, features = ["with-code
 ethereum-types = { version = "0.12", default-features = false }
 
 sp-api = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
+sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-std = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'polkadot-v0.9.11', default-features = false }
 sp-application-crypto = { git = "https://github.com/paritytech/substrate", branch = 'polkadot-v0.9.11', default-features = false  }
@@ -23,6 +24,7 @@ default = ["std"]
 std = [
 	"codec/std",
 	"scale-info/std",
+	"sp-io/std",
 	"sp-api/std",
 	"sp-runtime/std",
 	"sp-std/std",
