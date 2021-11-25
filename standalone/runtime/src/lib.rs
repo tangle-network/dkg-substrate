@@ -480,6 +480,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = Period;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 }
 
 parameter_types! {
