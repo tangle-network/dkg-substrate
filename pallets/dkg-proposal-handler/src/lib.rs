@@ -12,9 +12,8 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	keccak_256, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
-	PROPOSAL_SIGNATURE_LENGTH,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
+	ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{pallet_prelude::OriginFor, Origin};
@@ -213,16 +212,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn validate_proposal_signature(data: &Vec<u8>, signature: &Vec<u8>) -> bool {
-		if signature.len() == PROPOSAL_SIGNATURE_LENGTH {
-			let mut sig = [0u8; PROPOSAL_SIGNATURE_LENGTH];
-			sig[0..(PROPOSAL_SIGNATURE_LENGTH - 1)].copy_from_slice(&signature[..]);
-
-			let hash = keccak_256(&data);
-
-			return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash).is_ok()
-		} else {
-			return false
-		}
+		dkg_runtime_primitives::utils::validate_ecdsa_signature(data, signature)
 	}
 
 	// *** Utility methods ***

@@ -5,6 +5,7 @@
 pub mod mmr;
 pub mod proposal;
 pub mod traits;
+pub mod utils;
 
 pub use ethereum::*;
 pub use ethereum_types::*;
@@ -36,6 +37,12 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
+
+// Key for offchain storage of derived public key
+pub const OFFCHAIN_PUBLIC_KEY: &[u8] = b"dkg-metadata::public_key";
+
+// Key for offchain storage of derived public key signature
+pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
@@ -106,12 +113,16 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	/// MMR root hash.
 	#[codec(index = 3)]
 	MmrRoot(MmrRootHash),
+	/// The authority keys have changed
+	#[codec(index = 4)]
+	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DKGApi<AuthorityId> where
+	pub trait DKGApi<AuthorityId, BlockNumber> where
 		AuthorityId: Codec + PartialEq,
+		BlockNumber: Codec + PartialEq
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
@@ -119,8 +130,10 @@ sp_api::decl_runtime_apis! {
 		fn signature_threshold() -> u16;
 		/// Return the next authorities active authority set
 		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
-		/// Add public key to offchain storage
-		fn set_dkg_pub_key(key: Vec<u8>) -> ();
+		/// Check if refresh process should start
+		fn should_refresh(_block_number: BlockNumber) -> bool;
+		/// Fetch DKG public key for queued authorities
+		fn next_dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
 	}

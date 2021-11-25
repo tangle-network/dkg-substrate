@@ -480,6 +480,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = Period;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 }
 
 parameter_types! {
@@ -557,7 +558,7 @@ where
 		);
 		let raw_payload = SignedPayload::new(call, extra)
 			.map_err(|e| {
-				// log::warn!("Unable to create signed payload: {:?}", e);
+				frame_support::log::warn!("Unable to create signed payload: {:?}", e);
 			})
 			.ok()?;
 		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
@@ -744,7 +745,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			let authorities = DKG::authorities();
 			let authority_set_id = DKG::authority_set_id();
@@ -769,8 +770,15 @@ impl_runtime_apis! {
 			DKG::signature_threshold()
 		}
 
-		fn set_dkg_pub_key(key: Vec<u8>) -> () {
-			DKG::set_local_pub_key(key);
+		fn should_refresh(block_number: BlockNumber) -> bool {
+			DKG::should_refresh(block_number)
+		}
+
+		fn next_dkg_pub_key() -> Option<Vec<u8>> {
+			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
+				return Some(pub_key)
+			}
+			return None
 		}
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
