@@ -71,9 +71,12 @@ pub mod pallet {
 			Self::AccountId,
 		>;
 
+		/// This is used to limit the number of offchain extrinsics that can be submitted
+		/// within a span of time to prevent spaming the network with too many extrinsics
 		#[pallet::constant]
 		type GracePeriod: Get<Self::BlockNumber>;
 
+		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
 	}
 
@@ -163,7 +166,7 @@ pub mod pallet {
 
 			ensure!(signature != Vec::<u8>::default(), Error::<T>::InvalidSignature);
 
-			Self::verify_pub_key_signature(&signature)
+			Self::verify_pub_key_signature(origin, &signature)
 		}
 	}
 
@@ -391,8 +394,10 @@ impl<T: Config> Pallet<T> {
 		let submitted = StorageValueRef::persistent(b"dkg-metadata::submitted");
 		let mut pub_key_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY);
 
+		const RECENTLY_SENT: () = ();
+
 		let res = submitted.mutate(|submitted| match submitted {
-			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(()),
+			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(RECENTLY_SENT),
 			_ => Ok(block_number),
 		});
 
@@ -428,9 +433,10 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), &'static str> {
 		let submitted = StorageValueRef::persistent(b"dkg-metadata::submitted_signature");
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+		const RECENTLY_SENT: () = ();
 
 		let res = submitted.mutate(|submitted| match submitted {
-			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(()),
+			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(RECENTLY_SENT),
 			_ => Ok(block_number),
 		});
 
@@ -473,7 +479,10 @@ impl<T: Config> Pallet<T> {
 		false
 	}
 
-	pub fn verify_pub_key_signature(signature: &Vec<u8>) -> DispatchResultWithPostInfo {
+	pub fn verify_pub_key_signature(
+		_origin: T::AccountId,
+		signature: &Vec<u8>,
+	) -> DispatchResultWithPostInfo {
 		if let Some(pub_key) = Self::next_dkg_public_key() {
 			let recovered_pub_key = match dkg_runtime_primitives::utils::recover_ecdsa_pub_key(
 				&pub_key.1, &signature,
@@ -514,7 +523,6 @@ impl<T: Config> Pallet<T> {
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<dkg_runtime_primitives::AuthoritySetId>::KeyRefresh {
-					old_key_signature: pub_key_signature,
 					new_key_signature: next_pub_key_signature.unwrap().1,
 					old_public_key: dkg_pub_key.1,
 					new_public_key: next_pub_key.unwrap().1,
