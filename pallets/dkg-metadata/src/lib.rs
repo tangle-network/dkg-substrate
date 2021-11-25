@@ -368,7 +368,7 @@ impl<T: Config> Pallet<T> {
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
-		Self::refresh_dkg_keys();
+		Self::publish_pending_dkg_keys();
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
@@ -520,7 +520,7 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	pub fn refresh_dkg_keys() {
+	pub fn publish_pending_dkg_keys() {
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
 		let dkg_pub_key = Self::dkg_public_key();
