@@ -178,33 +178,21 @@ impl<T: Config> Pallet<T> {
 
 	// *** Offchain worker methods ***
 
-	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let submitted = StorageValueRef::persistent(b"dkg-proposal-handler::submitted");
-
-		let res = submitted.mutate(|submitted| match submitted {
-			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(()),
-			_ => Ok(block_number),
-		});
-
-		match res {
-			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
-				if !signer.can_sign() {
-					return Err(
-							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-						)?
-				}
-
-				if let Ok(next_proposal) = Self::get_next_offchain_signed_proposal() {
-					let _ = signer.send_signed_transaction(|_account| {
-						Call::submit_signed_proposal { prop: next_proposal.clone() }
-					});
-				}
-
-				return Ok(())
-			},
-			_ => return Err("Already submitted public key")?,
+	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)?
 		}
+
+		if let Ok(next_proposal) = Self::get_next_offchain_signed_proposal() {
+			let _ = signer.send_signed_transaction(|_account| Call::submit_signed_proposal {
+				prop: next_proposal.clone(),
+			});
+		}
+
+		return Ok(())
 	}
 
 	fn get_next_offchain_signed_proposal() -> Result<ProposalType, &'static str> {
