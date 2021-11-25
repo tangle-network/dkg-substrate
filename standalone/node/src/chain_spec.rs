@@ -72,7 +72,11 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			testnet_genesis(
 				wasm_binary,
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice", "Alice//stash")],
+				vec![
+					authority_keys_from_seed("Alice", "Alice//stash"),
+					authority_keys_from_seed("Bob", "Bob//stash"),
+					authority_keys_from_seed("Charlie", "Charlie//stash"),
+				],
 				vec![],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -115,6 +119,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				vec![
 					authority_keys_from_seed("Alice", "Alice//stash"),
 					authority_keys_from_seed("Bob", "Bob//stash"),
+					authority_keys_from_seed("Charlie", "Charlie//stash"),
 				],
 				vec![],
 				// Sudo account

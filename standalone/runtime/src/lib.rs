@@ -746,28 +746,35 @@ impl_runtime_apis! {
 
 	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId> for Runtime {
 		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
-			Grandpa::grandpa_authorities().iter().map(|auth| {
-				auth
-			});
+			let authorities = DKG::authorities();
+			let authority_set_id = DKG::authority_set_id();
 
-			dkg_runtime_primitives::AuthoritySet::empty()
+			dkg_runtime_primitives::AuthoritySet {
+				authorities,
+				id: authority_set_id
+			}
 		}
 
 		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
-			dkg_runtime_primitives::AuthoritySet::empty()
+			let queued_authorities = DKG::next_authorities();
+			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
+
+			dkg_runtime_primitives::AuthoritySet {
+				authorities: queued_authorities,
+				id: queued_authority_set_id
+			}
 		}
 
 		fn signature_threshold() -> u16 {
-			2
+			DKG::signature_threshold()
 		}
 
 		fn set_dkg_pub_key(key: Vec<u8>) -> () {
-
+			DKG::set_local_pub_key(key);
 		}
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
-			// DKGProposalHandler::get_unsigned_proposals()
-			Vec::new()
+			DKGProposalHandler::get_unsigned_proposals()
 		}
 	}
 
