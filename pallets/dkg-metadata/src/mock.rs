@@ -40,7 +40,7 @@ pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG
 
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
-		pub dummy: pallet_dkg_metadata::Pallet<Test>,
+		pub dkg: DKGMetadata,
 	}
 }
 
@@ -92,7 +92,7 @@ impl frame_system::Config for Test {
 	type OnSetCode = ();
 }
 
-type Extrinsic = TestXt<Call, ()>;
+pub type Extrinsic = TestXt<Call, ()>;
 
 impl frame_system::offchain::SigningTypes for Test {
 	type Public = <Signature as Verify>::Signer;
@@ -124,14 +124,13 @@ where
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type OnAuthoritySetChangeHandler = ();
-	type GracePeriod = GracePeriod;
+	type GracePeriod = Period;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 }
 
 parameter_types! {
-	pub const Period: u64 = 1;
-	pub const GracePeriod: u64 = 10;
+	pub const Period: u64 = 4;
 	pub const Offset: u64 = 0;
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
@@ -190,7 +189,7 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 	let session_keys: Vec<_> = authorities
 		.iter()
 		.enumerate()
-		.map(|(_, id)| (id.0.clone(), id.0.clone(), MockSessionKeys { dummy: id.1.clone() }))
+		.map(|(_, id)| (id.0.clone(), id.0.clone(), MockSessionKeys { dkg: id.1.clone() }))
 		.collect();
 
 	BasicExternalities::execute_with_storage(&mut t, || {

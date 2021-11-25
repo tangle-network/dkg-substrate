@@ -428,6 +428,14 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	fn should_submit_signature(offchain_signature: &Vec<u8>) -> bool {
+		let onchain_signature = Self::next_public_key_signature();
+		if let Some((.., onchain_signature)) = onchain_signature {
+			return offchain_signature != &onchain_signature
+		}
+		true
+	}
+
 	fn submit_public_key_signature_onchain(
 		block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
@@ -444,26 +452,33 @@ impl<T: Config> Pallet<T> {
 
 		match res {
 			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
-				if !signer.can_sign() {
-					Err(
-							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-						)?
-				}
-
 				if let Ok(Some(signature)) = signature {
+					// Clear offchain storage after each successful read since the outcome
+					// of this function is either a successful submission or a failure
+					// if data  has already been submitted
+					pub_key_sig_ref.clear();
+
+					if !Self::should_submit_signature(&signature) {
+						return Ok(())
+					}
+
+					let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+					if !signer.can_sign() {
+						Err(
+								"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+							)?
+					}
+
 					if !signature.is_empty() {
 						let _ = signer.send_signed_transaction(|_account| {
 							Call::submit_public_key_signature { signature: signature.clone() }
 						});
-
-						pub_key_sig_ref.clear();
 					}
 				}
 
 				return Ok(())
 			},
-			_ => Err("Already submitted public key signature")?,
+			_ => Err("Already submitted public key signature in this session")?,
 		}
 	}
 

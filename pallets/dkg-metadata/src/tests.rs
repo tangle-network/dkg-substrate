@@ -14,13 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::vec;
+use codec::Decode;
+use std::{sync::Arc, vec};
 
 use codec::Encode;
 use dkg_runtime_primitives::AuthoritySet;
 
+use dkg_runtime_primitives::OFFCHAIN_PUBLIC_KEY_SIG;
+use frame_support::{assert_err, assert_ok};
 use sp_core::H256;
-use sp_runtime::DigestItem;
+use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
+use sp_runtime::{
+	offchain::{
+		storage::StorageValueRef, testing, OffchainDbExt, OffchainStorage, OffchainWorkerExt,
+		TransactionPoolExt, STORAGE_PREFIX,
+	},
+	DigestItem, RuntimeAppPublic,
+};
 
 use frame_support::traits::OnInitialize;
 
@@ -59,14 +69,14 @@ fn genesis_session_initializes_authorities() {
 #[test]
 fn session_change_updates_authorities() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
+		init_block(4);
 
 		assert!(0 == DKGMetadata::authority_set_id());
 
 		// no change - no log
 		assert!(System::digest().logs.is_empty());
 
-		init_block(2);
+		init_block(8);
 
 		assert!(1 == DKGMetadata::authority_set_id());
 
@@ -92,7 +102,7 @@ fn session_change_updates_next_authorities() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
+		init_block(4);
 
 		let next_authorities = DKGMetadata::next_authorities();
 
@@ -100,7 +110,7 @@ fn session_change_updates_next_authorities() {
 		assert_eq!(want[0], next_authorities[0]);
 		assert_eq!(want[1], next_authorities[1]);
 
-		init_block(2);
+		init_block(8);
 
 		let next_authorities = DKGMetadata::next_authorities();
 
@@ -128,7 +138,7 @@ fn authority_set_updates_work() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
+		init_block(4);
 
 		let vs = DKGMetadata::authority_set();
 
@@ -136,12 +146,145 @@ fn authority_set_updates_work() {
 		assert_eq!(want[0], vs.authorities[0]);
 		assert_eq!(want[1], vs.authorities[1]);
 
-		init_block(2);
+		init_block(8);
 
 		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 1u64);
 		assert_eq!(want[2], vs.authorities[0]);
 		assert_eq!(want[3], vs.authorities[1]);
+	});
+}
+
+#[test]
+fn should_submit_non_existing_public_key_signature() {
+	const PHRASE: &str =
+		"news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+	let signature = vec![0u8; 65];
+
+	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
+	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = KeyStore::new();
+
+	SyncCryptoStore::ecdsa_generate_new(
+		&keystore,
+		dkg_runtime_primitives::crypto::Public::ID,
+		Some(PHRASE),
+	)
+	.unwrap();
+
+	let mut t = sp_io::TestExternalities::default();
+	t.register_extension(OffchainDbExt::new(offchain.clone()));
+	t.register_extension(OffchainWorkerExt::new(offchain));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
+
+	t.execute_with(|| {
+		let pub_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+
+		pub_sig_ref.set(&signature);
+
+		assert_ok!(DKGMetadata::submit_public_key_signature_onchain(0));
+
+		let tx = pool_state.write().transactions.pop().unwrap();
+		assert!(pool_state.read().transactions.is_empty());
+		let tx = Extrinsic::decode(&mut &*tx).unwrap();
+		assert_eq!(tx.signature.unwrap().0, 0);
+		assert_eq!(
+			tx.call,
+			Call::DKGMetadata(crate::Call::submit_public_key_signature { signature })
+		);
+
+		assert_eq!(pub_sig_ref.get::<Vec<u8>>(), Ok(None));
+	});
+}
+
+#[test]
+fn should_not_submit_existing_onchain_public_key_signature() {
+	const PHRASE: &str =
+		"news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+	let signature = vec![0u8; 65];
+
+	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
+	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = KeyStore::new();
+
+	SyncCryptoStore::ecdsa_generate_new(
+		&keystore,
+		dkg_runtime_primitives::crypto::Public::ID,
+		Some(PHRASE),
+	)
+	.unwrap();
+
+	let mut t = sp_io::TestExternalities::default();
+	t.register_extension(OffchainDbExt::new(offchain.clone()));
+	t.register_extension(OffchainWorkerExt::new(offchain));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
+
+	t.execute_with(|| {
+		crate::pallet::NextPublicKeySignature::<Test>::put((0, &signature));
+
+		let pub_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+
+		pub_sig_ref.set(&signature);
+
+		assert_ok!(DKGMetadata::submit_public_key_signature_onchain(0));
+
+		assert!(pool_state.read().transactions.is_empty());
+
+		assert_eq!(pub_sig_ref.get::<Vec<u8>>(), Ok(None));
+	});
+}
+
+#[test]
+fn should_not_be_able_to_submit_multiple_keys_within_the_same_session() {
+	const PHRASE: &str =
+		"news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+	let signature = vec![0u8; 65];
+
+	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
+	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = KeyStore::new();
+
+	SyncCryptoStore::ecdsa_generate_new(
+		&keystore,
+		dkg_runtime_primitives::crypto::Public::ID,
+		Some(PHRASE),
+	)
+	.unwrap();
+
+	let mut t = sp_io::TestExternalities::default();
+	t.register_extension(OffchainDbExt::new(offchain.clone()));
+	t.register_extension(OffchainWorkerExt::new(offchain));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
+
+	t.execute_with(|| {
+		crate::pallet::NextPublicKeySignature::<Test>::put((0, &signature));
+
+		let pub_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+
+		pub_sig_ref.set(&signature);
+
+		// Submit extrinsic  at block 0
+		assert_ok!(DKGMetadata::submit_public_key_signature_onchain(0));
+
+		assert!(pool_state.read().transactions.is_empty());
+
+		assert_eq!(pub_sig_ref.get::<Vec<u8>>(), Ok(None));
+
+		let new_key_signature = [2u8; 65];
+
+		pub_sig_ref.set(&new_key_signature);
+		// Sessions are four blocks long
+		// Extrinsic submission should fail, since we are submitting at block 2
+		assert_err!(
+			DKGMetadata::submit_public_key_signature_onchain(2),
+			"Already submitted public key signature in this session"
+		);
+
+		// Extrinsic submission should be ok
+		assert_ok!(DKGMetadata::submit_public_key_signature_onchain(5));
 	});
 }
