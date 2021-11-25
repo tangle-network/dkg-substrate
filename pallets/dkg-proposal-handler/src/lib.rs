@@ -12,11 +12,16 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, ProposalAction,
-	ProposalHandlerTrait, ProposalNonce, ProposalType, TransactionV2,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType,
+	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
 use frame_support::pallet_prelude::*;
-use frame_system::{pallet_prelude::OriginFor, Origin};
+use frame_system::{
+	offchain::{AppCrypto, SendSignedTransaction, Signer},
+	pallet_prelude::OriginFor,
+};
+use sp_runtime::offchain::storage::StorageValueRef;
 use sp_std::{convert::TryFrom, vec::Vec};
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -27,16 +32,19 @@ pub mod pallet {
 	use super::*;
 	use dkg_runtime_primitives::ProposalType;
 	use frame_support::dispatch::DispatchResultWithPostInfo;
-	use frame_system::pallet_prelude::*;
+	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::AtLeast32Bit;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// ChainID for anchor edges
 		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+
+		/// The identifier type for an offchain worker.
+		type OffChainAuthorityId: AppCrypto<Self::Public, Self::Signature>;
 	}
 
 	#[pallet::pallet]
@@ -94,7 +102,11 @@ pub mod pallet {
 	}
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn offchain_worker(block_number: T::BlockNumber) {
+			let _res = Self::submit_signed_proposal_onchain(block_number);
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -103,6 +115,33 @@ pub mod pallet {
 			_origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
+			let (data, signature) = match prop {
+				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
+				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
+			};
+
+			if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+				ensure!(
+					Self::validate_ethereum_tx(&eth_transaction),
+					Error::<T>::ProposalFormatInvalid
+				);
+
+				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
+
+				ensure!(
+					UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
+					Error::<T>::ProposalDoesNotExist
+				);
+				ensure!(
+					Self::validate_proposal_signature(&data, &signature),
+					Error::<T>::ProposalSignatureInvalid
+				);
+
+				SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
+
+				UnsignedProposalQueue::<T>::remove(chain_id, nonce);
+			}
+
 			Ok(().into())
 		}
 	}
@@ -134,35 +173,45 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
-	pub fn add_signed_proposal(prop: ProposalType) -> DispatchResultWithPostInfo {
-		let (data, signature) = match prop {
-			ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
-			_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
-		};
+	// *** Offchain worker methods ***
 
-		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-			ensure!(
-				Self::validate_ethereum_tx(&eth_transaction),
-				Error::<T>::ProposalFormatInvalid
-			);
-
-			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
-
-			ensure!(
-				UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
-				Error::<T>::ProposalDoesNotExist
-			);
-			ensure!(
-				Self::validate_proposal_signature(&data, &signature),
-				Error::<T>::ProposalSignatureInvalid
-			);
-
-			SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
-
-			UnsignedProposalQueue::<T>::remove(chain_id, nonce);
+	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)?
 		}
 
-		Ok(().into())
+		if let Ok(next_proposal) = Self::get_next_offchain_signed_proposal() {
+			let _ = signer.send_signed_transaction(|_account| Call::submit_signed_proposal {
+				prop: next_proposal.clone(),
+			});
+		}
+
+		return Ok(())
+	}
+
+	fn get_next_offchain_signed_proposal() -> Result<ProposalType, &'static str> {
+		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
+
+		if let Ok(Some(ser_props)) = proposals_ref.get::<Vec<u8>>() {
+			let mut prop_wrapper = match OffchainSignedProposals::decode(&mut &ser_props[..]) {
+				Ok(res) => res,
+				Err(_) => return Err("Could not decode stored proposals")?,
+			};
+
+			if let Some(next_proposal) = prop_wrapper.proposals.pop_front() {
+				let _update_res = proposals_ref.mutate(|val| match val {
+					Ok(Some(_)) => Ok(prop_wrapper.encode()),
+					_ => Err(()),
+				});
+
+				return Ok(next_proposal)
+			}
+		}
+
+		return Err("No pending proposals found")?
 	}
 
 	// *** Validation methods ***
