@@ -218,6 +218,7 @@ impl<T: Config> Pallet<T> {
 				Err(_) => return Err("Could not decode stored proposals")?,
 			};
 
+			// This gets the next proposal and removes it from offchain storage
 			if let Some(next_proposal) = prop_wrapper.proposals.pop_front() {
 				let _update_res = proposals_ref.mutate(|val| match val {
 					Ok(Some(_)) => Ok(prop_wrapper.encode()),
