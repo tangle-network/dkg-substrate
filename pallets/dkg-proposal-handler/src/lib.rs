@@ -128,6 +128,10 @@ pub mod pallet {
 
 				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 
+				if Self::signed_proposals(chain_id, nonce).is_some() {
+					return Ok(().into())
+				}
+
 				ensure!(
 					UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
 					Error::<T>::ProposalDoesNotExist
