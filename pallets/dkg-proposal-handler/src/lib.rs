@@ -173,6 +173,21 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
+	pub fn should_submit_proposal(prop: &ProposalType) -> Result<bool, Error<T>> {
+		let data = match prop {
+			ProposalType::EVMSigned { data, .. } => data,
+			_ => return Ok(false),
+		};
+
+		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
+
+			return Ok(Self::signed_proposals(chain_id, nonce).is_none())
+		}
+
+		Ok(false)
+	}
+
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
@@ -184,9 +199,11 @@ impl<T: Config> Pallet<T> {
 		}
 
 		if let Ok(next_proposal) = Self::get_next_offchain_signed_proposal() {
-			let _ = signer.send_signed_transaction(|_account| Call::submit_signed_proposal {
-				prop: next_proposal.clone(),
-			});
+			if let Ok(true) = Self::should_submit_proposal(&next_proposal) {
+				let _ = signer.send_signed_transaction(|_account| Call::submit_signed_proposal {
+					prop: next_proposal.clone(),
+				});
+			}
 		}
 
 		return Ok(())

@@ -28,6 +28,7 @@ sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'polkad
 pallet-dkg-proposals = { path = "../dkg-proposals", default-features = false }
 serde = { version = "1.0.119" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11", default-features = false, features = ["full_crypto"] }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.11" }
 
 [features]
 default = ["std"]
