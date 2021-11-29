@@ -529,12 +529,14 @@ where
 		if next_dkg_public_key.is_some() {
 			let offchain = self.backend.offchain_storage();
 			if let Some(mut offchain) = offchain {
-				offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
+				if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS).is_some() {
+					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
 
-				offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
-
-				self.dkg_state.listening_for_pub_key = false;
-				self.aggregated_public_keys.keys_and_signatures = vec![];
+					offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
+	
+					self.dkg_state.listening_for_pub_key = false;
+					self.aggregated_public_keys.keys_and_signatures = vec![];
+				}
 			}
 		}
 	}
