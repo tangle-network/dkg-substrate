@@ -59,7 +59,7 @@ pub struct OffchainSignedProposals {
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Default, Decode, RuntimeDebug, TypeInfo)]
 pub struct AggregatedPublicKeys {
 	/// A vector of public keys and signature pairs [/public_key/] , [/signature/]
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
@@ -68,12 +68,6 @@ pub struct AggregatedPublicKeys {
 impl Default for OffchainSignedProposals {
 	fn default() -> Self {
 		Self { proposals: VecDeque::default() }
-	}
-}
-
-impl Default for AggregatedPublicKeys {
-	fn default() -> Self {
-		Self { keys_and_signatures: vec![] }
 	}
 }
 
