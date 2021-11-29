@@ -306,27 +306,16 @@ impl<T: Config> Pallet<T> {
 		}
 
 		let threshold = Self::signature_threshold();
-		let next_authorities = Self::next_authorities();
+
 		let mut accepted = false;
 		for (key, accounts) in dict.iter() {
 			if accounts.len() >= threshold as usize {
 				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
 				accepted = true;
 
-				let log: DigestItem<T::Hash> = DigestItem::Consensus(
-					DKG_ENGINE_ID,
-					ConsensusLog::<T::DKGId>::NextPublicKeyAccepted {
-						next_public_key: key.clone(),
-					}
-					.encode(),
-				);
-				<frame_system::Pallet<T>>::deposit_log(log);
-	
 				break
 			}
 		}
-
-		
 
 		if accepted {
 			// TODO Do something about accounts that posted a wrong key

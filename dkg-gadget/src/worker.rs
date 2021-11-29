@@ -523,16 +523,10 @@ where
 	/// Offchain features
 
 	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
-		let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
+		let at = BlockId::hash(header.hash());
+		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at).ok();
 
-		let filter = |log: ConsensusLog<AuthorityId>| match log {
-			ConsensusLog::NextPublicKeyAccepted { next_public_key } => Some(next_public_key),
-			_ => None,
-		};
-
-		let digest = header.digest().convert_first(|l| l.try_to(id).and_then(filter));
-
-		if digest.is_some() {
+		if next_dkg_public_key.is_some() {
 			let offchain = self.backend.offchain_storage();
 			if let Some(mut offchain) = offchain {
 				offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
