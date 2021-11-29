@@ -321,17 +321,15 @@ impl<T: Config> Pallet<T> {
 					.encode(),
 				);
 				<frame_system::Pallet<T>>::deposit_log(log);
-
-				for acc in &next_authorities {
-					if !accounts.contains(acc) {
-						// TODO Do something about account that posted a wrong key
-					}
-				}
+	
 				break
 			}
 		}
 
+		
+
 		if accepted {
+			// TODO Do something about accounts that posted a wrong key
 			return Ok(().into())
 		}
 
