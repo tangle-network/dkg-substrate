@@ -38,8 +38,11 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
+// Key for offchain storage of aggregated derived public keys
+pub const AGGREGATED_PUBLIC_KEYS: &[u8] = b"dkg-metadata::public_key";
+
 // Key for offchain storage of derived public key
-pub const OFFCHAIN_PUBLIC_KEY: &[u8] = b"dkg-metadata::public_key";
+pub const PUBLIC_KEY_SUBMISSION_DELAY: &[u8] = b"dkg-metadata::public_key_submission_delay";
 
 // Key for offchain storage of derived public key signature
 pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
@@ -51,9 +54,23 @@ pub struct OffchainSignedProposals {
 	pub proposals: VecDeque<ProposalType>,
 }
 
+pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct AggregatedPublicKeys {
+	/// A vector of public keys and signature pairs [/public_key/] , [/signature/]
+	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
+}
+
 impl Default for OffchainSignedProposals {
 	fn default() -> Self {
 		Self { proposals: VecDeque::default() }
+	}
+}
+
+impl Default for AggregatedPublicKeys {
+	fn default() -> Self {
+		Self { keys_and_signatures: vec![] }
 	}
 }
 

@@ -41,12 +41,15 @@ use sp_runtime::{
 };
 
 use crate::keystore::DKGKeystore;
-use dkg_primitives::ProposalType;
+use dkg_primitives::{
+	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
+	AggregatedPublicKeys, ProposalType, AGGREGATED_PUBLIC_KEYS,
+};
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	ConsensusLog, MmrRootHash, OffchainSignedProposals, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_PUBLIC_KEY, OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS,
+	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS,
 };
 
 use crate::{
@@ -121,6 +124,8 @@ where
 	queued_keygen_in_progress: bool,
 	// public key refresh in progress
 	refresh_in_progress: bool,
+	// keep track of the broadcast public keys and signatures
+	aggregated_public_keys: AggregatedPublicKeys,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -169,6 +174,7 @@ where
 			dkg_state,
 			queued_keygen_in_progress: false,
 			refresh_in_progress: false,
+			aggregated_public_keys: AggregatedPublicKeys::default(),
 			_backend: PhantomData,
 		}
 	}
@@ -311,7 +317,7 @@ where
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
 			self.next_rounds = Some(set_up_rounds(&queued, &public));
-
+			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for next authority set successfully");
@@ -478,7 +484,7 @@ where
 
 		if let Some(mut next_rounds) = self.next_rounds.take() {
 			if next_rounds.get_id() == dkg_msg.round_id {
-				match next_rounds.handle_incoming(dkg_msg.payload) {
+				match next_rounds.handle_incoming(dkg_msg.payload.clone()) {
 					Ok(()) => (),
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
@@ -500,18 +506,84 @@ where
 						.get_element()
 						.serialize_uncompressed()
 						.to_vec();
-					let offchain = self.backend.offchain_storage();
 
-					if let Some(mut offchain) = offchain {
-						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY, &pub_key);
-					}
+					self.gossip_public_key(pub_key, dkg_msg.round_id);
 				}
 			}
 		}
 
+		self.handle_public_key_broadcast(dkg_msg.clone());
+
 		self.send_outgoing_dkg_messages();
 
 		self.process_finished_rounds();
+	}
+
+	fn gossip_public_key(&mut self, public_key: Vec<u8>, round_id: RoundId) {
+		let public = self
+			.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"));
+
+		if let Ok(signature) = self.key_store.sign(&public, &public_key) {
+			let encoded_signature = signature.encode();
+			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
+				id: public.clone(),
+				round_id,
+				payload: DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
+					pub_key: public_key.clone(),
+					signature: encoded_signature.clone(),
+				}),
+			};
+
+			self.gossip_engine
+				.lock()
+				.gossip_message(dkg_topic::<B>(), message.encode(), true);
+
+			self.aggregated_public_keys
+				.keys_and_signatures
+				.push((public_key.clone(), encoded_signature))
+		}
+	}
+
+	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
+		if !self.dkg_state.listening_for_pub_key {
+			return
+		}
+
+		match dkg_msg.payload {
+			DKGMsgPayload::PublicKeyBroadcast(msg) => {
+				let key_and_sig = (msg.pub_key, msg.signature);
+				if !self.aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
+					self.aggregated_public_keys.keys_and_signatures.push(key_and_sig);
+
+					if let Some(latest_header) = self.latest_header.as_ref() {
+						let threshold = self.get_threshold(latest_header).unwrap() as usize;
+						let num_authorities = self.queued_validator_set.authorities.len();
+						let threshold_buffer =
+							num_authorities.saturating_sub(threshold).saturating_div(2);
+						if self.aggregated_public_keys.keys_and_signatures.len() >=
+							(threshold + threshold_buffer)
+						{
+							let offchain = self.backend.offchain_storage();
+							self.dkg_state.listening_for_pub_key = false;
+
+							if let Some(mut offchain) = offchain {
+								offchain.set(
+									STORAGE_PREFIX,
+									AGGREGATED_PUBLIC_KEYS,
+									&self.aggregated_public_keys.encode(),
+								);
+								// TODO: Add random delay in submission to offchain storage here
+
+								self.aggregated_public_keys.keys_and_signatures = vec![];
+							}
+						}
+					}
+				}
+			},
+			_ => {},
+		}
 	}
 
 	fn process_finished_rounds(&mut self) {

@@ -22,6 +22,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 pub struct DKGState<K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
+	pub listening_for_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
 }
@@ -148,6 +149,7 @@ where
 				} else {
 					Ok(())
 				},
+			DKGMsgPayload::PublicKeyBroadcast(_) => Ok(()),
 		}
 	}
 
