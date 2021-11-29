@@ -150,7 +150,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	#[codec(index = 4)]
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 	/// Next DKG public key has been stored on chain
-	#[codec(index = 4)]
+	#[codec(index = 5)]
 	NextPublicKeyAccepted { next_public_key: Vec<u8> },
 }
 
