@@ -586,8 +586,7 @@ where
 					if let Some(latest_header) = self.latest_header.as_ref() {
 						let threshold = self.get_threshold(latest_header).unwrap() as usize;
 						let num_authorities = self.queued_validator_set.authorities.len();
-						let threshold_buffer =
-							num_authorities.saturating_sub(threshold).saturating_div(2);
+						let threshold_buffer = num_authorities.saturating_sub(threshold) / 2;
 						if self.aggregated_public_keys.keys_and_signatures.len() >=
 							(threshold + threshold_buffer)
 						{

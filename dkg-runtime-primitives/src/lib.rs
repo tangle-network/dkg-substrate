@@ -57,7 +57,6 @@ pub struct OffchainSignedProposals {
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
 
-
 #[derive(Eq, PartialEq, Clone, Encode, Default, Decode, RuntimeDebug, TypeInfo)]
 pub struct AggregatedPublicKeys {
 	/// A vector of public keys and signature pairs [/public_key/] , [/signature/]
