@@ -16,7 +16,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Encode;
+use codec::{Decode, Encode};
 
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -29,13 +29,13 @@ use sp_runtime::{
 	generic::DigestItem,
 	offchain::storage::StorageValueRef,
 	traits::{IsMember, Member},
-	RuntimeAppPublic,
+	Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, AuthorityIndex, AuthoritySet, ConsensusLog, DKG_ENGINE_ID,
-	OFFCHAIN_PUBLIC_KEY, OFFCHAIN_PUBLIC_KEY_SIG,
+	traits::OnAuthoritySetChangeHandler, utils, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
+	ConsensusLog, AGGREGATED_PUBLIC_KEYS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_KEYS_AT,
 };
 
 #[cfg(test)]
@@ -128,7 +128,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
-			pub_key: Vec<u8>,
+			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 
@@ -136,16 +136,7 @@ pub mod pallet {
 
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
 
-			ensure!(pub_key != Vec::<u8>::default(), Error::<T>::InvalidPublicKey);
-
-			ensure!(
-				Self::pending_dkg_public_keys(origin.clone()) == Vec::<u8>::default(),
-				Error::<T>::AlreadySubmittedPublicKey
-			);
-
-			PendingDKGPublicKeys::<T>::insert(origin, pub_key);
-
-			Self::vote_public_key();
+			Self::process_public_key_submissions(keys_and_signatures)?;
 
 			Ok(().into())
 		}
@@ -185,12 +176,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
-
-	/// Tracks public keys submitted by queued authorities
-	#[pallet::storage]
-	#[pallet::getter(fn pending_dkg_public_keys)]
-	pub type PendingDKGPublicKeys<T: Config> =
-		CountedStorageMap<_, Blake2_256, T::AccountId, Vec<u8>, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -258,7 +243,7 @@ pub mod pallet {
 		/// Refresh delay should be in the range of 0% - 100%
 		InvalidRefreshDelay,
 		/// Invalid public key submission
-		InvalidPublicKey,
+		InvalidPublicKeys,
 		/// Already submitted a public key
 		AlreadySubmittedPublicKey,
 		/// Already submitted a public key signature
@@ -297,39 +282,60 @@ impl<T: Config> Pallet<T> {
 		Self::signature_threshold()
 	}
 
-	/// For every public key submitted by the queued authorities,
-	/// this function goes through them and finds the submitted public
-	/// key that has the highest number of ocurrences based on the signature threshold
-	pub fn vote_public_key() -> () {
-		let mut dict: BTreeMap<Vec<u8>, Vec<T::AccountId>> = BTreeMap::new();
-		let authority_accounts = Self::next_authorities_accounts();
-		let num_of_authorities = authority_accounts.len();
+	pub fn process_public_key_submissions(
+		aggregated_keys: AggregatedPublicKeys,
+	) -> DispatchResultWithPostInfo {
+		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
 
-		for origin in authority_accounts.iter() {
-			let key = Self::pending_dkg_public_keys(origin);
-			let mut temp = dict.remove(&key).unwrap_or_default();
-			temp.push(origin.clone());
-			dict.insert(key.clone(), temp);
-		}
+		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
+			let authority_id = utils::recover_ecdsa_pub_key(&pub_key, &signature);
 
-		let thresh = Self::signature_threshold();
+			if let Ok(authority_id) = authority_id {
+				let dkg_id = T::DKGId::decode(&mut &authority_id[..]);
 
-		for (key, accounts) in dict.iter() {
-			if accounts.len() >= thresh as usize {
-				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-				let pending_submissions = PendingDKGPublicKeys::<T>::count() as usize;
-
-				if num_of_authorities == pending_submissions {
-					PendingDKGPublicKeys::<T>::remove_all();
-				}
-
-				for acc in &authority_accounts {
-					if !accounts.contains(acc) {
-						// TODO Slash account for posting a wrong key
+				if let Ok(dkg_id) = dkg_id {
+					if Self::next_authorities().contains(&dkg_id) {
+						if !dict.contains_key(&pub_key) {
+							dict.insert(pub_key.clone(), Vec::new());
+						}
+						let temp = dict.get_mut(&pub_key).unwrap();
+						temp.push(dkg_id.clone());
 					}
 				}
 			}
 		}
+
+		let threshold = Self::signature_threshold();
+		let next_authorities = Self::next_authorities();
+		let mut accepted = false;
+		for (key, accounts) in dict.iter() {
+			if accounts.len() >= threshold as usize {
+				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
+				accepted = true;
+
+				let log: DigestItem<T::Hash> = DigestItem::Consensus(
+					DKG_ENGINE_ID,
+					ConsensusLog::<T::DKGId>::NextPublicKeyAccepted {
+						next_public_key: key.clone(),
+					}
+					.encode(),
+				);
+				<frame_system::Pallet<T>>::deposit_log(log);
+
+				for acc in &next_authorities {
+					if !accounts.contains(acc) {
+						// TODO Do something about account that posted a wrong key
+					}
+				}
+				break
+			}
+		}
+
+		if accepted {
+			return Ok(().into())
+		}
+
+		Err(Error::<T>::InvalidPublicKeys.into())
 	}
 
 	fn change_authorities(
@@ -392,16 +398,36 @@ impl<T: Config> Pallet<T> {
 
 	fn submit_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let submitted = StorageValueRef::persistent(b"dkg-metadata::submitted");
-		let mut pub_key_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY);
+		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
+		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
 
 		const RECENTLY_SENT: () = ();
+
+		let submit_at = submit_at_ref.get::<Vec<u8>>();
+
+		if let Ok(Some(submit_at)) = submit_at {
+			let block = T::BlockNumber::decode(&mut &submit_at[..]);
+			submit_at_ref.clear();
+
+			if let Ok(block) = block {
+				if block_number <= block {
+					frame_support::log::trace!("Offchain worker skipping public key submmission");
+					return Ok(())
+				}
+			}
+		}
+
+		if Self::next_dkg_public_key().is_some() {
+			agg_key_ref.clear();
+			return Ok(())
+		}
 
 		let res = submitted.mutate(|submitted| match submitted {
 			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(RECENTLY_SENT),
 			_ => Ok(block_number),
 		});
 
-		let pub_key = pub_key_ref.get::<Vec<u8>>();
+		let agg_keys = agg_key_ref.get::<Vec<u8>>();
 
 		match res {
 			Ok(_block_number) => {
@@ -412,13 +438,15 @@ impl<T: Config> Pallet<T> {
 						)?
 				}
 
-				if let Ok(Some(pub_key)) = pub_key {
-					if !pub_key.is_empty() {
-						let _ = signer.send_signed_transaction(|_account| {
-							Call::submit_public_key { pub_key: pub_key.clone() }
-						});
+				if let Ok(Some(agg_keys)) = agg_keys {
+					let keys_and_signatures = AggregatedPublicKeys::decode(&mut &agg_keys[..]);
+					if let Ok(keys_and_signatures) = keys_and_signatures {
+						let _ =
+							signer.send_signed_transaction(|_account| Call::submit_public_key {
+								keys_and_signatures: keys_and_signatures.clone(),
+							});
 
-						pub_key_ref.clear();
+						agg_key_ref.clear();
 					}
 				}
 
@@ -522,7 +550,7 @@ impl<T: Config> Pallet<T> {
 
 			let log: DigestItem<T::Hash> = DigestItem::Consensus(
 				DKG_ENGINE_ID,
-				ConsensusLog::<dkg_runtime_primitives::AuthoritySetId>::KeyRefresh {
+				ConsensusLog::<T::DKGId>::KeyRefresh {
 					new_key_signature: next_pub_key_signature.unwrap().1,
 					old_public_key: dkg_pub_key.1,
 					new_public_key: next_pub_key.unwrap().1,
@@ -531,6 +559,15 @@ impl<T: Config> Pallet<T> {
 			);
 			<frame_system::Pallet<T>>::deposit_log(log);
 		}
+	}
+
+	pub fn max_extrinsic_delay(_block_number: T::BlockNumber) -> T::BlockNumber {
+		let refresh_delay = Self::refresh_delay();
+		let session_length = <T::NextSessionRotation as EstimateNextSessionRotation<
+			T::BlockNumber,
+		>>::average_session_length();
+		let max_delay = Permill::from_percent(60) * (refresh_delay * session_length);
+		max_delay
 	}
 }
 

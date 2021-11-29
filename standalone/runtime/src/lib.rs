@@ -785,6 +785,10 @@ impl_runtime_apis! {
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
+
+		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
+			DKG::max_extrinsic_delay(block_number)
+		}
 	}
 
 	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {

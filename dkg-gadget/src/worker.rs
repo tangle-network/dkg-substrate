@@ -43,13 +43,13 @@ use sp_runtime::{
 use crate::keystore::DKGKeystore;
 use dkg_primitives::{
 	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
-	AggregatedPublicKeys, ProposalType, AGGREGATED_PUBLIC_KEYS,
+	AggregatedPublicKeys, ProposalType,
 };
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	ConsensusLog, MmrRootHash, OffchainSignedProposals, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS,
+	ConsensusLog, MmrRootHash, OffchainSignedProposals, AGGREGATED_PUBLIC_KEYS,
+	GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -574,7 +574,14 @@ where
 									AGGREGATED_PUBLIC_KEYS,
 									&self.aggregated_public_keys.encode(),
 								);
-								// TODO: Add random delay in submission to offchain storage here
+								let submit_at = self.generate_random_delay();
+								if let Some(submit_at) = submit_at {
+									offchain.set(
+										STORAGE_PREFIX,
+										SUBMIT_KEYS_AT,
+										&submit_at.encode(),
+									);
+								}
 
 								self.aggregated_public_keys.keys_and_signatures = vec![];
 							}
@@ -687,6 +694,32 @@ where
 				}
 			}
 		}
+	}
+
+	fn generate_random_delay(&self) -> Option<<B::Header as Header>::Number> {
+		if let Some(header) = self.latest_header.as_ref() {
+			let public = self
+				.key_store
+				.authority_id(&self.key_store.public_keys().unwrap())
+				.unwrap_or_else(|| panic!("Halp"));
+
+			let party_inx =
+				find_index::<AuthorityId>(&self.queued_validator_set.authorities, &public).unwrap()
+					as u32;
+
+			let block_number = *header.number();
+			let at = BlockId::hash(header.hash());
+			let max_delay =
+				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
+			match max_delay {
+				Some(max_delay) => {
+					let delay = block_number + (max_delay % party_inx.into());
+					return Some(delay)
+				},
+				None => return None,
+			}
+		}
+		None
 	}
 
 	// *** Main run loop ***
