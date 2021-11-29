@@ -332,6 +332,7 @@ where
 
 	fn process_block_notification(&mut self, header: &B::Header) {
 		self.latest_header = Some(header.clone());
+		self.listen_and_clear_offchain_storage(header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -519,6 +520,31 @@ where
 		self.process_finished_rounds();
 	}
 
+	/// Offchain features
+
+	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
+		let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
+
+		let filter = |log: ConsensusLog<AuthorityId>| match log {
+			ConsensusLog::NextPublicKeyAccepted { next_public_key } => Some(next_public_key),
+			_ => None,
+		};
+
+		let digest = header.digest().convert_first(|l| l.try_to(id).and_then(filter));
+
+		if digest.is_some() {
+			let offchain = self.backend.offchain_storage();
+			if let Some(mut offchain) = offchain {
+				offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
+
+				offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
+
+				self.dkg_state.listening_for_pub_key = false;
+				self.aggregated_public_keys.keys_and_signatures = vec![];
+			}
+		}
+	}
+
 	fn gossip_public_key(&mut self, public_key: Vec<u8>, round_id: RoundId) {
 		let public = self
 			.key_store
@@ -592,6 +618,34 @@ where
 			_ => {},
 		}
 	}
+
+	fn generate_random_delay(&self) -> Option<<B::Header as Header>::Number> {
+		if let Some(header) = self.latest_header.as_ref() {
+			let public = self
+				.key_store
+				.authority_id(&self.key_store.public_keys().unwrap())
+				.unwrap_or_else(|| panic!("Halp"));
+
+			let party_inx =
+				find_index::<AuthorityId>(&self.queued_validator_set.authorities, &public).unwrap()
+					as u32;
+
+			let block_number = *header.number();
+			let at = BlockId::hash(header.hash());
+			let max_delay =
+				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
+			match max_delay {
+				Some(max_delay) => {
+					let delay = block_number + (max_delay % party_inx.into());
+					return Some(delay)
+				},
+				None => return None,
+			}
+		}
+		None
+	}
+
+	/// Rounds handling
 
 	fn process_finished_rounds(&mut self) {
 		for finished_round in self.rounds.get_finished_rounds() {
@@ -694,32 +748,6 @@ where
 				}
 			}
 		}
-	}
-
-	fn generate_random_delay(&self) -> Option<<B::Header as Header>::Number> {
-		if let Some(header) = self.latest_header.as_ref() {
-			let public = self
-				.key_store
-				.authority_id(&self.key_store.public_keys().unwrap())
-				.unwrap_or_else(|| panic!("Halp"));
-
-			let party_inx =
-				find_index::<AuthorityId>(&self.queued_validator_set.authorities, &public).unwrap()
-					as u32;
-
-			let block_number = *header.number();
-			let at = BlockId::hash(header.hash());
-			let max_delay =
-				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
-			match max_delay {
-				Some(max_delay) => {
-					let delay = block_number + (max_delay % party_inx.into());
-					return Some(delay)
-				},
-				None => return None,
-			}
-		}
-		None
 	}
 
 	// *** Main run loop ***
