@@ -339,7 +339,7 @@ where
 		}
 
 		self.latest_header = Some(header.clone());
-		self.listen_and_clear_offchain_storage(header);
+		// self.listen_and_clear_offchain_storage(header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
