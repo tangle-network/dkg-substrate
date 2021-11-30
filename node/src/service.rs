@@ -166,7 +166,7 @@ where
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("Parachain")]
 async fn start_node_impl<RuntimeApi, Executor, RB, BIQ, BIC>(
-	parachain_config: Configuration,
+	mut parachain_config: Configuration,
 	polkadot_config: Configuration,
 	id: ParaId,
 	rpc_ext_builder: RB,
@@ -237,7 +237,9 @@ where
 		return Err("Light client not supported!".into())
 	}
 
-	let parachain_config = prepare_node_config(parachain_config);
+	let mut parachain_config = prepare_node_config(parachain_config);
+
+	parachain_config.network.extra_sets.push(dkg_gadget::dkg_peers_set_config());
 
 	let params = new_partial::<RuntimeApi, Executor, BIQ>(&parachain_config, build_import_queue)?;
 	let (mut telemetry, telemetry_worker_handle) = params.other;

@@ -18,7 +18,7 @@
 
 use core::convert::TryFrom;
 use curv::elliptic::curves::traits::ECPoint;
-use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
+use std::{borrow::Borrow, collections::BTreeSet, marker::PhantomData, sync::Arc};
 
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
@@ -285,7 +285,8 @@ where
 		let thresh = self.get_threshold(header).unwrap();
 
 		let set_up_rounds = |authority_set: &AuthoritySet<Public>, public: &Public| {
-			let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap();
+			let party_inx =
+				find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
 
 			let n = authority_set.authorities.len();
 
@@ -320,7 +321,7 @@ where
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
 				Ok(()) => {
-					info!(target: "dkg", "Keygen started for next authority set successfully");
+					info!(target: "dkg", "Keygen started for queued authority set successfully");
 					self.queued_keygen_in_progress = true;
 				},
 				Err(err) => error!("Error starting keygen {}", err),
@@ -331,6 +332,12 @@ where
 	// *** Block notifications ***
 
 	fn process_block_notification(&mut self, header: &B::Header) {
+		if let Some(latest_header) = &self.latest_header {
+			if latest_header.number() >= header.number() {
+				return
+			}
+		}
+
 		self.latest_header = Some(header.clone());
 		self.listen_and_clear_offchain_storage(header);
 
@@ -377,7 +384,7 @@ where
 				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
 			} else {
 				// if the DKG has not been prepared / terminated, continue preparing it
-				if !self.dkg_state.accepted {
+				if !self.dkg_state.accepted || self.queued_keygen_in_progress {
 					self.send_outgoing_dkg_messages();
 				}
 			}
@@ -448,6 +455,7 @@ where
 			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+
 			send_messages(&mut self.rounds, id);
 		} else {
 			panic!("error");
@@ -496,7 +504,7 @@ where
 				let is_ready_to_vote = self.next_rounds.as_mut().unwrap().is_ready_to_vote();
 
 				if is_ready_to_vote && self.queued_keygen_in_progress {
-					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					self.queued_keygen_in_progress = false;
 					let pub_key = self
 						.next_rounds
@@ -533,7 +541,7 @@ where
 					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
 
 					offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
-	
+
 					self.dkg_state.listening_for_pub_key = false;
 					self.aggregated_public_keys.keys_and_signatures = vec![];
 				}
@@ -564,7 +572,8 @@ where
 
 			self.aggregated_public_keys
 				.keys_and_signatures
-				.push((public_key.clone(), encoded_signature))
+				.push((public_key.clone(), encoded_signature));
+			info!(target: "dkg", "gossiping local node  {:?} public key and signature", public)
 		}
 	}
 
@@ -603,6 +612,8 @@ where
 										&submit_at.encode(),
 									);
 								}
+
+								info!(target: "dkg", "Setting offchain storage keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
 
 								self.aggregated_public_keys.keys_and_signatures = vec![];
 							}

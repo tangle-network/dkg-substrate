@@ -559,12 +559,14 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = BlocksPerRound;
 	type NextSessionRotation = ParachainStaking;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {

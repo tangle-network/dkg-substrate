@@ -33,7 +33,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		Keccak256, OpaqueKeys, Verify,
 	},
-	Perbill,
+	Perbill, Permill,
 };
 
 use crate as pallet_dkg_mmr;
@@ -165,11 +165,13 @@ impl pallet_dkg_metadata::Config for Test {
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const GracePeriod: u64 = 10;
 	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_dkg_mmr::Config for Test {

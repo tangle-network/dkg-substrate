@@ -78,6 +78,10 @@ pub mod pallet {
 
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
+
+		/// Percentage session should have progressed for refresh to begin
+		#[pallet::constant]
+		type RefreshDelay: Get<Permill>;
 	}
 
 	#[pallet::pallet]
@@ -267,7 +271,7 @@ pub mod pallet {
 			Pallet::<T>::initialize_authorities(&self.authorities, &self.authority_ids);
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
-			RefreshDelay::<T>::put(Permill::from_percent(0u32));
+			RefreshDelay::<T>::put(T::RefreshDelay::get());
 		}
 	}
 }
@@ -333,6 +337,7 @@ impl<T: Config> Pallet<T> {
 	) {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
+
 		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
 
@@ -398,7 +403,7 @@ impl<T: Config> Pallet<T> {
 
 			if let Ok(block) = block {
 				if block_number <= block {
-					frame_support::log::trace!("Offchain worker skipping public key submmission");
+					frame_support::log::info!("Offchain worker skipping public key submmission");
 					return Ok(())
 				}
 			}

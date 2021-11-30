@@ -32,7 +32,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Perbill,
+	Perbill, Permill,
 };
 
 use crate as pallet_dkg_metadata;
@@ -127,6 +127,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
@@ -134,6 +135,7 @@ parameter_types! {
 	pub const GracePeriod: u64 = 10;
 	pub const Offset: u64 = 0;
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_session::Config for Test {
