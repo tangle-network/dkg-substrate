@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
-use sp_std::prelude::*;
+use sp_std::{prelude::*, vec};
 
 pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 
