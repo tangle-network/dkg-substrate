@@ -466,7 +466,7 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
 			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+				debug!(target: "dkg", "🕸️  queued_keygen: Local authority id: {:?}", id);
 				if let Some(next_rounds) = self.next_rounds.as_mut() {
 					send_messages(next_rounds, id);
 				}
@@ -496,20 +496,17 @@ where
 				match next_rounds.handle_incoming(dkg_msg.payload.clone()) {
 					Ok(()) => (),
 					Err(err) =>
-						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+						debug!(target: "dkg", "🕸️  queued_keygen: Error while handling DKG message {:?}", err),
 				}
 
-				self.next_rounds = Some(next_rounds);
+				
 
-				let is_ready_to_vote = self.next_rounds.as_mut().unwrap().is_ready_to_vote();
+				let is_ready_to_vote = next_rounds.is_ready_to_vote();
 
 				if is_ready_to_vote && self.queued_keygen_in_progress {
-					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					info!(target: "dkg", "🕸️  queued_keygen: Queued DKGs keygen has completed");
 					self.queued_keygen_in_progress = false;
-					let pub_key = self
-						.next_rounds
-						.as_mut()
-						.unwrap()
+					let pub_key = next_rounds
 						.get_public_key()
 						.unwrap()
 						.get_element()
@@ -518,6 +515,8 @@ where
 
 					self.gossip_public_key(pub_key, dkg_msg.round_id);
 				}
+
+				self.next_rounds = Some(next_rounds);
 			}
 		}
 
@@ -573,7 +572,10 @@ where
 			self.aggregated_public_keys
 				.keys_and_signatures
 				.push((public_key.clone(), encoded_signature));
-			info!(target: "dkg", "gossiping local node  {:?} public key and signature", public)
+			info!(target: "dkg", "queued_keygen: gossiping local node  {:?} public key and signature", public)
+		}
+		else {
+			error!(target: "dkg", "queued_keygen: Could not sign public key");
 		}
 	}
 
@@ -613,7 +615,7 @@ where
 									);
 								}
 
-								info!(target: "dkg", "Setting offchain storage keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
+								info!(target: "dkg", "queued_keygen: Setting offchain storage keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
 
 								self.aggregated_public_keys.keys_and_signatures = vec![];
 							}
