@@ -327,9 +327,7 @@ impl<T: Config> Pallet<T> {
 		for (key, accounts) in dict.iter() {
 			if accounts.len() >= threshold as usize {
 				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-				Self::deposit_event(Event::NextPublicKeySubmitted {
-					pub_key: key.clone(),
-				});
+				Self::deposit_event(Event::NextPublicKeySubmitted { pub_key: key.clone() });
 				accepted = true;
 
 				break
@@ -353,7 +351,7 @@ impl<T: Config> Pallet<T> {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
 
-		// if new != Self::authorities() {
+		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
 
 			let next_id = Self::authority_set_id() + 1u64;
@@ -377,7 +375,7 @@ impl<T: Config> Pallet<T> {
 				.encode(),
 			);
 			<frame_system::Pallet<T>>::deposit_log(log);
-		// }
+		}
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
@@ -610,7 +608,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
-		// if changed {
+		if changed {
 			let mut authority_account_ids = Vec::new();
 			let mut queued_authority_account_ids = Vec::new();
 			let next_authorities = validators
@@ -633,7 +631,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 				authority_account_ids,
 				queued_authority_account_ids,
 			);
-		// }
+		}
 	}
 
 	fn on_disabled(i: usize) {
