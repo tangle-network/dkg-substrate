@@ -336,7 +336,7 @@ impl<T: Config> Pallet<T> {
 		if accepted {
 			// TODO Do something about accounts that posted a wrong key
 			Self::deposit_event(Event::NextPublicKeySubmitted {
-				pub_key: Self::next_dkg_public_key().1,
+				pub_key: Self::next_dkg_public_key().unwrap().1,
 			});
 			return Ok(().into())
 		}
