@@ -327,6 +327,9 @@ impl<T: Config> Pallet<T> {
 		for (key, accounts) in dict.iter() {
 			if accounts.len() >= threshold as usize {
 				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
+				Self::deposit_event(Event::NextPublicKeySubmitted {
+					pub_key: key.clone(),
+				});
 				accepted = true;
 
 				break
@@ -335,9 +338,6 @@ impl<T: Config> Pallet<T> {
 
 		if accepted {
 			// TODO Do something about accounts that posted a wrong key
-			Self::deposit_event(Event::NextPublicKeySubmitted {
-				pub_key: Self::next_dkg_public_key().unwrap().1,
-			});
 			return Ok(().into())
 		}
 
