@@ -1,6 +1,6 @@
 use crate::mock::*;
 use codec::{Decode, Encode};
-use frame_support::assert_ok;
+use frame_support::{assert_err, assert_ok};
 use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
 use sp_std::vec::Vec;
 
@@ -81,10 +81,11 @@ fn store_signed_proposal_offchain() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
-		let unsigned_prop = DKGProposalHandler::unsigned_proposals(0, 0);
-		assert_eq!(unsigned_prop.is_some(), true);
+		assert_eq!(DKGProposalHandler::unsigned_proposals(0, 0).is_some(), true);
 
-		add_proposal_to_offchain_storage(unsigned_prop.unwrap());
+		let signed_proposal = mock_signed_proposal(tx_v_2);
+
+		add_proposal_to_offchain_storage(signed_proposal);
 
 		check_offchain_proposals_num_eq(1);
 	})
@@ -96,10 +97,11 @@ fn submit_signed_proposal_onchain_success() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
-		let unsigned_prop = DKGProposalHandler::unsigned_proposals(0, 0);
-		assert_eq!(unsigned_prop.is_some(), true);
+		assert_eq!(DKGProposalHandler::unsigned_proposals(0, 0).is_some(), true);
 
-		add_proposal_to_offchain_storage(unsigned_prop.unwrap());
+		let signed_proposal = mock_signed_proposal(tx_v_2);
+
+		add_proposal_to_offchain_storage(signed_proposal);
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposal_onchain(0));
 
@@ -125,7 +127,7 @@ fn submit_signed_proposal_success() {
 }
 
 #[test]
-fn submit_signed_proposal_fail_already_exists() {
+fn submit_signed_proposal_already_exists() {
 	execute_test_with(|| {
 		// First submission
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
@@ -180,9 +182,9 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		let signed_proposal =
 			ProposalType::EVMSigned { data: tx_v_2.encode(), signature: invalid_sig };
 
-		assert_eq!(
-			DKGProposalHandler::submit_signed_proposal(Origin::root(), signed_proposal).is_err(),
-			true
+		assert_err!(
+			DKGProposalHandler::submit_signed_proposal(Origin::root(), signed_proposal),
+			crate::Error::<Test>::ProposalSignatureInvalid
 		);
 
 		assert_eq!(DKGProposalHandler::unsigned_proposals(0, 0).is_some(), true);
