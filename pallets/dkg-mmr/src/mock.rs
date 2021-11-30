@@ -58,7 +58,7 @@ construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		MMR: pallet_mmr::{Pallet, Storage},
-		DKG: pallet_dkg_metadata::{Pallet, Config<T>, Call, Storage},
+		DKG: pallet_dkg_metadata::{Pallet, Config<T>, Event<T>, Call, Storage},
 		DKGMmr: pallet_dkg_mmr::{Pallet, Storage},
 	}
 );
@@ -161,6 +161,7 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = ();
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;

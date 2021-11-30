@@ -59,6 +59,8 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+		/// The overarching event type.
+		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + Default + MaybeSerializeDeserialize;
 
@@ -258,6 +260,16 @@ pub mod pallet {
 		InvalidSignature,
 	}
 
+	// Pallets use events to inform users when important changes are made.
+	#[pallet::event]
+	#[pallet::generate_deposit(pub fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// Next public key submitted
+		NextPublicKeySubmitted { pub_key: Vec<u8> },
+		/// Next public key signature submitted
+		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+	}
+
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
@@ -323,6 +335,9 @@ impl<T: Config> Pallet<T> {
 
 		if accepted {
 			// TODO Do something about accounts that posted a wrong key
+			Self::deposit_event(Event::NextPublicKeySubmitted {
+				pub_key: Self::next_dkg_public_key(),
+			});
 			return Ok(().into())
 		}
 
@@ -402,8 +417,8 @@ impl<T: Config> Pallet<T> {
 			submit_at_ref.clear();
 
 			if let Ok(block) = block {
-				if block_number <= block {
-					frame_support::log::info!("Offchain worker skipping public key submmission");
+				if block_number < block {
+					frame_support::log::debug!("Offchain worker skipping public key submmission");
 					return Ok(())
 				}
 			}
@@ -518,7 +533,13 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if Self::next_dkg_public_key().is_none() {
-				NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature));
+				NextPublicKeySignature::<T>::put((
+					Self::authority_set_id() + 1u64,
+					signature.clone(),
+				));
+				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+					pub_key_sig: signature,
+				});
 			}
 		}
 

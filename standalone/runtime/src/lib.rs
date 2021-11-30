@@ -477,6 +477,7 @@ impl pallet_sudo::Config for Runtime {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = Period;
@@ -603,7 +604,7 @@ construct_runtime!(
 		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		Historical: pallet_session_historical::{Pallet},
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Config<T>},
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		MMR: pallet_mmr::{Pallet, Storage},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},

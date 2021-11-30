@@ -54,7 +54,7 @@ construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Storage},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 	}
 );
@@ -123,6 +123,7 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = ();
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;

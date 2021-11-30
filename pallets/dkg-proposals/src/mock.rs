@@ -44,7 +44,7 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Storage},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
@@ -141,6 +141,7 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type GracePeriod = GracePeriod;
 	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
