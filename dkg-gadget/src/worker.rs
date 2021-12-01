@@ -18,7 +18,7 @@
 
 use core::convert::TryFrom;
 use curv::elliptic::curves::traits::ECPoint;
-use std::{borrow::Borrow, collections::BTreeSet, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
 
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
@@ -308,7 +308,7 @@ where
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
 			match self.rounds.start_keygen(next_authorities.id.clone()) {
 				Ok(()) =>
-					info!(target: "dkg", "Keygen started for next authority set successfully"),
+					info!(target: "dkg", "Keygen started for genesis authority set successfully"),
 				Err(err) => error!("Error starting keygen {}", err),
 			}
 		}
@@ -339,7 +339,7 @@ where
 		}
 
 		self.latest_header = Some(header.clone());
-		// self.listen_and_clear_offchain_storage(header);
+		self.listen_and_clear_offchain_storage(header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -420,7 +420,7 @@ where
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {
 				// TODO: use deterministic random signers set
-				let signer_set_id = self.current_validator_set.id;
+				let signer_set_id = rounds.get_id();
 				let s_l = (1..=rounds.dkg_params().2).collect();
 				match rounds.reset_signers(signer_set_id, s_l) {
 					Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
@@ -454,7 +454,7 @@ where
 		if let Some(id) =
 			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 
 			send_messages(&mut self.rounds, id);
 		} else {
@@ -466,9 +466,25 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
 			{
-				debug!(target: "dkg", "🕸️  queued_keygen: Local authority id: {:?}", id);
-				if let Some(next_rounds) = self.next_rounds.as_mut() {
-					send_messages(next_rounds, id);
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+				if let Some(mut next_rounds) = self.next_rounds.take() {
+					send_messages(&mut next_rounds, id);
+
+					let is_ready_to_vote = next_rounds.is_ready_to_vote();
+					debug!(target: "dkg", "🕸️  Is ready to to vote {:?}", is_ready_to_vote);
+					if is_ready_to_vote {
+						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+						self.queued_keygen_in_progress = false;
+						let pub_key = next_rounds
+							.get_public_key()
+							.unwrap()
+							.get_element()
+							.serialize_uncompressed()
+							.to_vec();
+
+						self.gossip_public_key(pub_key, next_rounds.get_id());
+					}
+					self.next_rounds = Some(next_rounds);
 				}
 			} else {
 				panic!("error");
@@ -491,32 +507,14 @@ where
 			}
 		}
 
-		if let Some(mut next_rounds) = self.next_rounds.take() {
+		if let Some(next_rounds) = self.next_rounds.as_mut() {
 			if next_rounds.get_id() == dkg_msg.round_id {
+				debug!(target: "dkg", "🕸️  Received message for Queued DKGs");
 				match next_rounds.handle_incoming(dkg_msg.payload.clone()) {
-					Ok(()) => (),
+					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
 					Err(err) =>
-						debug!(target: "dkg", "🕸️  queued_keygen: Error while handling DKG message {:?}", err),
+						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
-
-				
-
-				let is_ready_to_vote = next_rounds.is_ready_to_vote();
-
-				if is_ready_to_vote && self.queued_keygen_in_progress {
-					info!(target: "dkg", "🕸️  queued_keygen: Queued DKGs keygen has completed");
-					self.queued_keygen_in_progress = false;
-					let pub_key = next_rounds
-						.get_public_key()
-						.unwrap()
-						.get_element()
-						.serialize_uncompressed()
-						.to_vec();
-
-					self.gossip_public_key(pub_key, dkg_msg.round_id);
-				}
-
-				self.next_rounds = Some(next_rounds);
 			}
 		}
 
@@ -537,6 +535,7 @@ where
 			let offchain = self.backend.offchain_storage();
 			if let Some(mut offchain) = offchain {
 				if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS).is_some() {
+					debug!(target: "dkg", "cleaned offchain storage");
 					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
 
 					offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
@@ -572,10 +571,9 @@ where
 			self.aggregated_public_keys
 				.keys_and_signatures
 				.push((public_key.clone(), encoded_signature));
-			info!(target: "dkg", "queued_keygen: gossiping local node  {:?} public key and signature", public)
-		}
-		else {
-			error!(target: "dkg", "queued_keygen: Could not sign public key");
+			debug!(target: "dkg", "gossiping local node  {:?} public key and signature", public)
+		} else {
+			error!(target: "dkg", "Could not sign public key");
 		}
 	}
 
@@ -586,6 +584,21 @@ where
 
 		match dkg_msg.payload {
 			DKGMsgPayload::PublicKeyBroadcast(msg) => {
+				let recovered_pub_key = dkg_runtime_primitives::utils::recover_ecdsa_pub_key(
+					&msg.pub_key,
+					&msg.signature,
+				);
+				if let Ok(recovered_pub_key) = recovered_pub_key {
+					let decoded_key = Public::decode(&mut &recovered_pub_key[..]);
+					if let Ok(decoded_key) = decoded_key {
+						if !self.queued_validator_set.authorities.contains(&decoded_key) {
+							return
+						}
+					}
+				} else {
+					return
+				}
+
 				let key_and_sig = (msg.pub_key, msg.signature);
 				if !self.aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 					self.aggregated_public_keys.keys_and_signatures.push(key_and_sig);
@@ -615,7 +628,7 @@ where
 									);
 								}
 
-								info!(target: "dkg", "queued_keygen: Setting offchain storage keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
+								trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
 
 								self.aggregated_public_keys.keys_and_signatures = vec![];
 							}
@@ -627,6 +640,10 @@ where
 		}
 	}
 
+	// This random delay follows an arithemtic progression
+	// The min value that can be generated is the current block number
+	// The max value that can be generated is the block number represented
+	// by 50% of the keygen refresh delay period
 	fn generate_random_delay(&self) -> Option<<B::Header as Header>::Number> {
 		if let Some(header) = self.latest_header.as_ref() {
 			let public = self
@@ -636,7 +653,7 @@ where
 
 			let party_inx =
 				find_index::<AuthorityId>(&self.queued_validator_set.authorities, &public).unwrap()
-					as u32;
+					as u32 + 1u32;
 
 			let block_number = *header.number();
 			let at = BlockId::hash(header.hash());
@@ -782,13 +799,13 @@ where
 						return;
 					}
 				},
-				notification = self.block_import_notification.next().fuse() => {
-					if let Some(notification) = notification {
-						self.handle_import_notifications(notification);
-					} else {
-						return;
-					}
-				},
+				// notification = self.block_import_notification.next().fuse() => {
+				// 	if let Some(notification) = notification {
+				// 		self.handle_import_notifications(notification);
+				// 	} else {
+				// 		return;
+				// 	}
+				// },
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						self.process_incoming_dkg_message(dkg_msg);

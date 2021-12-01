@@ -363,7 +363,7 @@ where
 		let keygen = self.keygen.as_mut().unwrap();
 
 		if keygen.is_finished() {
-			info!(target: "dkg", "🕸️  Keygen is finished, extracting output");
+			info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
 			match keygen.pick_output() {
 				Some(Ok(k)) => {
 					self.local_key = Some(k);
@@ -382,7 +382,7 @@ where
 		let offline_stage = self.offline_stage.as_mut().unwrap();
 
 		if offline_stage.is_finished() {
-			info!(target: "dkg", "🕸️  OfflineStage is finished, extracting output");
+			info!(target: "dkg", "🕸️  OfflineStage is finished, extracting output round_id: {:?}", self.round_id);
 			match offline_stage.pick_output() {
 				Some(Ok(cos)) => {
 					self.completed_offline_stage = Some(cos);

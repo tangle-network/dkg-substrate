@@ -351,7 +351,11 @@ impl<T: Config> Pallet<T> {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
 
-		if new != Self::authorities() {
+		let changed = new != Self::authorities();
+		#[cfg(test)]
+		let changed = true;
+
+		if changed {
 			<Authorities<T>>::put(&new);
 
 			let next_id = Self::authority_set_id() + 1u64;
@@ -375,11 +379,11 @@ impl<T: Config> Pallet<T> {
 				.encode(),
 			);
 			<frame_system::Pallet<T>>::deposit_log(log);
+			Self::refresh_dkg_keys();
 		}
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
-		Self::refresh_dkg_keys();
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
@@ -577,7 +581,7 @@ impl<T: Config> Pallet<T> {
 		let session_length = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
 		>>::average_session_length();
-		let max_delay = Permill::from_percent(60) * (refresh_delay * session_length);
+		let max_delay = Permill::from_percent(50) * (refresh_delay * session_length);
 		max_delay
 	}
 }
@@ -608,6 +612,10 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
+		let changed = changed;
+		#[cfg(test)]
+		let changed = true;
+
 		if changed {
 			let mut authority_account_ids = Vec::new();
 			let mut queued_authority_account_ids = Vec::new();

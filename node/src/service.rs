@@ -166,7 +166,7 @@ where
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("Parachain")]
 async fn start_node_impl<RuntimeApi, Executor, RB, BIQ, BIC>(
-	mut parachain_config: Configuration,
+	parachain_config: Configuration,
 	polkadot_config: Configuration,
 	id: ParaId,
 	rpc_ext_builder: RB,
