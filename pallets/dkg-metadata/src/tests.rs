@@ -59,7 +59,6 @@ fn genesis_session_initializes_authorities() {
 #[test]
 fn session_change_updates_authorities() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-
 		assert!(0 == DKGMetadata::authority_set_id());
 
 		// no change - no log
@@ -91,7 +90,6 @@ fn session_change_updates_next_authorities() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-
 		let next_authorities = DKGMetadata::next_authorities();
 
 		assert!(next_authorities.len() == 2);
@@ -126,7 +124,6 @@ fn authority_set_updates_work() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-
 		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 0u64);

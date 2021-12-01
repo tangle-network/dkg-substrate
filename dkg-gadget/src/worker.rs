@@ -590,15 +590,19 @@ where
 					&msg.signature,
 				);
 				if let Ok(recovered_pub_key) = recovered_pub_key {
-
-					debug!(target: "dkg", "\nAuthority bytes {:?}, recovered_key: {:?}\n", self.queued_validator_set.authorities.iter().map(|k| k.encode()).collect::<Vec<Vec<u8>>>(), recovered_pub_key);
-					
-					let decoded_key = Public::decode(&mut &recovered_pub_key[..]);
-					if let Ok(decoded_key) = decoded_key {
-						if !self.queued_validator_set.authorities.contains(&decoded_key) {
-							error!("Public {:?} key signer is not part of queued authority set {:?}", decoded_key, self.queued_validator_set.authorities);
-							return
-						}
+					// Authority public key bytes removing odd_parity byte
+					let authority_key_bytes = self
+						.queued_validator_set
+						.authorities
+						.iter()
+						.map(|k| k.encode()[1..].to_vec())
+						.collect::<Vec<Vec<u8>>>();
+					if !authority_key_bytes.contains(&recovered_pub_key[0..32].to_vec()) {
+						error!(
+							"Public {:?} key signer is not part of queued authority set {:?}",
+							recovered_pub_key, authority_key_bytes
+						);
+						return
 					}
 				} else {
 					error!("Could not recover public key from broadcast signature");

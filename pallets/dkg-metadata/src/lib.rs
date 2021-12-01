@@ -608,7 +608,6 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
-
 		if changed {
 			let mut authority_account_ids = Vec::new();
 			let mut queued_authority_account_ids = Vec::new();
