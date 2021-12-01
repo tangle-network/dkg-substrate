@@ -234,9 +234,17 @@ impl pallet_timestamp::Config for Runtime {
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = ();
 }
+#[cfg(not(test))]
+parameter_types! {
+	pub const Period: BlockNumber = HOURS * 6;
+}
 
+#[cfg(test)]
 parameter_types! {
 	pub const Period: BlockNumber = 50;
+}
+
+parameter_types! {
 	pub const Offset: BlockNumber = 0;
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }

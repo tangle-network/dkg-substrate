@@ -59,7 +59,6 @@ fn genesis_session_initializes_authorities() {
 #[test]
 fn session_change_updates_authorities() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
 
 		assert!(0 == DKGMetadata::authority_set_id());
 
@@ -72,7 +71,7 @@ fn session_change_updates_authorities() {
 
 		let want = dkg_log(ConsensusLog::AuthoritiesChange {
 			next_authorities: AuthoritySet {
-				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
+				authorities: vec![mock_dkg_id(1), mock_dkg_id(2)],
 				id: 1,
 			},
 			next_queued_authorities: AuthoritySet {
@@ -92,7 +91,6 @@ fn session_change_updates_next_authorities() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
 
 		let next_authorities = DKGMetadata::next_authorities();
 
@@ -128,7 +126,6 @@ fn authority_set_updates_work() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
 
 		let vs = DKGMetadata::authority_set();
 
@@ -141,7 +138,7 @@ fn authority_set_updates_work() {
 		let vs = DKGMetadata::authority_set();
 
 		assert_eq!(vs.id, 1u64);
-		assert_eq!(want[2], vs.authorities[0]);
-		assert_eq!(want[3], vs.authorities[1]);
+		assert_eq!(want[0], vs.authorities[0]);
+		assert_eq!(want[1], vs.authorities[1]);
 	});
 }
