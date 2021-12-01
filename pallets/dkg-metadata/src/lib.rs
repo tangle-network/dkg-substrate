@@ -301,22 +301,24 @@ impl<T: Config> Pallet<T> {
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
 	) -> DispatchResultWithPostInfo {
-		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
+		let mut dict: BTreeMap<Vec<u8>, Vec<Vec<u8>>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
 			let authority_id = utils::recover_ecdsa_pub_key(&pub_key, &signature);
 
 			if let Ok(authority_id) = authority_id {
-				let dkg_id = T::DKGId::decode(&mut &authority_id[..]);
+				// Authority public key bytes removing odd_parity byte
+				let authority_key_bytes = Self::next_authorities()
+					.iter()
+					.map(|k| k.encode()[1..].to_vec())
+					.collect::<Vec<Vec<u8>>>();
 
-				if let Ok(dkg_id) = dkg_id {
-					if Self::next_authorities().contains(&dkg_id) {
-						if !dict.contains_key(&pub_key) {
-							dict.insert(pub_key.clone(), Vec::new());
-						}
-						let temp = dict.get_mut(&pub_key).unwrap();
-						temp.push(dkg_id.clone());
+				if authority_key_bytes.contains(&authority_id[..32].to_vec()) {
+					if !dict.contains_key(&pub_key) {
+						dict.insert(pub_key.clone(), Vec::new());
 					}
+					let temp = dict.get_mut(&pub_key).unwrap();
+					temp.push(authority_id[..32].to_vec());
 				}
 			}
 		}
