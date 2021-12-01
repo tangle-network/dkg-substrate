@@ -351,11 +351,7 @@ impl<T: Config> Pallet<T> {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
 
-		let changed = new != Self::authorities();
-		#[cfg(test)]
-		let changed = true;
-
-		if changed {
+		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
 
 			let next_id = Self::authority_set_id() + 1u64;
@@ -612,9 +608,6 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
-		let changed = changed;
-		#[cfg(test)]
-		let changed = true;
 
 		if changed {
 			let mut authority_account_ids = Vec::new();

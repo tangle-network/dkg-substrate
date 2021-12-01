@@ -554,7 +554,7 @@ where
 			.unwrap_or_else(|| panic!("Halp"));
 
 		if let Ok(signature) = self.key_store.sign(&public, &public_key) {
-			let encoded_signature = signature.encode();
+			let encoded_signature = signature.to_vec();
 			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 				id: public.clone(),
 				round_id,
@@ -584,18 +584,24 @@ where
 
 		match dkg_msg.payload {
 			DKGMsgPayload::PublicKeyBroadcast(msg) => {
+				debug!(target: "dkg", "Received public key broadcast");
 				let recovered_pub_key = dkg_runtime_primitives::utils::recover_ecdsa_pub_key(
 					&msg.pub_key,
 					&msg.signature,
 				);
 				if let Ok(recovered_pub_key) = recovered_pub_key {
+
+					debug!(target: "dkg", "\nAuthority bytes {:?}, recovered_key: {:?}\n", self.queued_validator_set.authorities.iter().map(|k| k.encode()).collect::<Vec<Vec<u8>>>(), recovered_pub_key);
+					
 					let decoded_key = Public::decode(&mut &recovered_pub_key[..]);
 					if let Ok(decoded_key) = decoded_key {
 						if !self.queued_validator_set.authorities.contains(&decoded_key) {
+							error!("Public {:?} key signer is not part of queued authority set {:?}", decoded_key, self.queued_validator_set.authorities);
 							return
 						}
 					}
 				} else {
+					error!("Could not recover public key from broadcast signature");
 					return
 				}
 
@@ -799,13 +805,13 @@ where
 						return;
 					}
 				},
-				// notification = self.block_import_notification.next().fuse() => {
-				// 	if let Some(notification) = notification {
-				// 		self.handle_import_notifications(notification);
-				// 	} else {
-				// 		return;
-				// 	}
-				// },
+				notification = self.block_import_notification.next().fuse() => {
+					if let Some(notification) = notification {
+						self.handle_import_notifications(notification);
+					} else {
+						return;
+					}
+				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						self.process_incoming_dkg_message(dkg_msg);
