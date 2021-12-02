@@ -203,7 +203,7 @@ impl<T: Config> Pallet<T> {
 		if let Ok(Some(mut prop_wrapper)) = proposals_ref.get::<OffchainSignedProposals>() {
 			if let Some(next_proposal) = prop_wrapper.proposals.pop_front() {
 				let _update_res = proposals_ref.mutate(|val| match val {
-					Ok(Some(_)) => Ok(prop_wrapper.encode()),
+					Ok(Some(_)) => Ok(prop_wrapper),
 					_ => Err(()),
 				});
 

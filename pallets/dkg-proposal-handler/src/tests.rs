@@ -17,23 +17,16 @@ use sp_runtime::offchain::storage::MutateStorageError;
 fn add_proposal_to_offchain_storage(prop: ProposalType) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<Vec<u8>, MutateStorageError<Vec<u8>, ()>> =
-		proposals_ref.mutate(|val: Result<Option<Vec<u8>>, StorageRetrievalError>| match val {
-			Ok(Some(ser_props)) =>
-				if ser_props.len() > 0 {
-					let mut prop_wrapper =
-						OffchainSignedProposals::decode(&mut &ser_props[..]).unwrap();
-					prop_wrapper.proposals.push_back(prop);
-					Ok(prop_wrapper.encode())
-				} else {
-					let mut prop_wrapper = OffchainSignedProposals::default();
-					prop_wrapper.proposals.push_back(prop);
-					Ok(prop_wrapper.encode())
-				},
+	let update_res: Result<OffchainSignedProposals, MutateStorageError<_, ()>> = proposals_ref
+		.mutate(|val: Result<Option<OffchainSignedProposals>, StorageRetrievalError>| match val {
+			Ok(Some(mut ser_props)) => {
+				ser_props.proposals.push_back(prop);
+				Ok(ser_props)
+			},
 			_ => {
 				let mut prop_wrapper = OffchainSignedProposals::default();
 				prop_wrapper.proposals.push_back(prop);
-				Ok(prop_wrapper.encode())
+				Ok(prop_wrapper)
 			},
 		});
 
@@ -42,12 +35,11 @@ fn add_proposal_to_offchain_storage(prop: ProposalType) {
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<Vec<u8>> = proposals_ref.get().unwrap();
+	let stored_props: Option<OffchainSignedProposals> =
+		proposals_ref.get::<OffchainSignedProposals>().unwrap();
 	assert_eq!(stored_props.is_some(), true);
 
-	let prop_wrapper = OffchainSignedProposals::decode(&mut &stored_props.unwrap()[..]);
-	assert_ok!(&prop_wrapper);
-	assert_eq!(prop_wrapper.unwrap().proposals.len(), num);
+	assert_eq!(stored_props.unwrap().proposals.len(), num);
 }
 
 // *** Tests ***
