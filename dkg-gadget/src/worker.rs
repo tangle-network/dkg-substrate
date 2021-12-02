@@ -653,7 +653,7 @@ where
 	}
 
 	// This random delay follows an arithemtic progression
-	// The min value that can be generated is the current block number
+	// The min value that can be generated is the immediate next block number
 	// The max value that can be generated is the block number represented
 	// by 50% of the keygen refresh delay period
 	fn generate_random_delay(&self) -> Option<<B::Header as Header>::Number> {
@@ -673,7 +673,7 @@ where
 				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
 			match max_delay {
 				Some(max_delay) => {
-					let delay = block_number + (max_delay % party_inx.into());
+					let delay = (block_number + 1u32.into()) + (max_delay % party_inx.into());
 					return Some(delay)
 				},
 				None => return None,

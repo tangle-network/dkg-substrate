@@ -16,7 +16,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
+use codec::Encode;
 
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -404,21 +404,22 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let submitted = StorageValueRef::persistent(b"dkg-metadata::submitted");
 		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
 		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
 
-		const RECENTLY_SENT: () = ();
+		const RECENTLY_SENT: &str = "Already submitted a key in this session";
 
 		let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
 		if let Ok(Some(submit_at)) = submit_at {
-			submit_at_ref.clear();
-
 			if block_number < submit_at {
 				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
 				return Ok(())
+			} else {
+				submit_at_ref.clear();
 			}
+		} else {
+			Err(RECENTLY_SENT)?
 		}
 
 		if Self::next_dkg_public_key().is_some() {
@@ -426,34 +427,22 @@ impl<T: Config> Pallet<T> {
 			return Ok(())
 		}
 
-		let res = submitted.mutate(|submitted| match submitted {
-			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(RECENTLY_SENT),
-			_ => Ok(block_number),
-		});
-
 		let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
-		match res {
-			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-				if !signer.can_sign() {
-					Err(
-							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-						)?
-				}
-
-				if let Ok(Some(agg_keys)) = agg_keys {
-					let _ = signer.send_signed_transaction(|_account| Call::submit_public_key {
-						keys_and_signatures: agg_keys.clone(),
-					});
-
-					agg_key_ref.clear();
-				}
-
-				return Ok(())
-			},
-			_ => Err("Already submitted public key")?,
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
 		}
+
+		if let Ok(Some(agg_keys)) = agg_keys {
+			let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+				keys_and_signatures: agg_keys.clone(),
+			});
+
+			agg_key_ref.clear();
+		}
+
+		return Ok(())
 	}
 
 	fn submit_public_key_signature_onchain(
