@@ -42,7 +42,6 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// ChainID for anchor edges
 		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
-
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 	}
@@ -96,7 +95,9 @@ pub mod pallet {
 		/// Proposal signature is invalid
 		ProposalSignatureInvalid,
 		/// No proposal with the ID was found
-		ProposalDoesNotExist,
+		ProposalDoesNotExists,
+		/// Proposal with the ID has already been submitted
+		ProposalAlreadyExists,
 		/// Chain id is invalid
 		ChainIdInvalid,
 	}
@@ -128,21 +129,25 @@ pub mod pallet {
 
 				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 
-				ensure!(
-					UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
-					Error::<T>::ProposalDoesNotExist
-				);
-				ensure!(
-					Self::validate_proposal_signature(&data, &signature),
-					Error::<T>::ProposalSignatureInvalid
-				);
+				if !SignedProposals::<T>::contains_key(chain_id, nonce) {
+					ensure!(
+						UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
+						Error::<T>::ProposalDoesNotExists
+					);
+					ensure!(
+						Self::validate_proposal_signature(&data, &signature),
+						Error::<T>::ProposalSignatureInvalid
+					);
 
-				SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
+					SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
+				}
 
 				UnsignedProposalQueue::<T>::remove(chain_id, nonce);
-			}
 
-			Ok(().into())
+				Ok(().into())
+			} else {
+				Err(Error::<T>::ProposalFormatInvalid)?
+			}
 		}
 	}
 }
