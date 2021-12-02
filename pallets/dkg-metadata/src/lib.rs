@@ -65,7 +65,7 @@ pub mod pallet {
 		type DKGId: Member + Parameter + RuntimeAppPublic + Default + MaybeSerializeDeserialize;
 
 		/// The identifier type for an offchain worker.
-		type OffChainAuthorityId: AppCrypto<Self::Public, Self::Signature>;
+		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 
 		/// Listener for authority set changes
 		type OnAuthoritySetChangeHandler: OnAuthoritySetChangeHandler<
@@ -410,17 +410,14 @@ impl<T: Config> Pallet<T> {
 
 		const RECENTLY_SENT: () = ();
 
-		let submit_at = submit_at_ref.get::<Vec<u8>>();
+		let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
 		if let Ok(Some(submit_at)) = submit_at {
-			let block = T::BlockNumber::decode(&mut &submit_at[..]);
 			submit_at_ref.clear();
 
-			if let Ok(block) = block {
-				if block_number < block {
-					frame_support::log::debug!("Offchain worker skipping public key submmission");
-					return Ok(())
-				}
+			if block_number < submit_at {
+				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+				return Ok(())
 			}
 		}
 
@@ -434,11 +431,11 @@ impl<T: Config> Pallet<T> {
 			_ => Ok(block_number),
 		});
 
-		let agg_keys = agg_key_ref.get::<Vec<u8>>();
+		let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 		match res {
 			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+				let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 				if !signer.can_sign() {
 					Err(
 							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -446,15 +443,11 @@ impl<T: Config> Pallet<T> {
 				}
 
 				if let Ok(Some(agg_keys)) = agg_keys {
-					let keys_and_signatures = AggregatedPublicKeys::decode(&mut &agg_keys[..]);
-					if let Ok(keys_and_signatures) = keys_and_signatures {
-						let _ =
-							signer.send_signed_transaction(|_account| Call::submit_public_key {
-								keys_and_signatures: keys_and_signatures.clone(),
-							});
+					let _ = signer.send_signed_transaction(|_account| Call::submit_public_key {
+						keys_and_signatures: agg_keys.clone(),
+					});
 
-						agg_key_ref.clear();
-					}
+					agg_key_ref.clear();
 				}
 
 				return Ok(())
@@ -475,11 +468,11 @@ impl<T: Config> Pallet<T> {
 			_ => Ok(block_number),
 		});
 
-		let signature = pub_key_sig_ref.get::<Vec<u8>>();
+		let signature = pub_key_sig_ref.get::<dkg_runtime_primitives::crypto::Signature>();
 
 		match res {
 			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+				let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 				if !signer.can_sign() {
 					Err(
 							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -487,13 +480,11 @@ impl<T: Config> Pallet<T> {
 				}
 
 				if let Ok(Some(signature)) = signature {
-					if !signature.is_empty() {
-						let _ = signer.send_signed_transaction(|_account| {
-							Call::submit_public_key_signature { signature: signature.clone() }
-						});
+					let _ = signer.send_signed_transaction(|_account| {
+						Call::submit_public_key_signature { signature: signature.encode() }
+					});
 
-						pub_key_sig_ref.clear();
-					}
+					pub_key_sig_ref.clear();
 				}
 
 				return Ok(())

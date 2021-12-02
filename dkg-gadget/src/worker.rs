@@ -458,7 +458,7 @@ where
 
 			send_messages(&mut self.rounds, id);
 		} else {
-			panic!("error");
+			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
 
 		// Check if a there's a key gen process running for the queued authority set
@@ -487,7 +487,9 @@ where
 					self.next_rounds = Some(next_rounds);
 				}
 			} else {
-				panic!("error");
+				error!(
+					"No local accounts available. Consider adding one via `author_insertKey` RPC."
+				);
 			}
 		}
 	}
@@ -529,13 +531,13 @@ where
 
 	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
 		let at = BlockId::hash(header.hash());
-		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at).ok();
+		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
 
-		if next_dkg_public_key.is_some() {
+		if let Ok(Some(_key)) = next_dkg_public_key {
 			let offchain = self.backend.offchain_storage();
 			if let Some(mut offchain) = offchain {
 				if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS).is_some() {
-					debug!(target: "dkg", "cleaned offchain storage");
+					debug!(target: "dkg", "cleaned offchain storage, next_public_key: {:?}", _key);
 					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
 
 					offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
@@ -638,7 +640,7 @@ where
 									);
 								}
 
-								trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}", self.aggregated_public_keys, submit_at);
+								trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}", self.aggregated_public_keys.encode(), submit_at);
 
 								self.aggregated_public_keys.keys_and_signatures = vec![];
 							}

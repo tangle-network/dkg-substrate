@@ -144,7 +144,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type GracePeriod = GracePeriod;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;
 }
@@ -231,7 +231,7 @@ impl pallet_parachain_staking::Config for Test {
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Test {
