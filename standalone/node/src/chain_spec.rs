@@ -6,7 +6,7 @@ use dkg_standalone_runtime::{
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{ecdsa, sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -39,7 +39,7 @@ pub fn authority_keys_from_seed(
 	c: &str,
 ) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
-		get_account_id_from_seed::<sr25519::Public>(s),
+		get_account_id_from_seed::<ecdsa::Public>(s),
 		get_account_id_from_seed::<sr25519::Public>(c),
 		get_from_seed::<AuraId>(s),
 		get_from_seed::<GrandpaId>(s),
@@ -79,13 +79,15 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				// Sudo account
-				get_account_id_from_seed::<sr25519::Public>("Alice"),
+				get_account_id_from_seed::<ecdsa::Public>("Alice"),
 				// Pre-funded accounts
 				vec![
-					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					get_account_id_from_seed::<sr25519::Public>("Bob"),
+					get_account_id_from_seed::<ecdsa::Public>("Alice"),
+					get_account_id_from_seed::<ecdsa::Public>("Bob"),
+					get_account_id_from_seed::<ecdsa::Public>("Charlie"),
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
 				],
 				true,
 			)
@@ -123,12 +125,12 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				// Sudo account
-				get_account_id_from_seed::<sr25519::Public>("Alice"),
+				get_account_id_from_seed::<ecdsa::Public>("Alice"),
 				// Pre-funded accounts
 				vec![
-					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					get_account_id_from_seed::<sr25519::Public>("Bob"),
-					get_account_id_from_seed::<sr25519::Public>("Charlie"),
+					get_account_id_from_seed::<ecdsa::Public>("Alice"),
+					get_account_id_from_seed::<ecdsa::Public>("Bob"),
+					get_account_id_from_seed::<ecdsa::Public>("Charlie"),
 					get_account_id_from_seed::<sr25519::Public>("Dave"),
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
@@ -201,7 +203,7 @@ fn testnet_genesis(
 				.iter()
 				.map(|x| {
 					(
-						x.0.clone(),
+						x.1.clone(),
 						x.0.clone(),
 						dkg_session_keys(x.3.clone(), x.2.clone(), x.4.clone()),
 					)

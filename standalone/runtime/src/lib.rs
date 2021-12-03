@@ -236,7 +236,7 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-	pub const Period: BlockNumber = HOURS * 1;
+	pub const Period: BlockNumber = 50;
 	pub const Offset: BlockNumber = 0;
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
@@ -477,22 +477,25 @@ impl pallet_sudo::Config for Runtime {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = Period;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
@@ -601,7 +604,7 @@ construct_runtime!(
 		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		Historical: pallet_session_historical::{Pallet},
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Config<T>},
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		MMR: pallet_mmr::{Pallet, Storage},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
@@ -784,6 +787,10 @@ impl_runtime_apis! {
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
+		}
+
+		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
+			DKG::max_extrinsic_delay(block_number)
 		}
 	}
 

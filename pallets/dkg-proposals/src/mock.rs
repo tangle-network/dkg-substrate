@@ -18,7 +18,7 @@ use sp_runtime::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Perbill, Percent,
+	Perbill, Percent, Permill,
 };
 
 use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
@@ -44,7 +44,7 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Storage},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
@@ -141,15 +141,18 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type GracePeriod = GracePeriod;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type NextSessionRotation = ParachainStaking;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const GracePeriod: u64 = 10;
 	pub const MinimumPeriod: u64 = 1;
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_timestamp::Config for Test {
@@ -228,7 +231,7 @@ impl pallet_parachain_staking::Config for Test {
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Test {

@@ -153,6 +153,7 @@ where
 			is_epoch_over: true,
 			curr_dkg: None,
 			past_dkg: None,
+			listening_for_pub_key: false,
 		},
 	};
 

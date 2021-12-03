@@ -43,7 +43,7 @@ pub mod pallet {
 		/// ChainID for anchor edges
 		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
 		/// The identifier type for an offchain worker.
-		type OffChainAuthorityId: AppCrypto<Self::Public, Self::Signature>;
+		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 	}
 
 	#[pallet::pallet]
@@ -181,7 +181,7 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let signer = Signer::<T, T::OffChainAuthorityId>::all_accounts();
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
 			return Err(
 				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -200,20 +200,17 @@ impl<T: Config> Pallet<T> {
 	fn get_next_offchain_signed_proposal() -> Result<ProposalType, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-		if let Ok(Some(ser_props)) = proposals_ref.get::<Vec<u8>>() {
-			let mut prop_wrapper = match OffchainSignedProposals::decode(&mut &ser_props[..]) {
-				Ok(res) => res,
-				Err(_) => return Err("Could not decode stored proposals")?,
-			};
-
+		if let Ok(Some(mut prop_wrapper)) = proposals_ref.get::<OffchainSignedProposals>() {
 			if let Some(next_proposal) = prop_wrapper.proposals.pop_front() {
 				let _update_res = proposals_ref.mutate(|val| match val {
-					Ok(Some(_)) => Ok(prop_wrapper.encode()),
+					Ok(Some(_)) => Ok(prop_wrapper),
 					_ => Err(()),
 				});
 
 				return Ok(next_proposal)
 			}
+		} else {
+			return Err("Could not decode stored proposals")?
 		}
 
 		return Err("No pending proposals found")?

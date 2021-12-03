@@ -9,6 +9,7 @@ pub mod utils;
 
 pub use ethereum::*;
 pub use ethereum_types::*;
+use frame_support::RuntimeDebug;
 pub use proposal::*;
 
 use codec::{Codec, Decode, Encode};
@@ -38,8 +39,11 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
+// Key for offchain storage of aggregated derived public keys
+pub const AGGREGATED_PUBLIC_KEYS: &[u8] = b"dkg-metadata::public_key";
+
 // Key for offchain storage of derived public key
-pub const OFFCHAIN_PUBLIC_KEY: &[u8] = b"dkg-metadata::public_key";
+pub const SUBMIT_KEYS_AT: &[u8] = b"dkg-metadata::submit_keys_at";
 
 // Key for offchain storage of derived public key signature
 pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
@@ -49,6 +53,14 @@ pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_prop
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
 pub struct OffchainSignedProposals {
 	pub proposals: VecDeque<ProposalType>,
+}
+
+pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
+
+#[derive(Eq, PartialEq, Clone, Encode, Default, Decode, RuntimeDebug, TypeInfo)]
+pub struct AggregatedPublicKeys {
+	/// A vector of public keys and signature pairs [/public_key/] , [/signature/]
+	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
 impl Default for OffchainSignedProposals {
@@ -135,7 +147,7 @@ sp_api::decl_runtime_apis! {
 
 	pub trait DKGApi<AuthorityId, BlockNumber> where
 		AuthorityId: Codec + PartialEq,
-		BlockNumber: Codec + PartialEq
+		BlockNumber: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
@@ -149,5 +161,7 @@ sp_api::decl_runtime_apis! {
 		fn next_dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
+		/// Get maximum delay before which an offchain extrinsic should be submitted
+		fn get_max_extrinsic_delay(_block_number: BlockNumber) -> BlockNumber;
 	}
 }

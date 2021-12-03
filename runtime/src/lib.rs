@@ -555,22 +555,25 @@ impl parachain_staking::Config for Runtime {
 
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
+	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 	type GracePeriod = BlocksPerRound;
 	type NextSessionRotation = ParachainStaking;
+	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthorityId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
@@ -685,7 +688,7 @@ construct_runtime!(
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Config<T>} = 36,
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
@@ -784,6 +787,10 @@ impl_runtime_apis! {
 
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
+		}
+
+		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
+			DKG::max_extrinsic_delay(block_number)
 		}
 	}
 
