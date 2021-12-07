@@ -156,7 +156,7 @@ impl pallet_session::SessionHandler<u64> for TestSessionHandler {
 
 	fn on_before_session_ending() {}
 
-	fn on_disabled(_: usize) {}
+	fn on_disabled(_: u32) {}
 }
 
 impl pallet_session::Config for Test {

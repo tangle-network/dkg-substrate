@@ -31,7 +31,7 @@ fn init_block(block: u64) {
 	Session::on_initialize(block);
 }
 
-pub fn dkg_log(log: ConsensusLog<DKGId>) -> DigestItem<H256> {
+pub fn dkg_log(log: ConsensusLog<DKGId>) -> DigestItem {
 	DigestItem::Consensus(DKG_ENGINE_ID, log.encode())
 }
 
