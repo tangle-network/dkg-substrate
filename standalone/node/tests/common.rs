@@ -18,23 +18,62 @@
 
 #![cfg(unix)]
 
-use assert_cmd::cargo::cargo_bin;
-use nix::{
-	sys::signal::{kill, Signal::SIGINT},
-	unistd::Pid,
-};
+use dkg_standalone_runtime::{AccountId, DKGId, Signature};
+
 use node_primitives::Block;
 use remote_externalities::rpc_api;
+use serde::Serialize;
+use serde_json::{json, Value};
+use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_core::{Pair, Public, sr25519};
+use sp_finality_grandpa::AuthorityId as GrandpaId;
+use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::{
-	convert::TryInto,
-	ops::{Deref, DerefMut},
-	path::Path,
-	process::{Child, Command, ExitStatus},
+	process::{Child, ExitStatus},
 	time::Duration,
 };
+use substrate_api_client::rpc::WsRpcClient;
 use tokio::time::timeout;
 
 static LOCALHOST_WS: &str = "ws://127.0.0.1:9945/";
+
+pub fn json_req<S: Serialize>(method: &str, params: S, id: u32) -> Value {
+	json!({
+		"method": method,
+		"params": params,
+		"jsonrpc": "2.0",
+		"id": id.to_string(),
+	})
+}
+
+/// Generate a crypto pair from seed.
+pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
+	TPublic::Pair::from_string(&format!("//{}", seed), None)
+		.expect("static values are valid; qed")
+		.public()
+}
+
+type AccountPublic = <Signature as Verify>::Signer;
+
+/// Generate an account ID from seed.
+pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
+where
+	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+{
+	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
+}
+
+/// Generate the session keys from individual elements.
+///
+/// The input must be a tuple of individual keys (a single arg for now since we
+/// have just one key).
+pub fn dkg_session_keys(
+	grandpa: GrandpaId,
+	aura: AuraId,
+	dkg: DKGId,
+) -> dkg_standalone_runtime::opaque::SessionKeys {
+	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, dkg }
+}
 
 /// Wait for at least n blocks to be finalized within a specified time.
 pub async fn wait_n_finalized_blocks(
@@ -84,24 +123,21 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 	}
 }
 
-pub struct KillChildOnDrop(pub Child);
+/// Extrinsics
+use ac_compose_macros::compose_extrinsic;
+use ac_primitives::{CallIndex, UncheckedExtrinsicV4};
+use substrate_api_client::Pair as PairT;
 
-impl Drop for KillChildOnDrop {
-	fn drop(&mut self) {
-		let _ = self.0.kill();
-	}
-}
+pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
+pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
 
-impl Deref for KillChildOnDrop {
-	type Target = Child;
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl DerefMut for KillChildOnDrop {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.0
-	}
+pub fn set_keys(
+	api: &substrate_api_client::Api<
+		sr25519::Pair,
+		WsRpcClient,
+	>,
+	keys: dkg_standalone_runtime::opaque::SessionKeys,
+	proof: Vec<u8>,
+) -> SetKeyXt {
+	compose_extrinsic!(api, "Session", "set_keys", keys, proof)
 }

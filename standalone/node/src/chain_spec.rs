@@ -6,7 +6,7 @@ use dkg_standalone_runtime::{
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ecdsa, sr25519, Pair, Public};
+use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -35,15 +35,15 @@ where
 
 /// Generate an Aura authority key.
 pub fn authority_keys_from_seed(
-	s: &str,
-	c: &str,
+	stash: &str,
+	controller: &str,
 ) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
-		get_account_id_from_seed::<ecdsa::Public>(s),
-		get_account_id_from_seed::<sr25519::Public>(c),
-		get_from_seed::<AuraId>(s),
-		get_from_seed::<GrandpaId>(s),
-		get_from_seed::<DKGId>(s),
+		get_account_id_from_seed::<sr25519::Public>(stash),
+		get_account_id_from_seed::<sr25519::Public>(controller),
+		get_from_seed::<AuraId>(stash),
+		get_from_seed::<GrandpaId>(stash),
+		get_from_seed::<DKGId>(stash),
 	)
 }
 
@@ -79,15 +79,21 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				// Sudo account
-				get_account_id_from_seed::<ecdsa::Public>("Alice"),
+				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
 				vec![
-					get_account_id_from_seed::<ecdsa::Public>("Alice"),
-					get_account_id_from_seed::<ecdsa::Public>("Bob"),
-					get_account_id_from_seed::<ecdsa::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Alice"),
+					get_account_id_from_seed::<sr25519::Public>("Bob"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
+					get_account_id_from_seed::<sr25519::Public>("Eve"),
+					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
 				true,
 			)
@@ -125,12 +131,12 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				// Sudo account
-				get_account_id_from_seed::<ecdsa::Public>("Alice"),
+				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
 				vec![
-					get_account_id_from_seed::<ecdsa::Public>("Alice"),
-					get_account_id_from_seed::<ecdsa::Public>("Bob"),
-					get_account_id_from_seed::<ecdsa::Public>("Charlie"),
+					get_account_id_from_seed::<sr25519::Public>("Alice"),
+					get_account_id_from_seed::<sr25519::Public>("Bob"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
 					get_account_id_from_seed::<sr25519::Public>("Dave"),
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie"),

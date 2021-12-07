@@ -39,6 +39,10 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
+// Key type for Validator Account keys
+pub const ACCOUNT_KEY_TYPE: sp_application_crypto::KeyTypeId =
+	sp_application_crypto::KeyTypeId(*b"_acc");
+
 // Key for offchain storage of aggregated derived public keys
 pub const AGGREGATED_PUBLIC_KEYS: &[u8] = b"dkg-metadata::public_key";
 

@@ -33,6 +33,11 @@ RUST_LOG=dkg=trace ./target/debug/dkg-node --tmp --bob
 RUST_LOG=dkg=trace ./target/debug/dkg-node --tmp --charlie
 ```
 
+> **NOTE**: DKG Authorities should add their account keys to the local keystore using the insert_key RPC with key type string as `_acc`, this should be the stash account used for staking if
+> running the standalone node, or the collator account used for staking if running the parachain node. This is necessary for submitting extrinsics from the 
+> offchain context i.e, for submitting public keys derived from the multiparty keygen process and also public key signatures and paying the associated 
+> transaction fees
+
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
 instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
 ## Build & Run
