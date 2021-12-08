@@ -75,6 +75,7 @@ jsonrpsee-ws-client = "0.4.1"
 wait-timeout = "0.2"
 remote-externalities = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
 pallet-timestamp = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
+pallet-staking = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
 node-primitives = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 substrate-api-client = { git = "https://github.com/scs/substrate-api-client", rev = "1a5951450203b11cb347d624891ba608e2e27f6d" }
 codec = { package = "parity-scale-codec", version = "2.0.0", features = ["derive"] }

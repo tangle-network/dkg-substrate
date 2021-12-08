@@ -155,11 +155,11 @@ async fn dkg_key_refresh() {
 	let key_type = "_acc";
 
 	for (seed, pub_key) in seed_and_pub_keys {
-		let session_keys = dkg_session_keys(
-			get_from_seed::<GrandpaId>(seed),
-			get_from_seed::<AuraId>(seed),
-			get_from_seed::<DKGId>(seed),
-		);
+		// let session_keys = dkg_session_keys(
+		// 	get_from_seed::<GrandpaId>(seed),
+		// 	get_from_seed::<AuraId>(seed),
+		// 	get_from_seed::<DKGId>(seed),
+		// );
 
 		match seed {
 			"Alice" => {
@@ -175,15 +175,19 @@ async fn dkg_key_refresh() {
 		}
 	}
 
+
+
 	let xt =
 		force_unstake(&alice_api, MultiAddress::Id(AccountKeyring::Charlie.to_account_id()), 2);
+	
+	println!("[+] Composed Extrinsic:\n {:?}\n", xt);
 
-	// send and watch extrinsic until finalized
-	let tx_hash = alice_api.send_extrinsic(xt.hex_encode(), XtStatus::InBlock).unwrap();
+	// send and watch extrinsic until broadcast
+	let tx_hash = alice_api.send_extrinsic(xt.hex_encode(), XtStatus::Broadcast).unwrap();
 
 	let _ = common::wait_n_finalized_blocks(35, 420).await;
 
-	let next_key = alice_api.get_storage_value("DKG", "NextDKGPublicKey", None).unwrap();
+	let next_key: Option<Vec<u8>> = alice_api.get_storage_value("DKG", "NextDKGPublicKey", None).unwrap();
 
 	assert!(next_key.is_some(), "Next public key should be on chain by now");
 

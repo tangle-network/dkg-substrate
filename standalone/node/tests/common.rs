@@ -20,7 +20,7 @@
 
 use dkg_standalone_runtime::{AccountId, DKGId, Signature};
 
-use ac_compose_macros::compose_extrinsic;
+use ac_compose_macros::{compose_extrinsic, compose_call};
 use ac_primitives::{CallIndex, GenericAddress, UncheckedExtrinsicV4};
 use node_primitives::Block;
 use remote_externalities::rpc_api;
@@ -39,6 +39,9 @@ use tokio::time::timeout;
 
 pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
 pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
+
+pub type SudoFn = (CallIndex, pallet_staking::Call<dkg_standalone_runtime::Runtime>);
+pub type SudoFnXt = UncheckedExtrinsicV4<SudoFn>;
 
 static LOCALHOST_WS: &str = "ws://127.0.0.1:45789/";
 
@@ -131,7 +134,7 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 /// RPC requests
 fn author_insert_key(key_type: &str, seed: &str, pub_key: &str) -> Value {
 	json_req(
-		"author_insertkey",
+		"author_insertKey",
 		vec![to_value(key_type).unwrap(), to_value(seed).unwrap(), to_value(pub_key).unwrap()],
 		1,
 	)
@@ -165,6 +168,7 @@ pub fn force_unstake(
 	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
 	stash: GenericAddress,
 	num_slashing_spans: u32,
-) -> SetKeyXt {
-	compose_extrinsic!(api, "Staking", "force_unstake", stash, num_slashing_spans)
+) -> SudoFnXt {
+	let call = compose_call!(api.metadata.clone(), "Staking", "force_unstake", stash, num_slashing_spans);
+	compose_extrinsic!(api, "Sudo", "sudo", call)
 }

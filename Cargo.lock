@@ -2197,6 +2197,7 @@ dependencies = [
  "jsonrpsee-ws-client",
  "nix",
  "node-primitives",
+ "pallet-staking",
  "pallet-timestamp",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
