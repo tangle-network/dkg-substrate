@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
 	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, GenesisConfig, GrandpaConfig, Perbill,
-	SessionConfig, Signature, StakerStatus, StakingConfig, SystemConfig, MAX_NOMINATIONS,
-	WASM_BINARY,
+	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
+	MAX_NOMINATIONS, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -199,6 +199,7 @@ fn testnet_genesis(
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
 		},
+		sudo: SudoConfig { key: root_key },
 		transaction_payment: Default::default(),
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.

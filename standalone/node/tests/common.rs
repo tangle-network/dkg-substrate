@@ -20,20 +20,25 @@
 
 use dkg_standalone_runtime::{AccountId, DKGId, Signature};
 
+use ac_compose_macros::compose_extrinsic;
+use ac_primitives::{CallIndex, GenericAddress, UncheckedExtrinsicV4};
 use node_primitives::Block;
 use remote_externalities::rpc_api;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{json, to_value, Value};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Pair, Public, sr25519};
+use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::{
 	process::{Child, ExitStatus},
 	time::Duration,
 };
-use substrate_api_client::rpc::WsRpcClient;
+use substrate_api_client::{rpc::WsRpcClient, ApiResult, Pair as PairT};
 use tokio::time::timeout;
+
+pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
+pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
 
 static LOCALHOST_WS: &str = "ws://127.0.0.1:9945/";
 
@@ -123,21 +128,43 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 	}
 }
 
-/// Extrinsics
-use ac_compose_macros::compose_extrinsic;
-use ac_primitives::{CallIndex, UncheckedExtrinsicV4};
-use substrate_api_client::Pair as PairT;
+/// RPC requests
+fn author_insert_key(key_type: &str, seed: &str, pub_key: &str) -> Value {
+	json_req(
+		"author_insertkey",
+		vec![to_value(key_type).unwrap(), to_value(seed).unwrap(), to_value(pub_key).unwrap()],
+		1,
+	)
+}
 
-pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
-pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
+pub fn insert_key(
+	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
+	key_type: &str,
+	seed: &str,
+	pub_key: &str,
+) -> ApiResult<Option<()>> {
+	let jsonreq = author_insert_key(key_type, seed, pub_key);
+	let res = api.get_request(jsonreq)?;
+	match res {
+		Some(_info) => Ok(Some(())),
+		None => Ok(None),
+	}
+}
+
+/// Extrinsics
 
 pub fn set_keys(
-	api: &substrate_api_client::Api<
-		sr25519::Pair,
-		WsRpcClient,
-	>,
+	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
 	keys: dkg_standalone_runtime::opaque::SessionKeys,
 	proof: Vec<u8>,
 ) -> SetKeyXt {
 	compose_extrinsic!(api, "Session", "set_keys", keys, proof)
+}
+
+pub fn force_unstake(
+	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
+	stash: GenericAddress,
+	num_slashing_spans: u32,
+) -> SetKeyXt {
+	compose_extrinsic!(api, "Staking", "force_unstake", stash, num_slashing_spans)
 }
