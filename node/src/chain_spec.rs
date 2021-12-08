@@ -218,7 +218,6 @@ fn testnet_genesis(
 		balances: dkg_runtime::BalancesConfig {
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
-		sudo: dkg_runtime::SudoConfig { key: root_key },
 		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
 		parachain_staking: dkg_runtime::ParachainStakingConfig {
 			candidates: candidates

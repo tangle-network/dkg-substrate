@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
 	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, GenesisConfig, GrandpaConfig, Perbill,
-	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
-	MAX_NOMINATIONS, WASM_BINARY,
+	SessionConfig, Signature, StakerStatus, StakingConfig, SystemConfig, MAX_NOMINATIONS,
+	WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -226,10 +226,6 @@ fn testnet_genesis(
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
-		sudo: SudoConfig {
-			// Assign network admin rights.
-			key: root_key,
-		},
 		dkg: DKGConfig::default(),
 	}
 }
