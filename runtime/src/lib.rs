@@ -483,9 +483,7 @@ impl pallet_authorship::Config for Runtime {
 	type UncleGenerations = UncleGenerations;
 }
 
-parameter_types! {
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
-}
+parameter_types! {}
 
 impl pallet_session::Config for Runtime {
 	type Event = Event;
@@ -499,7 +497,6 @@ impl pallet_session::Config for Runtime {
 	// we don't have stash and controller, thus we don't need the convert as well.
 	type ValidatorIdOf = parachain_staking::IdentityCollator;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 parameter_types! {
@@ -672,7 +669,7 @@ construct_runtime!(
 	{
 		System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>},
+		Sudo: pallet_sudo::{Pallet, Call, Storage, Event<T>},
 		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Storage},
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
 

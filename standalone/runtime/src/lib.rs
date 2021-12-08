@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{mmr::MmrLeafVersion, ProposalNonce, ProposalType};
-use frame_support::traits::{Everything, U128CurrencyToVote};
+use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -29,7 +29,7 @@ use sp_runtime::{
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
 
-use frame_system::{EnsureOneOf, EnsureRoot};
+use frame_system::EnsureRoot;
 use pallet_session::historical as pallet_session_historical;
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -238,7 +238,7 @@ impl pallet_timestamp::Config for Runtime {
 parameter_types! {
 	pub const Period: BlockNumber = 50;
 	pub const Offset: BlockNumber = 0;
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
+
 }
 
 impl pallet_session::Config for Runtime {
@@ -251,7 +251,6 @@ impl pallet_session::Config for Runtime {
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 pallet_staking_reward_curve::build! {
@@ -298,7 +297,7 @@ impl pallet_staking::Config for Runtime {
 	type GenesisElectionProvider = onchain::OnChainSequentialPhragmen<Self>;
 	type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
 	type NextNewSession = Session;
-	// type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
+	type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
 	// send the slashed funds to the treasury.
 	type Reward = ();
 	type RewardRemainder = ();
@@ -307,7 +306,7 @@ impl pallet_staking::Config for Runtime {
 	type SessionsPerEra = SessionsPerEra;
 	type Slash = ();
 	/// A super-majority of the council can cancel the slash.
-	type SlashCancelOrigin = EnsureOneOf<AccountId, EnsureRoot<AccountId>, EnsureRoot<AccountId>>;
+	type SlashCancelOrigin = EnsureRoot<AccountId>;
 	type SlashDeferDuration = SlashDeferDuration;
 	// Alternatively, use pallet_staking::UseNominatorsMap<Runtime> to just use the
 	// nominators map. Note that the aforementioned does not scale to a very large
@@ -315,8 +314,15 @@ impl pallet_staking::Config for Runtime {
 	type SortedListProvider = pallet_staking::UseNominatorsMap<Runtime>;
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
+	type BenchmarkingConfig = StakingBenchmarkingConfig;
 
 	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+}
+
+pub struct StakingBenchmarkingConfig;
+impl pallet_staking::BenchmarkingConfig for StakingBenchmarkingConfig {
+	type MaxNominators = ConstU32<1000>;
+	type MaxValidators = ConstU32<1000>;
 }
 
 parameter_types! {
@@ -599,7 +605,7 @@ construct_runtime!(
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
-		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
+		Sudo: pallet_sudo::{Pallet, Call, Storage, Event<T>},
 		ElectionProviderMultiPhase: pallet_election_provider_multi_phase::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
 		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
