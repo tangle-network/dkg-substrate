@@ -10,6 +10,7 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::sr25519;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_keyring::AccountKeyring;
+use sp_runtime::MultiAddress;
 use std::{
 	convert::TryInto,
 	io::Write,
@@ -174,7 +175,8 @@ async fn dkg_key_refresh() {
 		}
 	}
 
-	let xt = force_unstake(&alice_api, get_account_id_from_seed::<sr25519::Public>("Charlie"), 2);
+	let xt =
+		force_unstake(&alice_api, MultiAddress::Id(AccountKeyring::Charlie.to_account_id()), 2);
 
 	// send and watch extrinsic until finalized
 	let tx_hash = alice_api.send_extrinsic(xt.hex_encode(), XtStatus::InBlock).unwrap();
