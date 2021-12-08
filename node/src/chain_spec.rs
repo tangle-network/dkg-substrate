@@ -214,7 +214,6 @@ fn testnet_genesis(
 			code: dkg_runtime::WASM_BINARY
 				.expect("WASM binary was not build, please build it!")
 				.to_vec(),
-			changes_trie_config: Default::default(),
 		},
 		balances: dkg_runtime::BalancesConfig {
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),

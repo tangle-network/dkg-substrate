@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
 
 			<AuthoritySetId<T>>::put(next_id);
 
-			let log: DigestItem<T::Hash> = DigestItem::Consensus(
+			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::AuthoritiesChange {
 					next_authorities: AuthoritySet { authorities: new, id: next_id },
@@ -541,7 +541,7 @@ impl<T: Config> Pallet<T> {
 				val.push(pub_key_signature.clone());
 			});
 
-			let log: DigestItem<T::Hash> = DigestItem::Consensus(
+			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {
 					new_key_signature: next_pub_key_signature.unwrap().1,
@@ -616,8 +616,8 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		}
 	}
 
-	fn on_disabled(i: usize) {
-		let log: DigestItem<T::Hash> = DigestItem::Consensus(
+	fn on_disabled(i: u32) {
+		let log: DigestItem = DigestItem::Consensus(
 			DKG_ENGINE_ID,
 			ConsensusLog::<T::DKGId>::OnDisabled(i as AuthorityIndex).encode(),
 		);

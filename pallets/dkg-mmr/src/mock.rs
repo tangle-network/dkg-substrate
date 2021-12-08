@@ -99,7 +99,6 @@ impl frame_system::Config for Test {
 parameter_types! {
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
 
 impl pallet_session::Config for Test {
@@ -111,7 +110,6 @@ impl pallet_session::Config for Test {
 	type SessionManager = MockSessionManager;
 	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = MockSessionKeys;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 	type WeightInfo = ();
 }
 
