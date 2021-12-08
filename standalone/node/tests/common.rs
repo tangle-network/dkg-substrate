@@ -40,7 +40,7 @@ use tokio::time::timeout;
 pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
 pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
 
-static LOCALHOST_WS: &str = "ws://127.0.0.1:9945/";
+static LOCALHOST_WS: &str = "ws://127.0.0.1:45789/";
 
 pub fn json_req<S: Serialize>(method: &str, params: S, id: u32) -> Value {
 	json!({
