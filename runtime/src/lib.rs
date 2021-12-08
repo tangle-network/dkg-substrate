@@ -29,7 +29,7 @@ use sp_version::RuntimeVersion;
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 pub use frame_support::{
 	construct_runtime, match_type, parameter_types,
-	traits::{Everything, IsInVec, Randomness},
+	traits::{EnsureOneOf, Everything, IsInVec, Randomness},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		DispatchClass, IdentityFee, Weight,
@@ -60,9 +60,6 @@ use xcm_builder::{
 	SignedAccountId32AsNative, SovereignSignedViaLocation, TakeWeightCredit, UsingComponents,
 };
 use xcm_executor::{Config, XcmExecutor};
-
-/// Import the template pallet.
-pub use template;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -108,7 +105,7 @@ pub type Executive = frame_executive::Executive<
 	Block,
 	frame_system::ChainContext<Runtime>,
 	Runtime,
-	AllPallets,
+	AllPalletsWithSystemReversed,
 >;
 
 /// This runtime version.
@@ -467,11 +464,6 @@ impl pallet_aura::Config for Runtime {
 	type MaxAuthorities = MaxAuthorities;
 }
 
-/// Configure the pallet template in pallets/template.
-impl template::Config for Runtime {
-	type Event = Event;
-}
-
 parameter_types! {
 	pub const UncleGenerations: u32 = 0;
 }
@@ -481,10 +473,6 @@ impl pallet_authorship::Config for Runtime {
 	type FilterUncle = ();
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
 	type UncleGenerations = UncleGenerations;
-}
-
-parameter_types! {
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
 
 impl pallet_session::Config for Runtime {
@@ -499,7 +487,6 @@ impl pallet_session::Config for Runtime {
 	// we don't have stash and controller, thus we don't need the convert as well.
 	type ValidatorIdOf = parachain_staking::IdentityCollator;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 parameter_types! {
@@ -670,38 +657,38 @@ construct_runtime!(
 		NodeBlock = generic::Block<Header, sp_runtime::OpaqueExtrinsic>,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+		System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
+		ParachainSystem: cumulus_pallet_parachain_system::{Pallet, Call, Config, Storage, Inherent, Event<T>, ValidateUnsigned} = 1,
+		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
+		ParachainInfo: parachain_info::{Pallet, Storage, Config} = 3,
+
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>},
 		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Storage},
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
 
-		ParachainSystem: cumulus_pallet_parachain_system::{Pallet, Call, Config, Storage, Inherent, Event<T>, ValidateUnsigned} = 20,
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
+		TransactionPayment: pallet_transaction_payment::{Pallet, Storage} = 21,
 
-		ParachainInfo: parachain_info::{Pallet, Storage, Config} = 21,
 
-		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 30,
+
 
 		// Collator support. the order of these 4 are important and shall not change.
 		Authorship: pallet_authorship::{Pallet, Call, Storage} = 31,
 		ParachainStaking: parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>} = 32,
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
-		Aura: pallet_aura::{Pallet, Config<T>} = 34,
-		AuraExt: cumulus_pallet_aura_ext::{Pallet, Config} = 35,
+		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 34,
+		AuraExt: cumulus_pallet_aura_ext::{Pallet, Storage, Config} = 35,
 		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>} = 36,
 
 		// XCM helpers.
 		XcmpQueue: cumulus_pallet_xcmp_queue::{Pallet, Call, Storage, Event<T>} = 50,
 		PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin} = 51,
-		CumulusXcm: cumulus_pallet_xcm::{Pallet, Call, Event<T>, Origin} = 52,
+		CumulusXcm: cumulus_pallet_xcm::{Pallet, Event<T>, Origin} = 52,
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 53,
 
-		//Template
-		TemplatePallet: template::{Pallet, Call, Storage, Event<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		MMR: pallet_mmr::{Pallet, Storage},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
-		DKGMMR: pallet_dkg_mmr::{Pallet, Storage}
+		DKGProposals: pallet_dkg_proposals,
+		MMR: pallet_mmr,
+		DKGProposalHandler: pallet_dkg_proposal_handler,
+		DKGMMR: pallet_dkg_mmr
 	}
 );
 

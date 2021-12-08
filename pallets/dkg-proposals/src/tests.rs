@@ -557,7 +557,7 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		assert_eq!(DKGProposals::proposer_count(), 4);
 		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(10);
-		assert_has_event(Event::Session(pallet_session::Event::NewSession(1)));
+		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}));

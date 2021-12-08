@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{mmr::MmrLeafVersion, ProposalNonce, ProposalType};
-use frame_support::traits::{Everything, U128CurrencyToVote};
+use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -29,7 +29,7 @@ use sp_runtime::{
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
 
-use frame_system::{EnsureOneOf, EnsureRoot};
+use frame_system::EnsureRoot;
 use pallet_session::historical as pallet_session_historical;
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -39,7 +39,7 @@ use sp_version::RuntimeVersion;
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
 	construct_runtime, parameter_types,
-	traits::{KeyOwnerProofSystem, Randomness, StorageInfo},
+	traits::{EnsureOneOf, KeyOwnerProofSystem, Randomness, StorageInfo},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		DispatchClass, IdentityFee, Weight,
@@ -238,7 +238,6 @@ impl pallet_timestamp::Config for Runtime {
 parameter_types! {
 	pub const Period: BlockNumber = 50;
 	pub const Offset: BlockNumber = 0;
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
 }
 
 impl pallet_session::Config for Runtime {
@@ -251,7 +250,6 @@ impl pallet_session::Config for Runtime {
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 pallet_staking_reward_curve::build! {
@@ -288,6 +286,12 @@ parameter_types! {
 	pub const StakingUnsignedPriority: TransactionPriority = TransactionPriority::max_value() / 2;
 }
 
+pub struct StakingBenchmarkingConfig;
+impl pallet_staking::BenchmarkingConfig for StakingBenchmarkingConfig {
+	type MaxNominators = ConstU32<1000>;
+	type MaxValidators = ConstU32<1000>;
+}
+
 impl pallet_staking::Config for Runtime {
 	type BondingDuration = BondingDuration;
 	type Currency = Balances;
@@ -307,7 +311,7 @@ impl pallet_staking::Config for Runtime {
 	type SessionsPerEra = SessionsPerEra;
 	type Slash = ();
 	/// A super-majority of the council can cancel the slash.
-	type SlashCancelOrigin = EnsureOneOf<AccountId, EnsureRoot<AccountId>, EnsureRoot<AccountId>>;
+	type SlashCancelOrigin = EnsureOneOf<EnsureRoot<AccountId>, EnsureRoot<AccountId>>;
 	type SlashDeferDuration = SlashDeferDuration;
 	// Alternatively, use pallet_staking::UseNominatorsMap<Runtime> to just use the
 	// nominators map. Note that the aforementioned does not scale to a very large
@@ -315,6 +319,8 @@ impl pallet_staking::Config for Runtime {
 	type SortedListProvider = pallet_staking::UseNominatorsMap<Runtime>;
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
+	type BenchmarkingConfig = StakingBenchmarkingConfig;
+	type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
 
 	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
 }
@@ -592,23 +598,23 @@ construct_runtime!(
 		NodeBlock = opaque::Block,
 		UncheckedExtrinsic = UncheckedExtrinsic
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Storage},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Aura: pallet_aura::{Pallet, Config<T>},
-		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
-		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
-		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
-		ElectionProviderMultiPhase: pallet_election_provider_multi_phase::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
-		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
-		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
-		Historical: pallet_session_historical::{Pallet},
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		MMR: pallet_mmr::{Pallet, Storage},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
-		DKGMMR: pallet_dkg_mmr::{Pallet, Storage}
+		System: frame_system,
+		RandomnessCollectiveFlip: pallet_randomness_collective_flip,
+		Timestamp: pallet_timestamp,
+		Aura: pallet_aura,
+		Grandpa: pallet_grandpa,
+		Balances: pallet_balances,
+		TransactionPayment: pallet_transaction_payment,
+		Sudo: pallet_sudo,
+		ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
+		Staking: pallet_staking,
+		Session: pallet_session,
+		Historical: pallet_session_historical,
+		DKG: pallet_dkg_metadata,
+		DKGProposals: pallet_dkg_proposals,
+		MMR: pallet_mmr,
+		DKGProposalHandler: pallet_dkg_proposal_handler,
+		DKGMMR: pallet_dkg_mmr
 	}
 );
 
@@ -636,7 +642,7 @@ pub type Executive = frame_executive::Executive<
 	Block,
 	frame_system::ChainContext<Runtime>,
 	Runtime,
-	AllPallets,
+	AllPalletsWithSystemReversed,
 >;
 
 impl_runtime_apis! {

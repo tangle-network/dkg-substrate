@@ -156,11 +156,7 @@ impl pallet_session::SessionHandler<u64> for TestSessionHandler {
 
 	fn on_before_session_ending() {}
 
-	fn on_disabled(_: usize) {}
-}
-
-parameter_types! {
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
+	fn on_disabled(_: u32) {}
 }
 
 impl pallet_session::Config for Test {
@@ -174,7 +170,6 @@ impl pallet_session::Config for Test {
 	// we don't have stash and controller, thus we don't need the convert as well.
 	type ValidatorIdOf = crate::IdentityCollator;
 	type WeightInfo = ();
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 parameter_types! {

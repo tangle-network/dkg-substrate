@@ -172,10 +172,6 @@ impl pallet_aura::Config for Test {
 	type MaxAuthorities = MaxAuthorities;
 }
 
-parameter_types! {
-	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
-}
-
 impl pallet_session::Config for Test {
 	type Event = Event;
 	type ValidatorId = AccountId;
@@ -185,7 +181,6 @@ impl pallet_session::Config for Test {
 	type SessionManager = ParachainStaking;
 	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = MockSessionKeys;
-	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 	type WeightInfo = ();
 }
 

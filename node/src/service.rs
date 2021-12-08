@@ -128,7 +128,7 @@ where
 	let telemetry_worker_handle = telemetry.as_ref().map(|(worker, _)| worker.handle());
 
 	let telemetry = telemetry.map(|(worker, telemetry)| {
-		task_manager.spawn_handle().spawn("telemetry", worker.run());
+		task_manager.spawn_handle().spawn("telemetry", None, worker.run());
 		telemetry
 	});
 
@@ -273,7 +273,6 @@ where
 			transaction_pool: transaction_pool.clone(),
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue: import_queue.clone(),
-			on_demand: None,
 			block_announce_validator_builder: Some(Box::new(|_| block_announce_validator)),
 			warp_sync: None,
 		})?;
@@ -282,8 +281,6 @@ where
 	let rpc_extensions_builder = Box::new(move |_, _| rpc_ext_builder(rpc_client.clone()));
 
 	sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-		on_demand: None,
-		remote_blockchain: None,
 		rpc_extensions_builder,
 		client: client.clone(),
 		transaction_pool: transaction_pool.clone(),
@@ -312,9 +309,11 @@ where
 	};
 
 	// Start the DKG gadget.
-	task_manager
-		.spawn_essential_handle()
-		.spawn_blocking("dkg-gadget", dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params));
+	task_manager.spawn_essential_handle().spawn_blocking(
+		"dkg-gadget",
+		None,
+		dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
+	);
 
 	if validator {
 		let parachain_consensus = build_consensus(
