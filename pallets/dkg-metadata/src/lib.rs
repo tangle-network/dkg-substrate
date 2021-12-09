@@ -600,8 +600,9 @@ impl<T: Config> Pallet<T> {
 				Ok(key) => key,
 				Err(_) => Err(Error::<T>::InvalidSignature)?,
 			};
+			let stored_key = &Self::dkg_public_key().1;
 
-			if recovered_pub_key != Self::dkg_public_key().1 {
+			if recovered_pub_key != stored_key[1..].to_vec() {
 				// TODO probably a slashing condition
 
 				Err(Error::<T>::InvalidSignature)?;
