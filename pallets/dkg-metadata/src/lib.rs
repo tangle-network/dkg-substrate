@@ -35,7 +35,6 @@ use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler,
-	utils,
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, AGGREGATED_PUBLIC_KEYS,
 	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,

@@ -1,5 +1,5 @@
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ProposalNonce, ProposalType};
+use dkg_runtime_primitives::ProposalNonce;
 use std::fmt;
 
 /// A typedef for keygen set id

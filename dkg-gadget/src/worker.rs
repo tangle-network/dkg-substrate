@@ -25,7 +25,7 @@ use std::{
 };
 
 use codec::{Codec, Decode, Encode};
-use futures::{future, FutureExt, StreamExt, TryFutureExt};
+use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use parking_lot::Mutex;
 

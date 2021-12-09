@@ -18,7 +18,7 @@ use std::{collections::BTreeMap, time::Duration};
 
 use sc_network::PeerId;
 use sc_network_gossip::{ValidationResult, Validator, ValidatorContext};
-use sp_runtime::traits::{Block, Hash, Header, NumberFor};
+use sp_runtime::traits::{Block, NumberFor};
 
 use codec::Decode;
 use log::{debug, error, trace};
