@@ -587,7 +587,8 @@ impl<T: Config> Pallet<T> {
 				Err(_) => Err(Error::<T>::InvalidSignature)?,
 			};
 			let stored_key = &Self::dkg_public_key().1;
-
+			// The stored_key public key is 65 bytes long and contains the prefix which is the first byte
+			// The recovered key does not contains the prefix  and is 64 bytes long
 			if recovered_pub_key != stored_key[1..].to_vec() {
 				// TODO probably a slashing condition
 
