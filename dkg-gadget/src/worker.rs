@@ -433,13 +433,8 @@ where
 			if is_ready_to_vote {
 				debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				self.genesis_keygen_in_progress = false;
-				let pub_key = self
-					.rounds
-					.get_public_key()
-					.unwrap()
-					.get_element()
-					.serialize_uncompressed()
-					.to_vec();
+				let pub_key =
+					self.rounds.get_public_key().unwrap().get_element().serialize().to_vec();
 				let round_id = self.rounds.get_id();
 				self.gossip_public_key(pub_key, round_id);
 			}
@@ -511,7 +506,7 @@ where
 							.get_public_key()
 							.unwrap()
 							.get_element()
-							.serialize_uncompressed()
+							.serialize()
 							.to_vec();
 
 						self.gossip_public_key(pub_key, next_rounds.get_id());
@@ -594,7 +589,7 @@ where
 	fn gossip_public_key(&mut self, public_key: Vec<u8>, round_id: RoundId) {
 		let sr25519_public = self
 			.key_store
-			.srr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
 			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 		let public = self
@@ -618,17 +613,18 @@ where
 				.lock()
 				.gossip_message(dkg_topic::<B>(), message.encode(), true);
 
-			let aggregated_public_keys = self.aggregated_public_keys.get(&round_id);
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
+			{
+				self.aggregated_public_keys.get(&round_id).unwrap().clone()
+			} else {
+				AggregatedPublicKeys::default()
+			};
 
-			let mut agg_keys = AggregatedPublicKeys::default();
+			aggregated_public_keys
+				.keys_and_signatures
+				.push((public_key.clone(), encoded_signature));
 
-			if aggregated_public_keys.is_some() {
-				agg_keys = aggregated_public_keys.unwrap().clone();
-			}
-
-			agg_keys.keys_and_signatures.push((public_key.clone(), encoded_signature));
-
-			self.aggregated_public_keys.insert(round_id, agg_keys);
+			self.aggregated_public_keys.insert(round_id, aggregated_public_keys);
 
 			debug!(target: "dkg", "gossiping local node  {:?} public key and signature", public)
 		} else {
@@ -707,23 +703,24 @@ where
 
 				let key_and_sig = (msg.pub_key, msg.signature);
 				let round_id = msg.round_id;
-				let aggregated_public_keys = self.aggregated_public_keys.get(&round_id);
+				let mut aggregated_public_keys =
+					if self.aggregated_public_keys.get(&round_id).is_some() {
+						self.aggregated_public_keys.get(&round_id).unwrap().clone()
+					} else {
+						AggregatedPublicKeys::default()
+					};
 
-				let mut agg_keys = AggregatedPublicKeys::default();
-
-				if aggregated_public_keys.is_some() {
-					agg_keys = aggregated_public_keys.unwrap().clone();
-				}
-
-				if !agg_keys.keys_and_signatures.contains(&key_and_sig) {
-					agg_keys.keys_and_signatures.push(key_and_sig);
-					self.aggregated_public_keys.insert(round_id, agg_keys.clone());
+				if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
+					aggregated_public_keys.keys_and_signatures.push(key_and_sig);
+					self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
 
 					if let Some(latest_header) = self.latest_header.as_ref() {
 						let threshold = self.get_threshold(latest_header).unwrap() as usize;
 						let num_authorities = self.queued_validator_set.authorities.len();
 						let threshold_buffer = num_authorities.saturating_sub(threshold) / 2;
-						if agg_keys.keys_and_signatures.len() >= (threshold + threshold_buffer) {
+						if aggregated_public_keys.keys_and_signatures.len() >=
+							(threshold + threshold_buffer)
+						{
 							let offchain = self.backend.offchain_storage();
 
 							if let Some(mut offchain) = offchain {
@@ -733,7 +730,7 @@ where
 									offchain.set(
 										STORAGE_PREFIX,
 										AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-										&agg_keys.encode(),
+										&aggregated_public_keys.encode(),
 									);
 
 									let submit_at = self.generate_random_delay(
@@ -747,14 +744,14 @@ where
 										);
 									}
 
-									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", agg_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								} else {
 									self.dkg_state.listening_for_pub_key = false;
 
 									offchain.set(
 										STORAGE_PREFIX,
 										AGGREGATED_PUBLIC_KEYS,
-										&agg_keys.encode(),
+										&aggregated_public_keys.encode(),
 									);
 									let submit_at = self.generate_random_delay(
 										&self.queued_validator_set.authorities,
@@ -767,7 +764,7 @@ where
 										);
 									}
 
-									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", agg_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								}
 
 								let _ = self.aggregated_public_keys.remove(&round_id);
@@ -833,6 +830,8 @@ where
 						OFFCHAIN_PUBLIC_KEY_SIG,
 						&finished_round.signature,
 					);
+
+					trace!(target: "dkg", "Stored  pub _key signature offchain {:?}", finished_round.signature);
 				}
 			}, // TODO: handle other key types
 		};
@@ -853,9 +852,15 @@ where
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
 			if let Ok(Some(pub_key)) = pub_key {
-				let _ = self
-					.rounds
-					.vote(DKGPayloadKey::RefreshVote(self.current_validator_set.id + 164), pub_key);
+				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+
+				if !self.rounds.has_vote_in_process(key) {
+					if let Err(err) = self.rounds.vote(key, pub_key.clone()) {
+						error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+					} else {
+						trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
+					}
+				}
 			}
 		}
 	}

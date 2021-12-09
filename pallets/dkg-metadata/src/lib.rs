@@ -153,7 +153,7 @@ pub mod pallet {
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
 				if accounts.len() >= threshold as usize {
-					DKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
+					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
 					Self::deposit_event(Event::PublicKeySubmitted { pub_key: key.clone() });
 					accepted = true;
 
@@ -556,6 +556,7 @@ impl<T: Config> Pallet<T> {
 			let _ = signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 				signature: signature.encode(),
 			});
+			frame_support::log::debug!(target: "dkg", "Offchain Submitting public key sig onchain {:?}", signature.encode());
 
 			pub_key_sig_ref.clear();
 		}
@@ -589,6 +590,8 @@ impl<T: Config> Pallet<T> {
 			let stored_key = &Self::dkg_public_key().1;
 			// The stored_key public key is 65 bytes long and contains the prefix which is the first byte
 			// The recovered key does not contains the prefix  and is 64 bytes long
+
+			frame_support::log::debug!(target: "dkg", "Verifying signature {:?}, {:?}", recovered_pub_key, stored_key[1..].to_vec() );
 			if recovered_pub_key != stored_key[1..].to_vec() {
 				// TODO probably a slashing condition
 
