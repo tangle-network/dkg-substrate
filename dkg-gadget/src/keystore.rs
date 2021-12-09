@@ -13,7 +13,8 @@
 
 use std::convert::{From, TryInto};
 
-use codec::Encode;
+use codec::{Decode, Encode};
+use futures::TryFutureExt;
 use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
@@ -139,7 +140,7 @@ impl DKGKeystore {
 		&self,
 		public: &sr25519::Public,
 		message: &[u8],
-	) -> Result<Signature, error::Error> {
+	) -> Result<sr25519::Signature, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
 		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
@@ -149,11 +150,12 @@ impl DKGKeystore {
 			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
 
 		// check that `sig` has the expected result type
-		let sig = sig.clone().try_into().map_err(|_| {
-			error::Error::Signature(format!("invalid signature {:?} for key {:?}", sig, public))
-		})?;
+		let signature: sr25519::Signature =
+			sr25519::Signature::decode(&mut &sig[..]).map_err(|_| {
+				error::Error::Signature(format!("invalid signature {:?} for key {:?}", sig, public))
+			})?;
 
-		Ok(sig)
+		Ok(signature)
 	}
 
 	/// Use the `public` key to verify that `sig` is a valid signature for `message`.

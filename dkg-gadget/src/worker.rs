@@ -603,7 +603,7 @@ where
 			.unwrap_or_else(|| panic!("Could not find an ecdsa key in keystore"));
 
 		if let Ok(signature) = self.key_store.sr25519_sign(&sr25519_public, &public_key) {
-			let encoded_signature = signature.to_vec();
+			let encoded_signature = signature.encode();
 			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 				id: public.clone(),
 				round_id,
