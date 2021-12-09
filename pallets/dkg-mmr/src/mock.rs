@@ -162,7 +162,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = ();
 	type GracePeriod = GracePeriod;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 }

@@ -485,7 +485,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type GracePeriod = Period;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
@@ -501,7 +501,7 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {

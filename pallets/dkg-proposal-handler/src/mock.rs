@@ -109,7 +109,7 @@ where
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Test {
