@@ -817,6 +817,7 @@ where
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload<DKGPayloadKey>) {
+		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		match finished_round.key {
 			DKGPayloadKey::EVMProposal(_nonce) => {
 				self.process_signed_proposal(finished_round);
@@ -860,6 +861,8 @@ where
 					} else {
 						trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 					}
+
+					self.send_outgoing_dkg_messages();
 				}
 			}
 		}
@@ -885,6 +888,7 @@ where
 				if let Err(err) = self.rounds.vote(key, data) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 				}
+				self.send_outgoing_dkg_messages();
 			}
 		}
 	}
