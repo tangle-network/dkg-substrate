@@ -300,9 +300,8 @@ for the predefined validators Alice, Bob, etc, have been added to the keystore f
 
 If running a live chain as a validator or collator, please add your sr25519 account keys to the node's local keystore either by using the `author_insertKey` RPC or using the `key` subcommand (`dkg-standalone-node key insert --key-type acco --scheme sr25519 --suri <path-secret-phrase>`) of the node cli
 
+> Key Type is acco
+> Scheme is sr25519
+
 **Note** 
 For the standalone node the account being added to the keystore should be the Stash account used in staking not the Controller account
-
-
-
-
