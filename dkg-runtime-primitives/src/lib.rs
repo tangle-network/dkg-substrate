@@ -81,7 +81,7 @@ impl Default for OffchainSignedProposals {
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
-	use sp_core::ecdsa::Signature as ECDSASignature;
+	use sp_core::{ecdsa::Signature as ECDSASignature, sr25519::Signature as SR25519Signature};
 	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
@@ -95,16 +95,16 @@ pub mod crypto {
 
 	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OffchainAuthId {
 		type RuntimeAppPublic = AuthorityId;
-		type GenericSignature = sp_core::ecdsa::Signature;
-		type GenericPublic = sp_core::ecdsa::Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
 	}
 
-	impl frame_system::offchain::AppCrypto<<ECDSASignature as Verify>::Signer, ECDSASignature>
+	impl frame_system::offchain::AppCrypto<<SR25519Signature as Verify>::Signer, SR25519Signature>
 		for OffchainAuthId
 	{
 		type RuntimeAppPublic = AuthorityId;
-		type GenericSignature = sp_core::ecdsa::Signature;
-		type GenericPublic = sp_core::ecdsa::Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
 	}
 }
 

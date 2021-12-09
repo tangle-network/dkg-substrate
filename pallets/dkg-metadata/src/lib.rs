@@ -543,38 +543,24 @@ impl<T: Config> Pallet<T> {
 	fn submit_public_key_signature_onchain(
 		block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let submitted = StorageValueRef::persistent(b"dkg-metadata::submitted_signature");
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
-		const RECENTLY_SENT: () = ();
-
-		let res = submitted.mutate(|submitted| match submitted {
-			Ok(Some(block)) if block_number < block + T::GracePeriod::get() => Err(RECENTLY_SENT),
-			_ => Ok(block_number),
-		});
 
 		let signature = pub_key_sig_ref.get::<dkg_runtime_primitives::crypto::Signature>();
 
-		match res {
-			Ok(_block_number) => {
-				let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-				if !signer.can_sign() {
-					Err(
-							"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-						)?
-				}
-
-				if let Ok(Some(signature)) = signature {
-					let _ = signer.send_signed_transaction(|_account| {
-						Call::submit_public_key_signature { signature: signature.encode() }
-					});
-
-					pub_key_sig_ref.clear();
-				}
-
-				return Ok(())
-			},
-			_ => Err("Already submitted public key signature")?,
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
 		}
+
+		if let Ok(Some(signature)) = signature {
+			let _ = signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
+				signature: signature.encode(),
+			});
+
+			pub_key_sig_ref.clear();
+		}
+
+		return Ok(())
 	}
 
 	pub fn should_refresh(now: T::BlockNumber) -> bool {

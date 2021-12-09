@@ -53,7 +53,7 @@ pub fn verify_signer_from_set(
 }
 
 pub fn to_slice_32(val: &Vec<u8>) -> Option<[u8; 32]> {
-	if val.len() != KEY_LENGTH {
+	if val.len() == KEY_LENGTH {
 		let mut key = [0u8; KEY_LENGTH];
 		key[..KEY_LENGTH].copy_from_slice(&val);
 

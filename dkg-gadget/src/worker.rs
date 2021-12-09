@@ -746,6 +746,8 @@ where
 											&submit_at.encode(),
 										);
 									}
+
+									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", agg_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								} else {
 									self.dkg_state.listening_for_pub_key = false;
 
@@ -765,7 +767,7 @@ where
 										);
 									}
 
-									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}", agg_keys.encode(), submit_at);
+									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", agg_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								}
 
 								let _ = self.aggregated_public_keys.remove(&round_id);
