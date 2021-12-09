@@ -772,12 +772,24 @@ impl_runtime_apis! {
 			return None
 		}
 
+		fn dkg_pub_key() -> Option<Vec<u8>> {
+			let dkg_pub_key = DKG::dkg_public_key();
+			if !dkg_pub_key.1.is_empty() {
+				return Some(dkg_pub_key.1)
+			}
+			return None
+		}
+
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
 		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
 			DKG::max_extrinsic_delay(block_number)
+		}
+
+		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
+			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 	}
 

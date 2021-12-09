@@ -23,6 +23,7 @@ pub struct DKGState<K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
+	pub listening_for_genesis_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
 }

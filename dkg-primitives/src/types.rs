@@ -94,6 +94,7 @@ pub enum DKGPayloadKey {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
+	pub round_id: RoundId,
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
 	pub signature: Vec<u8>,

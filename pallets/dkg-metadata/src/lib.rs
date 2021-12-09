@@ -34,8 +34,12 @@ use sp_runtime::{
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, utils, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, AGGREGATED_PUBLIC_KEYS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_KEYS_AT,
+	traits::OnAuthoritySetChangeHandler,
+	utils,
+	utils::{sr25519, to_slice_32, verify_signer_from_set},
+	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, AGGREGATED_PUBLIC_KEYS,
+	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
+	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 #[cfg(test)]
@@ -92,7 +96,8 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_public_key_onchain(block_number);
+			let _res = Self::submit_genesis_public_key_onchain(block_number);
+			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
 		}
 	}
@@ -138,13 +143,65 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 
+			let authorities = Self::current_authorities_accounts();
+
+			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
+
+			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
+
+			let threshold = Self::signature_threshold();
+
+			let mut accepted = false;
+			for (key, accounts) in dict.iter() {
+				if accounts.len() >= threshold as usize {
+					DKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
+					Self::deposit_event(Event::PublicKeySubmitted { pub_key: key.clone() });
+					accepted = true;
+
+					break
+				}
+			}
+
+			if accepted {
+				// TODO Do something about accounts that posted a wrong key
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidPublicKeys.into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn submit_next_public_key(
+			origin: OriginFor<T>,
+			keys_and_signatures: AggregatedPublicKeys,
+		) -> DispatchResultWithPostInfo {
+			let origin = ensure_signed(origin)?;
+
 			let next_authorities = Self::next_authorities_accounts();
 
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
 
-			Self::process_public_key_submissions(keys_and_signatures)?;
+			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 
-			Ok(().into())
+			let threshold = Self::signature_threshold();
+
+			let mut accepted = false;
+			for (key, accounts) in dict.iter() {
+				if accounts.len() >= threshold as usize {
+					NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
+					Self::deposit_event(Event::NextPublicKeySubmitted { pub_key: key.clone() });
+					accepted = true;
+
+					break
+				}
+			}
+
+			if accepted {
+				// TODO Do something about accounts that posted a wrong key
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
 		#[pallet::weight(0)]
@@ -227,6 +284,12 @@ pub mod pallet {
 	#[pallet::getter(fn next_authorities)]
 	pub(super) type NextAuthorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
 
+	/// Accounts for the current authorities
+	#[pallet::storage]
+	#[pallet::getter(fn current_authorities_accounts)]
+	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
+		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+
 	/// Authority account ids scheduled for the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities_accounts)]
@@ -246,6 +309,8 @@ pub mod pallet {
 		InvalidThreshold,
 		/// Must be queued  to become an authority
 		MustBeAQueuedAuthority,
+		/// Must be an an authority
+		MustBeAnActiveAuthority,
 		/// Refresh delay should be in the range of 0% - 100%
 		InvalidRefreshDelay,
 		/// Invalid public key submission
@@ -264,6 +329,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// Current public key submitted
+		PublicKeySubmitted { pub_key: Vec<u8> },
 		/// Next public key submitted
 		NextPublicKeySubmitted { pub_key: Vec<u8> },
 		/// Next public key signature submitted
@@ -300,48 +367,32 @@ impl<T: Config> Pallet<T> {
 
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
-	) -> DispatchResultWithPostInfo {
+		authorities: Vec<T::AccountId>,
+	) -> BTreeMap<Vec<u8>, Vec<Vec<u8>>> {
 		let mut dict: BTreeMap<Vec<u8>, Vec<Vec<u8>>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
-			let authority_id = utils::recover_ecdsa_pub_key(&pub_key, &signature);
+			let maybe_signers = authorities
+				.iter()
+				.map(|x| {
+					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to sr25519 public key")
+					}))
+				})
+				.collect::<Vec<sr25519::Public>>();
 
-			if let Ok(authority_id) = authority_id {
-				// Authority public key bytes removing odd_parity byte
-				let authority_key_bytes = Self::next_authorities()
-					.iter()
-					.map(|k| k.encode()[1..].to_vec())
-					.collect::<Vec<Vec<u8>>>();
+			let can_proceed = verify_signer_from_set(maybe_signers, &pub_key, &signature);
 
-				if authority_key_bytes.contains(&authority_id[..32].to_vec()) {
-					if !dict.contains_key(&pub_key) {
-						dict.insert(pub_key.clone(), Vec::new());
-					}
-					let temp = dict.get_mut(&pub_key).unwrap();
-					temp.push(authority_id[..32].to_vec());
+			if can_proceed.1 {
+				if !dict.contains_key(&pub_key) {
+					dict.insert(pub_key.clone(), Vec::new());
 				}
+				let temp = dict.get_mut(&pub_key).unwrap();
+				temp.push(can_proceed.0.unwrap().encode());
 			}
 		}
 
-		let threshold = Self::signature_threshold();
-
-		let mut accepted = false;
-		for (key, accounts) in dict.iter() {
-			if accounts.len() >= threshold as usize {
-				NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-				Self::deposit_event(Event::NextPublicKeySubmitted { pub_key: key.clone() });
-				accepted = true;
-
-				break
-			}
-		}
-
-		if accepted {
-			// TODO Do something about accounts that posted a wrong key
-			return Ok(().into())
-		}
-
-		Err(Error::<T>::InvalidPublicKeys.into())
+		return dict
 	}
 
 	fn change_authorities(
@@ -355,6 +406,7 @@ impl<T: Config> Pallet<T> {
 
 		if new != Self::authorities() {
 			<Authorities<T>>::put(&new);
+			CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
 
 			let next_id = Self::authority_set_id() + 1u64;
 
@@ -395,6 +447,7 @@ impl<T: Config> Pallet<T> {
 		<AuthoritySetId<T>>::put(0);
 		// Like `pallet_session`, initialize the next validator set as well.
 		<NextAuthorities<T>>::put(authorities);
+		CurrentAuthoritiesAccounts::<T>::put(authority_account_ids);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
@@ -403,7 +456,50 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(0, authority_account_ids.to_vec());
 	}
 
-	fn submit_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
+
+		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
+
+		const RECENTLY_SENT: &str = "Already submitted a key in this session";
+
+		let submit_at = submit_at_ref.get::<T::BlockNumber>();
+
+		if let Ok(Some(submit_at)) = submit_at {
+			if block_number < submit_at {
+				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+				return Ok(())
+			} else {
+				submit_at_ref.clear();
+			}
+		} else {
+			Err(RECENTLY_SENT)?
+		}
+
+		if !Self::dkg_public_key().1.is_empty() {
+			agg_key_ref.clear();
+			return Ok(())
+		}
+
+		let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+		}
+
+		if let Ok(Some(agg_keys)) = agg_keys {
+			let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+				keys_and_signatures: agg_keys.clone(),
+			});
+
+			agg_key_ref.clear();
+		}
+
+		return Ok(())
+	}
+
+	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
 		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
 
@@ -435,7 +531,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		if let Ok(Some(agg_keys)) = agg_keys {
-			let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+			let _res = signer.send_signed_transaction(|_account| Call::submit_next_public_key {
 				keys_and_signatures: agg_keys.clone(),
 			});
 
