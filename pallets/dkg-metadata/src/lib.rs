@@ -210,10 +210,10 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 
-			let next_authorities = Self::next_authorities_accounts();
+			let authorities = Self::current_authorities_accounts();
 			let used_signatures = Self::used_signatures();
 
-			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
+			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 
 			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
