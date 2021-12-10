@@ -590,7 +590,7 @@ where
 			let offchain = self.backend.offchain_storage();
 			if let Some(mut offchain) = offchain {
 				if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
-					debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _key);
+					debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _sig);
 					offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);
 				}
 			}
