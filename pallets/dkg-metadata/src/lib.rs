@@ -598,10 +598,12 @@ impl<T: Config> Pallet<T> {
 				Err(Error::<T>::InvalidSignature)?;
 			}
 
-			NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature.clone()));
-			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-				pub_key_sig: signature.clone(),
-			});
+			if Self::next_public_key_signature().is_none() {
+				NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature.clone()));
+				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+					pub_key_sig: signature.clone(),
+				});
+			}
 		}
 
 		Ok(().into())
