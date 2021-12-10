@@ -861,7 +861,6 @@ where
 					} else {
 						trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 					}
-
 					self.send_outgoing_dkg_messages();
 				}
 			}
