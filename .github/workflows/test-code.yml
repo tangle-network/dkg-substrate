@@ -41,7 +41,7 @@ jobs:
     #   run: cargo +nightly-2020-05-07 clippy -- -D warnings
 
     - name: Check Code
-      run: cargo check
+      run: cargo +nightly check
 
     - name: Test Code
-      run: cargo test
+      run: cargo +nightly test
