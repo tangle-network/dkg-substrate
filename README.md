@@ -296,3 +296,17 @@ This pallet implements the `ProposalHandlerTrait` accepts proposals and signs th
 This pallet serves as a leaf provider for the `pallet-mmr`, generating leaf data that contains a merke root hash for a particular authority set.
 
 It also provides a type that has an implementation for converting `ECDSA` keys to ethereum compatible keys.
+
+
+### Note on Offchain workers
+
+The DKG makes use of offchain workers to submit some extrinsics back on chain and the runtime validates that the origin of such extrinsics is part of the active or queued authoritiy set, if running a development node or a local test net, the sr25519 account keys
+for the predefined validators Alice, Bob, etc, have been added to the keystore for convenience. 
+
+If running a live chain as a validator or collator, please add your sr25519 account keys to the node's local keystore either by using the `author_insertKey` RPC or using the `key` subcommand (`dkg-standalone-node key insert --key-type acco --scheme sr25519 --suri <path-secret-phrase>`) of the node cli
+
+> Key Type is acco
+> Scheme is sr25519
+
+**Note** 
+For the standalone node the account being added to the keystore should be the Stash account used in staking not the Controller account

@@ -13,7 +13,9 @@
 
 use std::convert::{From, TryInto};
 
-use sp_application_crypto::RuntimeAppPublic;
+use codec::{Decode, Encode};
+use futures::TryFutureExt;
+use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -45,6 +47,29 @@ impl DKGKeystore {
 		let public: Vec<Public> = keys
 			.iter()
 			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.to_raw_vec(), KEY_TYPE)]))
+			.cloned()
+			.collect();
+
+		if public.len() > 1 {
+			warn!(target: "dkg", "🕸️  Multiple private keys found for: {:?} ({})", public, public.len());
+		}
+
+		public.get(0).cloned()
+	}
+
+	/// Check if the keystore contains a private key for one of the sr25519 public keys
+	/// contained in `keys`. A public key with a matching private key is known
+	/// as a local authority id.
+	///
+	/// Return the public key for which we also do have a private key. If no
+	/// matching private key is found, `None` will be returned.
+	pub fn sr25519_authority_id(&self, keys: &[sr25519::Public]) -> Option<sr25519::Public> {
+		let store = self.0.clone()?;
+
+		// we do check for multiple private keys as a key store sanity check.
+		let public: Vec<sr25519::Public> = keys
+			.iter()
+			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.clone().encode(), ACCOUNT)]))
 			.cloned()
 			.collect();
 
@@ -90,6 +115,47 @@ impl DKGKeystore {
 			.collect();
 
 		Ok(pk)
+	}
+
+	/// Returns a vector of sr25519 Public keys which are currently supported (i.e. found
+	/// in the keystore).
+	pub fn sr25519_public_keys(&self) -> Result<Vec<sr25519::Public>, error::Error> {
+		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
+
+		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT)
+			.iter()
+			.map(|k| sr25519::Public::from(k.clone()))
+			.collect();
+
+		Ok(pk)
+	}
+
+	/// Sign `message` with the sr25519 `public` key.
+	///
+	/// Note that `message` usually will be pre-hashed before being signed.
+	///
+	/// Return the message signature or an error in case of failure.
+	#[allow(dead_code)]
+	pub fn sr25519_sign(
+		&self,
+		public: &sr25519::Public,
+		message: &[u8],
+	) -> Result<sr25519::Signature, error::Error> {
+		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
+
+		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
+
+		let sig = SyncCryptoStore::sign_with(&*store, ACCOUNT, &crypto_pair, message)
+			.map_err(|e| error::Error::Keystore(e.to_string()))?
+			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
+
+		// check that `sig` has the expected result type
+		let signature: sr25519::Signature =
+			sr25519::Signature::decode(&mut &sig[..]).map_err(|_| {
+				error::Error::Signature(format!("invalid signature {:?} for key {:?}", sig, public))
+			})?;
+
+		Ok(signature)
 	}
 
 	/// Use the `public` key to verify that `sig` is a valid signature for `message`.

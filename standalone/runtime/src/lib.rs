@@ -484,8 +484,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
-	type GracePeriod = Period;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 }
@@ -500,7 +499,7 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
@@ -790,12 +789,31 @@ impl_runtime_apis! {
 			return None
 		}
 
+		fn next_pub_key_sig() -> Option<Vec<u8>> {
+			if let Some((.., pub_key_sig)) = DKG::next_public_key_signature() {
+				return Some(pub_key_sig)
+			}
+			return None
+		}
+
+		fn dkg_pub_key() -> Option<Vec<u8>> {
+			let dkg_pub_key = DKG::dkg_public_key();
+			if !dkg_pub_key.1.is_empty() {
+				return Some(dkg_pub_key.1)
+			}
+			return None
+		}
+
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
 		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
 			DKG::max_extrinsic_delay(block_number)
+		}
+
+		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
+			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 	}
 

@@ -23,7 +23,10 @@ use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
 };
-use sp_core::{ecdsa::Signature, H256};
+use sp_core::{
+	sr25519::{self, Signature},
+	H256,
+};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
@@ -125,15 +128,13 @@ impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = ();
-	type GracePeriod = GracePeriod;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
 	pub const Period: u64 = 1;
-	pub const GracePeriod: u64 = 10;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
@@ -170,11 +171,11 @@ impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 // of `to_public_key()` assumes, that a public key is 32 bytes long. This is true for
 // ed25519 and sr25519 but *not* for ecdsa. An ecdsa public key is 33 bytes.
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	DKGId::from(mock_pub_key(id))
+	DKGId::from(Public::from_raw([id; 33]))
 }
 
 pub fn mock_pub_key(id: u8) -> AccountId {
-	Public::from_raw([id; 33])
+	sr25519::Public::from_raw([id; 32])
 }
 
 pub fn mock_authorities(vec: Vec<u8>) -> Vec<(AccountId, DKGId)> {

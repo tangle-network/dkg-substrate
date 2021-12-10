@@ -15,6 +15,10 @@ pub use proposal::*;
 use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
+use sp_runtime::{
+	traits::{IdentifyAccount, Verify},
+	MultiSignature,
+};
 use sp_std::{collections::vec_deque::VecDeque, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 
@@ -46,8 +50,14 @@ pub const ACCOUNT_KEY_TYPE: sp_application_crypto::KeyTypeId =
 // Key for offchain storage of aggregated derived public keys
 pub const AGGREGATED_PUBLIC_KEYS: &[u8] = b"dkg-metadata::public_key";
 
+// Key for offchain storage of aggregated derived public keys for genesis authorities
+pub const AGGREGATED_PUBLIC_KEYS_AT_GENESIS: &[u8] = b"dkg-metadata::genesis_public_keys";
+
 // Key for offchain storage of derived public key
 pub const SUBMIT_KEYS_AT: &[u8] = b"dkg-metadata::submit_keys_at";
+
+// Key for offchain storage of derived public key
+pub const SUBMIT_GENESIS_KEYS_AT: &[u8] = b"dkg-metadata::submit_genesis_keys_at";
 
 // Key for offchain storage of derived public key signature
 pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
@@ -73,9 +83,35 @@ impl Default for OffchainSignedProposals {
 	}
 }
 
+pub mod offchain_crypto {
+	use sp_core::sr25519::Signature as Sr25519Signature;
+	use sp_runtime::{
+		app_crypto::{app_crypto, sr25519},
+		key_types::ACCOUNT,
+		traits::Verify,
+		MultiSignature, MultiSigner,
+	};
+	app_crypto!(sr25519, ACCOUNT);
+
+	pub struct OffchainAuthId;
+
+	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OffchainAuthId {
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
+
+	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature>
+		for OffchainAuthId
+	{
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
+}
+
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
-	use sp_core::ecdsa::Signature as ECDSASignature;
 	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
@@ -84,22 +120,6 @@ pub mod crypto {
 
 	/// Signature for a DKG authority using ECDSA as its crypto.
 	pub type AuthoritySignature = Signature;
-
-	pub struct OffchainAuthId;
-
-	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OffchainAuthId {
-		type RuntimeAppPublic = AuthorityId;
-		type GenericSignature = sp_core::ecdsa::Signature;
-		type GenericPublic = sp_core::ecdsa::Public;
-	}
-
-	impl frame_system::offchain::AppCrypto<<ECDSASignature as Verify>::Signer, ECDSASignature>
-		for OffchainAuthId
-	{
-		type RuntimeAppPublic = AuthorityId;
-		type GenericSignature = sp_core::ecdsa::Signature;
-		type GenericPublic = sp_core::ecdsa::Public;
-	}
 }
 
 pub type AuthoritySetId = u64;
@@ -147,6 +167,8 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
 
+type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
+
 sp_api::decl_runtime_apis! {
 
 	pub trait DKGApi<AuthorityId, BlockNumber> where
@@ -163,9 +185,15 @@ sp_api::decl_runtime_apis! {
 		fn should_refresh(_block_number: BlockNumber) -> bool;
 		/// Fetch DKG public key for queued authorities
 		fn next_dkg_pub_key() -> Option<Vec<u8>>;
+		/// Fetch DKG public key for current authorities
+		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(_block_number: BlockNumber) -> BlockNumber;
+		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
+		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
+		/// Fetch DKG public key for sig
+		fn next_pub_key_sig() -> Option<Vec<u8>>;
 	}
 }

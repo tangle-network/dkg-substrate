@@ -2,7 +2,7 @@ use crate as pallet_dkg_proposal_handler;
 use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
-use sp_core::{ecdsa::Signature, H256};
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	testing::{Header, TestXt},
 	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
@@ -46,7 +46,6 @@ parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-	pub const GracePeriod: u64 = 10;
 }
 
 type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
@@ -109,7 +108,7 @@ where
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Test {
@@ -138,6 +137,13 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
+		Some(PHRASE),
+	)
+	.unwrap();
+
+	SyncCryptoStore::sr25519_generate_new(
+		&keystore,
+		dkg_runtime_primitives::offchain_crypto::Public::ID,
 		Some(PHRASE),
 	)
 	.unwrap();

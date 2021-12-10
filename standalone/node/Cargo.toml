@@ -19,6 +19,7 @@ name = "dkg-standalone-node"
 [dependencies]
 structopt = "0.3.8"
 rand = "0.7.2"
+codec = { package = "parity-scale-codec", version = "2.0.0" }
 
 sc-cli = { git = 'https://github.com/paritytech/substrate', branch = 'master', features = ["wasmtime"] }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
@@ -37,6 +38,7 @@ sp-finality-grandpa = { git = 'https://github.com/paritytech/substrate', branch 
 sc-client-api = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-timestamp = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
+sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
 # These dependencies are used for the node template's RPCs
 jsonrpc-core = "18.0.0"
@@ -55,6 +57,8 @@ frame-benchmarking-cli = { git = 'https://github.com/paritytech/substrate', bran
 
 # Local dependencies
 dkg-gadget = { path = "../../dkg-gadget", default-features = false }
+dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
+dkg-primitives = { path = "../../dkg-primitives", default-features = false }
 
 dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
 

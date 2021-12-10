@@ -39,11 +39,11 @@ pub fn authority_keys_from_seed(
 	controller: &str,
 ) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
-		get_account_id_from_seed::<sr25519::Public>(stash),
-		get_account_id_from_seed::<sr25519::Public>(controller),
-		get_from_seed::<AuraId>(stash),
-		get_from_seed::<GrandpaId>(stash),
-		get_from_seed::<DKGId>(stash),
+		get_account_id_from_seed::<sr25519::Public>(s),
+		get_account_id_from_seed::<sr25519::Public>(c),
+		get_from_seed::<AuraId>(s),
+		get_from_seed::<GrandpaId>(s),
+		get_from_seed::<DKGId>(s),
 	)
 }
 
@@ -85,9 +85,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
-					get_account_id_from_seed::<sr25519::Public>("Eve"),
-					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
@@ -227,6 +224,14 @@ fn testnet_genesis(
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
-		dkg: DKGConfig::default(),
+		sudo: SudoConfig {
+			// Assign network admin rights.
+			key: root_key,
+		},
+		dkg: DKGConfig {
+			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
+			threshold: Default::default(),
+			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
+		},
 	}
 }
