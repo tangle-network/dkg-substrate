@@ -649,6 +649,7 @@ impl<P> DKGRoundTracker<P> {
 
 	fn complete(&mut self) -> Option<SignatureRecid> {
 		if let Some(sign_manual) = self.sign_manual.take() {
+			debug!(target: "dkg", "Tyring to complete vote with {} votes", self.votes.len());
 			return match sign_manual.complete(&self.votes) {
 				Ok(sig) => {
 					debug!("Obtained complete signature: {}", &sig.recid);

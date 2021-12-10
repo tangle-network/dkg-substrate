@@ -110,7 +110,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			ensure!(
-				usize::from(new_threshold) <= Authorities::<T>::get().len(),
+				usize::from(new_threshold) < ((Authorities::<T>::get().len() / 2) + 1),
 				Error::<T>::InvalidThreshold
 			);
 			// set the new maintainer
@@ -346,7 +346,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			Pallet::<T>::initialize_authorities(&self.authorities, &self.authority_ids);
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
@@ -592,22 +591,17 @@ impl<T: Config> Pallet<T> {
 			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
 			// 32 bytes because the stored key is a compressed public key.
 
-			frame_support::log::debug!(target: "dkg", "Verifying signature {:?}, {:?}", recovered_pub_key, stored_key[1..].to_vec() );
+			frame_support::log::debug!(target: "dkg", "Verifying signature {:?}, {:?}", &recovered_pub_key[..32].to_vec(), stored_key[1..].to_vec() );
 			if recovered_pub_key[..32] != stored_key[1..].to_vec() {
 				// TODO probably a slashing condition
 
 				Err(Error::<T>::InvalidSignature)?;
 			}
 
-			if Self::next_dkg_public_key().is_none() {
-				NextPublicKeySignature::<T>::put((
-					Self::authority_set_id() + 1u64,
-					signature.clone(),
-				));
-				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-					pub_key_sig: signature.clone(),
-				});
-			}
+			NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature.clone()));
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+				pub_key_sig: signature.clone(),
+			});
 		}
 
 		Ok(().into())

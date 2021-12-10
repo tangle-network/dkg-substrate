@@ -245,6 +245,10 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: dkg_runtime::DKGConfig::default(),
+		dkg: dkg_runtime::DKGConfig {
+			authorities: candidates.iter().map(|x| x.2.clone()).collect::<_>(),
+			threshold: Default::default(),
+			authority_ids: candidates.iter().map(|x| x.0.clone()).collect::<_>(),
+		},
 	}
 }

@@ -224,6 +224,10 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			key: root_key,
 		},
-		dkg: DKGConfig::default(),
+		dkg: DKGConfig {
+			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
+			threshold: Default::default(),
+			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
+		},
 	}
 }
