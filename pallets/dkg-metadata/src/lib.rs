@@ -591,7 +591,6 @@ impl<T: Config> Pallet<T> {
 			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
 			// 32 bytes because the stored key is a compressed public key.
 
-			frame_support::log::debug!(target: "dkg", "Verifying signature {:?}, {:?}", &recovered_pub_key[..32].to_vec(), stored_key[1..].to_vec() );
 			if recovered_pub_key[..32] != stored_key[1..].to_vec() {
 				// TODO probably a slashing condition
 
@@ -599,7 +598,10 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if Self::next_public_key_signature().is_none() {
-				NextPublicKeySignature::<T>::put((Self::authority_set_id() + 1u64, signature.clone()));
+				NextPublicKeySignature::<T>::put((
+					Self::authority_set_id() + 1u64,
+					signature.clone(),
+				));
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});

@@ -881,12 +881,10 @@ where
 				_ => continue,
 			};
 
-			if !self.rounds.has_vote_in_process(key) {
-				if let Err(err) = self.rounds.vote(key, data) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-				}
-				self.send_outgoing_dkg_messages();
+			if let Err(err) = self.rounds.vote(key, data) {
+				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 			}
+			self.send_outgoing_dkg_messages();
 		}
 	}
 
