@@ -23,6 +23,7 @@ pub struct DKGState<K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
+	pub listening_for_genesis_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
 }
@@ -648,6 +649,7 @@ impl<P> DKGRoundTracker<P> {
 
 	fn complete(&mut self) -> Option<SignatureRecid> {
 		if let Some(sign_manual) = self.sign_manual.take() {
+			debug!(target: "dkg", "Tyring to complete vote with {} votes", self.votes.len());
 			return match sign_manual.complete(&self.votes) {
 				Ok(sig) => {
 					debug!("Obtained complete signature: {}", &sig.recid);

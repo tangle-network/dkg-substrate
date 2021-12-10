@@ -280,6 +280,13 @@ where
 	let rpc_client = client.clone();
 	let rpc_extensions_builder = Box::new(move |_, _| rpc_ext_builder(rpc_client.clone()));
 
+	if validator {
+		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
+			&parachain_config,
+			Some(params.keystore_container.sync_keystore()),
+		);
+	}
+
 	sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		rpc_extensions_builder,
 		client: client.clone(),

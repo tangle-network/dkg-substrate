@@ -10,9 +10,9 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::{ecdsa::Signature, H256};
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
-	app_crypto::ecdsa::Public,
+	app_crypto::{ecdsa::Public, sr25519},
 	testing::{Header, TestXt},
 	traits::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
@@ -113,7 +113,7 @@ parameter_types! {
 type Extrinsic = TestXt<Call, ()>;
 
 impl frame_system::offchain::SigningTypes for Test {
-	type Public = Public;
+	type Public = <Signature as Verify>::Signer;
 	type Signature = Signature;
 }
 
@@ -131,7 +131,7 @@ where
 {
 	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
 		call: Call,
-		_public: Public,
+		_public: <Signature as Verify>::Signer,
 		_account: AccountId,
 		nonce: u64,
 	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
@@ -143,14 +143,12 @@ impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
-	type GracePeriod = GracePeriod;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;
 }
 
 parameter_types! {
-	pub const GracePeriod: u64 = 10;
 	pub const MinimumPeriod: u64 = 1;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }
@@ -226,7 +224,7 @@ impl pallet_parachain_staking::Config for Test {
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 }
 
 impl pallet_dkg_proposals::Config for Test {
@@ -241,11 +239,11 @@ impl pallet_dkg_proposals::Config for Test {
 }
 
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	DKGId::from(mock_pub_key(id))
+	DKGId::from(Public::from_raw([id; 33]))
 }
 
 pub fn mock_pub_key(id: u8) -> AccountId {
-	Public::from_raw([id; 33])
+	sr25519::Public::from_raw([id; 32])
 }
 
 pub(crate) fn roll_to(n: u64) {

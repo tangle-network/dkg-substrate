@@ -36,6 +36,7 @@ jsonrpc-core = '18.0.0'
 # Local Dependencies
 dkg-runtime = { path = '../runtime' }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives' }
+dkg-primitives = { path = '../dkg-primitives' }
 dkg-gadget = { path = '../dkg-gadget' }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 
