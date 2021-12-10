@@ -855,14 +855,12 @@ where
 			if let Ok(Some(pub_key)) = pub_key {
 				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
 
-				if !self.rounds.has_vote_in_process(key) {
-					if let Err(err) = self.rounds.vote(key, pub_key.clone()) {
-						error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-					} else {
-						trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
-					}
-					self.send_outgoing_dkg_messages();
+				if let Err(err) = self.rounds.vote(key, pub_key.clone()) {
+					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+				} else {
+					trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 				}
+				self.send_outgoing_dkg_messages();
 			}
 		}
 	}
