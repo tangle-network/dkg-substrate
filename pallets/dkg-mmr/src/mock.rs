@@ -24,7 +24,7 @@ use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
 };
-use sp_core::{ecdsa::Signature, Hasher, H256};
+use sp_core::{sr25519, sr25519::Signature, Hasher, H256};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
@@ -131,7 +131,7 @@ impl pallet_mmr::Config for Test {
 type Extrinsic = TestXt<Call, ()>;
 
 impl frame_system::offchain::SigningTypes for Test {
-	type Public = Public;
+	type Public = <Signature as Verify>::Signer;
 	type Signature = Signature;
 }
 
@@ -149,7 +149,7 @@ where
 {
 	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
 		call: Call,
-		_public: Public,
+		_public: <Signature as Verify>::Signer,
 		_account: AccountId,
 		nonce: u64,
 	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
@@ -203,11 +203,11 @@ impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 // of `to_public_key()` assumes, that a public key is 32 bytes long. This is true for
 // ed25519 and sr25519 but *not* for ecdsa. An ecdsa public key is 33 bytes.
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	DKGId::from(mock_pub_key(id))
+	DKGId::from(Public::from_raw([id; 33]))
 }
 
 pub fn mock_pub_key(id: u8) -> AccountId {
-	Public::from_raw([id; 33])
+	sr25519::Public::from_raw([id; 32])
 }
 
 pub fn mock_authorities(vec: Vec<u8>) -> Vec<(AccountId, DKGId)> {
