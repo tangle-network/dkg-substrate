@@ -128,7 +128,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = ();
-	type GracePeriod = GracePeriod;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
@@ -136,7 +135,6 @@ impl pallet_dkg_metadata::Config for Test {
 
 parameter_types! {
 	pub const Period: u64 = 1;
-	pub const GracePeriod: u64 = 10;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 }

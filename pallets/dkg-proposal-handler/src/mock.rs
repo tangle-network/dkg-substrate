@@ -46,7 +46,6 @@ parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-	pub const GracePeriod: u64 = 10;
 }
 
 type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;

@@ -76,11 +76,6 @@ pub mod pallet {
 			Self::AccountId,
 		>;
 
-		/// This is used to limit the number of offchain extrinsics that can be submitted
-		/// within a span of time to prevent spaming the network with too many extrinsics
-		#[pallet::constant]
-		type GracePeriod: Get<Self::BlockNumber>;
-
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
 
@@ -543,6 +538,11 @@ impl<T: Config> Pallet<T> {
 		block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+
+		if Self::next_public_key_signature().is_some() {
+			pub_key_sig_ref.clear();
+			return Ok(())
+		}
 
 		let signature = pub_key_sig_ref.get::<dkg_runtime_primitives::crypto::Signature>();
 

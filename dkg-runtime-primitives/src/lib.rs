@@ -189,5 +189,7 @@ sp_api::decl_runtime_apis! {
 		fn get_max_extrinsic_delay(_block_number: BlockNumber) -> BlockNumber;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
+		/// Fetch DKG public key for sig
+		fn next_pub_key_sig() -> Option<Vec<u8>>;
 	}
 }

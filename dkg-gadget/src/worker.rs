@@ -560,6 +560,7 @@ where
 		let at = BlockId::hash(header.hash());
 		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
 		let dkg_public_key = self.client.runtime_api().dkg_pub_key(&at);
+		let public_key_sig = self.client.runtime_api().next_pub_key_sig(&at);
 
 		if let Ok(Some(_key)) = next_dkg_public_key {
 			let offchain = self.backend.offchain_storage();
@@ -581,6 +582,16 @@ where
 					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
 
 					offchain.remove(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT);
+				}
+			}
+		}
+
+		if let Ok(Some(_sig)) = public_key_sig {
+			let offchain = self.backend.offchain_storage();
+			if let Some(mut offchain) = offchain {
+				if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
+					debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _key);
+					offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);
 				}
 			}
 		}

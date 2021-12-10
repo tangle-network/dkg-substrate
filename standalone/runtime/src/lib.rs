@@ -486,7 +486,6 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
-	type GracePeriod = Period;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 }
@@ -787,6 +786,13 @@ impl_runtime_apis! {
 		fn next_dkg_pub_key() -> Option<Vec<u8>> {
 			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
 				return Some(pub_key)
+			}
+			return None
+		}
+
+		fn next_pub_key_sig() -> Option<Vec<u8>> {
+			if let Some((.., pub_key_sig)) = DKG::next_public_key_signature() {
+				return Some(pub_key_sig)
 			}
 			return None
 		}
