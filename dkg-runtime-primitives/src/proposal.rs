@@ -4,6 +4,14 @@ use sp_std::vec::Vec;
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub type ProposalNonce = u64;
+
+#[derive(
+	Debug, Clone, Decode, Encode, Copy, PartialEq, Eq, PartialOrd, Ord, scale_info::TypeInfo,
+)]
+pub enum DKGPayloadKey {
+	EVMProposal(ProposalNonce), // TODO: new voting types here
+	RefreshVote(u64),
+}
 pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
