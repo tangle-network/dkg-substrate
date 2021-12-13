@@ -39,11 +39,11 @@ pub fn authority_keys_from_seed(
 	controller: &str,
 ) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
-		get_account_id_from_seed::<sr25519::Public>(s),
-		get_account_id_from_seed::<sr25519::Public>(c),
-		get_from_seed::<AuraId>(s),
-		get_from_seed::<GrandpaId>(s),
-		get_from_seed::<DKGId>(s),
+		get_account_id_from_seed::<sr25519::Public>(stash),
+		get_account_id_from_seed::<sr25519::Public>(controller),
+		get_from_seed::<AuraId>(stash),
+		get_from_seed::<GrandpaId>(stash),
+		get_from_seed::<DKGId>(stash),
 	)
 }
 
@@ -224,10 +224,6 @@ fn testnet_genesis(
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
-		sudo: SudoConfig {
-			// Assign network admin rights.
-			key: root_key,
-		},
 		dkg: DKGConfig {
 			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
 			threshold: Default::default(),

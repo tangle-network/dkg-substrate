@@ -20,8 +20,6 @@
 
 use dkg_standalone_runtime::{AccountId, DKGId, Signature};
 
-use ac_compose_macros::{compose_extrinsic, compose_call};
-use ac_primitives::{CallIndex, GenericAddress, UncheckedExtrinsicV4};
 use node_primitives::Block;
 use remote_externalities::rpc_api;
 use serde::Serialize;
@@ -31,34 +29,35 @@ use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::{
-	process::{Child, ExitStatus},
+	thread,
+	net::TcpListener,
+	process::{self, Child, ExitStatus},
+	sync::atomic::{AtomicU16, Ordering},
 	time::Duration,
 };
-use substrate_api_client::{rpc::WsRpcClient, ApiResult, Pair as PairT};
+use subxt::{Client, ClientBuilder, PairSigner};
 use tokio::time::timeout;
+use lazy_static;
 
-pub type SetKeyFn = (CallIndex, dkg_standalone_runtime::opaque::SessionKeys, Vec<u8>);
-pub type SetKeyXt = UncheckedExtrinsicV4<SetKeyFn>;
+use std::path::PathBuf;
 
-pub type SudoFn = (CallIndex, pallet_staking::Call<dkg_standalone_runtime::Runtime>);
-pub type SudoFnXt = UncheckedExtrinsicV4<SudoFn>;
+#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
+pub mod node_runtime {}
 
 static LOCALHOST_WS: &str = "ws://127.0.0.1:45789/";
-
-pub fn json_req<S: Serialize>(method: &str, params: S, id: u32) -> Value {
-	json!({
-		"method": method,
-		"params": params,
-		"jsonrpc": "2.0",
-		"id": id.to_string(),
-	})
-}
 
 /// Generate a crypto pair from seed.
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
 	TPublic::Pair::from_string(&format!("//{}", seed), None)
 		.expect("static values are valid; qed")
 		.public()
+}
+
+pub fn get_pair_signer(seed: &str) -> PairSigner<node_runtime::DefaultConfig, sr25519::Pair> {
+	PairSigner::<node_runtime::DefaultConfig, sr25519::Pair>::new(
+		sr25519::Pair::from_string(&format!("//{}", seed), None)
+			.expect("static values are known good; qed"),
+	)
 }
 
 type AccountPublic = <Signature as Verify>::Signer;
@@ -71,24 +70,13 @@ where
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }
 
-/// Generate the session keys from individual elements.
-///
-/// The input must be a tuple of individual keys (a single arg for now since we
-/// have just one key).
-pub fn dkg_session_keys(
-	grandpa: GrandpaId,
-	aura: AuraId,
-	dkg: DKGId,
-) -> dkg_standalone_runtime::opaque::SessionKeys {
-	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, dkg }
-}
-
 /// Wait for at least n blocks to be finalized within a specified time.
 pub async fn wait_n_finalized_blocks(
 	n: usize,
+	url: &str,
 	timeout_secs: u64,
 ) -> Result<(), tokio::time::error::Elapsed> {
-	timeout(Duration::from_secs(timeout_secs), wait_n_finalized_blocks_from(n, LOCALHOST_WS)).await
+	timeout(Duration::from_secs(timeout_secs), wait_n_finalized_blocks_from(n, url)).await
 }
 
 /// Wait for the given `child` the given number of `secs`.
@@ -131,44 +119,137 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 	}
 }
 
-/// RPC requests
-fn author_insert_key(key_type: &str, seed: &str, pub_key: &str) -> Value {
-	json_req(
-		"author_insertKey",
-		vec![to_value(key_type).unwrap(), to_value(seed).unwrap(), to_value(pub_key).unwrap()],
-		1,
-	)
+lazy_static! {
+	static ref BIN_PATH: PathBuf = assert_cmd::cargo::cargo_bin("dkg-standalone-node");
 }
 
-pub fn insert_key(
-	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
-	key_type: &str,
-	seed: &str,
-	pub_key: &str,
-) -> ApiResult<Option<()>> {
-	let jsonreq = author_insert_key(key_type, seed, pub_key);
-	let res = api.get_request(jsonreq)?;
-	match res {
-		Some(_info) => Ok(Some(())),
-		None => Ok(None),
+#[derive(PartialEq)]
+pub enum Spawnable {
+	Alice,
+	Charlie,
+	Bob,
+	Dave,
+	Ferdie,
+	Eve,
+}
+
+/// Spawn the dkg nodes at the given path, and wait for rpc to be initialized.
+/// The Alice node should be the first value in the list
+pub async fn spawn(
+	nodes: Vec<Spawnable>,
+) -> Result<(subxt::Client<node_runtime::DefaultConfig>, Vec<Child>, String), String> {
+	assert!(nodes[0] == Spawnable::Alice, "Alice should be the first value");
+	let mut port = 9944u16;
+
+	let mut processes = Vec::new();
+
+	for node in nodes {
+		let mut node_name = "alice";
+		match node {
+			Spawnable::Alice => {},
+			Spawnable::Charlie => node_name = "charlie",
+			Spawnable::Bob => node_name = "bob",
+			Spawnable::Dave => node_name = "dave",
+			Spawnable::Ferdie => node_name = "ferdie",
+			Spawnable::Eve => node_name = "eve",
+		}
+
+		let mut cmd = process::Command::new(&*BIN_PATH);
+		cmd.env("RUST_LOG", "error").arg(format!("--{}", node_name));
+
+		let (p2p_port, http_port, ws_port) = next_open_port()
+			.ok_or_else(|| "No available ports in the given port range".to_owned())?;
+
+		cmd.arg(format!("--port={}", p2p_port));
+		cmd.arg(format!("--rpc-port={}", http_port));
+		cmd.arg(format!("--ws-port={}", ws_port));
+
+		if node_name == "alice" {
+			cmd.arg("--node-key=0000000000000000000000000000000000000000000000000000000000000001");
+			port = ws_port;
+		} else {
+			cmd.arg(format!("--bootnodes=/ip4/127.0.0.1/tcp/{}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp", p2p_port));
+		}
+
+		let proc = cmd
+			.stdout(process::Stdio::null())
+			.stderr(process::Stdio::null())
+			.stdin(process::Stdio::null())
+			.spawn()
+			.map_err(|e| {
+				format!("Error spawning dkg node '{}': {}", BIN_PATH.to_string_lossy(), e)
+			})?;
+
+		processes.push(proc);
+	}
+
+	let ws_url = format!("ws://127.0.0.1:{}", port);
+
+	// wait for rpc to be initialized
+	const MAX_ATTEMPTS: u32 = 16;
+	let mut attempts = 1;
+	let mut wait_secs = 1;
+	let client = loop {
+		thread::sleep(Duration::from_secs(wait_secs));
+
+		let result = ClientBuilder::new().set_url(ws_url.clone()).build().await;
+		match result {
+			Ok(client) => break Ok(client),
+			Err(err) => {
+				if attempts < MAX_ATTEMPTS {
+					attempts += 1;
+					wait_secs *= 2; // backoff
+					continue
+				}
+				break Err(err)
+			},
+		}
+	};
+
+	match client {
+		Ok(client) => Ok((client, processes, ws_url.clone())),
+		Err(err) => {
+			let err = format!(
+				"Failed to connect to node rpc at {} after {} attempts: {}",
+				ws_url, attempts, err
+			);
+			for mut proc in processes {
+				let _ = proc
+					.kill()
+					.map_err(|e| format!("Error killing dkg process '{}': {}", proc.id(), e));
+			}
+			Err(err)
+		},
 	}
 }
 
-/// Extrinsics
+/// The start of the port range to scan.
+const START_PORT: u16 = 9900;
+/// The end of the port range to scan.
+const END_PORT: u16 = 10000;
+/// The maximum number of ports to scan before giving up.
+const MAX_PORTS: u16 = 1000;
+/// Next available unclaimed port for test node endpoints.
+static PORT: AtomicU16 = AtomicU16::new(START_PORT);
 
-pub fn set_keys(
-	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
-	keys: dkg_standalone_runtime::opaque::SessionKeys,
-	proof: Vec<u8>,
-) -> SetKeyXt {
-	compose_extrinsic!(api, "Session", "set_keys", keys, proof)
-}
-
-pub fn force_unstake(
-	api: &substrate_api_client::Api<sr25519::Pair, WsRpcClient>,
-	stash: GenericAddress,
-	num_slashing_spans: u32,
-) -> SudoFnXt {
-	let call = compose_call!(api.metadata.clone(), "Staking", "force_unstake", stash, num_slashing_spans);
-	compose_extrinsic!(api, "Sudo", "sudo", call)
+/// Returns the next set of 3 open ports.
+///
+/// Returns None if there are not 3 open ports available.
+fn next_open_port() -> Option<(u16, u16, u16)> {
+	let mut ports = Vec::new();
+	let mut ports_scanned = 0u16;
+	loop {
+		let _ = PORT.compare_exchange(END_PORT, START_PORT, Ordering::SeqCst, Ordering::SeqCst);
+		let next = PORT.fetch_add(1, Ordering::SeqCst);
+		if TcpListener::bind(("0.0.0.0", next)).is_ok() {
+			ports.push(next);
+			if ports.len() == 3 {
+				return Some((ports[0], ports[1], ports[2]))
+			}
+		}
+		ports_scanned += 1;
+		if ports_scanned == MAX_PORTS {
+			return None
+		}
+	}
 }
