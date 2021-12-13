@@ -37,7 +37,7 @@ use std::{
 };
 use subxt::{Client, ClientBuilder, PairSigner};
 use tokio::time::timeout;
-use lazy_static;
+use lazy_static::lazy_static;
 
 use std::path::PathBuf;
 
