@@ -61,7 +61,7 @@ dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-featur
 dkg-primitives = { path = "../../dkg-primitives", default-features = false }
 
 dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
-subxt = { path = "/home/david/Documents/webb/subxt" }
+subxt = { git = "https://github.com/webb-tools/subxt.git", branch = "david/std-features" }
 
 [dev-dependencies]
 env_logger = "0.9"
