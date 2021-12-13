@@ -11511,7 +11511,7 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 [[package]]
 name = "subxt"
 version = "0.15.0"
-source = "git+https://github.com/webb-tools/subxt.git#78626eb5eef60b52fd199adb26a724e68c4fdb55"
+source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "bitvec 0.20.4",
@@ -11537,7 +11537,7 @@ dependencies = [
 [[package]]
 name = "subxt-codegen"
 version = "0.2.0"
-source = "git+https://github.com/webb-tools/subxt.git#78626eb5eef60b52fd199adb26a724e68c4fdb55"
+source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "darling",
@@ -11555,7 +11555,7 @@ dependencies = [
 [[package]]
 name = "subxt-macro"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/subxt.git#78626eb5eef60b52fd199adb26a724e68c4fdb55"
+source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "darling",
