@@ -52,9 +52,9 @@ async fn dkg_key_refresh() -> Result<(), subxt::Error> {
 
 	let api = client.to_runtime_api::<node_runtime::RuntimeApi<node_runtime::DefaultConfig>>();
 
-	let hash = api.tx().staking().chill().sign_and_submit(&charlie_stash).await?;
+	// let hash = api.tx().staking().chill().sign_and_submit(&charlie_stash).await?;
 
-	println!("[+] Composed Extrinsic:\n {:?}\n", hash);
+	// println!("[+] Composed Extrinsic:\n {:?}\n", hash);
 
 	let _ = common::wait_n_finalized_blocks(45, &ws_url, 540).await;
 
