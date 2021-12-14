@@ -886,7 +886,8 @@ where
 
 		for (key, proposal) in unsigned_proposals {
 			let data = match proposal {
-				ProposalType::EVMUnsigned { ref data } => data.clone(),
+				ProposalType::EVMUnsigned { data } => data,
+				ProposalType::AnchorUpdate { data } => data,
 				_ => continue,
 			};
 
