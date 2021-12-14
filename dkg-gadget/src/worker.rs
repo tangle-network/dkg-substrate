@@ -884,7 +884,10 @@ where
 			Err(_) => return,
 		};
 
+		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+
 		for (key, proposal) in unsigned_proposals {
+			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", key);
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
@@ -896,12 +899,14 @@ where
 					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 				}
 				self.send_outgoing_dkg_messages();
+			} else {
+				debug!(target: "dkg", "🕸️  vote already in process for key {:?}", key);
 			}
 		}
 	}
 
 	fn process_signed_proposal(&mut self, signed_proposal: ProposalType) {
-		trace!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {
 			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
@@ -920,7 +925,7 @@ where
 					old_val.as_deref(),
 					&prop_wrapper.encode(),
 				) {
-					trace!(target: "dkg", "🕸️  Successfully saved signed proposal in offchain starage");
+					debug!(target: "dkg", "🕸️  Successfully saved signed proposal in offchain starage");
 					break
 				}
 			}

@@ -441,7 +441,7 @@ impl<T: Config> Pallet<T> {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		// skip the first 22 bytes and then read the next 32 bytes as the chain id as U256
-		let chain_id = U256::from(&data[22..(22 + 32)]).as_u64();
+		let chain_id = U256::from(&data[22..54]).as_u64();
 		let chain_id = match T::ChainId::try_from(chain_id) {
 			Ok(v) => v,
 			Err(_) => return Err(Error::<T>::ChainIdInvalid)?,
@@ -452,7 +452,7 @@ impl<T: Config> Pallet<T> {
 			chain_id,
 		);
 		// read the next 32 bytes as the nonce
-		let nonce = U256::from(&data[(22 + 32)..64]).as_u64();
+		let nonce = U256::from(&data[54..86]).as_u64();
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
 			"🕸️ Got Nonce: {}",
