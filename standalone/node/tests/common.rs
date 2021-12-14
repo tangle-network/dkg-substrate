@@ -43,7 +43,7 @@ use tokio::time::timeout;
 use webb::substrate::dkg_runtime;
 
 lazy_static! {
-	static ref BIN_BATH: std::PathBuf = assert_cmd::cargo::cargo_bin("dkg-standalone-node");
+	static ref BIN_BATH: std::path::PathBuf = assert_cmd::cargo::cargo_bin("dkg-standalone-node");
 }
 
 /// Generate a crypto pair from seed.
