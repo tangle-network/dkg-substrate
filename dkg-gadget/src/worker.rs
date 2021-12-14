@@ -880,8 +880,7 @@ where
 			Err(_) => return,
 		};
 
-		for (nonce, proposal) in unsigned_proposals {
-			let key = DKGPayloadKey::EVMProposal(nonce);
+		for (key, proposal) in unsigned_proposals {
 			let data = match proposal {
 				ProposalType::EVMUnsigned { ref data } => data.clone(),
 				_ => continue,

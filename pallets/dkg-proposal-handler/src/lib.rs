@@ -12,7 +12,7 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType,
 	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
@@ -30,7 +30,7 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::ProposalType;
+	use dkg_runtime_primitives::{DKGPayloadKey, ProposalType};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::AtLeast32Bit;
@@ -58,7 +58,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		T::ChainId,
 		Blake2_128Concat,
-		ProposalNonce,
+		DKGPayloadKey,
 		ProposalType,
 	>;
 
@@ -70,7 +70,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		T::ChainId,
 		Blake2_128Concat,
-		ProposalNonce,
+		DKGPayloadKey,
 		ProposalType,
 	>;
 
@@ -129,9 +129,13 @@ pub mod pallet {
 
 				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 
-				if !SignedProposals::<T>::contains_key(chain_id, nonce) {
+				if !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::EVMProposal(nonce))
+				{
 					ensure!(
-						UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
+						UnsignedProposalQueue::<T>::contains_key(
+							chain_id,
+							DKGPayloadKey::EVMProposal(nonce)
+						),
 						Error::<T>::ProposalDoesNotExists
 					);
 					ensure!(
@@ -139,10 +143,14 @@ pub mod pallet {
 						Error::<T>::ProposalSignatureInvalid
 					);
 
-					SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
+					SignedProposals::<T>::insert(
+						chain_id,
+						DKGPayloadKey::EVMProposal(nonce),
+						prop.clone(),
+					);
 				}
 
-				UnsignedProposalQueue::<T>::remove(chain_id, nonce);
+				UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
 
 				Ok(().into())
 			} else {
@@ -162,7 +170,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 			let unsigned_proposal = ProposalType::EVMUnsigned { data: proposal };
-			UnsignedProposalQueue::<T>::insert(chain_id, nonce, unsigned_proposal);
+			UnsignedProposalQueue::<T>::insert(
+				chain_id,
+				DKGPayloadKey::EVMProposal(nonce),
+				unsigned_proposal,
+			);
 		};
 
 		return Ok(())
@@ -172,7 +184,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+	pub fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
 		return UnsignedProposalQueue::<T>::iter()
 			.map(|entry| (entry.1, entry.2.clone()))
 			.collect()
