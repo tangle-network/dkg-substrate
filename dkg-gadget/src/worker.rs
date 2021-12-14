@@ -276,12 +276,7 @@ where
 		Ok(())
 	}
 
-	fn handle_dkg_setup(
-		&mut self,
-		header: &B::Header,
-		next_authorities: AuthoritySet<Public>,
-		queued: AuthoritySet<Public>,
-	) {
+	fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
 		if next_authorities.authorities.is_empty() {
 			return
 		}
@@ -293,26 +288,10 @@ where
 
 		let thresh = self.get_threshold(header).unwrap();
 
-		let set_up_rounds = |authority_set: &AuthoritySet<Public>, public: &Public| {
-			let party_inx =
-				find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
-
-			let n = authority_set.authorities.len();
-
-			let rounds = MultiPartyECDSARounds::new(
-				u16::try_from(party_inx).unwrap(),
-				thresh,
-				u16::try_from(n).unwrap(),
-				authority_set.id.clone(),
-			);
-
-			rounds
-		};
-
 		self.rounds = self
 			.next_rounds
 			.take()
-			.unwrap_or_else(|| set_up_rounds(&next_authorities, &public));
+			.unwrap_or_else(|| set_up_rounds(&next_authorities, &public, thresh));
 
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
 			self.dkg_state.listening_for_genesis_pub_key = true;
@@ -325,12 +304,25 @@ where
 				Err(err) => error!("Error starting keygen {}", err),
 			}
 		}
+	}
+
+	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
+		if queued.authorities.is_empty() {
+			return
+		}
+
+		let public = self
+			.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"));
+
+		let thresh = self.get_threshold(header).unwrap();
 
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.next_rounds = Some(set_up_rounds(&queued, &public));
+			self.next_rounds = Some(set_up_rounds(&queued, &public, thresh));
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
 				Ok(()) => {
@@ -389,7 +381,8 @@ where
 				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
-				self.handle_dkg_setup(&header, active.clone(), queued.clone());
+				self.handle_dkg_setup(&header, active.clone());
+				self.handle_queued_dkg_setup(&header, queued.clone());
 
 				if !self.current_validator_set.authorities.is_empty() {
 					self.send_outgoing_dkg_messages();
@@ -400,6 +393,13 @@ where
 				if !self.dkg_state.accepted || self.queued_keygen_in_progress {
 					self.send_outgoing_dkg_messages();
 				}
+			}
+
+			if self.queued_validator_set.authorities != queued.authorities &&
+				!self.queued_keygen_in_progress
+			{
+				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.send_outgoing_dkg_messages();
 			}
 		}
 
@@ -982,6 +982,25 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 		}
 	}
 	None
+}
+
+fn set_up_rounds(
+	authority_set: &AuthoritySet<Public>,
+	public: &Public,
+	thresh: u16,
+) -> MultiPartyECDSARounds<DKGPayloadKey> {
+	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
+
+	let n = authority_set.authorities.len();
+
+	let rounds = MultiPartyECDSARounds::new(
+		u16::try_from(party_inx).unwrap(),
+		thresh,
+		u16::try_from(n).unwrap(),
+		authority_set.id.clone(),
+	);
+
+	rounds
 }
 
 /// Extract the MMR root hash from a digest in the given header, if it exists.

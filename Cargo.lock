@@ -2240,9 +2240,11 @@ dependencies = [
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "subxt",
+ "tempdir",
  "tempfile",
  "tokio",
  "wait-timeout",
+ "webb",
 ]
 
 [[package]]
@@ -2700,6 +2702,21 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "foreign-types"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
+dependencies = [
+ "foreign-types-shared",
+]
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "fork-tree"
@@ -5355,6 +5372,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "native-tls"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "log",
+ "openssl",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "security-framework",
+ "security-framework-sys",
+ "tempfile",
+]
+
+[[package]]
 name = "net2"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5566,10 +5601,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "openssl"
+version = "0.10.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c7ae222234c30df141154f159066c5093ff73b63204dcda7121eb082fc56a95"
+dependencies = [
+ "bitflags",
+ "cfg-if 1.0.0",
+ "foreign-types",
+ "libc",
+ "once_cell",
+ "openssl-sys",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28988d872ab76095a6e6ac88d99b54fd267702734fd7ffe610ca27f533ddb95a"
+
+[[package]]
+name = "openssl-src"
+version = "111.16.0+1.1.1l"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab2173f69416cf3ec12debb5823d244127d23a9b127d5a5189aa97c5fa2859f"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "openssl-sys"
+version = "0.9.72"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e46109c383602735fa0a2e48dd2b7c892b048e1bf69e5c3b1d804b7d9c203cb"
+dependencies = [
+ "autocfg 1.0.1",
+ "cc",
+ "libc",
+ "openssl-src",
+ "pkg-config",
+ "vcpkg",
+]
 
 [[package]]
 name = "ordered-float"
@@ -11511,7 +11583,7 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 [[package]]
 name = "subxt"
 version = "0.15.0"
-source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
+source = "git+https://github.com/webb-tools/subxt?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "bitvec 0.20.4",
@@ -11537,7 +11609,7 @@ dependencies = [
 [[package]]
 name = "subxt-codegen"
 version = "0.2.0"
-source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
+source = "git+https://github.com/webb-tools/subxt?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "darling",
@@ -11555,7 +11627,7 @@ dependencies = [
 [[package]]
 name = "subxt-macro"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/subxt.git?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
+source = "git+https://github.com/webb-tools/subxt?branch=david/std-features#3be765519b1f6a18ebd554a354b76b294e2e6581"
 dependencies = [
  "async-trait",
  "darling",
@@ -11611,6 +11683,16 @@ name = "target-lexicon"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9bffcddbc2458fa3e6058414599e3c838a022abae82e5c67b4f7f80298d5bff"
+
+[[package]]
+name = "tempdir"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
+dependencies = [
+ "rand 0.4.6",
+ "remove_dir_all",
+]
 
 [[package]]
 name = "tempfile"
@@ -12601,6 +12683,25 @@ checksum = "38eb105f1c59d9eaa6b5cdc92b859d85b926e82cb2e0945cd0c9259faa6fe9fb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webb"
+version = "0.2.5"
+source = "git+https://github.com/webb-tools/webb-rs.git?branch=david/update-runtime#af10af89a1228175651ec9c106e030117cb64720"
+dependencies = [
+ "async-trait",
+ "frame-metadata",
+ "hex",
+ "native-tls",
+ "parity-scale-codec",
+ "rand 0.8.4",
+ "serde_json",
+ "subxt",
+ "subxt-codegen",
+ "syn",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

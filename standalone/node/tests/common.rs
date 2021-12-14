@@ -17,7 +17,6 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![cfg(unix)]
-
 use dkg_standalone_runtime::{AccountId, DKGId, Signature};
 
 use node_primitives::Block;
@@ -29,22 +28,23 @@ use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::{
-	thread,
+	env,
 	net::TcpListener,
+	ops::{Deref, DerefMut},
 	process::{self, Child, ExitStatus},
 	sync::atomic::{AtomicU16, Ordering},
+	thread,
 	time::Duration,
 };
-use subxt::{Client, ClientBuilder, PairSigner};
-use tokio::time::timeout;
+
 use lazy_static::lazy_static;
+use subxt::{Client, ClientBuilder, Config, PairSigner};
+use tokio::time::timeout;
+use webb::substrate::dkg_runtime;
 
-use std::path::PathBuf;
-
-#[subxt::subxt(runtime_metadata_path = "metadata.scale")]
-pub mod node_runtime {}
-
-static LOCALHOST_WS: &str = "ws://127.0.0.1:45789/";
+lazy_static! {
+	static ref BIN_BATH: std::PathBuf = assert_cmd::cargo::cargo_bin("dkg-standalone-node");
+}
 
 /// Generate a crypto pair from seed.
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -53,8 +53,8 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 		.public()
 }
 
-pub fn get_pair_signer(seed: &str) -> PairSigner<node_runtime::DefaultConfig, sr25519::Pair> {
-	PairSigner::<node_runtime::DefaultConfig, sr25519::Pair>::new(
+pub fn get_pair_signer(seed: &str) -> PairSigner<dkg_runtime::api::DefaultConfig, sr25519::Pair> {
+	PairSigner::<dkg_runtime::api::DefaultConfig, sr25519::Pair>::new(
 		sr25519::Pair::from_string(&format!("//{}", seed), None)
 			.expect("static values are known good; qed"),
 	)
@@ -119,10 +119,6 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 	}
 }
 
-lazy_static! {
-	static ref BIN_PATH: PathBuf = assert_cmd::cargo::cargo_bin("dkg-standalone-node");
-}
-
 #[derive(PartialEq)]
 pub enum Spawnable {
 	Alice,
@@ -133,29 +129,49 @@ pub enum Spawnable {
 	Eve,
 }
 
+impl Spawnable {
+	fn to_str(&self) -> &str {
+		match self {
+			Self::Alice => "alice",
+			Self::Charlie => "charlie",
+			Self::Bob => "bob",
+			Self::Dave => "dave",
+			Self::Ferdie => "ferdie",
+			Self::Eve => "eve",
+		}
+	}
+}
+
 /// Spawn the dkg nodes at the given path, and wait for rpc to be initialized.
-/// The Alice node should be the first value in the list
+/// The list should always contain the alice node name as the first value
 pub async fn spawn(
-	nodes: Vec<Spawnable>,
-) -> Result<(subxt::Client<node_runtime::DefaultConfig>, Vec<Child>, String), String> {
-	assert!(nodes[0] == Spawnable::Alice, "Alice should be the first value");
-	let mut port = 9944u16;
+	nodes_names: Vec<Spawnable>,
+) -> Result<
+	(
+		subxt::Client<dkg_runtime::api::DefaultConfig>,
+		Vec<KillOnDrop>,
+		String,
+		Vec<Option<tempdir::TempDir>>,
+	),
+	String,
+> {
+	assert!(
+		nodes_names[0] == Spawnable::Alice,
+		"Alice should be in the list and should be the first node"
+	);
+	let mut port: u16 = 9944;
+	let mut alice_p2p_port: u16 = 0;
 
 	let mut processes = Vec::new();
+	let mut temp_dirs = Vec::new();
 
-	for node in nodes {
-		let mut node_name = "alice";
-		match node {
-			Spawnable::Alice => {},
-			Spawnable::Charlie => node_name = "charlie",
-			Spawnable::Bob => node_name = "bob",
-			Spawnable::Dave => node_name = "dave",
-			Spawnable::Ferdie => node_name = "ferdie",
-			Spawnable::Eve => node_name = "eve",
-		}
+	for name in nodes_names {
+		let mut node_name = name.to_str();
+		// Make temp dir
+		let tmp_dir = tempdir::TempDir::new(node_name).unwrap();
 
-		let mut cmd = process::Command::new(&*BIN_PATH);
-		cmd.env("RUST_LOG", "error").arg(format!("--{}", node_name));
+		let mut cmd = process::Command::new(&*BIN_BATH);
+		cmd.arg(format!("--{}", node_name));
 
 		let (p2p_port, http_port, ws_port) = next_open_port()
 			.ok_or_else(|| "No available ports in the given port range".to_owned())?;
@@ -163,23 +179,26 @@ pub async fn spawn(
 		cmd.arg(format!("--port={}", p2p_port));
 		cmd.arg(format!("--rpc-port={}", http_port));
 		cmd.arg(format!("--ws-port={}", ws_port));
+		cmd.arg(format!("--base-path={}", tmp_dir.path().to_str().unwrap()));
+
+		temp_dirs.push(Some(tmp_dir));
 
 		if node_name == "alice" {
 			cmd.arg("--node-key=0000000000000000000000000000000000000000000000000000000000000001");
-			port = ws_port;
+			alice_p2p_port = p2p_port
 		} else {
-			cmd.arg(format!("--bootnodes=/ip4/127.0.0.1/tcp/{}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp", p2p_port));
+			cmd.arg(format!("--bootnodes=/ip4/127.0.0.1/tcp/{}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp", alice_p2p_port));
 		}
 
-		let proc = cmd
-			.stdout(process::Stdio::null())
-			.stderr(process::Stdio::null())
-			.stdin(process::Stdio::null())
-			.spawn()
-			.map_err(|e| {
-				format!("Error spawning dkg node '{}': {}", BIN_PATH.to_string_lossy(), e)
-			})?;
+		let proc = KillOnDrop(
+			cmd.stdout(process::Stdio::null())
+				.stderr(process::Stdio::null())
+				.stdin(process::Stdio::null())
+				.spawn()
+				.map_err(|e| format!("Error spawning dkg node: {}", e))?,
+		);
 
+		port = ws_port;
 		processes.push(proc);
 	}
 
@@ -207,7 +226,7 @@ pub async fn spawn(
 	};
 
 	match client {
-		Ok(client) => Ok((client, processes, ws_url.clone())),
+		Ok(client) => Ok((client, processes, ws_url.clone(), temp_dirs)),
 		Err(err) => {
 			let err = format!(
 				"Failed to connect to node rpc at {} after {} attempts: {}",
@@ -251,5 +270,24 @@ fn next_open_port() -> Option<(u16, u16, u16)> {
 		if ports_scanned == MAX_PORTS {
 			return None
 		}
+	}
+}
+
+pub struct KillOnDrop(std::process::Child);
+
+impl Deref for KillOnDrop {
+	type Target = std::process::Child;
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+impl DerefMut for KillOnDrop {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
+	}
+}
+impl Drop for KillOnDrop {
+	fn drop(&mut self) {
+		let _ = self.0.kill();
 	}
 }
