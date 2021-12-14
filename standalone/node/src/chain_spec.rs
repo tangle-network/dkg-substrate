@@ -6,7 +6,7 @@ use dkg_standalone_runtime::{
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ecdsa, sr25519, Pair, Public};
+use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -234,12 +234,22 @@ fn testnet_genesis(
 				5001, // Hermis
 				5002, // Athena
 			],
-			initial_r_ids: vec![(
-				hex_literal::hex!(
-					"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+			initial_r_ids: vec![
+				// Resoruce ID for Chain Hermis => Athena
+				(
+					hex_literal::hex!(
+						"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+					),
+					Default::default(),
 				),
-				Default::default(),
-			)],
+				// Resource ID for Chain Athena => Hermis
+				(
+					hex_literal::hex!(
+						"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
+					),
+					Default::default(),
+				),
+			],
 			initial_proposers: vec![
 				get_account_id_from_seed::<sr25519::Public>("Dave"),
 				get_account_id_from_seed::<sr25519::Public>("Eve"),
