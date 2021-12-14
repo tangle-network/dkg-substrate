@@ -659,127 +659,122 @@ where
 			return
 		}
 
-		match dkg_msg.payload {
-			DKGMsgPayload::PublicKeyBroadcast(msg) => {
-				debug!(target: "dkg", "Received public key broadcast");
-				let can_proceed = {
-					if msg.round_id == self.rounds.get_id() {
-						let maybe_signers = authority_accounts
-							.unwrap()
-							.0
-							.iter()
-							.map(|x| {
-								sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-									panic!("Failed to convert account id to sr25519 public key")
-								}))
-							})
-							.collect::<Vec<sr25519::Public>>();
+		if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
+			debug!(target: "dkg", "Received public key broadcast");
+			let can_proceed = {
+				if msg.round_id == self.rounds.get_id() {
+					let maybe_signers = authority_accounts
+						.unwrap()
+						.0
+						.iter()
+						.map(|x| {
+							sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+								panic!("Failed to convert account id to sr25519 public key")
+							}))
+						})
+						.collect::<Vec<sr25519::Public>>();
 
-						dkg_runtime_primitives::utils::verify_signer_from_set(
-							maybe_signers,
-							&msg.pub_key,
-							&msg.signature,
-						)
+					dkg_runtime_primitives::utils::verify_signer_from_set(
+						maybe_signers,
+						&msg.pub_key,
+						&msg.signature,
+					)
+					.1
+				} else {
+					let maybe_signers = authority_accounts
+						.unwrap()
 						.1
-					} else {
-						let maybe_signers = authority_accounts
-							.unwrap()
-							.1
-							.iter()
-							.map(|x| {
-								sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-									panic!("Failed to convert account id to sr25519 public key")
-								}))
-							})
-							.collect::<Vec<sr25519::Public>>();
+						.iter()
+						.map(|x| {
+							sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+								panic!("Failed to convert account id to sr25519 public key")
+							}))
+						})
+						.collect::<Vec<sr25519::Public>>();
 
-						dkg_runtime_primitives::utils::verify_signer_from_set(
-							maybe_signers,
-							&msg.pub_key,
-							&msg.signature,
-						)
-						.1
-					}
-				};
-
-				if !can_proceed {
-					error!("Message signature is not from a registered authority");
-					return
+					dkg_runtime_primitives::utils::verify_signer_from_set(
+						maybe_signers,
+						&msg.pub_key,
+						&msg.signature,
+					)
+					.1
 				}
+			};
 
-				let key_and_sig = (msg.pub_key, msg.signature);
-				let round_id = msg.round_id;
-				let mut aggregated_public_keys =
-					if self.aggregated_public_keys.get(&round_id).is_some() {
-						self.aggregated_public_keys.get(&round_id).unwrap().clone()
-					} else {
-						AggregatedPublicKeys::default()
-					};
+			if !can_proceed {
+				error!("Message signature is not from a registered authority");
+				return
+			}
 
-				if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
-					aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-					self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
+			let key_and_sig = (msg.pub_key, msg.signature);
+			let round_id = msg.round_id;
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
+			{
+				self.aggregated_public_keys.get(&round_id).unwrap().clone()
+			} else {
+				AggregatedPublicKeys::default()
+			};
 
-					if let Some(latest_header) = self.latest_header.as_ref() {
-						let threshold = self.get_threshold(latest_header).unwrap() as usize;
-						let num_authorities = self.queued_validator_set.authorities.len();
-						let threshold_buffer = num_authorities.saturating_sub(threshold) / 2;
-						if aggregated_public_keys.keys_and_signatures.len() >=
-							(threshold + threshold_buffer)
-						{
-							let offchain = self.backend.offchain_storage();
+			if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
+				aggregated_public_keys.keys_and_signatures.push(key_and_sig);
+				self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
 
-							if let Some(mut offchain) = offchain {
-								if msg.round_id == self.rounds.get_id() {
-									self.dkg_state.listening_for_genesis_pub_key = false;
+				if let Some(latest_header) = self.latest_header.as_ref() {
+					let threshold = self.get_threshold(latest_header).unwrap() as usize;
+					let num_authorities = self.queued_validator_set.authorities.len();
+					let threshold_buffer = num_authorities.saturating_sub(threshold) / 2;
+					if aggregated_public_keys.keys_and_signatures.len() >=
+						(threshold + threshold_buffer)
+					{
+						let offchain = self.backend.offchain_storage();
 
+						if let Some(mut offchain) = offchain {
+							if msg.round_id == self.rounds.get_id() {
+								self.dkg_state.listening_for_genesis_pub_key = false;
+
+								offchain.set(
+									STORAGE_PREFIX,
+									AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+									&aggregated_public_keys.encode(),
+								);
+
+								let submit_at = self
+									.generate_random_delay(&self.current_validator_set.authorities);
+								if let Some(submit_at) = submit_at {
 									offchain.set(
 										STORAGE_PREFIX,
-										AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-										&aggregated_public_keys.encode(),
+										SUBMIT_GENESIS_KEYS_AT,
+										&submit_at.encode(),
 									);
-
-									let submit_at = self.generate_random_delay(
-										&self.current_validator_set.authorities,
-									);
-									if let Some(submit_at) = submit_at {
-										offchain.set(
-											STORAGE_PREFIX,
-											SUBMIT_GENESIS_KEYS_AT,
-											&submit_at.encode(),
-										);
-									}
-
-									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
-								} else {
-									self.dkg_state.listening_for_pub_key = false;
-
-									offchain.set(
-										STORAGE_PREFIX,
-										AGGREGATED_PUBLIC_KEYS,
-										&aggregated_public_keys.encode(),
-									);
-									let submit_at = self.generate_random_delay(
-										&self.queued_validator_set.authorities,
-									);
-									if let Some(submit_at) = submit_at {
-										offchain.set(
-											STORAGE_PREFIX,
-											SUBMIT_KEYS_AT,
-											&submit_at.encode(),
-										);
-									}
-
-									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								}
 
-								let _ = self.aggregated_public_keys.remove(&round_id);
+								trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+							} else {
+								self.dkg_state.listening_for_pub_key = false;
+
+								offchain.set(
+									STORAGE_PREFIX,
+									AGGREGATED_PUBLIC_KEYS,
+									&aggregated_public_keys.encode(),
+								);
+								let submit_at = self
+									.generate_random_delay(&self.queued_validator_set.authorities);
+								if let Some(submit_at) = submit_at {
+									offchain.set(
+										STORAGE_PREFIX,
+										SUBMIT_KEYS_AT,
+										&submit_at.encode(),
+									);
+								}
+
+								trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 							}
+
+							let _ = self.aggregated_public_keys.remove(&round_id);
 						}
 					}
 				}
-			},
-			_ => {},
+			}
 		}
 	}
 
@@ -826,7 +821,16 @@ where
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		match finished_round.key {
 			DKGPayloadKey::EVMProposal(_nonce) => {
-				self.process_signed_proposal(finished_round);
+				self.process_signed_proposal(ProposalType::EVMSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				});
+			},
+			DKGPayloadKey::AnchorUpdateProposal(_nonce) => {
+				self.process_signed_proposal(ProposalType::AnchorUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				});
 			},
 			DKGPayloadKey::RefreshVote(_nonce) => {
 				let offchain = self.backend.offchain_storage();
@@ -895,13 +899,8 @@ where
 		}
 	}
 
-	fn process_signed_proposal(&mut self, signed_payload: DKGSignedPayload<DKGPayloadKey>) {
+	fn process_signed_proposal(&mut self, signed_proposal: ProposalType) {
 		trace!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
-
-		let signed_proposal = ProposalType::EVMSigned {
-			data: signed_payload.payload,
-			signature: signed_payload.signature,
-		};
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {
 			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);

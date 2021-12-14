@@ -11,6 +11,7 @@ pub type ProposalNonce = u64;
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce), // TODO: new voting types here
 	RefreshVote(u64),
+	AnchorUpdateProposal(ProposalNonce),
 }
 pub enum ProposalAction {
 	// sign the proposal with some priority
@@ -21,6 +22,8 @@ pub enum ProposalAction {
 pub enum ProposalType {
 	EVMUnsigned { data: Vec<u8> },
 	EVMSigned { data: Vec<u8>, signature: Vec<u8> },
+	AnchorUpdate { data: Vec<u8> },
+	AnchorUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 pub trait ProposalHandlerTrait {
