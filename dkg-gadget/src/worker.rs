@@ -404,7 +404,7 @@ where
 		}
 
 		self.check_refresh(header);
-		self.process_unsigned_proposals(&header);
+		self.process_unsigned_proposals(header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
@@ -894,14 +894,11 @@ where
 				_ => continue,
 			};
 
-			if !self.rounds.has_vote_in_process(key) {
-				if let Err(err) = self.rounds.vote(key, data) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-				}
-				self.send_outgoing_dkg_messages();
-			} else {
-				debug!(target: "dkg", "🕸️  vote already in process for key {:?}", key);
+			if let Err(err) = self.rounds.vote(key, data) {
+				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 			}
+			// send messages to all peers
+			self.send_outgoing_dkg_messages();
 		}
 	}
 
