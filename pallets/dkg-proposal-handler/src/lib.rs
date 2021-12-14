@@ -18,7 +18,7 @@ use dkg_runtime_primitives::{
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
-	offchain::{AppCrypto, SubmitTransaction},
+	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
 use sp_runtime::offchain::storage::StorageValueRef;
@@ -261,14 +261,22 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)?
+		}
 		match Self::get_next_offchain_signed_proposal() {
 			Ok(next_proposal) => {
 				// send unsigned transaction to the chain
 				let call = Call::<T>::submit_signed_proposal { prop: next_proposal.clone() };
-				let result = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-					call.clone().into(),
-				)
-				.map_err(|()| "Unable to submit unsigned transaction.");
+				let result = signer
+					.send_signed_transaction(|_| call.clone())
+					.into_iter()
+					.map(|(_, r)| r)
+					.collect::<Result<Vec<_>, _>>()
+					.map_err(|()| "Unable to submit unsigned transaction.");
 				// Display error if the signed tx fails.
 				if result.is_err() {
 					frame_support::log::error!(
