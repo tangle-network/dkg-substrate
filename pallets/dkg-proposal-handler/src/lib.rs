@@ -121,7 +121,7 @@ pub mod pallet {
 			_origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
-			// let sender = ensure_signed(origin)?;
+			let _sender = ensure_signed(origin)?;
 			// log the caller, and the prop
 			frame_support::log::debug!(
 				target: "dkg_proposal_handler",
