@@ -118,7 +118,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
 		pub fn submit_signed_proposal(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
