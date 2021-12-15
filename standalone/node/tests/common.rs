@@ -22,7 +22,6 @@ use dkg_standalone_runtime::{AccountId, DKGId, Signature};
 use node_primitives::Block;
 use remote_externalities::rpc_api;
 use serde::Serialize;
-use serde_json::{json, to_value, Value};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
@@ -190,13 +189,7 @@ pub async fn spawn(
 			cmd.arg(format!("--bootnodes=/ip4/127.0.0.1/tcp/{}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp", alice_p2p_port));
 		}
 
-		let proc = KillOnDrop(
-			cmd.stdout(process::Stdio::null())
-				.stderr(process::Stdio::null())
-				.stdin(process::Stdio::null())
-				.spawn()
-				.map_err(|e| format!("Error spawning dkg node: {}", e))?,
-		);
+		let proc = KillOnDrop(cmd.spawn().map_err(|e| format!("Error spawning dkg node: {}", e))?);
 
 		port = ws_port;
 		processes.push(proc);

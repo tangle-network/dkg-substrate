@@ -65,22 +65,11 @@ subxt = { git = "https://github.com/webb-tools/subxt", branch = "david/std-featu
 
 [dev-dependencies]
 env_logger = "0.9"
-futures = "0.3.16"
-tempfile = "3.1.0"
 assert_cmd = "2.0.2"
 nix = "0.23"
-serde_json = "1.0"
-regex = "1"
-platforms = "2.0"
-async-std = { version = "1.10.0", features = ["attributes"] }
-soketto = "0.4.2"
-criterion = { version = "0.3.5", features = [ "async_tokio" ] }
 tokio = { version = "1.13", features = ["macros", "time"] }
-jsonrpsee-ws-client = "0.4.1"
 wait-timeout = "0.2"
 remote-externalities = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
-pallet-timestamp = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
-pallet-sudo = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
 node-primitives = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 codec = { package = "parity-scale-codec", version = "2.0.0", features = ["derive"] }
 scale-info = { version = "1.0", features = ["derive"] }
