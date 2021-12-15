@@ -235,7 +235,7 @@ fn testnet_genesis(
 				5002, // Athena
 			],
 			initial_r_ids: vec![
-				// Resoruce ID for Chain Hermis => Athena
+				// Resource ID for Chain Hermis => Athena
 				(
 					hex_literal::hex!(
 						"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
