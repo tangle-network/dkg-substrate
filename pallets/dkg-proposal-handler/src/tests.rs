@@ -10,7 +10,7 @@ use dkg_runtime_primitives::{
 	ProposalHandlerTrait, ProposalType, TransactionAction, TransactionV2,
 	OFFCHAIN_SIGNED_PROPOSALS, U256,
 };
-use sp_core::H256;
+use sp_core::{sr25519, H256};
 use sp_runtime::offchain::storage::MutateStorageError;
 
 // *** Utility ***
@@ -124,7 +124,10 @@ fn submit_signed_proposal_success() {
 
 		let signed_proposal = mock_signed_proposal(tx_v_2);
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposal(Origin::root(), signed_proposal));
+		assert_ok!(DKGProposalHandler::submit_signed_proposal(
+			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			signed_proposal
+		));
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
@@ -152,7 +155,7 @@ fn submit_signed_proposal_already_exists() {
 		let signed_proposal = mock_signed_proposal(tx_v_2.clone());
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposal(
-			Origin::root(),
+			Origin::signed(sr25519::Public::from_raw([1; 32])),
 			signed_proposal.clone()
 		));
 
@@ -172,7 +175,10 @@ fn submit_signed_proposal_already_exists() {
 			true
 		);
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposal(Origin::root(), signed_proposal));
+		assert_ok!(DKGProposalHandler::submit_signed_proposal(
+			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			signed_proposal
+		));
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
@@ -215,7 +221,10 @@ fn submit_signed_proposal_fail_invalid_sig() {
 			ProposalType::EVMSigned { data: tx_v_2.encode(), signature: invalid_sig };
 
 		assert_err!(
-			DKGProposalHandler::submit_signed_proposal(Origin::root(), signed_proposal),
+			DKGProposalHandler::submit_signed_proposal(
+				Origin::signed(sr25519::Public::from_raw([1; 32])),
+				signed_proposal
+			),
 			crate::Error::<Test>::ProposalSignatureInvalid
 		);
 

@@ -121,12 +121,13 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
-			let _sender = ensure_signed(origin)?;
+			let sender = ensure_signed(origin)?;
 			// log the caller, and the prop
 			frame_support::log::debug!(
 				target: "dkg_proposal_handler",
-				"submit_signed_proposal: prop: {:?}",
-				prop
+				"submit_signed_proposal: prop: {:?} by {:?}",
+				prop,
+				sender
 			);
 			let (data, signature) = match prop {
 				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),

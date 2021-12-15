@@ -29,6 +29,7 @@ pallet-dkg-proposals = { path = "../dkg-proposals", default-features = false }
 serde = { version = "1.0.119" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false, features = ["full_crypto"] }
 sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+pallet-balances = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
 [features]
 default = ["std"]
