@@ -1,0 +1,16 @@
+{
+  "name": "dkg-test-suite",
+  "version": "0.0.1",
+  "description": "e2e testing utilities for dkg-substrate",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@polkadot/api": "^6.11.1",
+    "ecpair": "^1.0.0",
+    "ethers": "^5.5.2"
+  }
+}
