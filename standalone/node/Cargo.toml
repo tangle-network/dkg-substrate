@@ -20,6 +20,7 @@ name = "dkg-standalone-node"
 structopt = "0.3.8"
 rand = "0.7.2"
 codec = { package = "parity-scale-codec", version = "2.0.0" }
+hex-literal = { package = "hex-literal", version = "0.3.3" }
 
 sc-cli = { git = 'https://github.com/paritytech/substrate', branch = 'master', features = ["wasmtime"] }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'master' }

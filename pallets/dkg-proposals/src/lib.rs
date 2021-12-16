@@ -88,7 +88,13 @@ pub mod pallet {
 		type Proposal: Parameter + EncodeLike + EncodeAppend;
 
 		/// ChainID for anchor edges
-		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+		type ChainId: Encode
+			+ Decode
+			+ Parameter
+			+ AtLeast32Bit
+			+ MaybeSerializeDeserialize
+			+ Default
+			+ Copy;
 
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a
@@ -233,6 +239,40 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub initial_chain_ids: Vec<T::ChainId>,
+		pub initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
+		pub initial_proposers: Vec<T::AccountId>,
+	}
+
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self {
+				initial_chain_ids: Default::default(),
+				initial_r_ids: Default::default(),
+				initial_proposers: Default::default(),
+			}
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			for chain_id in self.initial_chain_ids.iter() {
+				ChainNonces::<T>::insert(chain_id, ProposalNonce::default());
+			}
+			for (r_id, r_data) in self.initial_r_ids.iter() {
+				Resources::<T>::insert(r_id, r_data.clone());
+			}
+
+			for proposer in self.initial_proposers.iter() {
+				Proposers::<T>::insert(proposer, true);
+			}
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {

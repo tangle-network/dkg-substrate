@@ -12,6 +12,7 @@ pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
 pub use proposal::*;
 
+pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
@@ -184,7 +185,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)>;
+		fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(_block_number: BlockNumber) -> BlockNumber;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

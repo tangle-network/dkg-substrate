@@ -1,5 +1,4 @@
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::ProposalNonce;
 use std::fmt;
 
 /// A typedef for keygen set id
@@ -8,6 +7,7 @@ pub type KeygenSetId = u64;
 pub type SignerSetId = u64;
 /// A typedef for keygen set id
 pub type RoundId = u64;
+pub use dkg_runtime_primitives::DKGPayloadKey;
 
 /// DKG (distributed key generation) message.
 ///
@@ -82,13 +82,6 @@ pub struct DKGSignedPayload<Key> {
 	pub payload: Vec<u8>,
 	/// Runtime compatible signature for the payload
 	pub signature: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Decode, Encode, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub enum DKGPayloadKey {
-	EVMProposal(ProposalNonce), // TODO: new voting types here
-	RefreshVote(u64),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
