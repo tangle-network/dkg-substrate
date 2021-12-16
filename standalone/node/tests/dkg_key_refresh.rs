@@ -25,7 +25,9 @@ pub mod common;
 use common::{get_pair_signer, spawn, Spawnable};
 use webb::substrate::dkg_runtime::{
 	self,
-	api::runtime_types::{pallet_staking::ValidatorPrefs, sp_arithmetic::per_things::Perbill},
+	api::runtime_types::{
+		dkg_standalone_runtime, pallet_staking::ValidatorPrefs, sp_arithmetic::per_things::Perbill,
+	},
 };
 
 use std::path::PathBuf;
@@ -55,7 +57,14 @@ async fn dkg_key_refresh() -> Result<(), subxt::Error> {
 
 	let _hash = api.tx().staking().chill().sign_and_submit(&charlie_stash).await?;
 
-	let _hash = api.tx().staking().force_new_era().sign_and_submit(&signer).await?;
+	let _hash = api
+		.tx()
+		.sudo()
+		.sudo(dkg_standalone_runtime::Call::Staking(
+			pallet_staking::pallet::pallet::Call::force_new_era {},
+		))
+		.sign_and_submit(&signer)
+		.await?;
 
 	let _ = common::wait_n_finalized_blocks(45, &ws_url, 540).await;
 
@@ -83,7 +92,14 @@ async fn dkg_key_refresh() -> Result<(), subxt::Error> {
 		.sign_and_submit(&charlie_stash)
 		.await?;
 
-	let _hash = api.tx().staking().force_new_era().sign_and_submit(&signer).await?;
+	let _hash = api
+		.tx()
+		.sudo()
+		.sudo(dkg_standalone_runtime::Call::Staking(
+			pallet_staking::pallet::pallet::Call::force_new_era {},
+		))
+		.sign_and_submit(&signer)
+		.await?;
 
 	let _ = common::wait_n_finalized_blocks(15, &ws_url, 180).await;
 
