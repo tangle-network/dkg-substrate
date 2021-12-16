@@ -1,0 +1,11 @@
+FROM dkg-ubuntu-build as builder
+
+WORKDIR /app
+COPY . .
+RUN ~/.cargo/bin/cargo build --release -p dkg-standalone-node
+
+FROM ubuntu
+RUN apt update
+RUN apt install -y ca-certificates
+COPY --from=builder /app/target/release/dkg-standalone-node /app/dkg-standalone-node
+ENTRYPOINT ["/app/dkg-standalone-node"]
