@@ -2,7 +2,7 @@ use crate as pallet_dkg_proposal_handler;
 use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
-use sp_core::{sr25519::Signature, H256};
+use sp_core::{sr25519, sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
 	testing::{Header, TestXt},
@@ -47,6 +47,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Session: pallet_session,
 		DKG: pallet_dkg_metadata,
+		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
@@ -83,12 +84,27 @@ impl system::Config for Test {
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u64>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
 	type SS58Prefix = SS58Prefix;
 	type OnSetCode = ();
+}
+parameter_types! {
+	pub const ExistentialDeposit: u64 = 1;
+}
+
+impl pallet_balances::Config for Test {
+	type AccountStore = System;
+	type Balance = u64;
+	type DustRemoval = ();
+	type Event = Event;
+	type ExistentialDeposit = ExistentialDeposit;
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	type WeightInfo = ();
 }
 
 type Extrinsic = TestXt<Call, ()>;
@@ -178,7 +194,13 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+	t.into()
 }
 
 pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
@@ -200,7 +222,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	)
 	.unwrap();
 
-	let mut t = sp_io::TestExternalities::default();
+	let mut t = new_test_ext();
 	t.register_extension(OffchainDbExt::new(offchain.clone()));
 	t.register_extension(OffchainWorkerExt::new(offchain));
 	t.register_extension(KeystoreExt(Arc::new(keystore)));

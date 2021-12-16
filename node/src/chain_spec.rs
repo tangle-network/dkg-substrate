@@ -250,5 +250,6 @@ fn testnet_genesis(
 			threshold: Default::default(),
 			authority_ids: candidates.iter().map(|x| x.0.clone()).collect::<_>(),
 		},
+		dkg_proposals: Default::default(),
 	}
 }

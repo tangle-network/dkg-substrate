@@ -32,6 +32,7 @@ sp-core = { git = "https://github.com/paritytech/substrate", branch = "master", 
 sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "master" }
+pallet-balances = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
 [features]
 default = ["std"]
