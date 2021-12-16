@@ -985,6 +985,25 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 	None
 }
 
+fn set_up_rounds(
+	authority_set: &AuthoritySet<Public>,
+	public: &Public,
+	thresh: u16,
+) -> MultiPartyECDSARounds<DKGPayloadKey> {
+	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
+
+	let n = authority_set.authorities.len();
+
+	let rounds = MultiPartyECDSARounds::new(
+		u16::try_from(party_inx).unwrap(),
+		thresh,
+		u16::try_from(n).unwrap(),
+		authority_set.id.clone(),
+	);
+
+	rounds
+}
+
 /// Extract the MMR root hash from a digest in the given header, if it exists.
 fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
 where
