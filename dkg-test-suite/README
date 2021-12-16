@@ -2,7 +2,7 @@ Execute tests:
 
 From terminal 1:
 1. Run ./scripts/run-standalone.sh
-2. Wait untill Keygen completes
+2. Wait until Keygen completes
 
 From terminal 2:
 3. Run cd dkg-test-suite
