@@ -4,8 +4,13 @@ use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
 use sp_core::{sr25519, sr25519::Signature, H256};
 use sp_runtime::{
+	impl_opaque_keys,
 	testing::{Header, TestXt},
-	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
+	traits::{
+		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
+		OpaqueKeys, Verify,
+	},
+	Permill,
 };
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
@@ -18,11 +23,19 @@ use dkg_runtime_primitives::{keccak_256, TransactionV2};
 
 use frame_support::traits::{OnFinalize, OnInitialize};
 
-use dkg_runtime_primitives::{EIP2930Transaction, ProposalType, TransactionAction, U256};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, EIP2930Transaction, ProposalType, TransactionAction, U256,
+};
 use std::sync::Arc;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+
+impl_opaque_keys! {
+	pub struct MockSessionKeys {
+		pub dummy: pallet_dkg_metadata::Pallet<Test>,
+	}
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -32,6 +45,8 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		Session: pallet_session,
+		DKG: pallet_dkg_metadata,
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
@@ -138,6 +153,43 @@ impl pallet_dkg_proposals::Config for Test {
 	type ProposalHandler = DKGProposalHandler;
 }
 
+pub struct MockSessionManager;
+
+impl pallet_session::SessionManager<AccountId> for MockSessionManager {
+	fn end_session(_: sp_staking::SessionIndex) {}
+	fn start_session(_: sp_staking::SessionIndex) {}
+	fn new_session(idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
+		None
+	}
+}
+
+parameter_types! {
+	pub const Period: u64 = 1;
+	pub const Offset: u64 = 0;
+	pub const RefreshDelay: Permill = Permill::from_percent(90);
+}
+
+impl pallet_session::Config for Test {
+	type Event = Event;
+	type ValidatorId = AccountId;
+	type ValidatorIdOf = ConvertInto;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type SessionManager = MockSessionManager;
+	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = MockSessionKeys;
+	type WeightInfo = ();
+}
+
+impl pallet_dkg_metadata::Config for Test {
+	type DKGId = DKGId;
+	type Event = Event;
+	type OnAuthoritySetChangeHandler = ();
+	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type RefreshDelay = RefreshDelay;
+}
+
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
 #[allow(dead_code)]
@@ -156,7 +208,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	let keystore = KeyStore::new();
 	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
-	SyncCryptoStore::ecdsa_generate_new(
+	let dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
 		Some(PHRASE),
@@ -175,7 +227,11 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	t.register_extension(OffchainWorkerExt::new(offchain));
 	t.register_extension(KeystoreExt(Arc::new(keystore)));
 	t.register_extension(TransactionPoolExt::new(pool));
-	t.execute_with(execute)
+
+	t.execute_with(|| {
+		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, dkg_pub_key.encode()));
+		execute()
+	})
 }
 
 pub fn run_to_block(n: u64) {
