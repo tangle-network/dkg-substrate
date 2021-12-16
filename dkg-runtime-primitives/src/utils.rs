@@ -66,8 +66,8 @@ pub fn to_slice_32(val: &Vec<u8>) -> Option<[u8; 32]> {
 	return None
 }
 
-/// This function takes the compressed 33 bytes dkg public key
-/// the uncompressed ecdsa signature and the unhashed data
+
+/// This function takes the ecdsa signature and the unhashed data
 pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	signature: &Vec<u8>,
 	data: &Vec<u8>,
