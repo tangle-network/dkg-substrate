@@ -1,6 +1,9 @@
 pub use sp_core::sr25519;
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
+use sp_runtime::traits::BadOrigin;
 use sp_std::vec::Vec;
+
+use crate::traits::GetDKGPublicKey;
 
 pub const SIGNATURE_LENGTH: usize = 65;
 const KEY_LENGTH: usize = 32;
@@ -61,4 +64,32 @@ pub fn to_slice_32(val: &Vec<u8>) -> Option<[u8; 32]> {
 	}
 
 	return None
+}
+
+/// This function takes the compressed 33 bytes dkg public key
+/// the uncompressed ecdsa signature and the unhashed data
+pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
+	signature: &Vec<u8>,
+	data: &Vec<u8>,
+) -> Result<(), BadOrigin> {
+	let dkg_key = T::dkg_key();
+	if dkg_key.len() != 33 {
+		Err(BadOrigin)?
+	}
+
+	let recovered_key = recover_ecdsa_pub_key(data, signature);
+
+	match recovered_key {
+		Ok(recovered_pub_key) => {
+			// The stored_key public key is 33 bytes long and contains the prefix which is the first byte
+			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
+			// 32 bytes because the dkg_key is a compressed public key.
+			if recovered_pub_key[..32] != dkg_key[1..].to_vec() {
+				Err(BadOrigin)?
+			}
+		},
+		Err(_) => Err(BadOrigin)?,
+	}
+
+	Ok(())
 }

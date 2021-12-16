@@ -5447,7 +5447,9 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-dkg-metadata",
  "pallet-dkg-proposals",
+ "pallet-session",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -5455,6 +5457,7 @@ dependencies = [
  "sp-io",
  "sp-keystore",
  "sp-runtime",
+ "sp-staking",
  "sp-std",
 ]
 

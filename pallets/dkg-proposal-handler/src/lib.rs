@@ -30,14 +30,16 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::ProposalType;
+	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, ProposalType};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::AtLeast32Bit;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	pub trait Config:
+		frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_dkg_metadata::Config
+	{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// ChainID for anchor edges
@@ -121,6 +123,9 @@ pub mod pallet {
 				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
 			};
 
+			ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+				.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
+
 			if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
 				ensure!(
 					Self::validate_ethereum_tx(&eth_transaction),
@@ -181,7 +186,7 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
 			return Err(
 				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
