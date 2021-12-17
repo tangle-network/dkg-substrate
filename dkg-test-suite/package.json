@@ -4,13 +4,22 @@
   "description": "e2e testing utilities for dkg-substrate",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dkg-refresh": "ts-node ./src/key_refresh.ts",
+    "anchor-proposals": "ts-node ./src/testAnchorProposal.ts"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@polkadot/api": "^6.11.1",
     "ecpair": "^1.0.0",
-    "ethers": "^5.5.2"
+    "ethers": "^5.5.2",
+    "@polkadot/util": "^8.1.2",
+    "jest": "^27.4.5",
+    "ts-jest": "^27.1.2",
+    "ts-node": "^10.4.0",
+    "typescript": "4.5.4"
+  },
+  "engines": {
+    "node": "17.x.x"
   }
 }

@@ -1,4 +1,6 @@
-Execute tests:
+## Execute tests:
+
+# Anchor Proposal tests:
 
 From terminal 1:
 1. Run ./scripts/run-standalone.sh
@@ -6,5 +8,13 @@ From terminal 1:
 
 From terminal 2:
 3. Run cd dkg-test-suite
-4. Run npm i
-5. Run node ./src/testAnchorProposal.js
+4. Run yarn i
+5. Run `yarn anchor-proposals` for anchor proposal tests 
+
+# DKG Refresh tests:
+1. Run ./scripts/run-standalone.sh
+
+From terminal 2:
+3. Run cd dkg-test-suite
+4. Run yarn i
+5. Run `yarn dkg-refresh` for DKG refresh tests 

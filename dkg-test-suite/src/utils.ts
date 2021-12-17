@@ -1,19 +1,42 @@
+import { ApiPromise } from "@polkadot/api";
 
-exports.hexToBytes = function (hex) {
+const { WsProvider } = require('@polkadot/api');
+export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+
+export const provider = new WsProvider('ws://127.0.0.1:9944');
+
+export const hexToBytes = function (hex: any) {
     for (var bytes = [], c = 0; c < hex.length; c += 2) {
         bytes.push(parseInt(hex.substr(c, 2), 16));
     }
     return bytes;
 }
 
-exports.listenOneBlock = async function (api) {
+export const listenOneBlock = async function (api: ApiPromise) {
     const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
         console.log(`Chain is at block: #${header.hash}`);
         unsubscribe();
     });
 }
 
-exports.printValidators = async function (api) {
+export const wait_n_finalized_blocks = async function (api: ApiPromise, n: number, timeout:  number) {
+    return new Promise<void>(async (resolve, _reject) => {
+        let count = 0;
+        const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
+            count++;
+            if (count == n) {
+                unsubscribe();
+                resolve()
+            }
+            setTimeout(() => {
+                unsubscribe();
+                resolve()
+            }, timeout * 1000)
+        });
+    })
+}
+
+export const printValidators = async function (api: ApiPromise) {
     const [{ nonce: accountNonce }, now, validators] = await Promise.all([
         api.query.system.account(ALICE),
         api.query.timestamp.now(),
