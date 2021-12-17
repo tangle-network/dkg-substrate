@@ -196,7 +196,7 @@ fn testnet_genesis(
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
 		},
-		sudo: SudoConfig { key: root_key },
+		sudo: SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
@@ -216,7 +216,7 @@ fn testnet_genesis(
 		},
 		staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: initial_authorities.len() as u32,
+			minimum_validator_count: initial_authorities.len() as u32 - 1,
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect(),
 			slash_reward_fraction: Perbill::from_percent(10),
 			stakers,

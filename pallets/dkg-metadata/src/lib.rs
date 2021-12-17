@@ -65,7 +65,7 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
-		type DKGId: Member + Parameter + RuntimeAppPublic + Default + MaybeSerializeDeserialize;
+		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
 
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;

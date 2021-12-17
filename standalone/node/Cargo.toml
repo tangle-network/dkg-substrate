@@ -62,25 +62,6 @@ dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-featur
 dkg-primitives = { path = "../../dkg-primitives", default-features = false }
 
 dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
-subxt = { git = "https://github.com/webb-tools/subxt", branch = "david/std-features" }
-
-[dev-dependencies]
-env_logger = "0.9"
-assert_cmd = "2.0.2"
-nix = "0.23"
-tokio = { version = "1.13", features = ["macros", "time"] }
-wait-timeout = "0.2"
-remote-externalities = { git = 'https://github.com/paritytech/substrate', branch = 'master'}
-node-primitives = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
-codec = { package = "parity-scale-codec", version = "2.0.0", features = ["derive"] }
-scale-info = { version = "1.0", features = ["derive"] }
-hex = "0.4.3"
-sp-keyring = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
-serde = { version = "1.0", features = ["derive"] }
-webb = { git = "https://github.com/webb-tools/webb-rs.git",  branch = "david/update-runtime", default-features = false, features = ["substrate-runtime", "generate-substrate"] }
-tempdir = "0.3.7"
-lazy_static = "1.4.0"
-
 
 [build-dependencies]
 substrate-build-script-utils = { git = 'https://github.com/paritytech/substrate', branch = 'master' }

@@ -286,7 +286,10 @@ where
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
-		let thresh = self.get_threshold(header).unwrap();
+		let thresh = validate_threshold(
+			next_authorities.authorities.len() as u16,
+			self.get_threshold(header).unwrap(),
+		);
 
 		self.rounds = self
 			.next_rounds
@@ -316,7 +319,10 @@ where
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
-		let thresh = self.get_threshold(header).unwrap();
+		let thresh = validate_threshold(
+			queued.authorities.len() as u16,
+			self.get_threshold(header).unwrap(),
+		);
 
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
@@ -398,6 +404,7 @@ where
 			if self.queued_validator_set.authorities != queued.authorities &&
 				!self.queued_keygen_in_progress
 			{
+				self.queued_validator_set = queued.clone();
 				self.handle_queued_dkg_setup(&header, queued.clone());
 				self.send_outgoing_dkg_messages();
 			}
@@ -833,6 +840,7 @@ where
 				});
 			},
 			DKGPayloadKey::RefreshVote(_nonce) => {
+				self.refresh_in_progress = false;
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
@@ -983,6 +991,15 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 		}
 	}
 	None
+}
+
+fn validate_threshold(n: u16, t: u16) -> u16 {
+	let max_thresh = n - 1;
+	if t >= 1 && t <= max_thresh {
+		return t
+	}
+
+	return max_thresh
 }
 
 fn set_up_rounds(

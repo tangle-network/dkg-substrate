@@ -40,6 +40,7 @@ use pallet_mmr::primitives::LeafDataProvider;
 
 use codec::Encode;
 use frame_support::traits::Get;
+use sp_core::crypto::ByteArray;
 
 pub use pallet::*;
 

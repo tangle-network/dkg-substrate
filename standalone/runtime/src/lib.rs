@@ -409,6 +409,29 @@ impl frame_support::pallet_prelude::Get<Option<(usize, sp_npos_elections::Extend
 	}
 }
 
+pub struct Fallback<T>(sp_std::marker::PhantomData<T>);
+
+use frame_election_provider_support::{ElectionDataProvider, ElectionProvider};
+use sp_npos_elections::{Support, Supports};
+
+impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallback<T> {
+	type AccountId = T::AccountId;
+	type BlockNumber = T::BlockNumber;
+	type DataProvider = T::DataProvider;
+	type Error = &'static str;
+
+	fn elect() -> Result<Supports<Self::AccountId>, Self::Error> {
+		let targets = <Self::DataProvider as ElectionDataProvider>::targets(None);
+		match targets {
+			Ok(candidates) => Ok(candidates
+				.iter()
+				.map(|x| (x.clone(), Support::<Self::AccountId>::default()))
+				.collect::<Supports<Self::AccountId>>()),
+			Err(_) => Err("No fallback"),
+		}
+	}
+}
+
 impl pallet_election_provider_multi_phase::Config for Runtime {
 	type BenchmarkingConfig = BenchmarkConfig;
 	type Currency = Balances;
@@ -416,7 +439,7 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type DataProvider = Staking;
 	type EstimateCallFee = TransactionPayment;
 	type Event = Event;
-	type Fallback = pallet_election_provider_multi_phase::NoFallback<Self>;
+	type Fallback = Fallback<Self>;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type MinerMaxLength = MinerMaxLength;
 	type MinerMaxWeight = MinerMaxWeight;
