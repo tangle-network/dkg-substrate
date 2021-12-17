@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, GenesisConfig, GrandpaConfig, Perbill,
-	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
-	MAX_NOMINATIONS, WASM_BINARY,
+	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig,
+	GrandpaConfig, Perbill, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
+	SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -228,6 +228,32 @@ fn testnet_genesis(
 			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
 			threshold: Default::default(),
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
+		},
+		dkg_proposals: DKGProposalsConfig {
+			initial_chain_ids: vec![
+				5001, // Hermis
+				5002, // Athena
+			],
+			initial_r_ids: vec![
+				// Resource ID for Chain Hermis => Athena
+				(
+					hex_literal::hex!(
+						"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+					),
+					Default::default(),
+				),
+				// Resource ID for Chain Athena => Hermis
+				(
+					hex_literal::hex!(
+						"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
+					),
+					Default::default(),
+				),
+			],
+			initial_proposers: vec![
+				get_account_id_from_seed::<sr25519::Public>("Dave"),
+				get_account_id_from_seed::<sr25519::Public>("Eve"),
+			],
 		},
 	}
 }

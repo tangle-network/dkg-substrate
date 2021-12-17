@@ -23,12 +23,16 @@ frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'mast
 sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 sp-std = { git = "https://github.com/paritytech/substrate.git", branch = 'master', default-features = false }
 sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+pallet-dkg-metadata = { path = "../dkg-metadata", default-features = false }
 
 [dev-dependencies]
 pallet-dkg-proposals = { path = "../dkg-proposals", default-features = false }
 serde = { version = "1.0.119" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false, features = ["full_crypto"] }
 sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+pallet-session = { git = "https://github.com/paritytech/substrate", branch = "master" }
+sp-staking = { git = "https://github.com/paritytech/substrate", branch = "master" }
+pallet-balances = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
 [features]
 default = ["std"]
@@ -42,4 +46,5 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"dkg-runtime-primitives/std",
+	"pallet-dkg-metadata/std"
 ]

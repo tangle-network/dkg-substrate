@@ -12,9 +12,9 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce, ProposalType,
-	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
+	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS, U256,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -30,14 +30,16 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::ProposalType;
+	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey, ProposalType};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::AtLeast32Bit;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	pub trait Config:
+		frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_dkg_metadata::Config
+	{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// ChainID for anchor edges
@@ -58,7 +60,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		T::ChainId,
 		Blake2_128Concat,
-		ProposalNonce,
+		DKGPayloadKey,
 		ProposalType,
 	>;
 
@@ -70,7 +72,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		T::ChainId,
 		Blake2_128Concat,
-		ProposalNonce,
+		DKGPayloadKey,
 		ProposalType,
 	>;
 
@@ -105,7 +107,12 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_signed_proposal_onchain(block_number);
+			let res = Self::submit_signed_proposal_onchain(block_number);
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"offchain worker result: {:?}",
+				res
+			);
 		}
 	}
 
@@ -113,15 +120,39 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
 		pub fn submit_signed_proposal(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
+			let sender = ensure_signed(origin)?;
+			// log the caller, and the prop
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: prop: {:?} by {:?}",
+				prop,
+				sender
+			);
 			let (data, signature) = match prop {
 				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
+				ProposalType::AnchorUpdateSigned { ref data, ref signature } => (data, signature),
 				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
 			};
 
+			ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+				.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
+
+			// now we need to log the data and signature
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: data: {:?}, signature: {:?}",
+				data,
+				signature
+			);
 			if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+				// log that we are decoding the transaction as TransactionV2
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"submit_signed_proposal: decoding as TransactionV2"
+				);
 				ensure!(
 					Self::validate_ethereum_tx(&eth_transaction),
 					Error::<T>::ProposalFormatInvalid
@@ -129,21 +160,66 @@ pub mod pallet {
 
 				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 
-				if !SignedProposals::<T>::contains_key(chain_id, nonce) {
-					ensure!(
-						UnsignedProposalQueue::<T>::contains_key(chain_id, nonce),
-						Error::<T>::ProposalDoesNotExists
-					);
-					ensure!(
-						Self::validate_proposal_signature(&data, &signature),
-						Error::<T>::ProposalSignatureInvalid
-					);
+				ensure!(
+					UnsignedProposalQueue::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::EVMProposal(nonce)
+					),
+					Error::<T>::ProposalDoesNotExists
+				);
+				ensure!(
+					Self::validate_proposal_signature(&data, &signature),
+					Error::<T>::ProposalSignatureInvalid
+				);
 
-					SignedProposals::<T>::insert(chain_id, nonce, prop.clone());
-				}
+				SignedProposals::<T>::insert(
+					chain_id,
+					DKGPayloadKey::EVMProposal(nonce),
+					prop.clone(),
+				);
 
-				UnsignedProposalQueue::<T>::remove(chain_id, nonce);
+				UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
+				Ok(().into())
+			} else if let Ok((chain_id, nonce)) = Self::decode_anchor_update(&data) {
+				// log the chain id and nonce
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"submit_signed_proposal: chain_id: {:?}, nonce: {:?}",
+					chain_id,
+					nonce
+				);
+				ensure!(
+					UnsignedProposalQueue::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::AnchorUpdateProposal(nonce)
+					),
+					Error::<T>::ProposalDoesNotExists
+				);
+				// log that proposal exist in the unsigned queue
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"submit_signed_proposal: proposal exist in the unsigned queue"
+				);
+				ensure!(
+					Self::validate_proposal_signature(&data, &signature),
+					Error::<T>::ProposalSignatureInvalid
+				);
 
+				// log that the signature is valid
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"submit_signed_proposal: signature is valid"
+				);
+
+				SignedProposals::<T>::insert(
+					chain_id,
+					DKGPayloadKey::AnchorUpdateProposal(nonce),
+					prop.clone(),
+				);
+				UnsignedProposalQueue::<T>::remove(
+					chain_id,
+					DKGPayloadKey::AnchorUpdateProposal(nonce),
+				);
 				Ok(().into())
 			} else {
 				Err(Error::<T>::ProposalFormatInvalid)?
@@ -162,8 +238,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
 			let unsigned_proposal = ProposalType::EVMUnsigned { data: proposal };
-			UnsignedProposalQueue::<T>::insert(chain_id, nonce, unsigned_proposal);
-		};
+			UnsignedProposalQueue::<T>::insert(
+				chain_id,
+				DKGPayloadKey::EVMProposal(nonce),
+				unsigned_proposal,
+			);
+		} else if let Ok((chain_id, nonce)) = Self::decode_anchor_update(&proposal) {
+			let unsigned_proposal = ProposalType::AnchorUpdate { data: proposal };
+			UnsignedProposalQueue::<T>::insert(
+				chain_id,
+				DKGPayloadKey::AnchorUpdateProposal(nonce),
+				unsigned_proposal,
+			);
+		}
 
 		return Ok(())
 	}
@@ -172,7 +259,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+	pub fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
 		return UnsignedProposalQueue::<T>::iter()
 			.map(|entry| (entry.1, entry.2.clone()))
 			.collect()
@@ -181,37 +268,92 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
 			return Err(
 				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
 			)?
 		}
-
-		if let Ok(next_proposal) = Self::get_next_offchain_signed_proposal() {
-			let _ = signer.send_signed_transaction(|_account| Call::submit_signed_proposal {
-				prop: next_proposal.clone(),
-			});
-		}
-
+		match Self::get_next_offchain_signed_proposal() {
+			Ok(next_proposal) => {
+				// send unsigned transaction to the chain
+				let call = Call::<T>::submit_signed_proposal { prop: next_proposal.clone() };
+				let result = signer
+					.send_signed_transaction(|_| call.clone())
+					.into_iter()
+					.map(|(_, r)| r)
+					.collect::<Result<Vec<_>, _>>()
+					.map_err(|()| "Unable to submit unsigned transaction.");
+				// Display error if the signed tx fails.
+				if result.is_err() {
+					frame_support::log::error!(
+						target: "dkg_proposal_handler",
+						"failure: failed to send unsigned transactiion to chain: {:?}",
+						call,
+					);
+				} else {
+					// log the result of the transaction submission
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"Submitted unsigned transaction for signed proposal: {:?}",
+						call,
+					);
+				}
+			},
+			Err(e) => {
+				// log the error
+				frame_support::log::warn!(
+					target: "dkg_proposal_handler",
+					"Failed to get next signed proposal: {}",
+					e
+				);
+			},
+		};
 		return Ok(())
 	}
 
 	fn get_next_offchain_signed_proposal() -> Result<ProposalType, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-		if let Ok(Some(mut prop_wrapper)) = proposals_ref.get::<OffchainSignedProposals>() {
-			if let Some(next_proposal) = prop_wrapper.proposals.pop_front() {
-				let _update_res = proposals_ref.mutate(|val| match val {
-					Ok(Some(_)) => Ok(prop_wrapper),
-					_ => Err(()),
-				});
-
-				return Ok(next_proposal)
-			}
-		} else {
-			return Err("Could not decode stored proposals")?
-		}
+		match proposals_ref.get::<OffchainSignedProposals>() {
+			Ok(Some(mut prop_wrapper)) => {
+				// log the proposals
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"Offchain signed proposals: {:?}",
+					prop_wrapper.proposals
+				);
+				// log how many proposals are left
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"Offchain signed proposals left: {}",
+					prop_wrapper.proposals.len()
+				);
+				match prop_wrapper.proposals.pop_front() {
+					Some(next_proposal) => {
+						proposals_ref.set(&prop_wrapper);
+						return Ok(next_proposal)
+					},
+					None => {
+						// log that there are no more proposals
+						frame_support::log::debug!(
+							target: "dkg_proposal_handler",
+							"No more offchain signed proposals"
+						);
+						return Err("No more offchain signed proposals")
+					},
+				}
+			},
+			Ok(None) => return Err("No signed proposals key stored")?,
+			Err(e) => {
+				// log the error
+				frame_support::log::warn!(
+					target: "dkg_proposal_handler",
+					"Failed to read offchain signed proposals: {:?}",
+					e
+				);
+			},
+		};
 
 		return Err("No pending proposals found")?
 	}
@@ -295,5 +437,43 @@ impl<T: Config> Pallet<T> {
 		};
 
 		return Ok((chain_id, nonce))
+	}
+
+	fn decode_anchor_update(data: &[u8]) -> Result<(T::ChainId, ProposalNonce), Error<T>> {
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Decoding anchor update: {:?} ({} bytes)",
+			data,
+			data.len(),
+		);
+		// check if the data length is 118 bytes [
+		// 	anchor_handler_address_0x_prefixed(22),
+		// 	chain_id(32),
+		// 	nonce(32),
+		// 	merkle_root(32)
+		// ]
+		if data.len() != 22 + 32 + 32 + 32 {
+			return Err(Error::<T>::ProposalFormatInvalid)?
+		}
+		// skip the first 22 bytes and then read the next 32 bytes as the chain id as U256
+		let chain_id = U256::from(&data[22..54]).as_u64();
+		let chain_id = match T::ChainId::try_from(chain_id) {
+			Ok(v) => v,
+			Err(_) => return Err(Error::<T>::ChainIdInvalid)?,
+		};
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Got Chain id: {:?}",
+			chain_id,
+		);
+		// read the next 32 bytes as the nonce
+		let nonce = U256::from(&data[54..86]).as_u64();
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Got Nonce: {}",
+			nonce,
+		);
+		// now return the result
+		Ok((chain_id, nonce))
 	}
 }

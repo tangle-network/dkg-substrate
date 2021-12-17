@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{mmr::MmrLeafVersion, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{mmr::MmrLeafVersion, DKGPayloadKey, ProposalNonce, ProposalType};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -805,7 +805,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<(ProposalNonce, ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 

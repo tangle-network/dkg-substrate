@@ -34,7 +34,7 @@ use sp_runtime::{
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler,
+	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, AGGREGATED_PUBLIC_KEYS,
 	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
@@ -580,22 +580,8 @@ impl<T: Config> Pallet<T> {
 		signature: &Vec<u8>,
 	) -> DispatchResultWithPostInfo {
 		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let recovered_pub_key = match dkg_runtime_primitives::utils::recover_ecdsa_pub_key(
-				&pub_key.1, &signature,
-			) {
-				Ok(key) => key,
-				Err(_) => Err(Error::<T>::InvalidSignature)?,
-			};
-			let stored_key = &Self::dkg_public_key().1;
-			// The stored_key public key is 33 bytes long and contains the prefix which is the first byte
-			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
-			// 32 bytes because the stored key is a compressed public key.
-
-			if recovered_pub_key[..32] != stored_key[1..].to_vec() {
-				// TODO probably a slashing condition
-
-				Err(Error::<T>::InvalidSignature)?;
-			}
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &pub_key.1)
+				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put((
@@ -714,5 +700,11 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 impl<T: Config> IsMember<T::DKGId> for Pallet<T> {
 	fn is_member(authority_id: &T::DKGId) -> bool {
 		Self::authorities().iter().any(|id| id == authority_id)
+	}
+}
+
+impl<T: Config> GetDKGPublicKey for Pallet<T> {
+	fn dkg_key() -> Vec<u8> {
+		Self::dkg_public_key().1
 	}
 }

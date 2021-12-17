@@ -1,0 +1,12 @@
+FROM ubuntu
+
+RUN apt update
+RUN apt install -y git clang curl libssl-dev llvm libudev-dev libgmp3-dev
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN . ~/.cargo/env
+
+RUN ~/.cargo/bin/rustup default nightly
+RUN ~/.cargo/bin/rustup update
+RUN ~/.cargo/bin/rustup update nightly
+RUN ~/.cargo/bin/rustup target add wasm32-unknown-unknown --toolchain nightly

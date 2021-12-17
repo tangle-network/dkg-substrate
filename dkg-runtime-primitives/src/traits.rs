@@ -14,3 +14,7 @@ impl<AuthoritySetId, AuthorityId> OnAuthoritySetChangeHandler<AuthoritySetId, Au
 	) -> () {
 	}
 }
+
+pub trait GetDKGPublicKey {
+	fn dkg_key() -> Vec<u8>;
+}

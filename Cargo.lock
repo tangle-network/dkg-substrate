@@ -2115,6 +2115,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "hex",
+ "hex-literal",
  "jsonrpc-core",
  "lazy_static",
  "nix",
@@ -5843,7 +5844,10 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-balances",
+ "pallet-dkg-metadata",
  "pallet-dkg-proposals",
+ "pallet-session",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -5851,6 +5855,7 @@ dependencies = [
  "sp-io",
  "sp-keystore",
  "sp-runtime",
+ "sp-staking",
  "sp-std",
 ]
 

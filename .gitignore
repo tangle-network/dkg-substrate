@@ -13,3 +13,6 @@
 .local
 
 local-test
+
+# NodeJS
+**/node_modules/
