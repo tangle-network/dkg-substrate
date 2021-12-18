@@ -4,7 +4,7 @@
   "description": "e2e testing utilities for dkg-substrate",
   "main": "index.js",
   "scripts": {
-    "dkg-refresh": "ts-node ./src/key_refresh.ts",
+    "dkg-refresh": "ts-node ./src/keyRefresh.ts",
     "anchor-proposals": "ts-node ./src/testAnchorProposal.ts"
   },
   "author": "",

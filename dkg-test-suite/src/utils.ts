@@ -19,7 +19,7 @@ export const listenOneBlock = async function (api: ApiPromise) {
     });
 }
 
-export const wait_n_finalized_blocks = async function (api: ApiPromise, n: number, timeout:  number) {
+export const waitNfinalizedBlocks = async function (api: ApiPromise, n: number, timeout:  number) {
     return new Promise<void>(async (resolve, _reject) => {
         let count = 0;
         const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
