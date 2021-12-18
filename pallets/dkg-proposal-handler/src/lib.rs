@@ -134,6 +134,9 @@ pub mod pallet {
 			let (data, signature) = match prop {
 				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
 				ProposalType::AnchorUpdateSigned { ref data, ref signature } => (data, signature),
+				ProposalType::TokenUpdateSigned { ref data, ref signature } => (data, signature),
+				ProposalType::WrappingFeeUpdateSigned { ref data, ref signature } =>
+					(data, signature),
 				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
 			};
 
@@ -147,96 +150,70 @@ pub mod pallet {
 				data,
 				signature
 			);
-			if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-				// log that we are decoding the transaction as TransactionV2
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"submit_signed_proposal: decoding as TransactionV2"
-				);
-				ensure!(
-					Self::validate_ethereum_tx(&eth_transaction),
-					Error::<T>::ProposalFormatInvalid
-				);
 
-				let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
+			match prop {
+				ProposalType::EVMSigned { .. } => Self::handle_evm_signed_proposal(prop),
+				ProposalType::AnchorUpdateSigned { .. } =>
+					Self::handle_anchor_update_signed_proposal(prop),
+				ProposalType::TokenUpdateSigned { .. } =>
+					Self::handle_token_update_signed_proposal(prop),
+				ProposalType::WrappingFeeUpdateSigned { .. } =>
+					Self::handle_wrapping_fee_update_signed_proposal(prop),
+				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
+			};
 
-				ensure!(
-					UnsignedProposalQueue::<T>::contains_key(
+			Ok(().into())
+		}
+
+		/// Force submit an unsigned proposal to the DKG
+		///
+		/// There are certain proposals we'd like to be proposable only
+		/// through root actions. The currently supported proposals are
+		/// 	1. Updating
+		#[pallet::weight(0)]
+		pub fn force_submit_unsigned_proposal(
+			origin: OriginFor<T>,
+			prop: ProposalType,
+		) -> DispatchResultWithPostInfo {
+			// Call must come from root (likely from a democracy proposal passing)
+			let _ = ensure_root(origin)?;
+			// We ensure that only certain proposals are valid this way
+			let data = match prop {
+				ProposalType::TokenUpdate { ref data } => {
+					let (chain_id, nonce) = Self::decode_token_update_proposal(&data)?;
+					UnsignedProposalQueue::<T>::insert(
 						chain_id,
-						DKGPayloadKey::EVMProposal(nonce)
-					),
-					Error::<T>::ProposalDoesNotExists
-				);
-				ensure!(
-					Self::validate_proposal_signature(&data, &signature),
-					Error::<T>::ProposalSignatureInvalid
-				);
-
-				SignedProposals::<T>::insert(
-					chain_id,
-					DKGPayloadKey::EVMProposal(nonce),
-					prop.clone(),
-				);
-
-				UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
-				Ok(().into())
-			} else if let Ok((chain_id, nonce)) = Self::decode_anchor_update(&data) {
-				// log the chain id and nonce
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"submit_signed_proposal: chain_id: {:?}, nonce: {:?}",
-					chain_id,
-					nonce
-				);
-				ensure!(
-					UnsignedProposalQueue::<T>::contains_key(
+						DKGPayloadKey::TokenUpdateProposal(nonce),
+						prop.clone(),
+					);
+					data
+				},
+				ProposalType::WrappingFeeUpdate { ref data } => {
+					let (chain_id, nonce) = Self::decode_wrapping_fee_update_proposal(&data)?;
+					UnsignedProposalQueue::<T>::insert(
 						chain_id,
-						DKGPayloadKey::AnchorUpdateProposal(nonce)
-					),
-					Error::<T>::ProposalDoesNotExists
-				);
-				// log that proposal exist in the unsigned queue
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"submit_signed_proposal: proposal exist in the unsigned queue"
-				);
-				ensure!(
-					Self::validate_proposal_signature(&data, &signature),
-					Error::<T>::ProposalSignatureInvalid
-				);
+						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+						prop.clone(),
+					);
+					data
+				},
+				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
+			};
 
-				// log that the signature is valid
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"submit_signed_proposal: signature is valid"
-				);
-
-				SignedProposals::<T>::insert(
-					chain_id,
-					DKGPayloadKey::AnchorUpdateProposal(nonce),
-					prop.clone(),
-				);
-				UnsignedProposalQueue::<T>::remove(
-					chain_id,
-					DKGPayloadKey::AnchorUpdateProposal(nonce),
-				);
-				Ok(().into())
-			} else {
-				Err(Error::<T>::ProposalFormatInvalid)?
-			}
+			Ok(().into())
 		}
 	}
 }
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
-	fn handle_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
+	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		if let Ok(eth_transaction) = TransactionV2::decode(&mut &proposal[..]) {
 			ensure!(
 				Self::validate_ethereum_tx(&eth_transaction),
 				Error::<T>::ProposalFormatInvalid
 			);
 
-			let (chain_id, nonce) = Self::extract_chain_id_and_nonce(&eth_transaction)?;
+			let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
 			let unsigned_proposal = ProposalType::EVMUnsigned { data: proposal };
 			UnsignedProposalQueue::<T>::insert(
 				chain_id,
@@ -250,9 +227,120 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				DKGPayloadKey::AnchorUpdateProposal(nonce),
 				unsigned_proposal,
 			);
+		} else {
+			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 
 		return Ok(())
+	}
+
+	fn handle_evm_signed_proposal(prop: ProposalType) -> DispatchResult {
+		let data = prop.data();
+		let signature = prop.signature();
+		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+			// log that we are decoding the transaction as TransactionV2
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: decoding as TransactionV2"
+			);
+			ensure!(
+				Self::validate_ethereum_tx(&eth_transaction),
+				Error::<T>::ProposalFormatInvalid
+			);
+
+			let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
+
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(
+					chain_id,
+					DKGPayloadKey::EVMProposal(nonce)
+				),
+				Error::<T>::ProposalDoesNotExists
+			);
+			ensure!(
+				Self::validate_proposal_signature(&data, &signature),
+				Error::<T>::ProposalSignatureInvalid
+			);
+
+			SignedProposals::<T>::insert(chain_id, DKGPayloadKey::EVMProposal(nonce), prop.clone());
+
+			UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
+			Ok(().into())
+		} else {
+			Err(Error::<T>::ProposalFormatInvalid)?
+		}
+	}
+
+	fn handle_anchor_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+		Self::handle_single_parameter_signed_proposal(
+			prop,
+			DKGPayloadKey::AnchorUpdateProposal(0u64),
+		)
+	}
+
+	fn handle_token_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+		Self::handle_single_parameter_signed_proposal(
+			prop,
+			DKGPayloadKey::TokenUpdateProposal(0u64),
+		)
+	}
+
+	fn handle_wrapping_fee_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+		Self::handle_single_parameter_signed_proposal(
+			prop,
+			DKGPayloadKey::WrappingFeeUpdateProposal(0),
+		)
+	}
+
+	fn handle_single_parameter_signed_proposal(
+		prop: ProposalType,
+		payload_key_type: DKGPayloadKey,
+	) -> DispatchResult {
+		let data = prop.data();
+		let signature = prop.signature();
+		if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+			// log the chain id and nonce
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: chain_id: {:?}, nonce: {:?}",
+				chain_id,
+				nonce
+			);
+
+			let payload_key = match payload_key_type {
+				DKGPayloadKey::AnchorUpdateProposal(_) =>
+					DKGPayloadKey::AnchorUpdateProposal(nonce),
+				DKGPayloadKey::TokenUpdateProposal(_) => DKGPayloadKey::TokenUpdateProposal(nonce),
+				DKGPayloadKey::WrappingFeeUpdateProposal(_) =>
+					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
+			};
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(chain_id, payload_key),
+				Error::<T>::ProposalDoesNotExists
+			);
+			// log that proposal exist in the unsigned queue
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: proposal exist in the unsigned queue"
+			);
+			ensure!(
+				Self::validate_proposal_signature(&data, &signature),
+				Error::<T>::ProposalSignatureInvalid
+			);
+
+			// log that the signature is valid
+			frame_support::log::debug!(
+				target: "dkg_proposal_handler",
+				"submit_signed_proposal: signature is valid"
+			);
+
+			SignedProposals::<T>::insert(chain_id, payload_key, prop.clone());
+			UnsignedProposalQueue::<T>::remove(chain_id, payload_key);
+			Ok(())
+		} else {
+			Err(Error::<T>::ProposalFormatInvalid)?
+		}
 	}
 }
 
@@ -410,7 +498,7 @@ impl<T: Config> Pallet<T> {
 
 	// *** Utility methods ***
 
-	fn extract_chain_id_and_nonce(
+	fn decode_evm_transaction(
 		eth_transaction: &TransactionV2,
 	) -> core::result::Result<(T::ChainId, ProposalNonce), Error<T>> {
 		let (chain_id, nonce) = match eth_transaction {
@@ -446,13 +534,47 @@ impl<T: Config> Pallet<T> {
 			data,
 			data.len(),
 		);
+
+		// parameter is a address / bytes32 (32 byte element for extra room)
+		Self::decode_single_parameter_proposal::<32>(data)
+	}
+
+	fn decode_token_update_proposal(data: &[u8]) -> Result<(T::ChainId, ProposalNonce), Error<T>> {
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Decoding token update: {:?} ({} bytes)",
+			data,
+			data.len(),
+		);
+
+		// parameter is a address / bytes32 (32 byte element for extra room)
+		Self::decode_single_parameter_proposal::<32>(data)
+	}
+
+	fn decode_wrapping_fee_update_proposal(
+		data: &[u8],
+	) -> Result<(T::ChainId, ProposalNonce), Error<T>> {
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Decoding wrapping fee update: {:?} ({} bytes)",
+			data,
+			data.len(),
+		);
+
+		// parameter is a uint256 / bytes32 (32 byte element)
+		Self::decode_single_parameter_proposal::<32>(data)
+	}
+
+	fn decode_single_parameter_proposal<const N: usize>(
+		data: &[u8],
+	) -> Result<(T::ChainId, ProposalNonce), Error<T>> {
 		// check if the data length is 118 bytes [
-		// 	anchor_handler_address_0x_prefixed(22),
+		// 	handler_address_0x_prefixed(22),
 		// 	chain_id(32),
 		// 	nonce(32),
-		// 	merkle_root(32)
+		// 	parameter(N)
 		// ]
-		if data.len() != 22 + 32 + 32 + 32 {
+		if data.len() != 22 + 32 + 32 + N {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		// skip the first 22 bytes and then read the next 32 bytes as the chain id as U256
