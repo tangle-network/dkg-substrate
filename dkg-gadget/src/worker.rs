@@ -904,6 +904,8 @@ where
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
+				ProposalType::TokenUpdate { data } => data,
+				ProposalType::WrappingFeeUpdate { data } => data,
 				_ => continue,
 			};
 
