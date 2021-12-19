@@ -77,13 +77,14 @@ pub mod pallet {
 		dispatch::Weight,
 		pallet_prelude::*,
 		traits::{Currency, EstimateNextSessionRotation, Get, Imbalance, ReservableCurrency},
+		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
 	use pallet_session::{SessionManager, ShouldEndSession};
 	use parity_scale_codec::{Decode, Encode};
 	use scale_info::TypeInfo;
 	use sp_runtime::{
-		traits::{AtLeast32BitUnsigned, One, Saturating, Zero},
+		traits::{AccountIdConversion, AtLeast32BitUnsigned, One, Saturating, Zero},
 		Perbill, Percent, Permill, RuntimeDebug,
 	};
 	use sp_staking::SessionIndex;
@@ -93,7 +94,7 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(PhantomData<T>);
 
-	#[derive(Default, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 	pub struct Bond<AccountId, Balance> {
 		pub owner: AccountId,
 		pub amount: Balance,
@@ -142,13 +143,19 @@ pub mod pallet {
 		}
 	}
 
-	#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+	#[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
 	/// Snapshot of collator state at the start of the round for which they are
 	/// selected
 	pub struct CollatorSnapshot<AccountId, Balance> {
 		pub bond: Balance,
 		pub nominators: Vec<Bond<AccountId, Balance>>,
 		pub total: Balance,
+	}
+
+	impl<AccountId, Balance: Default> Default for CollatorSnapshot<AccountId, Balance> {
+		fn default() -> Self {
+			Self { bond: Balance::default(), nominators: Vec::default(), total: Balance::default() }
+		}
 	}
 
 	#[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -665,13 +672,8 @@ pub mod pallet {
 		/// Percent of inflation set aside for parachain bond account
 		pub percent: Percent,
 	}
-	impl<A: Default> Default for ParachainBondConfig<A> {
-		fn default() -> ParachainBondConfig<A> {
-			ParachainBondConfig { account: A::default(), percent: Percent::zero() }
-		}
-	}
 
-	#[derive(Encode, Decode, RuntimeDebug, Default, TypeInfo)]
+	#[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
 	/// Store and process all delayed exits by collators and nominators
 	pub struct ExitQ<AccountId> {
 		/// Candidate exit set
@@ -684,6 +686,17 @@ pub mod pallet {
 		/// [Nominator, Some(ValidatorId) || None => All Nominations, Round To
 		/// Exit]
 		pub nominator_schedule: Vec<(AccountId, Option<AccountId>, RoundIndex)>,
+	}
+
+	impl<AccountId> Default for ExitQ<AccountId> {
+		fn default() -> Self {
+			Self {
+				candidates: OrderedSet::default(),
+				nominators_leaving: OrderedSet::default(),
+				nominator_schedule: Vec::default(),
+				candidate_schedule: Vec::default(),
+			}
+		}
 	}
 
 	impl<A: Ord + Clone> ExitQ<A> {
@@ -791,6 +804,8 @@ pub mod pallet {
 		/// nominator
 		#[pallet::constant]
 		type MinNominatorStk: Get<BalanceOf<Self>>;
+		#[pallet::constant]
+		type PalletId: Get<PalletId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -824,6 +839,7 @@ pub mod pallet {
 		TooLowNominationCountToNominate,
 		TooLowCollatorNominationCountToNominate,
 		TooLowNominationCountToLeaveNominators,
+		InvalidBondConfig,
 	}
 
 	#[pallet::event]
@@ -1037,7 +1053,7 @@ pub mod pallet {
 	#[pallet::getter(fn parachain_bond_info)]
 	/// Parachain bond config info { account, percent_of_inflation }
 	type ParachainBondInfo<T: Config> =
-		StorageValue<_, ParachainBondConfig<T::AccountId>, ValueQuery>;
+		StorageValue<_, ParachainBondConfig<T::AccountId>, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn round)]
@@ -1203,8 +1219,7 @@ pub mod pallet {
 			<CollatorCommission<T>>::put(T::DefaultCollatorCommission::get());
 			// Set parachain bond config to default config
 			<ParachainBondInfo<T>>::put(ParachainBondConfig {
-				// must be set soon; if not => due inflation will be sent to collators/nominators
-				account: T::AccountId::default(),
+				account: Pallet::<T>::account_id(),
 				percent: T::DefaultParachainBondReservePercent::get(),
 			});
 
@@ -1282,10 +1297,12 @@ pub mod pallet {
 			new: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			T::MonetaryGovernanceOrigin::ensure_origin(origin)?;
-			let ParachainBondConfig { account: old, percent } = <ParachainBondInfo<T>>::get();
+			let ParachainBondConfig { account: old, percent } =
+				<ParachainBondInfo<T>>::get().unwrap_or(Self::default_bond_config());
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			<ParachainBondInfo<T>>::put(ParachainBondConfig { account: new.clone(), percent });
 			Self::deposit_event(Event::ParachainBondAccountSet { old, new });
+
 			Ok(().into())
 		}
 
@@ -1296,9 +1313,11 @@ pub mod pallet {
 			new: Percent,
 		) -> DispatchResultWithPostInfo {
 			T::MonetaryGovernanceOrigin::ensure_origin(origin)?;
-			let ParachainBondConfig { account, percent: old } = <ParachainBondInfo<T>>::get();
+			let ParachainBondConfig { account, percent: old } =
+				<ParachainBondInfo<T>>::get().unwrap_or(Self::default_bond_config());
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			<ParachainBondInfo<T>>::put(ParachainBondConfig { account, percent: new });
+
 			Self::deposit_event(Event::ParachainBondReservePercentSet { old, new });
 			Ok(().into())
 		}
@@ -1771,6 +1790,17 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
+		pub fn account_id() -> T::AccountId {
+			T::PalletId::get().into_account()
+		}
+
+		pub fn default_bond_config() -> ParachainBondConfig<T::AccountId> {
+			ParachainBondConfig {
+				account: Self::account_id(),
+				percent: T::DefaultParachainBondReservePercent::get(),
+			}
+		}
+
 		pub fn is_nominator(acc: &T::AccountId) -> bool {
 			<NominatorState2<T>>::get(acc).is_some()
 		}
@@ -1843,7 +1873,7 @@ pub mod pallet {
 			let total_issuance = Self::compute_issuance(total_staked);
 			let mut left_issuance = total_issuance;
 			// reserve portion of issuance for parachain bond account
-			let bond_config = <ParachainBondInfo<T>>::get();
+			let bond_config = <ParachainBondInfo<T>>::get().unwrap_or(Self::default_bond_config());
 			let parachain_bond_reserve = bond_config.percent * total_issuance;
 			if let Ok(imb) =
 				T::Currency::deposit_into_existing(&bond_config.account, parachain_bond_reserve)
