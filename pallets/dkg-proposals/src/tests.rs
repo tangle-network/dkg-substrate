@@ -189,18 +189,33 @@ fn add_remove_relayer() {
 	})
 }
 
-fn make_proposal(r: Vec<u8>) -> Vec<u8> {
-	r
+fn make_proposal() -> Vec<u8> {
+	let mut buf = vec![];
+	// handler address mock
+	buf.extend_from_slice(&[1u8; 20]);
+	// 32 bytes chain ID
+	buf.extend_from_slice(&[
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 1,
+	]);
+	// 32 bytes nonce
+	buf.extend_from_slice(&[
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 1,
+	]);
+	// 32 bytes parameter
+	buf.extend_from_slice(&[4u8; 32]);
+	buf
 }
 
 #[test]
-fn create_sucessful_proposal() {
+fn create_successful_proposal() {
 	let src_id = 1u32;
 	let r_id = derive_resource_id(src_id, b"remark");
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal(vec![10]);
+		let proposal = make_proposal();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -288,7 +303,7 @@ fn create_unsucessful_proposal() {
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal(vec![11]);
+		let proposal = make_proposal();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -375,7 +390,7 @@ fn execute_after_threshold_change() {
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal(vec![11]);
+		let proposal = make_proposal();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -445,7 +460,7 @@ fn proposal_expires() {
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal(vec![10]);
+		let proposal = make_proposal();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -595,7 +610,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 		assert_eq!(DKGProposals::resource_exists(r_id), true);
 
 		let prop_id = 1;
-		let proposal = make_proposal(vec![10]);
+		let proposal = make_proposal();
 
 		assert_err!(
 			DKGProposals::reject_proposal(
