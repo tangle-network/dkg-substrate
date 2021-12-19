@@ -50,7 +50,10 @@ fn handle_empty_proposal() {
 	execute_test_with(|| {
 		let prop: Vec<u8> = Vec::new();
 
-		assert_ok!(DKGProposalHandler::handle_proposal(prop, ProposalAction::Sign(0)));
+		assert_err!(
+			DKGProposalHandler::handle_unsigned_proposal(prop, ProposalAction::Sign(0)),
+			crate::Error::<Test>::ProposalFormatInvalid
+		);
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 0);
 	});
@@ -61,7 +64,10 @@ fn handle_unsigned_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
 		assert_eq!(
@@ -76,7 +82,10 @@ fn store_signed_proposal_offchain() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -95,7 +104,10 @@ fn submit_signed_proposal_onchain_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -116,7 +128,10 @@ fn submit_signed_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -146,7 +161,10 @@ fn submit_signed_proposal_already_exists() {
 		// First submission
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -169,7 +187,10 @@ fn submit_signed_proposal_already_exists() {
 		);
 
 		// Second submission
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -209,7 +230,10 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		};
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_proposal(tx_v_2.encode(), ProposalAction::Sign(0)));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			tx_v_2.encode(),
+			ProposalAction::Sign(0)
+		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
@@ -234,6 +258,75 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		);
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
+			true
+		);
+	});
+}
+
+fn make_single_param_propoosal(prop: ProposalType) -> ProposalType {
+	let mut buf = vec![];
+	// handler address mock
+	buf.extend_from_slice(&[1u8; 22]);
+	// 32 bytes chain ID
+	buf.extend_from_slice(&[
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 1,
+	]);
+	// 32 bytes nonce
+	buf.extend_from_slice(&[
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 1,
+	]);
+	// 32 bytes parameter
+	buf.extend_from_slice(&[4u8; 32]);
+
+	match prop {
+		ProposalType::TokenUpdate { .. } => ProposalType::TokenUpdate { data: buf },
+		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
+		_ => panic!("Invalid proposal type"),
+	}
+}
+
+#[test]
+fn force_submit_should_fail_with_invalid_proposal_type() {
+	execute_test_with(|| {
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+
+		assert_err!(
+			DKGProposalHandler::force_submit_unsigned_proposal(
+				Origin::root(),
+				ProposalType::EVMUnsigned { data: tx_v_2.encode() }
+			),
+			crate::Error::<Test>::ProposalFormatInvalid
+		);
+	});
+}
+
+#[test]
+fn force_submit_should_work_with_valid_proposals() {
+	execute_test_with(|| {
+		// [
+		// 	handler_address_0x_prefixed(22),
+		// 	chain_id(32),
+		// 	nonce(32),
+		// 	parameter(32)
+		// ]
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_single_param_propoosal(ProposalType::TokenUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenUpdateProposal(1))
+				.is_some(),
+			true
+		);
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_single_param_propoosal(ProposalType::WrappingFeeUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
+				.is_some(),
 			true
 		);
 	});

@@ -176,9 +176,9 @@ pub mod pallet {
 			prop: ProposalType,
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
-			let _ = ensure_root(origin)?;
+			ensure_root(origin)?;
 			// We ensure that only certain proposals are valid this way
-			let data = match prop {
+			match prop {
 				ProposalType::TokenUpdate { ref data } => {
 					let (chain_id, nonce) = Self::decode_token_update_proposal(&data)?;
 					UnsignedProposalQueue::<T>::insert(
@@ -186,7 +186,7 @@ pub mod pallet {
 						DKGPayloadKey::TokenUpdateProposal(nonce),
 						prop.clone(),
 					);
-					data
+					Ok(().into())
 				},
 				ProposalType::WrappingFeeUpdate { ref data } => {
 					let (chain_id, nonce) = Self::decode_wrapping_fee_update_proposal(&data)?;
@@ -195,12 +195,10 @@ pub mod pallet {
 						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 						prop.clone(),
 					);
-					data
+					Ok(().into())
 				},
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
-			};
-
-			Ok(().into())
+			}
 		}
 	}
 }
