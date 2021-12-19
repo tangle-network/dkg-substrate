@@ -35,15 +35,15 @@ where
 
 /// Generate an Aura authority key.
 pub fn authority_keys_from_seed(
-	s: &str,
-	c: &str,
+	stash: &str,
+	controller: &str,
 ) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
 	(
-		get_account_id_from_seed::<sr25519::Public>(s),
-		get_account_id_from_seed::<sr25519::Public>(c),
-		get_from_seed::<AuraId>(s),
-		get_from_seed::<GrandpaId>(s),
-		get_from_seed::<DKGId>(s),
+		get_account_id_from_seed::<sr25519::Public>(stash),
+		get_account_id_from_seed::<sr25519::Public>(controller),
+		get_from_seed::<AuraId>(stash),
+		get_from_seed::<GrandpaId>(stash),
+		get_from_seed::<DKGId>(stash),
 	)
 }
 
@@ -88,6 +88,9 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
 				true,
 			)
@@ -193,6 +196,7 @@ fn testnet_genesis(
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
 		},
+		sudo: SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
@@ -212,7 +216,7 @@ fn testnet_genesis(
 		},
 		staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: initial_authorities.len() as u32,
+			minimum_validator_count: initial_authorities.len() as u32 - 1,
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect(),
 			slash_reward_fraction: Perbill::from_percent(10),
 			stakers,
@@ -220,10 +224,6 @@ fn testnet_genesis(
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
-		sudo: SudoConfig {
-			// Assign network admin rights.
-			key: root_key,
-		},
 		dkg: DKGConfig {
 			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
 			threshold: Default::default(),

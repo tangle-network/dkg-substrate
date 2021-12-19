@@ -106,7 +106,7 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: MultiPartyECDSARounds<DKGPayloadKey>,
+	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
 	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
@@ -169,7 +169,7 @@ where
 			gossip_validator,
 			min_block_delta,
 			metrics,
-			rounds: MultiPartyECDSARounds::new(0, 0, 1, 0),
+			rounds: None,
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
 			block_import_notification: client.import_notification_stream(),
@@ -286,17 +286,27 @@ where
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
-		let thresh = self.get_threshold(header).unwrap();
+		let thresh = validate_threshold(
+			next_authorities.authorities.len() as u16,
+			self.get_threshold(header).unwrap(),
+		);
 
-		self.rounds = self
-			.next_rounds
-			.take()
-			.unwrap_or_else(|| set_up_rounds(&next_authorities, &public, thresh));
+		self.rounds = if self.next_rounds.is_some() {
+			self.next_rounds.take()
+		} else {
+			if next_authorities.id == GENESIS_AUTHORITY_SET_ID &&
+				find_index(&next_authorities.authorities, &public).is_some()
+			{
+				Some(set_up_rounds(&next_authorities, &public, thresh))
+			} else {
+				None
+			}
+		};
 
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
 			self.dkg_state.listening_for_genesis_pub_key = true;
 
-			match self.rounds.start_keygen(next_authorities.id.clone()) {
+			match self.rounds.as_mut().unwrap().start_keygen(next_authorities.id.clone()) {
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for genesis authority set successfully");
 					self.genesis_keygen_in_progress = true;
@@ -316,7 +326,10 @@ where
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
-		let thresh = self.get_threshold(header).unwrap();
+		let thresh = validate_threshold(
+			queued.authorities.len() as u16,
+			self.get_threshold(header).unwrap_or_default(),
+		);
 
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
@@ -398,6 +411,8 @@ where
 			if self.queued_validator_set.authorities != queued.authorities &&
 				!self.queued_keygen_in_progress
 			{
+				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
+				self.queued_validator_set = queued.clone();
 				self.handle_queued_dkg_setup(&header, queued.clone());
 				self.send_outgoing_dkg_messages();
 			}
@@ -425,20 +440,6 @@ where
 
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
-
-		if self.genesis_keygen_in_progress &&
-			self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID
-		{
-			let is_ready_to_vote = self.rounds.is_ready_to_vote();
-			if is_ready_to_vote {
-				debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
-				self.genesis_keygen_in_progress = false;
-				let pub_key =
-					self.rounds.get_public_key().unwrap().get_element().serialize().to_vec();
-				let round_id = self.rounds.get_id();
-				self.gossip_public_key(pub_key, round_id);
-			}
-		}
 
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
 		                     authority_id: Public| {
@@ -478,14 +479,36 @@ where
 			}
 		};
 
-		if let Some(id) =
-			self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
-		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+		let mut keys_to_gossip = Vec::new();
 
-			send_messages(&mut self.rounds, id);
-		} else {
-			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
+		if let Some(mut rounds) = self.rounds.take() {
+			if let Some(id) =
+				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
+			{
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+
+				send_messages(&mut rounds, id);
+			} else {
+				error!(
+					"No local accounts available. Consider adding one via `author_insertKey` RPC."
+				);
+			}
+
+			if self.genesis_keygen_in_progress &&
+				self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID
+			{
+				let is_ready_to_vote = rounds.is_ready_to_vote();
+				if is_ready_to_vote {
+					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
+					self.genesis_keygen_in_progress = false;
+					let pub_key =
+						rounds.get_public_key().unwrap().get_element().serialize().to_vec();
+					let round_id = rounds.get_id();
+					keys_to_gossip.push((round_id, pub_key));
+				}
+			}
+
+			self.rounds = Some(rounds);
 		}
 
 		// Check if a there's a key gen process running for the queued authority set
@@ -508,8 +531,7 @@ where
 							.get_element()
 							.serialize()
 							.to_vec();
-
-						self.gossip_public_key(pub_key, next_rounds.get_id());
+						keys_to_gossip.push((next_rounds.get_id(), pub_key));
 					}
 					self.next_rounds = Some(next_rounds);
 				}
@@ -519,20 +541,27 @@ where
 				);
 			}
 		}
+
+		for (round_id, pub_key) in &keys_to_gossip {
+			self.gossip_public_key(pub_key.clone(), *round_id);
+		}
 	}
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
-		if dkg_msg.round_id == self.rounds.get_id() {
-			match self.rounds.handle_incoming(dkg_msg.payload.clone()) {
-				Ok(()) => (),
-				Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-			}
+		if let Some(rounds) = self.rounds.as_mut() {
+			if dkg_msg.round_id == rounds.get_id() {
+				match rounds.handle_incoming(dkg_msg.payload.clone()) {
+					Ok(()) => (),
+					Err(err) =>
+						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+				}
 
-			if self.rounds.is_ready_to_vote() {
-				debug!(target: "dkg", "🕸️  DKG is ready to sign");
-				self.dkg_state.accepted = true;
+				if rounds.is_ready_to_vote() {
+					debug!(target: "dkg", "🕸️  DKG is ready to sign");
+					self.dkg_state.accepted = true;
+				}
 			}
 		}
 
@@ -584,6 +613,7 @@ where
 			}
 
 			if let Ok(Some(_sig)) = public_key_sig {
+				self.refresh_in_progress = false;
 				if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
 					debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _sig);
 					offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);
@@ -661,8 +691,17 @@ where
 
 		if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
 			debug!(target: "dkg", "Received public key broadcast");
+
+			let is_main_round = {
+				if self.rounds.is_some() {
+					msg.round_id == self.rounds.as_ref().unwrap().get_id()
+				} else {
+					false
+				}
+			};
+
 			let can_proceed = {
-				if msg.round_id == self.rounds.get_id() {
+				if is_main_round {
 					let maybe_signers = authority_accounts
 						.unwrap()
 						.0
@@ -729,7 +768,7 @@ where
 						let offchain = self.backend.offchain_storage();
 
 						if let Some(mut offchain) = offchain {
-							if msg.round_id == self.rounds.get_id() {
+							if is_main_round {
 								self.dkg_state.listening_for_genesis_pub_key = false;
 
 								offchain.set(
@@ -812,7 +851,11 @@ where
 	/// Rounds handling
 
 	fn process_finished_rounds(&mut self) {
-		for finished_round in self.rounds.get_finished_rounds() {
+		if self.rounds.is_none() {
+			return
+		}
+
+		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			self.handle_finished_round(finished_round);
 		}
 	}
@@ -853,7 +896,7 @@ where
 	// if not check if it's rime for refresh and start signing the public key
 	// for queued authorities
 	fn check_refresh(&mut self, header: &B::Header) {
-		if self.refresh_in_progress {
+		if self.refresh_in_progress || self.rounds.is_none() {
 			return
 		}
 
@@ -865,7 +908,7 @@ where
 			if let Ok(Some(pub_key)) = pub_key {
 				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
 
-				if let Err(err) = self.rounds.vote(key, pub_key.clone()) {
+				if let Err(err) = self.rounds.as_mut().unwrap().vote(key, pub_key.clone()) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 				} else {
 					trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
@@ -878,6 +921,10 @@ where
 	// *** Proposals handling ***
 
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
+		if self.rounds.is_none() {
+			return
+		}
+
 		let at = BlockId::hash(header.hash());
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
@@ -894,7 +941,7 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = self.rounds.vote(key, data) {
+			if let Err(err) = self.rounds.as_mut().unwrap().vote(key, data) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 			}
 			// send messages to all peers
@@ -983,6 +1030,15 @@ fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 		}
 	}
 	None
+}
+
+fn validate_threshold(n: u16, t: u16) -> u16 {
+	let max_thresh = n - 1;
+	if t >= 1 && t <= max_thresh {
+		return t
+	}
+
+	return max_thresh
 }
 
 fn set_up_rounds(

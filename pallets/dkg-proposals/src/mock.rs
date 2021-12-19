@@ -82,6 +82,7 @@ impl system::Config for Test {
 	type SS58Prefix = SS58Prefix;
 	type SystemWeightInfo = ();
 	type Version = ();
+	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
 parameter_types! {
@@ -197,10 +198,12 @@ parameter_types! {
 	pub const MinCollatorStk: u64 = 10;
 	pub const MinNominatorStk: u64 = 5;
 	pub const MinNomination: u64 = 3;
+	pub const ParachainStakingPalletId: PalletId = PalletId(*b"dw/pcstk");
 }
 
 impl pallet_parachain_staking::Config for Test {
 	type BlocksPerRound = BlocksPerRound;
+	type PalletId = ParachainStakingPalletId;
 	type Currency = Balances;
 	type DefaultCollatorCommission = DefaultCollatorCommission;
 	type DefaultParachainBondReservePercent = DefaultParachainBondReservePercent;

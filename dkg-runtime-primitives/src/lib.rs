@@ -7,6 +7,7 @@ pub mod proposal;
 pub mod traits;
 pub mod utils;
 
+use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
@@ -121,7 +122,7 @@ pub mod crypto {
 
 pub type AuthoritySetId = u64;
 
-#[derive(Decode, Encode, Default, Debug, PartialEq, Clone, TypeInfo)]
+#[derive(Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
 pub struct AuthoritySet<AuthorityId> {
 	/// Public keys of the validator set elements
 	pub authorities: Vec<AuthorityId>,
@@ -129,10 +130,16 @@ pub struct AuthoritySet<AuthorityId> {
 	pub id: AuthoritySetId,
 }
 
+impl Default for AuthoritySet<AuthorityId> {
+	fn default() -> Self {
+		Self { authorities: vec![], id: Default::default() }
+	}
+}
+
 impl<AuthorityId> AuthoritySet<AuthorityId> {
 	/// Return an empty validator set with id of 0.
 	pub fn empty() -> Self {
-		Self { authorities: Default::default(), id: Default::default() }
+		Self { authorities: vec![], id: Default::default() }
 	}
 }
 
