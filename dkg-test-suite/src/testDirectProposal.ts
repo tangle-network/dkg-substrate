@@ -65,14 +65,14 @@ async function testDirectProposal() {
 
     const unsubSignedProps = await api.query.dKGProposalHandler.signedProposals(
         4,
-        { anchorupdateproposal: 0 },
+        { tokenupdateproposal: 0 },
         (res) => {
             if (res) {
                 const parsedResult = JSON.parse(JSON.stringify(res));
                 console.log(`Signed prop: ${parsedResult}`);
 
                 if (parsedResult) {
-                    const sig = parsedResult.anchorUpdateSigned.signature;
+                    const sig = parsedResult.tokenupdatesigned.signature;
                     console.log(`Signature: ${sig}`);
 
                     const propHash = keccak256(anchorUpdateProp)
