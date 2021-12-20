@@ -1,13 +1,9 @@
-const { ApiPromise, WsProvider } = require('@polkadot/api');
-const { Keyring } = require('@polkadot/keyring');
-const { hexToBytes, listenOneBlock } = require('./utils');
-const ethers = require('ethers');
-const { keccak256 } = require('@ethersproject/keccak256');
-const { ECPair } = require('ecpair');
-
-const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
-
-const provider = new WsProvider('ws://127.0.0.1:9944');
+import { ApiPromise, WsProvider } from "@polkadot/api";
+import { Keyring } from "@polkadot/keyring";
+import { hexToBytes, listenOneBlock, ALICE, provider } from "./utils";
+import ethers from "ethers";
+import { keccak256 } from "@ethersproject/keccak256";
+import { ECPair } from "ecpair";
 
 const anchorUpdateProp = new Uint8Array([209, 1, 81, 230, 199, 165, 40, 225, 135, 229, 62, 97, 95, 108, 125, 232, 16, 159, 158, 30, 76, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 23, 194, 192, 194, 63, 104, 94, 171, 45, 188, 176, 167, 116, 213, 48, 159, 72, 180, 30, 153, 205, 53, 55, 38, 185, 131, 173, 100, 167, 96, 194, 18]);
 const resourceId = hexToBytes("000000000000000003812879bc2cc702956671036463e6873f63178600000003");
