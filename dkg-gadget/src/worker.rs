@@ -887,7 +887,20 @@ where
 
 					trace!(target: "dkg", "Stored  pub _key signature offchain {:?}", finished_round.signature);
 				}
-			}, // TODO: handle other key types
+			},
+			DKGPayloadKey::TokenUpdateProposal(_nonce) => {
+				self.process_signed_proposal(ProposalType::TokenUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				});
+			},
+			DKGPayloadKey::WrappingFeeUpdateProposal(_nonce) => {
+				self.process_signed_proposal(ProposalType::WrappingFeeUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				});
+			},
+			// TODO: handle other key types
 		};
 	}
 
@@ -938,6 +951,8 @@ where
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
+				ProposalType::TokenUpdate { data } => data,
+				ProposalType::WrappingFeeUpdate { data } => data,
 				_ => continue,
 			};
 
