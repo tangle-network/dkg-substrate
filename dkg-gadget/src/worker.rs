@@ -125,7 +125,7 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 	// dkg state
-	dkg_state: DKGState<DKGPayloadKey>,
+	dkg_state: DKGState<B, DKGPayloadKey>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
 	// Setting up keygen for genesis authorities
@@ -420,6 +420,7 @@ where
 
 		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
+		self.untrack_unsigned_proposals(header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
@@ -920,6 +921,24 @@ where
 
 	// *** Proposals handling ***
 
+	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
+		let keys  = self.dkg_state.voted_on.keys().cloned().collect::<Vec<_>>();
+		for key in keys {
+			let voted_at = self.dkg_state.voted_on.get(&key).unwrap();
+
+			let current_block_number = *header.number();
+			let diff = current_block_number - *voted_at;
+			let at = BlockId::hash(header.hash());
+			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
+
+			if diff >= untrack_interval {
+				self.dkg_state.voted_on.remove(&key)
+			}
+			
+		}
+
+	}
+
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -934,6 +953,9 @@ where
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 		for (key, proposal) in unsigned_proposals {
+			if self.dkg_state.voted_on.contains_key(&key) {
+				continue
+			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", key);
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
@@ -941,15 +963,18 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = self.rounds.as_mut().unwrap().vote(key, data) {
+			if let Err(err) = self.rounds.as_mut().unwrap().vote(key.clone(), data) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+			}
+			else {
+				self.dkg_state.voted_on.insert(key, *header.number());
 			}
 			// send messages to all peers
 			self.send_outgoing_dkg_messages();
 		}
 	}
 
-	fn process_signed_proposal(&mut self, signed_proposal: ProposalType) {
+	fn process_signed_proposal(&mut self, signed_proposals: ProposalType ) {
 		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {

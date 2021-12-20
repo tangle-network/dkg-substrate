@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 use dkg_primitives::rounds::DKGState;
 use log::debug;
@@ -155,6 +155,7 @@ where
 			past_dkg: None,
 			listening_for_pub_key: false,
 			listening_for_genesis_pub_key: false,
+			voted_on: HashMap::new()
 		},
 	};
 

@@ -801,6 +801,10 @@ impl_runtime_apis! {
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
+
+		fn untrack_interval() -> BlockNumber {
+			dkg_runtime_primitives::UNTRACK_INTERVAL
+		}
 	}
 
 	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
