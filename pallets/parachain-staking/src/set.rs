@@ -25,8 +25,14 @@ use sp_std::prelude::*;
 
 /// An ordered set backed by `Vec`
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(RuntimeDebug, PartialEq, Eq, Encode, Decode, Default, Clone, TypeInfo)]
+#[derive(RuntimeDebug, PartialEq, Eq, Encode, Decode, Clone, TypeInfo)]
 pub struct OrderedSet<T>(pub Vec<T>);
+
+impl<T> Default for OrderedSet<T> {
+	fn default() -> Self {
+		Self(Vec::default())
+	}
+}
 
 impl<T: Ord> OrderedSet<T> {
 	/// Create a new empty set

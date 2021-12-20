@@ -97,8 +97,8 @@ fn session_change_updates_next_authorities() {
 		let next_authorities = DKGMetadata::next_authorities();
 
 		assert!(next_authorities.len() == 2);
-		assert_eq!(want[0], next_authorities[0]);
-		assert_eq!(want[1], next_authorities[1]);
+		assert_eq!(want[2], next_authorities[0]);
+		assert_eq!(want[3], next_authorities[1]);
 
 		init_block(2);
 

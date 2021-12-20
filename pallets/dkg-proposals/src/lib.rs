@@ -114,7 +114,7 @@ pub mod pallet {
 	/// The parameter maintainer who can change the parameters
 	#[pallet::storage]
 	#[pallet::getter(fn maintainer)]
-	pub type Maintainer<T: Config> = StorageValue<_, T::AccountId, ValueQuery>;
+	pub type Maintainer<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	/// All whitelisted chains and their respective transaction counts
 	#[pallet::storage]
@@ -175,7 +175,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Maintainer is set
-		MaintainerSet { old_maintainer: T::AccountId, new_maintainer: T::AccountId },
+		MaintainerSet { old_maintainer: Option<T::AccountId>, new_maintainer: T::AccountId },
 		/// Vote threshold has changed (new_threshold)
 		ProposerThresholdChanged { new_threshold: u32 },
 		/// Chain now available for transfers (chain_id)
@@ -285,12 +285,12 @@ pub mod pallet {
 			Self::ensure_admin(origin.clone())?;
 			let origin = ensure_signed(origin)?;
 			// ensure parameter setter is the maintainer
-			ensure!(origin == Self::maintainer(), Error::<T>::InvalidPermissions);
+			ensure!(Some(origin.clone()) == Self::maintainer(), Error::<T>::InvalidPermissions);
 			// set the new maintainer
 			Maintainer::<T>::try_mutate(|maintainer| {
-				*maintainer = new_maintainer.clone();
+				*maintainer = Some(new_maintainer.clone());
 				Self::deposit_event(Event::MaintainerSet {
-					old_maintainer: origin,
+					old_maintainer: Some(origin),
 					new_maintainer,
 				});
 				Ok(().into())
@@ -306,11 +306,9 @@ pub mod pallet {
 			Self::ensure_admin(origin)?;
 			// set the new maintainer
 			Maintainer::<T>::try_mutate(|maintainer| {
-				*maintainer = new_maintainer.clone();
-				Self::deposit_event(Event::MaintainerSet {
-					old_maintainer: Default::default(),
-					new_maintainer,
-				});
+				let old_maintainer = maintainer.clone();
+				*maintainer = Some(new_maintainer.clone());
+				Self::deposit_event(Event::MaintainerSet { old_maintainer, new_maintainer });
 				Ok(().into())
 			})
 		}

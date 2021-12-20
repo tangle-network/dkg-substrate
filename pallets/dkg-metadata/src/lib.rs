@@ -65,7 +65,7 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
-		type DKGId: Member + Parameter + RuntimeAppPublic + Default + MaybeSerializeDeserialize;
+		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
 
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
@@ -425,6 +425,11 @@ impl<T: Config> Pallet<T> {
 			Self::refresh_dkg_keys();
 		}
 
+		if queued != Self::next_authorities() {
+			NextDKGPublicKey::<T>::kill();
+			NextPublicKeySignature::<T>::kill();
+		}
+
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 	}
@@ -657,34 +662,38 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		Self::initialize_authorities(&authorities, &authority_account_ids);
 	}
 
-	fn on_new_session<'a, I: 'a>(changed: bool, validators: I, queued_validators: I)
+	// We want to run this function always because there are other factors(forcing a new era) that can affect
+	// changes to the queued validator set that the session pallet will not take not of until the next session, and this
+	// could cause the value of `changed` to be wrong, causing an out of sync between this pallet and the session pallet.
+	// The `changed` value is true most of the times except in rare cases, omitting  that check does not cause any harm, since this function is light weight
+	// we already have a check in the change_authorities function that would ensure the refresh is not run if the authority
+	// set has not changed.
+	fn on_new_session<'a, I: 'a>(_changed: bool, validators: I, queued_validators: I)
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
-		if changed {
-			let mut authority_account_ids = Vec::new();
-			let mut queued_authority_account_ids = Vec::new();
-			let next_authorities = validators
-				.map(|(l, k)| {
-					authority_account_ids.push(l.clone());
-					k
-				})
-				.collect::<Vec<_>>();
+		let mut authority_account_ids = Vec::new();
+		let mut queued_authority_account_ids = Vec::new();
+		let next_authorities = validators
+			.map(|(l, k)| {
+				authority_account_ids.push(l.clone());
+				k
+			})
+			.collect::<Vec<_>>();
 
-			let next_queued_authorities = queued_validators
-				.map(|(acc, k)| {
-					queued_authority_account_ids.push(acc.clone());
-					k
-				})
-				.collect::<Vec<_>>();
+		let next_queued_authorities = queued_validators
+			.map(|(acc, k)| {
+				queued_authority_account_ids.push(acc.clone());
+				k
+			})
+			.collect::<Vec<_>>();
 
-			Self::change_authorities(
-				next_authorities.clone(),
-				next_queued_authorities,
-				authority_account_ids,
-				queued_authority_account_ids,
-			);
-		}
+		Self::change_authorities(
+			next_authorities.clone(),
+			next_queued_authorities,
+			authority_account_ids,
+			queued_authority_account_ids,
+		);
 	}
 
 	fn on_disabled(i: u32) {

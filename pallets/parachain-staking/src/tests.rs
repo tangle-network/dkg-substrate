@@ -26,7 +26,7 @@ use crate::{
 		events, last_event, roll_to, set_author, Balances, Event as MetaEvent, ExtBuilder, Origin,
 		Stake, Test,
 	},
-	Bond, CollatorStatus, Error, Event, NominatorAdded, Range,
+	Bond, CollatorStatus, Error, Event, NominatorAdded, Pallet, Range,
 };
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::{traits::Zero, DispatchError, Perbill, Percent};
@@ -426,7 +426,10 @@ fn set_parachain_bond_account_event_emits_correctly() {
 		assert_ok!(Stake::set_parachain_bond_account(Origin::root(), 11));
 		assert_eq!(
 			last_event(),
-			MetaEvent::Stake(Event::ParachainBondAccountSet { old: 0, new: 11 })
+			MetaEvent::Stake(Event::ParachainBondAccountSet {
+				old: Pallet::<Test>::account_id(),
+				new: 11
+			})
 		);
 	});
 }
@@ -434,9 +437,9 @@ fn set_parachain_bond_account_event_emits_correctly() {
 #[test]
 fn set_parachain_bond_account_storage_updates_correctly() {
 	ExtBuilder::default().build().execute_with(|| {
-		assert_eq!(Stake::parachain_bond_info().account, 0);
+		assert_eq!(Stake::parachain_bond_info().unwrap(), Pallet::<Test>::default_bond_config());
 		assert_ok!(Stake::set_parachain_bond_account(Origin::root(), 11));
-		assert_eq!(Stake::parachain_bond_info().account, 11);
+		assert_eq!(Stake::parachain_bond_info().unwrap().account, 11);
 	});
 }
 
@@ -462,12 +465,12 @@ fn set_parachain_bond_reserve_percent_event_emits_correctly() {
 #[test]
 fn set_parachain_bond_reserve_percent_storage_updates_correctly() {
 	ExtBuilder::default().build().execute_with(|| {
-		assert_eq!(Stake::parachain_bond_info().percent, Percent::from_percent(30));
+		assert_eq!(Stake::parachain_bond_info().unwrap().percent, Percent::from_percent(30));
 		assert_ok!(Stake::set_parachain_bond_reserve_percent(
 			Origin::root(),
 			Percent::from_percent(50)
 		));
-		assert_eq!(Stake::parachain_bond_info().percent, Percent::from_percent(50));
+		assert_eq!(Stake::parachain_bond_info().unwrap().percent, Percent::from_percent(50));
 	});
 }
 
@@ -2518,7 +2521,7 @@ fn parachain_bond_inflation_reserve_matches_config() {
 			roll_to(8);
 			// chooses top TotalSelectedCandidates (5), in order
 			let mut expected = vec![
-				Event::ParachainBondAccountSet { old: 0, new: 11 },
+				Event::ParachainBondAccountSet { old: Pallet::<Test>::account_id(), new: 11 },
 				Event::CollatorChosen { round: 2, collator: 1, total_exposed_amount: 50 },
 				Event::CollatorChosen { round: 2, collator: 2, total_exposed_amount: 40 },
 				Event::CollatorChosen { round: 2, collator: 3, total_exposed_amount: 20 },

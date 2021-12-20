@@ -189,6 +189,7 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The set code logic, just the default since we're not a parachain.
 	type OnSetCode = ();
+	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
 impl pallet_randomness_collective_flip::Config for Runtime {}
@@ -302,7 +303,7 @@ impl pallet_staking::Config for Runtime {
 	type GenesisElectionProvider = onchain::OnChainSequentialPhragmen<Self>;
 	type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
 	type NextNewSession = Session;
-	// type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
+	type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
 	// send the slashed funds to the treasury.
 	type Reward = ();
 	type RewardRemainder = ();
@@ -320,7 +321,6 @@ impl pallet_staking::Config for Runtime {
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
-	type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
 
 	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
 }
@@ -409,6 +409,29 @@ impl frame_support::pallet_prelude::Get<Option<(usize, sp_npos_elections::Extend
 	}
 }
 
+pub struct Fallback<T>(sp_std::marker::PhantomData<T>);
+
+use frame_election_provider_support::{ElectionDataProvider, ElectionProvider};
+use sp_npos_elections::{Support, Supports};
+
+impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallback<T> {
+	type AccountId = T::AccountId;
+	type BlockNumber = T::BlockNumber;
+	type DataProvider = T::DataProvider;
+	type Error = &'static str;
+
+	fn elect() -> Result<Supports<Self::AccountId>, Self::Error> {
+		let targets = <Self::DataProvider as ElectionDataProvider>::targets(None);
+		match targets {
+			Ok(candidates) => Ok(candidates
+				.iter()
+				.map(|x| (x.clone(), Support::<Self::AccountId>::default()))
+				.collect::<Supports<Self::AccountId>>()),
+			Err(_) => Err("No fallback"),
+		}
+	}
+}
+
 impl pallet_election_provider_multi_phase::Config for Runtime {
 	type BenchmarkingConfig = BenchmarkConfig;
 	type Currency = Balances;
@@ -416,7 +439,7 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type DataProvider = Staking;
 	type EstimateCallFee = TransactionPayment;
 	type Event = Event;
-	type Fallback = pallet_election_provider_multi_phase::NoFallback<Self>;
+	type Fallback = Fallback<Self>;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type MinerMaxLength = MinerMaxLength;
 	type MinerMaxWeight = MinerMaxWeight;
