@@ -27,7 +27,7 @@ pub struct DKGState<B, K> {
 	pub listening_for_genesis_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
-	pub voted_on: HashMap<K, NumberFor<B>>
+	pub voted_on: HashMap<K, NumberFor<B>>,
 }
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds

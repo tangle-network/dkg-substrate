@@ -21,7 +21,7 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
-use sp_std::{collections::vec_deque::VecDeque, prelude::*, vec::Vec};
+use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 
 /// Utility fn to calculate keccak 256 has
@@ -64,8 +64,8 @@ pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_prop
 pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals {
-	pub proposals: VecDeque<ProposalType>,
+pub struct OffchainSignedProposals<BlockNumber> {
+	pub proposals: Vec<(Vec<ProposalType>, BlockNumber)>,
 }
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
@@ -78,7 +78,7 @@ pub struct AggregatedPublicKeys {
 
 impl Default for OffchainSignedProposals {
 	fn default() -> Self {
-		Self { proposals: VecDeque::default() }
+		Self { proposals: Vec::default() }
 	}
 }
 
