@@ -18,26 +18,28 @@ use sp_runtime::offchain::storage::MutateStorageError;
 fn add_proposal_to_offchain_storage(prop: ProposalType) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<OffchainSignedProposals, MutateStorageError<_, ()>> = proposals_ref
-		.mutate(|val: Result<Option<OffchainSignedProposals>, StorageRetrievalError>| match val {
-			Ok(Some(mut ser_props)) => {
-				ser_props.proposals.push_back(prop);
-				Ok(ser_props)
+	let update_res: Result<OffchainSignedProposals<u64>, MutateStorageError<_, ()>> = proposals_ref
+		.mutate(
+			|val: Result<Option<OffchainSignedProposals<u64>>, StorageRetrievalError>| match val {
+				Ok(Some(mut ser_props)) => {
+					ser_props.proposals.push((vec![prop], 0));
+					Ok(ser_props)
+				},
+				_ => {
+					let mut prop_wrapper = OffchainSignedProposals::<u64>::default();
+					prop_wrapper.proposals.push((vec![prop], 0));
+					Ok(prop_wrapper)
+				},
 			},
-			_ => {
-				let mut prop_wrapper = OffchainSignedProposals::default();
-				prop_wrapper.proposals.push_back(prop);
-				Ok(prop_wrapper)
-			},
-		});
+		);
 
 	assert_ok!(update_res);
 }
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<OffchainSignedProposals> =
-		proposals_ref.get::<OffchainSignedProposals>().unwrap();
+	let stored_props: Option<OffchainSignedProposals<u64>> =
+		proposals_ref.get::<OffchainSignedProposals<u64>>().unwrap();
 	assert_eq!(stored_props.is_some(), true);
 
 	assert_eq!(stored_props.unwrap().proposals.len(), num);
@@ -139,9 +141,9 @@ fn submit_signed_proposal_success() {
 
 		let signed_proposal = mock_signed_proposal(tx_v_2);
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposal(
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			Origin::signed(sr25519::Public::from_raw([1; 32])),
-			signed_proposal
+			vec![signed_proposal]
 		));
 
 		assert_eq!(
@@ -172,9 +174,9 @@ fn submit_signed_proposal_already_exists() {
 
 		let signed_proposal = mock_signed_proposal(tx_v_2.clone());
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposal(
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			Origin::signed(sr25519::Public::from_raw([1; 32])),
-			signed_proposal.clone()
+			vec![signed_proposal.clone()]
 		));
 
 		assert_eq!(
@@ -196,9 +198,9 @@ fn submit_signed_proposal_already_exists() {
 			true
 		);
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposal(
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			Origin::signed(sr25519::Public::from_raw([1; 32])),
-			signed_proposal
+			vec![signed_proposal]
 		));
 
 		assert_eq!(
@@ -245,9 +247,9 @@ fn submit_signed_proposal_fail_invalid_sig() {
 			ProposalType::EVMSigned { data: tx_v_2.encode(), signature: invalid_sig };
 
 		assert_err!(
-			DKGProposalHandler::submit_signed_proposal(
+			DKGProposalHandler::submit_signed_proposals(
 				Origin::signed(sr25519::Public::from_raw([1; 32])),
-				signed_proposal
+				vec![signed_proposal]
 			),
 			crate::Error::<Test>::ProposalSignatureInvalid
 		);

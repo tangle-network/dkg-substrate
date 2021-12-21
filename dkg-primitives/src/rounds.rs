@@ -8,7 +8,8 @@ use curv::{
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
-use std::collections::BTreeMap;
+use sp_runtime::traits::{Block, NumberFor};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::types::*;
 use dkg_runtime_primitives::keccak_256;
@@ -19,13 +20,14 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 };
 
 /// DKG State tracker
-pub struct DKGState<K> {
+pub struct DKGState<B: Block, K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_genesis_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
+	pub voted_on: HashMap<K, NumberFor<B>>,
 }
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds

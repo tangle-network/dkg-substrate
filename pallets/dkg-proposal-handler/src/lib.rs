@@ -24,6 +24,9 @@ use frame_system::{
 use sp_runtime::offchain::storage::StorageValueRef;
 use sp_std::{convert::TryFrom, vec::Vec};
 
+pub mod weights;
+use weights::WeightInfo;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
@@ -46,6 +49,11 @@ pub mod pallet {
 		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
+		/// Max number of signed proposal submissions per batch;
+		#[pallet::constant]
+		type MaxSubmissionsPerBatch: Get<u16>;
+		/// Pallet weight information
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -102,6 +110,8 @@ pub mod pallet {
 		ProposalAlreadyExists,
 		/// Chain id is invalid
 		ChainIdInvalid,
+		/// Proposal length exceeds max allowed per batch
+		ProposalsLengthOverflow,
 	}
 
 	#[pallet::hooks]
@@ -118,49 +128,58 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
-		pub fn submit_signed_proposal(
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
+		#[frame_support::transactional]
+		pub fn submit_signed_proposals(
 			origin: OriginFor<T>,
-			prop: ProposalType,
+			props: Vec<ProposalType>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
+
+			ensure!(
+				props.len() <= T::MaxSubmissionsPerBatch::get() as usize,
+				Error::<T>::ProposalsLengthOverflow
+			);
 			// log the caller, and the prop
 			frame_support::log::debug!(
 				target: "dkg_proposal_handler",
-				"submit_signed_proposal: prop: {:?} by {:?}",
-				prop,
+				"submit_signed_proposal: props: {:?} by {:?}",
+				&props,
 				sender
 			);
-			let (data, signature) = match prop {
-				ProposalType::EVMSigned { ref data, ref signature } => (data, signature),
-				ProposalType::AnchorUpdateSigned { ref data, ref signature } => (data, signature),
-				ProposalType::TokenUpdateSigned { ref data, ref signature } => (data, signature),
-				ProposalType::WrappingFeeUpdateSigned { ref data, ref signature } =>
-					(data, signature),
-				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
-			};
 
-			ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
-				.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
+			for prop in &props {
+				let (data, signature) = match prop {
+					ProposalType::EVMSigned { data, signature } => (data, signature),
+					ProposalType::AnchorUpdateSigned { data, signature } => (data, signature),
+					ProposalType::TokenUpdateSigned { data, signature } => (data, signature),
+					ProposalType::WrappingFeeUpdateSigned { data, signature } => (data, signature),
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+				};
 
-			// now we need to log the data and signature
-			frame_support::log::debug!(
-				target: "dkg_proposal_handler",
-				"submit_signed_proposal: data: {:?}, signature: {:?}",
-				data,
-				signature
-			);
+				ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+					.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
 
-			match prop {
-				ProposalType::EVMSigned { .. } => Self::handle_evm_signed_proposal(prop),
-				ProposalType::AnchorUpdateSigned { .. } =>
-					Self::handle_anchor_update_signed_proposal(prop),
-				ProposalType::TokenUpdateSigned { .. } =>
-					Self::handle_token_update_signed_proposal(prop),
-				ProposalType::WrappingFeeUpdateSigned { .. } =>
-					Self::handle_wrapping_fee_update_signed_proposal(prop),
-				_ => return Err(Error::<T>::ProposalSignatureInvalid)?,
-			};
+				// now we need to log the data and signature
+				frame_support::log::debug!(
+					target: "dkg_proposal_handler",
+					"submit_signed_proposal: data: {:?}, signature: {:?}",
+					data,
+					signature
+				);
+
+				match prop {
+					ProposalType::EVMSigned { .. } =>
+						Self::handle_evm_signed_proposal(prop.clone())?,
+					ProposalType::AnchorUpdateSigned { .. } =>
+						Self::handle_anchor_update_signed_proposal(prop.clone())?,
+					ProposalType::TokenUpdateSigned { .. } =>
+						Self::handle_token_update_signed_proposal(prop.clone())?,
+					ProposalType::WrappingFeeUpdateSigned { .. } =>
+						Self::handle_wrapping_fee_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+				}
+			}
 
 			Ok(().into())
 		}
@@ -170,7 +189,7 @@ pub mod pallet {
 		/// There are certain proposals we'd like to be proposable only
 		/// through root actions. The currently supported proposals are
 		/// 	1. Updating
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
 			prop: ProposalType,
@@ -351,39 +370,92 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
+	pub fn is_existing_proposal(x: &ProposalType) -> bool {
+		match x {
+			ProposalType::EVMSigned { data, .. } => {
+				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
+						return !SignedProposals::<T>::contains_key(
+							chain_id,
+							DKGPayloadKey::EVMProposal(nonce),
+						)
+					}
+				}
+
+				false
+			},
+			ProposalType::AnchorUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::AnchorUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::TokenUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::TokenUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::WrappingFeeUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			_ => false,
+		}
+	}
+
 	// *** Offchain worker methods ***
 
-	fn submit_signed_proposal_onchain(_block_number: T::BlockNumber) -> Result<(), &'static str> {
+	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
 			return Err(
 				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
 			)?
 		}
-		match Self::get_next_offchain_signed_proposal() {
-			Ok(next_proposal) => {
+		match Self::get_next_offchain_signed_proposal(block_number) {
+			Ok(next_proposals) => {
 				// send unsigned transaction to the chain
-				let call = Call::<T>::submit_signed_proposal { prop: next_proposal.clone() };
-				let result = signer
-					.send_signed_transaction(|_| call.clone())
-					.into_iter()
-					.map(|(_, r)| r)
-					.collect::<Result<Vec<_>, _>>()
-					.map_err(|()| "Unable to submit unsigned transaction.");
-				// Display error if the signed tx fails.
-				if result.is_err() {
-					frame_support::log::error!(
-						target: "dkg_proposal_handler",
-						"failure: failed to send unsigned transactiion to chain: {:?}",
-						call,
-					);
-				} else {
-					// log the result of the transaction submission
-					frame_support::log::debug!(
-						target: "dkg_proposal_handler",
-						"Submitted unsigned transaction for signed proposal: {:?}",
-						call,
-					);
+				let filtered_proposals = next_proposals
+					.iter()
+					.cloned()
+					.filter(Self::is_existing_proposal)
+					.collect::<Vec<_>>();
+
+				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {
+					let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
+					let result = signer
+						.send_signed_transaction(|_| call.clone())
+						.into_iter()
+						.map(|(_, r)| r)
+						.collect::<Result<Vec<_>, _>>()
+						.map_err(|()| "Unable to submit unsigned transaction.");
+					// Display error if the signed tx fails.
+					if result.is_err() {
+						frame_support::log::error!(
+							target: "dkg_proposal_handler",
+							"failure: failed to send unsigned transactiion to chain: {:?}",
+							call,
+						);
+					} else {
+						// log the result of the transaction submission
+						frame_support::log::debug!(
+							target: "dkg_proposal_handler",
+							"Submitted unsigned transaction for signed proposal: {:?}",
+							call,
+						);
+					}
 				}
 			},
 			Err(e) => {
@@ -398,50 +470,62 @@ impl<T: Config> Pallet<T> {
 		return Ok(())
 	}
 
-	fn get_next_offchain_signed_proposal() -> Result<ProposalType, &'static str> {
+	fn get_next_offchain_signed_proposal(
+		block_number: T::BlockNumber,
+	) -> Result<Vec<ProposalType>, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-		match proposals_ref.get::<OffchainSignedProposals>() {
-			Ok(Some(mut prop_wrapper)) => {
-				// log the proposals
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"Offchain signed proposals: {:?}",
-					prop_wrapper.proposals
-				);
-				// log how many proposals are left
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"Offchain signed proposals left: {}",
-					prop_wrapper.proposals.len()
-				);
-				match prop_wrapper.proposals.pop_front() {
-					Some(next_proposal) => {
-						proposals_ref.set(&prop_wrapper);
-						return Ok(next_proposal)
-					},
-					None => {
-						// log that there are no more proposals
+		let mut all_proposals = Vec::new();
+		let res = proposals_ref.mutate::<OffchainSignedProposals<T::BlockNumber>, &'static str, _>(
+			|res| {
+				match res {
+					Ok(Some(mut prop_wrapper)) => {
+						// log the proposals
 						frame_support::log::debug!(
 							target: "dkg_proposal_handler",
-							"No more offchain signed proposals"
+							"Offchain signed proposals: {:?}",
+							prop_wrapper.proposals
 						);
-						return Err("No more offchain signed proposals")
+						// log how many proposal batches are left
+						frame_support::log::debug!(
+							target: "dkg_proposal_handler",
+							"Offchain signed proposals left: {}",
+							prop_wrapper.proposals.len()
+						);
+
+						let mut to_remove = Vec::new();
+						for (i, (props, submit_at)) in prop_wrapper.proposals.iter().enumerate() {
+							if *submit_at <= block_number {
+								all_proposals.extend_from_slice(&props[..]);
+								to_remove.push(i);
+							}
+						}
+
+						for i in to_remove {
+							prop_wrapper.proposals.swap_remove(i);
+						}
+
+						Ok(prop_wrapper)
+					},
+					Ok(None) => Err("No signed proposals key stored"),
+					Err(e) => {
+						// log the error
+						frame_support::log::warn!(
+							target: "dkg_proposal_handler",
+							"Failed to read offchain signed proposals: {:?}",
+							e
+						);
+						Err("Error decoding offchain signed proposals")
 					},
 				}
 			},
-			Ok(None) => return Err("No signed proposals key stored")?,
-			Err(e) => {
-				// log the error
-				frame_support::log::warn!(
-					target: "dkg_proposal_handler",
-					"Failed to read offchain signed proposals: {:?}",
-					e
-				);
-			},
-		};
+		);
 
-		return Err("No pending proposals found")?
+		if res.is_err() || all_proposals.is_empty() {
+			Err("Unable to get next proposal batch")?
+		}
+
+		return Ok(all_proposals)
 	}
 
 	// *** Validation methods ***
@@ -595,5 +679,10 @@ impl<T: Config> Pallet<T> {
 		);
 		// now return the result
 		Ok((chain_id, nonce))
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	pub fn signed_proposals_len() -> usize {
+		SignedProposals::<T>::iter_keys().collect::<Vec<_>>().len()
 	}
 }

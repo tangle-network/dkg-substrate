@@ -638,6 +638,11 @@ impl<T: Config> Pallet<T> {
 		let max_delay = Permill::from_percent(50) * (refresh_delay * session_length);
 		max_delay
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	pub fn set_dkg_public_key(key: Vec<u8>) {
+		DKGPublicKey::<T>::put((0, key))
+	}
 }
 
 impl<T: Config> sp_runtime::BoundToRuntimeAppPublic for Pallet<T> {

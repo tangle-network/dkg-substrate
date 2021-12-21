@@ -141,6 +141,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
+	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type WeightInfo = ();
 }
 
 impl pallet_dkg_proposals::Config for Test {
@@ -204,6 +206,20 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	t.into()
 }
 
+#[allow(dead_code)]
+pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
+	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+	let mut t_ext = sp_io::TestExternalities::from(t);
+	let keystore = KeyStore::new();
+	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));
+	t_ext
+}
+
 pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
 	let keystore = KeyStore::new();
@@ -222,7 +238,6 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 		Some(PHRASE),
 	)
 	.unwrap();
-
 	let mut t = new_test_ext();
 	t.register_extension(OffchainDbExt::new(offchain.clone()));
 	t.register_extension(OffchainWorkerExt::new(offchain));

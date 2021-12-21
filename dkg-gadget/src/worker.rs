@@ -88,7 +88,7 @@ where
 	pub gossip_validator: Arc<GossipValidator<B>>,
 	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
-	pub dkg_state: DKGState<DKGPayloadKey>,
+	pub dkg_state: DKGState<B, DKGPayloadKey>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -125,7 +125,7 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 	// dkg state
-	dkg_state: DKGState<DKGPayloadKey>,
+	dkg_state: DKGState<B, DKGPayloadKey>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
 	// Setting up keygen for genesis authorities
@@ -420,6 +420,7 @@ where
 
 		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
+		self.untrack_unsigned_proposals(header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
@@ -831,7 +832,11 @@ where
 				.authority_id(&self.key_store.public_keys().unwrap())
 				.unwrap_or_else(|| panic!("Halp"));
 
-			let party_inx = find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32;
+			let party_inx = if find_index::<AuthorityId>(&authorities, &public).is_some() {
+				find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32
+			} else {
+				return None
+			};
 
 			let block_number = *header.number();
 			let at = BlockId::hash(header.hash());
@@ -855,26 +860,31 @@ where
 			return
 		}
 
+		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
-			self.handle_finished_round(finished_round);
+			let proposal = self.handle_finished_round(finished_round);
+			if proposal.is_some() {
+				proposals.push(proposal.unwrap())
+			}
 		}
+
+		self.process_signed_proposals(proposals);
 	}
 
-	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload<DKGPayloadKey>) {
+	fn handle_finished_round(
+		&mut self,
+		finished_round: DKGSignedPayload<DKGPayloadKey>,
+	) -> Option<ProposalType> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		match finished_round.key {
-			DKGPayloadKey::EVMProposal(_nonce) => {
-				self.process_signed_proposal(ProposalType::EVMSigned {
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				});
-			},
-			DKGPayloadKey::AnchorUpdateProposal(_nonce) => {
-				self.process_signed_proposal(ProposalType::AnchorUpdateSigned {
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				});
-			},
+			DKGPayloadKey::EVMProposal(_nonce) => Some(ProposalType::EVMSigned {
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
+			DKGPayloadKey::AnchorUpdateProposal(_nonce) => Some(ProposalType::AnchorUpdateSigned {
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
 			DKGPayloadKey::RefreshVote(_nonce) => {
 				let offchain = self.backend.offchain_storage();
 
@@ -887,21 +897,20 @@ where
 
 					trace!(target: "dkg", "Stored  pub _key signature offchain {:?}", finished_round.signature);
 				}
+
+				None
 			},
-			DKGPayloadKey::TokenUpdateProposal(_nonce) => {
-				self.process_signed_proposal(ProposalType::TokenUpdateSigned {
+			DKGPayloadKey::TokenUpdateProposal(_nonce) => Some(ProposalType::TokenUpdateSigned {
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
+			DKGPayloadKey::WrappingFeeUpdateProposal(_nonce) =>
+				Some(ProposalType::WrappingFeeUpdateSigned {
 					data: finished_round.payload,
 					signature: finished_round.signature,
-				});
-			},
-			DKGPayloadKey::WrappingFeeUpdateProposal(_nonce) => {
-				self.process_signed_proposal(ProposalType::WrappingFeeUpdateSigned {
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				});
-			},
+				}),
 			// TODO: handle other key types
-		};
+		}
 	}
 
 	// *** Refresh Vote ***
@@ -933,6 +942,22 @@ where
 
 	// *** Proposals handling ***
 
+	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
+		let keys = self.dkg_state.voted_on.keys().cloned().collect::<Vec<_>>();
+		for key in keys {
+			let voted_at = self.dkg_state.voted_on.get(&key).unwrap();
+
+			let current_block_number = *header.number();
+			let diff = current_block_number - *voted_at;
+			let at = BlockId::hash(header.hash());
+			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
+
+			if diff >= untrack_interval {
+				self.dkg_state.voted_on.remove(&key);
+			}
+		}
+	}
+
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -947,6 +972,9 @@ where
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 		for (key, proposal) in unsigned_proposals {
+			if self.dkg_state.voted_on.contains_key(&key) {
+				continue
+			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", key);
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
@@ -956,16 +984,27 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = self.rounds.as_mut().unwrap().vote(key, data) {
+			if let Err(err) = self.rounds.as_mut().unwrap().vote(key.clone(), data) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+			} else {
+				self.dkg_state.voted_on.insert(key, *header.number());
 			}
 			// send messages to all peers
 			self.send_outgoing_dkg_messages();
 		}
 	}
 
-	fn process_signed_proposal(&mut self, signed_proposal: ProposalType) {
+	fn process_signed_proposals(&mut self, signed_proposals: Vec<ProposalType>) {
 		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+
+		let public = self
+			.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"));
+
+		if find_index::<AuthorityId>(&self.current_validator_set.authorities, &public).is_none() {
+			return
+		}
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {
 			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
@@ -975,7 +1014,9 @@ where
 				None => OffchainSignedProposals::default(),
 			};
 
-			prop_wrapper.proposals.push_back(signed_proposal);
+			let submit_at = self.generate_random_delay(&self.current_validator_set.authorities);
+
+			prop_wrapper.proposals.push((signed_proposals, submit_at));
 
 			for _i in 1..STORAGE_SET_RETRY_NUM {
 				if offchain.compare_and_set(
@@ -984,7 +1025,7 @@ where
 					old_val.as_deref(),
 					&prop_wrapper.encode(),
 				) {
-					debug!(target: "dkg", "🕸️  Successfully saved signed proposal in offchain starage");
+					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain starage");
 					break
 				}
 			}

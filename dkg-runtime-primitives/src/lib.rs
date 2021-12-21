@@ -21,7 +21,7 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
-use sp_std::{collections::vec_deque::VecDeque, prelude::*, vec::Vec};
+use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 
 /// Utility fn to calculate keccak 256 has
@@ -61,10 +61,11 @@ pub const SUBMIT_GENESIS_KEYS_AT: &[u8] = b"dkg-metadata::submit_genesis_keys_at
 pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
 // Key for offchain signed proposals storage
 pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_proposals";
+pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals {
-	pub proposals: VecDeque<ProposalType>,
+pub struct OffchainSignedProposals<BlockNumber> {
+	pub proposals: Vec<(Vec<ProposalType>, BlockNumber)>,
 }
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
@@ -75,9 +76,9 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
-impl Default for OffchainSignedProposals {
+impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
 	fn default() -> Self {
-		Self { proposals: VecDeque::default() }
+		Self { proposals: Vec::default() }
 	}
 }
 
@@ -199,5 +200,7 @@ sp_api::decl_runtime_apis! {
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
+		/// Get untrack interval for unsigned proposals
+		fn untrack_interval() -> BlockNumber;
 	}
 }
