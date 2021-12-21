@@ -76,7 +76,7 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
-impl Default for OffchainSignedProposals {
+impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
 	fn default() -> Self {
 		Self { proposals: Vec::default() }
 	}
