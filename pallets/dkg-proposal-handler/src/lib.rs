@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
-	pub fn is_signed_proposal(x: &ProposalType) -> bool {
+	pub fn is_existing_proposal(x: &ProposalType) -> bool {
 		match x {
 			ProposalType::EVMSigned { data, .. } => {
 				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
@@ -425,7 +425,7 @@ impl<T: Config> Pallet<T> {
 				let filtered_proposals = next_proposals
 					.iter()
 					.cloned()
-					.filter(Self::is_signed_proposal)
+					.filter(Self::is_existing_proposal)
 					.collect::<Vec<_>>();
 
 				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {
