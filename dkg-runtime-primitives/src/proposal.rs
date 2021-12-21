@@ -1,3 +1,5 @@
+use sp_std::hash::{Hash, Hasher};
+
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
 
@@ -14,6 +16,12 @@ pub enum DKGPayloadKey {
 	AnchorUpdateProposal(ProposalNonce),
 	TokenUpdateProposal(ProposalNonce),
 	WrappingFeeUpdateProposal(ProposalNonce),
+}
+
+impl Hash for DKGPayloadKey {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.encode().hash(state)
+	}
 }
 pub enum ProposalAction {
 	// sign the proposal with some priority

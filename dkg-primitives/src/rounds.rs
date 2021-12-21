@@ -8,7 +8,7 @@ use curv::{
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
-use sp_runtime::traits::NumberFor;
+use sp_runtime::traits::{Block, NumberFor};
 use std::collections::{BTreeMap, HashMap};
 
 use crate::types::*;
@@ -20,7 +20,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 };
 
 /// DKG State tracker
-pub struct DKGState<B, K> {
+pub struct DKGState<B: Block, K> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,

@@ -88,7 +88,7 @@ where
 	pub gossip_validator: Arc<GossipValidator<B>>,
 	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
-	pub dkg_state: DKGState<DKGPayloadKey>,
+	pub dkg_state: DKGState<B, DKGPayloadKey>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -949,7 +949,7 @@ where
 			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
 
 			if diff >= untrack_interval {
-				self.dkg_state.voted_on.remove(&key)
+				self.dkg_state.voted_on.remove(&key);
 			}
 		}
 	}
