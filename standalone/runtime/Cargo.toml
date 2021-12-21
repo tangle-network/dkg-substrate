@@ -63,8 +63,6 @@ frame-benchmarking = { git = 'https://github.com/paritytech/substrate', branch =
 frame-system-benchmarking = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false, optional = true }
 hex-literal = { version = "0.3.3", optional = true }
 
-pallet-template = { version = "3.0.0", default-features = false, path = "../../pallets/template" }
-
 [build-dependencies]
 substrate-wasm-builder = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
@@ -82,7 +80,6 @@ std = [
 	"pallet-grandpa/std",
 	"pallet-randomness-collective-flip/std",
 	"pallet-sudo/std",
-	"pallet-template/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
@@ -118,8 +115,10 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"hex-literal",
 	"pallet-balances/runtime-benchmarks",
-	"pallet-template/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-dkg-proposal-handler/runtime-benchmarks",
+	"pallet-dkg-proposals/runtime-benchmarks",
+	"pallet-dkg-metadata/runtime-benchmarks"
 ]
 

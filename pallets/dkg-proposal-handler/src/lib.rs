@@ -675,4 +675,9 @@ impl<T: Config> Pallet<T> {
 		// now return the result
 		Ok((chain_id, nonce))
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	pub fn signed_proposals_len() -> usize {
+		SignedProposals::<T>::iter_keys().collect::<Vec<_>>().len()
+	}
 }

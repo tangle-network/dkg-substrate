@@ -18,9 +18,9 @@ codec = { package = 'parity-scale-codec', version = '2.0.0', default-features = 
 log = { version = "0.4.14", default-features = false }
 serde = { version = '1.0.119', optional = true, features = ['derive'] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+hex-literal = { version = "0.3", optional = true }
 
 # Local Dependencies
-template = { package = 'pallet-template', path = '../pallets/template', default-features = false }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
 pallet-dkg-mmr = { path = '../pallets/dkg-mmr', default-features = false }
@@ -92,7 +92,10 @@ runtime-benchmarks = [
 	'frame-system/runtime-benchmarks',
 	'pallet-balances/runtime-benchmarks',
 	'pallet-timestamp/runtime-benchmarks',
-	'template/runtime-benchmarks',
+	'pallet-dkg-proposal-handler/runtime-benchmarks',
+	'hex-literal',
+	"pallet-dkg-proposals/runtime-benchmarks",
+	"pallet-dkg-metadata/runtime-benchmarks"
 ]
 std = [
 	"codec/std",
@@ -135,7 +138,6 @@ std = [
 	"polkadot-parachain/std",
 	"pallet-aura/std",
 	"sp-consensus-aura/std",
-	'template/std',
 	'pallet-authorship/std',
 	'pallet-session/std',
 	'parachain-staking/std',
