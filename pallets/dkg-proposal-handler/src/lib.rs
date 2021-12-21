@@ -494,7 +494,7 @@ impl<T: Config> Pallet<T> {
 
 						let mut to_remove = Vec::new();
 						for (i, (props, submit_at)) in prop_wrapper.proposals.iter().enumerate() {
-							if *submit_at >= block_number {
+							if *submit_at <= block_number {
 								all_proposals.extend_from_slice(&props[..]);
 								to_remove.push(i);
 							}
