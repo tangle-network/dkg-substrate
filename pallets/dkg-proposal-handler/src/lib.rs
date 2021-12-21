@@ -24,6 +24,9 @@ use frame_system::{
 use sp_runtime::offchain::storage::StorageValueRef;
 use sp_std::{convert::TryFrom, vec::Vec};
 
+pub mod weights;
+use weights::WeightInfo;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
@@ -49,6 +52,8 @@ pub mod pallet {
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
 		type MaxSubmissionsPerBatch: Get<u16>;
+		/// Pallet weight information
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -123,7 +128,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
 			origin: OriginFor<T>,
@@ -184,7 +189,7 @@ pub mod pallet {
 		/// There are certain proposals we'd like to be proposable only
 		/// through root actions. The currently supported proposals are
 		/// 	1. Updating
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
 			prop: ProposalType,

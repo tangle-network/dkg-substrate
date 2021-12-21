@@ -33,9 +33,13 @@
 use frame_support::{traits::Get, weights::Weight};
 use sp_std::marker::PhantomData;
 
+pub trait WeightInfo {
+	fn submit_signed_proposals(n: u32) -> Weight;
+	fn force_submit_unsigned_proposal() -> Weight;
+}
 /// Weight functions for `pallet_dkg_proposal_handler`.
-pub struct WeightInfo<T>(PhantomData<T>);
-impl<T: frame_system::Config> pallet_dkg_proposal_handler::WeightInfo for WeightInfo<T> {
+pub struct WebbWeight<T>(PhantomData<T>);
+impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKG DKGPublicKey (r:1 w:0)
 	// Storage: DKGProposalHandler UnsignedProposalQueue (r:2 w:2)
 	// Storage: DKGProposalHandler SignedProposals (r:0 w:2)
@@ -51,5 +55,15 @@ impl<T: frame_system::Config> pallet_dkg_proposal_handler::WeightInfo for Weight
 	fn force_submit_unsigned_proposal() -> Weight {
 		(8_866_000 as Weight)
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+}
+
+impl WeightInfo for () {
+	fn submit_signed_proposals(_n: u32, ) -> Weight {
+		0
+	}
+
+	fn force_submit_unsigned_proposal() -> Weight {
+		0
 	}
 }
