@@ -365,6 +365,51 @@ impl<T: Config> Pallet<T> {
 			.collect()
 	}
 
+	pub fn is_signed_proposal(x: &ProposalType) -> bool {
+		match x {
+			ProposalType::EVMSigned { data, .. } => {
+				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
+						return !SignedProposals::<T>::contains_key(
+							chain_id,
+							DKGPayloadKey::EVMProposal(nonce),
+						)
+					}
+				}
+
+				false
+			},
+			ProposalType::AnchorUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::AnchorUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::TokenUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::TokenUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::WrappingFeeUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_single_parameter_proposal::<32>(&data) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			_ => false,
+		}
+	}
+
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
@@ -380,56 +425,7 @@ impl<T: Config> Pallet<T> {
 				let filtered_proposals = next_proposals
 					.iter()
 					.cloned()
-					.filter(|x| match x {
-						ProposalType::EVMSigned { data, .. } => {
-							if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-								if let Ok((chain_id, nonce)) =
-									Self::decode_evm_transaction(&eth_transaction)
-								{
-									return !SignedProposals::<T>::contains_key(
-										chain_id,
-										DKGPayloadKey::EVMProposal(nonce),
-									)
-								}
-							}
-
-							false
-						},
-						ProposalType::AnchorUpdateSigned { data, .. } => {
-							if let Ok((chain_id, nonce)) =
-								Self::decode_single_parameter_proposal::<32>(&data)
-							{
-								return !SignedProposals::<T>::contains_key(
-									chain_id,
-									DKGPayloadKey::AnchorUpdateProposal(nonce),
-								)
-							}
-							false
-						},
-						ProposalType::TokenUpdateSigned { data, .. } => {
-							if let Ok((chain_id, nonce)) =
-								Self::decode_single_parameter_proposal::<32>(&data)
-							{
-								return !SignedProposals::<T>::contains_key(
-									chain_id,
-									DKGPayloadKey::TokenUpdateProposal(nonce),
-								)
-							}
-							false
-						},
-						ProposalType::WrappingFeeUpdateSigned { data, .. } => {
-							if let Ok((chain_id, nonce)) =
-								Self::decode_single_parameter_proposal::<32>(&data)
-							{
-								return !SignedProposals::<T>::contains_key(
-									chain_id,
-									DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-								)
-							}
-							false
-						},
-						_ => false,
-					})
+					.filter(Self::is_signed_proposal)
 					.collect::<Vec<_>>();
 
 				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {

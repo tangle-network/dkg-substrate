@@ -831,8 +831,6 @@ where
 				.key_store
 				.authority_id(&self.key_store.public_keys().unwrap())
 				.unwrap_or_else(|| panic!("Halp"));
-			
-			
 
 			let party_inx = if find_index::<AuthorityId>(&authorities, &public).is_some() {
 				find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32
