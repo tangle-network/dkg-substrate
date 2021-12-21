@@ -831,8 +831,14 @@ where
 				.key_store
 				.authority_id(&self.key_store.public_keys().unwrap())
 				.unwrap_or_else(|| panic!("Halp"));
+			
+			
 
-			let party_inx = find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32;
+			let party_inx = if find_index::<AuthorityId>(&authorities, &public).is_some() {
+				find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32
+			} else {
+				return None
+			};
 
 			let block_number = *header.number();
 			let at = BlockId::hash(header.hash());
@@ -992,6 +998,15 @@ where
 
 	fn process_signed_proposals(&mut self, signed_proposals: Vec<ProposalType>) {
 		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+
+		let public = self
+			.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"));
+
+		if find_index::<AuthorityId>(&self.current_validator_set.authorities, &public).is_none() {
+			return
+		}
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {
 			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
