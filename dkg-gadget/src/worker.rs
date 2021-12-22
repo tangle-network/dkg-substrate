@@ -676,11 +676,13 @@ where
 
 		// Get authority accounts
 		let mut authority_accounts = None;
-
+		let mut max_extrinsic_delay = None;
 		if let Some(header) = self.latest_header.as_ref() {
 			let at = BlockId::hash(header.hash());
+			let block_number = *header.number();
 			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
-
+			max_extrinsic_delay =
+				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
 			if accounts.is_some() {
 				authority_accounts = accounts;
 			}
@@ -778,17 +780,21 @@ where
 									&aggregated_public_keys.encode(),
 								);
 
-								let submit_at = self
-									.generate_random_delay(&self.current_validator_set.authorities);
-								if let Some(submit_at) = submit_at {
-									offchain.set(
-										STORAGE_PREFIX,
-										SUBMIT_GENESIS_KEYS_AT,
-										&submit_at.encode(),
+								if let Some(max_delay) = max_extrinsic_delay {
+									let submit_at = self.generate_random_delay(
+										&self.current_validator_set.authorities,
+										max_delay,
 									);
-								}
+									if let Some(submit_at) = submit_at {
+										offchain.set(
+											STORAGE_PREFIX,
+											SUBMIT_GENESIS_KEYS_AT,
+											&submit_at.encode(),
+										);
+									}
 
-								trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+								}
 							} else {
 								self.dkg_state.listening_for_pub_key = false;
 
@@ -797,17 +803,22 @@ where
 									AGGREGATED_PUBLIC_KEYS,
 									&aggregated_public_keys.encode(),
 								);
-								let submit_at = self
-									.generate_random_delay(&self.queued_validator_set.authorities);
-								if let Some(submit_at) = submit_at {
-									offchain.set(
-										STORAGE_PREFIX,
-										SUBMIT_KEYS_AT,
-										&submit_at.encode(),
-									);
-								}
 
-								trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+								if let Some(max_delay) = max_extrinsic_delay {
+									let submit_at = self.generate_random_delay(
+										&self.queued_validator_set.authorities,
+										max_delay,
+									);
+									if let Some(submit_at) = submit_at {
+										offchain.set(
+											STORAGE_PREFIX,
+											SUBMIT_KEYS_AT,
+											&submit_at.encode(),
+										);
+									}
+
+									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+								}
 							}
 
 							let _ = self.aggregated_public_keys.remove(&round_id);
@@ -821,10 +832,11 @@ where
 	// This random delay follows an arithemtic progression
 	// The min value that can be generated is the immediate next block number
 	// The max value that can be generated is the block number represented
-	// by 50% of the keygen refresh delay period
+	// by max_delay
 	fn generate_random_delay(
 		&self,
 		authorities: &Vec<AuthorityId>,
+		max_delay: NumberFor<B>,
 	) -> Option<<B::Header as Header>::Number> {
 		if let Some(header) = self.latest_header.as_ref() {
 			let public = self
@@ -839,16 +851,9 @@ where
 			};
 
 			let block_number = *header.number();
-			let at = BlockId::hash(header.hash());
-			let max_delay =
-				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
-			match max_delay {
-				Some(max_delay) => {
-					let delay = (block_number + 1u32.into()) + (max_delay % party_inx.into());
-					return Some(delay)
-				},
-				None => return None,
-			}
+
+			let delay = (block_number + 1u32.into()) + (max_delay % party_inx.into());
+			return Some(delay)
 		}
 		None
 	}
@@ -941,15 +946,18 @@ where
 	}
 
 	// *** Proposals handling ***
-
+	// When the node votes on an unsigned proposal we add that round key to the list of proposals the node has voted on
+	// to limit duplicate votes, since the voting process could go on for a number of blocks while the proposal is still in the unsigned proposal queue.
+	// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion
+	// After this time elapses for a round key we remove it from [dkg_state.voted_on] since we expect that proposal to
+	// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.voted_on.keys().cloned().collect::<Vec<_>>();
+		let at = BlockId::hash(header.hash());
+		let current_block_number = *header.number();
 		for key in keys {
 			let voted_at = self.dkg_state.voted_on.get(&key).unwrap();
-
-			let current_block_number = *header.number();
 			let diff = current_block_number - *voted_at;
-			let at = BlockId::hash(header.hash());
 			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
 
 			if diff >= untrack_interval {
@@ -989,12 +997,16 @@ where
 			} else {
 				self.dkg_state.voted_on.insert(key, *header.number());
 			}
-			// send messages to all peers
-			self.send_outgoing_dkg_messages();
 		}
+		// send messages to all peers
+		self.send_outgoing_dkg_messages();
 	}
 
 	fn process_signed_proposals(&mut self, signed_proposals: Vec<ProposalType>) {
+		if signed_proposals.is_empty() {
+			return
+		}
+
 		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
 
 		let public = self
@@ -1006,17 +1018,35 @@ where
 			return
 		}
 
+		// If the header is none, it means no block has been imported yet, so we can exit
+		if self.latest_header.is_none() {
+			return
+		}
+
+		let untrack_interval = {
+			let header = self.latest_header.as_ref().unwrap();
+			let at = BlockId::hash(header.hash());
+			self.client.runtime_api().untrack_interval(&at).unwrap()
+		};
+
 		if let Some(mut offchain) = self.backend.offchain_storage() {
 			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
 			let mut prop_wrapper = match old_val.clone() {
-				Some(ser_props) => OffchainSignedProposals::decode(&mut &ser_props[..]).unwrap(),
-				None => OffchainSignedProposals::default(),
+				Some(ser_props) =>
+					OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
+				None => OffchainSignedProposals::<NumberFor<B>>::default(),
 			};
 
-			let submit_at = self.generate_random_delay(&self.current_validator_set.authorities);
+			// The signed proposals are submitted in batches, since we want to try and limit duplicate submissions
+			// as much as we can, we add a random submission delay to each batch stored in offchain storage
+			// We use the untrack_interval as the max submission delay here since it's a relatively short period of time.
+			let submit_at = self
+				.generate_random_delay(&self.current_validator_set.authorities, untrack_interval);
 
-			prop_wrapper.proposals.push((signed_proposals, submit_at));
+			if let Some(submit_at) = submit_at {
+				prop_wrapper.proposals.push((signed_proposals, submit_at))
+			};
 
 			for _i in 1..STORAGE_SET_RETRY_NUM {
 				if offchain.compare_and_set(
@@ -1025,7 +1055,7 @@ where
 					old_val.as_deref(),
 					&prop_wrapper.encode(),
 				) {
-					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain starage");
+					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
 					break
 				}
 			}

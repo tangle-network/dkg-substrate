@@ -1,140 +1,144 @@
-import { ApiPromise, WsProvider } from "@polkadot/api";
+import { ApiPromise } from "@polkadot/api";
 import { Keyring } from "@polkadot/keyring";
-import { hexToBytes, listenOneBlock, ALICE, provider } from "./utils";
-import ethers from "ethers";
+import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from "./utils";
+import { ethers } from "ethers";
 import { keccak256 } from "@ethersproject/keccak256";
 import { ECPair } from "ecpair";
+import { assert } from "@polkadot/util";
 
-const anchorUpdateProp = new Uint8Array([209, 1, 81, 230, 199, 165, 40, 225, 135, 229, 62, 97, 95, 108, 125, 232, 16, 159, 158, 30, 76, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 23, 194, 192, 194, 63, 104, 94, 171, 45, 188, 176, 167, 116, 213, 48, 159, 72, 180, 30, 153, 205, 53, 55, 38, 185, 131, 173, 100, 167, 96, 194, 18]);
-const resourceId = hexToBytes("000000000000000003812879bc2cc702956671036463e6873f63178600000003");
+const raw_data =
+	"00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
+const tokenUpdateProp = new Uint8Array(hexToBytes(raw_data));
 
 async function testDirectProposal() {
-    const api = await ApiPromise.create({
-      provider,
-      types: {
-        ProposalType: {
-          _enum: [
-            'EVMUnsigned',
-            'EVMSigned',
-            'AnchorUpdate',
-            'AnchorUpdateSigned',
-            'TokenUpdate',
-            'TokenUpdateSigned',
-            'WrappingFeeUpdate',
-            'WrappingFeeUpdateSigned'
-          ]
-        },
-        EVMUnsigned: {
-          data: 'Vec<u8>',
-        },
-        EVMSigned: {
-          data: 'Vec<u8>',
-          signature: 'Vec<u8>',
-        },
-        AnchorUpdate: {
-          data: 'Vec<u8>',
-        },
-        AnchorUpdateSigned: {
-          data: 'Vec<u8>',
-          signature: 'Vec<u8>',
-        },
-        TokenUpdate: {
-          data: 'Vec<u8>',
-        },
-        TokenUpdateSigned: {
-          data: 'Vec<u8>',
-          signature: 'Vec<u8>',
-        },
-        WrappingFeeUpdate: {
-          data: 'Vec<u8>',
-        },
-        WrappingFeeUpdateSigned: {
-          data: 'Vec<u8>',
-          signature: 'Vec<u8>',
-        }
-      }
-    });
+	const api = await ApiPromise.create({
+		provider,
+		types: {
+			ProposalType: {
+				_enum: [
+					"EVMUnsigned",
+					"EVMSigned",
+					"AnchorUpdate",
+					"AnchorUpdateSigned",
+					"TokenUpdate",
+					"TokenUpdateSigned",
+					"WrappingFeeUpdate",
+					"WrappingFeeUpdateSigned",
+				],
+			},
+			EVMUnsigned: {
+				data: "Vec<u8>",
+			},
+			EVMSigned: {
+				data: "Vec<u8>",
+				signature: "Vec<u8>",
+			},
+			AnchorUpdate: {
+				data: "Vec<u8>",
+			},
+			AnchorUpdateSigned: {
+				data: "Vec<u8>",
+				signature: "Vec<u8>",
+			},
+			TokenUpdate: {
+				data: "Vec<u8>",
+			},
+			TokenUpdateSigned: {
+				data: "Vec<u8>",
+				signature: "Vec<u8>",
+			},
+			WrappingFeeUpdate: {
+				data: "Vec<u8>",
+			},
+			WrappingFeeUpdateSigned: {
+				data: "Vec<u8>",
+				signature: "Vec<u8>",
+			},
+		},
+	});
 
-    await sendSudoProposal(api);
+	await waitNfinalizedBlocks(api, 10, 20 * 5);
 
-    const dkgPubKeyCompressed = await api.query.dkg.dKGPublicKey();
-    const dkgPubKey = ECPair.fromPublicKey(
-        Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
-        { compressed: false },
-    ).publicKey.toString('hex')
+	await sendSudoProposal(api);
 
-    const unsubSignedProps = await api.query.dKGProposalHandler.signedProposals(
-        4,
-        { tokenupdateproposal: 0 },
-        (res) => {
-            if (res) {
-                const parsedResult = JSON.parse(JSON.stringify(res));
-                console.log(`Signed prop: ${parsedResult}`);
+	await waitNfinalizedBlocks(api, 20, 20 * 5);
 
-                if (parsedResult) {
-                    const sig = parsedResult.tokenupdatesigned.signature;
-                    console.log(`Signature: ${sig}`);
+	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
+	const dkgPubKey = ECPair.fromPublicKey(
+		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), "hex"),
+		{ compressed: false }
+	).publicKey.toString("hex");
 
-                    const propHash = keccak256(anchorUpdateProp)
-                    const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
-                    console.log(`Recovered public key: ${recoveredPubKey}`);
-                    console.log(`DKG public key: ${dkgPubKey}`);
+	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
+		1,
+		{ tokenupdateproposal: 1 },
+		(res: any) => {
+			if (res) {
+				const parsedResult = JSON.parse(JSON.stringify(res));
+				console.log(`Signed prop: ${parsedResult}`);
+				assert(parsedResult, "Signed proposal should be on chain");
 
-                    if (recoveredPubKey == dkgPubKey) {
-                        console.log(`Public keys match`);
-                    } else {
-                        console.error(`Public keys do not match`);
-                        process.exit();
-                    }
-                }
-            }
-        }
-    );
+				if (parsedResult) {
+					const sig = parsedResult.tokenUpdateSigned.signature;
+					console.log(`Signature: ${sig}`);
 
-    await new Promise(resolve => setTimeout(resolve, 20000));
+					const propHash = keccak256(tokenUpdateProp);
+					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
+					console.log(`Recovered public key: ${recoveredPubKey}`);
+					console.log(`DKG public key: ${dkgPubKey}`);
 
-    unsubSignedProps();
+					assert(recoveredPubKey == dkgPubKey, "Public keys should match");
+					if (recoveredPubKey == dkgPubKey) {
+						console.log(`Public keys match`);
+					} else {
+						console.error(`Public keys do not match`);
+						process.exit();
+					}
+				}
+			}
+		}
+	);
+
+	await new Promise((resolve) => setTimeout(resolve, 20000));
+
+	unsubSignedProps();
 }
 
-async function sendSudoProposal(api) {
-    const keyring = new Keyring({ type: 'sr25519' });
-    const alice = keyring.addFromUri('//Alice');
+async function sendSudoProposal(api: ApiPromise) {
+	const keyring = new Keyring({ type: "sr25519" });
+	const alice = keyring.addFromUri("//Alice");
 
-    await listenOneBlock(api);
+	await listenOneBlock(api);
 
-    const [authoritySetId, dkgPubKey] = await Promise.all([
-        api.query.dkg.authoritySetId(),
-        api.query.dkg.dKGPublicKey()
-    ]);
+	const [authoritySetId, dkgPubKey] = await Promise.all([
+		api.query.dkg.authoritySetId(),
+		api.query.dkg.dKGPublicKey(),
+	]);
 
-    console.log(`DKG authority set id: ${authoritySetId}`);
-    console.log(`DKG pub key: ${dkgPubKey}`);
+	console.log(`DKG authority set id: ${authoritySetId}`);
+	console.log(`DKG pub key: ${dkgPubKey}`);
 
-    // const tokenUpdate = api.createType('TokenUpdate', { data: Buffer.from(proposalData).toString('hex') });
-    const call = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-      TokenUpdate: {
-        data: '0x00000000000000000000000000000000000000000001' + 
-          '0000000000000000000000000000000000000000000000000000000000000001' +
-          '0000000000000000000000000000000000000000000000000000000000000001' +
-          '0000000000000000000000000000000000000000000000000000000000000001'
-      }
-    });
-    const unsub = await api.tx.sudo
-      .sudo(call)
-      .signAndSend(alice, ({ events = [], status }) => {
-        console.log(`Current status is: ${status.type}`);
+	const call = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+		TokenUpdate: {
+			data: `0x${raw_data}`,
+		},
+	});
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
 
-        if (status.isFinalized) {
-            console.log(`Transaction included at blockHash ${status.asFinalized}`);
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-            events.forEach(({ phase, event: { data, method, section } }) => {
-                console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-            });
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
 
-            unsub();
-        }
-    });
+			unsub();
+		}
+	});
 }
 
 // Run
-testDirectProposal().catch(console.error).finally(() => process.exit());
+testDirectProposal()
+	.catch(console.error)
+	.finally(() => process.exit());
