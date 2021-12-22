@@ -426,13 +426,14 @@ impl<T: Config> Pallet<T> {
 		}
 		match Self::get_next_offchain_signed_proposal(block_number) {
 			Ok(next_proposals) => {
-				// send unsigned transaction to the chain
+				// We filter out all proposals that are already on chain
 				let filtered_proposals = next_proposals
 					.iter()
 					.cloned()
 					.filter(Self::is_existing_proposal)
 					.collect::<Vec<_>>();
 
+				// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and submit those chunks
 				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {
 					let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
 					let result = signer
@@ -493,6 +494,7 @@ impl<T: Config> Pallet<T> {
 							prop_wrapper.proposals.len()
 						);
 
+						// We get all batches whose submission delay has been satisfied and remove them from offchain storage
 						let mut to_remove = Vec::new();
 						for (i, (props, submit_at)) in prop_wrapper.proposals.iter().enumerate() {
 							if *submit_at <= block_number {

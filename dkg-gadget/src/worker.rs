@@ -832,7 +832,7 @@ where
 	// This random delay follows an arithemtic progression
 	// The min value that can be generated is the immediate next block number
 	// The max value that can be generated is the block number represented
-	// by 50% of the keygen refresh delay period
+	// by max_delay
 	fn generate_random_delay(
 		&self,
 		authorities: &Vec<AuthorityId>,
@@ -946,7 +946,11 @@ where
 	}
 
 	// *** Proposals handling ***
-
+	// When the node votes on an unsigned proposal we add that round key to the list of proposals the node has voted on
+	// to limit duplicate votes, since the voting process could go on for a number of blocks while the proposal is still in the unsigned proposal queue.
+	// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion
+	// After this time elapses for a round key we remove it from [dkg_state.voted_on] since we expect that proposal to
+	// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.voted_on.keys().cloned().collect::<Vec<_>>();
 		let at = BlockId::hash(header.hash());
@@ -1014,6 +1018,7 @@ where
 			return
 		}
 
+		// If the header is none, it means no block has been imported yet, so we can exit
 		if self.latest_header.is_none() {
 			return
 		}
@@ -1033,6 +1038,9 @@ where
 				None => OffchainSignedProposals::<NumberFor<B>>::default(),
 			};
 
+			// The signed proposals are submitted in batches, since we want to try and limit duplicate submissions
+			// as much as we can, we add a random submission delay to each batch stored in offchain storage
+			// We use the untrack_interval as the max submission delay here since it's a relatively short period of time.
 			let submit_at = self
 				.generate_random_delay(&self.current_validator_set.authorities, untrack_interval);
 
