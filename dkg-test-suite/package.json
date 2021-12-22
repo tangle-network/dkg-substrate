@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dkg-refresh": "ts-node ./src/keyRefresh.ts",
-    "anchor-proposals": "ts-node ./src/testAnchorProposal.ts"
+    "anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
+    "sudo-proposals": "ts-node ./src/testDirectProposal.ts"
   },
   "author": "",
   "license": "ISC",
