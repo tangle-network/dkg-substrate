@@ -14,9 +14,13 @@ use std::collections::{BTreeMap, HashMap};
 use crate::types::*;
 use dkg_runtime_primitives::keccak_256;
 
-pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
+pub use gg_2020::{
 	party_i::*,
 	state_machine::{keygen::*, sign::*},
+};
+pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
+	gg_2020,
+	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign},
 };
 
 /// DKG State tracker
@@ -88,16 +92,22 @@ where
 		}
 	}
 
-	pub fn proceed(&mut self) {
-		let finished = match self.stage {
+	pub fn proceed(&mut self) -> Result<(), DKGError> {
+		let proceed_res = match self.stage {
 			Stage::Keygen => self.proceed_keygen(),
 			Stage::Offline => self.proceed_offline_stage(),
 			Stage::ManualReady => self.proceed_vote(),
-			_ => false,
+			_ => Ok(false),
 		};
 
-		if finished {
-			self.advance_stage();
+		return match proceed_res {
+			Ok(finished) => {
+				if finished {
+					self.advance_stage()
+				}
+				Ok(())
+			},
+			Err(err) => Err(err),
 		}
 	}
 
@@ -156,7 +166,7 @@ where
 		}
 	}
 
-	pub fn start_keygen(&mut self, keygen_set_id: KeygenSetId) -> Result<(), String> {
+	pub fn start_keygen(&mut self, keygen_set_id: KeygenSetId) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
 			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
@@ -177,14 +187,16 @@ where
 					if let Err(err) = self.handle_incoming_keygen(msg) {
 						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {}", err.to_string());
 					}
-					self.proceed_keygen();
+					if let Err(err) = self.proceed_keygen() {
+						return Err(err)
+					}
 				}
 				trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", self.pending_keygen_msgs.len());
 				self.pending_keygen_msgs.clear();
 
 				Ok(())
 			},
-			Err(err) => Err(err.to_string()),
+			Err(_) => Err(DKGError::GenericError),
 		}
 	}
 
@@ -192,14 +204,15 @@ where
 		&mut self,
 		signer_set_id: SignerSetId,
 		s_l: Vec<u16>,
-	) -> Result<(), String> {
+	) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Resetting singers {:?}", s_l);
 		info!(target: "dkg", "🕸️  Signer set id {:?}", signer_set_id);
 
 		match self.stage {
-			Stage::KeygenReady | Stage::Keygen =>
-				Err("Cannot reset signers and start offline stage, Keygen is not complete"
-					.to_string()),
+			Stage::KeygenReady | Stage::Keygen => Err(DKGError::ResetSigners {
+				reason: "Cannot reset signers and start offline stage, Keygen is not complete"
+					.to_string(),
+			}),
 			_ =>
 				if let Some(local_key_clone) = self.local_key.clone() {
 					return match OfflineStage::new(self.party_index, s_l, local_key_clone) {
@@ -213,7 +226,9 @@ where
 								if let Err(err) = self.handle_incoming_offline_stage(msg) {
 									warn!(target: "dkg", "🕸️  Error handling pending offline msg {}", err.to_string());
 								}
-								self.proceed_offline_stage();
+								if let Err(err) = self.proceed_offline_stage() {
+									return Err(err)
+								}
 							}
 							self.pending_offline_msgs.clear();
 							trace!(target: "dkg", "🕸️  Handled {} pending offline messages", self.pending_offline_msgs.len());
@@ -222,11 +237,11 @@ where
 						},
 						Err(err) => {
 							error!("Error creating new offline stage {}", err);
-							Err(err.to_string())
+							Err(DKGError::ResetSigners { reason: err.to_string() })
 						},
 					}
 				} else {
-					Err("No local key present".to_string())
+					Err(DKGError::ResetSigners { reason: "No local key present".to_string() })
 				},
 		}
 	}
@@ -312,7 +327,7 @@ where
 
 	/// Proceed to next step for current Stage
 
-	fn proceed_keygen(&mut self) -> bool {
+	fn proceed_keygen(&mut self) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
 
 		let keygen = self.keygen.as_mut().unwrap();
@@ -326,15 +341,31 @@ where
 					trace!(target: "dkg", "🕸️  after: {:?}", keygen);
 				},
 				Err(err) => {
-					error!(target: "dkg", "🕸️  error encountered during proceed: {:?}", err);
+					match err {
+						gg20_keygen::Error::ProceedRound(proceed_err) => match proceed_err {
+							gg20_keygen::ProceedError::Round2VerifyCommitments(err_type) =>
+								return Err(DKGError::KeygenMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_keygen::ProceedError::Round3VerifyVssConstruct(err_type) =>
+								return Err(DKGError::KeygenMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_keygen::ProceedError::Round4VerifyDLogProof(err_type) =>
+								return Err(DKGError::KeygenMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+						},
+						_ => return Err(DKGError::GenericError),
+					};
 				},
 			}
 		}
 
-		self.try_finish_keygen()
+		Ok(self.try_finish_keygen())
 	}
 
-	fn proceed_offline_stage(&mut self) -> bool {
+	fn proceed_offline_stage(&mut self) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
 		let offline_stage = self.offline_stage.as_mut().unwrap();
@@ -348,16 +379,41 @@ where
 					trace!(target: "dkg", "🕸️  after: {:?}", offline_stage);
 				},
 				Err(err) => {
-					error!(target: "dkg", "🕸️  error encountered during proceed: {:?}", err);
+					match err {
+						gg20_sign::Error::ProceedRound(proceed_err) => match proceed_err {
+							gg20_sign::rounds::Error::Round1(err_type) =>
+								return Err(DKGError::OfflineMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_sign::rounds::Error::Round2Stage4(err_type) =>
+								return Err(DKGError::OfflineMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_sign::rounds::Error::Round3(err_type) =>
+								return Err(DKGError::OfflineMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_sign::rounds::Error::Round5(err_type) =>
+								return Err(DKGError::OfflineMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
+								return Err(DKGError::OfflineMisbehaviour {
+									bad_actors: err_type.bad_actors,
+								}),
+							_ => return Err(DKGError::GenericError),
+						},
+						_ => return Err(DKGError::GenericError),
+					};
 				},
 			}
 		}
 
-		self.try_finish_offline_stage()
+		Ok(self.try_finish_offline_stage())
 	}
 
-	fn proceed_vote(&mut self) -> bool {
-		self.try_finish_vote()
+	fn proceed_vote(&mut self) -> Result<bool, DKGError> {
+		Ok(self.try_finish_vote())
 	}
 
 	/// Try finish current Stage
@@ -791,7 +847,7 @@ mod tests {
 		let mut msgs_pull = vec![];
 
 		for party in &mut parties.into_iter() {
-			party.proceed();
+			party.proceed().unwrap();
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
 		}
@@ -810,7 +866,7 @@ mod tests {
 			}
 
 			for party in &mut parties.into_iter() {
-				party.proceed();
+				party.proceed().unwrap();
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
 			}
