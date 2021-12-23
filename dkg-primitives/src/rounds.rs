@@ -709,6 +709,7 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 #[cfg(test)]
 mod tests {
 	use super::{MultiPartyECDSARounds, Stage};
+	use crate::types::DKGMsgPayload;
 	use codec::Encode;
 
 	fn check_all_reached_stage(
@@ -782,13 +783,17 @@ mod tests {
 		println!("All signatures are correct");
 	}
 
-	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64>>, stop_condition: C)
+	fn run_simulation<C>(
+		parties: &mut Vec<MultiPartyECDSARounds<u64>>,
+		stop_condition: C,
+	) -> Result<(), (&'static str, Vec<DKGMsgPayload<u64>>)>
 	where
 		C: Fn(&Vec<MultiPartyECDSARounds<u64>>) -> bool,
 	{
 		println!("Simulation starts");
 
 		let mut msgs_pull = vec![];
+		let mut all_messages = vec![];
 
 		for party in &mut parties.into_iter() {
 			party.proceed();
@@ -801,6 +806,7 @@ mod tests {
 
 			for party in &mut parties.into_iter() {
 				for msg_frozen in msgs_pull_frozen.iter() {
+					all_messages.push(msg_frozen.clone());
 					match party.handle_incoming(msg_frozen.clone()) {
 						Ok(()) => (),
 						Err(err) => panic!("{}", err.to_string()),
@@ -817,11 +823,11 @@ mod tests {
 
 			if stop_condition(parties) {
 				println!("All parties finished");
-				return
+				return Ok(())
 			}
 		}
 
-		panic!("Test failed")
+		Err(("Test failed", all_messages))
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
@@ -836,7 +842,8 @@ mod tests {
 
 		// Running Keygen stage
 		println!("Running Keygen");
-		run_simulation(&mut parties, check_all_reached_offline_ready);
+		run_simulation(&mut parties, check_all_reached_offline_ready)
+			.map_err(|err| panic!("{}", err.0));
 		check_all_parties_have_public_key(&mut &parties);
 
 		// Running Offline stage
@@ -849,7 +856,8 @@ mod tests {
 				Err(_err) => (),
 			}
 		}
-		run_simulation(&mut parties, check_all_reached_manual_ready);
+		run_simulation(&mut parties, check_all_reached_manual_ready)
+			.map_err(|err| panic!("{}", err.0));
 
 		// Running Sign stage
 		println!("Running Sign");
@@ -858,7 +866,7 @@ mod tests {
 			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.vote(1, "Webb".encode()).unwrap();
 		}
-		run_simulation(&mut parties, check_all_signatures_ready);
+		run_simulation(&mut parties, check_all_signatures_ready).map_err(|err| panic!("{}", err.0));
 
 		// Extract all signatures and check for correctness
 		check_all_signatures_correct(&mut parties);
@@ -872,5 +880,137 @@ mod tests {
 	#[test]
 	fn simulate_multi_party_t3_n5() {
 		simulate_multi_party(3, 5, (1..=5).collect());
+	}
+
+	fn simulate_multi_party_offline_interruption(t: u16, n: u16, s_l: Vec<u16>) {
+		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+
+		for i in 1..=n {
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0);
+			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
+			party.start_keygen(0).unwrap();
+			parties.push(party);
+		}
+
+		// Running Keygen stage
+		println!("Running Keygen");
+		run_simulation(&mut parties, check_all_reached_offline_ready)
+			.map_err(|err| panic!("{}", err.0));
+		check_all_parties_have_public_key(&mut &parties);
+
+		let mut party = parties.remove(0);
+
+		// Running Offline stage
+		println!("Running Offline");
+		let parties_refs = &mut parties;
+		for party in parties_refs.into_iter() {
+			println!("Resetting signers for party {}, Stage: {:?}", party.party_index, party.stage);
+			match party.reset_signers(0, s_l.clone()) {
+				Ok(()) => (),
+				Err(_err) => (),
+			}
+		}
+
+		let res = run_simulation(&mut parties, check_all_reached_manual_ready);
+
+		assert!(res.is_err());
+
+		if res.is_err() {
+			println!("Offline stage does not complete if a party is missing")
+		}
+
+		if res.is_ok() {
+			panic!("Offline stage completes even with a missing party")
+		}
+
+		party.reset_signers(0, s_l.clone());
+
+		match res {
+			Err((.., pending_msgs)) => {
+				println!("{:?}", pending_msgs.len());
+				// The rejoining party only needs to handle the first set of messages sent by the other parties
+				for msg in &pending_msgs[0..4] {
+					match party.handle_incoming(msg.clone()) {
+						Ok(()) => (),
+						Err(err) => panic!("{}", err.to_string()),
+					}
+				}
+				party.proceed();
+			},
+			_ => {},
+		}
+
+		parties.push(party);
+
+		let res = run_simulation(&mut parties, check_all_reached_manual_ready);
+
+		assert!(res.is_ok());
+
+		println!("Offline stage completes when missing party returns");
+	}
+
+	fn simulate_multi_party_keygen_interruption(t: u16, n: u16) {
+		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+
+		for i in 1..n {
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0);
+			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
+			party.start_keygen(0).unwrap();
+			parties.push(party);
+		}
+
+		// Running Keygen stage
+		println!("Running Keygen");
+		let res = run_simulation(&mut parties, check_all_reached_offline_ready);
+
+		assert!(res.is_err());
+
+		if res.is_err() {
+			println!("Keygen does not complete if a party is missing")
+		}
+
+		if res.is_ok() {
+			panic!("Keygen completes even with a missing party")
+		}
+
+		let mut party = MultiPartyECDSARounds::new(n, t, n, 0);
+		party.start_keygen(0).unwrap();
+		party.proceed();
+
+		match res {
+			Err((.., pending_msgs)) => {
+				println!("{:?}", pending_msgs.len());
+				// The rejoining party only needs to handle the first set of messages sent by the other parties
+				for msg in &pending_msgs[0..4] {
+					match party.handle_incoming(msg.clone()) {
+						Ok(()) => (),
+						Err(err) => panic!("{}", err.to_string()),
+					}
+				}
+				party.proceed();
+			},
+			_ => {},
+		}
+
+		parties.push(party);
+
+		let res = run_simulation(&mut parties, check_all_reached_offline_ready);
+
+		assert!(res.is_ok());
+
+		println!("Keygen completes when missing party returns");
+	}
+
+	// These tests are to check if the offline stage or keygen stage run to completion if one or more
+	// parties are missing
+
+	#[test]
+	fn simulate_keygen_interruption_party_t3_n5() {
+		simulate_multi_party_keygen_interruption(3, 5);
+	}
+
+	#[test]
+	fn simulate_offline_interruption_party_t3_n5() {
+		simulate_multi_party_offline_interruption(3, 5, (1..=5).collect());
 	}
 }
