@@ -16,6 +16,7 @@ pub enum DKGPayloadKey {
 	AnchorUpdateProposal(ProposalNonce),
 	TokenUpdateProposal(ProposalNonce),
 	WrappingFeeUpdateProposal(ProposalNonce),
+	ResourceIdUpdateProposal(ProposalNonce),
 }
 
 impl Hash for DKGPayloadKey {
@@ -38,6 +39,8 @@ pub enum ProposalType {
 	TokenUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 	WrappingFeeUpdate { data: Vec<u8> },
 	WrappingFeeUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+	ResourceIdUpdate { data: Vec<u8> },
+	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 impl ProposalType {
@@ -51,6 +54,8 @@ impl ProposalType {
 			ProposalType::TokenUpdateSigned { data, .. } => data.clone(),
 			ProposalType::WrappingFeeUpdate { data } => data.clone(),
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => data.clone(),
+			ProposalType::ResourceIdUpdate { data } => data.clone(),
+			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
 		}
 	}
 
@@ -64,6 +69,8 @@ impl ProposalType {
 			ProposalType::TokenUpdateSigned { signature, .. } => signature.clone(),
 			ProposalType::WrappingFeeUpdate { .. } => Vec::new(),
 			ProposalType::WrappingFeeUpdateSigned { signature, .. } => signature.clone(),
+			ProposalType::ResourceIdUpdate { .. } => Vec::new(),
+			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
 		}
 	}
 }
@@ -74,7 +81,7 @@ pub trait ProposalHandlerTrait {
 		action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult;
 
-	fn handle_single_parameter_signed_proposal(
+	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key: DKGPayloadKey,
 	) -> frame_support::pallet_prelude::DispatchResult;
@@ -92,6 +99,10 @@ pub trait ProposalHandlerTrait {
 	) -> frame_support::pallet_prelude::DispatchResult;
 
 	fn handle_wrapping_fee_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult;
+
+	fn handle_resource_id_update_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult;
 }
