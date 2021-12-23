@@ -689,7 +689,6 @@ impl<T: Config> Pallet<T> {
 		// 	chain_id(32),
 		// 	nonce(32),
 		//  (function_sig(4) + parameters_length()) -> N,
-		// 	parameter(N)
 		// ]
 		if data.len() != 22 + 32 + 32 + N {
 			return Err(Error::<T>::ProposalFormatInvalid)?
