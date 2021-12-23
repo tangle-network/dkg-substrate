@@ -1846,7 +1846,7 @@ dependencies = [
  "hex",
  "libsecp256k1 0.3.5",
  "log",
- "multi-party-ecdsa",
+ "multi-party-ecdsa 0.7.4 (git+https://github.com/ZenGo-X/multi-party-ecdsa.git)",
  "parity-scale-codec",
  "parking_lot 0.11.2",
  "round-based",
@@ -1948,7 +1948,7 @@ dependencies = [
  "hex",
  "libsecp256k1 0.3.5",
  "log",
- "multi-party-ecdsa",
+ "multi-party-ecdsa 0.7.4 (git+https://github.com/temld4/multi-party-ecdsa.git?rev=4312d9d5502224ae8a59e7ea9a4f8ef971845fc6)",
  "parity-scale-codec",
  "parking_lot 0.11.2",
  "round-based",
@@ -4920,6 +4920,24 @@ name = "more-asserts"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
+
+[[package]]
+name = "multi-party-ecdsa"
+version = "0.7.4"
+source = "git+https://github.com/temld4/multi-party-ecdsa.git?rev=4312d9d5502224ae8a59e7ea9a4f8ef971845fc6#4312d9d5502224ae8a59e7ea9a4f8ef971845fc6"
+dependencies = [
+ "centipede",
+ "curv-kzen",
+ "derivative",
+ "libsecp256k1 0.3.5",
+ "paillier",
+ "round-based",
+ "serde",
+ "subtle 2.4.1",
+ "thiserror",
+ "zeroize",
+ "zk-paillier",
+]
 
 [[package]]
 name = "multi-party-ecdsa"

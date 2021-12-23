@@ -46,8 +46,8 @@ use sp_runtime::{
 
 use crate::keystore::DKGKeystore;
 use dkg_primitives::{
-	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
-	AggregatedPublicKeys, ProposalType,
+	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
+	AggregatedPublicKeys, DKGReport, ProposalType,
 };
 
 use dkg_runtime_primitives::{
@@ -311,7 +311,10 @@ where
 					info!(target: "dkg", "Keygen started for genesis authority set successfully");
 					self.genesis_keygen_in_progress = true;
 				},
-				Err(err) => error!("Error starting keygen {}", err),
+				Err(err) => {
+					error!("Error starting keygen {:?}", &err);
+					self.handle_dkg_error(err);
+				},
 			}
 		}
 	}
@@ -342,7 +345,10 @@ where
 					info!(target: "dkg", "Keygen started for queued authority set successfully");
 					self.queued_keygen_in_progress = true;
 				},
-				Err(err) => error!("Error starting keygen {}", err),
+				Err(err) => {
+					error!("Error starting keygen {:?}", &err);
+					self.handle_dkg_error(err);
+				},
 			}
 		}
 	}
@@ -442,8 +448,11 @@ where
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
-		                     authority_id: Public| {
-			rounds.proceed();
+		                     authority_id: Public|
+		 -> Result<(), DKGError> {
+			if let Err(err) = rounds.proceed() {
+				return Err(err)
+			}
 
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {
@@ -452,7 +461,10 @@ where
 				let s_l = (1..=rounds.dkg_params().2).collect();
 				match rounds.reset_signers(signer_set_id, s_l) {
 					Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
-					Err(err) => error!("Error resetting signers {}", err),
+					Err(err) => {
+						error!("Error resetting signers {:?}", &err);
+						return Err(err)
+					},
 				}
 			}
 
@@ -477,17 +489,19 @@ where
 				);
 				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
 			}
+			Ok(())
 		};
 
 		let mut keys_to_gossip = Vec::new();
+		let mut rounds_send_result: Result<(), DKGError> = Ok(());
+		let mut next_rounds_send_result: Result<(), DKGError> = Ok(());
 
 		if let Some(mut rounds) = self.rounds.take() {
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
 				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-
-				send_messages(&mut rounds, id);
+				rounds_send_result = send_messages(&mut rounds, id);
 			} else {
 				error!(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC."
@@ -518,7 +532,7 @@ where
 			{
 				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 				if let Some(mut next_rounds) = self.next_rounds.take() {
-					send_messages(&mut next_rounds, id);
+					next_rounds_send_result = send_messages(&mut next_rounds, id);
 
 					let is_ready_to_vote = next_rounds.is_ready_to_vote();
 					debug!(target: "dkg", "🕸️  Is ready to to vote {:?}", is_ready_to_vote);
@@ -544,6 +558,13 @@ where
 
 		for (round_id, pub_key) in &keys_to_gossip {
 			self.gossip_public_key(pub_key.clone(), *round_id);
+		}
+
+		if let Err(err) = rounds_send_result {
+			self.handle_dkg_error(err);
+		}
+		if let Err(err) = next_rounds_send_result {
+			self.handle_dkg_error(err);
 		}
 	}
 
@@ -581,6 +602,38 @@ where
 		self.send_outgoing_dkg_messages();
 
 		self.process_finished_rounds();
+	}
+
+	fn handle_dkg_error(&mut self, dkg_error: DKGError) {
+		let authorities = self.current_validator_set.authorities.clone();
+
+		match dkg_error {
+			DKGError::KeygenMisbehaviour { bad_actors } =>
+				for bad_actor in bad_actors.iter() {
+					if *bad_actor > 0 && *bad_actor <= authorities.len() {
+						if let Some(offender) = authorities.get(bad_actor - 1) {
+							self.handle_dkg_report(DKGReport::KeygenMisbehavior {
+								offender: offender.clone(),
+							});
+						}
+					}
+				},
+			DKGError::OfflineMisbehaviour { bad_actors } =>
+				for bad_actor in bad_actors.iter() {
+					if *bad_actor > 0 && *bad_actor <= authorities.len() {
+						if let Some(offender) = authorities.get(bad_actor - 1) {
+							self.handle_dkg_report(DKGReport::SigningMisbehavior {
+								offender: offender.clone(),
+							});
+						}
+					}
+				},
+			_ => (),
+		}
+	}
+
+	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
+		// TODO: handle report by taking slashing action
 	}
 
 	/// Offchain features
