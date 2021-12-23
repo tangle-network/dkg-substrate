@@ -688,7 +688,7 @@ impl<T: Config> Pallet<T> {
 		// 	handler_address_0x_prefixed(22),
 		// 	chain_id(32),
 		// 	nonce(32),
-		//  function_sig(4),
+		//  (function_sig(4) + parameters_length()) -> N,
 		// 	parameter(N)
 		// ]
 		if data.len() != 22 + 32 + 32 + N {
