@@ -909,6 +909,11 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
+			DKGPayloadKey::ResourceIdUpdateProposal(_nonce) =>
+				Some(ProposalType::ResourceIdUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
 			// TODO: handle other key types
 		}
 	}

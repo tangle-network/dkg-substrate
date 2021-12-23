@@ -265,7 +265,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 	});
 }
 
-fn make_single_param_propoosal(prop: ProposalType) -> ProposalType {
+pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
 	let mut buf = vec![];
 	// handler address mock
 	buf.extend_from_slice(&[1u8; 22]);
@@ -279,12 +279,16 @@ fn make_single_param_propoosal(prop: ProposalType) -> ProposalType {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 1,
 	]);
-	// 32 bytes parameter
-	buf.extend_from_slice(&[4u8; 32]);
+	// 4 bytes function sig
+	buf.extend(b"\x26\x57\x88\x01");
+	// N bytes parameter
+	buf.extend_from_slice(&[4u8; N]);
 
 	match prop {
 		ProposalType::TokenUpdate { .. } => ProposalType::TokenUpdate { data: buf },
 		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
+		ProposalType::ResourceIdUpdate { .. } => ProposalType::ResourceIdUpdate { data: buf },
+		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
 }
@@ -311,11 +315,12 @@ fn force_submit_should_work_with_valid_proposals() {
 		// 	handler_address_0x_prefixed(22),
 		// 	chain_id(32),
 		// 	nonce(32),
+		//  function_sig(4)
 		// 	parameter(32)
 		// ]
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_single_param_propoosal(ProposalType::TokenUpdate { data: vec![] })
+			make_proposal::<32>(ProposalType::TokenUpdate { data: vec![] })
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenUpdateProposal(1))
@@ -324,7 +329,17 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_single_param_propoosal(ProposalType::WrappingFeeUpdate { data: vec![] })
+			make_proposal::<32>(ProposalType::WrappingFeeUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
+				.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<96>(ProposalType::ResourceIdUpdate { data: vec![] })
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
