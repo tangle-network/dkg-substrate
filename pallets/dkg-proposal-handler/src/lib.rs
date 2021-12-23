@@ -684,7 +684,7 @@ impl<T: Config> Pallet<T> {
 	fn decode_chain_id_nonce_from_proposal<const N: usize>(
 		data: &[u8],
 	) -> Result<(T::ChainId, ProposalNonce), Error<T>> {
-		// check if the data length is 118 bytes [
+		// check if the data length is (86 + N) bytes [
 		// 	handler_address_0x_prefixed(22),
 		// 	chain_id(32),
 		// 	nonce(32),
