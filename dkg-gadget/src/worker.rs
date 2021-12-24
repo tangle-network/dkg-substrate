@@ -21,6 +21,7 @@ use curv::elliptic::curves::traits::ECPoint;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
+	path::PathBuf,
 	sync::Arc,
 };
 
@@ -44,7 +45,10 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 
-use crate::keystore::DKGKeystore;
+use crate::{
+	keystore::DKGKeystore,
+	persistence::{DKGMessageBuffers, DKGPersistenceState},
+};
 use dkg_primitives::{
 	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
 	AggregatedPublicKeys, ProposalType,
@@ -63,7 +67,9 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
+	persistence::{buffer_message, DKGMessageBuffers},
 	types::dkg_topic,
+	utils::{find_authorities_change, find_index, set_up_rounds, validate_threshold},
 	Client,
 };
 
@@ -89,6 +95,7 @@ where
 	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
 	pub dkg_state: DKGState<B, DKGPayloadKey>,
+	pub base_path: Option<PathBuf>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -134,6 +141,12 @@ where
 	refresh_in_progress: bool,
 	// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	// Track DKG Persistence state
+	pub dkg_persistence: DKGPersistenceState,
+
+	pub base_path: Option<PathBuf>,
+
+	pub msg_buffer: DKGMessageBuffers,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -159,6 +172,7 @@ where
 			min_block_delta,
 			metrics,
 			dkg_state,
+			base_path,
 		} = worker_params;
 
 		DKGWorker {
@@ -184,8 +198,27 @@ where
 			genesis_keygen_in_progress: false,
 			refresh_in_progress: false,
 			aggregated_public_keys: HashMap::new(),
+			dkg_persistence: DKGPersistenceState::new(),
+			base_path,
+			msg_buffer: DKGMessageBuffers::new(),
 			_backend: PhantomData,
 		}
+	}
+
+	pub fn keystore_ref(&self) -> &DKGKeystore {
+		&self.key_store
+	}
+
+	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
+		self.gossip_engine.clone()
+	}
+
+	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey>) {
+		self.rounds = Some(rounds);
+	}
+
+	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey>) {
+		self.next_rounds = Some(rounds);
 	}
 }
 
@@ -220,7 +253,7 @@ where
 		return None
 	}
 
-	fn get_threshold(&self, header: &B::Header) -> Option<u16> {
+	pub fn get_threshold(&self, header: &B::Header) -> Option<u16> {
 		let at = BlockId::hash(header.hash());
 		return self.client.runtime_api().signature_threshold(&at).ok()
 	}
@@ -232,7 +265,7 @@ where
 	/// DKG on-chain state.
 	///
 	/// Such a failure is usually an indication that the DKG pallet has not been deployed (yet).
-	fn validator_set(
+	pub fn validator_set(
 		&self,
 		header: &B::Header,
 	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
@@ -348,6 +381,17 @@ where
 	}
 
 	// *** Block notifications ***
+
+	pub fn is_new_session(&self, header: &B::Header) -> bool {
+		if let Some((active, queued)) = self.validator_set(header) {
+			if active.id != self.current_validator_set.id ||
+				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
+			{
+				return true
+			}
+		}
+		false
+	}
 
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some(latest_header) = &self.latest_header {
@@ -550,6 +594,7 @@ where
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
+		buffer_message(self, dkg_msg.clone());
 
 		if let Some(rounds) = self.rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
@@ -1107,78 +1152,6 @@ where
 			}
 		}
 	}
-}
-
-fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
-	for (i, v) in queue.iter().enumerate() {
-		if value == v {
-			return Some(i)
-		}
-	}
-	None
-}
-
-fn validate_threshold(n: u16, t: u16) -> u16 {
-	let max_thresh = n - 1;
-	if t >= 1 && t <= max_thresh {
-		return t
-	}
-
-	return max_thresh
-}
-
-fn set_up_rounds(
-	authority_set: &AuthoritySet<Public>,
-	public: &Public,
-	thresh: u16,
-) -> MultiPartyECDSARounds<DKGPayloadKey> {
-	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
-
-	let n = authority_set.authorities.len();
-
-	let rounds = MultiPartyECDSARounds::new(
-		u16::try_from(party_inx).unwrap(),
-		thresh,
-		u16::try_from(n).unwrap(),
-		authority_set.id.clone(),
-	);
-
-	rounds
-}
-
-/// Extract the MMR root hash from a digest in the given header, if it exists.
-fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
-where
-	B: Block,
-	Id: Codec,
-{
-	header.digest().logs().iter().find_map(|log| {
-		match log.try_to::<ConsensusLog<Id>>(OpaqueDigestItemId::Consensus(&ENGINE_ID)) {
-			Some(ConsensusLog::MmrRoot(root)) => Some(root),
-			_ => None,
-		}
-	})
-}
-
-/// Scan the `header` digest log for a DKG validator set change. Return either the new
-/// validator set or `None` in case no validator set change has been signaled.
-fn find_authorities_change<B>(
-	header: &B::Header,
-) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)>
-where
-	B: Block,
-{
-	let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
-
-	let filter = |log: ConsensusLog<AuthorityId>| match log {
-		ConsensusLog::AuthoritiesChange {
-			next_authorities: validator_set,
-			next_queued_authorities,
-		} => Some((validator_set, next_queued_authorities)),
-		_ => None,
-	};
-
-	header.digest().convert_first(|l| l.try_to(id).and_then(filter))
 }
 
 #[cfg(test)]

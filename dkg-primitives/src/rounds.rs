@@ -88,6 +88,14 @@ where
 		}
 	}
 
+	pub fn set_local_key(&mut self, local_key: LocalKey) {
+		self.local_key = Some(local_key)
+	}
+
+	pub fn set_completed_offlinestage(&mut self, completed_offline: CompletedOfflineStage) {
+		self.completed_offline_stage = Some(completed_offline)
+	}
+
 	pub fn proceed(&mut self) {
 		let finished = match self.stage {
 			Stage::Keygen => self.proceed_keygen(),
@@ -152,7 +160,7 @@ where
 				} else {
 					Ok(())
 				},
-			DKGMsgPayload::PublicKeyBroadcast(_) => Ok(()),
+			_ => Ok(()),
 		}
 	}
 

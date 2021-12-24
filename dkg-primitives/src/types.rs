@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use dkg_runtime_primitives::crypto::AuthorityId;
 use std::fmt;
 
 /// A typedef for keygen set id
@@ -30,6 +31,10 @@ impl<ID, K> fmt::Display for DKGMessage<ID, K> {
 			DKGMsgPayload::Offline(_) => "Offline",
 			DKGMsgPayload::Vote(_) => "Vote",
 			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
+			DKGMsgPayload::RequestBufferedKeyGen => "RequestBufferedKeyGen",
+			DKGMsgPayload::RequestBufferedOffline => "RequestBufferedOffline",
+			DKGMsgPayload::BufferedKeyGenMessage(_) => "BufferedKeyGenMessage",
+			DKGMsgPayload::BufferedOfflineMessage(_) => "BufferedOfflineMessage",
 		};
 		write!(f, "DKGMessage of type {}", label)
 	}
@@ -42,6 +47,10 @@ pub enum DKGMsgPayload<Key> {
 	Offline(DKGOfflineMessage),
 	Vote(DKGVoteMessage<Key>),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
+	RequestBufferedKeyGen,
+	RequestBufferedOffline,
+	BufferedKeyGenMessage(DKGBufferedMessage<AuthorityId, Key>),
+	BufferedOfflineMessage(DKGBufferedMessage<AuthorityId, Key>),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -91,6 +100,12 @@ pub struct DKGPublicKeyMessage {
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
 	pub signature: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct DKGBufferedMessage<AuthorityId, Key> {
+	msg: Vec<DKGMessage<AuthorityId, Key>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -224,6 +224,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			Some(keystore_container.sync_keystore()),
 		);
 	}
+	let base_path = config.base_path.clone();
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		network: network.clone(),
@@ -303,6 +304,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		min_block_delta: 4,
 		prometheus_registry: prometheus_registry.clone(),
 		block: None,
+		base_path,
 	};
 
 	// Start the DKG gadget.

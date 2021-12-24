@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use dkg_primitives::rounds::DKGState;
 use log::debug;
@@ -28,6 +28,7 @@ use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
+use sc_service::BasePath;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
@@ -35,7 +36,9 @@ mod gossip;
 mod keyring;
 mod keystore;
 mod metrics;
+mod persistence;
 mod types;
+mod utils;
 mod worker;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
@@ -99,6 +102,8 @@ where
 	pub prometheus_registry: Option<Registry>,
 
 	pub block: Option<B>,
+
+	pub base_path: Option<BasePath>,
 }
 
 /// Start the DKG gadget.
@@ -120,6 +125,7 @@ where
 		min_block_delta,
 		prometheus_registry,
 		block,
+		base_path,
 	} = dkg_params;
 
 	let gossip_validator = Arc::new(gossip::GossipValidator::new());
@@ -139,6 +145,14 @@ where
 				},
 			},
 		);
+	let base_path = if base_path.is_some() {
+		match base_path {
+			Some(BasePath::Permanenent(path_buf)) => Some(path_buf),
+			_ => None,
+		}
+	} else {
+		None
+	};
 
 	let worker_params = worker::WorkerParams {
 		client,
@@ -148,6 +162,7 @@ where
 		gossip_validator,
 		min_block_delta,
 		metrics,
+		base_path,
 		dkg_state: DKGState {
 			accepted: false,
 			is_epoch_over: true,
