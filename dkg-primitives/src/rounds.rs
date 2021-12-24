@@ -411,7 +411,7 @@ where
 	}
 
 	fn proceed_vote(&mut self) -> Result<bool, DKGError> {
-		Ok(self.try_finish_vote())
+		self.try_finish_vote()
 	}
 
 	/// Try finish current Stage
@@ -453,7 +453,7 @@ where
 		return false
 	}
 
-	fn try_finish_vote(&mut self) -> bool {
+	fn try_finish_vote(&mut self) -> Result<bool, DKGError> {
 		let mut finished: Vec<K> = Vec::new();
 
 		for (round_key, round) in self.rounds.iter() {
@@ -469,7 +469,9 @@ where
 				let sig = round.complete();
 				let payload = round.payload;
 
-				if let (Some(payload), Some(sig)) = (payload, sig) {
+				if let Err(err) = sig {
+					return Err(err)
+				} else if let (Some(payload), Ok(sig)) = (payload, sig) {
 					match convert_signature(&sig) {
 						Some(signature) => {
 							let signed_payload = DKGSignedPayload {
@@ -488,7 +490,7 @@ where
 			}
 		}
 
-		false
+		Ok(false)
 	}
 
 	/// Get outgoing messages for current Stage
@@ -703,21 +705,47 @@ impl<P> DKGRoundTracker<P> {
 		self.sign_manual.is_some() && self.votes.len() >= threshold
 	}
 
-	fn complete(&mut self) -> Option<SignatureRecid> {
+	fn complete(&mut self) -> Result<SignatureRecid, DKGError> {
 		if let Some(sign_manual) = self.sign_manual.take() {
 			debug!(target: "dkg", "Tyring to complete vote with {} votes", self.votes.len());
 			return match sign_manual.complete(&self.votes) {
 				Ok(sig) => {
 					debug!("Obtained complete signature: {}", &sig.recid);
-					Some(sig)
+					Ok(sig)
 				},
 				Err(err) => {
-					error!("Error signing: {:?}", &err);
-					None
+					let sign_err = match err {
+						SignError::LocalSigning(sign_err) => sign_err,
+						SignError::CompleteSigning(sign_err) => sign_err,
+					};
+
+					match sign_err {
+						gg20_sign::rounds::Error::Round1(err_type) =>
+							return Err(DKGError::SignMisbehaviour {
+								bad_actors: err_type.bad_actors,
+							}),
+						gg20_sign::rounds::Error::Round2Stage4(err_type) =>
+							return Err(DKGError::SignMisbehaviour {
+								bad_actors: err_type.bad_actors,
+							}),
+						gg20_sign::rounds::Error::Round3(err_type) =>
+							return Err(DKGError::SignMisbehaviour {
+								bad_actors: err_type.bad_actors,
+							}),
+						gg20_sign::rounds::Error::Round5(err_type) =>
+							return Err(DKGError::SignMisbehaviour {
+								bad_actors: err_type.bad_actors,
+							}),
+						gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
+							return Err(DKGError::SignMisbehaviour {
+								bad_actors: err_type.bad_actors,
+							}),
+						_ => return Err(DKGError::GenericError),
+					};
 				},
 			}
 		}
-		None
+		Err(DKGError::GenericError)
 	}
 }
 
