@@ -43,8 +43,8 @@ sc-service = { git = 'https://github.com/paritytech/substrate', branch = 'master
 round-based = { version = "0.1.4", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.2.1"
-# multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
-multi-party-ecdsa = { path = "/home/david/Documents/multi-party-ecdsa" }
+multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git", branch = "david/make-some-structs-serializable" }
+
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }

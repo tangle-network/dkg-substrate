@@ -4919,6 +4919,7 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.7.4"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=david/make-some-structs-serializable#442f4fafce6da5a7abd6feba90181117c8813f60"
 dependencies = [
  "centipede",
  "curv-kzen",
