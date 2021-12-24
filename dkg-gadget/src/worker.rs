@@ -628,6 +628,16 @@ where
 						}
 					}
 				},
+			DKGError::SignMisbehaviour { bad_actors } =>
+				for bad_actor in bad_actors.iter() {
+					if *bad_actor > 0 && *bad_actor <= authorities.len() {
+						if let Some(offender) = authorities.get(bad_actor - 1) {
+							self.handle_dkg_report(DKGReport::SigningMisbehavior {
+								offender: offender.clone(),
+							});
+						}
+					}
+				},
 			_ => (),
 		}
 	}
