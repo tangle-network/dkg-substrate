@@ -91,6 +91,17 @@ pub mod pallet {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		ProposalAdded(T::AccountId, ProposalType),
+		/// Event When a Proposal Gets Signed by DKG.
+		ProposalSigned {
+			/// The Target EVM chain ID.
+			chain_id: T::ChainId,
+			/// The Payload Type or the Key.
+			key: DKGPayloadKey,
+			/// The Proposal Data.
+			data: Vec<u8>,
+			/// Signature of the hash of the proposal data.
+			signature: Vec<u8>,
+		},
 	}
 
 	// Errors inform users that something went wrong.
@@ -311,6 +322,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			SignedProposals::<T>::insert(chain_id, DKGPayloadKey::EVMProposal(nonce), prop.clone());
 
 			UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
+			// Emit event so frontend can react to it.
+			Self::deposit_event(Event::<T>::ProposalSigned {
+				chain_id,
+				key: DKGPayloadKey::EVMProposal(nonce),
+				data,
+				signature,
+			});
 			Ok(().into())
 		} else {
 			Err(Error::<T>::ProposalFormatInvalid)?
@@ -391,6 +409,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			SignedProposals::<T>::insert(T::ChainId::from(chain_id), payload_key, prop.clone());
 			UnsignedProposalQueue::<T>::remove(T::ChainId::from(chain_id), payload_key);
+			// Emit event so frontend can react to it.
+			Self::deposit_event(Event::<T>::ProposalSigned {
+				chain_id,
+				key: payload_key,
+				data,
+				signature,
+			});
 			Ok(())
 		} else {
 			Err(Error::<T>::ProposalFormatInvalid)?
