@@ -105,7 +105,7 @@ pub struct DKGPublicKeyMessage {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGBufferedMessage<AuthorityId, Key> {
-	msg: Vec<DKGMessage<AuthorityId, Key>>,
+	pub msg: Vec<DKGMessage<AuthorityId, Key>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

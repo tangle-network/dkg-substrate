@@ -28,6 +28,8 @@ pub fn set_up_rounds(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
 	thresh: u16,
+	local_key_path: Option<std::path::PathBuf>,
+	offline_stage_path: Option<std::path::PathBuf>,
 ) -> MultiPartyECDSARounds<DKGPayloadKey> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
 
@@ -38,6 +40,8 @@ pub fn set_up_rounds(
 		thresh,
 		u16::try_from(n).unwrap(),
 		authority_set.id.clone(),
+		local_key_path,
+		offline_stage_path,
 	);
 
 	rounds

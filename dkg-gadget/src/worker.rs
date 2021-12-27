@@ -67,7 +67,10 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	persistence::{buffer_message, DKGMessageBuffers},
+	persistence::{
+		buffer_message, handle_buffered_message_request, handle_incoming_buffered_message,
+		try_resume_dkg, DKGMessageBuffers,
+	},
 	types::dkg_topic,
 	utils::{find_authorities_change, find_index, set_up_rounds, validate_threshold},
 	Client,
@@ -76,6 +79,10 @@ use crate::{
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload},
+	utils::{
+		DKG_LOCAL_KEY_FILE, DKG_OFFLINE_STAGE_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
+		QUEUED_DKG_OFFLINE_STAGE_FILE,
+	},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -220,6 +227,14 @@ where
 	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey>) {
 		self.next_rounds = Some(rounds);
 	}
+
+	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey>> {
+		self.rounds.take()
+	}
+
+	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey>> {
+		self.next_rounds.take()
+	}
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -324,13 +339,28 @@ where
 			self.get_threshold(header).unwrap(),
 		);
 
+		let mut local_key_path = None;
+		let mut offline_stage_path = None;
+
+		if self.base_path.is_some() {
+			local_key_path = Some(self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE));
+			offline_stage_path =
+				Some(self.base_path.as_ref().unwrap().join(DKG_OFFLINE_STAGE_FILE));
+		}
+
 		self.rounds = if self.next_rounds.is_some() {
 			self.next_rounds.take()
 		} else {
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID &&
 				find_index(&next_authorities.authorities, &public).is_some()
 			{
-				Some(set_up_rounds(&next_authorities, &public, thresh))
+				Some(set_up_rounds(
+					&next_authorities,
+					&public,
+					thresh,
+					local_key_path,
+					offline_stage_path,
+				))
 			} else {
 				None
 			}
@@ -364,11 +394,22 @@ where
 			self.get_threshold(header).unwrap_or_default(),
 		);
 
+		let mut local_key_path = None;
+		let mut offline_stage_path = None;
+
+		if self.base_path.is_some() {
+			local_key_path =
+				Some(self.base_path..as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
+			offline_stage_path =
+				Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_OFFLINE_STAGE_FILE));
+		}
+
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.next_rounds = Some(set_up_rounds(&queued, &public, thresh));
+			self.next_rounds =
+				Some(set_up_rounds(&queued, &public, thresh, local_key_path, offline_stage_path));
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
 				Ok(()) => {
@@ -402,6 +443,7 @@ where
 
 		self.latest_header = Some(header.clone());
 		self.listen_and_clear_offchain_storage(header);
+		try_resume_dkg(self, header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -596,6 +638,11 @@ where
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 		buffer_message(self, dkg_msg.clone());
 
+		if self.dkg_persistence.awaiting_messages {
+			handle_incoming_buffered_message(self, dkg_msg.clone());
+			return
+		}
+
 		if let Some(rounds) = self.rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
 				match rounds.handle_incoming(dkg_msg.payload.clone()) {
@@ -621,6 +668,8 @@ where
 				}
 			}
 		}
+
+		handle_buffered_message_request(self, dkg_msg.clone());
 
 		self.handle_public_key_broadcast(dkg_msg.clone());
 

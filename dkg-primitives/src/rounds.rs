@@ -9,9 +9,15 @@ use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
 use sp_runtime::traits::{Block, NumberFor};
-use std::collections::{BTreeMap, HashMap};
+use std::{
+	collections::{BTreeMap, HashMap},
+	path::PathBuf,
+};
 
-use crate::types::*;
+use crate::{
+	types::*,
+	utils::{store_localkey, store_offline_stage},
+};
 use dkg_runtime_primitives::keccak_256;
 
 pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
@@ -57,6 +63,10 @@ pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<Vec<u8>>>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage<SignPayloadKey>>,
 	finished_rounds: Vec<DKGSignedPayload<SignPayloadKey>>,
+
+	// Offline storage
+	local_key_path: Option<PathBuf>,
+	completed_offline_stage_path: Option<PathBuf>,
 }
 
 impl<K> MultiPartyECDSARounds<K>
@@ -65,7 +75,14 @@ where
 {
 	/// Public ///
 
-	pub fn new(party_index: u16, threshold: u16, parties: u16, round_id: RoundId) -> Self {
+	pub fn new(
+		party_index: u16,
+		threshold: u16,
+		parties: u16,
+		round_id: RoundId,
+		local_key_path: Option<PathBuf>,
+		completed_offline_stage_path: Option<PathBuf>,
+	) -> Self {
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
 		Self {
@@ -85,6 +102,8 @@ where
 			rounds: BTreeMap::new(),
 			sign_outgoing_msgs: Vec::new(),
 			finished_rounds: Vec::new(),
+			local_key_path,
+			completed_offline_stage_path,
 		}
 	}
 
@@ -377,8 +396,15 @@ where
 			info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
 			match keygen.pick_output() {
 				Some(Ok(k)) => {
-					self.local_key = Some(k);
+					self.local_key = Some(k.clone());
 
+					if self.local_key_path.is_some() {
+						let _ = store_localkey(
+							k,
+							self.round_id,
+							self.local_key_path.as_ref().unwrap().clone(),
+						);
+					}
 					info!(target: "dkg", "🕸️  local share key is extracted");
 					return true
 				},
@@ -396,7 +422,14 @@ where
 			info!(target: "dkg", "🕸️  OfflineStage is finished, extracting output round_id: {:?}", self.round_id);
 			match offline_stage.pick_output() {
 				Some(Ok(cos)) => {
-					self.completed_offline_stage = Some(cos);
+					self.completed_offline_stage = Some(cos.clone());
+					if self.completed_offline_stage_path.is_some() {
+						let _ = store_offline_stage(
+							cos,
+							self.round_id,
+							self.completed_offline_stage_path.as_ref().unwrap().clone(),
+						);
+					}
 					info!(target: "dkg", "🕸️  CompletedOfflineStage is extracted");
 					return true
 				},
@@ -842,7 +875,7 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -894,7 +927,7 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, 0);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -961,7 +994,7 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
 
 		for i in 1..n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, 0);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -981,7 +1014,7 @@ mod tests {
 			panic!("Keygen completes even with a missing party")
 		}
 
-		let mut party = MultiPartyECDSARounds::new(n, t, n, 0);
+		let mut party = MultiPartyECDSARounds::new(n, t, n, 0, None, None);
 		party.start_keygen(0).unwrap();
 		party.proceed();
 
