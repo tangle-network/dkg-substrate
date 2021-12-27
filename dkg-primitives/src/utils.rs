@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -73,7 +73,7 @@ pub fn store_localkey(key: LocalKey, round_id: RoundId, path: PathBuf) -> std::i
 		fs::write(path, data)?;
 		return Ok(())
 	}
-	Err(std::io::ErrorKind::Other)
+	Err(std::io::ErrorKind::Other.into())
 }
 
 pub fn store_offline_stage(
@@ -90,5 +90,5 @@ pub fn store_offline_stage(
 		return Ok(())
 	}
 
-	Err(std::io::ErrorKind::Other)
+	Err(std::io::ErrorKind::Other.into())
 }

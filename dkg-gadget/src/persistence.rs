@@ -6,7 +6,7 @@ use crate::{
 };
 
 use bincode::deserialize_from;
-use codec::Encode;
+use codec::{Decode, Encode};
 use dkg_primitives::{
 	crypto::AuthorityId,
 	keys::{CompletedOfflineStage, LocalKey},
@@ -18,9 +18,10 @@ use dkg_primitives::{
 	},
 	DKGPayloadKey,
 };
+use dkg_runtime_primitives::DKGApi;
+use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
-use sp_api::BlockT as Block;
-use sp_blockchain::Backend;
+use sp_api::{BlockT as Block, HeaderT as Header};
 use std::{fs, io::Cursor};
 
 pub struct DKGPersistenceState {
@@ -43,8 +44,8 @@ impl DKGPersistenceState {
 }
 
 pub struct DKGMessageBuffers {
-	pub offline: Vec<DKGMessage<AuthorityId, DKGPayloadKey>>,
-	pub keygen: Vec<DKGMessage<AuthorityId, DKGPayloadKey>>,
+	pub offline: Vec<Vec<u8>>,
+	pub keygen: Vec<Vec<u8>>,
 }
 
 impl DKGMessageBuffers {
@@ -53,40 +54,52 @@ impl DKGMessageBuffers {
 	}
 }
 
-pub fn buffer_message<B, BE, C>(
-	worker: &mut DKGWorker<B, BE, C>,
+pub(crate) fn buffer_message<B, C, BE>(
+	worker: &mut DKGWorker<B, C, BE>,
 	msg: DKGMessage<AuthorityId, DKGPayloadKey>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	match msg.payload.clone() {
 		DKGMsgPayload::Keygen(_) => {
 			// we only need to buffer one message from each node
-			let msg_from_authority_exists = worker.msg_buffer.keygen.iter().any(|x| x.id == msg.id);
+			let msg_from_authority_exists =
+				worker.msg_buffer.keygen.iter().any(|x| {
+					match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &x[..]) {
+						Ok(m) => msg.id == m.id,
+						_ => false,
+					}
+				});
 			if !msg_from_authority_exists {
-				worker.msg_buffer.keygen.push(msg.clone());
+				worker.msg_buffer.keygen.push(msg.encode());
 			}
 		},
 		DKGMsgPayload::Offline(_) => {
-			let msg_from_authority_exists =
-				worker.msg_buffer.offline.iter().any(|x| x.id == msg.id);
+			let msg_from_authority_exists = worker.msg_buffer.offline.iter().any(|x| {
+				match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &x[..]) {
+					Ok(m) => msg.id == m.id,
+					_ => false,
+				}
+			});
 			if !msg_from_authority_exists {
-				worker.msg_buffer.offline.push(msg.clone())
+				worker.msg_buffer.offline.push(msg.encode())
 			}
 		},
 		_ => {},
 	}
 }
 
-pub fn handle_incoming_buffered_message<B, BE, C>(
-	worker: &mut DKGWorker<B, BE, C>,
+pub(crate) fn handle_incoming_buffered_message<B, C, BE>(
+	worker: &mut DKGWorker<B, C, BE>,
 	msg: DKGMessage<AuthorityId, DKGPayloadKey>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if !worker.dkg_persistence.awaiting_messages {
 		return
@@ -105,8 +118,12 @@ pub fn handle_incoming_buffered_message<B, BE, C>(
 				let inner_round_id = inner_rounds.get_id();
 				if round_id == inner_round_id {
 					for m in &payload.msg {
-						if m.round_id == inner_round_id {
-							inner_rounds.handle_incoming(m.payload.clone())
+						match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &m[..]) {
+							Ok(msg) =>
+								if msg.round_id == inner_round_id {
+									let _ = inner_rounds.handle_incoming(msg.payload.clone());
+								},
+							_ => {},
 						}
 					}
 				}
@@ -117,8 +134,12 @@ pub fn handle_incoming_buffered_message<B, BE, C>(
 				let inner_round_id = inner_rounds.get_id();
 				if round_id == inner_round_id {
 					for m in &payload.msg {
-						if m.round_id == inner_round_id {
-							inner_rounds.handle_incoming(m.payload.clone())
+						match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &m[..]) {
+							Ok(msg) =>
+								if msg.round_id == inner_round_id {
+									let _ = inner_rounds.handle_incoming(msg.payload.clone());
+								},
+							_ => {},
 						}
 					}
 				}
@@ -136,13 +157,14 @@ pub fn handle_incoming_buffered_message<B, BE, C>(
 	}
 }
 
-pub fn handle_buffered_message_request<B, BE, C>(
-	worker: &mut DKGWorker<B, BE, C>,
+pub(crate) fn handle_buffered_message_request<B, C, BE>(
+	worker: &mut DKGWorker<B, C, BE>,
 	msg: DKGMessage<AuthorityId, DKGPayloadKey>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if worker.dkg_persistence.awaiting_messages {
 		return
@@ -150,7 +172,7 @@ pub fn handle_buffered_message_request<B, BE, C>(
 
 	let public = worker
 		.keystore_ref()
-		.authority_id(&self.key_store.public_keys().unwrap())
+		.authority_id(&worker.keystore_ref().public_keys().unwrap())
 		.unwrap_or_else(|| panic!("Halp"));
 
 	let round_id = msg.round_id;
@@ -196,11 +218,12 @@ pub fn handle_buffered_message_request<B, BE, C>(
 	}
 }
 
-pub fn try_resume_dkg<B, BE, C>(worker: &mut DKGWorker<B, BE, C>, header: &B::Header)
+pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if worker.dkg_persistence.initial_check {
 		return
@@ -216,7 +239,7 @@ where
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = worker
 			.keystore_ref()
-			.authority_id(&self.key_store.public_keys().unwrap())
+			.authority_id(&worker.keystore_ref().public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
 		let mut local_key = None;
@@ -231,18 +254,18 @@ where
 			let queued_local_key_path = base_path.join(QUEUED_DKG_LOCAL_KEY_FILE);
 			let queued_offline_stage_path = base_path.join(QUEUED_DKG_OFFLINE_STAGE_FILE);
 
-			let offline_stage_serialized = fs::read(offline_stage_path);
-			let local_key_serialized = fs::read(local_key_path);
-			let queued_offline_stage_serialized = fs::read(queued_offline_stage_path);
-			let queued_local_key_serialized = fs::read(queued_local_key_path);
+			let offline_stage_serialized = fs::read(offline_stage_path.clone());
+			let local_key_serialized = fs::read(local_key_path.clone());
+			let queued_offline_stage_serialized = fs::read(queued_offline_stage_path.clone());
+			let queued_local_key_serialized = fs::read(queued_local_key_path.clone());
 
 			let round_id = active.id;
 			let queued_round_id = queued.id;
 
 			if let Ok(offline_stage_serialized) = offline_stage_serialized {
-				let mut reader = Cursor::new(offline_stage_serialized);
+				let reader = Cursor::new(offline_stage_serialized);
 				let offline_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(&mut reader);
+					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(reader);
 
 				if let Ok(offline_deserialized) = offline_deserialized {
 					if round_id == offline_deserialized.round_id {
@@ -252,9 +275,9 @@ where
 			}
 
 			if let Ok(local_key_serialized) = local_key_serialized {
-				let mut reader = Cursor::new(local_key_serialized);
+				let reader = Cursor::new(local_key_serialized);
 				let localkey_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(&mut reader);
+					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
 
 				if let Ok(localkey_deserialized) = localkey_deserialized {
 					if round_id == localkey_deserialized.round_id {
@@ -264,9 +287,9 @@ where
 			}
 
 			if let Ok(queued_offline_stage_serialized) = queued_offline_stage_serialized {
-				let mut reader = Cursor::new(queued_offline_stage_serialized);
+				let reader = Cursor::new(queued_offline_stage_serialized);
 				let queued_offline_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(&mut reader);
+					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(reader);
 
 				if let Ok(queued_offline_deserialized) = queued_offline_deserialized {
 					if queued_round_id == queued_offline_deserialized.round_id {
@@ -276,9 +299,9 @@ where
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
-				let mut reader = Cursor::new(queued_local_key_serialized);
+				let reader = Cursor::new(queued_local_key_serialized);
 				let queued_localkey_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(&mut reader);
+					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
 
 				if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
 					if queued_round_id == queued_localkey_deserialized.round_id {
@@ -294,7 +317,7 @@ where
 				);
 
 				let mut rounds = set_up_rounds(
-					&active.authorities,
+					&active,
 					&public,
 					threshold,
 					Some(local_key_path),
@@ -308,6 +331,8 @@ where
 						payload: DKGMsgPayload::RequestBufferedKeyGen,
 					};
 
+					let _ = rounds.start_keygen(rounds.get_id());
+					rounds.proceed();
 					worker.gossip_engine_ref().lock().gossip_message(
 						dkg_topic::<B>(),
 						message.encode(),
@@ -319,7 +344,9 @@ where
 
 				if local_key.is_some() && offline_stage.is_none() {
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-
+					let s_l = (1..=rounds.dkg_params().2).collect();
+					let _ = rounds.reset_signers(rounds.get_id(), s_l);
+					rounds.proceed();
 					// Send a message requesting buffered offline messages
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
@@ -353,13 +380,15 @@ where
 				);
 
 				let mut rounds = set_up_rounds(
-					&queued.authorities,
+					&queued,
 					&public,
 					threshold,
 					Some(queued_local_key_path),
 					Some(queued_offline_stage_path),
 				);
 				if queued_local_key.is_none() {
+					let _ = rounds.start_keygen(rounds.get_id());
+					rounds.proceed();
 					// Send a message requesting list of messages required to join stalled keygen
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
@@ -377,6 +406,9 @@ where
 				} else if queued_local_key.is_some() && queued_offline_stage.is_none() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
 					// Send a message requesting pending offline stage messages
+					let s_l = (1..=rounds.dkg_params().2).collect();
+					let _ = rounds.reset_signers(rounds.get_id(), s_l);
+					rounds.proceed();
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
 						round_id: rounds.get_id(),

@@ -1,9 +1,10 @@
+use crate::worker::ENGINE_ID;
 use codec::Codec;
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
 };
 use dkg_runtime_primitives::DKGPayloadKey;
-use sp_api::BlockT as Block;
+use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
 
 pub fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {

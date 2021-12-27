@@ -49,8 +49,8 @@ pub enum DKGMsgPayload<Key> {
 	PublicKeyBroadcast(DKGPublicKeyMessage),
 	RequestBufferedKeyGen,
 	RequestBufferedOffline,
-	BufferedKeyGenMessage(DKGBufferedMessage<AuthorityId, Key>),
-	BufferedOfflineMessage(DKGBufferedMessage<AuthorityId, Key>),
+	BufferedKeyGenMessage(DKGBufferedMessage),
+	BufferedOfflineMessage(DKGBufferedMessage),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -102,10 +102,10 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Decode, Encode)]
+#[derive(Debug, Clone, Encode, Decode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGBufferedMessage<AuthorityId, Key> {
-	pub msg: Vec<DKGMessage<AuthorityId, Key>>,
+pub struct DKGBufferedMessage {
+	pub msg: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

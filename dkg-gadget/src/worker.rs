@@ -47,7 +47,10 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{DKGMessageBuffers, DKGPersistenceState},
+	persistence::{
+		buffer_message, handle_buffered_message_request, handle_incoming_buffered_message,
+		try_resume_dkg, DKGMessageBuffers, DKGPersistenceState,
+	},
 };
 use dkg_primitives::{
 	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
@@ -67,10 +70,6 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	persistence::{
-		buffer_message, handle_buffered_message_request, handle_incoming_buffered_message,
-		try_resume_dkg, DKGMessageBuffers,
-	},
 	types::dkg_topic,
 	utils::{find_authorities_change, find_index, set_up_rounds, validate_threshold},
 	Client,
@@ -212,8 +211,8 @@ where
 		}
 	}
 
-	pub fn keystore_ref(&self) -> &DKGKeystore {
-		&self.key_store
+	pub fn keystore_ref(&self) -> DKGKeystore {
+		self.key_store.clone()
 	}
 
 	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
@@ -398,8 +397,7 @@ where
 		let mut offline_stage_path = None;
 
 		if self.base_path.is_some() {
-			local_key_path =
-				Some(self.base_path..as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
+			local_key_path = Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
 			offline_stage_path =
 				Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_OFFLINE_STAGE_FILE));
 		}
@@ -424,7 +422,7 @@ where
 	// *** Block notifications ***
 
 	pub fn is_new_session(&self, header: &B::Header) -> bool {
-		if let Some((active, queued)) = self.validator_set(header) {
+		if let Some((active, _queued)) = self.validator_set(header) {
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
