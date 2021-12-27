@@ -124,5 +124,5 @@ pub enum DKGError {
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
 	ResetSigners { reason: String },
-	GenericError, // TODO: handle other
+	GenericError { reason: String }, // TODO: handle other
 }
