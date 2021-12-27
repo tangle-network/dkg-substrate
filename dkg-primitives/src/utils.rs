@@ -37,3 +37,7 @@ pub fn insert_controller_account_keys_into_keystore(
 		_ => {},
 	}
 }
+
+pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
+	return input.iter().map(|v| *v as u16).collect()
+}
