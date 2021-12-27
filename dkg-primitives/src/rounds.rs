@@ -8,6 +8,7 @@ use curv::{
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
+use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::collections::BTreeMap;
 
 use crate::{types::*, utils::vec_usize_to_u16};
@@ -23,13 +24,13 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// DKG State tracker
-pub struct DKGState<K> {
+pub struct DKGState<K, C> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_genesis_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
+	pub curr_dkg: Option<MultiPartyECDSARounds<K, C>>,
+	pub past_dkg: Option<MultiPartyECDSARounds<K, C>>,
 }
 
 const KEYGEN_TIMEOUT: u32 = 10;
@@ -37,7 +38,7 @@ const OFFLINE_TIMEOUT: u32 = 10;
 const SIGN_TIMEOUT: u32 = 3;
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
-pub struct MultiPartyECDSARounds<SignPayloadKey> {
+pub struct MultiPartyECDSARounds<SignPayloadKey, Clock> {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
@@ -49,8 +50,8 @@ pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	stage: Stage,
 
 	// DKG clock
-	keygen_started_at: u32,
-	offline_started_at: u32,
+	keygen_started_at: Clock,
+	offline_started_at: Clock,
 
 	// Message processing
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
@@ -65,14 +66,15 @@ pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	completed_offline_stage: Option<CompletedOfflineStage>,
 
 	// Signing rounds
-	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<Vec<u8>>>,
+	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<Vec<u8>, Clock>>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage<SignPayloadKey>>,
 	finished_rounds: Vec<DKGSignedPayload<SignPayloadKey>>,
 }
 
-impl<K> MultiPartyECDSARounds<K>
+impl<K, C> MultiPartyECDSARounds<K, C>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
+	C: AtLeast32BitUnsigned + Copy,
 {
 	/// Public ///
 
@@ -87,8 +89,8 @@ where
 			keygen_set_id: 0,
 			signer_set_id: 0,
 			signers: Vec::new(),
-			keygen_started_at: 0,
-			offline_started_at: 0,
+			keygen_started_at: 0u32.into(),
+			offline_started_at: 0u32.into(),
 			stage: Stage::KeygenReady,
 			pending_keygen_msgs: Vec::new(),
 			pending_offline_msgs: Vec::new(),
@@ -102,7 +104,7 @@ where
 		}
 	}
 
-	pub fn proceed(&mut self, at: u32) -> Result<(), DKGError> {
+	pub fn proceed(&mut self, at: C) -> Result<(), DKGError> {
 		let proceed_res = match self.stage {
 			Stage::Keygen => self.proceed_keygen(at),
 			Stage::Offline => self.proceed_offline_stage(at),
@@ -179,7 +181,7 @@ where
 	pub fn start_keygen(
 		&mut self,
 		keygen_set_id: KeygenSetId,
-		started_at: u32,
+		started_at: C,
 	) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
@@ -219,7 +221,7 @@ where
 		&mut self,
 		signer_set_id: SignerSetId,
 		s_l: Vec<u16>,
-		started_at: u32,
+		started_at: C,
 	) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Resetting singers {:?}", s_l);
 		info!(target: "dkg", "🕸️  Signer set id {:?}", signer_set_id);
@@ -264,7 +266,7 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: K, data: Vec<u8>, started_at: u32) -> Result<(), String> {
+	pub fn vote(&mut self, round_key: K, data: Vec<u8>, started_at: C) -> Result<(), String> {
 		if let Some(completed_offline) = self.completed_offline_stage.as_mut() {
 			let round = self.rounds.entry(round_key).or_default();
 			let hash = BigInt::from_bytes(&keccak_256(&data));
@@ -333,9 +335,10 @@ where
 	}
 }
 
-impl<K> MultiPartyECDSARounds<K>
+impl<K, C> MultiPartyECDSARounds<K, C>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
+	C: AtLeast32BitUnsigned + Copy,
 {
 	/// Internal ///
 
@@ -346,7 +349,7 @@ where
 
 	/// Proceed to next step for current Stage
 
-	fn proceed_keygen(&mut self, at: u32) -> Result<bool, DKGError> {
+	fn proceed_keygen(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
 
 		let keygen = self.keygen.as_mut().unwrap();
@@ -386,7 +389,7 @@ where
 		if self.try_finish_keygen() {
 			Ok(true)
 		} else {
-			if at - self.keygen_started_at > KEYGEN_TIMEOUT {
+			if at - self.keygen_started_at > KEYGEN_TIMEOUT.into() {
 				if !blame_vec.is_empty() {
 					return Err(DKGError::KeygenTimeout { bad_actors: blame_vec })
 				} else {
@@ -398,7 +401,7 @@ where
 		}
 	}
 
-	fn proceed_offline_stage(&mut self, at: u32) -> Result<bool, DKGError> {
+	fn proceed_offline_stage(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
 		let offline_stage = self.offline_stage.as_mut().unwrap();
@@ -447,7 +450,7 @@ where
 		if self.try_finish_offline_stage() {
 			Ok(true)
 		} else {
-			if at - self.offline_started_at > OFFLINE_TIMEOUT {
+			if at - self.offline_started_at > OFFLINE_TIMEOUT.into() {
 				if !blame_vec.is_empty() {
 					return Err(DKGError::OfflineTimeout { bad_actors: blame_vec })
 				} else {
@@ -459,14 +462,16 @@ where
 		}
 	}
 
-	fn proceed_vote(&mut self, at: u32) -> Result<bool, DKGError> {
+	fn proceed_vote(&mut self, at: C) -> Result<bool, DKGError> {
 		if let Err(err) = self.try_finish_vote() {
 			return Err(err)
 		} else {
 			let mut timed_out: Vec<K> = Vec::new();
 
 			for (round_key, round) in self.rounds.iter() {
-				if round.is_signed_by(self.party_index) && at - round.started_at > SIGN_TIMEOUT {
+				if round.is_signed_by(self.party_index) &&
+					at - round.started_at > SIGN_TIMEOUT.into()
+				{
 					timed_out.push(round_key.clone());
 				}
 			}
@@ -759,25 +764,31 @@ where
 	}
 }
 
-struct DKGRoundTracker<Payload> {
+struct DKGRoundTracker<Payload, Clock> {
 	votes: BTreeMap<u16, PartialSignature>,
 	sign_manual: Option<SignManual>,
 	payload: Option<Payload>,
-	started_at: u32,
+	started_at: Clock,
 }
 
-impl<P> Default for DKGRoundTracker<P> {
+impl<P, C> Default for DKGRoundTracker<P, C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	fn default() -> Self {
 		Self {
 			votes: Default::default(),
 			sign_manual: Default::default(),
 			payload: Default::default(),
-			started_at: 0,
+			started_at: 0u32.into(),
 		}
 	}
 }
 
-impl<P> DKGRoundTracker<P> {
+impl<P, C> DKGRoundTracker<P, C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	fn add_vote(&mut self, party: u16, vote: PartialSignature) -> bool {
 		self.votes.insert(party, vote);
 		true
@@ -887,7 +898,7 @@ mod tests {
 	use codec::Encode;
 
 	fn check_all_reached_stage(
-		parties: &Vec<MultiPartyECDSARounds<u64>>,
+		parties: &Vec<MultiPartyECDSARounds<u64, u32>>,
 		target_stage: Stage,
 	) -> bool {
 		for party in parties.iter() {
@@ -898,7 +909,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64>>) {
+	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) {
 		for party in parties.iter() {
 			if party.get_public_key().is_none() {
 				panic!("No public key for party {}", party.party_index)
@@ -906,15 +917,15 @@ mod tests {
 		}
 	}
 
-	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		check_all_reached_stage(parties, Stage::OfflineReady)
 	}
 
-	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		check_all_reached_stage(parties, Stage::ManualReady)
 	}
 
-	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		for party in parties.iter() {
 			if !party.has_finished_rounds() {
 				return false
@@ -923,7 +934,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64>>) {
+	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>) {
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
 
@@ -957,9 +968,9 @@ mod tests {
 		println!("All signatures are correct");
 	}
 
-	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64>>, stop_condition: C)
+	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>, stop_condition: C)
 	where
-		C: Fn(&Vec<MultiPartyECDSARounds<u64>>) -> bool,
+		C: Fn(&Vec<MultiPartyECDSARounds<u64, u32>>) -> bool,
 	{
 		println!("Simulation starts");
 
@@ -1000,7 +1011,7 @@ mod tests {
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
 
 		for i in 1..=n {
 			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);

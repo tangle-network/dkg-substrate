@@ -18,6 +18,7 @@
 
 use core::convert::TryFrom;
 use curv::elliptic::curves::traits::ECPoint;
+use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -88,7 +89,7 @@ where
 	pub gossip_validator: Arc<GossipValidator<B>>,
 	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
-	pub dkg_state: DKGState<DKGPayloadKey>,
+	pub dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -106,8 +107,8 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
-	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
+	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
+	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
@@ -125,7 +126,7 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 	// dkg state
-	dkg_state: DKGState<DKGPayloadKey>,
+	dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
 	// setting up queued authorities keygen
 	queued_keygen_in_progress: bool,
 	// Setting up keygen for genesis authorities
@@ -225,9 +226,8 @@ where
 		return self.client.runtime_api().signature_threshold(&at).ok()
 	}
 
-	fn get_latest_block_number(&self) -> u32 {
-		// header.number().try_into().unwrap()
-		0
+	fn get_latest_block_number(&self) -> NumberFor<B> {
+		self.latest_header.clone().unwrap().number().clone()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -466,9 +466,9 @@ where
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
-		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
+		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>,
 		                     authority_id: Public,
-		                     at: u32|
+		                     at: NumberFor<B>|
 		 -> Result<(), DKGError> {
 			if let Err(err) = rounds.proceed(at) {
 				return Err(err)
@@ -628,41 +628,42 @@ where
 	fn handle_dkg_error(&mut self, dkg_error: DKGError) {
 		let authorities = self.current_validator_set.authorities.clone();
 
-		match dkg_error {
-			DKGError::KeygenMisbehaviour { bad_actors } =>
-				for bad_actor in bad_actors.iter() {
-					let bad_actor = *bad_actor as usize;
-					if bad_actor > 0 && bad_actor <= authorities.len() {
-						if let Some(offender) = authorities.get(bad_actor - 1) {
-							self.handle_dkg_report(DKGReport::KeygenMisbehavior {
-								offender: offender.clone(),
-							});
-						}
-					}
-				},
-			DKGError::OfflineMisbehaviour { bad_actors } =>
-				for bad_actor in bad_actors.iter() {
-					let bad_actor = *bad_actor as usize;
-					if bad_actor > 0 && bad_actor <= authorities.len() {
-						if let Some(offender) = authorities.get(bad_actor - 1) {
-							self.handle_dkg_report(DKGReport::SigningMisbehavior {
-								offender: offender.clone(),
-							});
-						}
-					}
-				},
-			DKGError::SignMisbehaviour { bad_actors } =>
-				for bad_actor in bad_actors.iter() {
-					let bad_actor = *bad_actor as usize;
-					if bad_actor > 0 && bad_actor <= authorities.len() {
-						if let Some(offender) = authorities.get(bad_actor - 1) {
-							self.handle_dkg_report(DKGReport::SigningMisbehavior {
-								offender: offender.clone(),
-							});
-						}
-					}
-				},
-			_ => (),
+		let bad_actors = match dkg_error {
+			DKGError::KeygenMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			DKGError::KeygenTimeout { ref bad_actors } => bad_actors.clone(),
+			DKGError::OfflineMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			DKGError::OfflineTimeout { ref bad_actors } => bad_actors.clone(),
+			DKGError::SignMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			DKGError::SignTimeout { ref bad_actors } => bad_actors.clone(),
+			_ => Default::default(),
+		};
+
+		let mut offenders: Vec<AuthorityId> = Vec::new();
+		for bad_actor in bad_actors {
+			let bad_actor = bad_actor as usize;
+			if bad_actor > 0 && bad_actor <= authorities.len() {
+				if let Some(offender) = authorities.get(bad_actor - 1) {
+					offenders.push(offender.clone());
+				}
+			}
+		}
+
+		for offender in offenders {
+			match dkg_error {
+				DKGError::KeygenMisbehaviour { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::KeygenMisbehavior { offender }),
+				DKGError::KeygenTimeout { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::KeygenMisbehavior { offender }),
+				DKGError::OfflineMisbehaviour { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::SigningMisbehavior { offender }),
+				DKGError::OfflineTimeout { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::SigningMisbehavior { offender }),
+				DKGError::SignMisbehaviour { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::SigningMisbehavior { offender }),
+				DKGError::SignTimeout { bad_actors: _ } =>
+					self.handle_dkg_report(DKGReport::SigningMisbehavior { offender }),
+				_ => (),
+			}
 		}
 	}
 
@@ -1147,11 +1148,14 @@ fn validate_threshold(n: u16, t: u16) -> u16 {
 	return max_thresh
 }
 
-fn set_up_rounds(
+fn set_up_rounds<Clock>(
 	authority_set: &AuthoritySet<Public>,
 	public: &Public,
 	thresh: u16,
-) -> MultiPartyECDSARounds<DKGPayloadKey> {
+) -> MultiPartyECDSARounds<DKGPayloadKey, Clock>
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
 
 	let n = authority_set.authorities.len();
