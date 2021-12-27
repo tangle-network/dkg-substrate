@@ -11,7 +11,7 @@ use sp_core::ecdsa::Signature;
 use sp_runtime::traits::{Block, NumberFor};
 use std::collections::{BTreeMap, HashMap};
 
-use crate::types::*;
+use crate::{types::*, utils::vec_usize_to_u16};
 use dkg_runtime_primitives::keccak_256;
 
 pub use gg_2020::{
@@ -20,7 +20,7 @@ pub use gg_2020::{
 };
 pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020,
-	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign},
+	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
 /// DKG State tracker
@@ -34,6 +34,10 @@ pub struct DKGState<B: Block, K> {
 	pub voted_on: HashMap<K, NumberFor<B>>,
 }
 
+const KEYGEN_TIMEOUT: u32 = 10;
+const OFFLINE_TIMEOUT: u32 = 10;
+const SIGN_TIMEOUT: u32 = 3;
+
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
 pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	round_id: RoundId,
@@ -43,7 +47,12 @@ pub struct MultiPartyECDSARounds<SignPayloadKey> {
 
 	keygen_set_id: KeygenSetId,
 	signer_set_id: SignerSetId,
+	signers: Vec<u16>,
 	stage: Stage,
+
+	// DKG clock
+	keygen_started_at: u32,
+	offline_started_at: u32,
 
 	// Message processing
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
@@ -79,6 +88,9 @@ where
 			round_id,
 			keygen_set_id: 0,
 			signer_set_id: 0,
+			signers: Vec::new(),
+			keygen_started_at: 0,
+			offline_started_at: 0,
 			stage: Stage::KeygenReady,
 			pending_keygen_msgs: Vec::new(),
 			pending_offline_msgs: Vec::new(),
@@ -92,11 +104,11 @@ where
 		}
 	}
 
-	pub fn proceed(&mut self) -> Result<(), DKGError> {
+	pub fn proceed(&mut self, at: u32) -> Result<(), DKGError> {
 		let proceed_res = match self.stage {
-			Stage::Keygen => self.proceed_keygen(),
-			Stage::Offline => self.proceed_offline_stage(),
-			Stage::ManualReady => self.proceed_vote(),
+			Stage::Keygen => self.proceed_keygen(at),
+			Stage::Offline => self.proceed_offline_stage(at),
+			Stage::ManualReady => self.proceed_vote(at),
 			_ => Ok(false),
 		};
 
@@ -166,7 +178,11 @@ where
 		}
 	}
 
-	pub fn start_keygen(&mut self, keygen_set_id: KeygenSetId) -> Result<(), DKGError> {
+	pub fn start_keygen(
+		&mut self,
+		keygen_set_id: KeygenSetId,
+		started_at: u32,
+	) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
 			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
@@ -180,6 +196,7 @@ where
 			Ok(new_keygen) => {
 				self.stage = Stage::Keygen;
 				self.keygen_set_id = keygen_set_id;
+				self.keygen_started_at = started_at;
 				self.keygen = Some(new_keygen);
 
 				// Processing pending messages
@@ -187,7 +204,7 @@ where
 					if let Err(err) = self.handle_incoming_keygen(msg) {
 						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {}", err.to_string());
 					}
-					if let Err(err) = self.proceed_keygen() {
+					if let Err(err) = self.proceed_keygen(started_at) {
 						return Err(err)
 					}
 				}
@@ -204,6 +221,7 @@ where
 		&mut self,
 		signer_set_id: SignerSetId,
 		s_l: Vec<u16>,
+		started_at: u32,
 	) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Resetting singers {:?}", s_l);
 		info!(target: "dkg", "🕸️  Signer set id {:?}", signer_set_id);
@@ -215,10 +233,12 @@ where
 			}),
 			_ =>
 				if let Some(local_key_clone) = self.local_key.clone() {
-					return match OfflineStage::new(self.party_index, s_l, local_key_clone) {
+					return match OfflineStage::new(self.party_index, s_l.clone(), local_key_clone) {
 						Ok(new_offline_stage) => {
 							self.stage = Stage::Offline;
 							self.signer_set_id = signer_set_id;
+							self.signers = s_l;
+							self.offline_started_at = started_at;
 							self.offline_stage = Some(new_offline_stage);
 							self.completed_offline_stage = None;
 
@@ -226,7 +246,7 @@ where
 								if let Err(err) = self.handle_incoming_offline_stage(msg) {
 									warn!(target: "dkg", "🕸️  Error handling pending offline msg {}", err.to_string());
 								}
-								if let Err(err) = self.proceed_offline_stage() {
+								if let Err(err) = self.proceed_offline_stage(started_at) {
 									return Err(err)
 								}
 							}
@@ -246,7 +266,7 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: K, data: Vec<u8>) -> Result<(), String> {
+	pub fn vote(&mut self, round_key: K, data: Vec<u8>, started_at: u32) -> Result<(), String> {
 		if let Some(completed_offline) = self.completed_offline_stage.as_mut() {
 			let round = self.rounds.entry(round_key).or_default();
 			let hash = BigInt::from_bytes(&keccak_256(&data));
@@ -257,6 +277,7 @@ where
 
 					round.sign_manual = Some(sign_manual);
 					round.payload = Some(data);
+					round.started_at = started_at;
 
 					match bincode::serialize(&sig) {
 						Ok(serialized_sig) => {
@@ -327,7 +348,7 @@ where
 
 	/// Proceed to next step for current Stage
 
-	fn proceed_keygen(&mut self) -> Result<bool, DKGError> {
+	fn proceed_keygen(&mut self, at: u32) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
 
 		let keygen = self.keygen.as_mut().unwrap();
@@ -345,15 +366,15 @@ where
 						gg20_keygen::Error::ProceedRound(proceed_err) => match proceed_err {
 							gg20_keygen::ProceedError::Round2VerifyCommitments(err_type) =>
 								return Err(DKGError::KeygenMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_keygen::ProceedError::Round3VerifyVssConstruct(err_type) =>
 								return Err(DKGError::KeygenMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_keygen::ProceedError::Round4VerifyDLogProof(err_type) =>
 								return Err(DKGError::KeygenMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 						},
 						_ => return Err(DKGError::GenericError),
@@ -362,10 +383,24 @@ where
 			}
 		}
 
-		Ok(self.try_finish_keygen())
+		let (_, blame_vec) = keygen.round_blame();
+
+		if self.try_finish_keygen() {
+			Ok(true)
+		} else {
+			if at - self.keygen_started_at > KEYGEN_TIMEOUT {
+				if !blame_vec.is_empty() {
+					return Err(DKGError::KeygenTimeout { bad_actors: blame_vec })
+				} else {
+					// Should never happen
+					warn!(target: "dkg", "🕸️  Keygen timeout reached, but no missing parties found", );
+				}
+			}
+			Ok(false)
+		}
 	}
 
-	fn proceed_offline_stage(&mut self) -> Result<bool, DKGError> {
+	fn proceed_offline_stage(&mut self, at: u32) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
 		let offline_stage = self.offline_stage.as_mut().unwrap();
@@ -383,23 +418,23 @@ where
 						gg20_sign::Error::ProceedRound(proceed_err) => match proceed_err {
 							gg20_sign::rounds::Error::Round1(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_sign::rounds::Error::Round2Stage4(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_sign::rounds::Error::Round3(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_sign::rounds::Error::Round5(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: err_type.bad_actors,
+									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 							_ => return Err(DKGError::GenericError),
 						},
@@ -409,11 +444,58 @@ where
 			}
 		}
 
-		Ok(self.try_finish_offline_stage())
+		let (_, blame_vec) = offline_stage.round_blame();
+
+		if self.try_finish_offline_stage() {
+			Ok(true)
+		} else {
+			if at - self.offline_started_at > OFFLINE_TIMEOUT {
+				if !blame_vec.is_empty() {
+					return Err(DKGError::OfflineTimeout { bad_actors: blame_vec })
+				} else {
+					// Should never happen
+					warn!(target: "dkg", "🕸️  Offline timeout reached, but no missing parties found", );
+				}
+			}
+			Ok(false)
+		}
 	}
 
-	fn proceed_vote(&mut self) -> Result<bool, DKGError> {
-		self.try_finish_vote()
+	fn proceed_vote(&mut self, at: u32) -> Result<bool, DKGError> {
+		if let Err(err) = self.try_finish_vote() {
+			return Err(err)
+		} else {
+			let mut timed_out: Vec<K> = Vec::new();
+
+			for (round_key, round) in self.rounds.iter() {
+				if round.is_signed_by(self.party_index) && at - round.started_at > SIGN_TIMEOUT {
+					timed_out.push(round_key.clone());
+				}
+			}
+
+			if !timed_out.is_empty() {
+				let mut bad_actors: Vec<u16> = Vec::new();
+
+				for round_key in timed_out.iter() {
+					if let Some(round) = self.rounds.remove(round_key) {
+						let signed_by = round.get_signed_parties();
+
+						let mut not_signed_by: Vec<u16> = self
+							.signers
+							.iter()
+							.filter(|v| !signed_by.contains(*v))
+							.map(|v| *v)
+							.collect();
+
+						bad_actors.append(&mut not_signed_by)
+					}
+				}
+
+				Err(DKGError::SignTimeout { bad_actors })
+			} else {
+				Ok(false)
+			}
+		}
 	}
 
 	/// Try finish current Stage
@@ -468,8 +550,8 @@ where
 
 		for round_key in finished.iter() {
 			if let Some(mut round) = self.rounds.remove(round_key) {
+				let payload = round.payload.take();
 				let sig = round.complete();
-				let payload = round.payload;
 
 				if let Err(err) = sig {
 					return Err(err)
@@ -673,16 +755,17 @@ where
 			},
 		};
 
-		self.rounds.entry(data.round_key).or_default().add_vote(sig);
+		self.rounds.entry(data.round_key).or_default().add_vote(data.party_ind, sig);
 
 		Ok(())
 	}
 }
 
 struct DKGRoundTracker<Payload> {
-	votes: Vec<PartialSignature>,
+	votes: BTreeMap<u16, PartialSignature>,
 	sign_manual: Option<SignManual>,
 	payload: Option<Payload>,
+	started_at: u32,
 }
 
 impl<P> Default for DKGRoundTracker<P> {
@@ -691,26 +774,36 @@ impl<P> Default for DKGRoundTracker<P> {
 			votes: Default::default(),
 			sign_manual: Default::default(),
 			payload: Default::default(),
+			started_at: 0,
 		}
 	}
 }
 
 impl<P> DKGRoundTracker<P> {
-	fn add_vote(&mut self, vote: PartialSignature) -> bool {
-		// TODO: check for duplicates
-
-		self.votes.push(vote);
+	fn add_vote(&mut self, party: u16, vote: PartialSignature) -> bool {
+		self.votes.insert(party, vote);
 		true
+	}
+
+	fn is_signed_by(&self, party: u16) -> bool {
+		self.votes.contains_key(&party)
+	}
+
+	fn get_signed_parties(&self) -> Vec<u16> {
+		self.votes.keys().map(|v| *v).collect()
 	}
 
 	fn is_done(&self, threshold: usize) -> bool {
 		self.sign_manual.is_some() && self.votes.len() >= threshold
 	}
 
-	fn complete(&mut self) -> Result<SignatureRecid, DKGError> {
+	fn complete(mut self) -> Result<SignatureRecid, DKGError> {
 		if let Some(sign_manual) = self.sign_manual.take() {
 			debug!(target: "dkg", "Tyring to complete vote with {} votes", self.votes.len());
-			return match sign_manual.complete(&self.votes) {
+
+			let votes: Vec<PartialSignature> = self.votes.into_values().collect();
+
+			return match sign_manual.complete(&votes) {
 				Ok(sig) => {
 					debug!("Obtained complete signature: {}", &sig.recid);
 					Ok(sig)
@@ -724,23 +817,23 @@ impl<P> DKGRoundTracker<P> {
 					match sign_err {
 						gg20_sign::rounds::Error::Round1(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
-								bad_actors: err_type.bad_actors,
+								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						gg20_sign::rounds::Error::Round2Stage4(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
-								bad_actors: err_type.bad_actors,
+								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						gg20_sign::rounds::Error::Round3(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
-								bad_actors: err_type.bad_actors,
+								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						gg20_sign::rounds::Error::Round5(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
-								bad_actors: err_type.bad_actors,
+								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
-								bad_actors: err_type.bad_actors,
+								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						_ => return Err(DKGError::GenericError),
 					};
@@ -875,7 +968,7 @@ mod tests {
 		let mut msgs_pull = vec![];
 
 		for party in &mut parties.into_iter() {
-			party.proceed().unwrap();
+			party.proceed(0).unwrap();
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
 		}
@@ -894,7 +987,7 @@ mod tests {
 			}
 
 			for party in &mut parties.into_iter() {
-				party.proceed().unwrap();
+				party.proceed(0).unwrap();
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
 			}
@@ -914,7 +1007,7 @@ mod tests {
 		for i in 1..=n {
 			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
-			party.start_keygen(0).unwrap();
+			party.start_keygen(0, 0).unwrap();
 			parties.push(party);
 		}
 
@@ -928,7 +1021,7 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in parties_refs.into_iter() {
 			println!("Resetting signers for party {}, Stage: {:?}", party.party_index, party.stage);
-			match party.reset_signers(0, s_l.clone()) {
+			match party.reset_signers(0, s_l.clone(), 0) {
 				Ok(()) => (),
 				Err(_err) => (),
 			}
@@ -940,7 +1033,7 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
 			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
-			party.vote(1, "Webb".encode()).unwrap();
+			party.vote(1, "Webb".encode(), 0).unwrap();
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
 
