@@ -470,9 +470,7 @@ where
 		                     authority_id: Public,
 		                     at: NumberFor<B>|
 		 -> Result<(), DKGError> {
-			if let Err(err) = rounds.proceed(at) {
-				return Err(err)
-			}
+			rounds.proceed(at)?;
 
 			// TODO: run this in a different place, tied to certain number of blocks probably
 			if rounds.is_offline_ready() {

@@ -204,16 +204,14 @@ where
 					if let Err(err) = self.handle_incoming_keygen(msg) {
 						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {}", err.to_string());
 					}
-					if let Err(err) = self.proceed_keygen(started_at) {
-						return Err(err)
-					}
+					self.proceed_keygen(started_at)?;
 				}
 				trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", self.pending_keygen_msgs.len());
 				self.pending_keygen_msgs.clear();
 
 				Ok(())
 			},
-			Err(_) => Err(DKGError::GenericError),
+			Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
 		}
 	}
 
@@ -246,9 +244,7 @@ where
 								if let Err(err) = self.handle_incoming_offline_stage(msg) {
 									warn!(target: "dkg", "🕸️  Error handling pending offline msg {}", err.to_string());
 								}
-								if let Err(err) = self.proceed_offline_stage(started_at) {
-									return Err(err)
-								}
+								self.proceed_offline_stage(started_at)?;
 							}
 							self.pending_offline_msgs.clear();
 							trace!(target: "dkg", "🕸️  Handled {} pending offline messages", self.pending_offline_msgs.len());
@@ -378,7 +374,7 @@ where
 									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
 						},
-						_ => return Err(DKGError::GenericError),
+						_ => return Err(DKGError::GenericError { reason: err.to_string() }),
 					};
 				},
 			}
@@ -437,9 +433,12 @@ where
 								return Err(DKGError::OfflineMisbehaviour {
 									bad_actors: vec_usize_to_u16(err_type.bad_actors),
 								}),
-							_ => return Err(DKGError::GenericError),
+							_ =>
+								return Err(DKGError::GenericError {
+									reason: proceed_err.to_string(),
+								}),
 						},
-						_ => return Err(DKGError::GenericError),
+						_ => return Err(DKGError::GenericError { reason: err.to_string() }),
 					};
 				},
 			}
@@ -844,12 +843,12 @@ where
 							return Err(DKGError::SignMisbehaviour {
 								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
-						_ => return Err(DKGError::GenericError),
+						_ => return Err(DKGError::GenericError { reason: sign_err.to_string() }),
 					};
 				},
 			}
 		}
-		Err(DKGError::GenericError)
+		Err(DKGError::GenericError { reason: "No SignManual found".to_string() })
 	}
 }
 
