@@ -91,6 +91,17 @@ pub mod pallet {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		ProposalAdded(T::AccountId, ProposalType),
+		/// Event When a Proposal Gets Signed by DKG.
+		ProposalSigned {
+			/// The Target EVM chain ID.
+			chain_id: T::ChainId,
+			/// The Payload Type or the Key.
+			key: DKGPayloadKey,
+			/// The Proposal Data.
+			data: Vec<u8>,
+			/// Signature of the hash of the proposal data.
+			signature: Vec<u8>,
+		},
 	}
 
 	// Errors inform users that something went wrong.
@@ -235,8 +246,7 @@ pub mod pallet {
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
-		#[cfg(feature = "std")]
-		println!("handle_unsigned_proposal: {}", proposal.len());
+		frame_support::log::debug!(target: "dkg_proposal_handler", "handle_unsigned_proposal: {}", proposal.len());
 		if let Ok(eth_transaction) = TransactionV2::decode(&mut &proposal[..]) {
 			ensure!(
 				Self::validate_ethereum_tx(&eth_transaction),
@@ -295,6 +305,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			SignedProposals::<T>::insert(chain_id, DKGPayloadKey::EVMProposal(nonce), prop.clone());
 
 			UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
+			// Emit event so frontend can react to it.
+			Self::deposit_event(Event::<T>::ProposalSigned {
+				chain_id,
+				key: DKGPayloadKey::EVMProposal(nonce),
+				data,
+				signature,
+			});
 			Ok(().into())
 		} else {
 			Err(Error::<T>::ProposalFormatInvalid)?
@@ -302,35 +319,23 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_anchor_update_signed_proposal(prop: ProposalType) -> DispatchResult {
-		Self::handle_signed_proposal(
-			prop,
-			DKGPayloadKey::AnchorUpdateProposal(0u64),
-		)
+		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0u64))
 	}
 
 	fn handle_token_update_signed_proposal(prop: ProposalType) -> DispatchResult {
-		Self::handle_signed_proposal(
-			prop,
-			DKGPayloadKey::TokenUpdateProposal(0u64),
-		)
+		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenUpdateProposal(0u64))
 	}
 
 	fn handle_wrapping_fee_update_signed_proposal(prop: ProposalType) -> DispatchResult {
-		Self::handle_signed_proposal(
-			prop,
-			DKGPayloadKey::WrappingFeeUpdateProposal(0),
-		)
+		Self::handle_signed_proposal(prop, DKGPayloadKey::WrappingFeeUpdateProposal(0))
 	}
 
 	fn handle_resource_id_update_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(
-			prop,
-			DKGPayloadKey::ResourceIdUpdateProposal(0),
-		)
-    }
-	
+		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
+	}
+
 	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key_type: DKGPayloadKey,
@@ -347,10 +352,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			);
 
 			let payload_key = match payload_key_type {
-				DKGPayloadKey::AnchorUpdateProposal(_) => DKGPayloadKey::AnchorUpdateProposal(nonce),
+				DKGPayloadKey::AnchorUpdateProposal(_) =>
+					DKGPayloadKey::AnchorUpdateProposal(nonce),
 				DKGPayloadKey::TokenUpdateProposal(_) => DKGPayloadKey::TokenUpdateProposal(nonce),
-				DKGPayloadKey::WrappingFeeUpdateProposal(_) => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-				DKGPayloadKey::ResourceIdUpdateProposal(_) => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+				DKGPayloadKey::WrappingFeeUpdateProposal(_) =>
+					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
+					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
@@ -375,6 +383,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			SignedProposals::<T>::insert(chain_id, payload_key, prop.clone());
 			UnsignedProposalQueue::<T>::remove(chain_id, payload_key);
+			// Emit event so frontend can react to it.
+			Self::deposit_event(Event::<T>::ProposalSigned {
+				chain_id,
+				key: payload_key,
+				data,
+				signature,
+			});
 			Ok(())
 		} else {
 			Err(Error::<T>::ProposalFormatInvalid)?
@@ -396,33 +411,56 @@ impl<T: Config> Pallet<T> {
 			ProposalType::EVMSigned { data, .. } => {
 				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
 					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
-						return !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::EVMProposal(nonce))
+						return !SignedProposals::<T>::contains_key(
+							chain_id,
+							DKGPayloadKey::EVMProposal(nonce),
+						)
 					}
 				}
 
 				false
 			},
 			ProposalType::AnchorUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_chain_id_nonce_from_proposal::<32>(&data) {
-					return !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::AnchorUpdateProposal(nonce))
+				if let Ok((chain_id, nonce)) =
+					Self::decode_chain_id_nonce_from_proposal::<32>(&data)
+				{
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::AnchorUpdateProposal(nonce),
+					)
 				}
 				false
 			},
 			ProposalType::TokenUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_chain_id_nonce_from_proposal::<32>(&data) {
-					return !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::TokenUpdateProposal(nonce))
+				if let Ok((chain_id, nonce)) =
+					Self::decode_chain_id_nonce_from_proposal::<32>(&data)
+				{
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::TokenUpdateProposal(nonce),
+					)
 				}
 				false
 			},
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_chain_id_nonce_from_proposal::<32>(&data) {
-					return !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(nonce))
+				if let Ok((chain_id, nonce)) =
+					Self::decode_chain_id_nonce_from_proposal::<32>(&data)
+				{
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+					)
 				}
 				false
 			},
 			ProposalType::ResourceIdUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_chain_id_nonce_from_proposal::<32>(&data) {
-					return !SignedProposals::<T>::contains_key(chain_id, DKGPayloadKey::ResourceIdUpdateProposal(nonce))
+				if let Ok((chain_id, nonce)) =
+					Self::decode_chain_id_nonce_from_proposal::<32>(&data)
+				{
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+					)
 				}
 				false
 			},
@@ -633,8 +671,6 @@ impl<T: Config> Pallet<T> {
 			data,
 			data.len(),
 		);
-		#[cfg(feature = "std")]
-		println!("🕸️ Decoding anchor update: {:?} ({} bytes)", data, data.len());
 		// function signature + 2 parameters: (target_chain_id, merkle_root)
 		// 4 + 32 + 32 = 68 bytes
 		Self::decode_chain_id_nonce_from_proposal::<68>(data)
