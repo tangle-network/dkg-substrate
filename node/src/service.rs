@@ -281,6 +281,15 @@ where
 	let rpc_client = client.clone();
 	let rpc_extensions_builder = Box::new(move |_, _| rpc_ext_builder(rpc_client.clone()));
 
+	let base_path = if parachain_config.base_path.is_some() {
+		match parachain_config.base_path.as_ref() {
+			Some(BasePath::Permanenent(path_buf)) => Some(path_buf.clone()),
+			_ => None,
+		}
+	} else {
+		None
+	};
+
 	if validator {
 		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
 			&parachain_config,
@@ -314,6 +323,7 @@ where
 		min_block_delta: 4,
 		prometheus_registry: prometheus_registry.clone(),
 		block: None,
+		base_path,
 	};
 
 	// Start the DKG gadget.

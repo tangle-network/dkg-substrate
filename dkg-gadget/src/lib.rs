@@ -23,6 +23,7 @@ use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
+use scale_info::Path;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
@@ -103,7 +104,7 @@ where
 
 	pub block: Option<B>,
 
-	pub base_path: Option<BasePath>,
+	pub base_path: Option<PathBuf>,
 }
 
 /// Start the DKG gadget.
@@ -145,14 +146,6 @@ where
 				},
 			},
 		);
-	let base_path = if base_path.is_some() {
-		match base_path {
-			Some(BasePath::Permanenent(path_buf)) => Some(path_buf),
-			_ => None,
-		}
-	} else {
-		None
-	};
 
 	let worker_params = worker::WorkerParams {
 		client,

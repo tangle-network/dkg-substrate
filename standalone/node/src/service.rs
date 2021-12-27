@@ -6,7 +6,7 @@ use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_service::{error::Error as ServiceError, BasePath, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sp_consensus::SlotData;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
@@ -224,7 +224,15 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			Some(keystore_container.sync_keystore()),
 		);
 	}
-	let base_path = config.base_path.clone();
+
+	let base_path = if config.base_path.is_some() {
+		match config.base_path.as_ref() {
+			Some(BasePath::Permanenent(path_buf)) => Some(path_buf.clone()),
+			_ => None,
+		}
+	} else {
+		None
+	};
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		network: network.clone(),
