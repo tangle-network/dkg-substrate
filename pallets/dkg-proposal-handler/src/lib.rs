@@ -438,7 +438,7 @@ impl<T: Config> Pallet<T> {
 				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
 					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
 						return !SignedProposals::<T>::contains_key(
-							chain_id,
+							T::ChainId::from(chain_id),
 							DKGPayloadKey::EVMProposal(nonce),
 						)
 					}
