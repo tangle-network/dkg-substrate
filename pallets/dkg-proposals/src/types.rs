@@ -5,8 +5,6 @@ use sp_std::{prelude::*, vec};
 
 pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 
-pub type ResourceId = [u8; 32];
-
 #[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum ProposalStatus {
 	Initiated,

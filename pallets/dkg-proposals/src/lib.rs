@@ -47,10 +47,10 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use crate::types::{ProposalStatus, ProposalVotes, ResourceId};
+use crate::types::{ProposalStatus, ProposalVotes};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce,
+	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 };
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
@@ -65,7 +65,7 @@ use sp_std::prelude::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{ProposalVotes, ResourceId, DKG_DEFAULT_PROPOSER_THRESHOLD};
+	use crate::types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD};
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;

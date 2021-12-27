@@ -890,22 +890,11 @@ where
 				data: finished_round.payload,
 				signature: finished_round.signature,
 			}),
-			DKGPayloadKey::RefreshVote(_nonce) => {
-				let offchain = self.backend.offchain_storage();
-
-				if let Some(mut offchain) = offchain {
-					offchain.set(
-						STORAGE_PREFIX,
-						OFFCHAIN_PUBLIC_KEY_SIG,
-						&finished_round.signature,
-					);
-
-					trace!(target: "dkg", "Stored  pub _key signature offchain {:?}", finished_round.signature);
-				}
-
-				None
-			},
-			DKGPayloadKey::TokenUpdateProposal(_nonce) => Some(ProposalType::TokenUpdateSigned {
+			DKGPayloadKey::TokenAddProposal(_nonce) => Some(ProposalType::TokenAddSigned {
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
+			DKGPayloadKey::TokenRemoveProposal(_nonce) => Some(ProposalType::TokenRemoveSigned {
 				data: finished_round.payload,
 				signature: finished_round.signature,
 			}),
@@ -919,6 +908,21 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
+			DKGPayloadKey::RefreshVote(_nonce) => {
+				let offchain = self.backend.offchain_storage();
+
+				if let Some(mut offchain) = offchain {
+					offchain.set(
+						STORAGE_PREFIX,
+						OFFCHAIN_PUBLIC_KEY_SIG,
+						&finished_round.signature,
+					);
+
+					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
+				}
+
+				None
+			},
 			// TODO: handle other key types
 		}
 	}
@@ -992,7 +996,8 @@ where
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
-				ProposalType::TokenUpdate { data } => data,
+				ProposalType::TokenAdd { data } => data,
+				ProposalType::TokenRemove { data } => data,
 				ProposalType::WrappingFeeUpdate { data } => data,
 				_ => continue,
 			};
