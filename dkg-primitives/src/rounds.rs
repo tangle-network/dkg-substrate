@@ -130,7 +130,7 @@ where
 		let current_stage = self.stage;
 		let block_diff = current_block_number - self.last_received_at;
 
-		if block_diff >= 2u32.into() && last_stage == current_stage {
+		if block_diff >= 2u32.into() && last_stage == current_stage && !self.is_ready_to_vote() {
 			return true
 		}
 
