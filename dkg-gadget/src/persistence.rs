@@ -4,7 +4,6 @@ use crate::{
 	worker::DKGWorker,
 	Client,
 };
-
 use bincode::deserialize_from;
 use codec::{Decode, Encode};
 use dkg_primitives::{
@@ -19,10 +18,11 @@ use dkg_primitives::{
 	DKGPayloadKey,
 };
 use dkg_runtime_primitives::DKGApi;
+use log::debug;
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_api::{BlockT as Block, HeaderT as Header};
-use std::{fs, io::Cursor};
+use std::{collections::HashMap, fs, io::Cursor};
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -44,13 +44,13 @@ impl DKGPersistenceState {
 }
 
 pub struct DKGMessageBuffers {
-	pub offline: Vec<Vec<u8>>,
-	pub keygen: Vec<Vec<u8>>,
+	pub offline: HashMap<RoundId, Vec<Vec<u8>>>,
+	pub keygen: HashMap<RoundId, Vec<Vec<u8>>>,
 }
 
 impl DKGMessageBuffers {
 	pub fn new() -> Self {
-		Self { offline: vec![], keygen: vec![] }
+		Self { offline: HashMap::new(), keygen: HashMap::new() }
 	}
 }
 
@@ -65,27 +65,48 @@ pub(crate) fn buffer_message<B, C, BE>(
 {
 	match msg.payload.clone() {
 		DKGMsgPayload::Keygen(_) => {
+			if worker.msg_buffer.keygen.get(&msg.round_id).is_none() {
+				return
+			}
 			// we only need to buffer one message from each node
 			let msg_from_authority_exists =
-				worker.msg_buffer.keygen.iter().any(|x| {
+				worker.msg_buffer.keygen.get(&msg.round_id).unwrap().iter().any(
+					|x| match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &x[..]) {
+						Ok(m) => msg.id == m.id,
+						_ => false,
+					},
+				);
+			if !msg_from_authority_exists {
+				debug!(target: "dkg_persistence", "Buffering keygen message, {:?}", msg);
+				let keygen = if worker.msg_buffer.keygen.get_mut(&msg.round_id).is_some() {
+					worker.msg_buffer.keygen.get_mut(&msg.round_id).unwrap()
+				} else {
+					worker.msg_buffer.keygen.insert(msg.round_id, Default::default());
+					worker.msg_buffer.keygen.get_mut(&msg.round_id).unwrap()
+				};
+				keygen.push(msg.encode());
+			}
+		},
+		DKGMsgPayload::Offline(_) => {
+			if worker.msg_buffer.offline.get(&msg.round_id).is_none() {
+				return
+			}
+			let msg_from_authority_exists =
+				worker.msg_buffer.offline.get(&msg.round_id).unwrap().iter().any(|x| {
 					match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &x[..]) {
 						Ok(m) => msg.id == m.id,
 						_ => false,
 					}
 				});
 			if !msg_from_authority_exists {
-				worker.msg_buffer.keygen.push(msg.encode());
-			}
-		},
-		DKGMsgPayload::Offline(_) => {
-			let msg_from_authority_exists = worker.msg_buffer.offline.iter().any(|x| {
-				match DKGMessage::<AuthorityId, DKGPayloadKey>::decode(&mut &x[..]) {
-					Ok(m) => msg.id == m.id,
-					_ => false,
-				}
-			});
-			if !msg_from_authority_exists {
-				worker.msg_buffer.offline.push(msg.encode())
+				debug!(target: "dkg_persistence", "Buffering offline message, {:?}", msg);
+				let offline = if worker.msg_buffer.offline.get_mut(&msg.round_id).is_some() {
+					worker.msg_buffer.offline.get_mut(&msg.round_id).unwrap()
+				} else {
+					worker.msg_buffer.offline.insert(msg.round_id, Default::default());
+					worker.msg_buffer.offline.get_mut(&msg.round_id).unwrap()
+				};
+				offline.push(msg.encode());
 			}
 		},
 		_ => {},
@@ -112,6 +133,7 @@ pub(crate) fn handle_incoming_buffered_message<B, C, BE>(
 	match msg.payload.clone() {
 		DKGMsgPayload::BufferedKeyGenMessage(payload) |
 		DKGMsgPayload::BufferedOfflineMessage(payload) => {
+			debug!(target: "dkg_persistence", "Handling incoming buffered message, {:?}", msg);
 			worker.dkg_persistence.awaiting_messages = false;
 			if rounds.is_some() {
 				let inner_rounds = rounds.as_mut().unwrap();
@@ -179,17 +201,20 @@ pub(crate) fn handle_buffered_message_request<B, C, BE>(
 
 	match msg.payload.clone() {
 		DKGMsgPayload::RequestBufferedKeyGen => {
-			if worker.msg_buffer.keygen.is_empty() {
+			if worker.msg_buffer.keygen.get(&msg.round_id).is_none() {
+				return
+			}
+			if worker.msg_buffer.keygen.get(&msg.round_id).unwrap().is_empty() {
 				return
 			}
 			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 				id: public.clone(),
 				round_id,
 				payload: DKGMsgPayload::BufferedKeyGenMessage(DKGBufferedMessage {
-					msg: worker.msg_buffer.keygen.clone(),
+					msg: worker.msg_buffer.keygen.get(&msg.round_id).unwrap().clone(),
 				}),
 			};
-
+			debug!(target: "dkg_persistence", "Responding to buffered keygen message request");
 			worker.gossip_engine_ref().lock().gossip_message(
 				dkg_topic::<B>(),
 				message.encode(),
@@ -197,17 +222,20 @@ pub(crate) fn handle_buffered_message_request<B, C, BE>(
 			);
 		},
 		DKGMsgPayload::RequestBufferedOffline => {
-			if worker.msg_buffer.offline.is_empty() {
+			if worker.msg_buffer.offline.get(&msg.round_id).is_none() {
+				return
+			}
+			if worker.msg_buffer.offline.get(&msg.round_id).unwrap().is_empty() {
 				return
 			}
 			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 				id: public.clone(),
 				round_id,
 				payload: DKGMsgPayload::BufferedOfflineMessage(DKGBufferedMessage {
-					msg: worker.msg_buffer.offline.clone(),
+					msg: worker.msg_buffer.offline.get(&msg.round_id).unwrap().clone(),
 				}),
 			};
-
+			debug!(target: "dkg_persistence", "Responding to buffered offline message request");
 			worker.gossip_engine_ref().lock().gossip_message(
 				dkg_topic::<B>(),
 				message.encode(),
@@ -236,6 +264,7 @@ where
 		return
 	}
 
+	debug!(target: "dkg_persistence", "Trying to resume dkg");
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = worker
 			.keystore_ref()
@@ -324,6 +353,7 @@ where
 					Some(offline_stage_path),
 				);
 				if local_key.is_none() {
+					debug!(target: "dkg_persistence", "Requesting buffered keygen messages");
 					// Send a message requesting buffered keygen messages
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
@@ -348,6 +378,7 @@ where
 					let _ = rounds.reset_signers(rounds.get_id(), s_l);
 					rounds.proceed();
 					// Send a message requesting buffered offline messages
+					debug!(target: "dkg_persistence", "Requesting buffered offline messages");
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
 						round_id: rounds.get_id(),
@@ -390,6 +421,7 @@ where
 					let _ = rounds.start_keygen(rounds.get_id());
 					rounds.proceed();
 					// Send a message requesting list of messages required to join stalled keygen
+					debug!(target: "dkg_persistence", "Requesting buffered queued keygen messages");
 					let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
 						id: public.clone(),
 						round_id: rounds.get_id(),
@@ -406,6 +438,7 @@ where
 				} else if queued_local_key.is_some() && queued_offline_stage.is_none() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
 					// Send a message requesting pending offline stage messages
+					debug!(target: "dkg_persistence", "Requesting buffered queued offline keygen messages");
 					let s_l = (1..=rounds.dkg_params().2).collect();
 					let _ = rounds.reset_signers(rounds.get_id(), s_l);
 					rounds.proceed();
