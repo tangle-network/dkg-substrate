@@ -411,7 +411,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			UnsignedProposalQueue::<T>::remove(T::ChainId::from(chain_id), payload_key);
 			// Emit event so frontend can react to it.
 			Self::deposit_event(Event::<T>::ProposalSigned {
-				chain_id,
+				chain_id: T::ChainId::from(chain_id),
 				key: payload_key,
 				data,
 				signature,
