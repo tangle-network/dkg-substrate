@@ -125,6 +125,10 @@ where
 		self.stage = stage;
 	}
 
+	// We check if the protocol has stalled at a particular stage, if messages are no longer
+	// received from other peers and the protocol has not reached the signing stage
+	// We take it that the protocol has stalled if messages are not received from other peers after an interval of 3 blocks
+	// And the stage has not reached the signing phase.
 	pub fn has_stalled(&self, current_block_number: N) -> bool {
 		let last_stage = self.stage_at_last_receipt;
 		let current_stage = self.stage;
