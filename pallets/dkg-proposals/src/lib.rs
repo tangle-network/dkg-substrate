@@ -85,7 +85,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend;
+		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>>;
 
 		/// ChainID for anchor edges
 		type ChainId: Encode
@@ -647,7 +647,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
 		T::ProposalHandler::handle_unsigned_proposal(
-			prop.encode(),
+			prop.into(),
 			dkg_runtime_primitives::ProposalAction::Sign(0),
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, proposal_nonce: nonce });

@@ -731,7 +731,8 @@ impl<T: Config> Pallet<T> {
 		let header = Self::decode_proposal_header(data)?;
 		let new_fee = data.last().copied().expect("len is 41");
 		// check if the fee is valid by checking if it is between 0 and 100
-		if new_fee < 0 || new_fee > 100 {
+		// note that u8 is unsigned, so we need to check for 0x00 and 0xFF
+		if new_fee > 100 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		Ok(header)
