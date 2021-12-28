@@ -92,3 +92,8 @@ pub fn store_offline_stage(
 
 	Err(std::io::ErrorKind::Other.into())
 }
+
+pub fn cleanup(path: PathBuf) -> std::io::Result<()> {
+	fs::remove_file(path)?;
+	Ok(())
+}

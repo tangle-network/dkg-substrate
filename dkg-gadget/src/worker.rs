@@ -76,7 +76,7 @@ use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload},
 	utils::{
-		DKG_LOCAL_KEY_FILE, DKG_OFFLINE_STAGE_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
+		cleanup, DKG_LOCAL_KEY_FILE, DKG_OFFLINE_STAGE_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
 		QUEUED_DKG_OFFLINE_STAGE_FILE,
 	},
 };
@@ -276,6 +276,11 @@ where
 		return self.client.runtime_api().signature_threshold(&at).ok()
 	}
 
+	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
+		let at = BlockId::hash(header.hash());
+		return self.client.runtime_api().time_to_restart(&at).ok()
+	}
+
 	/// Return the next and queued validator set at header `header`.
 	///
 	/// Note that the validator set could be `None`. This is the case if we don't find
@@ -349,6 +354,8 @@ where
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE));
 			offline_stage_path =
 				Some(self.base_path.as_ref().unwrap().join(DKG_OFFLINE_STAGE_FILE));
+			let _ = cleanup(offline_stage_path.as_ref().unwrap().clone());
+			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 
 		self.rounds = if self.next_rounds.is_some() {
@@ -405,6 +412,8 @@ where
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
 			offline_stage_path =
 				Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_OFFLINE_STAGE_FILE));
+			let _ = cleanup(offline_stage_path.as_ref().unwrap().clone());
+			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 
 		// If current node is part of the queued authorities

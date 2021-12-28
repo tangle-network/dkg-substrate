@@ -170,6 +170,7 @@ parameter_types! {
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const TimeToRestart: BlockNumber = 3;
 }
 
 impl pallet_session::Config for Test {
@@ -191,6 +192,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
+	type TimeToRestart = TimeToRestart;
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";

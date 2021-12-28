@@ -5,7 +5,6 @@ use crate::{
 	Client,
 };
 use bincode::deserialize_from;
-use codec::{Decode, Encode};
 use dkg_primitives::{
 	crypto::AuthorityId,
 	keys::{CompletedOfflineStage, LocalKey},
@@ -38,7 +37,7 @@ impl DKGPersistenceState {
 	}
 }
 
-// We only try to resume the dkg once if we can find any data for the completed offline stage for the current round
+// We only try to resume the dkg once, if we can find any data for the completed offline stage for the current round
 pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,
@@ -195,12 +194,13 @@ where
 {
 	let rounds = worker.take_rounds();
 	let next_rounds = worker.take_next_rounds();
+	let time_to_restart = worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if rounds.is_none() {
 			true
 		} else {
-			let stalled = rounds.as_ref().unwrap().has_stalled(*header.number());
+			let stalled = rounds.as_ref().unwrap().has_stalled(time_to_restart, *header.number());
 			worker.set_rounds(rounds.unwrap());
 			stalled
 		}
@@ -210,7 +210,8 @@ where
 		if next_rounds.is_none() {
 			true
 		} else {
-			let stalled = next_rounds.as_ref().unwrap().has_stalled(*header.number());
+			let stalled =
+				next_rounds.as_ref().unwrap().has_stalled(time_to_restart, *header.number());
 			worker.set_next_rounds(next_rounds.unwrap());
 			stalled
 		}

@@ -202,5 +202,7 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get untrack interval for unsigned proposals
 		fn untrack_interval() -> BlockNumber;
+		/// Get the time to restart for the dkg keygen
+		fn time_to_restart() -> BlockNumber;
 	}
 }
