@@ -153,7 +153,7 @@ impl pallet_dkg_metadata::Config for Test {
 parameter_types! {
 	pub const MinimumPeriod: u64 = 1;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
-	pub const TimeToRestart: BlockNumber = 3;
+	pub const TimeToRestart: u64 = 3;
 }
 
 impl pallet_timestamp::Config for Test {
