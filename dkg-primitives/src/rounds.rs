@@ -8,7 +8,7 @@ use curv::{
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sp_core::ecdsa::Signature;
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -31,17 +31,19 @@ pub struct DKGState<B: Block, K> {
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_genesis_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<K>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<K>>,
+	pub curr_dkg: Option<MultiPartyECDSARounds<K, NumberFor<B>>>,
+	pub past_dkg: Option<MultiPartyECDSARounds<K, NumberFor<B>>>,
 	pub voted_on: HashMap<K, NumberFor<B>>,
 }
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
-pub struct MultiPartyECDSARounds<SignPayloadKey> {
+pub struct MultiPartyECDSARounds<SignPayloadKey, Number> {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
+	last_received_at: Number,
+	stage_at_last_receipt: Stage,
 
 	keygen_set_id: KeygenSetId,
 	signer_set_id: SignerSetId,
@@ -69,9 +71,10 @@ pub struct MultiPartyECDSARounds<SignPayloadKey> {
 	completed_offline_stage_path: Option<PathBuf>,
 }
 
-impl<K> MultiPartyECDSARounds<K>
+impl<K, N> MultiPartyECDSARounds<K, N>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
+	N: AtLeast32BitUnsigned + Copy,
 {
 	/// Public ///
 
@@ -82,6 +85,7 @@ where
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		completed_offline_stage_path: Option<PathBuf>,
+		created_at: N,
 	) -> Self {
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
@@ -90,6 +94,8 @@ where
 			threshold,
 			parties,
 			round_id,
+			last_received_at: created_at,
+			stage_at_last_receipt: Stage::KeygenReady,
 			keygen_set_id: 0,
 			signer_set_id: 0,
 			stage: Stage::KeygenReady,
@@ -113,6 +119,22 @@ where
 
 	pub fn set_completed_offlinestage(&mut self, completed_offline: CompletedOfflineStage) {
 		self.completed_offline_stage = Some(completed_offline)
+	}
+
+	pub fn set_stage(&mut self, stage: Stage) {
+		self.stage = stage;
+	}
+
+	pub fn has_stalled(&self, current_block_number: N) -> bool {
+		let last_stage = self.stage_at_last_receipt;
+		let current_stage = self.stage;
+		let block_diff = current_block_number - self.last_received_at;
+
+		if block_diff >= 2u32.into() && last_stage == current_stage {
+			return true
+		}
+
+		false
 	}
 
 	pub fn proceed(&mut self) {
@@ -151,9 +173,17 @@ where
 		}
 	}
 
-	pub fn handle_incoming(&mut self, data: DKGMsgPayload<K>) -> Result<(), String> {
+	pub fn handle_incoming(
+		&mut self,
+		data: DKGMsgPayload<K>,
+		current_block_number: Option<N>,
+	) -> Result<(), String> {
 		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
+		if current_block_number.is_some() {
+			self.last_received_at = current_block_number.unwrap();
+		}
 
+		self.stage_at_last_receipt = self.stage;
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
 				// TODO: check keygen_set_id
@@ -326,7 +356,7 @@ where
 	}
 }
 
-impl<K> MultiPartyECDSARounds<K>
+impl<K, N> MultiPartyECDSARounds<K, N>
 where
 	K: Ord + Encode + Copy + core::fmt::Debug,
 {
@@ -754,7 +784,7 @@ mod tests {
 	use codec::Encode;
 
 	fn check_all_reached_stage(
-		parties: &Vec<MultiPartyECDSARounds<u64>>,
+		parties: &Vec<MultiPartyECDSARounds<u64, u32>>,
 		target_stage: Stage,
 	) -> bool {
 		for party in parties.iter() {
@@ -765,7 +795,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64>>) {
+	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) {
 		for party in parties.iter() {
 			if party.get_public_key().is_none() {
 				panic!("No public key for party {}", party.party_index)
@@ -773,15 +803,15 @@ mod tests {
 		}
 	}
 
-	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		check_all_reached_stage(parties, Stage::OfflineReady)
 	}
 
-	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		check_all_reached_stage(parties, Stage::ManualReady)
 	}
 
-	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64>>) -> bool {
+	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
 		for party in parties.iter() {
 			if !party.has_finished_rounds() {
 				return false
@@ -790,7 +820,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64>>) {
+	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>) {
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
 
@@ -825,11 +855,11 @@ mod tests {
 	}
 
 	fn run_simulation<C>(
-		parties: &mut Vec<MultiPartyECDSARounds<u64>>,
+		parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>,
 		stop_condition: C,
 	) -> Result<(), (&'static str, Vec<DKGMsgPayload<u64>>)>
 	where
-		C: Fn(&Vec<MultiPartyECDSARounds<u64>>) -> bool,
+		C: Fn(&Vec<MultiPartyECDSARounds<u64, u32>>) -> bool,
 	{
 		println!("Simulation starts");
 
@@ -848,7 +878,7 @@ mod tests {
 			for party in &mut parties.into_iter() {
 				for msg_frozen in msgs_pull_frozen.iter() {
 					all_messages.push(msg_frozen.clone());
-					match party.handle_incoming(msg_frozen.clone()) {
+					match party.handle_incoming(msg_frozen.clone(), None) {
 						Ok(()) => (),
 						Err(err) => panic!("{}", err.to_string()),
 					}
@@ -872,10 +902,10 @@ mod tests {
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, None);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, None, 0);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -924,10 +954,10 @@ mod tests {
 	}
 
 	fn simulate_multi_party_offline_interruption(t: u16, n: u16, s_l: Vec<u16>) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None, 0);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -971,7 +1001,7 @@ mod tests {
 				println!("{:?}", pending_msgs.len());
 				// The rejoining party only needs to handle the first set of messages sent by the other parties
 				for msg in &pending_msgs[0..4] {
-					match party.handle_incoming(msg.clone()) {
+					match party.handle_incoming(msg.clone(), None) {
 						Ok(()) => (),
 						Err(err) => panic!("{}", err.to_string()),
 					}
@@ -991,10 +1021,10 @@ mod tests {
 	}
 
 	fn simulate_multi_party_keygen_interruption(t: u16, n: u16) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64>> = vec![];
+		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
 
 		for i in 1..n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, None, 0);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0).unwrap();
 			parties.push(party);
@@ -1014,7 +1044,7 @@ mod tests {
 			panic!("Keygen completes even with a missing party")
 		}
 
-		let mut party = MultiPartyECDSARounds::new(n, t, n, 0, None, None);
+		let mut party = MultiPartyECDSARounds::new(n, t, n, 0, None, None, 0);
 		party.start_keygen(0).unwrap();
 		party.proceed();
 
@@ -1023,7 +1053,7 @@ mod tests {
 				println!("{:?}", pending_msgs.len());
 				// The rejoining party only needs to handle the first set of messages sent by the other parties
 				for msg in &pending_msgs[0..4] {
-					match party.handle_incoming(msg.clone()) {
+					match party.handle_incoming(msg.clone(), None) {
 						Ok(()) => (),
 						Err(err) => panic!("{}", err.to_string()),
 					}

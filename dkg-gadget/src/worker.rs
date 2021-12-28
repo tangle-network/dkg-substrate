@@ -47,10 +47,7 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{
-		buffer_message, handle_buffered_message_request, handle_incoming_buffered_message,
-		try_resume_dkg, DKGMessageBuffers, DKGPersistenceState,
-	},
+	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 use dkg_primitives::{
 	types::{DKGMsgPayload, DKGPublicKeyMessage, RoundId},
@@ -119,8 +116,8 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
-	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey>>,
+	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
+	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
@@ -151,8 +148,6 @@ where
 	pub dkg_persistence: DKGPersistenceState,
 
 	pub base_path: Option<PathBuf>,
-
-	pub msg_buffer: DKGMessageBuffers,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -206,9 +201,16 @@ where
 			aggregated_public_keys: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
-			msg_buffer: DKGMessageBuffers::new(),
 			_backend: PhantomData,
 		}
+	}
+
+	pub fn get_current_validators(&self) -> AuthoritySet<AuthorityId> {
+		self.current_validator_set.clone()
+	}
+
+	pub fn get_queued_validators(&self) -> AuthoritySet<AuthorityId> {
+		self.queued_validator_set.clone()
 	}
 
 	pub fn keystore_ref(&self) -> DKGKeystore {
@@ -219,19 +221,21 @@ where
 		self.gossip_engine.clone()
 	}
 
-	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey>) {
+	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>) {
 		self.rounds = Some(rounds);
 	}
 
-	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey>) {
+	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>) {
 		self.next_rounds = Some(rounds);
 	}
 
-	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey>> {
+	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>> {
 		self.rounds.take()
 	}
 
-	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey>> {
+	pub fn take_next_rounds(
+		&mut self,
+	) -> Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>> {
 		self.next_rounds.take()
 	}
 }
@@ -359,6 +363,7 @@ where
 					thresh,
 					local_key_path,
 					offline_stage_path,
+					*header.number(),
 				))
 			} else {
 				None
@@ -406,8 +411,14 @@ where
 		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.next_rounds =
-				Some(set_up_rounds(&queued, &public, thresh, local_key_path, offline_stage_path));
+			self.next_rounds = Some(set_up_rounds(
+				&queued,
+				&public,
+				thresh,
+				local_key_path,
+				offline_stage_path,
+				*header.number(),
+			));
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
 				Ok(()) => {
@@ -441,7 +452,6 @@ where
 
 		self.latest_header = Some(header.clone());
 		self.listen_and_clear_offchain_storage(header);
-		try_resume_dkg(self, header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -501,6 +511,8 @@ where
 				self.send_outgoing_dkg_messages();
 			}
 		}
+		try_resume_dkg(self, header);
+		try_restart_dkg(self, header);
 
 		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
@@ -526,7 +538,7 @@ where
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
-		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey>,
+		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>,
 		                     authority_id: Public| {
 			rounds.proceed();
 
@@ -634,16 +646,17 @@ where
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
-		buffer_message(self, dkg_msg.clone());
-
-		if self.dkg_persistence.awaiting_messages {
-			handle_incoming_buffered_message(self, dkg_msg.clone());
-			return
-		}
 
 		if let Some(rounds) = self.rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
-				match rounds.handle_incoming(dkg_msg.payload.clone()) {
+				let block_number = {
+					if self.latest_header.is_some() {
+						Some(*self.latest_header.as_ref().unwrap().number())
+					} else {
+						None
+					}
+				};
+				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => (),
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
@@ -657,17 +670,22 @@ where
 		}
 
 		if let Some(next_rounds) = self.next_rounds.as_mut() {
+			let block_number = {
+				if self.latest_header.is_some() {
+					Some(*self.latest_header.as_ref().unwrap().number())
+				} else {
+					None
+				}
+			};
 			if next_rounds.get_id() == dkg_msg.round_id {
 				debug!(target: "dkg", "🕸️  Received message for Queued DKGs");
-				match next_rounds.handle_incoming(dkg_msg.payload.clone()) {
+				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
 			}
 		}
-
-		handle_buffered_message_request(self, dkg_msg.clone());
 
 		self.handle_public_key_broadcast(dkg_msg.clone());
 

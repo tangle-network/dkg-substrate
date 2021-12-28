@@ -5,6 +5,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::DKGPayloadKey;
 use sp_api::{BlockT as Block, HeaderT};
+use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::generic::OpaqueDigestItemId;
 
 pub fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
@@ -25,13 +26,14 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 	return max_thresh
 }
 
-pub fn set_up_rounds(
+pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
 	offline_stage_path: Option<std::path::PathBuf>,
-) -> MultiPartyECDSARounds<DKGPayloadKey> {
+	created_at: N,
+) -> MultiPartyECDSARounds<DKGPayloadKey, N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
 
 	let n = authority_set.authorities.len();
@@ -43,6 +45,7 @@ pub fn set_up_rounds(
 		authority_set.id.clone(),
 		local_key_path,
 		offline_stage_path,
+		created_at,
 	);
 
 	rounds

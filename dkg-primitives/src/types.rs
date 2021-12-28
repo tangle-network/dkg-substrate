@@ -31,10 +31,6 @@ impl<ID, K> fmt::Display for DKGMessage<ID, K> {
 			DKGMsgPayload::Offline(_) => "Offline",
 			DKGMsgPayload::Vote(_) => "Vote",
 			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
-			DKGMsgPayload::RequestBufferedKeyGen => "RequestBufferedKeyGen",
-			DKGMsgPayload::RequestBufferedOffline => "RequestBufferedOffline",
-			DKGMsgPayload::BufferedKeyGenMessage(_) => "BufferedKeyGenMessage",
-			DKGMsgPayload::BufferedOfflineMessage(_) => "BufferedOfflineMessage",
 		};
 		write!(f, "DKGMessage of type {}", label)
 	}
@@ -47,10 +43,6 @@ pub enum DKGMsgPayload<Key> {
 	Offline(DKGOfflineMessage),
 	Vote(DKGVoteMessage<Key>),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
-	RequestBufferedKeyGen,
-	RequestBufferedOffline,
-	BufferedKeyGenMessage(DKGBufferedMessage),
-	BufferedOfflineMessage(DKGBufferedMessage),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -100,12 +92,6 @@ pub struct DKGPublicKeyMessage {
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
 	pub signature: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Encode, Decode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGBufferedMessage {
-	pub msg: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
