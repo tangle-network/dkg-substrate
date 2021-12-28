@@ -511,7 +511,7 @@ where
 				self.send_outgoing_dkg_messages();
 			}
 		}
-		try_resume_dkg(self, header);
+
 		try_restart_dkg(self, header);
 
 		self.check_refresh(header);
@@ -1187,6 +1187,10 @@ where
 		loop {
 			let engine = self.gossip_engine.clone();
 			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
+
+			if self.latest_header.is_some() && !self.dkg_persistence.initial_check {
+				try_resume_dkg(self, self.latest_header.as_ref().unwrap());
+			}
 
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {

@@ -26,16 +26,11 @@ use std::{fs, io::Cursor};
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
-	pub awaiting_messages: bool,
 }
 
 impl DKGPersistenceState {
 	pub fn new() -> Self {
-		Self { initial_check: false, awaiting_messages: false }
-	}
-
-	pub fn is_done(&self) -> bool {
-		self.initial_check
+		Self { initial_check: false }
 	}
 
 	pub fn start(&mut self) {
@@ -248,8 +243,12 @@ where
 		.authority_id(&worker.keystore_ref().public_keys().unwrap())
 		.unwrap_or_else(|| panic!("Halp"));
 
-	if restart_rounds {
-		let authority_set = worker.get_current_validators();
+	let authority_set = worker.get_current_validators();
+	let queued_authority_set = worker.get_queued_validators();
+
+	if restart_rounds && authority_set.authorities.contains(&public) {
+		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
+
 		let threshold = validate_threshold(
 			authority_set.authorities.len() as u16,
 			worker.get_threshold(header).unwrap(),
@@ -269,15 +268,15 @@ where
 		worker.set_rounds(rounds);
 	}
 
-	if restart_next_rounds {
-		let authority_set = worker.get_queued_validators();
+	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
+		debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
 		let threshold = validate_threshold(
-			authority_set.authorities.len() as u16,
+			queued_authority_set.authorities.len() as u16,
 			worker.get_threshold(header).unwrap(),
 		);
 
 		let mut rounds = set_up_rounds(
-			&authority_set,
+			&queued_authority_set,
 			&public,
 			threshold,
 			queued_local_key_path,
@@ -285,7 +284,7 @@ where
 			*header.number(),
 		);
 
-		let _ = rounds.start_keygen(authority_set.id);
+		let _ = rounds.start_keygen(queued_authority_set.id);
 
 		worker.set_next_rounds(rounds);
 	}
