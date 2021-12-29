@@ -646,11 +646,11 @@ where
 				.1
 			};
 
-			if !check_signers(authority_accounts.clone().unwrap().0.into())
-				|| !check_signers(authority_accounts.clone().unwrap().1.into()) {
-				false
-			} else {
+			if check_signers(authority_accounts.clone().unwrap().0.into())
+				|| check_signers(authority_accounts.clone().unwrap().1.into()) {
 				return Ok(dkg_msg);
+			} else {
+				false
 			}
 		};
 
