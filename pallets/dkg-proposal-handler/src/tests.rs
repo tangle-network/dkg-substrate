@@ -7,7 +7,7 @@ use sp_std::vec::Vec;
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
 	DKGPayloadKey, EIP2930Transaction, OffchainSignedProposals, ProposalAction,
-	ProposalHandlerTrait, ProposalType, TransactionAction, TransactionV2,
+	ProposalHandlerTrait, ProposalHeader, ProposalType, TransactionAction, TransactionV2,
 	OFFCHAIN_SIGNED_PROPOSALS, U256,
 };
 use sp_core::{sr25519, H256};
@@ -265,26 +265,28 @@ fn submit_signed_proposal_fail_invalid_sig() {
 	});
 }
 
-fn make_single_param_propoosal(prop: ProposalType) -> ProposalType {
+pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
+	// Create the proposal Header
+	let mut header = ProposalHeader {
+		resource_id: [
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+			0, 0, 0,
+		],
+		chain_id: 1,
+		function_sig: [0x26, 0x57, 0x88, 0x01],
+		nonce: 1,
+	};
 	let mut buf = vec![];
-	// handler address mock
-	buf.extend_from_slice(&[1u8; 22]);
-	// 32 bytes chain ID
-	buf.extend_from_slice(&[
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 1,
-	]);
-	// 32 bytes nonce
-	buf.extend_from_slice(&[
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 1,
-	]);
-	// 32 bytes parameter
-	buf.extend_from_slice(&[4u8; 32]);
+	header.encode_to(&mut buf);
+	// N bytes parameter
+	buf.extend_from_slice(&[0u8; N]);
 
 	match prop {
-		ProposalType::TokenUpdate { .. } => ProposalType::TokenUpdate { data: buf },
+		ProposalType::TokenRemove { .. } => ProposalType::TokenRemove { data: buf },
+		ProposalType::TokenAdd { .. } => ProposalType::TokenAdd { data: buf },
 		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
+		ProposalType::ResourceIdUpdate { .. } => ProposalType::ResourceIdUpdate { data: buf },
+		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
 }
@@ -307,24 +309,36 @@ fn force_submit_should_fail_with_invalid_proposal_type() {
 #[test]
 fn force_submit_should_work_with_valid_proposals() {
 	execute_test_with(|| {
-		// [
-		// 	handler_address_0x_prefixed(22),
-		// 	chain_id(32),
-		// 	nonce(32),
-		// 	parameter(32)
-		// ]
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_single_param_propoosal(ProposalType::TokenUpdate { data: vec![] })
+			make_proposal::<20>(ProposalType::TokenAdd { data: vec![] })
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenUpdateProposal(1))
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenAddProposal(1)).is_some(),
+			true
+		);
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<20>(ProposalType::TokenRemove { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenRemoveProposal(1))
 				.is_some(),
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_single_param_propoosal(ProposalType::WrappingFeeUpdate { data: vec![] })
+			make_proposal::<1>(ProposalType::WrappingFeeUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
+				.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<72>(ProposalType::ResourceIdUpdate { data: vec![] })
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))

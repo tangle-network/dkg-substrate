@@ -144,6 +144,11 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 	}
 }
 
+pub enum DKGReport {
+	KeygenMisbehavior { offender: AuthorityId },
+	SigningMisbehavior { offender: AuthorityId },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
 pub struct Commitment<TBlockNumber, TPayload> {
 	pub payload: TPayload,

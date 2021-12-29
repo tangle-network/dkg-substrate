@@ -1,4 +1,4 @@
-use crate::types::ResourceId;
+use dkg_runtime_primitives::ResourceId;
 
 /// Helper function to concatenate a chain ID and some bytes to produce a
 /// resource ID. The common format is (31 bytes unique ID + 1 byte chain ID).
@@ -14,5 +14,5 @@ pub fn derive_resource_id(chain: u32, id: &[u8]) -> ResourceId {
 	for i in 0..range {
 		r_id[27 - i] = id[range - 1 - i]; // Ensure left padding for eth compatibility
 	}
-	return r_id
+	r_id
 }

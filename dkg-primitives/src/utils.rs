@@ -53,6 +53,10 @@ pub fn insert_controller_account_keys_into_keystore(
 	}
 }
 
+pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
+	return input.iter().map(|v| *v as u16).collect()
+}
+
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
 pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 

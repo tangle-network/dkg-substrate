@@ -237,6 +237,7 @@ where
 	let authority_set = worker.get_current_validators();
 	let queued_authority_set = worker.get_queued_validators();
 
+	let latest_block_num = *header.number();
 	if restart_rounds && authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
 
@@ -254,7 +255,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(authority_set.id);
+		let _ = rounds.start_keygen(authority_set.id, latest_block_num);
 
 		worker.set_rounds(rounds);
 	}
@@ -275,7 +276,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(queued_authority_set.id);
+		let _ = rounds.start_keygen(queued_authority_set.id, latest_block_num);
 
 		worker.set_next_rounds(rounds);
 	}
