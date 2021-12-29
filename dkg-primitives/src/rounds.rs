@@ -147,7 +147,7 @@ where
 		}
 	}
 
-	pub fn handle_incoming(&mut self, data: DKGMsgPayload<K>) -> Result<(), String> {
+	pub fn handle_incoming(&mut self, data: DKGMsgPayload<K>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
 
 		return match data {
@@ -203,7 +203,7 @@ where
 				// Processing pending messages
 				for msg in std::mem::take(&mut self.pending_keygen_msgs) {
 					if let Err(err) = self.handle_incoming_keygen(msg) {
-						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {}", err.to_string());
+						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
 					}
 					self.proceed_keygen(started_at)?;
 				}
@@ -243,7 +243,7 @@ where
 
 							for msg in std::mem::take(&mut self.pending_offline_msgs) {
 								if let Err(err) = self.handle_incoming_offline_stage(msg) {
-									warn!(target: "dkg", "🕸️  Error handling pending offline msg {}", err.to_string());
+									warn!(target: "dkg", "🕸️  Error handling pending offline msg {:?}", err);
 								}
 								self.proceed_offline_stage(started_at)?;
 							}
@@ -644,9 +644,9 @@ where
 
 	/// Handle incoming messages for current Stage
 
-	fn handle_incoming_keygen(&mut self, data: DKGKeygenMessage) -> Result<(), String> {
+	fn handle_incoming_keygen(&mut self, data: DKGKeygenMessage) -> Result<(), DKGError> {
 		if data.keygen_set_id != self.keygen_set_id {
-			return Err("Keygen set ids do not match".to_string())
+			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
 		}
 
 		if let Some(keygen) = self.keygen.as_mut() {
@@ -660,7 +660,7 @@ where
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					return Err("Error deserializing keygen msg".to_string())
+					return Err(DKGError::GenericError { reason: "Error deserializing keygen msg".to_string() })
 				},
 			};
 
@@ -682,7 +682,7 @@ where
 				Ok(()) => (),
 				Err(err) if err.is_critical() => {
 					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err("Keygen critical error encountered".to_string())
+					return Err(DKGError::GenericError { reason: "Keygen critical error encountered".to_string() })
 				},
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
@@ -693,23 +693,22 @@ where
 		Ok(())
 	}
 
-	fn handle_incoming_offline_stage(&mut self, data: DKGOfflineMessage) -> Result<(), String> {
+	fn handle_incoming_offline_stage(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
 		if data.signer_set_id != self.signer_set_id {
-			return Err("Signer set ids do not match".to_string())
+			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
 
 		if let Some(offline_stage) = self.offline_stage.as_mut() {
 			trace!(target: "dkg", "🕸️  Handle incoming offline message");
 			if data.offline_msg.is_empty() {
-				warn!(
-					target: "dkg", "🕸️  Got empty message");
+				warn!(target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
 			let msg: Msg<OfflineProtocolMessage> = match bincode::deserialize(&data.offline_msg) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					return Err("Error deserializing offline msg".to_string())
+					return Err(DKGError::GenericError { reason: "Error deserializing offline msg".to_string() })
 				},
 			};
 
@@ -731,7 +730,7 @@ where
 				Ok(()) => (),
 				Err(err) if err.is_critical() => {
 					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err("Offline critical error encountered".to_string())
+					return Err(DKGError::GenericError { reason: "Offline critical error encountered".to_string() })
 				},
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
@@ -742,7 +741,7 @@ where
 		Ok(())
 	}
 
-	fn handle_incoming_vote(&mut self, data: DKGVoteMessage<K>) -> Result<(), String> {
+	fn handle_incoming_vote(&mut self, data: DKGVoteMessage<K>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle vote message");
 
 		if data.party_ind == self.party_index {
@@ -754,7 +753,7 @@ where
 			Ok(sig) => sig,
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-				return Err("Error deserializing vote msg".to_string())
+				return Err(DKGError::GenericError { reason: "Error deserializing vote msg".to_string() })
 			},
 		};
 
@@ -894,7 +893,9 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use super::{MultiPartyECDSARounds, Stage};
+	use crate::types::DKGError;
+
+use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
 
 	fn check_all_reached_stage(
@@ -989,7 +990,7 @@ mod tests {
 				for msg_frozen in msgs_pull_frozen.iter() {
 					match party.handle_incoming(msg_frozen.clone()) {
 						Ok(()) => (),
-						Err(err) => panic!("{}", err.to_string()),
+						Err(err) => panic!("{:?}", err),
 					}
 				}
 				msgs_pull.append(&mut party.get_outgoing_messages());
