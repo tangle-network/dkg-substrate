@@ -4,9 +4,11 @@ use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
 };
 use dkg_runtime_primitives::DKGPayloadKey;
+use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::generic::OpaqueDigestItemId;
+use std::sync::Arc;
 
 pub fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -31,8 +33,8 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	public: &AuthorityId,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	offline_stage_path: Option<std::path::PathBuf>,
 	created_at: N,
+	local_keystore: Option<Arc<LocalKeystore>>,
 ) -> MultiPartyECDSARounds<DKGPayloadKey, N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
 
@@ -44,8 +46,9 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		u16::try_from(n).unwrap(),
 		authority_set.id.clone(),
 		local_key_path,
-		offline_stage_path,
 		created_at,
+		public.clone(),
+		local_keystore,
 	);
 
 	rounds

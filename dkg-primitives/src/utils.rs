@@ -13,7 +13,11 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::{fs, path::PathBuf};
+use std::{
+	fs,
+	io::{Error, ErrorKind},
+	path::PathBuf,
+};
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -49,9 +53,7 @@ pub fn insert_controller_account_keys_into_keystore(
 	}
 }
 
-pub const DKG_OFFLINE_STAGE_FILE: &str = "dkg_completed_offline_stage";
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
-pub const QUEUED_DKG_OFFLINE_STAGE_FILE: &str = "queued_dkg_completed_offline_stage";
 pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 
 #[derive(Deserialize, Serialize)]
@@ -60,41 +62,21 @@ pub struct StoredLocalKey {
 	pub local_key: LocalKey,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct StoredOfflineStage {
-	pub round_id: RoundId,
-	pub completed_offlinestage: CompletedOfflineStage,
-}
-
-// TODO: Encrypt data before storing
-
-pub fn store_localkey(key: LocalKey, round_id: RoundId, path: PathBuf) -> std::io::Result<()> {
-	let stored_local_key = StoredLocalKey { round_id, local_key: key };
-
-	let serialized_data = serialize(&stored_local_key);
-
-	if let Ok(data) = serialized_data {
-		fs::write(path, data)?;
-		return Ok(())
-	}
-	Err(std::io::ErrorKind::Other.into())
-}
-
-pub fn store_offline_stage(
-	offline_stage: CompletedOfflineStage,
+pub fn store_localkey(
+	key: LocalKey,
 	round_id: RoundId,
 	path: PathBuf,
+	secret_key: Vec<u8>,
 ) -> std::io::Result<()> {
-	let stored_local_key = StoredOfflineStage { round_id, completed_offlinestage: offline_stage };
+	let stored_local_key = StoredLocalKey { round_id, local_key: key };
 
-	let serialized_data = serialize(&stored_local_key);
+	let serialized_data = serialize(&stored_local_key)
+		.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 
-	if let Ok(data) = serialized_data {
-		fs::write(path, data)?;
-		return Ok(())
-	}
-
-	Err(std::io::ErrorKind::Other.into())
+	let encrypted_data =
+		encrypt_data(serialized_data, secret_key).map_err(|e| Error::new(ErrorKind::Other, e))?;
+	fs::write(path, encrypted_data)?;
+	Ok(())
 }
 
 pub fn cleanup(path: PathBuf) -> std::io::Result<()> {
@@ -107,7 +89,7 @@ pub fn encrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>,
 		return Err("Secret key bytes must be 64bytes long")
 	}
 	let key = &secret_key_bytes[..32];
-	// Nonce is 32 bytes, we only need the first 24bytes for the encryption algorithm
+	// The Nonce is 32 bytes, we only need 24 bytes for the encryption algorithm
 	let nonce = &secret_key_bytes[32..][..24];
 	let cipher = XChaCha20Poly1305::new(key.into());
 

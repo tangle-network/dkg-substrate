@@ -313,6 +313,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		prometheus_registry: prometheus_registry.clone(),
 		block: None,
 		base_path,
+		local_keystore: keystore_container.local_keystore(),
 	};
 
 	// Start the DKG gadget.

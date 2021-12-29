@@ -5,15 +5,13 @@ use crate::{
 	Client,
 };
 use bincode::deserialize_from;
+use curv::arithmetic::Converter;
 use dkg_primitives::{
 	crypto::AuthorityId,
 	keys::{CompletedOfflineStage, LocalKey},
 	rounds::MultiPartyECDSARounds,
 	types::Stage,
-	utils::{
-		StoredLocalKey, StoredOfflineStage, DKG_LOCAL_KEY_FILE, DKG_OFFLINE_STAGE_FILE,
-		QUEUED_DKG_LOCAL_KEY_FILE, QUEUED_DKG_OFFLINE_STAGE_FILE,
-	},
+	utils::{decrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 	DKGPayloadKey,
 };
 use dkg_runtime_primitives::DKGApi;
@@ -21,6 +19,7 @@ use log::debug;
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_api::{BlockT as Block, HeaderT as Header};
+use dkg_runtime_primitives::offchain_crypto::Pair as AppPair;
 use std::{fs, io::Cursor};
 
 pub struct DKGPersistenceState {
@@ -51,7 +50,7 @@ where
 
 	worker.dkg_persistence.start();
 
-	debug!(target: "dkg_persistence", "Trying to resume dkg");
+	debug!(target: "dkg_persistence", "Trying to restore key gen data");
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = worker
 			.keystore_ref()
@@ -59,69 +58,66 @@ where
 			.unwrap_or_else(|| panic!("Halp"));
 
 		let mut local_key = None;
-		let mut offline_stage = None;
 		let mut queued_local_key = None;
-		let mut queued_offline_stage = None;
 
 		if worker.base_path.is_some() {
 			let base_path = worker.base_path.as_ref().unwrap();
 			let local_key_path = base_path.join(DKG_LOCAL_KEY_FILE);
-			let offline_stage_path = base_path.join(DKG_OFFLINE_STAGE_FILE);
 			let queued_local_key_path = base_path.join(QUEUED_DKG_LOCAL_KEY_FILE);
-			let queued_offline_stage_path = base_path.join(QUEUED_DKG_OFFLINE_STAGE_FILE);
 
-			let offline_stage_serialized = fs::read(offline_stage_path.clone());
 			let local_key_serialized = fs::read(local_key_path.clone());
-			let queued_offline_stage_serialized = fs::read(queued_offline_stage_path.clone());
 			let queued_local_key_serialized = fs::read(queued_local_key_path.clone());
 
 			let round_id = active.id;
 			let queued_round_id = queued.id;
 
-			if let Ok(offline_stage_serialized) = offline_stage_serialized {
-				let reader = Cursor::new(offline_stage_serialized);
-				let offline_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(reader);
-
-				if let Ok(offline_deserialized) = offline_deserialized {
-					if round_id == offline_deserialized.round_id {
-						offline_stage = Some(offline_deserialized)
-					}
-				}
+			if worker.local_keystore.is_none() {
+				return
 			}
 
 			if let Ok(local_key_serialized) = local_key_serialized {
-				let reader = Cursor::new(local_key_serialized);
-				let localkey_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
+				let key_pair =
+					worker.local_keystore.as_ref().unwrap().key_pair::<AppPair>(&public.into());
+				if let Ok(Some(key_pair)) = key_pair {
+					let decrypted_data = decrypt_data(
+						local_key_serialized,
+						key_pair.as_ref().0.secret.to_bytes().to_vec(),
+					);
 
-				if let Ok(localkey_deserialized) = localkey_deserialized {
-					if round_id == localkey_deserialized.round_id {
-						local_key = Some(localkey_deserialized)
-					}
-				}
-			}
+					if let Ok(decrypted_data) = decrypted_data {
+						let reader = Cursor::new(decrypted_data);
+						let localkey_deserialized =
+							deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
 
-			if let Ok(queued_offline_stage_serialized) = queued_offline_stage_serialized {
-				let reader = Cursor::new(queued_offline_stage_serialized);
-				let queued_offline_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredOfflineStage>(reader);
-
-				if let Ok(queued_offline_deserialized) = queued_offline_deserialized {
-					if queued_round_id == queued_offline_deserialized.round_id {
-						queued_offline_stage = Some(queued_offline_deserialized)
+						if let Ok(localkey_deserialized) = localkey_deserialized {
+							// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
+							if round_id == localkey_deserialized.round_id {
+								local_key = Some(localkey_deserialized)
+							}
+						}
 					}
 				}
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
-				let reader = Cursor::new(queued_local_key_serialized);
-				let queued_localkey_deserialized =
-					deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
+				let key_pair =
+					worker.local_keystore.as_ref().unwrap().key_pair::<sr25519::Pair>(public);
+				if let Ok(Some(key_pair)) = key_pair {
+					let decrypted_data = decrypt_data(
+						queued_local_key_serialized,
+						key_pair.as_ref().secret.to_bytes().to_vec(),
+					);
 
-				if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
-					if queued_round_id == queued_localkey_deserialized.round_id {
-						queued_local_key = Some(queued_localkey_deserialized)
+					if let Ok(decrypted_data) = decrypted_data {
+						let reader = Cursor::new(decrypted_data);
+						let queued_localkey_deserialized =
+							deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
+
+						if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
+							if queued_round_id == queued_localkey_deserialized.round_id {
+								queued_local_key = Some(queued_localkey_deserialized)
+							}
+						}
 					}
 				}
 			}
@@ -137,16 +133,15 @@ where
 					&public,
 					threshold,
 					Some(local_key_path),
-					Some(offline_stage_path),
 					*header.number(),
+					worker.local_keystore.clone(),
 				);
 
-				if local_key.is_some() && offline_stage.is_some() {
+				if local_key.is_some() {
+					// TODO: After setting a valid local key after restart, we need a strategy to handle recreating the Offline stage.
+					// So this node can partake in signing messages
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_completed_offlinestage(
-						offline_stage.as_ref().unwrap().completed_offlinestage.clone(),
-					);
-					rounds.set_stage(Stage::ManualReady)
+					rounds.set_stage(Stage::Offline)
 				}
 
 				worker.set_rounds(rounds)
@@ -163,17 +158,13 @@ where
 					&public,
 					threshold,
 					Some(queued_local_key_path),
-					Some(queued_offline_stage_path),
 					*header.number(),
+					worker.local_keystore.clone(),
 				);
 
-				if queued_local_key.is_some() && queued_offline_stage.is_some() {
-					// Restore local key and CompletedofflineStage
+				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_completed_offlinestage(
-						queued_offline_stage.as_ref().unwrap().completed_offlinestage.clone(),
-					);
-					rounds.set_stage(Stage::ManualReady)
+					rounds.set_stage(Stage::Offline)
 				}
 
 				worker.set_next_rounds(rounds)
@@ -231,16 +222,12 @@ where
 {
 	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker, header);
 	let mut local_key_path = None;
-	let mut offline_stage_path = None;
 	let mut queued_local_key_path = None;
-	let mut queued_offline_stage_path = None;
 
 	if worker.base_path.is_some() {
 		let base_path = worker.base_path.as_ref().unwrap();
 		local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
-		offline_stage_path = Some(base_path.join(DKG_OFFLINE_STAGE_FILE));
 		queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
-		queued_offline_stage_path = Some(base_path.join(QUEUED_DKG_OFFLINE_STAGE_FILE));
 	}
 	let public = worker
 		.keystore_ref()
@@ -263,8 +250,8 @@ where
 			&public,
 			threshold,
 			local_key_path,
-			offline_stage_path,
 			*header.number(),
+			worker.local_keystore.clone(),
 		);
 
 		let _ = rounds.start_keygen(authority_set.id);
@@ -284,8 +271,8 @@ where
 			&public,
 			threshold,
 			queued_local_key_path,
-			queued_offline_stage_path,
 			*header.number(),
+			worker.local_keystore.clone(),
 		);
 
 		let _ = rounds.start_keygen(queued_authority_set.id);

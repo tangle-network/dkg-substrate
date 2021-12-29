@@ -29,6 +29,7 @@ use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
+use sc_keystore::LocalKeystore;
 use sc_service::BasePath;
 use sp_keystore::SyncCryptoStorePtr;
 
@@ -93,8 +94,10 @@ where
 	pub client: Arc<C>,
 	/// Client Backend
 	pub backend: Arc<BE>,
-	/// Local key store
+	/// Synchronous key store pointer
 	pub key_store: Option<SyncCryptoStorePtr>,
+	/// Concrete local key store
+	pub local_keystore: Option<LocalKeystore>,
 	/// Gossip network
 	pub network: N,
 	/// Minimal delta between blocks, DKG should vote for
@@ -127,6 +130,7 @@ where
 		prometheus_registry,
 		block,
 		base_path,
+		local_keystore,
 	} = dkg_params;
 
 	let gossip_validator = Arc::new(gossip::GossipValidator::new());
@@ -156,6 +160,7 @@ where
 		min_block_delta,
 		metrics,
 		base_path,
+		local_keystore,
 		dkg_state: DKGState {
 			accepted: false,
 			is_epoch_over: true,

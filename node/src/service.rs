@@ -326,6 +326,7 @@ where
 		prometheus_registry: prometheus_registry.clone(),
 		block: None,
 		base_path,
+		local_keystore: params.keystore_container.local_keystore(),
 	};
 
 	// Start the DKG gadget.

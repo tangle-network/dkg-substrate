@@ -1979,6 +1979,7 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.11.2",
  "round-based",
+ "sc-keystore",
  "sc-service",
  "serde",
  "sha3",
@@ -4946,7 +4947,7 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.7.4"
-source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=david/make-some-structs-serializable#442f4fafce6da5a7abd6feba90181117c8813f60"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=master#fc4a0ed2e1c9ba75d249e7ef0172ebc310f2eb43"
 dependencies = [
  "centipede",
  "curv-kzen",

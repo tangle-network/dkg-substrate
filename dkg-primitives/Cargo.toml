@@ -21,12 +21,13 @@ chacha20poly1305 = "0.9.0"
 
 curv = { package = "curv-kzen", version = "0.7", default-features = false }
 round-based = { version = "0.1.4", features = [] }
-multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git", branch = "david/make-some-structs-serializable" }
+multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git", branch = "master" }
 sp-core = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sc-service = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives" }
+sc-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 
 [dev-dependencies]
 sp-keyring = { git = 'https://github.com/paritytech/substrate', branch = 'master' }

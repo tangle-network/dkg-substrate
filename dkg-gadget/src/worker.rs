@@ -18,6 +18,7 @@
 
 use core::convert::TryFrom;
 use curv::elliptic::curves::traits::ECPoint;
+use sc_keystore::LocalKeystore;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -75,10 +76,7 @@ use crate::{
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload},
-	utils::{
-		cleanup, DKG_LOCAL_KEY_FILE, DKG_OFFLINE_STAGE_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
-		QUEUED_DKG_OFFLINE_STAGE_FILE,
-	},
+	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -99,6 +97,7 @@ where
 	pub metrics: Option<Metrics>,
 	pub dkg_state: DKGState<B, DKGPayloadKey>,
 	pub base_path: Option<PathBuf>,
+	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -148,6 +147,8 @@ where
 	pub dkg_persistence: DKGPersistenceState,
 
 	pub base_path: Option<PathBuf>,
+	// Concrete type that points to the actual local keystore if it exists
+	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -174,6 +175,7 @@ where
 			metrics,
 			dkg_state,
 			base_path,
+			local_keystore,
 		} = worker_params;
 
 		DKGWorker {
@@ -201,6 +203,7 @@ where
 			aggregated_public_keys: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
+			local_keystore,
 			_backend: PhantomData,
 		}
 	}
@@ -352,9 +355,6 @@ where
 
 		if self.base_path.is_some() {
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE));
-			offline_stage_path =
-				Some(self.base_path.as_ref().unwrap().join(DKG_OFFLINE_STAGE_FILE));
-			let _ = cleanup(offline_stage_path.as_ref().unwrap().clone());
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 
@@ -369,8 +369,8 @@ where
 					&public,
 					thresh,
 					local_key_path,
-					offline_stage_path,
 					*header.number(),
+					self.local_keystore.clone(),
 				))
 			} else {
 				None
@@ -410,9 +410,6 @@ where
 
 		if self.base_path.is_some() {
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
-			offline_stage_path =
-				Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_OFFLINE_STAGE_FILE));
-			let _ = cleanup(offline_stage_path.as_ref().unwrap().clone());
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 
@@ -425,8 +422,8 @@ where
 				&public,
 				thresh,
 				local_key_path,
-				offline_stage_path,
 				*header.number(),
+				self.local_keystore.clone(),
 			));
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(queued.id.clone()) {
