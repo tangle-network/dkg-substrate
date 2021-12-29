@@ -79,6 +79,7 @@ where
 			let queued_round_id = queued.id;
 
 			if worker.local_keystore.is_none() {
+				debug!(target: "dkg_persistence", "Exiting no local key store found");
 				return
 			}
 
@@ -98,12 +99,17 @@ where
 
 						if let Ok(localkey_deserialized) = localkey_deserialized {
 							// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
+							debug!(target: "dkg_persistence", "Recovered local key");
 							if round_id == localkey_deserialized.round_id {
 								local_key = Some(localkey_deserialized)
 							}
 						}
+					} else {
+						debug!(target: "dkg_persistence", "Failed to decrypt local key");
 					}
 				}
+			} else {
+				debug!(target: "dkg_persistence", "Failed to read file");
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
@@ -149,6 +155,7 @@ where
 				if local_key.is_some() {
 					// TODO: After setting a valid local key after restart, we need a strategy to handle recreating the Offline stage.
 					// So this node can partake in signing messages
+					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
 					rounds.set_stage(Stage::Offline)
 				}
