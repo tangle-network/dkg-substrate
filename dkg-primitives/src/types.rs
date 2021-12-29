@@ -113,3 +113,16 @@ impl Stage {
 		}
 	}
 }
+
+#[derive(Debug, Clone)]
+pub enum DKGError {
+	KeygenMisbehaviour { bad_actors: Vec<u16> },
+	KeygenTimeout { bad_actors: Vec<u16> },
+	OfflineMisbehaviour { bad_actors: Vec<u16> },
+	OfflineTimeout { bad_actors: Vec<u16> },
+	SignMisbehaviour { bad_actors: Vec<u16> },
+	SignTimeout { bad_actors: Vec<u16> },
+	StartKeygen { reason: String },
+	ResetSigners { reason: String },
+	GenericError { reason: String }, // TODO: handle other
+}
