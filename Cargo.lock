@@ -4947,7 +4947,7 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.7.4"
-source = "git+https://github.com/temld4/multi-party-ecdsa.git?rev=4312d9d5502224ae8a59e7ea9a4f8ef971845fc6#4312d9d5502224ae8a59e7ea9a4f8ef971845fc6"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git#8fbea9e7d1b81e74b529390d9de4079069d797ad"
 dependencies = [
  "centipede",
  "curv-kzen",
