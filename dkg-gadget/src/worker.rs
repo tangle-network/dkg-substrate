@@ -284,7 +284,7 @@ where
 		let at = BlockId::hash(header.hash());
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
-	
+
 	fn get_latest_block_number(&self) -> NumberFor<B> {
 		self.latest_header.clone().unwrap().number().clone()
 	}
@@ -349,6 +349,10 @@ where
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
+		let sr25519_public = self
+			.key_store
+			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 		let thresh = validate_threshold(
 			next_authorities.authorities.len() as u16,
@@ -356,7 +360,6 @@ where
 		);
 
 		let mut local_key_path = None;
-		let mut offline_stage_path = None;
 
 		if self.base_path.is_some() {
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE));
@@ -373,6 +376,7 @@ where
 				Some(set_up_rounds(
 					&next_authorities,
 					&public,
+					&sr25519_public,
 					thresh,
 					local_key_path,
 					*header.number(),
@@ -413,6 +417,10 @@ where
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
+		let sr25519_public = self
+			.key_store
+			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 		let thresh = validate_threshold(
 			queued.authorities.len() as u16,
@@ -420,7 +428,6 @@ where
 		);
 
 		let mut local_key_path = None;
-		let mut offline_stage_path = None;
 
 		if self.base_path.is_some() {
 			local_key_path = Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
@@ -435,6 +442,7 @@ where
 			self.next_rounds = Some(set_up_rounds(
 				&queued,
 				&public,
+				&sr25519_public,
 				thresh,
 				local_key_path,
 				*header.number(),

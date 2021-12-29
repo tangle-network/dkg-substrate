@@ -7,6 +7,7 @@ use dkg_runtime_primitives::DKGPayloadKey;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use sp_core::sr25519;
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::sync::Arc;
 
@@ -31,6 +32,7 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
+	sr25519_public: &sr25519::Public,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
 	created_at: N,
@@ -47,7 +49,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		authority_set.id.clone(),
 		local_key_path,
 		created_at,
-		public.clone(),
+		Some(sr25519_public.clone()),
 		local_keystore,
 	);
 

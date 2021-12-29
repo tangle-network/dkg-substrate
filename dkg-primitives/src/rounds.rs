@@ -8,7 +8,7 @@ use curv::{
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sc_keystore::LocalKeystore;
-use sp_core::{ecdsa::Signature, sr25519};
+use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
 use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -16,12 +16,14 @@ use std::{
 	sync::Arc,
 };
 
-use crate::{types::*, utils::{store_localkey, vec_usize_to_u16}};
-use dkg_runtime_primitives::{keccak_256, offchain_crypto::Pair as AppPair};
-use sp_core::ecdsa::Signature;
-use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::collections::{BTreeMap, HashMap};
-
+use crate::{
+	types::*,
+	utils::{store_localkey, vec_usize_to_u16},
+};
+use dkg_runtime_primitives::{
+	keccak_256,
+	offchain_crypto::{Pair as AppPair, Public},
+};
 
 pub use gg_2020::{
 	party_i::*,
@@ -101,7 +103,7 @@ where
 		parties: u16,
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
-		created_at: N,
+		created_at: C,
 		public_key: Option<sr25519::Public>,
 		local_keystore: Option<Arc<LocalKeystore>>,
 	) -> Self {
@@ -147,7 +149,7 @@ where
 	// received from other peers and the protocol has not completed the keygen stage
 	// We take it that the protocol has stalled if messages are not received from other peers after an interval of 3 blocks
 	// And the keygen stage has not completed
-	pub fn has_stalled(&self, time_to_restart: Option<N>, current_block_number: N) -> bool {
+	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
 		let last_stage = self.stage_at_last_receipt;
 		let current_stage = self.stage;
 		let block_diff = current_block_number - self.last_received_at;
@@ -207,7 +209,7 @@ where
 	pub fn handle_incoming(
 		&mut self,
 		data: DKGMsgPayload<K>,
-		current_block_number: Option<N>,
+		current_block_number: Option<C>,
 	) -> Result<(), String> {
 		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
 		if current_block_number.is_some() {
@@ -586,16 +588,15 @@ where
 						self.local_keystore.is_some() &&
 						self.public_key.is_some()
 					{
-						let key_pair =
-							self.local_keystore.as_ref().unwrap().key_pair::<AppPair>(
-								self.public_key.as_ref().unwrap(),
-							);
+						let key_pair = self.local_keystore.as_ref().unwrap().key_pair::<AppPair>(
+							&Public::try_from(&self.public_key.as_ref().unwrap().0[..]).unwrap(),
+						);
 						if let Ok(Some(key_pair)) = key_pair {
 							let _ = store_localkey(
 								k,
 								self.round_id,
 								self.local_key_path.as_ref().unwrap().clone(),
-								key_pair.as_ref().0.secret.to_bytes().to_vec(),
+								key_pair.to_raw_vec(),
 							);
 						}
 					}

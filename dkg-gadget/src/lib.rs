@@ -97,7 +97,7 @@ where
 	/// Synchronous key store pointer
 	pub key_store: Option<SyncCryptoStorePtr>,
 	/// Concrete local key store
-	pub local_keystore: Option<LocalKeystore>,
+	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: N,
 	/// Minimal delta between blocks, DKG should vote for

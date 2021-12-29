@@ -14,12 +14,15 @@ use dkg_primitives::{
 	utils::{decrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 	DKGPayloadKey,
 };
-use dkg_runtime_primitives::DKGApi;
+use dkg_runtime_primitives::{
+	offchain_crypto::{Pair as AppPair, Public},
+	DKGApi,
+};
 use log::debug;
 use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_api::{BlockT as Block, HeaderT as Header};
-use dkg_runtime_primitives::offchain_crypto::Pair as AppPair;
+use sp_core::Pair;
 use std::{fs, io::Cursor};
 
 pub struct DKGPersistenceState {
@@ -56,6 +59,10 @@ where
 			.keystore_ref()
 			.authority_id(&worker.keystore_ref().public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
+		let sr25519_public = worker
+			.keystore_ref()
+			.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
+			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 		let mut local_key = None;
 		let mut queued_local_key = None;
@@ -76,13 +83,13 @@ where
 			}
 
 			if let Ok(local_key_serialized) = local_key_serialized {
-				let key_pair =
-					worker.local_keystore.as_ref().unwrap().key_pair::<AppPair>(&public.into());
+				let key_pair = worker
+					.local_keystore
+					.as_ref()
+					.unwrap()
+					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
 				if let Ok(Some(key_pair)) = key_pair {
-					let decrypted_data = decrypt_data(
-						local_key_serialized,
-						key_pair.as_ref().0.secret.to_bytes().to_vec(),
-					);
+					let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
 
 					if let Ok(decrypted_data) = decrypted_data {
 						let reader = Cursor::new(decrypted_data);
@@ -100,13 +107,14 @@ where
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
-				let key_pair =
-					worker.local_keystore.as_ref().unwrap().key_pair::<sr25519::Pair>(public);
+				let key_pair = worker
+					.local_keystore
+					.as_ref()
+					.unwrap()
+					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
 				if let Ok(Some(key_pair)) = key_pair {
-					let decrypted_data = decrypt_data(
-						queued_local_key_serialized,
-						key_pair.as_ref().secret.to_bytes().to_vec(),
-					);
+					let decrypted_data =
+						decrypt_data(queued_local_key_serialized, key_pair.as_ref().to_raw_vec());
 
 					if let Ok(decrypted_data) = decrypted_data {
 						let reader = Cursor::new(decrypted_data);
@@ -131,6 +139,7 @@ where
 				let mut rounds = set_up_rounds(
 					&active,
 					&public,
+					&sr25519_public,
 					threshold,
 					Some(local_key_path),
 					*header.number(),
@@ -156,6 +165,7 @@ where
 				let mut rounds = set_up_rounds(
 					&queued,
 					&public,
+					&sr25519_public,
 					threshold,
 					Some(queued_local_key_path),
 					*header.number(),
@@ -233,6 +243,10 @@ where
 		.keystore_ref()
 		.authority_id(&worker.keystore_ref().public_keys().unwrap())
 		.unwrap_or_else(|| panic!("Halp"));
+	let sr25519_public = worker
+		.keystore_ref()
+		.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 	let authority_set = worker.get_current_validators();
 	let queued_authority_set = worker.get_queued_validators();
@@ -249,6 +263,7 @@ where
 		let mut rounds = set_up_rounds(
 			&authority_set,
 			&public,
+			&sr25519_public,
 			threshold,
 			local_key_path,
 			*header.number(),
@@ -270,6 +285,7 @@ where
 		let mut rounds = set_up_rounds(
 			&queued_authority_set,
 			&public,
+			&sr25519_public,
 			threshold,
 			queued_local_key_path,
 			*header.number(),
