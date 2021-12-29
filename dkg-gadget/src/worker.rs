@@ -616,49 +616,41 @@ where
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
 		let signature = signed_dkg_msg.signature.unwrap_or_default();
-		let can_proceed = {
-			// Get authority accounts
-			let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
+		// Get authority accounts
+		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
 
-			if let Some(header) = self.latest_header.as_ref() {
-				let at = BlockId::hash(header.hash());
-				let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+		if let Some(header) = self.latest_header.as_ref() {
+			let at = BlockId::hash(header.hash());
+			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
 
-				if accounts.is_some() {
-					authority_accounts = accounts;
-				}
+			if accounts.is_some() {
+				authority_accounts = accounts;
 			}
-
-			if authority_accounts.is_none() {
-				return Err("No authorities".into());
-			}
-
-			let check_signers = |xs: Vec<AccountId32>| {
-				return dkg_runtime_primitives::utils::verify_signer_from_set(
-					xs.iter().map(|x| {
-						sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-							panic!("Failed to convert account id to sr25519 public key")
-						}))
-					}).collect(),
-					&encoded,
-					&signature,
-				)
-				.1
-			};
-
-			if check_signers(authority_accounts.clone().unwrap().0.into())
-				|| check_signers(authority_accounts.clone().unwrap().1.into()) {
-				return Ok(dkg_msg);
-			} else {
-				false
-			}
-		};
-
-		if !can_proceed {
-			return Err("Message signature is not from a registered authority or next authority".into());
 		}
 
-		Err("Invalid sender: not an authority or next authority".into())
+		if authority_accounts.is_none() {
+			return Err("No authorities".into());
+		}
+
+		let check_signers = |xs: Vec<AccountId32>| {
+			return dkg_runtime_primitives::utils::verify_signer_from_set(
+				xs.iter().map(|x| {
+					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to sr25519 public key")
+					}))
+				}).collect(),
+				&encoded,
+				&signature,
+			)
+			.1
+		};
+
+		if check_signers(authority_accounts.clone().unwrap().0.into())
+			|| check_signers(authority_accounts.clone().unwrap().1.into()) {
+			return Ok(dkg_msg);
+		} else {
+			return Err("Message signature is not from a registered authority or next authority".into());
+		}
 	}
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
