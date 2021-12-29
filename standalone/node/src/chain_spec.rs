@@ -4,6 +4,8 @@ use dkg_standalone_runtime::{
 	GrandpaConfig, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
 	SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
 };
+use hex_literal::hex;
+
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
@@ -233,11 +235,17 @@ pub fn arana_testnet_config() -> Result<ChainSpec, String> {
 				// Pre-funded accounts
 				vec![
 					crate::testnet_fixtures::get_testnet_root_key(),
+					hex!["4e85271af1330e5e9384bd3ac5bdc04c0f8ef5a8cc29c1a8ae483d674164745c"].into(),
+					hex!["804808fb75d16340dc250871138a1a6f1dfa3cab9cc1fbd6f42960f1c39a950d"].into(),
+					hex!["587c2ef00ec0a1b98af4c655763acd76ece690fccbb255f01663660bc274960d"].into(),
+					hex!["cc195602a63bbdcf2ef4773c86fdbfefe042cb9aa8e3059d02e59a062d9c3138"].into(),
+					hex!["a24f729f085de51eebaeaeca97d6d499761b8f6daeca9b99d754a06ef8bcec3f"].into(),
+					hex!["368ea402dbd9c9888ae999d6a799cf36e08673ee53c001dfb4529c149fc2c13b"].into(),
 				],
 				vec![],
 				vec![],
 				crate::testnet_fixtures::get_arana_initial_authorities().iter()
-					.map(|mut a| a.0.clone())
+					.map(|a| a.0.clone())
 					.collect(),
 				true,
 			)
