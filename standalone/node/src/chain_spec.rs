@@ -236,7 +236,9 @@ pub fn arana_testnet_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				vec![],
-				vec![],
+				crate::testnet_fixtures::get_arana_initial_authorities().iter()
+					.map(|mut a| a.0.clone())
+					.collect(),
 				true,
 			)
 		},
