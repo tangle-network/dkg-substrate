@@ -23,6 +23,15 @@ pub struct DKGMessage<AuthorityId, Key> {
 	pub round_id: RoundId,
 }
 
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct SignedDKGMessage<AuthorityId, Key> {
+	/// DKG messages
+	pub msg: DKGMessage<AuthorityId, Key>,
+	/// ECDSA signature of sha3(concatenated message contents)
+	pub signature: Option<Vec<u8>>,
+}
+
 impl<ID, K> fmt::Display for DKGMessage<ID, K> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let label = match self.payload {

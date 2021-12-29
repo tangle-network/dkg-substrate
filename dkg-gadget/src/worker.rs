@@ -19,6 +19,7 @@
 use core::convert::TryFrom;
 use curv::elliptic::curves::traits::ECPoint;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -42,7 +43,7 @@ use sp_api::{
 };
 use sp_runtime::{
 	generic::OpaqueDigestItemId,
-	traits::{Block, Header, NumberFor},
+	traits::{Block, Header, NumberFor}, AccountId32,
 };
 
 use crate::keystore::DKGKeystore;
@@ -70,7 +71,7 @@ use crate::{
 
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
-	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload},
+	types::{SignedDKGMessage, DKGMessage, DKGPayloadKey, DKGSignedPayload},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -500,11 +501,31 @@ where
 					encoded_dkg_message
 				);
 
-				self.gossip_engine.lock().gossip_message(
-					dkg_topic::<B>(),
-					encoded_dkg_message.clone(),
-					true,
-				);
+				let sr25519_public = self
+					.key_store
+					.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+					.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	
+				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+					Ok(sig) => {
+						let signed_dkg_message = SignedDKGMessage {
+							msg: dkg_message,
+							signature: Some(sig.encode()),
+						};
+						let encoded_signed_dkg_message = signed_dkg_message.encode();
+		
+						self.gossip_engine.lock().gossip_message(
+							dkg_topic::<B>(),
+							encoded_signed_dkg_message.clone(),
+							true,
+						);
+					},
+					Err(e) => trace!(
+						target: "dkg",
+						"🕸️  Error signing DKG message: {:?}",
+						e
+					),
+				}
 				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
 			}
 			Ok(())
@@ -587,6 +608,58 @@ where
 		}
 	}
 
+	fn verify_signature_against_authorities(
+		&mut self,
+		signed_dkg_msg: SignedDKGMessage<Public, DKGPayloadKey>
+	) -> Result<DKGMessage<Public, DKGPayloadKey>, String> {
+		let dkg_msg = signed_dkg_msg.msg;
+		let encoded = dkg_msg.encode();
+		let signature = signed_dkg_msg.signature.unwrap_or_default();
+		let can_proceed = {
+			// Get authority accounts
+			let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
+
+			if let Some(header) = self.latest_header.as_ref() {
+				let at = BlockId::hash(header.hash());
+				let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+
+				if accounts.is_some() {
+					authority_accounts = accounts;
+				}
+			}
+
+			if authority_accounts.is_none() {
+				return Err("No authorities".into());
+			}
+
+			let check_signers = |xs: Vec<AccountId32>| {
+				return dkg_runtime_primitives::utils::verify_signer_from_set(
+					xs.iter().map(|x| {
+						sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+							panic!("Failed to convert account id to sr25519 public key")
+						}))
+					}).collect(),
+					&encoded,
+					&signature,
+				)
+				.1
+			};
+
+			if !check_signers(authority_accounts.clone().unwrap().0.into())
+				|| !check_signers(authority_accounts.clone().unwrap().1.into()) {
+				false
+			} else {
+				return Ok(dkg_msg);
+			}
+		};
+
+		if !can_proceed {
+			return Err("Message signature is not from a registered authority or next authority".into());
+		}
+
+		Err("Invalid sender: not an authority or next authority".into())
+	}
+
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
@@ -617,9 +690,7 @@ where
 		}
 
 		self.handle_public_key_broadcast(dkg_msg.clone());
-
 		self.send_outgoing_dkg_messages();
-
 		self.process_finished_rounds();
 	}
 
@@ -1089,7 +1160,7 @@ where
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
-					DKGMessage::<Public, DKGPayloadKey>::decode(&mut &notification.message[..]).ok()
+					SignedDKGMessage::<Public, DKGPayloadKey>::decode(&mut &notification.message[..]).ok()
 				},
 			));
 
@@ -1114,7 +1185,11 @@ where
 				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						self.process_incoming_dkg_message(dkg_msg);
+						if let Ok(raw) = self.verify_signature_against_authorities(dkg_msg.clone()) {
+							self.process_incoming_dkg_message(raw);
+						} else {
+							error!(target: "dkg", "🕸️  Received message with invalid signature");
+						}
 					} else {
 						return;
 					}
