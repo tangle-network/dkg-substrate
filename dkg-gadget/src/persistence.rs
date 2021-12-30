@@ -91,18 +91,23 @@ where
 					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
 				if let Ok(Some(key_pair)) = key_pair {
 					let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
-					debug!(target: "dkg", "Decrypted local key successfully");
 					if let Ok(decrypted_data) = decrypted_data {
+						debug!(target: "dkg", "Decrypted local key successfully");
 						let reader = Cursor::new(decrypted_data);
 						let localkey_deserialized =
 							deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
 
-						if let Ok(localkey_deserialized) = localkey_deserialized {
-							// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
-							debug!(target: "dkg", "Recovered local key");
-							if round_id == localkey_deserialized.round_id {
-								local_key = Some(localkey_deserialized)
-							}
+						match localkey_deserialized {
+							Ok(localkey_deserialized) => {
+								debug!(target: "dkg", "Recovered local key");
+								// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
+								if round_id == localkey_deserialized.round_id {
+									local_key = Some(localkey_deserialized)
+								}
+							},
+							Err(e) => {
+								debug!(target: "dkg", "Deserialization failed for local key {:?}", e);
+							},
 						}
 					} else {
 						debug!(target: "dkg", "Failed to decrypt local key");

@@ -60,7 +60,7 @@ pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
 pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct StoredLocalKey {
 	pub round_id: RoundId,
 	pub local_key: LocalKey,
@@ -79,7 +79,7 @@ pub fn store_localkey(
 
 	let encrypted_data =
 		encrypt_data(serialized_data, secret_key).map_err(|e| Error::new(ErrorKind::Other, e))?;
-	fs::write(path, encrypted_data)?;
+	fs::write(path, &encrypted_data[..])?;
 	Ok(())
 }
 
