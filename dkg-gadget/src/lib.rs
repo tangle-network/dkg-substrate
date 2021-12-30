@@ -167,7 +167,7 @@ where
 			curr_dkg: None,
 			past_dkg: None,
 			listening_for_pub_key: false,
-			listening_for_genesis_pub_key: false,
+			listening_for_active_pub_key: false,
 			voted_on: HashMap::new(),
 		},
 	};

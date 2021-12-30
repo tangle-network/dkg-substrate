@@ -39,7 +39,7 @@ pub struct DKGState<K, C> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
-	pub listening_for_genesis_pub_key: bool,
+	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K, C>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K, C>>,
 	pub voted_on: HashMap<K, C>,
@@ -363,7 +363,7 @@ where
 	}
 
 	pub fn is_key_gen_stage(&self) -> bool {
-		Stage::Keygen == self.stage || Stage::KeygenReady == self.stage
+		Stage::Keygen == self.stage
 	}
 
 	pub fn is_offline_ready(&self) -> bool {
@@ -1122,8 +1122,7 @@ mod tests {
 
 		// Running Keygen stage
 		println!("Running Keygen");
-		run_simulation(&mut parties, check_all_reached_offline_ready)
-			.map_err(|err| panic!("{}", err.0));
+		run_simulation(&mut parties, check_all_reached_offline_ready);
 		check_all_parties_have_public_key(&mut &parties);
 
 		// Running Offline stage
@@ -1136,8 +1135,7 @@ mod tests {
 				Err(_err) => (),
 			}
 		}
-		run_simulation(&mut parties, check_all_reached_manual_ready)
-			.map_err(|err| panic!("{}", err.0));
+		run_simulation(&mut parties, check_all_reached_manual_ready);
 
 		// Running Sign stage
 		println!("Running Sign");
@@ -1146,7 +1144,7 @@ mod tests {
 			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.vote(1, "Webb".encode(), 0).unwrap();
 		}
-		run_simulation(&mut parties, check_all_signatures_ready).map_err(|err| panic!("{}", err.0));
+		run_simulation(&mut parties, check_all_signatures_ready);
 
 		// Extract all signatures and check for correctness
 		check_all_signatures_correct(&mut parties);

@@ -136,16 +136,16 @@ where
 	last_signed_id: u64,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
-	// dkg state
-	dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
-	// setting up queued authorities keygen
-	queued_keygen_in_progress: bool,
-	// Setting up keygen for genesis authorities
-	genesis_keygen_in_progress: bool,
 	// public key refresh in progress
 	refresh_in_progress: bool,
 	// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	// dkg state
+	pub dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
+	// Setting up keygen for current authorities
+	pub active_keygen_in_progress: bool,
+	// setting up queued authorities keygen
+	pub queued_keygen_in_progress: bool,
 	// Track DKG Persistence state
 	pub dkg_persistence: DKGPersistenceState,
 
@@ -201,7 +201,7 @@ where
 			last_signed_id: 0,
 			dkg_state,
 			queued_keygen_in_progress: false,
-			genesis_keygen_in_progress: false,
+			active_keygen_in_progress: false,
 			refresh_in_progress: false,
 			aggregated_public_keys: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
@@ -347,6 +347,12 @@ where
 			return
 		}
 
+		if self.rounds.is_some() {
+			if self.rounds.as_ref().unwrap().get_id() == next_authorities.id {
+				return
+			}
+		}
+
 		let public = self
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
@@ -390,7 +396,7 @@ where
 		};
 
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
-			self.dkg_state.listening_for_genesis_pub_key = true;
+			self.dkg_state.listening_for_active_pub_key = true;
 
 			match self
 				.rounds
@@ -400,7 +406,7 @@ where
 			{
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for genesis authority set successfully");
-					self.genesis_keygen_in_progress = true;
+					self.active_keygen_in_progress = true;
 				},
 				Err(err) => {
 					error!("Error starting keygen {:?}", &err);
@@ -413,6 +419,12 @@ where
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
 		if queued.authorities.is_empty() {
 			return
+		}
+
+		if self.next_rounds.is_some() {
+			if self.next_rounds.as_ref().unwrap().get_id() == queued.id {
+				return
+			}
 		}
 
 		let public = self
@@ -480,6 +492,7 @@ where
 
 		self.latest_header = Some(header.clone());
 		self.listen_and_clear_offchain_storage(header);
+		try_resume_dkg(self, header);
 
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
@@ -540,10 +553,8 @@ where
 			}
 		}
 
-		try_resume_dkg(self, header);
-
 		try_restart_dkg(self, header);
-
+		self.send_outgoing_dkg_messages();
 		self.check_refresh(header);
 		self.process_unsigned_proposals(&header);
 		self.untrack_unsigned_proposals(header);
@@ -646,13 +657,11 @@ where
 				);
 			}
 
-			if self.genesis_keygen_in_progress &&
-				self.current_validator_set.id == GENESIS_AUTHORITY_SET_ID
-			{
+			if self.active_keygen_in_progress {
 				let is_ready_to_vote = rounds.is_ready_to_vote();
 				if is_ready_to_vote {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
-					self.genesis_keygen_in_progress = false;
+					self.active_keygen_in_progress = false;
 					let pub_key =
 						rounds.get_public_key().unwrap().get_element().serialize().to_vec();
 					let round_id = rounds.get_id();
@@ -911,10 +920,26 @@ where
 					signature: encoded_signature.clone(),
 				}),
 			};
+			let encoded_dkg_message = message.encode();
 
-			self.gossip_engine
-				.lock()
-				.gossip_message(dkg_topic::<B>(), message.encode(), true);
+			match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+				Ok(sig) => {
+					let signed_dkg_message =
+						SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
+					let encoded_signed_dkg_message = signed_dkg_message.encode();
+
+					self.gossip_engine.lock().gossip_message(
+						dkg_topic::<B>(),
+						encoded_signed_dkg_message.clone(),
+						true,
+					);
+				},
+				Err(e) => trace!(
+					target: "dkg",
+					"🕸️  Error signing DKG message: {:?}",
+					e
+				),
+			}
 
 			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
 			{
@@ -936,7 +961,7 @@ where
 	}
 
 	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
-		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_genesis_pub_key {
+		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_active_pub_key {
 			return
 		}
 
@@ -1038,7 +1063,7 @@ where
 
 						if let Some(mut offchain) = offchain {
 							if is_main_round {
-								self.dkg_state.listening_for_genesis_pub_key = false;
+								self.dkg_state.listening_for_active_pub_key = false;
 
 								offchain.set(
 									STORAGE_PREFIX,

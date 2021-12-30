@@ -91,7 +91,7 @@ where
 					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
 				if let Ok(Some(key_pair)) = key_pair {
 					let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
-
+					debug!(target: "dkg", "Decrypted local key successfully");
 					if let Ok(decrypted_data) = decrypted_data {
 						let reader = Cursor::new(decrypted_data);
 						let localkey_deserialized =
@@ -99,17 +99,17 @@ where
 
 						if let Ok(localkey_deserialized) = localkey_deserialized {
 							// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
-							debug!(target: "dkg_persistence", "Recovered local key");
+							debug!(target: "dkg", "Recovered local key");
 							if round_id == localkey_deserialized.round_id {
 								local_key = Some(localkey_deserialized)
 							}
 						}
 					} else {
-						debug!(target: "dkg_persistence", "Failed to decrypt local key");
+						debug!(target: "dkg", "Failed to decrypt local key");
 					}
 				}
 			} else {
-				debug!(target: "dkg_persistence", "Failed to read file");
+				debug!(target: "dkg", "Failed to read local key file");
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
@@ -157,10 +157,9 @@ where
 					// So this node can partake in signing messages
 					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_stage(Stage::Offline)
+					rounds.set_stage(Stage::Offline);
+					worker.set_rounds(rounds)
 				}
-
-				worker.set_rounds(rounds)
 			}
 
 			if queued.authorities.contains(&public) {
@@ -181,10 +180,9 @@ where
 
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_stage(Stage::Offline)
+					rounds.set_stage(Stage::Offline);
+					worker.set_next_rounds(rounds)
 				}
-
-				worker.set_next_rounds(rounds)
 			}
 		}
 	}
@@ -278,7 +276,8 @@ where
 		);
 
 		let _ = rounds.start_keygen(authority_set.id, latest_block_num);
-
+		worker.active_keygen_in_progress = true;
+		worker.dkg_state.listening_for_active_pub_key = true;
 		worker.set_rounds(rounds);
 	}
 
@@ -300,7 +299,8 @@ where
 		);
 
 		let _ = rounds.start_keygen(queued_authority_set.id, latest_block_num);
-
+		worker.queued_keygen_in_progress = true;
+		worker.dkg_state.listening_for_pub_key = true;
 		worker.set_next_rounds(rounds);
 	}
 }

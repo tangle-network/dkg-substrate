@@ -39,6 +39,8 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
+pub const GENESIS_BLOCK_NUMBER: u32 = 0;
+
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
