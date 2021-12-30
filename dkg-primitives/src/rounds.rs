@@ -1081,7 +1081,6 @@ mod tests {
 		println!("Simulation starts");
 
 		let mut msgs_pull = vec![];
-		let mut all_messages = vec![];
 
 		for party in &mut parties.into_iter() {
 			party.proceed(0).unwrap();
@@ -1094,7 +1093,6 @@ mod tests {
 
 			for party in &mut parties.into_iter() {
 				for msg_frozen in msgs_pull_frozen.iter() {
-					all_messages.push(msg_frozen.clone());
 					match party.handle_incoming(msg_frozen.clone(), None) {
 						Ok(()) => (),
 						Err(err) => panic!("{:?}", err),
@@ -1111,11 +1109,9 @@ mod tests {
 
 			if stop_condition(parties) {
 				println!("All parties finished");
-				return Ok(())
+				return
 			}
 		}
-
-		Err(("Test failed", all_messages))
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
