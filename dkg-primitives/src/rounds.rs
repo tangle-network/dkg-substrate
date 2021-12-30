@@ -210,7 +210,7 @@ where
 		&mut self,
 		data: DKGMsgPayload<K>,
 		current_block_number: Option<C>,
-	) -> Result<(), String> {
+	) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
 		if current_block_number.is_some() {
 			self.last_received_at = current_block_number.unwrap();

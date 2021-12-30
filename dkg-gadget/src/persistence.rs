@@ -153,7 +153,7 @@ where
 				);
 
 				if local_key.is_some() {
-					// TODO: After setting a valid local key after restart, we need a strategy to handle recreating the Offline stage.
+					// TODO: After setting a valid local key after restart, we need a strategy to handle recreating the Offline stage continuously.
 					// So this node can partake in signing messages
 					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
