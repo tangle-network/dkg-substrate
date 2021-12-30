@@ -472,6 +472,10 @@ where
 	fn proceed_offline_stage(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
+		if self.offline_stage.is_none() {
+			return Err(DKGError::GenericError { reason: "Offline Stage missing".to_string() })
+		}
+
 		let offline_stage = self.offline_stage.as_mut().unwrap();
 
 		if offline_stage.wants_to_proceed() {
@@ -611,6 +615,10 @@ where
 	}
 
 	fn try_finish_offline_stage(&mut self) -> bool {
+		if self.offline_stage.is_none() {
+			return false
+		}
+
 		let offline_stage = self.offline_stage.as_mut().unwrap();
 
 		if offline_stage.is_finished() {
