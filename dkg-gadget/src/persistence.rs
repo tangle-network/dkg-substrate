@@ -4,7 +4,7 @@ use crate::{
 	worker::DKGWorker,
 	Client,
 };
-use bincode::deserialize_from;
+use bincode::deserialize;
 use curv::arithmetic::Converter;
 use dkg_primitives::{
 	crypto::AuthorityId,
@@ -23,7 +23,7 @@ use sc_client_api::Backend;
 use serde::{Deserialize, Serialize};
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
-use std::{fs, io::Cursor};
+use std::fs;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -93,9 +93,8 @@ where
 					let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
 					if let Ok(decrypted_data) = decrypted_data {
 						debug!(target: "dkg", "Decrypted local key successfully");
-						let reader = Cursor::new(decrypted_data);
 						let localkey_deserialized =
-							deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
+							deserialize::<StoredLocalKey>(&decrypted_data[..]);
 
 						match localkey_deserialized {
 							Ok(localkey_deserialized) => {
@@ -128,9 +127,8 @@ where
 						decrypt_data(queued_local_key_serialized, key_pair.as_ref().to_raw_vec());
 
 					if let Ok(decrypted_data) = decrypted_data {
-						let reader = Cursor::new(decrypted_data);
 						let queued_localkey_deserialized =
-							deserialize_from::<Cursor<Vec<u8>>, StoredLocalKey>(reader);
+							deserialize::<StoredLocalKey>(&decrypted_data[..]);
 
 						if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
 							if queued_round_id == queued_localkey_deserialized.round_id {
