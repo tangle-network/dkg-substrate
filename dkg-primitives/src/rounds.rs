@@ -660,7 +660,9 @@ where
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					return Err(DKGError::GenericError { reason: "Error deserializing keygen msg".to_string() })
+					return Err(DKGError::GenericError {
+						reason: "Error deserializing keygen msg".to_string(),
+					})
 				},
 			};
 
@@ -682,7 +684,9 @@ where
 				Ok(()) => (),
 				Err(err) if err.is_critical() => {
 					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err(DKGError::GenericError { reason: "Keygen critical error encountered".to_string() })
+					return Err(DKGError::GenericError {
+						reason: "Keygen critical error encountered".to_string(),
+					})
 				},
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
@@ -708,7 +712,9 @@ where
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					return Err(DKGError::GenericError { reason: "Error deserializing offline msg".to_string() })
+					return Err(DKGError::GenericError {
+						reason: "Error deserializing offline msg".to_string(),
+					})
 				},
 			};
 
@@ -730,7 +736,9 @@ where
 				Ok(()) => (),
 				Err(err) if err.is_critical() => {
 					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err(DKGError::GenericError { reason: "Offline critical error encountered".to_string() })
+					return Err(DKGError::GenericError {
+						reason: "Offline critical error encountered".to_string(),
+					})
 				},
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
@@ -753,7 +761,9 @@ where
 			Ok(sig) => sig,
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-				return Err(DKGError::GenericError { reason: "Error deserializing vote msg".to_string() })
+				return Err(DKGError::GenericError {
+					reason: "Error deserializing vote msg".to_string(),
+				})
 			},
 		};
 
@@ -895,7 +905,7 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 mod tests {
 	use crate::types::DKGError;
 
-use super::{MultiPartyECDSARounds, Stage};
+	use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
 
 	fn check_all_reached_stage(

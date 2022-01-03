@@ -845,6 +845,10 @@ impl_runtime_apis! {
 		fn untrack_interval() -> BlockNumber {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
 		}
+
+		fn refresh_nonce() -> u64 {
+			DKG::refresh_nonce()
+		}
 	}
 
 	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {

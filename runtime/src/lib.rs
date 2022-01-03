@@ -807,6 +807,10 @@ impl_runtime_apis! {
 		fn untrack_interval() -> BlockNumber {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
 		}
+
+		fn refresh_nonce() -> u64 {
+			DKG::refresh_nonce()
+		}
 	}
 
 	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {

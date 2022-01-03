@@ -8,6 +8,18 @@ pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 pub type ResourceId = [u8; 32];
 pub type ProposalNonce = u64;
 
+#[derive(Clone, Encode, Decode, scale_info::TypeInfo)]
+pub struct RefreshProposal {
+	pub nonce: ProposalNonce,
+	pub pub_key: Vec<u8>,
+}
+
+#[derive(Clone, Encode, Decode, scale_info::TypeInfo, frame_support::RuntimeDebug)]
+pub struct RefreshProposalSigned {
+	pub nonce: ProposalNonce,
+	pub signature: Vec<u8>,
+}
+
 #[derive(Debug, Clone, Copy, scale_info::TypeInfo)]
 pub struct ProposalHeader {
 	pub resource_id: ResourceId,
@@ -79,7 +91,7 @@ impl From<ProposalHeader> for (ResourceId, u32, ProposalNonce) {
 #[derive(Debug, Clone, Decode, Encode, Copy, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
-	RefreshVote(u64),
+	RefreshVote(ProposalNonce),
 	AnchorUpdateProposal(ProposalNonce),
 	TokenAddProposal(ProposalNonce),
 	TokenRemoveProposal(ProposalNonce),

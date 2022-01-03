@@ -43,7 +43,8 @@ use sp_api::{
 };
 use sp_runtime::{
 	generic::OpaqueDigestItemId,
-	traits::{Block, Header, NumberFor}, AccountId32,
+	traits::{Block, Header, NumberFor},
+	AccountId32,
 };
 
 use crate::keystore::DKGKeystore;
@@ -55,9 +56,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ConsensusLog, MmrRootHash, OffchainSignedProposals, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	ConsensusLog, MmrRootHash, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -71,7 +72,7 @@ use crate::{
 
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
-	types::{SignedDKGMessage, DKGMessage, DKGPayloadKey, DKGSignedPayload},
+	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
@@ -506,15 +507,13 @@ where
 					.key_store
 					.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
 					.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
-	
+
 				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
 					Ok(sig) => {
-						let signed_dkg_message = SignedDKGMessage {
-							msg: dkg_message,
-							signature: Some(sig.encode()),
-						};
+						let signed_dkg_message =
+							SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
 						let encoded_signed_dkg_message = signed_dkg_message.encode();
-		
+
 						self.gossip_engine.lock().gossip_message(
 							dkg_topic::<B>(),
 							encoded_signed_dkg_message.clone(),
@@ -611,7 +610,7 @@ where
 
 	fn verify_signature_against_authorities(
 		&mut self,
-		signed_dkg_msg: SignedDKGMessage<Public, DKGPayloadKey>
+		signed_dkg_msg: SignedDKGMessage<Public, DKGPayloadKey>,
 	) -> Result<DKGMessage<Public, DKGPayloadKey>, String> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
@@ -629,27 +628,32 @@ where
 		}
 
 		if authority_accounts.is_none() {
-			return Err("No authorities".into());
+			return Err("No authorities".into())
 		}
 
 		let check_signers = |xs: Vec<AccountId32>| {
 			return dkg_runtime_primitives::utils::verify_signer_from_set(
-				xs.iter().map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
-					}))
-				}).collect(),
+				xs.iter()
+					.map(|x| {
+						sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+							panic!("Failed to convert account id to sr25519 public key")
+						}))
+					})
+					.collect(),
 				&encoded,
 				&signature,
 			)
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0.into())
-			|| check_signers(authority_accounts.clone().unwrap().1.into()) {
-			return Ok(dkg_msg);
+		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
+			check_signers(authority_accounts.clone().unwrap().1.into())
+		{
+			return Ok(dkg_msg)
 		} else {
-			return Err("Message signature is not from a registered authority or next authority".into());
+			return Err(
+				"Message signature is not from a registered authority or next authority".into()
+			)
 		}
 	}
 
@@ -1061,15 +1065,18 @@ where
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
-					offchain.set(
-						STORAGE_PREFIX,
-						OFFCHAIN_PUBLIC_KEY_SIG,
-						&finished_round.signature,
-					);
+					let decoded_payload = RefreshProposal::decode(&mut &finished_round.payload);
+					if let Ok(decoded_payload) = decoded_payload {
+						let refresh_proposal = RefreshProposalSigned {
+							nonce: decoded_payload.nonce,
+							signature: finished_round.signature.clone(),
+						};
+						let encoded_proposal = refresh_proposal.encode();
+						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
+						trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
+					}
 				}
-
 				None
 			},
 			// TODO: handle other key types
@@ -1085,23 +1092,32 @@ where
 			return
 		}
 
-		let latest_block_num = self.get_latest_block_number();
+		let latest_block_num = *header.number();
 		let at = BlockId::hash(header.hash());
 		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
 		if let Ok(true) = should_refresh {
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at).ok();
 			if let Ok(Some(pub_key)) = pub_key {
-				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+				match refresh_nonce {
+					Ok(Some(nonce)) => {
+						let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
 
-				if let Err(err) =
-					self.rounds.as_mut().unwrap().vote(key, pub_key.clone(), latest_block_num)
-				{
-					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-				} else {
-					trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
+						if let Err(err) = self.rounds.as_mut().unwrap().vote(
+							key,
+							proposal.encode(),
+							latest_block_num,
+						) {
+							error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+						} else {
+							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
+						}
+						self.send_outgoing_dkg_messages();
+					},
+					_ => {},
 				}
-				self.send_outgoing_dkg_messages();
 			}
 		}
 	}
@@ -1233,7 +1249,10 @@ where
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
-					SignedDKGMessage::<Public, DKGPayloadKey>::decode(&mut &notification.message[..]).ok()
+					SignedDKGMessage::<Public, DKGPayloadKey>::decode(
+						&mut &notification.message[..],
+					)
+					.ok()
 				},
 			));
 

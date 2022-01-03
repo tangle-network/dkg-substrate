@@ -207,5 +207,7 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get untrack interval for unsigned proposals
 		fn untrack_interval() -> BlockNumber;
+		/// Get next nonce value for refresh proposal
+		fn refresh_nonce() -> u64;
 	}
 }
