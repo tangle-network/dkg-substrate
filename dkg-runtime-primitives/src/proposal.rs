@@ -14,7 +14,9 @@ pub struct RefreshProposal {
 	pub pub_key: Vec<u8>,
 }
 
-#[derive(Clone, Encode, Decode, scale_info::TypeInfo, frame_support::RuntimeDebug)]
+#[derive(
+	Eq, PartialEq, Clone, Encode, Decode, scale_info::TypeInfo, frame_support::RuntimeDebug,
+)]
 pub struct RefreshProposalSigned {
 	pub nonce: ProposalNonce,
 	pub signature: Vec<u8>,

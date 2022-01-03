@@ -1065,7 +1065,7 @@ where
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
-					let decoded_payload = RefreshProposal::decode(&mut &finished_round.payload);
+					let decoded_payload = RefreshProposal::decode(&mut &finished_round.payload[..]);
 					if let Ok(decoded_payload) = decoded_payload {
 						let refresh_proposal = RefreshProposalSigned {
 							nonce: decoded_payload.nonce,
@@ -1098,10 +1098,10 @@ where
 		if let Ok(true) = should_refresh {
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at).ok();
+			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at);
 			if let Ok(Some(pub_key)) = pub_key {
 				match refresh_nonce {
-					Ok(Some(nonce)) => {
+					Ok(nonce) => {
 						let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
 						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
 
