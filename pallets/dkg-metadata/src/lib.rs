@@ -604,7 +604,8 @@ impl<T: Config> Pallet<T> {
 		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
 			let data = RefreshProposal { nonce: refresh_nonce, pub_key: pub_key.1.clone() };
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, data.encode())
+			let encoded_data = data.encode();
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &encoded_data)
 				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
