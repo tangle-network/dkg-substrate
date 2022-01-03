@@ -892,13 +892,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "chacha20"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01b72a433d0cf2aef113ba70f62634c56fddb0f244e6377185c56a7cadbd8f91"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cipher",
+ "cpufeatures 0.2.1",
+ "zeroize",
+]
+
+[[package]]
 name = "chacha20poly1305"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1580317203210c517b6d44794abfbe600698276db18127e37ad3e69bf5e848e5"
 dependencies = [
  "aead",
- "chacha20",
+ "chacha20 0.7.1",
+ "cipher",
+ "poly1305",
+ "zeroize",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b84ed6d1d5f7aa9bdde921a5090e0ca4d934d250ea3b402a5fab3a994e28a2a"
+dependencies = [
+ "aead",
+ "chacha20 0.8.1",
  "cipher",
  "poly1305",
  "zeroize",
@@ -1855,6 +1880,7 @@ dependencies = [
  "sc-network",
  "sc-network-gossip",
  "sc-network-test",
+ "sc-service",
  "scale-info",
  "serde",
  "sha3",
@@ -1941,6 +1967,7 @@ name = "dkg-primitives"
 version = "0.0.1"
 dependencies = [
  "bincode",
+ "chacha20poly1305 0.9.0",
  "curv-kzen",
  "dkg-runtime-primitives",
  "fnv",
@@ -1952,10 +1979,12 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.11.2",
  "round-based",
+ "sc-keystore",
  "sc-service",
  "serde",
  "sha3",
  "sp-core",
+ "sp-keyring",
  "sp-keystore",
  "sp-runtime",
  "thiserror",
@@ -9987,7 +10016,7 @@ checksum = "6142f7c25e94f6fd25a32c3348ec230df9109b463f59c8c7acc4bd34936babb7"
 dependencies = [
  "aes-gcm",
  "blake2",
- "chacha20poly1305",
+ "chacha20poly1305 0.8.0",
  "rand 0.8.4",
  "rand_core 0.6.3",
  "ring",

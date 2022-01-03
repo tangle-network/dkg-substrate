@@ -82,6 +82,9 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
+		/// Default number of blocks after which dkg keygen will be restarted if it has stalled
+		#[pallet::constant]
+		type TimeToRestart: Get<Self::BlockNumber>;
 	}
 
 	#[pallet::pallet]
@@ -216,6 +219,16 @@ pub mod pallet {
 
 			Self::verify_pub_key_signature(origin, &signature)
 		}
+
+		#[pallet::weight(0)]
+		pub fn set_time_to_restart(
+			origin: OriginFor<T>,
+			interval: T::BlockNumber,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			TimeToRestart::<T>::put(interval);
+			Ok(().into())
+		}
 	}
 
 	/// Public key Signatures for past sessions
@@ -233,6 +246,12 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
+
+	/// Number of blocks that should elapse after which the dkg keygen is restarted
+	/// if it has stalled
+	#[pallet::storage]
+	#[pallet::getter(fn time_to_restart)]
+	pub type TimeToRestart<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -344,6 +363,7 @@ pub mod pallet {
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
+			TimeToRestart::<T>::put(T::TimeToRestart::get());
 		}
 	}
 }

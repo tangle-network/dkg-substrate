@@ -22,10 +22,7 @@ pub fn validate_ecdsa_signature(data: &[u8], signature: &[u8]) -> bool {
 	}
 }
 
-pub fn recover_ecdsa_pub_key(
-	data: &[u8],
-	signature: &[u8],
-) -> Result<Vec<u8>, EcdsaVerifyError> {
+pub fn recover_ecdsa_pub_key(data: &[u8], signature: &[u8]) -> Result<Vec<u8>, EcdsaVerifyError> {
 	if signature.len() == SIGNATURE_LENGTH {
 		let mut sig = [0u8; SIGNATURE_LENGTH];
 		sig[..SIGNATURE_LENGTH].copy_from_slice(&signature);
