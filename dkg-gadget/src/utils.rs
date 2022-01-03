@@ -11,7 +11,7 @@ use sp_core::sr25519;
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::sync::Arc;
 
-pub fn find_index<B: Eq>(queue: &Vec<B>, value: &B) -> Option<usize> {
+pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
 		if value == v {
 			return Some(i)
@@ -38,7 +38,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	created_at: N,
 	local_keystore: Option<Arc<LocalKeystore>>,
 ) -> MultiPartyECDSARounds<DKGPayloadKey, N> {
-	let party_inx = find_index::<AuthorityId>(&authority_set.authorities, public).unwrap() + 1;
+	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
 
 	let n = authority_set.authorities.len();
 

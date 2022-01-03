@@ -39,7 +39,7 @@ impl DKGPersistenceState {
 	}
 }
 
-// We only try to resume the dkg once, if we can find any data for the completed offline stage for the current round
+/// We only try to resume the dkg once, if we can find any data for the completed offline stage for the current round
 pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,
@@ -191,6 +191,8 @@ where
 	}
 }
 
+/// To determine if the protocol should be restarted, we check if the
+/// protocol is stuck at the keygen stage
 pub(crate) fn should_restart_dkg<B, C, BE>(
 	worker: &mut DKGWorker<B, C, BE>,
 	header: &B::Header,
@@ -229,8 +231,8 @@ where
 	(should_restart_rounds, should_restart_next_rounds)
 }
 
-// If we ascertain that the protocol has stalled and we are part of the current authority set or queued authority set
-// We restart the protocol on our end
+/// If we ascertain that the protocol has stalled and we are part of the current authority set or queued authority set
+/// We restart the protocol on our end
 pub(crate) fn try_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,

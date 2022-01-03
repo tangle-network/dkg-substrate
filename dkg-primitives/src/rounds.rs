@@ -55,7 +55,10 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, Clock> {
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
+	// The block number at which a dkg message was last received
 	last_received_at: Clock,
+	// This holds the information of which stage the protocol was at when the last dkg message was received
+	// This information can be used to deduce approximately if the protocol is stuck at the keygen stage.
 	stage_at_last_receipt: Stage,
 
 	keygen_set_id: KeygenSetId,

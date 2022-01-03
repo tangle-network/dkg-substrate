@@ -379,7 +379,7 @@ where
 			self.next_rounds.take()
 		} else {
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID &&
-				find_index(&next_authorities.authorities, &public).is_some()
+				find_index(&next_authorities.authorities[..], &public).is_some()
 			{
 				Some(set_up_rounds(
 					&next_authorities,
@@ -1135,7 +1135,7 @@ where
 				.authority_id(&self.key_store.public_keys().unwrap())
 				.unwrap_or_else(|| panic!("Halp"));
 
-			let party_inx = if find_index::<AuthorityId>(&authorities, &public).is_some() {
+			let party_inx = if find_index::<AuthorityId>(&authorities[..], &public).is_some() {
 				find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32
 			} else {
 				return None
@@ -1319,7 +1319,8 @@ where
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
 
-		if find_index::<AuthorityId>(&self.current_validator_set.authorities, &public).is_none() {
+		if find_index::<AuthorityId>(&self.current_validator_set.authorities[..], &public).is_none()
+		{
 			return
 		}
 
