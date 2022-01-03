@@ -1061,21 +1061,18 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
-			DKGPayloadKey::RefreshVote(_nonce) => {
+			DKGPayloadKey::RefreshVote(nonce) => {
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
-					let decoded_payload = RefreshProposal::decode(&mut &finished_round.payload[..]);
-					if let Ok(decoded_payload) = decoded_payload {
-						let refresh_proposal = RefreshProposalSigned {
-							nonce: decoded_payload.nonce,
-							signature: finished_round.signature.clone(),
-						};
-						let encoded_proposal = refresh_proposal.encode();
-						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
+					let refresh_proposal = RefreshProposalSigned {
+						nonce,
+						signature: finished_round.signature.clone(),
+					};
+					let encoded_proposal = refresh_proposal.encode();
+					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-						trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
-					}
+					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
 				}
 				None
 			},
@@ -1102,7 +1099,7 @@ where
 			if let Ok(Some(pub_key)) = pub_key {
 				match refresh_nonce {
 					Ok(nonce) => {
-						let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+						let key = DKGPayloadKey::RefreshVote(nonce);
 						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
 
 						if let Err(err) = self.rounds.as_mut().unwrap().vote(
