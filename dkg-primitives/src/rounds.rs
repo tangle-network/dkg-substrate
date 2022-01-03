@@ -148,10 +148,9 @@ where
 		self.stage = stage;
 	}
 
-	// We check if the protocol has stalled at a particular stage, if messages are no longer
-	// received from other peers and the protocol has not completed the keygen stage
-	// We take it that the protocol has stalled if messages are not received from other peers after an interval of 3 blocks
-	// And the keygen stage has not completed
+	/// A check to know if the protocol has stalled at the keygen stage,
+	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
+	/// And the keygen stage has not completed
 	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
 		let last_stage = self.stage_at_last_receipt;
 		let current_stage = self.stage;
