@@ -594,6 +594,7 @@ where
 						self.local_keystore.is_some() &&
 						self.public_key.is_some()
 					{
+						// The public key conversion here will not fail because they have the same type(sr25519)
 						let key_pair = self.local_keystore.as_ref().unwrap().key_pair::<AppPair>(
 							&Public::try_from(&self.public_key.as_ref().unwrap().0[..]).unwrap(),
 						);
