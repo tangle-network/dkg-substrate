@@ -46,7 +46,7 @@ impl Decode for ProposalHeader {
 		// the chain id is the last 4 bytes of the **resourceId**
 		let mut chain_id_bytes = [0u8; 4];
 		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
-		let chain_id = u32::from_le_bytes(chain_id_bytes);
+		let chain_id = u32::from_be_bytes(chain_id_bytes);
 		// the function signature is the next first 4 bytes after the resourceId.
 		let mut function_sig = [0u8; 4];
 		function_sig.copy_from_slice(&data[32..36]);
