@@ -647,7 +647,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
 		T::ProposalHandler::handle_unsigned_proposal(
-			Vec::from(prop),
+			prop.into(),
 			dkg_runtime_primitives::ProposalAction::Sign(0),
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, proposal_nonce: nonce });
