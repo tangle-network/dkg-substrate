@@ -511,6 +511,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
+	type TimeToRestart = TimeToRestart;
 }
 
 parameter_types! {
@@ -518,6 +519,7 @@ parameter_types! {
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const TimeToRestart: BlockNumber = 3;
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
@@ -848,6 +850,10 @@ impl_runtime_apis! {
 
 		fn refresh_nonce() -> u64 {
 			DKG::refresh_nonce()
+		}
+		
+		fn time_to_restart() -> BlockNumber {
+			DKG::time_to_restart()
 		}
 	}
 

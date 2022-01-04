@@ -7,12 +7,23 @@ use curv::{
 };
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
-use sp_core::ecdsa::Signature;
-use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::collections::{BTreeMap, HashMap};
+use sc_keystore::LocalKeystore;
+use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
+use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
+use std::{
+	collections::{BTreeMap, HashMap},
+	path::PathBuf,
+	sync::Arc,
+};
 
-use crate::{types::*, utils::vec_usize_to_u16};
-use dkg_runtime_primitives::keccak_256;
+use crate::{
+	types::*,
+	utils::{store_localkey, vec_usize_to_u16},
+};
+use dkg_runtime_primitives::{
+	keccak_256,
+	offchain_crypto::{Pair as AppPair, Public},
+};
 
 pub use gg_2020::{
 	party_i::*,
@@ -28,7 +39,7 @@ pub struct DKGState<K, C> {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
-	pub listening_for_genesis_pub_key: bool,
+	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<K, C>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<K, C>>,
 	pub voted_on: HashMap<K, C>,
@@ -53,6 +64,11 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, Clock> {
 	// DKG clock
 	keygen_started_at: Clock,
 	offline_started_at: Clock,
+	// The block number at which a dkg message was last received
+	last_received_at: Clock,
+	// This holds the information of which stage the protocol was at when the last dkg message was received
+	// This information can be used to deduce approximately if the protocol is stuck at the keygen stage.
+	stage_at_last_receipt: Stage,
 
 	// Message processing
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
@@ -70,6 +86,11 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, Clock> {
 	rounds: BTreeMap<SignPayloadKey, DKGRoundTracker<Vec<u8>, Clock>>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage<SignPayloadKey>>,
 	finished_rounds: Vec<DKGSignedPayload<SignPayloadKey>>,
+
+	// File system storage and encryption
+	local_key_path: Option<PathBuf>,
+	public_key: Option<sr25519::Public>,
+	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<K, C> MultiPartyECDSARounds<K, C>
@@ -79,7 +100,16 @@ where
 {
 	/// Public ///
 
-	pub fn new(party_index: u16, threshold: u16, parties: u16, round_id: RoundId) -> Self {
+	pub fn new(
+		party_index: u16,
+		threshold: u16,
+		parties: u16,
+		round_id: RoundId,
+		local_key_path: Option<PathBuf>,
+		created_at: C,
+		public_key: Option<sr25519::Public>,
+		local_keystore: Option<Arc<LocalKeystore>>,
+	) -> Self {
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
 		Self {
@@ -87,6 +117,8 @@ where
 			threshold,
 			parties,
 			round_id,
+			last_received_at: created_at,
+			stage_at_last_receipt: Stage::KeygenReady,
 			keygen_set_id: 0,
 			signer_set_id: 0,
 			signers: Vec::new(),
@@ -102,7 +134,36 @@ where
 			rounds: BTreeMap::new(),
 			sign_outgoing_msgs: Vec::new(),
 			finished_rounds: Vec::new(),
+			local_key_path,
+			public_key,
+			local_keystore,
 		}
+	}
+
+	pub fn set_local_key(&mut self, local_key: LocalKey) {
+		self.local_key = Some(local_key)
+	}
+
+	pub fn set_stage(&mut self, stage: Stage) {
+		self.stage = stage;
+	}
+
+	/// A check to know if the protocol has stalled at the keygen stage,
+	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
+	/// And the keygen stage has not completed
+	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
+		let last_stage = self.stage_at_last_receipt;
+		let current_stage = self.stage;
+		let block_diff = current_block_number - self.last_received_at;
+
+		if block_diff >= time_to_restart.unwrap_or(3u32.into()) &&
+			last_stage == current_stage &&
+			self.is_key_gen_stage()
+		{
+			return true
+		}
+
+		false
 	}
 
 	pub fn proceed(&mut self, at: C) -> Result<(), DKGError> {
@@ -147,9 +208,17 @@ where
 		}
 	}
 
-	pub fn handle_incoming(&mut self, data: DKGMsgPayload<K>) -> Result<(), DKGError> {
+	pub fn handle_incoming(
+		&mut self,
+		data: DKGMsgPayload<K>,
+		current_block_number: Option<C>,
+	) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
+		if current_block_number.is_some() {
+			self.last_received_at = current_block_number.unwrap();
+		}
 
+		self.stage_at_last_receipt = self.stage;
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
 				// TODO: check keygen_set_id
@@ -175,7 +244,7 @@ where
 				} else {
 					Ok(())
 				},
-			DKGMsgPayload::PublicKeyBroadcast(_) => Ok(()),
+			_ => Ok(()),
 		}
 	}
 
@@ -295,6 +364,10 @@ where
 		Err("Not ready to vote".to_string())
 	}
 
+	pub fn is_key_gen_stage(&self) -> bool {
+		Stage::Keygen == self.stage
+	}
+
 	pub fn is_offline_ready(&self) -> bool {
 		Stage::OfflineReady == self.stage
 	}
@@ -400,6 +473,10 @@ where
 
 	fn proceed_offline_stage(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
+
+		if self.offline_stage.is_none() {
+			return Err(DKGError::GenericError { reason: "Offline Stage missing".to_string() })
+		}
 
 		let offline_stage = self.offline_stage.as_mut().unwrap();
 
@@ -510,8 +587,26 @@ where
 			info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
 			match keygen.pick_output() {
 				Some(Ok(k)) => {
-					self.local_key = Some(k);
+					self.local_key = Some(k.clone());
 
+					// We only persist the local key if we have all that is required to encrypt it
+					if self.local_key_path.is_some() &&
+						self.local_keystore.is_some() &&
+						self.public_key.is_some()
+					{
+						// The public key conversion here will not fail because they have the same type(sr25519)
+						let key_pair = self.local_keystore.as_ref().unwrap().key_pair::<AppPair>(
+							&Public::try_from(&self.public_key.as_ref().unwrap().0[..]).unwrap(),
+						);
+						if let Ok(Some(key_pair)) = key_pair {
+							let _ = store_localkey(
+								k,
+								self.round_id,
+								self.local_key_path.as_ref().unwrap().clone(),
+								key_pair.to_raw_vec(),
+							);
+						}
+					}
 					info!(target: "dkg", "🕸️  local share key is extracted");
 					return true
 				},
@@ -523,13 +618,17 @@ where
 	}
 
 	fn try_finish_offline_stage(&mut self) -> bool {
+		if self.offline_stage.is_none() {
+			return false
+		}
+
 		let offline_stage = self.offline_stage.as_mut().unwrap();
 
 		if offline_stage.is_finished() {
 			info!(target: "dkg", "🕸️  OfflineStage is finished, extracting output round_id: {:?}", self.round_id);
 			match offline_stage.pick_output() {
 				Some(Ok(cos)) => {
-					self.completed_offline_stage = Some(cos);
+					self.completed_offline_stage = Some(cos.clone());
 					info!(target: "dkg", "🕸️  CompletedOfflineStage is extracted");
 					return true
 				},
@@ -903,9 +1002,8 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use crate::types::DKGError;
-
 	use super::{MultiPartyECDSARounds, Stage};
+	use crate::types::{DKGError, DKGMsgPayload};
 	use codec::Encode;
 
 	fn check_all_reached_stage(
@@ -998,7 +1096,7 @@ mod tests {
 
 			for party in &mut parties.into_iter() {
 				for msg_frozen in msgs_pull_frozen.iter() {
-					match party.handle_incoming(msg_frozen.clone()) {
+					match party.handle_incoming(msg_frozen.clone(), None) {
 						Ok(()) => (),
 						Err(err) => panic!("{:?}", err),
 					}
@@ -1017,15 +1115,13 @@ mod tests {
 				return
 			}
 		}
-
-		panic!("Test failed")
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
 		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
 
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, 0, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0, 0).unwrap();
 			parties.push(party);

@@ -94,17 +94,29 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	data: &[u8],
 ) -> Result<(), BadOrigin> {
 	let dkg_key = T::dkg_key();
+	frame_support::log::debug!(
+		target: "dkg",
+		"Stored public key: {:?}",
+		dkg_key
+	);
 	if dkg_key.len() != 33 {
 		Err(BadOrigin)?
 	}
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature);
 
+
+
 	match recovered_key {
 		Ok(recovered_pub_key) => {
 			// The stored_key public key is 33 bytes long and contains the prefix which is the first byte
 			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
 			// 32 bytes because the dkg_key is a compressed public key.
+			frame_support::log::debug!(
+				target: "dkg",
+				"Recovered public key: {:?}",
+				recovered_pub_key
+			);
 			if recovered_pub_key[..32] != dkg_key[1..].to_vec() {
 				Err(BadOrigin)?
 			}
