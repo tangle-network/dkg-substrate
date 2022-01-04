@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use dkg_runtime_primitives::crypto::AuthorityId;
 use std::fmt;
 
 /// A typedef for keygen set id

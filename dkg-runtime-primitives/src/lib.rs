@@ -39,6 +39,8 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
+pub const GENESIS_BLOCK_NUMBER: u32 = 0;
+
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -207,5 +209,9 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get untrack interval for unsigned proposals
 		fn untrack_interval() -> BlockNumber;
+		/// Get next nonce value for refresh proposal
+		fn refresh_nonce() -> u64;
+		/// Get the time to restart for the dkg keygen
+		fn time_to_restart() -> BlockNumber;
 	}
 }
