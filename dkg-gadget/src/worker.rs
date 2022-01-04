@@ -61,9 +61,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ConsensusLog, MmrRootHash, OffchainSignedProposals, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	ConsensusLog, MmrRootHash, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -1199,19 +1199,19 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
-			DKGPayloadKey::RefreshVote(_nonce) => {
+			DKGPayloadKey::RefreshVote(nonce) => {
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
-					offchain.set(
-						STORAGE_PREFIX,
-						OFFCHAIN_PUBLIC_KEY_SIG,
-						&finished_round.signature,
-					);
+					let refresh_proposal = RefreshProposalSigned {
+						nonce,
+						signature: finished_round.signature.clone(),
+					};
+					let encoded_proposal = refresh_proposal.encode();
+					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
 					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
 				}
-
 				None
 			},
 			// TODO: handle other key types
@@ -1227,23 +1227,32 @@ where
 			return
 		}
 
-		let latest_block_num = self.get_latest_block_number();
+		let latest_block_num = *header.number();
 		let at = BlockId::hash(header.hash());
 		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
 		if let Ok(true) = should_refresh {
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
+			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at);
 			if let Ok(Some(pub_key)) = pub_key {
-				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+				match refresh_nonce {
+					Ok(nonce) => {
+						let key = DKGPayloadKey::RefreshVote(nonce);
+						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
 
-				if let Err(err) =
-					self.rounds.as_mut().unwrap().vote(key, pub_key.clone(), latest_block_num)
-				{
-					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-				} else {
-					trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
+						if let Err(err) = self.rounds.as_mut().unwrap().vote(
+							key,
+							proposal.encode(),
+							latest_block_num,
+						) {
+							error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+						} else {
+							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
+						}
+						self.send_outgoing_dkg_messages();
+					},
+					_ => {},
 				}
-				self.send_outgoing_dkg_messages();
 			}
 		}
 	}

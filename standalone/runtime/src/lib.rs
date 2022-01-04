@@ -848,6 +848,10 @@ impl_runtime_apis! {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
 		}
 
+		fn refresh_nonce() -> u64 {
+			DKG::refresh_nonce()
+		}
+		
 		fn time_to_restart() -> BlockNumber {
 			DKG::time_to_restart()
 		}
