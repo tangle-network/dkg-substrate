@@ -2059,6 +2059,7 @@ dependencies = [
  "ethereum-types",
  "frame-support",
  "frame-system",
+ "hex",
  "parity-scale-codec",
  "scale-info",
  "sp-api",

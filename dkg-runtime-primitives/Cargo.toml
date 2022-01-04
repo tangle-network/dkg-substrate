@@ -19,6 +19,9 @@ sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master
 frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 
+[dev-dependencies]
+hex = { version = "0.4", default-features = false }
+
 [features]
 default = ["std"]
 std = [
