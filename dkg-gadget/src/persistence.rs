@@ -160,7 +160,7 @@ where
 					// So this node can partake in signing messages
 					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_stage(Stage::Offline);
+					rounds.set_stage(Stage::OfflineReady);
 					worker.set_rounds(rounds)
 				}
 			}
@@ -183,7 +183,7 @@ where
 
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_stage(Stage::Offline);
+					rounds.set_stage(Stage::OfflineReady);
 					worker.set_next_rounds(rounds)
 				}
 			}

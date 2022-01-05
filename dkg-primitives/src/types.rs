@@ -15,25 +15,25 @@ pub use dkg_runtime_primitives::DKGPayloadKey;
 /// A message wrapper intended to be passed between the nodes
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGMessage<AuthorityId, Key> {
+pub struct DKGMessage<AuthorityId> {
 	/// Node authority id
 	pub id: AuthorityId,
 	/// DKG message contents
-	pub payload: DKGMsgPayload<Key>,
+	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
 	pub round_id: RoundId,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct SignedDKGMessage<AuthorityId, Key> {
+pub struct SignedDKGMessage<AuthorityId> {
 	/// DKG messages
-	pub msg: DKGMessage<AuthorityId, Key>,
+	pub msg: DKGMessage<AuthorityId>,
 	/// ECDSA signature of sha3(concatenated message contents)
 	pub signature: Option<Vec<u8>>,
 }
 
-impl<ID, K> fmt::Display for DKGMessage<ID, K> {
+impl<ID> fmt::Display for DKGMessage<ID> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let label = match self.payload {
 			DKGMsgPayload::Keygen(_) => "Keygen",
@@ -47,10 +47,10 @@ impl<ID, K> fmt::Display for DKGMessage<ID, K> {
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub enum DKGMsgPayload<Key> {
+pub enum DKGMsgPayload {
 	Keygen(DKGKeygenMessage),
 	Offline(DKGOfflineMessage),
-	Vote(DKGVoteMessage<Key>),
+	Vote(DKGVoteMessage),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
 }
 
@@ -66,6 +66,8 @@ pub struct DKGKeygenMessage {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGOfflineMessage {
+	// Identifier
+	pub key: Vec<u8>,
 	/// Signer set epoch id
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
@@ -74,20 +76,20 @@ pub struct DKGOfflineMessage {
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGVoteMessage<Key> {
+pub struct DKGVoteMessage {
 	/// Party index
 	pub party_ind: u16,
 	/// Key for the vote signature created for
-	pub round_key: Key,
+	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGSignedPayload<Key> {
+pub struct DKGSignedPayload {
 	/// Payload key
-	pub key: Key,
+	pub key: Vec<u8>,
 	/// The payload signatures are collected for.
 	pub payload: Vec<u8>,
 	/// Runtime compatible signature for the payload
@@ -108,6 +110,10 @@ pub enum Stage {
 	KeygenReady,
 	Keygen,
 	OfflineReady,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MiniStage {
 	Offline,
 	ManualReady,
 }
@@ -117,9 +123,15 @@ impl Stage {
 		match self {
 			Stage::KeygenReady => Stage::Keygen,
 			Stage::Keygen => Stage::OfflineReady,
-			Stage::OfflineReady => Stage::Offline,
-			Stage::Offline => Stage::ManualReady,
-			Stage::ManualReady => Stage::ManualReady,
+			Stage::OfflineReady => Stage::OfflineReady,
+		}
+	}
+}
+
+impl MiniStage {
+	pub fn get_next(self) -> Self {
+		match self {
+			_ => Self::ManualReady,
 		}
 	}
 }
@@ -134,5 +146,6 @@ pub enum DKGError {
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
 	ResetSigners { reason: String },
+	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
 }

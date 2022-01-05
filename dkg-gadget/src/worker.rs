@@ -55,7 +55,7 @@ use crate::{
 };
 use dkg_primitives::{
 	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
-	AggregatedPublicKeys, DKGReport, ProposalType,
+	AggregatedPublicKeys, ChainId, DKGReport, ProposalType,
 };
 
 use dkg_runtime_primitives::{
@@ -100,7 +100,7 @@ where
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
+	pub dkg_state: DKGState<NumberFor<B>>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -118,8 +118,8 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
-	next_rounds: Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>>,
+	rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
+	next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
 	/// Best block we received a GRANDPA notification for
@@ -141,7 +141,7 @@ where
 	// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	// dkg state
-	pub dkg_state: DKGState<DKGPayloadKey, NumberFor<B>>,
+	pub dkg_state: DKGState<NumberFor<B>>,
 	// Setting up keygen for current authorities
 	pub active_keygen_in_progress: bool,
 	// setting up queued authorities keygen
@@ -227,21 +227,19 @@ where
 		self.gossip_engine.clone()
 	}
 
-	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>) {
+	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
 		self.rounds = Some(rounds);
 	}
 
-	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>) {
+	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
 		self.next_rounds = Some(rounds);
 	}
 
-	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>> {
+	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
 		self.rounds.take()
 	}
 
-	pub fn take_next_rounds(
-		&mut self,
-	) -> Option<MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>> {
+	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
 		self.next_rounds.take()
 	}
 }
@@ -556,7 +554,8 @@ where
 		try_restart_dkg(self, header);
 		self.send_outgoing_dkg_messages();
 		self.check_refresh(header);
-		self.process_unsigned_proposals(&header);
+		self.create_offline_stages(header);
+		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
 	}
 
@@ -579,25 +578,11 @@ where
 	fn send_outgoing_dkg_messages(&mut self) {
 		debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
-		let send_messages = |rounds: &mut MultiPartyECDSARounds<DKGPayloadKey, NumberFor<B>>,
+		let send_messages = |rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 		                     authority_id: Public,
 		                     at: NumberFor<B>|
-		 -> Result<(), DKGError> {
-			rounds.proceed(at)?;
-
-			// TODO: run this in a different place, tied to certain number of blocks probably
-			if rounds.is_offline_ready() {
-				// TODO: use deterministic random signers set
-				let signer_set_id = rounds.get_id();
-				let s_l = (1..=rounds.dkg_params().2).collect();
-				match rounds.reset_signers(signer_set_id, s_l, at) {
-					Ok(()) => info!(target: "dkg", "🕸️  Reset signers"),
-					Err(err) => {
-						error!("Error resetting signers {:?}", &err);
-						return Err(err)
-					},
-				}
-			}
+		 -> Vec<Result<(), DKGError>> {
+			let results = rounds.proceed(at);
 
 			for message in rounds.get_outgoing_messages() {
 				let dkg_message = DKGMessage {
@@ -638,12 +623,12 @@ where
 				}
 				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
 			}
-			Ok(())
+			results
 		};
 
 		let mut keys_to_gossip = Vec::new();
-		let mut rounds_send_result: Result<(), DKGError> = Ok(());
-		let mut next_rounds_send_result: Result<(), DKGError> = Ok(());
+		let mut rounds_send_result = vec![];
+		let mut next_rounds_send_result = vec![];
 
 		if let Some(mut rounds) = self.rounds.take() {
 			if let Some(id) =
@@ -658,7 +643,7 @@ where
 			}
 
 			if self.active_keygen_in_progress {
-				let is_ready_to_vote = rounds.is_ready_to_vote();
+				let is_ready_to_vote = rounds.is_offline_ready();
 				if is_ready_to_vote {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
@@ -682,7 +667,7 @@ where
 					next_rounds_send_result =
 						send_messages(&mut next_rounds, id, self.get_latest_block_number());
 
-					let is_ready_to_vote = next_rounds.is_ready_to_vote();
+					let is_ready_to_vote = next_rounds.is_offline_ready();
 					debug!(target: "dkg", "🕸️  Is ready to to vote {:?}", is_ready_to_vote);
 					if is_ready_to_vote {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
@@ -708,18 +693,23 @@ where
 			self.gossip_public_key(pub_key.clone(), *round_id);
 		}
 
-		if let Err(err) = rounds_send_result {
-			self.handle_dkg_error(err);
+		for res in &rounds_send_result {
+			if let Err(err) = res {
+				self.handle_dkg_error(err.clone());
+			}
 		}
-		if let Err(err) = next_rounds_send_result {
-			self.handle_dkg_error(err);
+
+		for res in &next_rounds_send_result {
+			if let Err(err) = res {
+				self.handle_dkg_error(err.clone());
+			}
 		}
 	}
 
 	fn verify_signature_against_authorities(
 		&mut self,
-		signed_dkg_msg: SignedDKGMessage<Public, DKGPayloadKey>,
-	) -> Result<DKGMessage<Public, DKGPayloadKey>, String> {
+		signed_dkg_msg: SignedDKGMessage<Public>,
+	) -> Result<DKGMessage<Public>, String> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
 		let signature = signed_dkg_msg.signature.unwrap_or_default();
@@ -765,7 +755,7 @@ where
 		}
 	}
 
-	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
+	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public>) {
 		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
 
 		if let Some(rounds) = self.rounds.as_mut() {
@@ -783,7 +773,7 @@ where
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
 
-				if rounds.is_ready_to_vote() {
+				if rounds.is_offline_ready() {
 					debug!(target: "dkg", "🕸️  DKG is ready to sign");
 					self.dkg_state.accepted = true;
 				}
@@ -911,7 +901,7 @@ where
 
 		if let Ok(signature) = self.key_store.sr25519_sign(&sr25519_public, &public_key) {
 			let encoded_signature = signature.encode();
-			let message = DKGMessage::<AuthorityId, DKGPayloadKey> {
+			let message = DKGMessage::<AuthorityId> {
 				id: public.clone(),
 				round_id,
 				payload: DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
@@ -960,7 +950,7 @@ where
 		}
 	}
 
-	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public, DKGPayloadKey>) {
+	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public>) {
 		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_active_pub_key {
 			return
 		}
@@ -1167,39 +1157,40 @@ where
 		self.process_signed_proposals(proposals);
 	}
 
-	fn handle_finished_round(
-		&mut self,
-		finished_round: DKGSignedPayload<DKGPayloadKey>,
-	) -> Option<ProposalType> {
+	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		match finished_round.key {
-			DKGPayloadKey::EVMProposal(_nonce) => Some(ProposalType::EVMSigned {
+		let decoded_key = <(ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		match decoded_key {
+			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
 				data: finished_round.payload,
 				signature: finished_round.signature,
 			}),
-			DKGPayloadKey::AnchorUpdateProposal(_nonce) => Some(ProposalType::AnchorUpdateSigned {
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			DKGPayloadKey::TokenAddProposal(_nonce) => Some(ProposalType::TokenAddSigned {
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			DKGPayloadKey::TokenRemoveProposal(_nonce) => Some(ProposalType::TokenRemoveSigned {
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			DKGPayloadKey::WrappingFeeUpdateProposal(_nonce) =>
+			Ok((_chain_id, DKGPayloadKey::AnchorUpdateProposal(_nonce))) =>
+				Some(ProposalType::AnchorUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::TokenAddProposal(_nonce))) =>
+				Some(ProposalType::TokenAddSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::TokenRemoveProposal(_nonce))) =>
+				Some(ProposalType::TokenRemoveSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(_nonce))) =>
 				Some(ProposalType::WrappingFeeUpdateSigned {
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
-			DKGPayloadKey::ResourceIdUpdateProposal(_nonce) =>
+			Ok((_chain_id, DKGPayloadKey::ResourceIdUpdateProposal(_nonce))) =>
 				Some(ProposalType::ResourceIdUpdateSigned {
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
-			DKGPayloadKey::RefreshVote(_nonce) => {
+			Ok((_chain_id, DKGPayloadKey::RefreshVote(_nonce))) => {
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
@@ -1214,7 +1205,7 @@ where
 
 				None
 			},
-			// TODO: handle other key types
+			_ => None, // TODO: handle other key types
 		}
 	}
 
@@ -1234,17 +1225,59 @@ where
 			self.refresh_in_progress = true;
 			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
 			if let Ok(Some(pub_key)) = pub_key {
-				let key = DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64);
+				let key = (0u32, DKGPayloadKey::RefreshVote(self.current_validator_set.id + 1u64));
 
-				if let Err(err) =
-					self.rounds.as_mut().unwrap().vote(key, pub_key.clone(), latest_block_num)
-				{
+				if let Err(err) = self.rounds.as_mut().unwrap().vote(
+					key.encode(),
+					pub_key.clone(),
+					latest_block_num,
+				) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", err);
 				} else {
 					trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 				}
 				self.send_outgoing_dkg_messages();
 			}
+		}
+	}
+
+	/// Get unsigned proposals and create offline stage using the chainId and dkgpayloadKey as the round key
+	fn create_offline_stages(&mut self, header: &B::Header) {
+		if self.rounds.is_none() {
+			return
+		}
+
+		let at = BlockId::hash(header.hash());
+		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
+			Ok(res) => res,
+			Err(_) => return,
+		};
+
+		let rounds = self.rounds.as_mut().unwrap();
+		let mut errors = vec![];
+		if rounds.is_offline_ready() {
+			for (key, ..) in &unsigned_proposals {
+				if self.dkg_state.voted_on.contains_key(&key.encode()) {
+					continue
+				}
+				// TODO: use deterministic random signers set
+				let signer_set_id = rounds.get_id();
+				let s_l = (1..=rounds.dkg_params().2).collect();
+				match rounds.reset_signers(key.encode(), signer_set_id, s_l, *header.number()) {
+					Ok(()) => {
+						info!(target: "dkg", "🕸️  Reset signers");
+						self.dkg_state.voted_on.insert(key.encode(), *header.number());
+					},
+					Err(err) => {
+						error!("Error resetting signers {:?}", &err);
+						errors.push(err)
+					},
+				}
+			}
+		}
+
+		for err in &errors {
+			self.handle_dkg_error(err.clone());
 		}
 	}
 
@@ -1282,12 +1315,12 @@ where
 		};
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
-
+		let rounds = self.rounds.as_mut().unwrap();
 		for (key, proposal) in unsigned_proposals {
-			if self.dkg_state.voted_on.contains_key(&key) {
+			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
-			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", key);
+			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
@@ -1297,10 +1330,8 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = self.rounds.as_mut().unwrap().vote(key, data, latest_block_num) {
+			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-			} else {
-				self.dkg_state.voted_on.insert(key, *header.number());
 			}
 		}
 		// send messages to all peers
@@ -1376,10 +1407,7 @@ where
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
 
-					SignedDKGMessage::<Public, DKGPayloadKey>::decode(
-						&mut &notification.message[..],
-					)
-					.ok()
+					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
 				},
 			));
 

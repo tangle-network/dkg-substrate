@@ -794,7 +794,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((u32, DKGPayloadKey), ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 

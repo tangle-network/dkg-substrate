@@ -36,7 +36,7 @@ pub mod pallet {
 	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey, ProposalType};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
-	use sp_runtime::traits::AtLeast32Bit;
+	use sp_runtime::traits::AtLeast32BitUnsigned;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -46,7 +46,7 @@ pub mod pallet {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// ChainID for anchor edges
-		type ChainId: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+		type ChainId: Encode + Decode + Parameter + AtLeast32BitUnsigned + Default + Copy;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 		/// Max number of signed proposal submissions per batch;
@@ -426,9 +426,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
+	pub fn get_unsigned_proposals() -> Vec<((T::ChainId, DKGPayloadKey), ProposalType)> {
 		return UnsignedProposalQueue::<T>::iter()
-			.map(|entry| (entry.1, entry.2.clone()))
+			.map(|entry| ((entry.0, entry.1), entry.2.clone()))
 			.collect()
 	}
 
