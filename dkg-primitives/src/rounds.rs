@@ -1040,12 +1040,12 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use super::{MultiPartyECDSARounds, Stage};
+	use super::{MiniStage, MultiPartyECDSARounds, Stage};
 	use crate::types::{DKGError, DKGMsgPayload};
 	use codec::Encode;
 
 	fn check_all_reached_stage(
-		parties: &Vec<MultiPartyECDSARounds<u64, u32>>,
+		parties: &Vec<MultiPartyECDSARounds<u32>>,
 		target_stage: Stage,
 	) -> bool {
 		for party in parties.iter() {
@@ -1056,7 +1056,7 @@ mod tests {
 		true
 	}
 
-	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) {
+	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
 		for party in parties.iter() {
 			if party.get_public_key().is_none() {
 				panic!("No public key for party {}", party.party_index)
@@ -1064,15 +1064,21 @@ mod tests {
 		}
 	}
 
-	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
+	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		check_all_reached_stage(parties, Stage::OfflineReady)
 	}
 
-	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
-		check_all_reached_stage(parties, Stage::ManualReady)
+	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
+		let round_key = 1u32.encode();
+		for party in parties.iter() {
+			if !party.is_ready_to_vote(round_key.clone()) {
+				return false
+			}
+		}
+		true
 	}
 
-	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u64, u32>>) -> bool {
+	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
 			if !party.has_finished_rounds() {
 				return false
@@ -1081,7 +1087,8 @@ mod tests {
 		true
 	}
 
-	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>) {
+	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
+		let round_key = 1u32.encode();
 		for party in &mut parties.into_iter() {
 			let mut finished_rounds = party.get_finished_rounds();
 
@@ -1105,26 +1112,19 @@ mod tests {
 			}
 		}
 
-		for party in &mut parties.into_iter() {
-			match party.stage {
-				Stage::ManualReady => (),
-				_ => panic!("Stage must be ManualReady, but {:?} found", &party.stage),
-			}
-		}
-
 		println!("All signatures are correct");
 	}
 
-	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u64, u32>>, stop_condition: C)
+	fn run_simulation<C>(parties: &mut Vec<MultiPartyECDSARounds<u32>>, stop_condition: C)
 	where
-		C: Fn(&Vec<MultiPartyECDSARounds<u64, u32>>) -> bool,
+		C: Fn(&Vec<MultiPartyECDSARounds<u32>>) -> bool,
 	{
 		println!("Simulation starts");
 
 		let mut msgs_pull = vec![];
 
 		for party in &mut parties.into_iter() {
-			party.proceed(0).unwrap();
+			party.proceed(0);
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
 		}
@@ -1143,7 +1143,7 @@ mod tests {
 			}
 
 			for party in &mut parties.into_iter() {
-				party.proceed(0).unwrap();
+				party.proceed(0);
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
 			}
@@ -1156,8 +1156,8 @@ mod tests {
 	}
 
 	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
-		let mut parties: Vec<MultiPartyECDSARounds<u64, u32>> = vec![];
-
+		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
+		let round_key = 1u32.encode();
 		for i in 1..=n {
 			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, 0, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
@@ -1175,7 +1175,7 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in parties_refs.into_iter() {
 			println!("Resetting signers for party {}, Stage: {:?}", party.party_index, party.stage);
-			match party.reset_signers(0, s_l.clone(), 0) {
+			match party.reset_signers(round_key.clone(), 0, s_l.clone(), 0) {
 				Ok(()) => (),
 				Err(_err) => (),
 			}
@@ -1187,7 +1187,7 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
 			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
-			party.vote(1, "Webb".encode(), 0).unwrap();
+			party.vote(round_key.clone(), "Webb".encode(), 0).unwrap();
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
 

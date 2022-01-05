@@ -643,8 +643,8 @@ where
 			}
 
 			if self.active_keygen_in_progress {
-				let is_ready_to_vote = rounds.is_offline_ready();
-				if is_ready_to_vote {
+				let is_offline_ready = rounds.is_offline_ready();
+				if is_offline_ready {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
 					let pub_key =
@@ -667,9 +667,8 @@ where
 					next_rounds_send_result =
 						send_messages(&mut next_rounds, id, self.get_latest_block_number());
 
-					let is_ready_to_vote = next_rounds.is_offline_ready();
-					debug!(target: "dkg", "🕸️  Is ready to to vote {:?}", is_ready_to_vote);
-					if is_ready_to_vote {
+					let is_offline_ready = next_rounds.is_offline_ready();
+					if is_offline_ready {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
 						let pub_key = next_rounds
