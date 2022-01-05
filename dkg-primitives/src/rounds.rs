@@ -43,7 +43,7 @@ pub struct DKGState<C> {
 	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
-	pub voted_on: HashMap<Vec<u8>, C>,
+	pub reset_signers_at: HashMap<Vec<u8>, C>,
 }
 
 const KEYGEN_TIMEOUT: u32 = 10;
@@ -51,6 +51,9 @@ const OFFLINE_TIMEOUT: u32 = 10;
 const SIGN_TIMEOUT: u32 = 3;
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
+/// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
+/// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
+/// different chains are submitted
 pub struct MultiPartyECDSARounds<Clock> {
 	round_id: RoundId,
 	party_index: u16,

@@ -1247,7 +1247,7 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using the chainId and dkgpayloadKey as the round key
+	/// Get unsigned proposals and create offline stage using an encoded (chainId, dkgpayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1263,7 +1263,7 @@ where
 		let mut errors = vec![];
 		if rounds.is_offline_ready() {
 			for (key, ..) in &unsigned_proposals {
-				if self.dkg_state.voted_on.contains_key(&key.encode()) {
+				if self.dkg_state.reset_signers_at.contains_key(&key.encode()) {
 					continue
 				}
 				// TODO: use deterministic random signers set
@@ -1272,7 +1272,7 @@ where
 				match rounds.reset_signers(key.encode(), signer_set_id, s_l, *header.number()) {
 					Ok(()) => {
 						info!(target: "dkg", "🕸️  Reset signers");
-						self.dkg_state.voted_on.insert(key.encode(), *header.number());
+						self.dkg_state.reset_signers_at.insert(key.encode(), *header.number());
 					},
 					Err(err) => {
 						error!("Error resetting signers {:?}", &err);
@@ -1291,19 +1291,19 @@ where
 	// When the node votes on an unsigned proposal we add that round key to the list of proposals the node has voted on
 	// to limit duplicate votes, since the voting process could go on for a number of blocks while the proposal is still in the unsigned proposal queue.
 	// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion
-	// After this time elapses for a round key we remove it from [dkg_state.voted_on] since we expect that proposal to
+	// After this time elapses for a round key we remove it from [dkg_state.reset_signers_at] since we expect that proposal to
 	// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
-		let keys = self.dkg_state.voted_on.keys().cloned().collect::<Vec<_>>();
+		let keys = self.dkg_state.reset_signers_at.keys().cloned().collect::<Vec<_>>();
 		let at = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
 		for key in keys {
-			let voted_at = self.dkg_state.voted_on.get(&key).unwrap();
+			let voted_at = self.dkg_state.reset_signers_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
 			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
 
 			if diff >= untrack_interval {
-				self.dkg_state.voted_on.remove(&key);
+				self.dkg_state.reset_signers_at.remove(&key);
 			}
 		}
 	}
