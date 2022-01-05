@@ -194,8 +194,8 @@ pub fn make_proposal<const N: usize>(prop: ProposalType) -> Vec<u8> {
 	// Create the proposal Header
 	let header = ProposalHeader {
 		resource_id: [
-			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-			0, 0, 0,
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 1,
 		],
 		chain_id: 1,
 		function_sig: [0x26, 0x57, 0x88, 0x01],

@@ -22,7 +22,7 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, scale_info::TypeInfo)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, scale_info::TypeInfo)]
 pub struct ProposalHeader {
 	pub resource_id: ResourceId,
 	pub chain_id: u32,
@@ -60,7 +60,7 @@ impl Decode for ProposalHeader {
 		// the chain id is the last 4 bytes of the **resourceId**
 		let mut chain_id_bytes = [0u8; 4];
 		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
-		let chain_id = u32::from_le_bytes(chain_id_bytes);
+		let chain_id = u32::from_be_bytes(chain_id_bytes);
 		// the function signature is the next first 4 bytes after the resourceId.
 		let mut function_sig = [0u8; 4];
 		function_sig.copy_from_slice(&data[32..36]);
@@ -212,4 +212,39 @@ pub trait ProposalHandlerTrait {
 	fn handle_resource_id_update_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn proposal_encode_decode() {
+		let mut proposal_data = Vec::with_capacity(80);
+		let chain_id = 5002u32;
+		let nonce = 0xffu64;
+		let resource_id = {
+			let mut r = [0u8; 32];
+			r[28..32].copy_from_slice(&chain_id.to_be_bytes());
+			r
+		};
+		let function_sig = [0xaa, 0xbb, 0xcc, 0xdd];
+		let proposal_header = ProposalHeader { chain_id, function_sig, nonce, resource_id };
+		let src_id = 5001u32;
+		let last_leaf_index = nonce as u32;
+		let merkle_root = [0xeeu8; 32];
+		proposal_header.encode_to(&mut proposal_data);
+		proposal_data.extend_from_slice(&src_id.to_le_bytes());
+		proposal_data.extend_from_slice(&last_leaf_index.to_le_bytes());
+		proposal_data.extend_from_slice(&merkle_root);
+		assert_eq!(proposal_data.len(), 80);
+		let hex = hex::encode(&proposal_data);
+		println!("nonce: {}", nonce);
+		println!("src_id: {}", src_id);
+		println!("r_id: 0x{}", hex::encode(&resource_id));
+		println!("Proposal: 0x{}", hex);
+
+		let decoded_head = ProposalHeader::decode(&mut &proposal_data[..]).unwrap();
+		assert_eq!(decoded_head, proposal_header);
+	}
 }
