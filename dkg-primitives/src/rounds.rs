@@ -6,10 +6,12 @@ use curv::{
 	BigInt,
 };
 use log::{debug, error, info, trace, warn};
+use multi_party_ecdsa::paillier;
+use paillier::{Decrypt, DecryptionKey, EncodedCiphertext, Encrypt, EncryptionKey};
 use round_based::{IsCritical, Msg, StateMachine};
 use sc_keystore::LocalKeystore;
 use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
-use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
+use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -18,7 +20,7 @@ use std::{
 
 use crate::{
 	types::*,
-	utils::{store_localkey, vec_usize_to_u16},
+	utils::{store_localkey, vec_u64_to_u8, vec_u8_to_u64, vec_usize_to_u16},
 };
 use dkg_runtime_primitives::{
 	keccak_256,
@@ -74,6 +76,10 @@ pub struct MultiPartyECDSARounds<SignPayloadKey, Clock> {
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
 	pending_offline_msgs: Vec<DKGOfflineMessage>,
 
+	// Encryption/Decryption
+	dk: Option<DecryptionKey>,
+	eks: HashMap<u16, EncryptionKey>,
+
 	// Key generation
 	keygen: Option<Keygen>,
 	local_key: Option<LocalKey>,
@@ -127,6 +133,8 @@ where
 			stage: Stage::KeygenReady,
 			pending_keygen_msgs: Vec::new(),
 			pending_offline_msgs: Vec::new(),
+			dk: None,
+			eks: HashMap::new(),
 			keygen: None,
 			local_key: None,
 			offline_stage: None,
@@ -268,6 +276,20 @@ where
 				self.keygen_set_id = keygen_set_id;
 				self.keygen_started_at = started_at;
 				self.keygen = Some(new_keygen);
+
+				self.proceed_keygen(started_at)?;
+
+				{
+					// Extract generate encryption/decryption keys
+					let keygen = self.keygen.as_mut().unwrap();
+					match keygen.get_current_round() {
+						R::Round1(round1) => {
+							self.eks.insert(keygen.party_ind(), round1.get_keys().ek.clone());
+							self.dk = Some(round1.get_keys().dk.clone());
+						},
+						_ => (),
+					};
+				}
 
 				// Processing pending messages
 				for msg in std::mem::take(&mut self.pending_keygen_msgs) {
@@ -695,8 +717,19 @@ where
 					.into_iter()
 					.map(|m| {
 						trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
-						let m_ser = bincode::serialize(m).unwrap();
-						return DKGKeygenMessage { keygen_set_id, keygen_msg: m_ser }
+						let m_data = if let Some(receiver) = m.receiver {
+							let m_ser = bincode::serialize(m).unwrap();
+							let party_ek = self.eks.get(&receiver).unwrap();
+							Self::encrypt(party_ek, &m_ser)
+						} else {
+							bincode::serialize(m).unwrap()
+						};
+
+						return DKGKeygenMessage {
+							keygen_set_id,
+							receiver_id: m.receiver,
+							keygen_msg: m_data,
+						}
 					})
 					.collect::<Vec<DKGKeygenMessage>>();
 
@@ -721,10 +754,19 @@ where
 					.into_iter()
 					.map(|m| {
 						trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
-						let m_ser = bincode::serialize(m).unwrap();
+
+						let m_data = if let Some(receiver) = m.receiver {
+							let m_ser = bincode::serialize(m).unwrap();
+							let party_ek = self.eks.get(&receiver).unwrap();
+							Self::encrypt(party_ek, &m_ser)
+						} else {
+							bincode::serialize(m).unwrap()
+						};
+
 						return DKGOfflineMessage {
 							signer_set_id: singer_set_id,
-							offline_msg: m_ser,
+							receiver_id: m.receiver,
+							offline_msg: m_data,
 						}
 					})
 					.collect::<Vec<DKGOfflineMessage>>();
@@ -755,7 +797,20 @@ where
 					target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<ProtocolMessage> = match bincode::deserialize(&data.keygen_msg) {
+
+			let m_data = if let Some(receiver) = data.receiver_id {
+				if receiver != keygen.party_ind() {
+					// Skipping messages not intended for us
+					return Ok(())
+				} else {
+					let dk = self.dk.clone().unwrap();
+					Self::decrypt(&dk, &data.keygen_msg)?
+				}
+			} else {
+				data.keygen_msg
+			};
+
+			let msg: Msg<ProtocolMessage> = match bincode::deserialize(&m_data) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -771,13 +826,15 @@ where
 				warn!(target: "dkg", "🕸️  Ignore messages sent by self");
 				return Ok(())
 			}
-			trace!(
-				target: "dkg", "🕸️  Party {} got message from={}, broadcast={}: {:?}",
-				keygen.party_ind(),
-				msg.sender,
-				msg.receiver.is_none(),
-				msg.body,
-			);
+
+			// Extract and store encryption key for sender party
+			match &msg.body {
+				ProtocolMessage(M::Round1(keygen_bcast_1)) => {
+					self.eks.insert(msg.sender, keygen_bcast_1.e.clone());
+				},
+				_ => (),
+			};
+
 			debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
 			match keygen.handle_incoming(msg.clone()) {
 				Ok(()) => (),
@@ -807,7 +864,20 @@ where
 				warn!(target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<OfflineProtocolMessage> = match bincode::deserialize(&data.offline_msg) {
+
+			let m_data = if let Some(receiver) = data.receiver_id {
+				if receiver != offline_stage.party_ind() {
+					// Skipping messages not intended for us
+					return Ok(())
+				} else {
+					let dk = self.dk.clone().unwrap();
+					Self::decrypt(&dk, &data.offline_msg)?
+				}
+			} else {
+				data.offline_msg
+			};
+
+			let msg: Msg<OfflineProtocolMessage> = match bincode::deserialize(&m_data) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -869,6 +939,40 @@ where
 		self.rounds.entry(data.round_key).or_default().add_vote(data.party_ind, sig);
 
 		Ok(())
+	}
+
+	/// Encryption/Decryption
+
+	// TODO: do not ancrypt small numbers
+	fn encrypt(ek: &EncryptionKey, data: &[u8]) -> Vec<u8> {
+		let mut v_enc: Vec<EncodedCiphertext<u64>> = Vec::new();
+
+		for byte in vec_u8_to_u64(&data) {
+			v_enc.push(paillier::Paillier::encrypt(ek, byte));
+		}
+
+		bincode::serialize(&v_enc).unwrap()
+	}
+
+	fn decrypt(dk: &DecryptionKey, data: &[u8]) -> Result<Vec<u8>, DKGError> {
+		let v_enc: Vec<EncodedCiphertext<u64>> = match bincode::deserialize(&data) {
+			Ok(v_enc) => v_enc,
+			Err(err) => {
+				error!(target: "dkg", "🕸️  Error deserializing cyphertext: {:?}", err);
+				return Err(DKGError::DecryptionError {
+					reason: "Error deserializing cyphertext".to_string(),
+				})
+			},
+		};
+
+		let mut v_dec: Vec<u64> = Vec::new();
+		for byte in v_enc {
+			v_dec.push(paillier::Paillier::decrypt(dk, byte));
+		}
+
+		vec_u64_to_u8(&v_dec).map_err(|_| DKGError::DecryptionError {
+			reason: "Error converting decrypted vec to u8 vec".to_string(),
+		})
 	}
 }
 
@@ -1003,7 +1107,6 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 #[cfg(test)]
 mod tests {
 	use super::{MultiPartyECDSARounds, Stage};
-	use crate::types::{DKGError, DKGMsgPayload};
 	use codec::Encode;
 
 	fn check_all_reached_stage(

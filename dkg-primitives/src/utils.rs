@@ -1,7 +1,4 @@
-use crate::{
-	rounds::{CompletedOfflineStage, LocalKey},
-	types::RoundId,
-};
+use crate::{rounds::LocalKey, types::RoundId};
 use bincode::serialize;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
@@ -51,10 +48,6 @@ pub fn insert_controller_account_keys_into_keystore(
 		},
 		_ => {},
 	}
-}
-
-pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
-	return input.iter().map(|v| *v as u16).collect()
 }
 
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
@@ -113,6 +106,26 @@ pub fn decrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>,
 	let decrypted_data =
 		cipher.decrypt(nonce.into(), &data[..]).map_err(|_| "File decryption failed")?;
 	Ok(decrypted_data)
+}
+
+pub fn vec_usize_to_u16(src: Vec<usize>) -> Vec<u16> {
+	src.iter().map(|v| *v as u16).collect()
+}
+
+pub fn vec_u8_to_u64(src: &[u8]) -> Vec<u64> {
+	src.iter().map(|v| *v as u64).collect()
+}
+
+pub fn vec_u64_to_u8(src: &[u64]) -> Result<Vec<u8>, ()> {
+	let mut dst: Vec<u8> = Vec::new();
+	for v in src {
+		if let Ok(converted) = u8::try_from(*v) {
+			dst.push(converted);
+		} else {
+			return Err(())
+		}
+	}
+	Ok(dst)
 }
 
 #[cfg(test)]

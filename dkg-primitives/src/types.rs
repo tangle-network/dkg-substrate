@@ -1,5 +1,4 @@
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::crypto::AuthorityId;
 use std::fmt;
 
 /// A typedef for keygen set id
@@ -59,6 +58,8 @@ pub enum DKGMsgPayload<Key> {
 pub struct DKGKeygenMessage {
 	/// Keygen set epoch id
 	pub keygen_set_id: KeygenSetId,
+	/// Receiving party id
+	pub receiver_id: Option<u16>,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
 }
@@ -68,6 +69,8 @@ pub struct DKGKeygenMessage {
 pub struct DKGOfflineMessage {
 	/// Signer set epoch id
 	pub signer_set_id: SignerSetId,
+	/// Receiving party id
+	pub receiver_id: Option<u16>,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
 }
@@ -134,5 +137,6 @@ pub enum DKGError {
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
 	ResetSigners { reason: String },
-	GenericError { reason: String }, // TODO: handle other
+	GenericError { reason: String },
+	DecryptionError { reason: String }, // TODO: handle other
 }
