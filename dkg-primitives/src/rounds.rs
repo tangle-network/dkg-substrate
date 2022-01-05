@@ -709,7 +709,6 @@ where
 
 							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", round_key);
 							self.signer_set_id.remove(round_key);
-							self.rounds.remove(round_key);
 							self.local_stages.remove(round_key);
 						},
 						_ => debug!("Error serializing signature"),
