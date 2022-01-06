@@ -204,16 +204,16 @@ where
 					rounds.set_stage(Stage::OfflineReady);
 					// // We set the signer set using the public key as a seed to select signers at random
 					// // We need a 32byte seed, the compressed public key is 32 bytes
-					// let seed = &queued_local_key
-					// 	.as_ref()
-					// 	.unwrap()
-					// 	.local_key
-					// 	.clone()
-					// 	.public_key()
-					// 	.get_element()
-					// 	.serialize()[1..];
+					let seed = &queued_local_key
+						.as_ref()
+						.unwrap()
+						.local_key
+						.clone()
+						.public_key()
+						.get_element()
+						.serialize()[1..];
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					// let signers_set = select_random_set(seed, set, rounds.dkg_params().1);
+					let signers_set = select_random_set(seed, set, rounds.dkg_params().1);
 					if let Ok(signers_set) = signers_set {
 						let round_id = rounds.get_id();
 						rounds.set_signer_set_id(round_id);
