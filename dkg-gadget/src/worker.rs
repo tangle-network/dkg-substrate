@@ -1247,7 +1247,7 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (chainId, dkgpayloadKey) as the round key
+	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return

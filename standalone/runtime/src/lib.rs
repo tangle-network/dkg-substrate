@@ -7,7 +7,9 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{mmr::MmrLeafVersion, DKGPayloadKey, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{
+	mmr::MmrLeafVersion, ChainId, DKGPayloadKey, ProposalNonce, ProposalType,
+};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -524,7 +526,7 @@ parameter_types! {
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type ChainId = u32;
+	type ChainId = ChainId;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
@@ -533,7 +535,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = u32;
+	type ChainId = ChainId;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
@@ -832,7 +834,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<((u32, DKGPayloadKey), ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
