@@ -1270,8 +1270,8 @@ where
 				match rounds.create_offline_stage(key.encode(), *header.number()) {
 					Ok(()) => {
 						// We note unsigned proposals for which we have started the offline stage
-						// To prevent overwrting running offline stages when next this function is run since
-						// the proposal might still be in the the unsigned proposals queue.
+						// to prevent overwriting running offline stages when next this function is called
+						// this function is called on every block import and the proposal might still be in the the unsigned proposals queue.
 						self.dkg_state
 							.created_offlinestage_at
 							.insert(key.encode(), *header.number());
