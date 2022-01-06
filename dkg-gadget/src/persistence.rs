@@ -217,7 +217,7 @@ where
 					if let Ok(signers_set) = signers_set {
 						let round_id = rounds.get_id();
 						rounds.set_signer_set_id(round_id);
-						rounds.set_signers(set);
+						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
 				}
