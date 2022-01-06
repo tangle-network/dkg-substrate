@@ -1269,13 +1269,15 @@ where
 
 				match rounds.create_offline_stage(key.encode(), *header.number()) {
 					Ok(()) => {
-						info!(target: "dkg", "🕸️  Reset signers");
+						// We note unsigned proposals for which we have started the offline stage
+						// To prevent overwrting running offline stages when next this function is run since
+						// the proposal might still be in the the unsigned proposals queue.
 						self.dkg_state
 							.created_offlinestage_at
 							.insert(key.encode(), *header.number());
 					},
 					Err(err) => {
-						error!("Error resetting signers {:?}", &err);
+						error!("Error Creating offline stage {:?}", &err);
 						errors.push(err)
 					},
 				}

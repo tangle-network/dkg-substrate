@@ -327,8 +327,7 @@ where
 		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
 		match self.stage {
 			Stage::KeygenReady | Stage::Keygen => Err(DKGError::CreateOfflineStage {
-				reason: "Cannot reset signers and start offline stage, Keygen is not complete"
-					.to_string(),
+				reason: "Cannot start offline stage, Keygen is not complete".to_string(),
 			}),
 			_ =>
 				if let Some(local_key_clone) = self.local_key.clone() {
