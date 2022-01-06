@@ -168,7 +168,7 @@ where
 			past_dkg: None,
 			listening_for_pub_key: false,
 			listening_for_active_pub_key: false,
-			voted_on: HashMap::new(),
+			created_offlinestage_at: HashMap::new(),
 		},
 	};
 

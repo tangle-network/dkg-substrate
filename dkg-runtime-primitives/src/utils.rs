@@ -105,8 +105,6 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature);
 
-
-
 	match recovered_key {
 		Ok(recovered_pub_key) => {
 			// The stored_key public key is 33 bytes long and contains the prefix which is the first byte

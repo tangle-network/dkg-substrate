@@ -37,7 +37,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	local_key_path: Option<std::path::PathBuf>,
 	created_at: N,
 	local_keystore: Option<Arc<LocalKeystore>>,
-) -> MultiPartyECDSARounds<DKGPayloadKey, N> {
+) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
 
 	let n = authority_set.authorities.len();
