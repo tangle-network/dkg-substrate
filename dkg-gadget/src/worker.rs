@@ -1263,16 +1263,16 @@ where
 		let mut errors = vec![];
 		if rounds.is_offline_ready() {
 			for (key, ..) in &unsigned_proposals {
-				if self.dkg_state.reset_signers_at.contains_key(&key.encode()) {
+				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}
-				// TODO: use deterministic random signers set
-				let signer_set_id = rounds.get_id();
-				let s_l = (1..=rounds.dkg_params().2).collect();
-				match rounds.reset_signers(key.encode(), signer_set_id, s_l, *header.number()) {
+
+				match rounds.create_offline_stage(key.encode(), *header.number()) {
 					Ok(()) => {
 						info!(target: "dkg", "🕸️  Reset signers");
-						self.dkg_state.reset_signers_at.insert(key.encode(), *header.number());
+						self.dkg_state
+							.created_offlinestage_at
+							.insert(key.encode(), *header.number());
 					},
 					Err(err) => {
 						error!("Error resetting signers {:?}", &err);
@@ -1288,22 +1288,22 @@ where
 	}
 
 	// *** Proposals handling ***
-	// When the node votes on an unsigned proposal we add that round key to the list of proposals the node has voted on
-	// to limit duplicate votes, since the voting process could go on for a number of blocks while the proposal is still in the unsigned proposal queue.
-	// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion
-	// After this time elapses for a round key we remove it from [dkg_state.reset_signers_at] since we expect that proposal to
-	// have been signed and moved to the signed proposals queue already.
+	/// When we create the offline stage we note that round key since the offline stage and voting process could go on for a number of blocks while the proposal
+	/// is still in the unsigned proposal queue.
+	/// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion for a proposal
+	/// After this time elapses for a round key we remove it from [dkg_state.created_offlinestage_at] since we expect that proposal to
+	/// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
-		let keys = self.dkg_state.reset_signers_at.keys().cloned().collect::<Vec<_>>();
+		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
 		let at = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
 		for key in keys {
-			let voted_at = self.dkg_state.reset_signers_at.get(&key).unwrap();
+			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
 			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
 
 			if diff >= untrack_interval {
-				self.dkg_state.reset_signers_at.remove(&key);
+				self.dkg_state.created_offlinestage_at.remove(&key);
 			}
 		}
 	}

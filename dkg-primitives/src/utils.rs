@@ -19,6 +19,8 @@ use std::{
 	path::PathBuf,
 };
 
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
 	TPublic::Pair::from_string(&format!("//{}", seed), None)
@@ -115,9 +117,26 @@ pub fn decrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>,
 	Ok(decrypted_data)
 }
 
+pub fn select_random_set(
+	seed: &[u8],
+	set: Vec<u16>,
+	amount: u16,
+) -> Result<Vec<u16>, &'static str> {
+	if seed.len() != 32 {
+		return Err("Seed must be 32 bytes")
+	}
+	let mut slice = [0u8; 32];
+	slice.copy_from_slice(seed);
+	let mut std_rng = <StdRng as SeedableRng>::from_seed(slice);
+	let random_set =
+		set.choose_multiple(&mut std_rng, amount as usize).cloned().collect::<Vec<_>>();
+	Ok(random_set)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use rand::RngCore;
 	use sp_keyring::AccountKeyring::Alice;
 
 	fn encrypt(data: Vec<u8>) -> Vec<u8> {
@@ -152,5 +171,22 @@ mod tests {
 
 		println!("{:?}, {:?}", data, decrypted_data);
 		assert!(decrypted_data == data.to_vec());
+	}
+
+	#[test]
+	fn should_generate_same_random_set_for_the_same_seed() {
+		let mut rng = rand::thread_rng();
+		let mut seed = [0u8; 32];
+		rng.fill_bytes(&mut seed);
+
+		let set = (1..=16).collect::<Vec<u16>>();
+		let mut random_set = Vec::new();
+		for _ in 0..100 {
+			let new_set = select_random_set(&seed, set.clone(), 10).unwrap();
+			if random_set.len() > 0 {
+				assert!(random_set == new_set);
+			}
+			random_set = new_set;
+		}
 	}
 }

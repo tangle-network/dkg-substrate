@@ -5,13 +5,16 @@ use crate::{
 	Client,
 };
 use bincode::deserialize;
-use curv::arithmetic::Converter;
+use curv::{arithmetic::Converter, elliptic::curves::traits::ECPoint};
 use dkg_primitives::{
 	crypto::AuthorityId,
 	keys::{CompletedOfflineStage, LocalKey},
 	rounds::MultiPartyECDSARounds,
 	types::Stage,
-	utils::{decrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
+	utils::{
+		decrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
+		QUEUED_DKG_LOCAL_KEY_FILE,
+	},
 	DKGPayloadKey,
 };
 use dkg_runtime_primitives::{
@@ -156,10 +159,25 @@ where
 				);
 
 				if local_key.is_some() {
-					// TODO: After setting a valid local key after restart, we need a strategy to handle recreating the Offline stage continuously.
-					// So this node can partake in signing messages
 					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
+					// We create a deterministic signer set using the public key as a seed to the random number generator
+					// We need a 32 byte seed, the compressed public key is 33 bytes
+					let seed = &local_key
+						.as_ref()
+						.unwrap()
+						.local_key
+						.clone()
+						.public_key()
+						.get_element()
+						.serialize()[1..];
+					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+					let signers_set = select_random_set(seed, set, rounds.dkg_params().1);
+					if let Ok(signers_set) = signers_set {
+						let round_id = rounds.get_id();
+						rounds.set_signer_set_id(round_id);
+						rounds.set_signers(signers_set);
+					}
 					rounds.set_stage(Stage::OfflineReady);
 					worker.set_rounds(rounds)
 				}
@@ -184,6 +202,23 @@ where
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
 					rounds.set_stage(Stage::OfflineReady);
+					// // We set the signer set using the public key as a seed to select signers at random
+					// // We need a 32byte seed, the compressed public key is 32 bytes
+					// let seed = &queued_local_key
+					// 	.as_ref()
+					// 	.unwrap()
+					// 	.local_key
+					// 	.clone()
+					// 	.public_key()
+					// 	.get_element()
+					// 	.serialize()[1..];
+					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+					// let signers_set = select_random_set(seed, set, rounds.dkg_params().1);
+					if let Ok(signers_set) = signers_set {
+						let round_id = rounds.get_id();
+						rounds.set_signer_set_id(round_id);
+						rounds.set_signers(set);
+					}
 					worker.set_next_rounds(rounds)
 				}
 			}

@@ -2,7 +2,10 @@ use bincode;
 use codec::{Decode, Encode};
 use curv::{
 	arithmetic::Converter,
-	elliptic::curves::{secp256_k1::Secp256k1Point, traits::ECScalar},
+	elliptic::curves::{
+		secp256_k1::Secp256k1Point,
+		traits::{ECPoint, ECScalar},
+	},
 	BigInt,
 };
 use log::{debug, error, info, trace, warn};
@@ -18,7 +21,7 @@ use std::{
 
 use crate::{
 	types::*,
-	utils::{store_localkey, vec_usize_to_u16},
+	utils::{select_random_set, store_localkey, vec_usize_to_u16},
 };
 use dkg_runtime_primitives::{
 	keccak_256,
@@ -43,7 +46,7 @@ pub struct DKGState<C> {
 	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
 	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
-	pub reset_signers_at: HashMap<Vec<u8>, C>,
+	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
 const KEYGEN_TIMEOUT: u32 = 10;
@@ -61,8 +64,8 @@ pub struct MultiPartyECDSARounds<Clock> {
 	parties: u16,
 
 	keygen_set_id: KeygenSetId,
-	signer_set_id: HashMap<Vec<u8>, SignerSetId>,
-	signers: HashMap<Vec<u8>, Vec<u16>>,
+	signer_set_id: SignerSetId,
+	signers: Vec<u16>,
 	stage: Stage,
 	// Stage tracker for individual OfflineStages
 	local_stages: HashMap<Vec<u8>, MiniStage>,
@@ -125,8 +128,8 @@ where
 			last_received_at: created_at,
 			stage_at_last_receipt: Stage::KeygenReady,
 			keygen_set_id: 0,
-			signer_set_id: HashMap::new(),
-			signers: HashMap::new(),
+			signer_set_id: 0,
+			signers: vec![],
 			keygen_started_at: 0u32.into(),
 			offline_started_at: HashMap::new(),
 			stage: Stage::KeygenReady,
@@ -152,6 +155,14 @@ where
 
 	pub fn set_stage(&mut self, stage: Stage) {
 		self.stage = stage;
+	}
+
+	pub fn set_signers(&mut self, signers: Vec<u16>) {
+		self.signers = signers;
+	}
+
+	pub fn set_signer_set_id(&mut self, set_id: SignerSetId) {
+		self.signer_set_id = set_id;
 	}
 
 	/// A check to know if the protocol has stalled at the keygen stage,
@@ -257,9 +268,7 @@ where
 					Ok(())
 				}
 			},
-			DKGMsgPayload::Offline(msg) => {
-				// TODO: check signer_set_id
-
+			DKGMsgPayload::Offline(msg) =>
 				if self.offline_stage.contains_key(&msg.key) {
 					let res = self.handle_incoming_offline_stage(msg.clone());
 					if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
@@ -271,8 +280,7 @@ where
 					let messages = self.pending_offline_msgs.entry(msg.key.clone()).or_default();
 					messages.push(msg);
 					Ok(())
-				}
-			},
+				},
 			DKGMsgPayload::Vote(msg) => self.handle_incoming_vote(msg),
 			_ => Ok(()),
 		}
@@ -315,27 +323,19 @@ where
 		}
 	}
 
-	pub fn reset_signers(
-		&mut self,
-		key: Vec<u8>,
-		signer_set_id: SignerSetId,
-		s_l: Vec<u16>,
-		started_at: C,
-	) -> Result<(), DKGError> {
-		info!(target: "dkg", "🕸️  Resetting singers {:?}", s_l);
-		info!(target: "dkg", "🕸️  Signer set id {:?}", signer_set_id);
+	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
+		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
 		match self.stage {
-			Stage::KeygenReady | Stage::Keygen => Err(DKGError::ResetSigners {
+			Stage::KeygenReady | Stage::Keygen => Err(DKGError::CreateOfflineStage {
 				reason: "Cannot reset signers and start offline stage, Keygen is not complete"
 					.to_string(),
 			}),
 			_ =>
 				if let Some(local_key_clone) = self.local_key.clone() {
-					return match OfflineStage::new(self.party_index, s_l.clone(), local_key_clone) {
+					let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
+					return match OfflineStage::new(self.party_index, s_l, local_key_clone) {
 						Ok(new_offline_stage) => {
 							self.local_stages.insert(key.clone(), MiniStage::Offline);
-							self.signer_set_id.insert(key.clone(), signer_set_id);
-							self.signers.insert(key.clone(), s_l);
 							self.offline_started_at.insert(key.clone(), started_at);
 							self.offline_stage.insert(key.clone(), new_offline_stage);
 
@@ -351,16 +351,19 @@ where
 						},
 						Err(err) => {
 							error!("Error creating new offline stage {}", err);
-							Err(DKGError::ResetSigners { reason: err.to_string() })
+							Err(DKGError::CreateOfflineStage { reason: err.to_string() })
 						},
 					}
 				} else {
-					Err(DKGError::ResetSigners { reason: "No local key present".to_string() })
+					Err(DKGError::CreateOfflineStage { reason: "No local key present".to_string() })
 				},
 		}
 	}
 
 	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), String> {
+		if !self.is_signer() {
+			return Ok(())
+		}
 		let proceed_res =
 			if let Some(completed_offline) = self.completed_offline_stage.remove(&round_key) {
 				let round = self.rounds.entry(round_key.clone()).or_default();
@@ -424,6 +427,10 @@ where
 
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
 		(self.party_index, self.threshold, self.parties)
+	}
+
+	pub fn is_signer(&self) -> bool {
+		self.signers.contains(&self.party_index)
 	}
 
 	pub fn get_public_key(&self) -> Option<Secp256k1Point> {
@@ -601,8 +608,6 @@ where
 
 						let mut not_signed_by: Vec<u16> = self
 							.signers
-							.remove(round_key)
-							.unwrap_or_default()
 							.iter()
 							.filter(|v| !signed_by.contains(*v))
 							.map(|v| *v)
@@ -630,6 +635,15 @@ where
 				Some(Ok(k)) => {
 					self.local_key = Some(k.clone());
 
+					// We create a deterministic signer set using the public key as a seed to the random number generator
+					// We need a 32 byte seed, the compressed public key is 33 bytes
+					let seed = &k.public_key().get_element().serialize()[1..];
+					let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
+					let signers_set = select_random_set(seed, set, self.dkg_params().1);
+					if let Ok(signers_set) = signers_set {
+						self.signer_set_id = self.round_id;
+						self.signers = signers_set;
+					}
 					// We only persist the local key if we have all that is required to encrypt it
 					if self.local_key_path.is_some() &&
 						self.local_keystore.is_some() &&
@@ -698,6 +712,7 @@ where
 				let sig = round.complete();
 
 				if let Err(err) = sig {
+					println!("{:?}", err);
 					return Err(err)
 				} else if let (Some(payload), Ok(sig)) = (payload, sig) {
 					match convert_signature(&sig) {
@@ -711,7 +726,6 @@ where
 							self.finished_rounds.push(signed_payload);
 
 							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", round_key);
-							self.signer_set_id.remove(round_key);
 							self.local_stages.remove(round_key);
 						},
 						_ => debug!("Error serializing signature"),
@@ -758,7 +772,7 @@ where
 			if !offline_stage.message_queue().is_empty() {
 				trace!(target: "dkg", "🕸️  Outgoing messages for {:?}, queue len: {}", key, offline_stage.message_queue().len());
 
-				let signer_set_id = *self.signer_set_id.get(key).unwrap_or(&0u32.into());
+				let signer_set_id = self.signer_set_id;
 
 				for m in offline_stage.message_queue().into_iter() {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
@@ -837,7 +851,7 @@ where
 	}
 
 	fn handle_incoming_offline_stage(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
-		if Some(&data.signer_set_id) != self.signer_set_id.get(&data.key) {
+		if data.signer_set_id != self.signer_set_id {
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
 
@@ -951,7 +965,8 @@ where
 	}
 
 	fn is_done(&self, threshold: usize) -> bool {
-		self.sign_manual.is_some() && self.votes.len() >= threshold
+		// Subtracting one from the threshold since we don't count the signature submitted by local node
+		self.sign_manual.is_some() && self.votes.len() >= (threshold - 1)
 	}
 
 	fn complete(mut self) -> Result<SignatureRecid, DKGError> {
@@ -1082,6 +1097,9 @@ mod tests {
 
 	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
+			if !party.is_signer() {
+				continue
+			}
 			if !party.has_finished_rounds() {
 				return false
 			}
@@ -1090,8 +1108,10 @@ mod tests {
 	}
 
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
-		let round_key = 1u32.encode();
 		for party in &mut parties.into_iter() {
+			if !party.is_signer() {
+				continue
+			}
 			let mut finished_rounds = party.get_finished_rounds();
 
 			if finished_rounds.len() == 1 {
@@ -1157,11 +1177,11 @@ mod tests {
 		}
 	}
 
-	fn simulate_multi_party(t: u16, n: u16, s_l: Vec<u16>) {
+	fn simulate_multi_party(t: u16, n: u16) {
 		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
 		let round_key = 1u32.encode();
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, i as u64, None, 0, None, None);
+			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, 0, None, None);
 			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
 			party.start_keygen(0, 0).unwrap();
 			parties.push(party);
@@ -1176,8 +1196,8 @@ mod tests {
 		println!("Running Offline");
 		let parties_refs = &mut parties;
 		for party in parties_refs.into_iter() {
-			println!("Resetting signers for party {}, Stage: {:?}", party.party_index, party.stage);
-			match party.reset_signers(round_key.clone(), 0, s_l.clone(), 0) {
+			println!("Creating offline stage");
+			match party.create_offline_stage(round_key.clone(), 0) {
 				Ok(()) => (),
 				Err(_err) => (),
 			}
@@ -1188,7 +1208,7 @@ mod tests {
 		println!("Running Sign");
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
-			println!("Vote for party {}, Stage: {:?}", party.party_index, party.stage);
+			println!("Vote for party {}", party.party_index);
 			party.vote(round_key.clone(), "Webb".encode(), 0).unwrap();
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
@@ -1199,11 +1219,11 @@ mod tests {
 
 	#[test]
 	fn simulate_multi_party_t2_n3() {
-		simulate_multi_party(2, 3, (1..=3).collect());
+		simulate_multi_party(2, 3);
 	}
 
 	#[test]
 	fn simulate_multi_party_t3_n5() {
-		simulate_multi_party(3, 5, (1..=5).collect());
+		simulate_multi_party(3, 5);
 	}
 }
