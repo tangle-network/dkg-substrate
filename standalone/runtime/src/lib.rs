@@ -7,9 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{
-	mmr::MmrLeafVersion, ChainId, DKGPayloadKey, ProposalNonce, ProposalType,
-};
+use dkg_runtime_primitives::{mmr::MmrLeafVersion, DKGPayloadKey, ProposalNonce, ProposalType};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -30,6 +28,7 @@ use sp_runtime::{
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
+use dkg_runtime_primitives::ChainId;
 
 use frame_system::EnsureRoot;
 use pallet_session::historical as pallet_session_historical;
@@ -100,22 +99,16 @@ pub mod opaque {
 	}
 }
 
-// To learn more about runtime versioning and what each of the following value means:
-//   https://substrate.dev/docs/en/knowledgebase/runtime/upgrades#runtime-versioning
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("dkg-standalone-node"),
 	impl_name: create_runtime_str!("dkg-standalone-node"),
 	authoring_version: 1,
-	// The version of the runtime specification. A full node will not attempt to use its native
-	//   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
-	//   `spec_version`, and `authoring_version` are the same between Wasm and native.
-	// This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
-	//   the compatible custom types.
-	spec_version: 100,
-	impl_version: 1,
+	spec_version: 14,
+	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
+	state_version: 0,
 };
 
 pub mod constants;
@@ -526,7 +519,7 @@ parameter_types! {
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type ChainId = ChainId;
+	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
@@ -535,7 +528,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = ChainId;
+	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
