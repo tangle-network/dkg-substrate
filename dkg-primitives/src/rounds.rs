@@ -361,9 +361,6 @@ where
 	}
 
 	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), String> {
-		if !self.is_signer() {
-			return Ok(())
-		}
 		let proceed_res =
 			if let Some(completed_offline) = self.completed_offline_stage.remove(&round_key) {
 				let round = self.rounds.entry(round_key.clone()).or_default();
@@ -533,6 +530,7 @@ where
 					trace!(target: "dkg", "🕸️  after: {:?}", offline_stage);
 				},
 				Err(err) => {
+					println!("Error proceeding offline stage {:?}", err);
 					match err {
 						gg20_sign::Error::ProceedRound(proceed_err) => match proceed_err {
 							gg20_sign::rounds::Error::Round1(err_type) =>
@@ -639,7 +637,8 @@ where
 					// We need a 32 byte seed, the compressed public key is 33 bytes
 					let seed = &k.public_key().get_element().serialize()[1..];
 					let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, self.dkg_params().1);
+					// We need threshold + 1 parties to complete the signing round
+					let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
 					if let Ok(signers_set) = signers_set {
 						self.signer_set_id = self.round_id;
 						self.signers = signers_set;
@@ -965,8 +964,7 @@ where
 	}
 
 	fn is_done(&self, threshold: usize) -> bool {
-		// Subtracting one from the threshold since we don't count the signature submitted by local node
-		self.sign_manual.is_some() && self.votes.len() >= (threshold - 1)
+		self.sign_manual.is_some() && self.votes.len() >= threshold
 	}
 
 	fn complete(mut self) -> Result<SignatureRecid, DKGError> {
@@ -1109,9 +1107,6 @@ mod tests {
 
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
 		for party in &mut parties.into_iter() {
-			if !party.is_signer() {
-				continue
-			}
 			let mut finished_rounds = party.get_finished_rounds();
 
 			if finished_rounds.len() == 1 {
