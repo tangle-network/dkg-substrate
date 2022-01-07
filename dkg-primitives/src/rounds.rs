@@ -1,18 +1,11 @@
 use bincode;
-use codec::{Decode, Encode};
-use curv::{
-	arithmetic::Converter,
-	elliptic::curves::{
-		secp256_k1::Secp256k1Point,
-		traits::{ECPoint, ECScalar},
-	},
-	BigInt,
-};
+use codec::Encode;
+use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sc_keystore::LocalKeystore;
 use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
-use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
+use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -26,7 +19,6 @@ use crate::{
 use dkg_runtime_primitives::{
 	keccak_256,
 	offchain_crypto::{Pair as AppPair, Public},
-	ChainId,
 };
 
 pub use gg_2020::{
@@ -85,7 +77,7 @@ pub struct MultiPartyECDSARounds<Clock> {
 
 	// Key generation
 	keygen: Option<Keygen>,
-	local_key: Option<LocalKey>,
+	local_key: Option<LocalKey<Secp256k1>>,
 
 	// Offline stage
 	offline_stage: HashMap<Vec<u8>, OfflineStage>,
@@ -149,7 +141,7 @@ where
 		}
 	}
 
-	pub fn set_local_key(&mut self, local_key: LocalKey) {
+	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
 	}
 
@@ -429,7 +421,7 @@ where
 		self.signers.contains(&self.party_index)
 	}
 
-	pub fn get_public_key(&self) -> Option<Secp256k1Point> {
+	pub fn get_public_key(&self) -> Option<GE> {
 		if let Some(local_key) = &self.local_key {
 			Some(local_key.public_key().clone())
 		} else {
@@ -634,7 +626,7 @@ where
 
 					// We create a deterministic signer set using the public key as a seed to the random number generator
 					// We need a 32 byte seed, the compressed public key is 33 bytes
-					let seed = &k.public_key().get_element().serialize()[1..];
+					let seed = &k.public_key().to_bytes(true)[1..];
 					let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
 					// We need threshold + 1 parties to complete the signing round
 					let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
@@ -811,6 +803,7 @@ where
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
+					println!("🕸️  Error deserializing msg: {:?}", err);
 					return Err(DKGError::GenericError {
 						reason: "Error deserializing keygen msg".to_string(),
 					})
@@ -1014,8 +1007,8 @@ where
 }
 
 pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
-	let r = sig_recid.r.to_big_int().to_bytes();
-	let s = sig_recid.s.to_big_int().to_bytes();
+	let r = sig_recid.r.to_bigint().to_bytes();
+	let s = sig_recid.s.to_bigint().to_bytes();
 	let v = sig_recid.recid;
 
 	let mut sig_vec: Vec<u8> = Vec::new();
@@ -1054,8 +1047,7 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use super::{MiniStage, MultiPartyECDSARounds, Stage};
-	use crate::types::{DKGError, DKGMsgPayload};
+	use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
 
 	fn check_all_reached_stage(

@@ -1,13 +1,11 @@
-use crate::{
-	rounds::{CompletedOfflineStage, LocalKey},
-	types::RoundId,
-};
+use crate::{rounds::LocalKey, types::RoundId};
 use bincode::serialize;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
 };
 use codec::Encode;
+use curv::elliptic::curves::Secp256k1;
 use sc_service::{ChainType, Configuration};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
@@ -65,11 +63,11 @@ pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 #[derive(Deserialize, Serialize, Clone)]
 pub struct StoredLocalKey {
 	pub round_id: RoundId,
-	pub local_key: LocalKey,
+	pub local_key: LocalKey<Secp256k1>,
 }
 
 pub fn store_localkey(
-	key: LocalKey,
+	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
 	path: PathBuf,
 	secret_key: Vec<u8>,

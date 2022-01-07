@@ -16,11 +16,7 @@
 
 #![allow(clippy::collapsible_match)]
 
-use core::convert::TryFrom;
-use curv::elliptic::curves::traits::ECPoint;
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -44,7 +40,6 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	generic::OpaqueDigestItemId,
 	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
@@ -61,9 +56,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ConsensusLog, MmrRootHash, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
-	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	OffchainSignedProposals, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
+	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -647,8 +642,7 @@ where
 				if is_offline_ready {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
-					let pub_key =
-						rounds.get_public_key().unwrap().get_element().serialize().to_vec();
+					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					let round_id = rounds.get_id();
 					keys_to_gossip.push((round_id, pub_key));
 				}
@@ -671,12 +665,7 @@ where
 					if is_offline_ready {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
-						let pub_key = next_rounds
-							.get_public_key()
-							.unwrap()
-							.get_element()
-							.serialize()
-							.to_vec();
+						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 						keys_to_gossip.push((next_rounds.get_id(), pub_key));
 					}
 					self.next_rounds = Some(next_rounds);
