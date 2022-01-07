@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig,
-	GrandpaConfig, Perbill, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
-	SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
+	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, Perbill,
+	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
+	MAX_NOMINATIONS, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -101,6 +101,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
+		// Fork ID
+		None,
 		// Properties
 		None,
 		// Extensions
@@ -152,6 +154,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		// Telemetry
 		None,
 		// Protocol ID
+		None,
+		// Fork ID
 		None,
 		// Properties
 		None,

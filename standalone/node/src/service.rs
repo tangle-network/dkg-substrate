@@ -1,5 +1,6 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
+use dkg_gadget::DKG_PROTOCOL_NAME;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::ExecutorProvider;
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
@@ -176,7 +177,9 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		};
 	}
 
-	config.network.extra_sets.push(sc_finality_grandpa::grandpa_peers_set_config());
+	config.network.extra_sets.push(sc_finality_grandpa::grandpa_peers_set_config(
+		std::borrow::Cow::Borrowed(&DKG_PROTOCOL_NAME),
+	));
 	config.network.extra_sets.push(dkg_gadget::dkg_peers_set_config());
 
 	let (network, system_rpc_tx, network_starter) =
@@ -332,6 +335,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		keystore,
 		local_role: role,
 		telemetry: telemetry.as_ref().map(|x| x.handle()),
+		protocol_name: std::borrow::Cow::Borrowed(&DKG_PROTOCOL_NAME),
 	};
 
 	if enable_grandpa {
