@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{DKGPayloadKey, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{ChainId, DKGPayloadKey, ProposalNonce, ProposalType};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -551,6 +551,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;
+	type TimeToRestart = TimeToRestart;
 }
 
 parameter_types! {
@@ -558,11 +559,12 @@ parameter_types! {
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const TimeToRestart: BlockNumber = 3;
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type ChainId = u32;
+	type ChainId = ChainId;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
@@ -571,7 +573,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = u32;
+	type ChainId = ChainId;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
@@ -792,7 +794,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
@@ -806,6 +808,14 @@ impl_runtime_apis! {
 
 		fn untrack_interval() -> BlockNumber {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
+		}
+
+		fn refresh_nonce() -> u64 {
+			DKG::refresh_nonce()
+		}
+
+		fn time_to_restart() -> BlockNumber {
+			DKG::time_to_restart()
 		}
 	}
 

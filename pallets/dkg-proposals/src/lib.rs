@@ -47,10 +47,10 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use crate::types::{ProposalStatus, ProposalVotes, ResourceId};
+use crate::types::{ProposalStatus, ProposalVotes};
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce,
+	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 };
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
@@ -65,7 +65,7 @@ use sp_std::prelude::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{ProposalVotes, ResourceId, DKG_DEFAULT_PROPOSER_THRESHOLD};
+	use crate::types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD};
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
@@ -85,7 +85,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend;
+		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>>;
 
 		/// ChainID for anchor edges
 		type ChainId: Encode
@@ -647,7 +647,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
 		T::ProposalHandler::handle_unsigned_proposal(
-			prop.encode(),
+			prop.into(),
 			dkg_runtime_primitives::ProposalAction::Sign(0),
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded { chain_id: src_id, proposal_nonce: nonce });

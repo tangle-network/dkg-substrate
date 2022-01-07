@@ -36,9 +36,9 @@ use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
-	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, RefreshProposal,
+	RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+	DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 #[cfg(test)]
@@ -82,6 +82,9 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
+		/// Default number of blocks after which dkg keygen will be restarted if it has stalled
+		#[pallet::constant]
+		type TimeToRestart: Get<Self::BlockNumber>;
 	}
 
 	#[pallet::pallet]
@@ -201,7 +204,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
-			signature: Vec<u8>,
+			signature_proposal: RefreshProposalSigned,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 
@@ -210,11 +213,32 @@ pub mod pallet {
 
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 
-			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
+			ensure!(
+				signature_proposal.nonce == Self::refresh_nonce(),
+				Error::<T>::InvalidSignature
+			);
 
-			ensure!(signature != Vec::<u8>::default(), Error::<T>::InvalidSignature);
+			ensure!(
+				!used_signatures.contains(&signature_proposal.signature),
+				Error::<T>::UsedSignature
+			);
 
-			Self::verify_pub_key_signature(origin, &signature)
+			ensure!(
+				signature_proposal.signature != Vec::<u8>::default(),
+				Error::<T>::InvalidSignature
+			);
+
+			Self::verify_pub_key_signature(origin, &signature_proposal.signature)
+		}
+
+		#[pallet::weight(0)]
+		pub fn set_time_to_restart(
+			origin: OriginFor<T>,
+			interval: T::BlockNumber,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			TimeToRestart::<T>::put(interval);
+			Ok(().into())
 		}
 	}
 
@@ -222,6 +246,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn used_signatures)]
 	pub type UsedSignatures<T: Config> = StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
+
+	/// Nonce value for next refresh proposal
+	#[pallet::storage]
+	#[pallet::getter(fn refresh_nonce)]
+	pub type RefreshNonce<T: Config> = StorageValue<_, u64, ValueQuery>;
 
 	/// Signature of the DKG public key for the next session
 	#[pallet::storage]
@@ -233,6 +262,12 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
+
+	/// Number of blocks that should elapse after which the dkg keygen is restarted
+	/// if it has stalled
+	#[pallet::storage]
+	#[pallet::getter(fn time_to_restart)]
+	pub type TimeToRestart<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -344,6 +379,8 @@ pub mod pallet {
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
+			RefreshNonce::<T>::put(0);
+			TimeToRestart::<T>::put(T::TimeToRestart::get());
 		}
 	}
 }
@@ -549,18 +586,18 @@ impl<T: Config> Pallet<T> {
 			return Ok(())
 		}
 
-		let signature = pub_key_sig_ref.get::<dkg_runtime_primitives::crypto::Signature>();
+		let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
 
 		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
 			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
 		}
 
-		if let Ok(Some(signature)) = signature {
+		if let Ok(Some(refresh_proposal)) = refresh_proposal {
 			let _ = signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
-				signature: signature.encode(),
+				signature_proposal: refresh_proposal.clone(),
 			});
-			frame_support::log::debug!(target: "dkg", "Offchain Submitting public key sig onchain {:?}", signature.encode());
+			frame_support::log::debug!(target: "dkg", "Offchain Submitting public key sig onchain {:?}", refresh_proposal.signature);
 
 			pub_key_sig_ref.clear();
 		}
@@ -584,8 +621,11 @@ impl<T: Config> Pallet<T> {
 		_origin: T::AccountId,
 		signature: &Vec<u8>,
 	) -> DispatchResultWithPostInfo {
+		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &pub_key.1)
+			let data = RefreshProposal { nonce: refresh_nonce, pub_key: pub_key.1.clone() };
+			let encoded_data = data.encode();
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &encoded_data)
 				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
@@ -593,6 +633,8 @@ impl<T: Config> Pallet<T> {
 					Self::authority_set_id() + 1u64,
 					signature.clone(),
 				));
+				// Increase nonce value
+				RefreshNonce::<T>::put(refresh_nonce + 1u64);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});

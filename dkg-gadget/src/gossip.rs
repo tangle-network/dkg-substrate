@@ -27,7 +27,7 @@ use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
 use dkg_primitives::types::{DKGMessage, DKGPayloadKey};
-use dkg_runtime_primitives::{crypto::Public, MmrRootHash};
+use dkg_runtime_primitives::{crypto::Public, ChainId, MmrRootHash};
 
 // Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
@@ -131,7 +131,7 @@ where
 	) -> ValidationResult<B::Hash> {
 		let mut data_copy = data;
 		trace!(target: "dkg", "🕸️  Got a message: {:?}, from: {:?}", data_copy, sender);
-		match DKGMessage::<Public, DKGPayloadKey>::decode(&mut data_copy) {
+		match DKGMessage::<Public>::decode(&mut data_copy) {
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got dkg message: {:?}, from: {:?}", msg, sender);
 				return ValidationResult::ProcessAndKeep(dkg_topic::<B>())

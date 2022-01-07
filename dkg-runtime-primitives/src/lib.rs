@@ -36,8 +36,12 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
+pub type ChainId = u32;
+
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
+
+pub const GENESIS_BLOCK_NUMBER: u32 = 0;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -144,6 +148,11 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 	}
 }
 
+pub enum DKGReport {
+	KeygenMisbehavior { offender: AuthorityId },
+	SigningMisbehavior { offender: AuthorityId },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
 pub struct Commitment<TBlockNumber, TPayload> {
 	pub payload: TPayload,
@@ -176,9 +185,9 @@ type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::Accoun
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DKGApi<AuthorityId, BlockNumber> where
+	pub trait DKGApi<AuthorityId, N> where
 		AuthorityId: Codec + PartialEq,
-		BlockNumber: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned
+		N: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned,
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
@@ -187,20 +196,24 @@ sp_api::decl_runtime_apis! {
 		/// Return the next authorities active authority set
 		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
 		/// Check if refresh process should start
-		fn should_refresh(_block_number: BlockNumber) -> bool;
+		fn should_refresh(_block_number: N) -> bool;
 		/// Fetch DKG public key for queued authorities
 		fn next_dkg_pub_key() -> Option<Vec<u8>>;
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<(DKGPayloadKey, ProposalType)>;
+		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
-		fn get_max_extrinsic_delay(_block_number: BlockNumber) -> BlockNumber;
+		fn get_max_extrinsic_delay(_block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get untrack interval for unsigned proposals
-		fn untrack_interval() -> BlockNumber;
+		fn untrack_interval() -> N;
+		/// Get next nonce value for refresh proposal
+		fn refresh_nonce() -> u64;
+		/// Get the time to restart for the dkg keygen
+		fn time_to_restart() -> N;
 	}
 }

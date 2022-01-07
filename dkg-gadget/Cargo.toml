@@ -38,11 +38,12 @@ sc-client-api = { git = 'https://github.com/paritytech/substrate', branch = 'mas
 sc-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 sc-network = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 sc-network-gossip = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+sc-service = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
 
 round-based = { version = "0.1.4", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.2.1"
-multi-party-ecdsa = { git = "https://github.com/ZenGo-X/multi-party-ecdsa.git" }
+multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }

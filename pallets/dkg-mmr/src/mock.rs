@@ -165,11 +165,13 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
+	type TimeToRestart = TimeToRestart;
 }
 
 parameter_types! {
 	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const TimeToRestart: u64 = 3;
 }
 
 impl pallet_dkg_mmr::Config for Test {
