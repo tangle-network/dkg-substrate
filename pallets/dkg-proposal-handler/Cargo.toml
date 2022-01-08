@@ -17,12 +17,12 @@ scale-info = { version = "1.0", default-features = false, features = ["derive"] 
 
 
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
-frame-benchmarking = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false, optional = true }
-frame-support = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
-frame-system = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
-sp-io = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false, optional = true }
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
+frame-system = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 sp-std = { git = "https://github.com/paritytech/substrate.git", branch = 'master', default-features = false }
-sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 pallet-dkg-metadata = { path = "../dkg-metadata", default-features = false }
 hex-literal = { version = "0.3", optional = true }
@@ -30,10 +30,10 @@ hex-literal = { version = "0.3", optional = true }
 [dev-dependencies]
 pallet-dkg-proposals = { path = "../dkg-proposals" }
 serde = { version = "1.0.119" }
-sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master', default-features = false }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "master" }
-pallet-balances = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "master" }
 
 [features]
 default = ["std"]

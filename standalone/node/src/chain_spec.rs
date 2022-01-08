@@ -101,12 +101,11 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
-		// Fork ID
-		None,
 		// Properties
 		None,
 		// Extensions
 		None,
+		
 	))
 }
 
@@ -155,12 +154,11 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
-		// Fork ID
-		None,
 		// Properties
 		None,
 		// Extensions
 		None,
+		
 	))
 }
 

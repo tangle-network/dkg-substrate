@@ -75,7 +75,7 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
 	properties.insert("tokenSymbol".into(), "UNIT".into());
-	properties.insert("tokenDecimals".into(), 12.into());
+	properties.insert("tokenDecimals".into(), 12u32.into());
 
 	ChainSpec::from_genesis(
 		// Name
@@ -115,7 +115,6 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 		None,
 		None,
 		None,
-		None,
 		Extensions {
 			relay_chain: "rococo-local".into(), // You MUST set this to the correct network!
 			para_id: id.into(),
@@ -127,7 +126,7 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
 	properties.insert("tokenSymbol".into(), "UNIT".into());
-	properties.insert("tokenDecimals".into(), 12.into());
+	properties.insert("tokenDecimals".into(), 12u32.into());
 
 	ChainSpec::from_genesis(
 		// Name
@@ -172,7 +171,6 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 			)
 		},
 		Vec::new(),
-		None,
 		None,
 		None,
 		None,
