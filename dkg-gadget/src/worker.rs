@@ -129,23 +129,23 @@ where
 	queued_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
 	last_signed_id: u64,
-	// keep rustc happy
+	/// keep rustc happy
 	_backend: PhantomData<BE>,
-	// public key refresh in progress
+	/// public key refresh in progress
 	refresh_in_progress: bool,
-	// keep track of the broadcast public keys and signatures
+	/// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
-	// dkg state
+	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
-	// Setting up keygen for current authorities
+	/// Setting up keygen for current authorities
 	pub active_keygen_in_progress: bool,
-	// setting up queued authorities keygen
+	/// setting up queued authorities keygen
 	pub queued_keygen_in_progress: bool,
-	// Track DKG Persistence state
+	/// Track DKG Persistence state
 	pub dkg_persistence: DKGPersistenceState,
-
+	/// Local keystore for DKG data
 	pub base_path: Option<PathBuf>,
-	// Concrete type that points to the actual local keystore if it exists
+	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 

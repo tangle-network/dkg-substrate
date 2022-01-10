@@ -219,13 +219,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		})
 	};
 
-	if role.is_authority() {
-		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
-			&config,
-			Some(keystore_container.sync_keystore()),
-		);
-	}
-
 	let base_path = if config.base_path.is_some() {
 		match config.base_path.as_ref() {
 			Some(BasePath::Permanenent(path_buf)) => Some(path_buf.clone()),
@@ -234,6 +227,13 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	} else {
 		None
 	};
+
+	if role.is_authority() {
+		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
+			&config,
+			Some(keystore_container.sync_keystore()),
+		);
+	}
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		network: network.clone(),
@@ -247,6 +247,12 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		config,
 		telemetry: telemetry.as_mut(),
 	})?;
+
+	// if the node isn't actively participating in consensus then it doesn't
+	// need a keystore, regardless of which protocol we use below.
+	let keystore =
+		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
+
 
 	if role.is_authority() {
 		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
@@ -298,31 +304,26 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		task_manager
 			.spawn_essential_handle()
 			.spawn_blocking("aura", Some("block-authoring"), aura);
+
+		let dkg_params = dkg_gadget::DKGParams {
+			client,
+			backend,
+			key_store: keystore.clone(),
+			network: network.clone(),
+			min_block_delta: 4,
+			prometheus_registry: prometheus_registry.clone(),
+			base_path,
+			local_keystore: keystore_container.local_keystore(),
+			_block: std::marker::PhantomData::<Block>,
+		};
+
+		// Start the DKG gadget.
+		task_manager.spawn_essential_handle().spawn_blocking(
+			"dkg-gadget",
+			None,
+			dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
+		);
 	}
-
-	// if the node isn't actively participating in consensus then it doesn't
-	// need a keystore, regardless of which protocol we use below.
-	let keystore =
-		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
-
-	let dkg_params = dkg_gadget::DKGParams {
-		client,
-		backend,
-		key_store: keystore.clone(),
-		network: network.clone(),
-		min_block_delta: 4,
-		prometheus_registry: prometheus_registry.clone(),
-		block: None,
-		base_path,
-		local_keystore: keystore_container.local_keystore(),
-	};
-
-	// Start the DKG gadget.
-	task_manager.spawn_essential_handle().spawn_blocking(
-		"dkg-gadget",
-		None,
-		dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
-	);
 
 	let grandpa_config = sc_finality_grandpa::Config {
 		// FIXME #1578 make this available through chainspec
