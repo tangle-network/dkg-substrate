@@ -1,9 +1,11 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, Perbill,
-	SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
-	MAX_NOMINATIONS, WASM_BINARY,
+	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig,
+	GrandpaConfig, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
+	SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
 };
+use hex_literal::hex;
+
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
@@ -92,6 +94,33 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
+				// Initial Chain Ids
+				vec![
+					5001, // Hermis
+					5002, // Athena
+				],
+				// Initial resource Ids
+				vec![
+					// Resource ID for Chain Hermis => Athena
+					(
+						hex_literal::hex!(
+							"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+						),
+						Default::default(),
+					),
+					// Resource ID for Chain Athena => Hermis
+					(
+						hex_literal::hex!(
+							"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
+						),
+						Default::default(),
+					),
+				],
+				// Initial proposers
+				vec![
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
+					get_account_id_from_seed::<sr25519::Public>("Eve"),
+				],
 				true,
 			)
 		},
@@ -145,6 +174,33 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
+				// Initial Chain Ids
+				vec![
+					5001, // Hermis
+					5002, // Athena
+				],
+				// Initial resource Ids
+				vec![
+					// Resource ID for Chain Hermis => Athena
+					(
+						hex_literal::hex!(
+							"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+						),
+						Default::default(),
+					),
+					// Resource ID for Chain Athena => Hermis
+					(
+						hex_literal::hex!(
+							"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
+						),
+						Default::default(),
+					),
+				],
+				// Initial proposers
+				vec![
+					get_account_id_from_seed::<sr25519::Public>("Dave"),
+					get_account_id_from_seed::<sr25519::Public>("Eve"),
+				],
 				true,
 			)
 		},
@@ -162,6 +218,53 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 	))
 }
 
+pub fn arana_testnet_config() -> Result<ChainSpec, String> {
+	let wasm_binary = WASM_BINARY.ok_or_else(|| "Arana wasm not available".to_string())?;
+	let boot_nodes = crate::testnet_fixtures::get_arana_bootnodes();
+
+	Ok(ChainSpec::from_genesis(
+		"Arana",
+		"arana",
+		ChainType::Development,
+		move || {
+			testnet_genesis(
+				wasm_binary,
+				// Initial PoA authorities
+				crate::testnet_fixtures::get_arana_initial_authorities(),
+				vec![],
+				// Sudo account
+				crate::testnet_fixtures::get_testnet_root_key(),
+				// Pre-funded accounts
+				vec![
+					crate::testnet_fixtures::get_testnet_root_key(),
+					hex!["4e85271af1330e5e9384bd3ac5bdc04c0f8ef5a8cc29c1a8ae483d674164745c"].into(),
+					hex!["804808fb75d16340dc250871138a1a6f1dfa3cab9cc1fbd6f42960f1c39a950d"].into(),
+					hex!["587c2ef00ec0a1b98af4c655763acd76ece690fccbb255f01663660bc274960d"].into(),
+					hex!["cc195602a63bbdcf2ef4773c86fdbfefe042cb9aa8e3059d02e59a062d9c3138"].into(),
+					hex!["a24f729f085de51eebaeaeca97d6d499761b8f6daeca9b99d754a06ef8bcec3f"].into(),
+					hex!["368ea402dbd9c9888ae999d6a799cf36e08673ee53c001dfb4529c149fc2c13b"].into(),
+				],
+				vec![],
+				vec![],
+				crate::testnet_fixtures::get_arana_initial_authorities().iter()
+					.map(|a| a.0.clone())
+					.collect(),
+				true,
+			)
+		},
+		// Bootnodes
+		boot_nodes,
+		// Telemetry
+		None,
+		// Protocol ID
+		None,
+		// Properties
+		None,
+		// Extensions
+		None,
+	))
+}
+
 /// Configure initial storage state for FRAME modules.
 fn testnet_genesis(
 	wasm_binary: &[u8],
@@ -169,6 +272,9 @@ fn testnet_genesis(
 	initial_nominators: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
+	initial_chain_ids: Vec<u32>,
+	initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
+	initial_proposers: Vec<AccountId>,
 	_enable_println: bool,
 ) -> GenesisConfig {
 	const ENDOWMENT: Balance = 10_000_000 * DOLLARS;
@@ -232,30 +338,9 @@ fn testnet_genesis(
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
 		dkg_proposals: DKGProposalsConfig {
-			initial_chain_ids: vec![
-				5001, // Hermis
-				5002, // Athena
-			],
-			initial_r_ids: vec![
-				// Resource ID for Chain Hermis => Athena
-				(
-					hex_literal::hex!(
-						"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
-					),
-					Default::default(),
-				),
-				// Resource ID for Chain Athena => Hermis
-				(
-					hex_literal::hex!(
-						"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
-					),
-					Default::default(),
-				),
-			],
-			initial_proposers: vec![
-				get_account_id_from_seed::<sr25519::Public>("Dave"),
-				get_account_id_from_seed::<sr25519::Public>("Eve"),
-			],
+			initial_chain_ids,
+			initial_r_ids,
+			initial_proposers,
 		},
 	}
 }
