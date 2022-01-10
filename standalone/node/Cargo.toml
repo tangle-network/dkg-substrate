@@ -37,6 +37,7 @@ sc-consensus = { git = 'https://github.com/paritytech/substrate', branch = 'mast
 sc-finality-grandpa = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-finality-grandpa = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sc-client-api = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
+sc-network = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-runtime = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-timestamp = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
 sp-keystore = { git = 'https://github.com/paritytech/substrate', branch = 'master' }
@@ -60,7 +61,6 @@ frame-benchmarking-cli = { git = 'https://github.com/paritytech/substrate', bran
 dkg-gadget = { path = "../../dkg-gadget", default-features = false }
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 dkg-primitives = { path = "../../dkg-primitives", default-features = false }
-
 dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
 
 [build-dependencies]

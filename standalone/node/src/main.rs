@@ -7,6 +7,7 @@ mod service;
 mod cli;
 mod command;
 mod rpc;
+mod testnet_fixtures;
 
 fn main() -> sc_cli::Result<()> {
 	command::run()
