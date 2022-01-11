@@ -1972,6 +1972,7 @@ dependencies = [
  "sc-keystore",
  "sc-service",
  "serde",
+ "serde_json",
  "sha3",
  "sp-core",
  "sp-keyring",

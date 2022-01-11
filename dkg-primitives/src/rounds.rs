@@ -365,18 +365,14 @@ where
 						round.payload = Some(data);
 						round.started_at = started_at;
 
-						match bincode::serialize(&sig) {
-							Ok(serialized_sig) => {
-								let msg = DKGVoteMessage {
-									party_ind: self.party_index,
-									round_key: round_key.clone(),
-									partial_signature: serialized_sig,
-								};
-								self.sign_outgoing_msgs.push(msg);
-								Ok(true)
-							},
-							Err(err) => Err(err.to_string()),
-						}
+						let serialized = serde_json::to_string(&sig).unwrap();
+						let msg = DKGVoteMessage {
+							party_ind: self.party_index,
+							round_key: round_key.clone(),
+							partial_signature: serialized.into_bytes(),
+						};
+						self.sign_outgoing_msgs.push(msg);
+						Ok(true)
 					},
 					Err(err) => Err(err.to_string()),
 				}
@@ -743,8 +739,8 @@ where
 					.into_iter()
 					.map(|m| {
 						trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
-						let m_ser = bincode::serialize(m).unwrap();
-						return DKGKeygenMessage { keygen_set_id, keygen_msg: m_ser }
+						let serialized = serde_json::to_string(&m).unwrap();
+						return DKGKeygenMessage { keygen_set_id, keygen_msg: serialized.into_bytes() }
 					})
 					.collect::<Vec<DKGKeygenMessage>>();
 
@@ -766,9 +762,9 @@ where
 
 				for m in offline_stage.message_queue().into_iter() {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
-					let m_ser = bincode::serialize(m).unwrap();
+					let serialized = serde_json::to_string(&m).unwrap();
 					let msg =
-						DKGOfflineMessage { key: key.clone(), signer_set_id, offline_msg: m_ser };
+						DKGOfflineMessage { key: key.clone(), signer_set_id, offline_msg: serialized.into_bytes() };
 
 					messages.push(msg);
 				}
@@ -794,12 +790,14 @@ where
 
 		if let Some(keygen) = self.keygen.as_mut() {
 			trace!(target: "dkg", "🕸️  Handle incoming keygen message");
+			println!("🕸️  Handle incoming keygen message: {:?}", data);
 			if data.keygen_msg.is_empty() {
 				warn!(
 					target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<ProtocolMessage> = match bincode::deserialize(&data.keygen_msg) {
+			
+			let msg: Msg<ProtocolMessage> = match serde_json::from_slice(&data.keygen_msg) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -852,7 +850,7 @@ where
 				warn!(target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<OfflineProtocolMessage> = match bincode::deserialize(&data.offline_msg) {
+			let msg: Msg<OfflineProtocolMessage> = match serde_json::from_slice(&data.offline_msg) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -901,7 +899,7 @@ where
 			return Ok(())
 		}
 
-		let sig: PartialSignature = match bincode::deserialize(&data.partial_signature) {
+		let sig: PartialSignature = match serde_json::from_slice(&data.partial_signature) {
 			Ok(sig) => sig,
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
