@@ -10,7 +10,7 @@
 
 ## Running the DKG
 
-Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-node`. We will call those nodes `Alice`, `Bob` and
+Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
 `Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
 account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
 for our testnet.
@@ -18,19 +18,19 @@ for our testnet.
 `Alice` is our bootnode and is started like so:
 
 ```
-$ RUST_LOG=dkg=trace ./target/debug/dkg-node --tmp --alice
+$ RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --alice
 ```
 
 `Bob` is started like so:
 
 ```
-RUST_LOG=dkg=trace ./target/debug/dkg-node --tmp --bob
+RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --bob
 ```
 
 `Charlie` is started like so:
 
 ```
-RUST_LOG=dkg=trace ./target/debug/dkg-node --tmp --charlie
+RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --charlie
 ```
 
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
@@ -179,19 +179,19 @@ cargo build --release
 mkdir -p resources
 
 # Build the chainspec
-./target/release/dkg-node build-spec \
+./target/release/dkg-standalone-node build-spec \
 --disable-default-bootnode > ./resources/template-local-plain.json
 
 # Build the raw chainspec file
-./target/release/dkg-node build-spec \
+./target/release/dkg-standalone-node build-spec \
 --chain=./resources/template-local-plain.json \
 --raw --disable-default-bootnode > ./resources/template-local-raw.json
 
 # Export genesis state to `./resources`, using 2000 as the ParaId
-./target/release/dkg-node export-genesis-state --parachain-id 2000 > ./resources/para-2000-genesis
+./target/release/dkg-standalone-node export-genesis-state --parachain-id 2000 > ./resources/para-2000-genesis
 
 # Export the genesis wasm
-./target/release/dkg-node export-genesis-wasm > ./resources/para-2000-wasm
+./target/release/dkg-standalone-node export-genesis-wasm > ./resources/para-2000-wasm
 ```
 
 > **NOTE**: we have set the `para_ID` to be **2000** here. This _must_ be unique for all parathreads/chains
@@ -207,7 +207,7 @@ From the dkg-substrate working directory:
 # that is at the same level of the template working directory. Change as needed.
 #
 # It also assumes a ParaId of 2000. Change as needed.
-./target/release/dkg-node \
+./target/release/dkg-standalone-node \
 -d /tmp/parachain/alice \
 --collator \
 --alice \
