@@ -1,6 +1,9 @@
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::crypto::AuthorityId;
+use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use std::fmt;
+
+pub type FE = Scalar<Secp256k1>;
+pub type GE = Point<Secp256k1>;
 
 /// A typedef for keygen set id
 pub type KeygenSetId = u64;

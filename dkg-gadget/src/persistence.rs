@@ -1,21 +1,16 @@
 use crate::{
-	types::dkg_topic,
-	utils::{find_index, set_up_rounds, validate_threshold},
+	utils::{set_up_rounds, validate_threshold},
 	worker::DKGWorker,
 	Client,
 };
 use bincode::deserialize;
-use curv::{arithmetic::Converter, elliptic::curves::traits::ECPoint};
 use dkg_primitives::{
 	crypto::AuthorityId,
-	keys::{CompletedOfflineStage, LocalKey},
-	rounds::MultiPartyECDSARounds,
 	types::Stage,
 	utils::{
 		decrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
 		QUEUED_DKG_LOCAL_KEY_FILE,
 	},
-	DKGPayloadKey,
 };
 use dkg_runtime_primitives::{
 	offchain_crypto::{Pair as AppPair, Public},
@@ -23,7 +18,6 @@ use dkg_runtime_primitives::{
 };
 use log::debug;
 use sc_client_api::Backend;
-use serde::{Deserialize, Serialize};
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
 use std::fs;
@@ -51,7 +45,7 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if worker.dkg_persistence.initial_check {
-		return
+		return;
 	}
 
 	worker.dkg_persistence.start();
@@ -163,14 +157,9 @@ where
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
 					// We create a deterministic signer set using the public key as a seed to the random number generator
 					// We need a 32 byte seed, the compressed public key is 33 bytes
-					let seed = &local_key
-						.as_ref()
-						.unwrap()
-						.local_key
-						.clone()
-						.public_key()
-						.get_element()
-						.serialize()[1..];
+					let seed =
+						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
+							[1..];
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
 					if let Ok(signers_set) = signers_set {
@@ -210,8 +199,7 @@ where
 						.local_key
 						.clone()
 						.public_key()
-						.get_element()
-						.serialize()[1..];
+						.to_bytes(true)[1..];
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
 					if let Ok(signers_set) = signers_set {

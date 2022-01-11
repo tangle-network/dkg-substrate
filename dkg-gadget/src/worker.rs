@@ -16,11 +16,7 @@
 
 #![allow(clippy::collapsible_match)]
 
-use core::convert::TryFrom;
-use curv::elliptic::curves::traits::ECPoint;
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -44,7 +40,6 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	generic::OpaqueDigestItemId,
 	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
@@ -61,9 +56,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ConsensusLog, MmrRootHash, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
-	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	OffchainSignedProposals, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
+	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -134,23 +129,23 @@ where
 	queued_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
 	last_signed_id: u64,
-	// keep rustc happy
+	/// keep rustc happy
 	_backend: PhantomData<BE>,
-	// public key refresh in progress
+	/// public key refresh in progress
 	refresh_in_progress: bool,
-	// keep track of the broadcast public keys and signatures
+	/// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
-	// dkg state
+	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
-	// Setting up keygen for current authorities
+	/// Setting up keygen for current authorities
 	pub active_keygen_in_progress: bool,
-	// setting up queued authorities keygen
+	/// setting up queued authorities keygen
 	pub queued_keygen_in_progress: bool,
-	// Track DKG Persistence state
+	/// Track DKG Persistence state
 	pub dkg_persistence: DKGPersistenceState,
-
+	/// Local keystore for DKG data
 	pub base_path: Option<PathBuf>,
-	// Concrete type that points to the actual local keystore if it exists
+	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 
@@ -647,8 +642,7 @@ where
 				if is_offline_ready {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
-					let pub_key =
-						rounds.get_public_key().unwrap().get_element().serialize().to_vec();
+					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					let round_id = rounds.get_id();
 					keys_to_gossip.push((round_id, pub_key));
 				}
@@ -671,12 +665,7 @@ where
 					if is_offline_ready {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
-						let pub_key = next_rounds
-							.get_public_key()
-							.unwrap()
-							.get_element()
-							.serialize()
-							.to_vec();
+						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 						keys_to_gossip.push((next_rounds.get_id(), pub_key));
 					}
 					self.next_rounds = Some(next_rounds);

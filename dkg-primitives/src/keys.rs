@@ -1,11 +1,5 @@
-use curv::{
-	arithmetic::Converter,
-	elliptic::curves::{
-		secp256_k1::{FE, GE},
-		traits::*,
-	},
-	BigInt,
-};
+use crate::types::{FE, GE};
+use curv::{arithmetic::Converter, BigInt};
 use hex::{self};
 use secp256k1::curve::{Affine, Field};
 use sha3::{Digest, Keccak256};
@@ -17,7 +11,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 };
 
 pub fn recover_pub_key(sig: &SignatureRecid, message: &BigInt) -> Result<GE, String> {
-	recover_pub_key_raw(message, sig.recid, sig.r, sig.s)
+	recover_pub_key_raw(message, sig.recid, sig.r.clone(), sig.s.clone())
 }
 
 pub fn recover_pub_key_raw(message: &BigInt, v: u8, r: FE, s: FE) -> Result<GE, String> {
@@ -33,7 +27,7 @@ pub fn recover_pub_key_raw(message: &BigInt, v: u8, r: FE, s: FE) -> Result<GE, 
 
 	// r value as X coordinate in a Field format
 	let mut fx = Field::default();
-	let r_bytes: [u8; 32] = match r.to_big_int().to_bytes().try_into() {
+	let r_bytes: [u8; 32] = match r.to_bigint().to_bytes().try_into() {
 		Ok(res) => res,
 		Err(_err) => return Err("Invalid r value".to_string()),
 	};
@@ -58,25 +52,24 @@ pub fn recover_pub_key_raw(message: &BigInt, v: u8, r: FE, s: FE) -> Result<GE, 
 
 	// point, calculated from r value in Secp256k1Point format
 	let r_calc = {
-		let mut r_calc_bytes: Vec<u8> = Vec::new();
-		r_calc_bytes.extend_from_slice(&r_calc_point.x.b32());
-		r_calc_bytes.extend_from_slice(&r_calc_point.y.b32());
+		let r_x = BigInt::from_bytes(&r_calc_point.x.b32());
+		let r_y = BigInt::from_bytes(&r_calc_point.y.b32());
 
-		match GE::from_bytes(&r_calc_bytes) {
+		match GE::from_coords(&r_x, &r_y) {
 			Ok(res) => res,
 			Err(_err) => return Err("Could not construct Secp256k1Point from r value".to_string()),
 		}
 	};
 
-	let g: GE = ECPoint::generator(); // G
-	let z: FE = ECScalar::from(message); // z
+	let g = GE::generator().clone(); // G
+	let z = FE::from(message); // z
 
-	let rn = r.invert(); // r^-1
+	let rn = r.invert().unwrap(); // r^-1
 
-	let rsrn = r_calc * s * rn; // R * s * r^-1
+	let rsrn = r_calc * s * rn.clone(); // R * s * r^-1
 	let gzrn = g * z * rn; // G * z * r^-1
 
-	let pub_key = rsrn.sub_point(&gzrn.get_element());
+	let pub_key = rsrn - gzrn;
 
 	return Ok(pub_key)
 }
@@ -112,11 +105,11 @@ pub fn convert_to_checksum_eth_address(addr: &str) -> Result<String, String> {
 }
 
 pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
-	let x = match pub_key.x_coor() {
+	let x = match pub_key.x_coord() {
 		Some(res) => res,
 		None => return Err("X coordinate is absent".to_string()),
 	};
-	let y = match pub_key.y_coor() {
+	let y = match pub_key.y_coord() {
 		Some(res) => res,
 		None => return Err("Y coordinate is absent".to_string()),
 	};
@@ -139,13 +132,10 @@ pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-	use super::{convert_to_checksum_eth_address, convert_to_eth_address, recover_pub_key_raw};
+	use super::{convert_to_checksum_eth_address, convert_to_eth_address, recover_pub_key_raw, GE};
 	use curv::{
 		arithmetic::Converter,
-		elliptic::curves::{
-			secp256_k1::GE,
-			traits::{ECPoint, ECScalar},
-		},
+		elliptic::curves::{Scalar, Secp256k1},
 		BigInt,
 	};
 
@@ -158,11 +148,11 @@ mod tests {
 		println!("Message: {:?}", message.to_hex());
 
 		let v: u8 = 0;
-		let r = ECScalar::from(
+		let r = Scalar::<Secp256k1>::from(
 			&BigInt::from_hex("4f282dd8be26cc20c27ccb986452411cc90ba9b9e9802256b7ecd3ba98b6fac4")
 				.unwrap(),
 		);
-		let s = ECScalar::from(
+		let s = Scalar::<Secp256k1>::from(
 			&BigInt::from_hex("5e378bbb7f7c7db9c4c7baf898134d636c810d2cb2cec5c85e36ee2c341265be")
 				.unwrap(),
 		);
@@ -179,8 +169,8 @@ mod tests {
 			BigInt::from_hex("c7b40c9fdca6815d43b315c8b039ecda1ba7eabd97794496c3023730581d7d63")
 				.unwrap();
 
-		let actual_x = recovered.x_coor().unwrap();
-		let actual_y = recovered.y_coor().unwrap();
+		let actual_x = recovered.x_coord().unwrap();
+		let actual_y = recovered.y_coord().unwrap();
 
 		println!("Expected pubkey: {}{}", expected_x.to_hex(), expected_y.to_hex());
 		println!("Recovered pubkey: {}{}", actual_x.to_hex(), actual_y.to_hex());
@@ -210,7 +200,7 @@ mod tests {
 			BigInt::from_hex("c7b40c9fdca6815d43b315c8b039ecda1ba7eabd97794496c3023730581d7d63")
 				.unwrap();
 
-		let eth_addr = convert_to_eth_address(&GE::from_coor(&x, &y)).unwrap();
+		let eth_addr = convert_to_eth_address(&GE::from_coords(&x, &y).unwrap()).unwrap();
 
 		assert_eq!("E24FAFbc593B2Dbb8DaF296F9BBf5DA94E633A40", eth_addr);
 	}

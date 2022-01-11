@@ -1,18 +1,11 @@
 use bincode;
-use codec::{Decode, Encode};
-use curv::{
-	arithmetic::Converter,
-	elliptic::curves::{
-		secp256_k1::Secp256k1Point,
-		traits::{ECPoint, ECScalar},
-	},
-	BigInt,
-};
+use codec::Encode;
+use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 use sc_keystore::LocalKeystore;
 use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
-use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
+use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -26,7 +19,6 @@ use crate::{
 use dkg_runtime_primitives::{
 	keccak_256,
 	offchain_crypto::{Pair as AppPair, Public},
-	ChainId,
 };
 
 pub use gg_2020::{
@@ -85,7 +77,7 @@ pub struct MultiPartyECDSARounds<Clock> {
 
 	// Key generation
 	keygen: Option<Keygen>,
-	local_key: Option<LocalKey>,
+	local_key: Option<LocalKey<Secp256k1>>,
 
 	// Offline stage
 	offline_stage: HashMap<Vec<u8>, OfflineStage>,
@@ -149,7 +141,7 @@ where
 		}
 	}
 
-	pub fn set_local_key(&mut self, local_key: LocalKey) {
+	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
 	}
 
@@ -373,18 +365,14 @@ where
 						round.payload = Some(data);
 						round.started_at = started_at;
 
-						match bincode::serialize(&sig) {
-							Ok(serialized_sig) => {
-								let msg = DKGVoteMessage {
-									party_ind: self.party_index,
-									round_key: round_key.clone(),
-									partial_signature: serialized_sig,
-								};
-								self.sign_outgoing_msgs.push(msg);
-								Ok(true)
-							},
-							Err(err) => Err(err.to_string()),
-						}
+						let serialized = serde_json::to_string(&sig).unwrap();
+						let msg = DKGVoteMessage {
+							party_ind: self.party_index,
+							round_key: round_key.clone(),
+							partial_signature: serialized.into_bytes(),
+						};
+						self.sign_outgoing_msgs.push(msg);
+						Ok(true)
 					},
 					Err(err) => Err(err.to_string()),
 				}
@@ -429,7 +417,7 @@ where
 		self.signers.contains(&self.party_index)
 	}
 
-	pub fn get_public_key(&self) -> Option<Secp256k1Point> {
+	pub fn get_public_key(&self) -> Option<GE> {
 		if let Some(local_key) = &self.local_key {
 			Some(local_key.public_key().clone())
 		} else {
@@ -634,7 +622,7 @@ where
 
 					// We create a deterministic signer set using the public key as a seed to the random number generator
 					// We need a 32 byte seed, the compressed public key is 33 bytes
-					let seed = &k.public_key().get_element().serialize()[1..];
+					let seed = &k.public_key().to_bytes(true)[1..];
 					let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
 					// We need threshold + 1 parties to complete the signing round
 					let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
@@ -751,8 +739,8 @@ where
 					.into_iter()
 					.map(|m| {
 						trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
-						let m_ser = bincode::serialize(m).unwrap();
-						return DKGKeygenMessage { keygen_set_id, keygen_msg: m_ser }
+						let serialized = serde_json::to_string(&m).unwrap();
+						return DKGKeygenMessage { keygen_set_id, keygen_msg: serialized.into_bytes() }
 					})
 					.collect::<Vec<DKGKeygenMessage>>();
 
@@ -774,9 +762,9 @@ where
 
 				for m in offline_stage.message_queue().into_iter() {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
-					let m_ser = bincode::serialize(m).unwrap();
+					let serialized = serde_json::to_string(&m).unwrap();
 					let msg =
-						DKGOfflineMessage { key: key.clone(), signer_set_id, offline_msg: m_ser };
+						DKGOfflineMessage { key: key.clone(), signer_set_id, offline_msg: serialized.into_bytes() };
 
 					messages.push(msg);
 				}
@@ -802,15 +790,18 @@ where
 
 		if let Some(keygen) = self.keygen.as_mut() {
 			trace!(target: "dkg", "🕸️  Handle incoming keygen message");
+			println!("🕸️  Handle incoming keygen message: {:?}", data);
 			if data.keygen_msg.is_empty() {
 				warn!(
 					target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<ProtocolMessage> = match bincode::deserialize(&data.keygen_msg) {
+			
+			let msg: Msg<ProtocolMessage> = match serde_json::from_slice(&data.keygen_msg) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
+					println!("🕸️  Error deserializing msg: {:?}", err);
 					return Err(DKGError::GenericError {
 						reason: "Error deserializing keygen msg".to_string(),
 					})
@@ -859,7 +850,7 @@ where
 				warn!(target: "dkg", "🕸️  Got empty message");
 				return Ok(())
 			}
-			let msg: Msg<OfflineProtocolMessage> = match bincode::deserialize(&data.offline_msg) {
+			let msg: Msg<OfflineProtocolMessage> = match serde_json::from_slice(&data.offline_msg) {
 				Ok(msg) => msg,
 				Err(err) => {
 					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -908,7 +899,7 @@ where
 			return Ok(())
 		}
 
-		let sig: PartialSignature = match bincode::deserialize(&data.partial_signature) {
+		let sig: PartialSignature = match serde_json::from_slice(&data.partial_signature) {
 			Ok(sig) => sig,
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
@@ -1014,8 +1005,8 @@ where
 }
 
 pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
-	let r = sig_recid.r.to_big_int().to_bytes();
-	let s = sig_recid.s.to_big_int().to_bytes();
+	let r = sig_recid.r.to_bigint().to_bytes();
+	let s = sig_recid.s.to_bigint().to_bytes();
 	let v = sig_recid.recid;
 
 	let mut sig_vec: Vec<u8> = Vec::new();
@@ -1054,8 +1045,7 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 
 #[cfg(test)]
 mod tests {
-	use super::{MiniStage, MultiPartyECDSARounds, Stage};
-	use crate::types::{DKGError, DKGMsgPayload};
+	use super::{MultiPartyECDSARounds, Stage};
 	use codec::Encode;
 
 	fn check_all_reached_stage(

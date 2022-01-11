@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, DKGPayloadKey, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{DKGPayloadKey, ProposalNonce, ProposalType};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -19,6 +19,7 @@ use sp_runtime::{
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
+use dkg_runtime_primitives::ChainId;
 
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -111,10 +112,10 @@ pub type Executive = frame_executive::Executive<
 /// This runtime version.
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("template-parachain"),
-	impl_name: create_runtime_str!("template-parachain"),
+	spec_name: create_runtime_str!("dkg-parachain"),
+	impl_name: create_runtime_str!("dkg-parachain"),
 	authoring_version: 1,
-	spec_version: 1,
+	spec_version: 14,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -564,7 +565,7 @@ parameter_types! {
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type ChainId = ChainId;
+	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
@@ -573,7 +574,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = ChainId;
+	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;

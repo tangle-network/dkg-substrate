@@ -134,6 +134,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Extensions
 		None,
+		
 	))
 }
 
@@ -213,6 +214,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Extensions
 		None,
+		
 	))
 }
 

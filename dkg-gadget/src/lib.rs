@@ -104,10 +104,10 @@ where
 	pub min_block_delta: u32,
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
-
-	pub block: Option<B>,
-
+	/// Path to the persistent keystore directory for DKG data
 	pub base_path: Option<PathBuf>,
+	/// Phantom block type
+	pub _block: std::marker::PhantomData<B>,
 }
 
 /// Start the DKG gadget.
@@ -128,9 +128,9 @@ where
 		network,
 		min_block_delta,
 		prometheus_registry,
-		block,
 		base_path,
 		local_keystore,
+		_block,
 	} = dkg_params;
 
 	let gossip_validator = Arc::new(gossip::GossipValidator::new());

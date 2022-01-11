@@ -297,6 +297,25 @@ where
 			&parachain_config,
 			Some(params.keystore_container.sync_keystore()),
 		);
+
+		let dkg_params = dkg_gadget::DKGParams {
+			client: client.clone(),
+			backend: backend.clone(),
+			key_store: Some(params.keystore_container.sync_keystore()),
+			network: network.clone(),
+			min_block_delta: 4,
+			prometheus_registry: prometheus_registry.clone(),
+			base_path,
+			local_keystore: params.keystore_container.local_keystore(),
+			_block: std::marker::PhantomData::<Block>,
+		};
+
+		// Start the DKG gadget.
+		task_manager.spawn_essential_handle().spawn_blocking(
+			"dkg-gadget",
+			None,
+			dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
+		);
 	}
 
 	sc_service::spawn_tasks(sc_service::SpawnTasksParams {
@@ -316,25 +335,6 @@ where
 		let network = network.clone();
 		Arc::new(move |hash, data| network.announce_block(hash, data))
 	};
-
-	let dkg_params = dkg_gadget::DKGParams {
-		client: client.clone(),
-		backend: backend.clone(),
-		key_store: Some(params.keystore_container.sync_keystore()),
-		network: network.clone(),
-		min_block_delta: 4,
-		prometheus_registry: prometheus_registry.clone(),
-		block: None,
-		base_path,
-		local_keystore: params.keystore_container.local_keystore(),
-	};
-
-	// Start the DKG gadget.
-	task_manager.spawn_essential_handle().spawn_blocking(
-		"dkg-gadget",
-		None,
-		dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
-	);
 
 	if validator {
 		let parachain_consensus = build_consensus(
