@@ -1,40 +1,42 @@
-import { ApiPromise } from "@polkadot/api";
-import { Keyring } from "@polkadot/keyring";
-import { hexToBytes, provider, waitNfinalizedBlocks } from "./utils";
-import { ethers } from "ethers";
-import { keccak256 } from "@ethersproject/keccak256";
-import { ECPair } from "ecpair";
-import { assert } from "@polkadot/util";
+import { ApiPromise } from '@polkadot/api';
+import { Keyring } from '@polkadot/keyring';
+import { hexToBytes, provider, waitNfinalizedBlocks } from './utils';
+import { ethers } from 'ethers';
+import { keccak256 } from '@ethersproject/keccak256';
+import { ECPair } from 'ecpair';
+import { assert } from '@polkadot/util';
+import { Anchor } from '@webb-tools/fixed-bridge';
 
 const anchorUpdateProp = new Uint8Array([
-	209, 1, 81, 230, 199, 165, 40, 225, 135, 229, 62, 97, 95, 108, 125, 232, 16, 159, 158, 30, 76,
-	163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	19, 137, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 23, 194, 192, 194, 63, 104, 94, 171, 45, 188, 176, 167, 116, 213, 48, 159, 72, 180, 30,
-	153, 205, 53, 55, 38, 185, 131, 173, 100, 167, 96, 194, 18,
+    0,   0,   0,   0,   0,   0,   0,   0, 223,  22, 158, 136,
+  193,  21, 177, 236, 107,  47, 234, 158, 193, 108, 153,  64,
+  171, 132,  14,   7,   0,   0,   5,  57,  68,  52, 123, 169,
+    0,   0,   0,   1,   0,   0, 122, 105,   0,   0,   0,   0,
+   37, 168,  34, 127, 179, 164,  10,  49, 149, 165, 172, 173,
+  194, 178,  58,  98, 176,  16, 209,  39, 221, 166,  75, 249,
+  181, 131, 238,  94,  88, 214, 203,  31
 ]);
-const resourceId = hexToBytes("0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a");
+const resourceId = hexToBytes('0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a');
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
 
-	await waitNfinalizedBlocks(api, 10, 20 * 5);
-
 	await sendAnchorProposal(api);
 
-	await waitNfinalizedBlocks(api, 20, 20 * 5);
+	await waitNfinalizedBlocks(api, 2, 20 * 5);
 
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
-		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), "hex"),
+		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
-	).publicKey.toString("hex");
+	).publicKey.toString('hex');
 
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
 		5001,
 		{ anchorupdateproposal: 0 },
 		(res: any) => {
 			if (res) {
+				console.log(res);
 				const parsedResult = JSON.parse(JSON.stringify(res));
 				console.log(`Signed anchor prop: ${parsedResult}`);
 
@@ -47,7 +49,7 @@ async function testAnchorProposal() {
 					console.log(`Recovered public key: ${recoveredPubKey}`);
 					console.log(`DKG public key: ${dkgPubKey}`);
 
-					assert(recoveredPubKey == dkgPubKey, "Public keys should match");
+					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
 					if (recoveredPubKey == dkgPubKey) {
 						console.log(`Public keys match`);
 					} else {
@@ -65,8 +67,8 @@ async function testAnchorProposal() {
 }
 
 async function sendAnchorProposal(api: ApiPromise) {
-	const keyring = new Keyring({ type: "sr25519" });
-	const alice = keyring.addFromUri("//Alice");
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
 
 	const [authoritySetId, dkgPubKey] = await Promise.all([
 		api.query.dkg.authoritySetId(),

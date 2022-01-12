@@ -12,9 +12,10 @@
   "license": "ISC",
   "dependencies": {
     "@polkadot/api": "^6.11.1",
+    "@polkadot/util": "^8.1.2",
+    "@webb-tools/fixed-bridge": "^0.0.2",
     "ecpair": "^1.0.0",
     "ethers": "^5.5.2",
-    "@polkadot/util": "^8.1.2",
     "jest": "^27.4.5",
     "ts-jest": "^27.1.2",
     "ts-node": "^10.4.0",
