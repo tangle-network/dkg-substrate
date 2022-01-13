@@ -1,10 +1,10 @@
-import { ApiPromise } from "@polkadot/api";
-import { WsProvider } from "@polkadot/api";
-import { u8aToHex, hexToU8a, assert } from "@polkadot/util";
+import { ApiPromise } from '@polkadot/api';
+import { WsProvider } from '@polkadot/api';
+import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 
-export const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-export const provider = new WsProvider("ws://127.0.0.1:9944");
+export const provider = new WsProvider('ws://127.0.0.1:9944');
 
 export const hexToBytes = function (hex: any) {
 	for (var bytes = [], c = 0; c < hex.length; c += 2) {
@@ -53,7 +53,7 @@ export const printValidators = async function (api: ApiPromise) {
 		);
 
 		console.log(
-			"validators",
+			'validators',
 			validators.map((authorityId, index) => ({
 				address: authorityId.toString(),
 				balance: validatorBalances[index].data.free.toHuman(),
@@ -184,10 +184,10 @@ export function makeResourceId(addr: string, chainId: number): string {
 }
 
 function _testEncodeDecode() {
-	const anchorHandlerAddress = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	const anchorHandlerAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 	const chainId = 0xcafe;
 	const resourceId = makeResourceId(anchorHandlerAddress, chainId);
-	const functionSignature = "0xdeadbeef";
+	const functionSignature = '0xdeadbeef';
 	const nonce = 0xdad;
 	const header: ProposalHeader = {
 		resourceId,
@@ -196,7 +196,7 @@ function _testEncodeDecode() {
 	};
 	const srcChainId = 0xbabe;
 	const lastLeafIndex = 0xfeed;
-	const merkleRoot = "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+	const merkleRoot = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 	const updateProposal: AnchorUpdateProposal = {
 		header,
 		srcChainId,
@@ -205,19 +205,19 @@ function _testEncodeDecode() {
 	};
 	const headerEncoded = encodeProposalHeader(header);
 	const headerDecoded = decodeProposalHeader(headerEncoded);
-	assert(headerDecoded.resourceId === resourceId, "resourceId");
-	assert(headerDecoded.functionSignature === functionSignature, "functionSignature");
-	assert(headerDecoded.nonce === nonce, "nonce");
+	assert(headerDecoded.resourceId === resourceId, 'resourceId');
+	assert(headerDecoded.functionSignature === functionSignature, 'functionSignature');
+	assert(headerDecoded.nonce === nonce, 'nonce');
 
 	const updateProposalEncoded = encodeUpdateAnchorProposal(updateProposal);
 	const updateProposalDecoded = decodeUpdateAnchorProposal(updateProposalEncoded);
-	assert(updateProposalDecoded.header.resourceId === resourceId, "resourceId");
+	assert(updateProposalDecoded.header.resourceId === resourceId, 'resourceId');
 	assert(
 		updateProposalDecoded.header.functionSignature === functionSignature,
-		"functionSignature"
+		'functionSignature'
 	);
-	assert(updateProposalDecoded.header.nonce === nonce, "nonce");
-	assert(updateProposalDecoded.srcChainId === srcChainId, "srcChainId");
-	assert(updateProposalDecoded.lastLeafIndex === lastLeafIndex, "lastLeafIndex");
-	assert(updateProposalDecoded.merkleRoot === merkleRoot, "merkleRoot");
+	assert(updateProposalDecoded.header.nonce === nonce, 'nonce');
+	assert(updateProposalDecoded.srcChainId === srcChainId, 'srcChainId');
+	assert(updateProposalDecoded.lastLeafIndex === lastLeafIndex, 'lastLeafIndex');
+	assert(updateProposalDecoded.merkleRoot === merkleRoot, 'merkleRoot');
 }

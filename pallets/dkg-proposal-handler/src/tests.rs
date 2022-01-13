@@ -62,7 +62,7 @@ fn handle_empty_proposal() {
 }
 
 #[test]
-fn handle_unsigned_proposal_success() {
+fn handle_unsigned_eip2930_transaction_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
@@ -76,6 +76,28 @@ fn handle_unsigned_proposal_success() {
 			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
 			true
 		);
+	})
+}
+
+#[test]
+fn handle_anchor_update_proposal_success() {
+	execute_test_with(|| {
+		let proposal_raw: Vec<u8> = vec![
+				0,   0,   0,   0,   0,   0,   0,   0, 223,  22, 158, 136,
+			  193,  21, 177, 236, 107,  47, 234, 158, 193, 108, 153,  64,
+			  171, 132,  14,   7,   0,   0,   5,  57,  68,  52, 123, 169,
+				0,   0,   0,   1,   0,   0, 122, 105,   0,   0,   0,   0,
+			   37, 168,  34, 127, 179, 164,  10,  49, 149, 165, 172, 173,
+			  194, 178,  58,  98, 176,  16, 209,  39, 221, 166,  75, 249,
+			  181, 131, 238,  94,  88, 214, 203,  31
+		];
+
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			proposal_raw,
+			ProposalAction::Sign(0)
+		));
+
+		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
 	})
 }
 

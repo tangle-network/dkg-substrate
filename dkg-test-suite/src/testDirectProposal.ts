@@ -1,13 +1,13 @@
-import { ApiPromise } from "@polkadot/api";
-import { Keyring } from "@polkadot/keyring";
-import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from "./utils";
-import { ethers } from "ethers";
-import { keccak256 } from "@ethersproject/keccak256";
-import { ECPair } from "ecpair";
-import { assert } from "@polkadot/util";
+import { ApiPromise } from '@polkadot/api';
+import { Keyring } from '@polkadot/keyring';
+import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from './utils';
+import { ethers } from 'ethers';
+import { keccak256 } from '@ethersproject/keccak256';
+import { ECPair } from 'ecpair';
+import { assert } from '@polkadot/util';
 
 const raw_data =
-	"00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
+	'00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001';
 const tokenUpdateProp = new Uint8Array(hexToBytes(raw_data));
 
 async function testDirectProposal() {
@@ -16,43 +16,43 @@ async function testDirectProposal() {
 		types: {
 			ProposalType: {
 				_enum: [
-					"EVMUnsigned",
-					"EVMSigned",
-					"AnchorUpdate",
-					"AnchorUpdateSigned",
-					"TokenUpdate",
-					"TokenUpdateSigned",
-					"WrappingFeeUpdate",
-					"WrappingFeeUpdateSigned",
+					'EVMUnsigned',
+					'EVMSigned',
+					'AnchorUpdate',
+					'AnchorUpdateSigned',
+					'TokenUpdate',
+					'TokenUpdateSigned',
+					'WrappingFeeUpdate',
+					'WrappingFeeUpdateSigned',
 				],
 			},
 			EVMUnsigned: {
-				data: "Vec<u8>",
+				data: 'Vec<u8>',
 			},
 			EVMSigned: {
-				data: "Vec<u8>",
-				signature: "Vec<u8>",
+				data: 'Vec<u8>',
+				signature: 'Vec<u8>',
 			},
 			AnchorUpdate: {
-				data: "Vec<u8>",
+				data: 'Vec<u8>',
 			},
 			AnchorUpdateSigned: {
-				data: "Vec<u8>",
-				signature: "Vec<u8>",
+				data: 'Vec<u8>',
+				signature: 'Vec<u8>',
 			},
 			TokenUpdate: {
-				data: "Vec<u8>",
+				data: 'Vec<u8>',
 			},
 			TokenUpdateSigned: {
-				data: "Vec<u8>",
-				signature: "Vec<u8>",
+				data: 'Vec<u8>',
+				signature: 'Vec<u8>',
 			},
 			WrappingFeeUpdate: {
-				data: "Vec<u8>",
+				data: 'Vec<u8>',
 			},
 			WrappingFeeUpdateSigned: {
-				data: "Vec<u8>",
-				signature: "Vec<u8>",
+				data: 'Vec<u8>',
+				signature: 'Vec<u8>',
 			},
 		},
 	});
@@ -65,9 +65,9 @@ async function testDirectProposal() {
 
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
-		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), "hex"),
+		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
-	).publicKey.toString("hex");
+	).publicKey.toString('hex');
 
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
 		1,
@@ -76,7 +76,7 @@ async function testDirectProposal() {
 			if (res) {
 				const parsedResult = JSON.parse(JSON.stringify(res));
 				console.log(`Signed prop: ${parsedResult}`);
-				assert(parsedResult, "Signed proposal should be on chain");
+				assert(parsedResult, 'Signed proposal should be on chain');
 
 				if (parsedResult) {
 					const sig = parsedResult.tokenUpdateSigned.signature;
@@ -87,7 +87,7 @@ async function testDirectProposal() {
 					console.log(`Recovered public key: ${recoveredPubKey}`);
 					console.log(`DKG public key: ${dkgPubKey}`);
 
-					assert(recoveredPubKey == dkgPubKey, "Public keys should match");
+					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
 					if (recoveredPubKey == dkgPubKey) {
 						console.log(`Public keys match`);
 					} else {
@@ -105,8 +105,8 @@ async function testDirectProposal() {
 }
 
 async function sendSudoProposal(api: ApiPromise) {
-	const keyring = new Keyring({ type: "sr25519" });
-	const alice = keyring.addFromUri("//Alice");
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
 
 	await listenOneBlock(api);
 
