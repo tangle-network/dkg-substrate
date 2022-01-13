@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{DKGPayloadKey, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{ChainId, DKGPayloadKey, ProposalNonce, ProposalType};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -19,7 +19,6 @@ use sp_runtime::{
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
-use dkg_runtime_primitives::ChainId;
 
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -811,7 +810,7 @@ impl_runtime_apis! {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
 		}
 
-		fn refresh_nonce() -> u64 {
+		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}
 

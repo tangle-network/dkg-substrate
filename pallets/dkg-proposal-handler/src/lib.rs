@@ -336,19 +336,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_anchor_update_signed_proposal(prop: ProposalType) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0))
 	}
 
 	fn handle_token_add_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0))
 	}
 
 	fn handle_token_remove_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0))
 	}
 
 	fn handle_wrapping_fee_update_signed_proposal(prop: ProposalType) -> DispatchResult {
@@ -668,17 +668,17 @@ impl<T: Config> Pallet<T> {
 		let (chain_id, nonce) = match eth_transaction {
 			TransactionV2::Legacy(tx) => {
 				let chain_id: u64 = 0;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 			TransactionV2::EIP2930(tx) => {
 				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 			TransactionV2::EIP1559(tx) => {
 				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 		};
