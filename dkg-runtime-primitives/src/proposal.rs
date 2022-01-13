@@ -6,7 +6,8 @@ use sp_std::vec::Vec;
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub type ResourceId = [u8; 32];
-pub type ProposalNonce = u64;
+// Proposal Nonces (4 bytes)
+pub type ProposalNonce = u32;
 
 #[derive(Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct RefreshProposal {
@@ -36,7 +37,8 @@ impl Encode for ProposalHeader {
 		// resource_id contains the chain id already.
 		buf.extend_from_slice(&self.resource_id); // 32 bytes
 		buf.extend_from_slice(&self.function_sig); // 4 bytes
-		buf.extend_from_slice(&(self.nonce as u32).to_le_bytes()); // 4 bytes
+		// we encode it in big endian that is what EVM expect things to be.
+		buf.extend_from_slice(&self.nonce.to_be_bytes()); // 4 bytes
 		buf
 	}
 
@@ -67,7 +69,7 @@ impl Decode for ProposalHeader {
 		// the nonce is the last 4 bytes of the header (also considered as the first arg).
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
-		let nonce = u32::from_le_bytes(nonce_bytes);
+		let nonce = u32::from_be_bytes(nonce_bytes);
 		let header = ProposalHeader {
 			resource_id,
 			chain_id,

@@ -712,14 +712,17 @@ impl<T: Config> Pallet<T> {
 		let header = Self::decode_proposal_header(data)?;
 		let mut src_chain_id_bytes = [0u8; 4];
 		src_chain_id_bytes.copy_from_slice(&data[40..44]);
-		let src_chain_id = u32::from_le_bytes(src_chain_id_bytes);
+		let src_chain_id = u32::from_be_bytes(src_chain_id_bytes);
 		let mut latest_leaf_index_bytes = [0u8; 4];
 		latest_leaf_index_bytes.copy_from_slice(&data[44..48]);
-		let latest_leaf_index = u32::from_le_bytes(latest_leaf_index_bytes);
+		let latest_leaf_index = u32::from_be_bytes(latest_leaf_index_bytes);
 		let mut merkle_root_bytes = [0u8; 32];
 		merkle_root_bytes.copy_from_slice(&data[48..80]);
 		// 1. Should we check for the function signature?
 		// 2. Should we check for the chainId != srcChainId?
+		// TODO: do something with them here.
+		let _ = src_chain_id;
+		let _ = latest_leaf_index;
 		Ok(header)
 	}
 
