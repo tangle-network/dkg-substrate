@@ -1,27 +1,36 @@
 {
-  "name": "dkg-test-suite",
-  "version": "0.0.1",
-  "description": "e2e testing utilities for dkg-substrate",
-  "main": "index.js",
-  "scripts": {
-    "dkg-refresh": "ts-node ./src/keyRefresh.ts",
-    "anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
-    "sudo-proposals": "ts-node ./src/testDirectProposal.ts"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@polkadot/api": "^6.11.1",
-    "@polkadot/util": "^8.1.2",
-    "@webb-tools/fixed-bridge": "^0.0.2",
-    "ecpair": "^1.0.0",
-    "ethers": "^5.5.2",
-    "jest": "^27.4.5",
-    "ts-jest": "^27.1.2",
-    "ts-node": "^10.4.0",
-    "typescript": "4.5.4"
-  },
-  "engines": {
-    "node": "17.x.x"
+	"name": "dkg-test-suite",
+	"version": "0.0.1",
+	"description": "e2e testing utilities for dkg-substrate",
+	"main": "index.js",
+	"scripts": {
+		"dkg-refresh": "ts-node ./src/keyRefresh.ts",
+		"anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
+		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
+		"prepare": "husky install"
+	},
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@polkadot/api": "^6.11.1",
+		"@polkadot/util": "^8.1.2",
+		"@webb-tools/fixed-bridge": "^0.0.2",
+		"ecpair": "^1.0.0",
+		"ethers": "^5.5.2",
+		"jest": "^27.4.5",
+		"ts-jest": "^27.1.2",
+		"ts-node": "^10.4.0",
+		"typescript": "4.5.4"
+	},
+	"engines": {
+		"node": "17.x.x"
+	},
+	"devDependencies": {
+		"husky": "^7.0.4",
+		"lint-staged": "^12.1.7",
+		"prettier": "2.5.1"
+	},
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
   }
 }

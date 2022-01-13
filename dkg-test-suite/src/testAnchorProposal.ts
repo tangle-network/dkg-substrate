@@ -1,22 +1,29 @@
 import { ApiPromise } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
-import { hexToBytes, provider, waitNfinalizedBlocks } from './utils';
+import {
+	AnchorUpdateProposal,
+	encodeUpdateAnchorProposal,
+	hexToBytes,
+	makeResourceId,
+	provider,
+	waitNfinalizedBlocks,
+} from './utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert } from '@polkadot/util';
-import { Anchor } from '@webb-tools/fixed-bridge';
 
-const anchorUpdateProp = new Uint8Array([
-	    0,   0,   0,   0,   0,   0,   0,   0, 223,  22, 158, 136,
-	  193,  21, 177, 236, 107,  47, 234, 158, 193, 108, 153,  64,
-	  171, 132,  14,   7,   0,   0,   5,  57,  68,  52, 123, 169,
-	    0,   0,   0,   1,   0,   0, 122, 105,   0,   0,   0,   0,
-	   37, 168,  34, 127, 179, 164,  10,  49, 149, 165, 172, 173,
-	  194, 178,  58,  98, 176,  16, 209,  39, 221, 166,  75, 249,
-	  181, 131, 238,  94,  88, 214, 203,  31
-]);
-const resourceId = hexToBytes('0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a');
+const resourceId = makeResourceId('0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667', 5002);
+const anchorUpdateProposal: AnchorUpdateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0xdeadbeef',
+		nonce: 0,
+	},
+	srcChainId: 5001,
+	lastLeafIndex: 0,
+	merkleRoot: '0x0000000000000000000000000000000000000000000000000000000000000000',
+};
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
@@ -43,7 +50,7 @@ async function testAnchorProposal() {
 					const sig = parsedResult.anchorUpdateSigned.signature;
 					console.log(`Signature: ${sig}`);
 
-					const propHash = keccak256(anchorUpdateProp);
+					const propHash = keccak256(encodeUpdateAnchorProposal(anchorUpdateProposal));
 					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
 					console.log(`Recovered public key: ${recoveredPubKey}`);
 					console.log(`DKG public key: ${dkgPubKey}`);
@@ -77,13 +84,11 @@ async function sendAnchorProposal(api: ApiPromise) {
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
-	console.log(`Update proposal is: ${anchorUpdateProp}`);
-
 	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(
 		0,
 		5001,
 		resourceId,
-		anchorUpdateProp
+		encodeUpdateAnchorProposal(anchorUpdateProposal)
 	);
 
 	const unsub = await proposalCall.signAndSend(alice, ({ events = [], status }) => {
