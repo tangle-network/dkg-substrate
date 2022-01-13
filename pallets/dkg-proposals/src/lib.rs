@@ -646,12 +646,6 @@ impl<T: Config> Pallet<T> {
 		prop: T::Proposal,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved { chain_id: src_id, proposal_nonce: nonce });
-		frame_support::log::debug!(
-			target: "dkg_proposal_handler",
-			"🕸️ Handle Unsigned Proposal: {:?} ({:?})",
-			prop,
-			prop.clone().into(),
-		);
 		T::ProposalHandler::handle_unsigned_proposal(
 			prop.into(),
 			dkg_runtime_primitives::ProposalAction::Sign(0),
