@@ -250,7 +250,7 @@ pub mod pallet {
 	/// Nonce value for next refresh proposal
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_nonce)]
-	pub type RefreshNonce<T: Config> = StorageValue<_, u64, ValueQuery>;
+	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	/// Signature of the DKG public key for the next session
 	#[pallet::storage]
@@ -634,7 +634,7 @@ impl<T: Config> Pallet<T> {
 					signature.clone(),
 				));
 				// Increase nonce value
-				RefreshNonce::<T>::put(refresh_nonce + 1u64);
+				RefreshNonce::<T>::put(refresh_nonce + 1u32);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});

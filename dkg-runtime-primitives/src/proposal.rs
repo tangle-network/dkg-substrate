@@ -6,7 +6,8 @@ use sp_std::vec::Vec;
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub type ResourceId = [u8; 32];
-pub type ProposalNonce = u64;
+// Proposal Nonces (4 bytes)
+pub type ProposalNonce = u32;
 
 #[derive(Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct RefreshProposal {
@@ -36,7 +37,8 @@ impl Encode for ProposalHeader {
 		// resource_id contains the chain id already.
 		buf.extend_from_slice(&self.resource_id); // 32 bytes
 		buf.extend_from_slice(&self.function_sig); // 4 bytes
-		buf.extend_from_slice(&(self.nonce as u32).to_le_bytes()); // 4 bytes
+		// we encode it in big endian that is what EVM expect things to be.
+		buf.extend_from_slice(&self.nonce.to_be_bytes()); // 4 bytes
 		buf
 	}
 
@@ -67,7 +69,7 @@ impl Decode for ProposalHeader {
 		// the nonce is the last 4 bytes of the header (also considered as the first arg).
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
-		let nonce = u32::from_le_bytes(nonce_bytes);
+		let nonce = u32::from_be_bytes(nonce_bytes);
 		let header = ProposalHeader {
 			resource_id,
 			chain_id,
@@ -222,7 +224,7 @@ mod tests {
 	fn proposal_encode_decode() {
 		let mut proposal_data = Vec::with_capacity(80);
 		let chain_id = 5002u32;
-		let nonce = 0xffu64;
+		let nonce = 0xffu32;
 		let resource_id = {
 			let mut r = [0u8; 32];
 			r[28..32].copy_from_slice(&chain_id.to_be_bytes());
@@ -234,8 +236,8 @@ mod tests {
 		let last_leaf_index = nonce as u32;
 		let merkle_root = [0xeeu8; 32];
 		proposal_header.encode_to(&mut proposal_data);
-		proposal_data.extend_from_slice(&src_id.to_le_bytes());
-		proposal_data.extend_from_slice(&last_leaf_index.to_le_bytes());
+		proposal_data.extend_from_slice(&src_id.to_be_bytes());
+		proposal_data.extend_from_slice(&last_leaf_index.to_be_bytes());
 		proposal_data.extend_from_slice(&merkle_root);
 		assert_eq!(proposal_data.len(), 80);
 		let hex = hex::encode(&proposal_data);
