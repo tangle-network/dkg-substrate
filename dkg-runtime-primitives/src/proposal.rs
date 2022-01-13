@@ -37,7 +37,7 @@ impl Encode for ProposalHeader {
 		// resource_id contains the chain id already.
 		buf.extend_from_slice(&self.resource_id); // 32 bytes
 		buf.extend_from_slice(&self.function_sig); // 4 bytes
-										   // we encode it in big endian that is what EVM expect things to be.
+		// we encode it in big endian that is what EVM expect things to be.
 		buf.extend_from_slice(&self.nonce.to_be_bytes()); // 4 bytes
 		buf
 	}
