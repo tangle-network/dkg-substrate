@@ -706,6 +706,13 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, srcChainId: 4 Bytes, latestLeafIndex: 4 Bytes, merkleRoot: 32 Bytes) = 80 Bytes
 	fn decode_anchor_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Decoded Anchor Update Proposal: {:?} ({} bytes)",
+			data,
+			data.len(),
+		);
+
 		if data.len() != 80 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}

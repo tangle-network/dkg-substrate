@@ -36,9 +36,8 @@ async function testAnchorProposal() {
 		{ anchorupdateproposal: 0 },
 		(res: any) => {
 			if (res) {
-				console.log(res);
 				const parsedResult = JSON.parse(JSON.stringify(res));
-				console.log(`Signed anchor prop: ${parsedResult}`);
+				console.log(`Signed anchor prop: ${res.toHuman()}`);
 
 				if (parsedResult) {
 					const sig = parsedResult.anchorUpdateSigned.signature;
@@ -77,15 +76,8 @@ async function sendAnchorProposal(api: ApiPromise) {
 
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
-
-	// console.log(`tx ${Object.getOwnPropertyNames(api.tx.dKGProposals)}`);
-
-	const proposalData = new Uint8Array(130);
-	for (let i = 0; i < proposalData.length; i++) {
-		proposalData[i] = i / 255;
-	}
-
 	console.log(`Resource id is: ${resourceId}`);
+	console.log(`Update proposal is: ${anchorUpdateProp}`);
 
 	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(
 		0,
