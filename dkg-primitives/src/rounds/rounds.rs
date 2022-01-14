@@ -49,6 +49,7 @@ const SIGN_TIMEOUT: u32 = 3;
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
+#[derive(TypedBuilder)]
 pub struct MultiPartyKeygen<Clock> {
 	round_id: RoundId,
 	party_index: u16,
@@ -56,28 +57,15 @@ pub struct MultiPartyKeygen<Clock> {
 	parties: u16,
 
 	keygen_set_id: KeygenSetId,
-	signer_set_id: SignerSetId,
-	signers: Vec<u16>,
-	stage: Stage,
-	// Stage tracker for individual OfflineStages
-	local_stages: HashMap<Vec<u8>, MiniStage>,
+	keygen: KeygenState<Clock>,
 
 	// DKG clock
 	keygen_started_at: Clock,
-	offline_started_at: HashMap<Vec<u8>, Clock>,
 	// The block number at which a dkg message was last received
 	last_received_at: Clock,
-	// This holds the information of which stage the protocol was at when the last dkg message was received
-	// This information can be used to deduce approximately if the protocol is stuck at the keygen stage.
-	stage_at_last_receipt: Stage,
 
 	// Message processing
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
-
-	keygen: KeygenState<Clock>,
-	offline: HashMap<Vec<u8>, OfflineState<Clock>>,
-	sign: HashMap<Vec<u8>, SignState<Clock>>,
 
 	// File system storage and encryption
 	local_key_path: Option<PathBuf>,
@@ -85,53 +73,10 @@ pub struct MultiPartyKeygen<Clock> {
 	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
-impl<C> MultiPartyKeygenRounds<C>
+impl<C> MultiPartyKeygen<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Public ///
-
-	pub fn new(
-		party_index: u16,
-		threshold: u16,
-		parties: u16,
-		round_id: RoundId,
-		local_key_path: Option<PathBuf>,
-		created_at: C,
-		public_key: Option<sr25519::Public>,
-		local_keystore: Option<Arc<LocalKeystore>>,
-	) -> Self {
-		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
-
-		Self {
-			party_index,
-			threshold,
-			parties,
-			round_id,
-			last_received_at: created_at,
-			stage_at_last_receipt: Stage::KeygenReady,
-			keygen_set_id: 0,
-			signer_set_id: 0,
-			signers: vec![],
-			keygen_started_at: 0u32.into(),
-			offline_started_at: HashMap::new(),
-			stage: Stage::KeygenReady,
-			local_stages: HashMap::new(),
-			pending_keygen_msgs: Vec::new(),
-			pending_offline_msgs: HashMap::new(),
-			keygen: None,
-			local_key: None,
-			offline_stage: HashMap::new(),
-			completed_offline_stage: HashMap::new(),
-			rounds: BTreeMap::new(),
-			sign_outgoing_msgs: Vec::new(),
-			finished_rounds: Vec::new(),
-			local_key_path,
-			public_key,
-			local_keystore,
-		}
-	}
-
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
 	}
@@ -339,89 +284,31 @@ where
 	}
 }
 
+#[derive(TypedBuilder)]
 pub struct MultiPartySign<Clock> {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
 
-	keygen_set_id: KeygenSetId,
 	signer_set_id: SignerSetId,
 	signers: Vec<u16>,
-	stage: Stage,
-	// Stage tracker for individual OfflineStages
-	local_stages: HashMap<Vec<u8>, MiniStage>,
-
-	// DKG clock
-	keygen_started_at: Clock,
-	offline_started_at: HashMap<Vec<u8>, Clock>,
-	// The block number at which a dkg message was last received
-	last_received_at: Clock,
-	// This holds the information of which stage the protocol was at when the last dkg message was received
-	// This information can be used to deduce approximately if the protocol is stuck at the keygen stage.
-	stage_at_last_receipt: Stage,
-
-	// Message processing
-	pending_keygen_msgs: Vec<DKGKeygenMessage>,
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
-
-	keygen: KeygenState<Clock>,
 	offline: HashMap<Vec<u8>, OfflineState<Clock>>,
 	sign: HashMap<Vec<u8>, SignState<Clock>>,
 
-	// File system storage and encryption
-	local_key_path: Option<PathBuf>,
-	public_key: Option<sr25519::Public>,
-	local_keystore: Option<Arc<LocalKeystore>>,
+	// DKG clock
+	offline_started_at: HashMap<Vec<u8>, Clock>,
+	// The block number at which a dkg message was last received
+	last_received_at: Clock,
+
+	// Message processing
+	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
 }
 
 impl<C> MultiPartySign<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Public ///
-
-	pub fn new(
-		party_index: u16,
-		threshold: u16,
-		parties: u16,
-		round_id: RoundId,
-		local_key_path: Option<PathBuf>,
-		created_at: C,
-		public_key: Option<sr25519::Public>,
-		local_keystore: Option<Arc<LocalKeystore>>,
-	) -> Self {
-		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
-
-		Self {
-			party_index,
-			threshold,
-			parties,
-			round_id,
-			last_received_at: created_at,
-			stage_at_last_receipt: Stage::KeygenReady,
-			keygen_set_id: 0,
-			signer_set_id: 0,
-			signers: vec![],
-			keygen_started_at: 0u32.into(),
-			offline_started_at: HashMap::new(),
-			stage: Stage::KeygenReady,
-			local_stages: HashMap::new(),
-			pending_keygen_msgs: Vec::new(),
-			pending_offline_msgs: HashMap::new(),
-			keygen: None,
-			local_key: None,
-			offline_stage: HashMap::new(),
-			completed_offline_stage: HashMap::new(),
-			rounds: BTreeMap::new(),
-			sign_outgoing_msgs: Vec::new(),
-			finished_rounds: Vec::new(),
-			local_key_path,
-			public_key,
-			local_keystore,
-		}
-	}
-
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
 	}
