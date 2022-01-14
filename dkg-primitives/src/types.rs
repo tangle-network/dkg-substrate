@@ -108,17 +108,24 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Stage {
-	KeygenReady,
-	Keygen,
-	OfflineReady,
+pub enum MultiPartyState {
+	Keygen(MulitPartyKeygen),
+	Sign(MultiPartySign),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MiniStage {
-	Offline,
-	ManualReady,
+pub enum KeygenState<C> {
+	Started(KeygenRounds<C>),
+	Finished(Result<LocalKey<Secp256k1>, DKGError>),
+}
+
+pub enum OfflineState<C> {
+	Started(OfflineRounds<C>),
+	Finished(Result<CompletedOfflineStage, DKGError>),
+}
+
+pub enum SignState<C> {
+	Started(SignRounds<C>),
+	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
 impl Stage {

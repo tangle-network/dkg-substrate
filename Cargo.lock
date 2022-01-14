@@ -1979,6 +1979,7 @@ dependencies = [
  "sp-keystore",
  "sp-runtime",
  "thiserror",
+ "typed-builder",
  "wasm-timer",
 ]
 
@@ -11536,6 +11537,16 @@ dependencies = [
  "cfg-if 1.0.0",
  "rand 0.8.4",
  "static_assertions",
+]
+
+[[package]]
+name = "typed-builder"
+version = "0.9.1"
+source = "git+https://github.com/idanarye/rust-typed-builder.git?branch=master#981566eb591688458b2ec0c27f15ed7554ca7187"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
