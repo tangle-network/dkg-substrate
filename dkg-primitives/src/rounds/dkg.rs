@@ -20,7 +20,6 @@ use dkg_runtime_primitives::{
 	offchain_crypto::{Pair as AppPair, Public},
 };
 
-use crate::keygen::MultiPartyKeygen;
 pub use gg_2020::{
 	party_i::*,
 	state_machine::{keygen::*, sign::*},
@@ -36,8 +35,8 @@ pub struct DKGState<C> {
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
+	pub curr_dkg: Option<MultiPartyState<C>>,
+	pub past_dkg: Option<MultiPartyState<C>>,
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
@@ -45,11 +44,16 @@ const KEYGEN_TIMEOUT: u32 = 10;
 const OFFLINE_TIMEOUT: u32 = 10;
 const SIGN_TIMEOUT: u32 = 3;
 
-/// State machine structure for performing Keygen, Offline stage and Sign rounds
+pub enum MultiPartyState<C> {
+	Keygen(MulitPartyKeygen<C>),
+	Sign(MultiPartySign<C>),
+}
+
+/// State machine structure for performing Keygen
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
-#[derive(TypedBuilder)]
+
 pub struct MultiPartyKeygen<Clock> {
 	round_id: RoundId,
 	party_index: u16,
@@ -77,22 +81,6 @@ impl<C> MultiPartyKeygen<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
-		self.local_key = Some(local_key)
-	}
-
-	pub fn set_stage(&mut self, stage: Stage) {
-		self.stage = stage;
-	}
-
-	pub fn set_signers(&mut self, signers: Vec<u16>) {
-		self.signers = signers;
-	}
-
-	pub fn set_signer_set_id(&mut self, set_id: SignerSetId) {
-		self.signer_set_id = set_id;
-	}
-
 	/// A check to know if the protocol has stalled at the keygen stage,
 	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
 	/// And the keygen stage has not completed
@@ -146,31 +134,16 @@ where
 	}
 
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
-		trace!(target: "dkg", "🕸️  Get outgoing, stage {:?}", self.stage);
+		trace!(target: "dkg", "🕸️  Get outgoing Keygen");
 
-		let mut all_messages = match self.stage {
-			Stage::Keygen => self
+		let mut all_messages = match self.keygen {
+			KeygenState::Started(keygen) => keygen
 				.get_outgoing_messages_keygen()
 				.into_iter()
 				.map(|msg| DKGMsgPayload::Keygen(msg))
 				.collect(),
 			_ => vec![],
 		};
-
-		let offline_messages = self
-			.get_outgoing_messages_offline_stage()
-			.into_iter()
-			.map(|msg| DKGMsgPayload::Offline(msg))
-			.collect::<Vec<_>>();
-
-		let vote_messages = self
-			.get_outgoing_messages_vote()
-			.into_iter()
-			.map(|msg| DKGMsgPayload::Vote(msg))
-			.collect::<Vec<_>>();
-
-		all_messages.extend_from_slice(&offline_messages[..]);
-		all_messages.extend_from_slice(&vote_messages[..]);
 
 		all_messages
 	}
@@ -196,20 +169,6 @@ where
 					Ok(())
 				}
 			},
-			DKGMsgPayload::Offline(msg) =>
-				if self.offline_stage.contains_key(&msg.key) {
-					let res = self.handle_incoming_offline_stage(msg.clone());
-					if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
-						self.offline_stage.remove(&msg.key);
-						self.local_stages.remove(&msg.key);
-					}
-					res
-				} else {
-					let messages = self.pending_offline_msgs.entry(msg.key.clone()).or_default();
-					messages.push(msg);
-					Ok(())
-				},
-			DKGMsgPayload::Vote(msg) => self.handle_incoming_vote(msg),
 			_ => Ok(()),
 		}
 	}
@@ -251,20 +210,8 @@ where
 		}
 	}
 
-	pub fn has_finished_rounds(&self) -> bool {
-		!self.finished_rounds.is_empty()
-	}
-
-	pub fn get_finished_rounds(&mut self) -> Vec<DKGSignedPayload> {
-		std::mem::take(&mut self.finished_rounds)
-	}
-
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
 		(self.party_index, self.threshold, self.parties)
-	}
-
-	pub fn is_signer(&self) -> bool {
-		self.signers.contains(&self.party_index)
 	}
 
 	pub fn get_public_key(&self) -> Option<GE> {
@@ -278,13 +225,12 @@ where
 	pub fn get_id(&self) -> RoundId {
 		self.round_id
 	}
-
-	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
-		return self.rounds.contains_key(&round_key)
-	}
 }
 
-#[derive(TypedBuilder)]
+/// State machine structure for performing Offline and Sign
+/// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
+/// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
+/// different chains are submitted
 pub struct MultiPartySign<Clock> {
 	round_id: RoundId,
 	party_index: u16,
@@ -303,6 +249,8 @@ pub struct MultiPartySign<Clock> {
 
 	// Message processing
 	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
+
+	local_key: LocalKey<Secp256k1>,
 }
 
 impl<C> MultiPartySign<C>

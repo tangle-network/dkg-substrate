@@ -108,11 +108,6 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-pub enum MultiPartyState {
-	Keygen(MulitPartyKeygen),
-	Sign(MultiPartySign),
-}
-
 pub enum KeygenState<C> {
 	Started(KeygenRounds<C>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),

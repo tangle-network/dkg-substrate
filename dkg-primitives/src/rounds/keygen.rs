@@ -39,11 +39,9 @@ pub struct KeygenRounds<Clock> {
 	keygen_set_id: KeygenSetId,
 	// DKG clock
 	keygen_started_at: Clock,
-	// Message processing
-	pending_keygen_msgs: Vec<DKGKeygenMessage>,
 	// Key generation
 	keygen: Keygen,
-	local_key: Option<LocalKey<Secp256k1>>,
+	output: Option<Result<LocalKey<Secp256k1>, DKGError>>,
 }
 
 impl<C> KeygenRounds<C>
@@ -55,12 +53,12 @@ where
 	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
 
-		let keygen = self.keygen;
+		let keygen = &mut self.keygen;
 
-		if self.keygen.wants_to_proceed() {
+		if keygen.wants_to_proceed() {
 			info!(target: "dkg", "🕸️  Keygen party {} wants to proceed", keygen.party_ind());
 			trace!(target: "dkg", "🕸️  before: {:?}", keygen);
-			// TODO, handle asynchronously
+
 			match keygen.proceed() {
 				Ok(_) => {
 					trace!(target: "dkg", "🕸️  after: {:?}", keygen);
@@ -106,7 +104,7 @@ where
 
 	/// Try finish current Stage
 
-	pub fn try_finish(&mut self) -> bool {
+	fn try_finish(&mut self) -> bool {
 		let keygen = self.keygen.as_mut().unwrap();
 
 		if keygen.is_finished() {
@@ -114,35 +112,6 @@ where
 			match keygen.pick_output() {
 				Some(Ok(k)) => {
 					self.local_key = Some(k.clone());
-
-					// We create a deterministic signer set using the public key as a seed to the random number generator
-					// We need a 32 byte seed, the compressed public key is 33 bytes
-					let seed = &k.public_key().to_bytes(true)[1..];
-					let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
-					// We need threshold + 1 parties to complete the signing round
-					let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						self.signer_set_id = self.round_id;
-						self.signers = signers_set;
-					}
-					// We only persist the local key if we have all that is required to encrypt it
-					if self.local_key_path.is_some() &&
-						self.local_keystore.is_some() &&
-						self.public_key.is_some()
-					{
-						// The public key conversion here will not fail because they have the same type(sr25519)
-						let key_pair = self.local_keystore.as_ref().unwrap().key_pair::<AppPair>(
-							&Public::try_from(&self.public_key.as_ref().unwrap().0[..]).unwrap(),
-						);
-						if let Ok(Some(key_pair)) = key_pair {
-							let _ = store_localkey(
-								k,
-								self.round_id,
-								self.local_key_path.as_ref().unwrap().clone(),
-								key_pair.to_raw_vec(),
-							);
-						}
-					}
 					info!(target: "dkg", "🕸️  local share key is extracted");
 					return true
 				},

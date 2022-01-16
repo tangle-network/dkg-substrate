@@ -1,3 +1,3 @@
-pub mod rounds;
+pub mod dkg;
 
-pub use rounds::*;
+pub use dkg::*;
