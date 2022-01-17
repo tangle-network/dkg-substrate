@@ -29,6 +29,51 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+pub enum OfflineState<C> {
+	NotStarted(PreOfflineRounds<C>),
+	Started(OfflineRounds<C>),
+	Finished(Result<CompletedOfflineStage, DKGError>),
+}
+
+/// Pre-offline rounds
+
+pub struct PreOfflineRounds<Clock> {
+	signer_set_id: SignerSetId,
+	pending_offline_msgs: Vec<DKGOfflineMessage>,
+}
+
+impl<C> PreOfflineRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn new(signer_set_id: SignerSetId) -> Self {
+		Self{
+			signer_set_id,
+			pending_keygen_msgs: Vec::default(),
+		}
+	}
+}
+
+impl<C> DKGRoundsSM<DKGOfflineMessage, Vec<DKGOfflineMessage>, C> for PreOfflineRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
+		self.pending_offline_msgs.push(data);
+		Ok(())
+	}
+
+	pub fn is_finished(&self) {
+		true
+	}
+	
+	pub fn try_finish(self) -> Result<Vec<DKGOfflineMessage>, DKGError> {
+		Ok(self.pending_offline_msgs.take())
+	}
+}
+
+/// Offline rounds
+
 pub struct OfflineRounds<Clock> {
 	round_id: RoundId,
 	party_index: u16,

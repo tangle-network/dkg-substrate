@@ -108,21 +108,6 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-pub enum KeygenState<C> {
-	Started(KeygenRounds<C>),
-	Finished(Result<LocalKey<Secp256k1>, DKGError>),
-}
-
-pub enum OfflineState<C> {
-	Started(OfflineRounds<C>),
-	Finished(Result<CompletedOfflineStage, DKGError>),
-}
-
-pub enum SignState<C> {
-	Started(SignRounds<C>),
-	Finished(Result<DKGSignedPayload, DKGError>),
-}
-
 impl Stage {
 	pub fn get_next(self) -> Stage {
 		match self {

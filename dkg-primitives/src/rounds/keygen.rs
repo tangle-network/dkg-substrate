@@ -29,6 +29,50 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+pub enum KeygenState<C> {
+	NotStarted(PreKeygenRounds<C>),
+	Started(KeygenRounds<C>),
+	Finished(Result<LocalKey<Secp256k1>, DKGError>),
+}
+
+/// Pre-keygen rounds
+pub struct PreKeygenRounds<Clock> {
+	round_id: RoundId,
+	pending_keygen_msgs: Vec<DKGKeygenMessage>,
+}
+
+impl<C> PreKeygenRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn new(round_id: RoundId) -> Self {
+		Self{
+			round_id,
+			pending_keygen_msgs: Vec::default(),
+		}
+	}
+}
+
+impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn handle_incoming(&mut self, data: DKGKeygenMessage) -> Result<(), DKGError> {
+		self.pending_keygen_msgs.push(data);
+		Ok(())
+	}
+
+	pub fn is_finished(&self) {
+		true
+	}
+	
+	pub fn try_finish(self) -> Result<Vec<DKGKeygenMessage>, DKGError> {
+		Ok(self.pending_keygen_msgs.take())
+	}
+}
+
+/// Keygen rounds
+
 pub struct KeygenRounds<Clock> {
 	round_id: RoundId,
 

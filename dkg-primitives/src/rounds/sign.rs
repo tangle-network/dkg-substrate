@@ -29,6 +29,11 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+pub enum SignState<C> {
+	Started(SignRounds<C>),
+	Finished(Result<DKGSignedPayload, DKGError>),
+}
+
 pub struct SignRounds<Clock> {
 	round_id: RoundId,
 	party_index: u16,
@@ -260,5 +265,44 @@ where
 			}
 		}
 		Err(DKGError::GenericError { reason: "No SignManual found".to_string() })
+	}
+}
+
+pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
+	let r = sig_recid.r.to_bigint().to_bytes();
+	let s = sig_recid.s.to_bigint().to_bytes();
+	let v = sig_recid.recid;
+
+	let mut sig_vec: Vec<u8> = Vec::new();
+
+	for _ in 0..(32 - r.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&r);
+
+	for _ in 0..(32 - s.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&s);
+
+	sig_vec.extend(&[v]);
+
+	if 65 != sig_vec.len() {
+		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+		return None
+	}
+
+	let mut dkg_sig_arr: [u8; 65] = [0; 65];
+	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
+
+	return match Signature(dkg_sig_arr).try_into() {
+		Ok(sig) => {
+			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
+			Some(sig)
+		},
+		Err(err) => {
+			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
+			None
+		},
 	}
 }

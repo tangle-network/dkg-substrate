@@ -1,3 +1,4 @@
+use bincode;
 use codec::Encode;
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
@@ -35,8 +36,8 @@ pub struct DKGState<C> {
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyState<C>>,
-	pub past_dkg: Option<MultiPartyState<C>>,
+	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
+	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
@@ -44,32 +45,52 @@ const KEYGEN_TIMEOUT: u32 = 10;
 const OFFLINE_TIMEOUT: u32 = 10;
 const SIGN_TIMEOUT: u32 = 3;
 
-pub enum MultiPartyState<C> {
-	Keygen(MulitPartyKeygen<C>),
-	Sign(MultiPartySign<C>),
+pub trait DKGRoundsSM<Payload, Output, Clock> {
+	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+		Ok(false)
+	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		vec![]
+	}
+
+	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+		Ok(())
+	}
+
+	fn is_finished(&self) -> bool {
+		false
+	}
+
+	fn try_finish(self) -> Result<Output, DKGError>;
 }
 
-/// State machine structure for performing Keygen
+/// State machine structure for performing Keygen, Offline stage and Sign rounds
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
-
-pub struct MultiPartyKeygen<Clock> {
+pub struct MultiPartyECDSARounds<Clock> {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
 
-	keygen_set_id: KeygenSetId,
-	keygen: KeygenState<Clock>,
-
-	// DKG clock
-	keygen_started_at: Clock,
-	// The block number at which a dkg message was last received
-	last_received_at: Clock,
-
 	// Message processing
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
+	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
+
+	// Key generation
+	keygen: Option<KegenRounds<Clock>>,
+	local_key: Option<LocalKey<Secp256k1>>,
+
+	// Offline stage
+	offline_stage: HashMap<Vec<u8>, OfflineRounds<Clock>>,
+	completed_offline_stage: HashMap<Vec<u8>, CompletedOfflineStage>,
+
+	// Signing rounds
+	rounds: HashMap<Vec<u8>, SignRounds<Clock>>,
+	sign_outgoing_msgs: Vec<DKGVoteMessage>,
+	finished_rounds: Vec<DKGSignedPayload>,
 
 	// File system storage and encryption
 	local_key_path: Option<PathBuf>,
@@ -77,186 +98,53 @@ pub struct MultiPartyKeygen<Clock> {
 	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
-impl<C> MultiPartyKeygen<C>
+impl<C> MultiPartyECDSARounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// A check to know if the protocol has stalled at the keygen stage,
-	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
-	/// And the keygen stage has not completed
-	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
-		let last_stage = self.stage_at_last_receipt;
-		let current_stage = self.stage;
-		let block_diff = current_block_number - self.last_received_at;
+	/// Public ///
 
-		if block_diff >= time_to_restart.unwrap_or(3u32.into()) &&
-			last_stage == current_stage &&
-			self.is_key_gen_stage()
-		{
-			return true
-		}
+	pub fn new(
+		party_index: u16,
+		threshold: u16,
+		parties: u16,
+		round_id: RoundId,
+		local_key_path: Option<PathBuf>,
+		created_at: C,
+		public_key: Option<sr25519::Public>,
+		local_keystore: Option<Arc<LocalKeystore>>,
+	) -> Self {
+		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
-		false
-	}
-
-	pub fn proceed(&mut self, at: C) -> Vec<Result<(), DKGError>> {
-		let proceed_res = match self.stage {
-			Stage::Keygen => self.proceed_keygen(at),
-			Stage::OfflineReady => Ok(false),
-			_ => Ok(false),
-		};
-
-		let mut results = vec![];
-
-		match proceed_res {
-			Ok(finished) =>
-				if finished {
-					self.advance_stage();
-				},
-			Err(err) => results.push(Err(err)),
-		}
-
-		let keys = self.offline_stage.keys().cloned().collect::<Vec<_>>();
-		for key in &keys {
-			let res = self.proceed_offline_stage(key.clone(), at).map(|_| ());
-			if res.is_err() {
-				results.push(res);
-			}
-		}
-
-		let res = self.proceed_vote(at).map(|_| ());
-
-		if res.is_err() {
-			results.push(res);
-		}
-
-		results
-	}
-
-	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
-		trace!(target: "dkg", "🕸️  Get outgoing Keygen");
-
-		let mut all_messages = match self.keygen {
-			KeygenState::Started(keygen) => keygen
-				.get_outgoing_messages_keygen()
-				.into_iter()
-				.map(|msg| DKGMsgPayload::Keygen(msg))
-				.collect(),
-			_ => vec![],
-		};
-
-		all_messages
-	}
-
-	pub fn handle_incoming(
-		&mut self,
-		data: DKGMsgPayload,
-		current_block_number: Option<C>,
-	) -> Result<(), DKGError> {
-		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
-		if current_block_number.is_some() {
-			self.last_received_at = current_block_number.unwrap();
-		}
-
-		self.stage_at_last_receipt = self.stage;
-		return match data {
-			DKGMsgPayload::Keygen(msg) => {
-				// TODO: check keygen_set_id
-				if Stage::Keygen == self.stage {
-					self.handle_incoming_keygen(msg)
-				} else {
-					self.pending_keygen_msgs.push(msg);
-					Ok(())
-				}
-			},
-			_ => Ok(()),
+		Self {
+			party_index,
+			threshold,
+			parties,
+			round_id,
+			last_received_at: created_at,
+			stage_at_last_receipt: Stage::KeygenReady,
+			keygen_set_id: 0,
+			signer_set_id: 0,
+			signers: vec![],
+			keygen_started_at: 0u32.into(),
+			offline_started_at: HashMap::new(),
+			stage: Stage::KeygenReady,
+			local_stages: HashMap::new(),
+			pending_keygen_msgs: Vec::new(),
+			pending_offline_msgs: HashMap::new(),
+			keygen: None,
+			local_key: None,
+			offline_stage: HashMap::new(),
+			completed_offline_stage: HashMap::new(),
+			rounds: BTreeMap::new(),
+			sign_outgoing_msgs: Vec::new(),
+			finished_rounds: Vec::new(),
+			local_key_path,
+			public_key,
+			local_keystore,
 		}
 	}
 
-	pub fn start_keygen(
-		&mut self,
-		keygen_set_id: KeygenSetId,
-		started_at: C,
-	) -> Result<(), DKGError> {
-		info!(
-			target: "dkg",
-			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
-			self.party_index,
-			self.threshold,
-			self.parties,
-		);
-		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
-
-		match Keygen::new(self.party_index, self.threshold, self.parties) {
-			Ok(new_keygen) => {
-				self.stage = Stage::Keygen;
-				self.keygen_set_id = keygen_set_id;
-				self.keygen_started_at = started_at;
-				self.keygen = Some(new_keygen);
-
-				// Processing pending messages
-				for msg in std::mem::take(&mut self.pending_keygen_msgs) {
-					if let Err(err) = self.handle_incoming_keygen(msg) {
-						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
-					}
-					self.proceed_keygen(started_at)?;
-				}
-				trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", self.pending_keygen_msgs.len());
-				self.pending_keygen_msgs.clear();
-
-				Ok(())
-			},
-			Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
-		}
-	}
-
-	pub fn dkg_params(&self) -> (u16, u16, u16) {
-		(self.party_index, self.threshold, self.parties)
-	}
-
-	pub fn get_public_key(&self) -> Option<GE> {
-		if let Some(local_key) = &self.local_key {
-			Some(local_key.public_key().clone())
-		} else {
-			None
-		}
-	}
-
-	pub fn get_id(&self) -> RoundId {
-		self.round_id
-	}
-}
-
-/// State machine structure for performing Offline and Sign
-/// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
-/// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
-/// different chains are submitted
-pub struct MultiPartySign<Clock> {
-	round_id: RoundId,
-	party_index: u16,
-	threshold: u16,
-	parties: u16,
-
-	signer_set_id: SignerSetId,
-	signers: Vec<u16>,
-	offline: HashMap<Vec<u8>, OfflineState<Clock>>,
-	sign: HashMap<Vec<u8>, SignState<Clock>>,
-
-	// DKG clock
-	offline_started_at: HashMap<Vec<u8>, Clock>,
-	// The block number at which a dkg message was last received
-	last_received_at: Clock,
-
-	// Message processing
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
-
-	local_key: LocalKey<Secp256k1>,
-}
-
-impl<C> MultiPartySign<C>
-where
-	C: AtLeast32BitUnsigned + Copy,
-{
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
 	}
@@ -394,6 +282,43 @@ where
 		}
 	}
 
+	pub fn start_keygen(
+		&mut self,
+		keygen_set_id: KeygenSetId,
+		started_at: C,
+	) -> Result<(), DKGError> {
+		info!(
+			target: "dkg",
+			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
+			self.party_index,
+			self.threshold,
+			self.parties,
+		);
+		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
+
+		match Keygen::new(self.party_index, self.threshold, self.parties) {
+			Ok(new_keygen) => {
+				self.stage = Stage::Keygen;
+				self.keygen_set_id = keygen_set_id;
+				self.keygen_started_at = started_at;
+				self.keygen = Some(new_keygen);
+
+				// Processing pending messages
+				for msg in std::mem::take(&mut self.pending_keygen_msgs) {
+					if let Err(err) = self.handle_incoming_keygen(msg) {
+						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
+					}
+					self.proceed_keygen(started_at)?;
+				}
+				trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", self.pending_keygen_msgs.len());
+				self.pending_keygen_msgs.clear();
+
+				Ok(())
+			},
+			Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
+		}
+	}
+
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
 		match self.stage {
@@ -468,6 +393,18 @@ where
 		}
 	}
 
+	pub fn is_key_gen_stage(&self) -> bool {
+		Stage::Keygen == self.stage
+	}
+
+	pub fn is_offline_ready(&self) -> bool {
+		Stage::OfflineReady == self.stage
+	}
+
+	pub fn is_ready_to_vote(&self, key: Vec<u8>) -> bool {
+		Some(&MiniStage::ManualReady) == self.local_stages.get(&key)
+	}
+
 	pub fn has_finished_rounds(&self) -> bool {
 		!self.finished_rounds.is_empty()
 	}
@@ -498,45 +435,6 @@ where
 
 	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
 		return self.rounds.contains_key(&round_key)
-	}
-}
-
-pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
-	let r = sig_recid.r.to_bigint().to_bytes();
-	let s = sig_recid.s.to_bigint().to_bytes();
-	let v = sig_recid.recid;
-
-	let mut sig_vec: Vec<u8> = Vec::new();
-
-	for _ in 0..(32 - r.len()) {
-		sig_vec.extend(&[0]);
-	}
-	sig_vec.extend_from_slice(&r);
-
-	for _ in 0..(32 - s.len()) {
-		sig_vec.extend(&[0]);
-	}
-	sig_vec.extend_from_slice(&s);
-
-	sig_vec.extend(&[v]);
-
-	if 65 != sig_vec.len() {
-		warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
-		return None
-	}
-
-	let mut dkg_sig_arr: [u8; 65] = [0; 65];
-	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
-
-	return match Signature(dkg_sig_arr).try_into() {
-		Ok(sig) => {
-			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
-			Some(sig)
-		},
-		Err(err) => {
-			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
-			None
-		},
 	}
 }
 
