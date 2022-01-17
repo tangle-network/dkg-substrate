@@ -130,11 +130,12 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
+		// Fork id
+		None,
 		// Properties
 		None,
 		// Extensions
 		None,
-		
 	))
 }
 
@@ -210,6 +211,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
+		// Fork id
+		None,
 		// Properties
 		None,
 		// Extensions
@@ -257,6 +260,8 @@ pub fn arana_testnet_config() -> Result<ChainSpec, String> {
 		// Telemetry
 		None,
 		// Protocol ID
+		None,
+		// Fork id
 		None,
 		// Properties
 		None,
