@@ -75,22 +75,14 @@ pub struct MultiPartyECDSARounds<Clock> {
 	threshold: u16,
 	parties: u16,
 
-	// Message processing
-	pending_keygen_msgs: Vec<DKGKeygenMessage>,
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
+	create_at: C,
 
 	// Key generation
-	keygen: Option<KegenRounds<Clock>>,
-	local_key: Option<LocalKey<Secp256k1>>,
-
+	keygen: Option<KeygenState<Clock>>,
 	// Offline stage
-	offline_stage: HashMap<Vec<u8>, OfflineRounds<Clock>>,
-	completed_offline_stage: HashMap<Vec<u8>, CompletedOfflineStage>,
-
+	offline_stage: HashMap<Vec<u8>, OfflineState<Clock>>,
 	// Signing rounds
-	rounds: HashMap<Vec<u8>, SignRounds<Clock>>,
-	sign_outgoing_msgs: Vec<DKGVoteMessage>,
-	finished_rounds: Vec<DKGSignedPayload>,
+	rounds: HashMap<Vec<u8>, SignState<Clock>>,
 
 	// File system storage and encryption
 	local_key_path: Option<PathBuf>,
@@ -105,10 +97,10 @@ where
 	/// Public ///
 
 	pub fn new(
+		round_id: RoundId,
 		party_index: u16,
 		threshold: u16,
 		parties: u16,
-		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		created_at: C,
 		public_key: Option<sr25519::Public>,
@@ -117,28 +109,13 @@ where
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
 
 		Self {
+			round_id,
 			party_index,
 			threshold,
 			parties,
-			round_id,
-			last_received_at: created_at,
-			stage_at_last_receipt: Stage::KeygenReady,
-			keygen_set_id: 0,
-			signer_set_id: 0,
-			signers: vec![],
-			keygen_started_at: 0u32.into(),
-			offline_started_at: HashMap::new(),
-			stage: Stage::KeygenReady,
-			local_stages: HashMap::new(),
-			pending_keygen_msgs: Vec::new(),
-			pending_offline_msgs: HashMap::new(),
 			keygen: None,
-			local_key: None,
 			offline_stage: HashMap::new(),
-			completed_offline_stage: HashMap::new(),
-			rounds: BTreeMap::new(),
-			sign_outgoing_msgs: Vec::new(),
-			finished_rounds: Vec::new(),
+			rounds: HashMap::new(),
 			local_key_path,
 			public_key,
 			local_keystore,
@@ -147,10 +124,6 @@ where
 
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.local_key = Some(local_key)
-	}
-
-	pub fn set_stage(&mut self, stage: Stage) {
-		self.stage = stage;
 	}
 
 	pub fn set_signers(&mut self, signers: Vec<u16>) {

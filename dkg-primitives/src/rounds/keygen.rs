@@ -88,7 +88,7 @@ pub struct KeygenRounds<Clock> {
 	output: Option<Result<LocalKey<Secp256k1>, DKGError>>,
 }
 
-impl<C> KeygenRounds<C>
+impl<C> DKGRoundsSM<DKGKeygenMessage, Result<LocalKey<Secp256k1>, DKGError>, C> for KeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {

@@ -88,14 +88,12 @@ pub struct OfflineRounds<Clock> {
 	// The block number at which a dkg message was last received
 	last_received_at: Clock,
 
-	// Message processing
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
-
 	// Offline stage
 	offline_stage: OfflineStage,
+	output: Option<Result<CompletedOfflineStage, DKGError>>
 }
 
-impl<C> OfflineRounds<C>
+impl<C> DKGRoundsSM<DKGOfflineMessage, CompletedOfflineStage, C> for OfflineRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
