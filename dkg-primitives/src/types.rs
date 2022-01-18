@@ -152,3 +152,38 @@ pub enum DKGError {
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
 }
+
+impl DKGError {
+	pub fn to_string(&self) -> String {
+		match self {
+			DKGError::KeygenMisbehaviour { bad_actors } => format!(
+				"Keygen misbehaviour: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::KeygenTimeout { bad_actors } => format!(
+				"Keygen timeout: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::OfflineMisbehaviour { bad_actors } => format!(
+				"Offline misbehaviour: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::OfflineTimeout { bad_actors } => format!(
+				"Offline timeout: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::SignMisbehaviour { bad_actors } => format!(
+				"Sign misbehaviour: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::SignTimeout { bad_actors } => format!(
+				"Sign timeout: bad actors: {:?}",
+				bad_actors
+			),
+			DKGError::StartKeygen { reason } => format!("Start keygen: {}", reason),
+			DKGError::CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
+			DKGError::CriticalError { reason } => format!("Critical error: {}", reason),
+			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
+		}
+	}
+}

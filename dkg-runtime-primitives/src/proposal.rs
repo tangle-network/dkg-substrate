@@ -130,6 +130,8 @@ pub enum ProposalAction {
 
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
 pub enum ProposalType {
+	RefreshProposal { data: Vec<u8> },
+	RefreshProposalSigned { data: Vec<u8>, signature: Vec<u8> },
 	EVMUnsigned { data: Vec<u8> },
 	EVMSigned { data: Vec<u8>, signature: Vec<u8> },
 	AnchorUpdate { data: Vec<u8> },
@@ -147,6 +149,8 @@ pub enum ProposalType {
 impl ProposalType {
 	pub fn data(&self) -> Vec<u8> {
 		match self {
+			ProposalType::RefreshProposal { data } => data.clone(),
+			ProposalType::RefreshProposalSigned { data, .. } => data.clone(),
 			ProposalType::EVMUnsigned { data } => data.clone(),
 			ProposalType::EVMSigned { data, .. } => data.clone(),
 			ProposalType::AnchorUpdate { data } => data.clone(),
@@ -164,6 +168,8 @@ impl ProposalType {
 
 	pub fn signature(&self) -> Vec<u8> {
 		match self {
+			ProposalType::RefreshProposal { .. } => Vec::new(),
+			ProposalType::RefreshProposalSigned { signature, .. } => signature.clone(),
 			ProposalType::EVMUnsigned { .. } => Vec::new(),
 			ProposalType::EVMSigned { signature, .. } => signature.clone(),
 			ProposalType::AnchorUpdate { .. } => Vec::new(),
@@ -181,6 +187,10 @@ impl ProposalType {
 }
 
 pub trait ProposalHandlerTrait {
+	fn handle_refresh_proposal(
+		proposal: RefreshProposal
+	) -> frame_support::pallet_prelude::DispatchResult;
+
 	fn handle_unsigned_proposal(
 		proposal: Vec<u8>,
 		action: ProposalAction,
@@ -214,6 +224,46 @@ pub trait ProposalHandlerTrait {
 	fn handle_resource_id_update_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult;
+}
+
+impl ProposalHandlerTrait for () {
+	fn handle_refresh_proposal(
+		_proposal: RefreshProposal
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_unsigned_proposal(
+		_proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_signed_proposal(
+		_prop: ProposalType,
+		_payload_key: DKGPayloadKey,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_evm_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_anchor_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_token_add_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_token_remove_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_wrapping_fee_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+
+	fn handle_resource_id_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
 }
 
 #[cfg(test)]

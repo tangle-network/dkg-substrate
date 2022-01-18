@@ -50,48 +50,48 @@ const SIGN_TIMEOUT: u32 = 3;
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
 pub struct MultiPartyECDSARounds<Clock> {
-	round_id: RoundId,
-	party_index: u16,
-	threshold: u16,
-	parties: u16,
+	pub round_id: RoundId,
+	pub party_index: u16,
+	pub threshold: u16,
+	pub parties: u16,
 
-	keygen_set_id: KeygenSetId,
-	signer_set_id: SignerSetId,
-	signers: Vec<u16>,
-	stage: Stage,
+	pub keygen_set_id: KeygenSetId,
+	pub signer_set_id: SignerSetId,
+	pub signers: Vec<u16>,
+	pub stage: Stage,
 	// Stage tracker for individual OfflineStages
-	local_stages: HashMap<Vec<u8>, MiniStage>,
+	pub local_stages: HashMap<Vec<u8>, MiniStage>,
 
 	// DKG clock
-	keygen_started_at: Clock,
-	offline_started_at: HashMap<Vec<u8>, Clock>,
+	pub keygen_started_at: Clock,
+	pub offline_started_at: HashMap<Vec<u8>, Clock>,
 	// The block number at which a dkg message was last received
-	last_received_at: Clock,
+	pub last_received_at: Clock,
 	// This holds the information of which stage the protocol was at when the last dkg message was received
 	// This information can be used to deduce approximately if the protocol is stuck at the keygen stage.
-	stage_at_last_receipt: Stage,
+	pub stage_at_last_receipt: Stage,
 
 	// Message processing
-	pending_keygen_msgs: Vec<DKGKeygenMessage>,
-	pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
+	pub pending_keygen_msgs: Vec<DKGKeygenMessage>,
+	pub pending_offline_msgs: HashMap<Vec<u8>, Vec<DKGOfflineMessage>>,
 
 	// Key generation
-	keygen: Option<Keygen>,
-	local_key: Option<LocalKey<Secp256k1>>,
+	pub keygen: Option<Keygen>,
+	pub local_key: Option<LocalKey<Secp256k1>>,
 
 	// Offline stage
-	offline_stage: HashMap<Vec<u8>, OfflineStage>,
-	completed_offline_stage: HashMap<Vec<u8>, CompletedOfflineStage>,
+	pub offline_stage: HashMap<Vec<u8>, OfflineStage>,
+	pub completed_offline_stage: HashMap<Vec<u8>, CompletedOfflineStage>,
 
 	// Signing rounds
-	rounds: BTreeMap<Vec<u8>, DKGRoundTracker<Vec<u8>, Clock>>,
-	sign_outgoing_msgs: Vec<DKGVoteMessage>,
-	finished_rounds: Vec<DKGSignedPayload>,
+	pub rounds: BTreeMap<Vec<u8>, DKGRoundTracker<Vec<u8>, Clock>>,
+	pub sign_outgoing_msgs: Vec<DKGVoteMessage>,
+	pub finished_rounds: Vec<DKGSignedPayload>,
 
 	// File system storage and encryption
-	local_key_path: Option<PathBuf>,
-	public_key: Option<sr25519::Public>,
-	local_keystore: Option<Arc<LocalKeystore>>,
+	pub local_key_path: Option<PathBuf>,
+	pub public_key: Option<sr25519::Public>,
+	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -351,7 +351,7 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), String> {
+	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		let proceed_res =
 			if let Some(completed_offline) = self.completed_offline_stage.remove(&round_key) {
 				let round = self.rounds.entry(round_key.clone()).or_default();
@@ -374,10 +374,14 @@ where
 						self.sign_outgoing_msgs.push(msg);
 						Ok(true)
 					},
-					Err(err) => Err(err.to_string()),
+					Err(err) => Err(DKGError::GenericError {
+						reason: err.to_string(),
+					}),
 				}
 			} else {
-				Err("Not ready to vote".to_string())
+				Err(DKGError::GenericError {
+					reason: "Not ready to vote".to_string(),
+				})
 			};
 
 		match proceed_res {
@@ -915,7 +919,7 @@ where
 	}
 }
 
-struct DKGRoundTracker<Payload, Clock> {
+pub struct DKGRoundTracker<Payload, Clock> {
 	votes: BTreeMap<u16, PartialSignature>,
 	sign_manual: Option<SignManual>,
 	payload: Option<Payload>,

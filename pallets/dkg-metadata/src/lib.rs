@@ -52,6 +52,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use dkg_runtime_primitives::ProposalHandlerTrait;
 	use frame_support::{ensure, pallet_prelude::*};
 	use frame_system::{
 		ensure_signed,
@@ -66,6 +67,8 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
+
+		type ProposalHandler: ProposalHandlerTrait;
 
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
@@ -88,6 +91,7 @@ pub mod pallet {
 	}
 
 	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::hooks]
@@ -96,6 +100,29 @@ pub mod pallet {
 			let _res = Self::submit_genesis_public_key_onchain(block_number);
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
+		}
+
+		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
+			if Self::should_refresh(n) {
+				let refresh_nonce = Self::refresh_nonce();
+				if let Some(pub_key) = Self::next_dkg_public_key() {
+					let data = dkg_runtime_primitives::RefreshProposal {
+						nonce: refresh_nonce,
+						pub_key: pub_key.1.clone()
+					};
+
+					match T::ProposalHandler::handle_refresh_proposal(data) {
+						Ok(()) => {
+							frame_support::log::debug!("Handled refresh proposal");
+						},
+						Err(e) => {
+							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						}
+					}
+				}
+			}
+
+			0
 		}
 	}
 
@@ -139,15 +166,10 @@ pub mod pallet {
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
-
 			let authorities = Self::current_authorities_accounts();
-
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-
 			let threshold = Self::signature_threshold();
-
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
 				if accounts.len() >= threshold as usize {
@@ -173,15 +195,10 @@ pub mod pallet {
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
-
 			let next_authorities = Self::next_authorities_accounts();
-
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
-
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
-
 			let threshold = Self::signature_threshold();
-
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
 				if accounts.len() >= threshold as usize {
@@ -207,27 +224,21 @@ pub mod pallet {
 			signature_proposal: RefreshProposalSigned,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
-
 			let authorities = Self::current_authorities_accounts();
 			let used_signatures = Self::used_signatures();
-
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-
 			ensure!(
 				signature_proposal.nonce == Self::refresh_nonce(),
 				Error::<T>::InvalidSignature
 			);
-
 			ensure!(
 				!used_signatures.contains(&signature_proposal.signature),
 				Error::<T>::UsedSignature
 			);
-
 			ensure!(
 				signature_proposal.signature != Vec::<u8>::default(),
 				Error::<T>::InvalidSignature
 			);
-
 			Self::verify_pub_key_signature(origin, &signature_proposal.signature)
 		}
 
@@ -488,13 +499,11 @@ impl<T: Config> Pallet<T> {
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
-
 		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
 
 		const RECENTLY_SENT: &str = "Already submitted a key in this session";
 
 		let submit_at = submit_at_ref.get::<T::BlockNumber>();
-
 		if let Ok(Some(submit_at)) = submit_at {
 			if block_number < submit_at {
 				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
@@ -571,9 +580,7 @@ impl<T: Config> Pallet<T> {
 		return Ok(())
 	}
 
-	fn submit_public_key_signature_onchain(
-		block_number: T::BlockNumber,
-	) -> Result<(), &'static str> {
+	fn submit_public_key_signature_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
 
 		if Self::next_public_key_signature().is_some() {
@@ -606,8 +613,11 @@ impl<T: Config> Pallet<T> {
 		>>::estimate_current_session_progress(now);
 		if let Some(session_progress) = session_progress {
 			let delay = RefreshDelay::<T>::get();
-			let next_dkg_public_key_signature = Self::next_public_key_signature();
-			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
+			frame_support::log::debug!(
+				target: "dkg",
+				"Refresh state (delay: {:?}, progress: {:?})", delay, session_progress
+			);
+			return delay <= session_progress
 		}
 		false
 	}

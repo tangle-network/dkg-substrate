@@ -26,7 +26,7 @@ use std::{
 
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use parking_lot::Mutex;
 
 use sc_client_api::{
@@ -254,7 +254,7 @@ where
 			self.client.runtime_api().authority_set(&at).ok()
 		};
 
-		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
+		debug!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		let set = new.unwrap_or_else(|| panic!("Help"));
 		let public = self
@@ -305,7 +305,7 @@ where
 			))
 		};
 
-		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
+		debug!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		new
 	}
@@ -548,19 +548,18 @@ where
 
 		try_restart_dkg(self, header);
 		self.send_outgoing_dkg_messages();
-		self.check_refresh(header);
 		self.create_offline_stages(header);
 		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
+		debug!(target: "import", "🕸️  Block import notification: {:?}", notification);
 		self.process_block_notification(&notification.header);
 	}
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
-		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		debug!(target: "finality", "🕸️  Finality notification: {:?}", notification);
 
 		// update best GRANDPA finalized block we have seen
 		self.best_grandpa_block = *notification.header.number();
@@ -610,13 +609,13 @@ where
 							true,
 						);
 					},
-					Err(e) => trace!(
+					Err(e) => debug!(
 						target: "dkg",
 						"🕸️  Error signing DKG message: {:?}",
 						e
 					),
 				}
-				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+				debug!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
 			}
 			results
 		};
@@ -912,7 +911,7 @@ where
 						true,
 					);
 				},
-				Err(e) => trace!(
+				Err(e) => debug!(
 					target: "dkg",
 					"🕸️  Error signing DKG message: {:?}",
 					e
@@ -1062,7 +1061,7 @@ where
 										);
 									}
 
-									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+									debug!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								}
 							} else {
 								self.dkg_state.listening_for_pub_key = false;
@@ -1086,7 +1085,7 @@ where
 										);
 									}
 
-									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
+									debug!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
 								}
 							}
 
@@ -1146,7 +1145,7 @@ where
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
-		trace!(target: "dkg", "Got finished round {:?}", finished_round);
+		debug!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key = <(ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		match decoded_key {
 			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
@@ -1189,50 +1188,11 @@ where
 					let encoded_proposal = refresh_proposal.encode();
 					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
+					debug!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
 				}
 				None
 			},
 			_ => None, // TODO: handle other key types
-		}
-	}
-
-	// *** Refresh Vote ***
-	// Return if a refresh has been started in this worker,
-	// if not check if it's rime for refresh and start signing the public key
-	// for queued authorities
-	fn check_refresh(&mut self, header: &B::Header) {
-		if self.refresh_in_progress || self.rounds.is_none() {
-			return
-		}
-
-		let latest_block_num = *header.number();
-		let at = BlockId::hash(header.hash());
-		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
-		if let Ok(true) = should_refresh {
-			self.refresh_in_progress = true;
-			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at);
-			if let Ok(Some(pub_key)) = pub_key {
-				match refresh_nonce {
-					Ok(nonce) => {
-						let key = DKGPayloadKey::RefreshVote(nonce);
-						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
-
-						if let Err(err) = self.rounds.as_mut().unwrap().vote(
-							key.encode(),
-							proposal.encode(),
-							latest_block_num,
-						) {
-							error!(target: "dkg", "🕸️  error creating new vote: {}", err);
-						} else {
-							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
-						}
-						self.send_outgoing_dkg_messages();
-					},
-					_ => {},
-				}
-			}
 		}
 	}
 
@@ -1260,7 +1220,8 @@ where
 					Ok(()) => {
 						// We note unsigned proposals for which we have started the offline stage
 						// to prevent overwriting running offline stages when next this function is called
-						// this function is called on every block import and the proposal might still be in the the unsigned proposals queue.
+						// this function is called on every block import and the proposal might still
+						// be in the the unsigned proposals queue.
 						self.dkg_state
 							.created_offlinestage_at
 							.insert(key.encode(), *header.number());
@@ -1319,6 +1280,7 @@ where
 			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
+				ProposalType::RefreshProposal { data } => data,
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
 				ProposalType::TokenAdd { data } => data,
@@ -1327,8 +1289,8 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 			}
 		}
 		// send messages to all peers

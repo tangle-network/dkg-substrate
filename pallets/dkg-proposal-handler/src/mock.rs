@@ -14,15 +14,10 @@ use sp_runtime::{
 };
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
-
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-
 use sp_runtime::RuntimeAppPublic;
-
 use dkg_runtime_primitives::{keccak_256, TransactionV2};
-
 use frame_support::traits::{OnFinalize, OnInitialize};
-
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, ProposalType, TransactionAction, U256,
 };
@@ -193,6 +188,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
