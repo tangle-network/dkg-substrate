@@ -29,13 +29,60 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+// Keygen state
+
 pub enum KeygenState<C> {
 	NotStarted(PreKeygenRounds<C>),
 	Started(KeygenRounds<C>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
 
+impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> {
+	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+		match self {
+			Started(keygen_rounds) => keygen_rounds.proceed(at),
+			_ => Ok(true)
+		}
+	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		match self {
+			Started(keygen_rounds) => keygen_rounds.get_outgoing(),
+			_ => vec![]
+		}
+	}
+
+	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+		match self {
+			NotStarted(pre_keygen_rounds) => pre_keygen_rounds.handle_incoming(),
+			Started(keygen_rounds) => keygen_rounds.handle_incoming(),
+			_ => Ok(())
+		}
+	}
+
+	fn is_finished(&self) -> bool {
+		match self {
+			Started(keygen_rounds) => keygen_rounds.is_finished(),
+			_ => Ok(true)
+		}
+	}
+
+	fn try_finish(self) -> Result<Self, DKGError> {
+		match self {
+			Started(keygen_rounds) => {
+				if keygen_rounds.is_finished() {
+					self
+				} else {
+					DKGError::SMNotFinished
+				}
+			},
+			_ => self
+		}
+	}
+}
+
 /// Pre-keygen rounds
+
 pub struct PreKeygenRounds<Clock> {
 	round_id: RoundId,
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
@@ -85,14 +132,13 @@ pub struct KeygenRounds<Clock> {
 	keygen_started_at: Clock,
 	// Key generation
 	keygen: Keygen,
-	output: Option<Result<LocalKey<Secp256k1>, DKGError>>,
 }
 
 impl<C> DKGRoundsSM<DKGKeygenMessage, Result<LocalKey<Secp256k1>, DKGError>, C> for KeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Proceed to next step for current Stage
+	/// Proceed to next step
 
 	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
@@ -131,7 +177,7 @@ where
 
 		let (_, blame_vec) = keygen.round_blame();
 
-		if self.try_finish_keygen() {
+		if keygen.is_finished() {
 			Ok(true)
 		} else {
 			if at - self.keygen_started_at > KEYGEN_TIMEOUT.into() {
@@ -146,27 +192,7 @@ where
 		}
 	}
 
-	/// Try finish current Stage
-
-	fn try_finish(&mut self) -> bool {
-		let keygen = self.keygen.as_mut().unwrap();
-
-		if keygen.is_finished() {
-			info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
-			match keygen.pick_output() {
-				Some(Ok(k)) => {
-					self.local_key = Some(k.clone());
-					info!(target: "dkg", "🕸️  local share key is extracted");
-					return true
-				},
-				Some(Err(e)) => panic!("Keygen finished with error result {}", e),
-				None => panic!("Keygen finished with no result"),
-			}
-		}
-		return false
-	}
-
-	/// Get outgoing messages for current Stage
+	/// Get outgoing messages
 
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGKeygenMessage> {
 		if let Some(keygen) = self.keygen.as_mut() {
@@ -197,7 +223,7 @@ where
 		vec![]
 	}
 
-	/// Handle incoming messages for current Stage
+	/// Handle incoming messages
 
 	pub fn handle_incoming(&mut self, data: DKGKeygenMessage) -> Result<(), DKGError> {
 		if data.keygen_set_id != self.keygen_set_id {
@@ -253,5 +279,23 @@ where
 			debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
 		}
 		Ok(())
+	}
+
+	/// Try finish
+
+	pub fn is_finished(&self) -> bool {
+		self.keygen.is_finished()
+	}
+
+	pub fn try_finish(self) -> Result<LocalKey<Secp256k1>, DKGError> {
+		info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
+		match self.keygen.pick_output() {
+			Some(Ok(key)) => {
+				info!(target: "dkg", "🕸️  local share key is extracted");
+				Ok(key)
+			},
+			Some(Err(e)) => panic!("Keygen finished with error result {}", e),
+			None => panic!("Keygen finished with no result"),
+		}
 	}
 }

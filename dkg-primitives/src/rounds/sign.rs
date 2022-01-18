@@ -29,10 +29,57 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+/// Sign state
+
 pub enum SignState<C> {
 	Started(SignRounds<C>),
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
+
+impl<C> DKGRoundsSM<DKGSignMessage, SignState<C>, C> for SignState<C> {
+	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+		match self {
+			Started(sign_rounds) => sign_rounds.proceed(at),
+			_ => Ok(true)
+		}
+	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		match self {
+			Started(sign_rounds) => sign_rounds.get_outgoing(),
+			_ => vec![]
+		}
+	}
+
+	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+		match self {
+			Started(sign_rounds) => sign_rounds.handle_incoming(),
+			_ => Ok(())
+		}
+	}
+
+	fn is_finished(&self) -> bool {
+		match self {
+			Started(sign_rounds) => sign_rounds.is_finished(),
+			_ => Ok(true)
+		}
+	}
+
+	fn try_finish(self) -> Result<Self, DKGError> {
+		match self {
+			Started(sign_rounds) => {
+				if sign_rounds.is_finished() {
+					self
+				} else {
+					DKGError::SMNotFinished
+				}
+			},
+			_ => self
+		}
+	}
+}
+
+/// Sign rounds
 
 pub struct SignRounds<Clock> {
 	round_id: RoundId,
@@ -63,7 +110,7 @@ where
 {
 	/// Proceed to next step for current Stage
 
-	fn proceed_vote(&mut self, at: C) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		if let Err(err) = self.try_finish_vote() {
 			return Err(err)
 		} else {

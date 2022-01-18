@@ -113,7 +113,7 @@ where
 			party_index,
 			threshold,
 			parties,
-			keygen: None,
+			keygen: KeygenState::NotStarted(PreKeygenRounds::new(round_id)),
 			offline_stage: HashMap::new(),
 			rounds: HashMap::new(),
 			local_key_path,
@@ -189,14 +189,11 @@ where
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing, stage {:?}", self.stage);
 
-		let mut all_messages = match self.stage {
-			Stage::Keygen => self
+		let mut all_messages = self.keygen_state
 				.get_outgoing_messages_keygen()
 				.into_iter()
 				.map(|msg| DKGMsgPayload::Keygen(msg))
-				.collect(),
-			_ => vec![],
-		};
+				.collect();
 
 		let offline_messages = self
 			.get_outgoing_messages_offline_stage()

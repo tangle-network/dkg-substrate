@@ -35,6 +35,50 @@ pub enum OfflineState<C> {
 	Finished(Result<CompletedOfflineStage, DKGError>),
 }
 
+impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> {
+	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+		match self {
+			Started(offline_rounds) => offline_rounds.proceed(at),
+			_ => Ok(true)
+		}
+	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		match self {
+			Started(offline_rounds) => offline_rounds.get_outgoing(),
+			_ => vec![]
+		}
+	}
+
+	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+		match self {
+			NotStarted(pre_offline_rounds) => pre_offline_rounds.handle_incoming(),
+			Started(offline_rounds) => offline_rounds.handle_incoming(),
+			_ => Ok(())
+		}
+	}
+
+	fn is_finished(&self) -> bool {
+		match self {
+			Started(offline_rounds) => offline_rounds.is_finished(),
+			_ => Ok(true)
+		}
+	}
+
+	fn try_finish(self) -> Result<Self, DKGError> {
+		match self {
+			Started(offline_rounds) => {
+				if offline_rounds.is_finished() {
+					self
+				} else {
+					DKGError::SMNotFinished
+				}
+			},
+			_ => self
+		}
+	}
+}
+
 /// Pre-offline rounds
 
 pub struct PreOfflineRounds<Clock> {
@@ -99,7 +143,7 @@ where
 {
 	/// Proceed to next step for current Stage
 
-	fn proceed_offline_stage(&mut self, key: Vec<u8>, at: C) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
 		if !self.offline_stage.contains_key(&key) {
@@ -172,7 +216,7 @@ where
 
 	/// Try finish current Stage
 
-	fn try_finish_offline_stage(&mut self, key: Vec<u8>) -> bool {
+	fn try_finish(&mut self, key: Vec<u8>) -> bool {
 		if let Some(offline_stage) = self.offline_stage.get_mut(&key) {
 			if offline_stage.is_finished() {
 				info!(target: "dkg", "🕸️  OfflineStage is finished for {:?}, extracting output", &key);
@@ -197,7 +241,7 @@ where
 
 	/// Get outgoing messages for current Stage
 
-	fn get_outgoing_messages_offline_stage(&mut self) -> Vec<DKGOfflineMessage> {
+	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		let mut messages = vec![];
 		trace!(target: "dkg", "🕸️  Getting outgoing offline messages");
 		for (key, offline_stage) in self.offline_stage.iter_mut() {
@@ -227,7 +271,7 @@ where
 
 	/// Handle incoming messages for current Stage
 
-	fn handle_incoming_offline_stage(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
 		if data.signer_set_id != self.signer_set_id {
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}

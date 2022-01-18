@@ -138,4 +138,5 @@ pub enum DKGError {
 	CreateOfflineStage { reason: String },
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
+	SMNotFinished,
 }
