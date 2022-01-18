@@ -676,9 +676,6 @@ construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage} = 21,
 
-
-
-
 		// Collator support. the order of these 4 are important and shall not change.
 		Authorship: pallet_authorship::{Pallet, Call, Storage} = 31,
 		ParachainStaking: parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>} = 32,

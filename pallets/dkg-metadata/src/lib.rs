@@ -433,39 +433,34 @@ impl<T: Config> Pallet<T> {
 	) {
 		// As in GRANDPA, we trigger a validator set change only if the the validator
 		// set has actually changed.
+		<Authorities<T>>::put(&new);
+		CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
 
-		if new != Self::authorities() {
-			<Authorities<T>>::put(&new);
-			CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
+		let next_id = Self::authority_set_id() + 1u64;
 
-			let next_id = Self::authority_set_id() + 1u64;
+		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
+			T::AccountId,
+		>>::on_authority_set_changed(next_id, authorities_accounts);
 
-			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-				dkg_runtime_primitives::AuthoritySetId,
-				T::AccountId,
-			>>::on_authority_set_changed(next_id, authorities_accounts);
+		<AuthoritySetId<T>>::put(next_id);
 
-			<AuthoritySetId<T>>::put(next_id);
+		let log: DigestItem = DigestItem::Consensus(
+			DKG_ENGINE_ID,
+			ConsensusLog::AuthoritiesChange {
+				next_authorities: AuthoritySet { authorities: new, id: next_id },
+				next_queued_authorities: AuthoritySet {
+					authorities: queued.clone(),
+					id: next_id + 1u64,
+				},
+			}
+			.encode(),
+		);
+		<frame_system::Pallet<T>>::deposit_log(log);
+		Self::refresh_dkg_keys();
 
-			let log: DigestItem = DigestItem::Consensus(
-				DKG_ENGINE_ID,
-				ConsensusLog::AuthoritiesChange {
-					next_authorities: AuthoritySet { authorities: new, id: next_id },
-					next_queued_authorities: AuthoritySet {
-						authorities: queued.clone(),
-						id: next_id + 1u64,
-					},
-				}
-				.encode(),
-			);
-			<frame_system::Pallet<T>>::deposit_log(log);
-			Self::refresh_dkg_keys();
-		}
-
-		if queued != Self::next_authorities() {
-			NextDKGPublicKey::<T>::kill();
-			NextPublicKeySignature::<T>::kill();
-		}
+		NextDKGPublicKey::<T>::kill();
+		NextPublicKeySignature::<T>::kill();
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
