@@ -166,6 +166,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = ();
 }
 
 parameter_types! {
