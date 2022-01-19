@@ -80,9 +80,12 @@ pub struct MultiPartyECDSARounds<Clock> {
 	// Key generation
 	keygen: Option<KeygenState<Clock>>,
 	// Offline stage
-	offline_stage: HashMap<Vec<u8>, OfflineState<Clock>>,
+	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
 	// Signing rounds
-	rounds: HashMap<Vec<u8>, SignState<Clock>>,
+	votes: HashMap<Vec<u8>, SignState<Clock>>,
+
+	signers: Vec<u16>,
+	signer_set_id: SignerSetId,
 
 	// File system storage and encryption
 	local_key_path: Option<PathBuf>,
@@ -190,19 +193,23 @@ where
 		trace!(target: "dkg", "🕸️  Get outgoing, stage {:?}", self.stage);
 
 		let mut all_messages = self.keygen_state
-				.get_outgoing_messages_keygen()
-				.into_iter()
-				.map(|msg| DKGMsgPayload::Keygen(msg))
-				.collect();
+			.get_outgoing()
+			.into_iter()
+			.map(|msg| DKGMsgPayload::Keygen(msg))
+			.collect();
 
-		let offline_messages = self
-			.get_outgoing_messages_offline_stage()
+		let offline_messages = self.offlines
+			.values()
+			.map(|s| s.get_outgoing())
+			.fold(Vec::new(), |acc, x| acc.extend(x))
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Offline(msg))
 			.collect::<Vec<_>>();
 
-		let vote_messages = self
-			.get_outgoing_messages_vote()
+		let vote_messages = self.votes
+			.values()
+			.map(|s| s.get_outgoing())
+			.fold(Vec::new(), |acc, x| acc.extend(x))
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Vote(msg))
 			.collect::<Vec<_>>();
@@ -226,28 +233,30 @@ where
 		self.stage_at_last_receipt = self.stage;
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
-				// TODO: check keygen_set_id
-				if Stage::Keygen == self.stage {
-					self.handle_incoming_keygen(msg)
-				} else {
-					self.pending_keygen_msgs.push(msg);
-					Ok(())
-				}
+				self.keygen.handle_incoming(msg)
+
 			},
-			DKGMsgPayload::Offline(msg) =>
-				if self.offline_stage.contains_key(&msg.key) {
-					let res = self.handle_incoming_offline_stage(msg.clone());
-					if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
-						self.offline_stage.remove(&msg.key);
-						self.local_stages.remove(&msg.key);
-					}
-					res
-				} else {
-					let messages = self.pending_offline_msgs.entry(msg.key.clone()).or_default();
-					messages.push(msg);
-					Ok(())
-				},
-			DKGMsgPayload::Vote(msg) => self.handle_incoming_vote(msg),
+			DKGMsgPayload::Offline(msg) => {
+				let key = msg.key.clone();
+
+				let offline = self.offlines.entry(&key).or_insert_with(|| {
+					OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
+				})
+
+				let res = offline.handle_incoming(msg);
+				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
+					self.offlines.remove(&key);
+				}
+				res
+			},
+			DKGMsgPayload::Vote(msg) => {
+				let key = msg.key.clone();
+
+				let vote = self.votes.entry(&key).or_insert_with(|| {
+					SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
+				})
+				self.handle_incoming_vote(msg)
+			},
 			_ => Ok(()),
 		}
 	}
@@ -266,62 +275,80 @@ where
 		);
 		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
 
-		match Keygen::new(self.party_index, self.threshold, self.parties) {
-			Ok(new_keygen) => {
-				self.stage = Stage::Keygen;
-				self.keygen_set_id = keygen_set_id;
-				self.keygen_started_at = started_at;
-				self.keygen = Some(new_keygen);
-
-				// Processing pending messages
-				for msg in std::mem::take(&mut self.pending_keygen_msgs) {
-					if let Err(err) = self.handle_incoming_keygen(msg) {
-						warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
-					}
-					self.proceed_keygen(started_at)?;
+		match self.keygen {
+			KeygenState::NotStarted(pre_keygen) => {
+				match Keygen::new(self.party_index, self.threshold, self.parties) {
+					Ok(new_keygen) => {
+						self.keygen = KeygenState::Started(
+							KeygenRounds::new(
+								self.keygen_params(),
+								started_at,
+								new_keygen
+							));
+		
+						// Processing pending messages
+						for msg in std::mem::take(&mut pre_keygen.pending_keygen_msgs) {
+							if let Err(err) = self.keygen.handle_incoming(msg) {
+								warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
+							}
+							self.keygen.proceed(started_at)?;
+						}
+						trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", &pre_keygen.pending_keygen_msgs.len());
+		
+						Ok(())
+					},
+					Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
 				}
-				trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", self.pending_keygen_msgs.len());
-				self.pending_keygen_msgs.clear();
-
-				Ok(())
 			},
-			Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
+			_ => Err(DKGError::StartKeygen { reason: "Already started".to_string() }),
 		}
 	}
 
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
-		match self.stage {
-			Stage::KeygenReady | Stage::Keygen => Err(DKGError::CreateOfflineStage {
+		match self.keygen {
+			KeygenState::Finished(local_key) => {
+
+				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
+				return match OfflineStage::new(self.party_index, s_l.clone(), local_key_clone) {
+					Ok(new_offline_stage) => {
+						let offline = self.offlines.entry(&key).or_insert_with(|| {
+							OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
+						})
+
+						match offline {
+							OfflineState::NotStarted(pre_offline) => {
+								let new_offline = OfflineState::Started(
+									OfflineRounds::new(
+										self.sign_params(),
+										started_at,
+										new_offline_stage
+									));
+
+								for msg in pre_offline.pending_offline_msgs {
+									if let Err(err) = new_offline.handle_incoming(msg) {
+										warn!(target: "dkg", "🕸️  Error handling pending offline msg {:?}", err);
+									}
+									new_offline.proceed(key.clone(), started_at)?;
+								}
+								trace!(target: "dkg", "🕸️  Handled pending offline messages for {:?}", key);
+								
+								self.offlines.insert(&key, new_offline)
+
+								Ok(())
+							},
+							_ => Err(DKGError::CreateOfflineStage { reason: "Already started".to_string() })
+						}
+					},
+					Err(err) => {
+						error!("Error creating new offline stage {}", err);
+						Err(DKGError::CreateOfflineStage { reason: err.to_string() })
+					},
+				}
+			},
+			_ => Err(DKGError::CreateOfflineStage {
 				reason: "Cannot start offline stage, Keygen is not complete".to_string(),
 			}),
-			_ =>
-				if let Some(local_key_clone) = self.local_key.clone() {
-					let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
-					return match OfflineStage::new(self.party_index, s_l, local_key_clone) {
-						Ok(new_offline_stage) => {
-							self.local_stages.insert(key.clone(), MiniStage::Offline);
-							self.offline_started_at.insert(key.clone(), started_at);
-							self.offline_stage.insert(key.clone(), new_offline_stage);
-
-							for msg in self.pending_offline_msgs.remove(&key).unwrap_or_default() {
-								if let Err(err) = self.handle_incoming_offline_stage(msg) {
-									warn!(target: "dkg", "🕸️  Error handling pending offline msg {:?}", err);
-								}
-								self.proceed_offline_stage(key.clone(), started_at)?;
-							}
-							trace!(target: "dkg", "🕸️  Handled pending offline messages for {:?}", key);
-
-							Ok(())
-						},
-						Err(err) => {
-							error!("Error creating new offline stage {}", err);
-							Err(DKGError::CreateOfflineStage { reason: err.to_string() })
-						},
-					}
-				} else {
-					Err(DKGError::CreateOfflineStage { reason: "No local key present".to_string() })
-				},
 		}
 	}
 
@@ -335,17 +362,24 @@ where
 					Ok((sign_manual, sig)) => {
 						trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
 
-						round.sign_manual = Some(sign_manual);
-						round.payload = Some(data);
-						round.started_at = started_at;
+						let vote = self.votes.entry(&key).or_insert_with(|| {
+							SignState::NotStarted(SignRounds::new(self.signer_set_id))
+						})
 
-						let serialized = serde_json::to_string(&sig).unwrap();
-						let msg = DKGVoteMessage {
-							party_ind: self.party_index,
-							round_key: round_key.clone(),
-							partial_signature: serialized.into_bytes(),
-						};
-						self.sign_outgoing_msgs.push(msg);
+						match vote {
+							SignState::NotStarted(pre_sign) => {
+								let new_sign = SignState::Started(
+									SignRounds::new(
+										self.sign_params(),
+										started_at,
+										data,
+										round_key.clone(),
+										sig,
+										sign_manual
+									));
+							}
+						}
+						
 						Ok(true)
 					},
 					Err(err) => Err(err.to_string()),
@@ -368,11 +402,21 @@ where
 	}
 
 	pub fn is_offline_ready(&self) -> bool {
-		Stage::OfflineReady == self.stage
+		match self.keygen => {
+			KeygenState::Finished(_) => true,
+			_ => false,
+		}
 	}
 
 	pub fn is_ready_to_vote(&self, key: Vec<u8>) -> bool {
-		Some(&MiniStage::ManualReady) == self.local_stages.get(&key)
+		if let Some(offline) == self.offlines.get(&key) {
+			match offline {
+				OfflineState::Finished(_) => true,
+				_ => false,
+			}
+		} else {
+			false
+		}
 	}
 
 	pub fn has_finished_rounds(&self) -> bool {
@@ -392,10 +436,11 @@ where
 	}
 
 	pub fn get_public_key(&self) -> Option<GE> {
-		if let Some(local_key) = &self.local_key {
-			Some(local_key.public_key().clone())
-		} else {
-			None
+		match self.keygen {
+			KeygenState::Finished(local_key) => {
+				Some(local_key.public_key().clone())
+			},
+			_ => None,
 		}
 	}
 
@@ -404,7 +449,30 @@ where
 	}
 
 	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
-		return self.rounds.contains_key(&round_key)
+		return self.votes.contains_key(&round_key)
+	}
+
+	/// Utils
+
+	fn keygen_params(&self) -> KeygenParams {
+		KeygenParams {
+			round_id: self.round_id,
+			party_index: self.party_index,
+			threshold: self.threshold,
+			parties: self.parties,
+			keygen_set_id: self.keygen_set_id,
+		}
+	}
+
+	fn sign_params(&self) -> SignParams {
+		KeygenParams {
+			round_id: self.round_id,
+			party_index: self.party_index,
+			threshold: self.threshold,
+			parties: self.parties,
+			signer_set_id: self.signer_set_id,
+			signers: self.signers,
+		}
 	}
 }
 

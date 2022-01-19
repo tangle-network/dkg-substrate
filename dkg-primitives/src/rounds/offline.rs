@@ -93,7 +93,7 @@ where
 	pub fn new(signer_set_id: SignerSetId) -> Self {
 		Self{
 			signer_set_id,
-			pending_keygen_msgs: Vec::default(),
+			pending_offline_msgs: Vec::default(),
 		}
 	}
 }
@@ -119,22 +119,26 @@ where
 /// Offline rounds
 
 pub struct OfflineRounds<Clock> {
-	round_id: RoundId,
-	party_index: u16,
-	threshold: u16,
-	parties: u16,
-
-	signer_set_id: SignerSetId,
-	signers: Vec<u16>,
-
-	// DKG clock
-	offline_started_at: Clock,
-	// The block number at which a dkg message was last received
-	last_received_at: Clock,
-
-	// Offline stage
+    params: SignParams,
+	started_at: Clock,
 	offline_stage: OfflineStage,
-	output: Option<Result<CompletedOfflineStage, DKGError>>
+}
+
+impl<C> OfflineRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn new(
+		params: SignParams,
+		started_at: Clock,
+		offline_stage: OfflineStage
+	) -> Self {
+		Self {
+			params,
+			started_at,
+			offline_stage,
+		}
+	}
 }
 
 impl<C> DKGRoundsSM<DKGOfflineMessage, CompletedOfflineStage, C> for OfflineRounds<C>

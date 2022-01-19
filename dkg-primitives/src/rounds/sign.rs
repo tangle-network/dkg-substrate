@@ -32,6 +32,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 /// Sign state
 
 pub enum SignState<C> {
+	NotStarted(PreSignRounds<C>),
 	Started(SignRounds<C>),
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
@@ -79,38 +80,100 @@ impl<C> DKGRoundsSM<DKGSignMessage, SignState<C>, C> for SignState<C> {
 	}
 }
 
+/// Pre-sign rounds
+
+pub struct PreSignRounds<Clock> {
+	signer_set_id: SignerSetId,
+	pending_sign_msgs: Vec<DKGSignMessage>,
+}
+
+impl<C> PreSignRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn new(signer_set_id: SignerSetId) -> Self {
+		Self{
+			signer_set_id,
+			pending_sign_msgs: Vec::default(),
+		}
+	}
+}
+
+impl<C> DKGRoundsSM<DKGSignMessage, Vec<DKGSignMessage>, C> for PreSignRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn handle_incoming(&mut self, data: DKGSignMessage) -> Result<(), DKGError> {
+		self.pending_sign_msgs.push(data);
+		Ok(())
+	}
+
+	pub fn is_finished(&self) {
+		true
+	}
+	
+	pub fn try_finish(self) -> Result<Vec<DKGSignMessage>, DKGError> {
+		Ok(self.pending_sign_msgs.take())
+	}
+}
+
 /// Sign rounds
 
 pub struct SignRounds<Clock> {
-	round_id: RoundId,
-	party_index: u16,
-	threshold: u16,
-	parties: u16,
-
-	signer_set_id: SignerSetId,
-	signers: Vec<u16>,
-
-	// DKG clock
-	offline_started_at: Clock,
-	// The block number at which a dkg message was last received
-	last_received_at: Clock,
-
-	// Offline stage
-	completed_offline_stage: CompletedOfflineStage,
-
-	// Signing rounds
-	rounds: DKGRoundTracker<Vec<u8>, Clock>,
+	params: SignParams,
+	started_at: Clock,
+	payload: Vec<u8>,
+	round_key: Vec<u8>,
+	partial_sig: PartialSignature,
+	round_tracker: DKGRoundTracker<Vec<u8>, Clock>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage>,
-	finished_rounds: Option<DKGSignedPayload>,
 }
 
 impl<C> SignRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
+	pub fn new(
+		params: SignParams,
+		started_at: Clock,
+		payload: Vec<u8>,
+		round_key: Vec<u8>,
+		partial_sig: PartialSignature,
+		sign_manual: SignManual,
+	) -> Self {
+		let round_tracker = DKGRoundTracker::default();
+		round_tracker.sign_manual = Some(sign_manual);
+		round_tracker.payload = Some(payload);
+		round_tracker.started_at = started_at;
+
+		let mut sign_outgoing_msgs: Vec<DKGVoteMessage> = Vec::new();
+		let serialized = serde_json::to_string(&partial_sig).unwrap();
+		let msg = DKGVoteMessage {
+			party_ind: params.party_index,
+			round_key: round_key.clone(),
+			partial_signature: serialized.into_bytes(),
+		};
+		sign_outgoing_msgs.push(msg);
+
+		Self {
+			params,
+			started_at,
+			payload,
+			round_key,
+			partial_sig,
+			rounds,
+			sign_outgoing_msgs,
+		}
+	}
+}
+
+impl<C> DKGRoundsSM<DKGVoteMessage, DKGSignedPayload, C> for SignRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	/// Proceed to next step for current Stage
 
-	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
+	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		if let Err(err) = self.try_finish_vote() {
 			return Err(err)
 		} else {
@@ -151,7 +214,7 @@ where
 
 	/// Try finish current Stage
 
-	fn try_finish_vote(&mut self) -> Result<bool, DKGError> {
+	pub fn try_finish(&mut self) -> Result<bool, DKGError> {
 		let mut finished = Vec::new();
 
 		for (round_key, round) in self.rounds.iter() {
@@ -195,14 +258,14 @@ where
 
 	/// Get outgoing messages for current Stage
 
-	fn get_outgoing_messages_vote(&mut self) -> Vec<DKGVoteMessage> {
+	pub fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
 		trace!(target: "dkg", "🕸️  Getting outgoing vote messages");
 		std::mem::take(&mut self.sign_outgoing_msgs)
 	}
 
 	/// Handle incoming messages for current Stage
 
-	fn handle_incoming_vote(&mut self, data: DKGVoteMessage) -> Result<(), DKGError> {
+	pub fn handle_incoming(&mut self, data: DKGVoteMessage) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle vote message");
 
 		if data.party_ind == self.party_index {

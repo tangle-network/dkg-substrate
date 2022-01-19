@@ -121,17 +121,26 @@ where
 /// Keygen rounds
 
 pub struct KeygenRounds<Clock> {
-	round_id: RoundId,
-
-	party_index: u16,
-	threshold: u16,
-	parties: u16,
-
-	keygen_set_id: KeygenSetId,
-	// DKG clock
-	keygen_started_at: Clock,
-	// Key generation
+	params: KeygenParams,
+	started_at: Clock,
 	keygen: Keygen,
+}
+
+impl<C> KeygenRounds<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
+	pub fn new(
+		params: KeygenParams,
+		started_at: Clock,
+		keygen: Keygen
+	) -> Self {
+		Self {
+			params,
+			started_at,
+			keygen,
+		}
+	}
 }
 
 impl<C> DKGRoundsSM<DKGKeygenMessage, Result<LocalKey<Secp256k1>, DKGError>, C> for KeygenRounds<C>

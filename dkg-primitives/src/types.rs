@@ -108,22 +108,21 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-impl Stage {
-	pub fn get_next(self) -> Stage {
-		match self {
-			Stage::KeygenReady => Stage::Keygen,
-			Stage::Keygen => Stage::OfflineReady,
-			Stage::OfflineReady => Stage::OfflineReady,
-		}
-	}
+pub struct KeygenParams {
+	pub round_id: RoundId,
+	pub party_index: u16,
+	pub threshold: u16,
+	pub parties: u16,
+	pub keygen_set_id: KeygenSetId,
 }
 
-impl MiniStage {
-	pub fn get_next(self) -> Self {
-		match self {
-			_ => Self::ManualReady,
-		}
-	}
+pub struct SignParams {
+	pub round_id: RoundId,
+	pub party_index: u16,
+	pub threshold: u16,
+	pub parties: u16,
+	pub signer_set_id: SignerSetId,
+	pub signers: Vec<u16>,
 }
 
 #[derive(Debug, Clone)]
