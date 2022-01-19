@@ -552,23 +552,6 @@ fn should_get_initial_proposers_from_dkg() {
 	})
 }
 
-// In the DKG, when the session changes but the validators remain the same, it does not change the authority set, so the proposers should also not be reset.
-// This test checks that behaviour
-#[test]
-fn should_not_reset_proposers_if_authorities_have_not_changed() {
-	ExtBuilder::with_genesis_collators().execute_with(|| {
-		roll_to(15);
-		assert_does_not_have_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![
-				mock_pub_key(0),
-				mock_pub_key(USER_A),
-				mock_pub_key(PROPOSER_A),
-				mock_pub_key(PROPOSER_B),
-			],
-		}))
-	})
-}
-
 // Should update proposers if new collator set has changed during a session change
 #[test]
 fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
