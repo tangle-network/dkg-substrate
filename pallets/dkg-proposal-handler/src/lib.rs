@@ -261,12 +261,21 @@ pub mod pallet {
 }
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
-	fn handle_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+	fn handle_unsigned_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
 		let unsigned_proposal = ProposalType::RefreshProposal { data: proposal.encode() };
 		UnsignedProposalQueue::<T>::insert(
 			T::ChainId::zero(),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
+		);
+
+		Ok(().into())
+	}
+
+	fn handle_signed_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+		UnsignedProposalQueue::<T>::remove(
+			T::ChainId::zero(),
+			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
 		Ok(().into())

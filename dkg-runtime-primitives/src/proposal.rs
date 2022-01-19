@@ -187,7 +187,10 @@ impl ProposalType {
 }
 
 pub trait ProposalHandlerTrait {
-	fn handle_refresh_proposal(
+	fn handle_unsigned_refresh_proposal(
+		proposal: RefreshProposal
+	) -> frame_support::pallet_prelude::DispatchResult;
+	fn handle_signed_refresh_proposal(
 		proposal: RefreshProposal
 	) -> frame_support::pallet_prelude::DispatchResult;
 
@@ -227,7 +230,10 @@ pub trait ProposalHandlerTrait {
 }
 
 impl ProposalHandlerTrait for () {
-	fn handle_refresh_proposal(
+	fn handle_unsigned_refresh_proposal(
+		_proposal: RefreshProposal
+	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal
 	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
 

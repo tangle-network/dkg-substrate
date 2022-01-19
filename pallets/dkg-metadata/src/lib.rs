@@ -111,7 +111,7 @@ pub mod pallet {
 						pub_key: pub_key.1.clone()
 					};
 
-					match T::ProposalHandler::handle_refresh_proposal(data) {
+					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
 							frame_support::log::debug!("Handled refresh proposal");
 						},
@@ -226,6 +226,7 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 			let authorities = Self::current_authorities_accounts();
 			let used_signatures = Self::used_signatures();
+			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			ensure!(
 				signature_proposal.nonce == Self::refresh_nonce(),
@@ -239,7 +240,35 @@ pub mod pallet {
 				signature_proposal.signature != Vec::<u8>::default(),
 				Error::<T>::InvalidSignature
 			);
-			Self::verify_pub_key_signature(origin, &signature_proposal.signature)
+
+			let refresh_nonce = Self::refresh_nonce();
+			if let Some(pub_key) = Self::next_dkg_public_key() {
+				let data = RefreshProposal { nonce: refresh_nonce, pub_key: pub_key.1.clone() };
+				let encoded_data = data.encode();
+				dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature_proposal.signature, &encoded_data)
+					.map_err(|_| Error::<T>::InvalidSignature)?;
+				// We expect the next public key signature to be empty because
+				// we clear the storage for this after each session on `refresh_dkg_keys`
+				if Self::next_public_key_signature().is_none() {
+					NextPublicKeySignature::<T>::put((
+						// TODO: Ensure authority sets match storage value
+						// previously we weren't updating the set when authorities
+						// remain the same. We shouldn't be doing that anymore.
+						// Instead we expect the authority set ID to increase
+						// with each new session.
+						Self::authority_set_id() + 1u64,
+						signature_proposal.signature.clone(),
+					));
+					// Increase nonce value
+					RefreshNonce::<T>::put(refresh_nonce + 1u32);
+					T::ProposalHandler::handle_signed_refresh_proposal(data)?;
+					Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+						pub_key_sig: signature_proposal.signature,
+					});
+				}
+			}
+
+			Ok(().into())
 		}
 
 		#[pallet::weight(0)]
@@ -355,6 +384,8 @@ pub mod pallet {
 		InvalidRefreshDelay,
 		/// Invalid public key submission
 		InvalidPublicKeys,
+		/// No next public key available (FATAL ERROR)
+		NoNextPublicKey,
 		/// Already submitted a public key
 		AlreadySubmittedPublicKey,
 		/// Already submitted a public key signature
@@ -442,8 +473,6 @@ impl<T: Config> Pallet<T> {
 		authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
-		// As in GRANDPA, we trigger a validator set change only if the the validator
-		// set has actually changed.
 		<Authorities<T>>::put(&new);
 		CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
 
@@ -620,33 +649,6 @@ impl<T: Config> Pallet<T> {
 			return delay <= session_progress
 		}
 		false
-	}
-
-	pub fn verify_pub_key_signature(
-		_origin: T::AccountId,
-		signature: &Vec<u8>,
-	) -> DispatchResultWithPostInfo {
-		let refresh_nonce = Self::refresh_nonce();
-		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let data = RefreshProposal { nonce: refresh_nonce, pub_key: pub_key.1.clone() };
-			let encoded_data = data.encode();
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &encoded_data)
-				.map_err(|_| Error::<T>::InvalidSignature)?;
-
-			if Self::next_public_key_signature().is_none() {
-				NextPublicKeySignature::<T>::put((
-					Self::authority_set_id() + 1u64,
-					signature.clone(),
-				));
-				// Increase nonce value
-				RefreshNonce::<T>::put(refresh_nonce + 1u32);
-				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-					pub_key_sig: signature.clone(),
-				});
-			}
-		}
-
-		Ok(().into())
 	}
 
 	pub fn refresh_dkg_keys() {
