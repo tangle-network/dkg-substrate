@@ -125,7 +125,7 @@ pub struct SignRounds<Clock> {
 	payload: Vec<u8>,
 	round_key: Vec<u8>,
 	partial_sig: PartialSignature,
-	round_tracker: DKGRoundTracker<Vec<u8>, Clock>,
+	sign_tracker: DKGRoundTracker<Vec<u8>, Clock>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage>,
 }
 
@@ -141,10 +141,10 @@ where
 		partial_sig: PartialSignature,
 		sign_manual: SignManual,
 	) -> Self {
-		let round_tracker = DKGRoundTracker::default();
-		round_tracker.sign_manual = Some(sign_manual);
-		round_tracker.payload = Some(payload);
-		round_tracker.started_at = started_at;
+		let sign_tracker = DKGRoundTracker::default();
+		sign_tracker.sign_manual = Some(sign_manual);
+		sign_tracker.payload = Some(payload);
+		sign_tracker.started_at = started_at;
 
 		let mut sign_outgoing_msgs: Vec<DKGVoteMessage> = Vec::new();
 		let serialized = serde_json::to_string(&partial_sig).unwrap();
@@ -161,7 +161,7 @@ where
 			payload,
 			round_key,
 			partial_sig,
-			rounds,
+			sign_tracker,
 			sign_outgoing_msgs,
 		}
 	}
@@ -174,86 +174,28 @@ where
 	/// Proceed to next step for current Stage
 
 	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
-		if let Err(err) = self.try_finish_vote() {
-			return Err(err)
+		if self.sign_tracker.is_done(self.params.threshold) {
+			return Ok(true)
 		} else {
-			let mut timed_out = Vec::new();
+			if self.sign_tracker.is_signed_by(self.party_index) &&
+				at - round.started_at > SIGN_TIMEOUT.into()
+			{
+				let signed_by = self.sign_tracker.get_signed_parties();
+				let mut not_signed_by: Vec<u16> = self
+					.signers
+					.iter()
+					.filter(|v| !signed_by.contains(*v))
+					.map(|v| *v)
+					.collect();
 
-			for (round_key, round) in self.rounds.iter() {
-				if round.is_signed_by(self.party_index) &&
-					at - round.started_at > SIGN_TIMEOUT.into()
-				{
-					timed_out.push(round_key.clone());
-				}
-			}
-
-			if !timed_out.is_empty() {
 				let mut bad_actors: Vec<u16> = Vec::new();
-
-				for round_key in timed_out.iter() {
-					if let Some(round) = self.rounds.remove(round_key) {
-						let signed_by = round.get_signed_parties();
-
-						let mut not_signed_by: Vec<u16> = self
-							.signers
-							.iter()
-							.filter(|v| !signed_by.contains(*v))
-							.map(|v| *v)
-							.collect();
-
-						bad_actors.append(&mut not_signed_by)
-					}
-				}
+				bad_actors.append(&mut not_signed_by);
 
 				Err(DKGError::SignTimeout { bad_actors })
 			} else {
 				Ok(false)
 			}
 		}
-	}
-
-	/// Try finish current Stage
-
-	pub fn try_finish(&mut self) -> Result<bool, DKGError> {
-		let mut finished = Vec::new();
-
-		for (round_key, round) in self.rounds.iter() {
-			if round.is_done(self.threshold.into()) {
-				finished.push(round_key.clone());
-			}
-		}
-
-		trace!(target: "dkg", "🕸️  {} Rounds done", finished.len());
-
-		for round_key in finished.iter() {
-			if let Some(mut round) = self.rounds.remove(round_key) {
-				let payload = round.payload.take();
-				let sig = round.complete();
-
-				if let Err(err) = sig {
-					println!("{:?}", err);
-					return Err(err)
-				} else if let (Some(payload), Ok(sig)) = (payload, sig) {
-					match convert_signature(&sig) {
-						Some(signature) => {
-							let signed_payload = DKGSignedPayload {
-								key: round_key.clone(),
-								payload,
-								signature: signature.encode(),
-							};
-
-							self.finished_rounds.push(signed_payload);
-
-							trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", round_key);
-							self.local_stages.remove(round_key);
-						},
-						_ => debug!("Error serializing signature"),
-					}
-				}
-			}
-		}
-
-		Ok(false)
 	}
 
 	/// Get outgoing messages for current Stage
@@ -268,7 +210,7 @@ where
 	pub fn handle_incoming(&mut self, data: DKGVoteMessage) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle vote message");
 
-		if data.party_ind == self.party_index {
+		if data.party_ind == self.params.party_index {
 			warn!(target: "dkg", "🕸️  Ignore messages sent by self");
 			return Ok(())
 		}
@@ -283,9 +225,43 @@ where
 			},
 		};
 
-		self.rounds.entry(data.round_key).or_default().add_vote(data.party_ind, sig);
+		self.sign_tracker.add_vote(data.party_ind, sig);
 
 		Ok(())
+	}
+
+	/// Try finish current Stage
+
+	pub fn is_finished(&self) -> bool {
+		self.sign_tracker.is_done(self.params.threshold)
+	}
+
+	pub fn try_finish(self) -> Result<DKGSignedPayload, DKGError> {
+		let mut finished = Vec::new();
+
+		let payload = self.sign_tracker.payload.take();
+		let sig = self.sign_tracker.complete();
+
+		if let Err(err) = sig {
+			println!("{:?}", err);
+			return Err(err)
+		} else if let (Some(payload), Ok(sig)) = (payload, sig) {
+			match convert_signature(&sig) {
+				Some(signature) => {
+					let signed_payload = DKGSignedPayload {
+						key: self.round_key.clone(),
+						payload,
+						signature: signature.encode(),
+					};
+
+					trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
+					Ok(signed_payload)
+				},
+				_ => Err(DKGError::GenericError { reason: "Error serializing signature".to_string() }),
+			}
+		} else {
+			Err(DKGError::GenericError { reason: "No payload".to_string() })
+		}
 	}
 }
 

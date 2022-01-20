@@ -145,16 +145,12 @@ impl<C> DKGRoundsSM<DKGOfflineMessage, CompletedOfflineStage, C> for OfflineRoun
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Proceed to next step for current Stage
+	/// Proceed to next step
 
-	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
+	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
-		if !self.offline_stage.contains_key(&key) {
-			return Ok(false)
-		}
-
-		let offline_stage = self.offline_stage.get_mut(&key).unwrap();
+		let offline_stage = self.offline_stage;
 
 		if offline_stage.wants_to_proceed() {
 			info!(target: "dkg", "🕸️  OfflineStage party {} wants to proceed", offline_stage.party_ind());
@@ -201,10 +197,10 @@ where
 
 		let (_, blame_vec) = offline_stage.round_blame();
 
-		if self.try_finish_offline_stage(key.clone()) {
+		if offline_stage.is_finished() {
 			Ok(true)
 		} else {
-			if at - *self.offline_started_at.get(&key).unwrap_or(&0u32.into()) >
+			if at - self.offline_started_at >
 				OFFLINE_TIMEOUT.into()
 			{
 				if !blame_vec.is_empty() {
@@ -218,112 +214,109 @@ where
 		}
 	}
 
-	/// Try finish current Stage
+	/// Get outgoing messages
 
-	fn try_finish(&mut self, key: Vec<u8>) -> bool {
-		if let Some(offline_stage) = self.offline_stage.get_mut(&key) {
-			if offline_stage.is_finished() {
-				info!(target: "dkg", "🕸️  OfflineStage is finished for {:?}, extracting output", &key);
-				match offline_stage.pick_output() {
-					Some(Ok(cos)) => {
-						self.local_stages.insert(key.clone(), MiniStage::ManualReady);
-						self.completed_offline_stage.insert(key.clone(), cos);
-						info!(target: "dkg", "🕸️  CompletedOfflineStage is extracted");
-					},
-					Some(Err(e)) => info!("OfflineStage finished with error result {}", e),
-					None => info!("OfflineStage finished with no result"),
-				}
-			}
-		}
-
-		if self.completed_offline_stage.contains_key(&key) {
-			self.offline_stage.remove(&key);
-			return true
-		}
-		false
-	}
-
-	/// Get outgoing messages for current Stage
-
-	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
+	pub fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		let mut messages = vec![];
 		trace!(target: "dkg", "🕸️  Getting outgoing offline messages");
-		for (key, offline_stage) in self.offline_stage.iter_mut() {
-			if !offline_stage.message_queue().is_empty() {
-				trace!(target: "dkg", "🕸️  Outgoing messages for {:?}, queue len: {}", key, offline_stage.message_queue().len());
 
-				let signer_set_id = self.signer_set_id;
+		let offline_stage = self.offline_stage;
 
-				for m in offline_stage.message_queue().into_iter() {
-					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
-					let serialized = serde_json::to_string(&m).unwrap();
-					let msg = DKGOfflineMessage {
-						key: key.clone(),
-						signer_set_id,
-						offline_msg: serialized.into_bytes(),
-					};
+		if !offline_stage.message_queue().is_empty() {
+			trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", offline_stage.message_queue().len());
 
-					messages.push(msg);
-				}
+			let signer_set_id = self.signer_set_id;
 
-				offline_stage.message_queue().clear();
+			for m in offline_stage.message_queue().into_iter() {
+				trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
+				let serialized = serde_json::to_string(&m).unwrap();
+				let msg = DKGOfflineMessage {
+					key: key.clone(),
+					signer_set_id,
+					offline_msg: serialized.into_bytes(),
+				};
+
+				messages.push(msg);
 			}
+
+			offline_stage.message_queue().clear();
 		}
 
 		messages
 	}
 
-	/// Handle incoming messages for current Stage
+	/// Handle incoming messages
 
-	fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
-		if data.signer_set_id != self.signer_set_id {
+	pub fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
+		if data.signer_set_id != self.params.signer_set_id {
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
 
-		if let Some(offline_stage) = self.offline_stage.get_mut(&data.key) {
-			trace!(target: "dkg", "🕸️  Handle incoming offline message");
-			if data.offline_msg.is_empty() {
-				warn!(target: "dkg", "🕸️  Got empty message");
-				return Ok(())
-			}
-			let msg: Msg<OfflineProtocolMessage> = match serde_json::from_slice(&data.offline_msg) {
-				Ok(msg) => msg,
-				Err(err) => {
-					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					return Err(DKGError::GenericError {
-						reason: "Error deserializing offline msg".to_string(),
-					})
-				},
-			};
+		let offline_stage = self.offline_stage;
 
-			if Some(offline_stage.party_ind()) != msg.receiver &&
-				(msg.receiver.is_some() || msg.sender == offline_stage.party_ind())
-			{
-				warn!(target: "dkg", "🕸️  Ignore messages sent by self");
-				return Ok(())
-			}
-			trace!(
-				target: "dkg", "🕸️  Party {} got message from={}, broadcast={}: {:?}",
-				offline_stage.party_ind(),
-				msg.sender,
-				msg.receiver.is_none(),
-				msg.body,
-			);
-			debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
-			match offline_stage.handle_incoming(msg.clone()) {
-				Ok(()) => (),
-				Err(err) if err.is_critical() => {
-					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err(DKGError::CriticalError {
-						reason: "Offline critical error encountered".to_string(),
-					})
-				},
-				Err(err) => {
-					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
-				},
-			}
-			debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
+		trace!(target: "dkg", "🕸️  Handle incoming offline message");
+		if data.offline_msg.is_empty() {
+			warn!(target: "dkg", "🕸️  Got empty message");
+			return Ok(())
 		}
+		let msg: Msg<OfflineProtocolMessage> = match serde_json::from_slice(&data.offline_msg) {
+			Ok(msg) => msg,
+			Err(err) => {
+				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
+				return Err(DKGError::GenericError {
+					reason: "Error deserializing offline msg".to_string(),
+				})
+			},
+		};
+
+		if Some(offline_stage.party_ind()) != msg.receiver &&
+			(msg.receiver.is_some() || msg.sender == offline_stage.party_ind())
+		{
+			warn!(target: "dkg", "🕸️  Ignore messages sent by self");
+			return Ok(())
+		}
+		trace!(
+			target: "dkg", "🕸️  Party {} got message from={}, broadcast={}: {:?}",
+			offline_stage.party_ind(),
+			msg.sender,
+			msg.receiver.is_none(),
+			msg.body,
+		);
+		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
+		match offline_stage.handle_incoming(msg.clone()) {
+			Ok(()) => (),
+			Err(err) if err.is_critical() => {
+				error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
+				return Err(DKGError::CriticalError {
+					reason: "Offline critical error encountered".to_string(),
+				})
+			},
+			Err(err) => {
+				error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
+			},
+		}
+		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
+
 		Ok(())
+	}
+
+	/// Try finish current Stage
+
+	pub fn is_finished(&self) {
+		self.offline_stage.is_finished()
+	}
+
+	pub fn try_finish(self) -> Result<CompletedOfflineStage, DKGError> {
+		let offline_stage = self.offline_stage;
+
+		info!(target: "dkg", "🕸️  Extracting output for offline stage");
+		match offline_stage.pick_output() {
+			Some(Ok(cos)) => {
+				info!(target: "dkg", "🕸️  CompletedOfflineStage is extracted");
+				Ok(cos)
+			},
+			Some(Err(e)) => info!("OfflineStage finished with error result {}", e),
+			None => info!("OfflineStage finished with no result"),
+		}
 	}
 }

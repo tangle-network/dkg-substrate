@@ -353,48 +353,39 @@ where
 	}
 
 	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), String> {
-		let proceed_res =
-			if let Some(completed_offline) = self.completed_offline_stage.remove(&round_key) {
-				let round = self.rounds.entry(round_key.clone()).or_default();
-				let hash = BigInt::from_bytes(&keccak_256(&data));
 
-				match SignManual::new(hash, completed_offline.clone()) {
-					Ok((sign_manual, sig)) => {
-						trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
+		if let Some(OfflineState::Finished(Ok(completed_offline))) = self.offlines.remove(&round_key) {
+			let hash = BigInt::from_bytes(&keccak_256(&data));
 
-						let vote = self.votes.entry(&key).or_insert_with(|| {
-							SignState::NotStarted(SignRounds::new(self.signer_set_id))
-						})
+			match SignManual::new(hash, completed_offline.clone()) {
+				Ok((sign_manual, sig)) => {
+					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
 
-						match vote {
-							SignState::NotStarted(pre_sign) => {
-								let new_sign = SignState::Started(
-									SignRounds::new(
-										self.sign_params(),
-										started_at,
-										data,
-										round_key.clone(),
-										sig,
-										sign_manual
-									));
-							}
+					let vote = self.votes.entry(&key).or_insert_with(|| {
+						SignState::NotStarted(SignRounds::new(self.signer_set_id))
+					})
+
+					match vote {
+						SignState::NotStarted(pre_sign) => {
+							let new_sign = SignState::Started(
+								SignRounds::new(
+									self.sign_params(),
+									started_at,
+									data,
+									round_key.clone(),
+									sig,
+									sign_manual
+								));
 						}
-						
-						Ok(true)
-					},
-					Err(err) => Err(err.to_string()),
-				}
-			} else {
-				Err("Not ready to vote".to_string())
-			};
-
-		match proceed_res {
-			Ok(true | false) => {
-				self.local_stages.remove(&round_key);
-				Ok(())
-			},
-			Err(err) => Err(err),
-		}
+					}
+					
+					Ok(()))
+				},
+				Err(err) => Err(err.to_string()),
+			}
+		} else {
+			Err("Not ready to vote".to_string())
+		};
 	}
 
 	pub fn is_key_gen_stage(&self) -> bool {
