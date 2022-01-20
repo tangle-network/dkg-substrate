@@ -33,7 +33,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// DKG State tracker
-pub struct DKGState<C> {
+pub struct DKGState<C> where C: AtLeast32BitUnsigned + Copy  {
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
@@ -47,7 +47,7 @@ pub struct DKGState<C> {
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
-pub struct MultiPartyECDSARounds<Clock> {
+pub struct MultiPartyECDSARounds<Clock> where Clock: AtLeast32BitUnsigned + Copy {
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
@@ -62,6 +62,7 @@ pub struct MultiPartyECDSARounds<Clock> {
 	// Signing rounds
 	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
+	keygen_set_id: KeygenSetId,
 	signers: Vec<u16>,
 	signer_set_id: SignerSetId,
 
@@ -98,6 +99,7 @@ where
 			keygen: KeygenState::NotStarted(PreKeygenRounds::new(round_id)),
 			offlines: HashMap::new(),
 			votes: HashMap::new(),
+			keygen_set_id: 0,
 			signers: Vec::new(),
 			signer_set_id: 0,
 			local_key_path,
@@ -164,7 +166,7 @@ where
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
-		let mut all_messages = self.keygen
+		let mut all_messages: Vec<DKGMsgPayload> = self.keygen
 			.get_outgoing()
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Keygen(msg))
@@ -201,7 +203,7 @@ where
 
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
-				self.keygen.handle_incoming(msg)
+				self.keygen.handle_incoming(msg, at.unwrap())
 
 			},
 			DKGMsgPayload::Offline(msg) => {
@@ -295,6 +297,7 @@ where
 									OfflineRounds::new(
 										self.sign_params(),
 										started_at,
+										key.clone(),
 										new_offline_stage
 									));
 
@@ -325,8 +328,7 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), String> {
-
+	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		if let Some(OfflineState::Finished(Ok(completed_offline))) = self.offlines.remove(&round_key) {
 			let hash = BigInt::from_bytes(&keccak_256(&data));
 
@@ -334,8 +336,8 @@ where
 				Ok((sign_manual, sig)) => {
 					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
 
-					let vote = self.votes.entry(&round_key).or_insert_with(|| {
-						SignState::NotStarted(SignRounds::new(self.signer_set_id))
+					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
+						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
 					});
 
 					match vote {
@@ -349,16 +351,29 @@ where
 									sig,
 									sign_manual
 								));
-						}
-					}
+							
+							for msg in pre_sign.pending_sign_msgs {
+								if let Err(err) = new_sign.handle_incoming(msg, started_at) {
+									warn!(target: "dkg", "🕸️  Error handling pending vote msg {:?}", err);
+								}
+								new_sign.proceed(started_at)?;
+							}
+							trace!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", key);
+							
+							self.votes.insert(key.clone(), new_sign);
+
+							Ok(())
+						},
+						_ => Err(DKGError::Vote { reason: "Already started".to_string() })
+					};
 					
 					Ok(())
 				},
-				Err(err) => Err(err.to_string()),
+				Err(err) => Err(DKGError::Vote { reason: err.to_string() }),
 			}
 		} else {
-			Err("Not ready to vote".to_string())
-		};
+			Err(DKGError::Vote { reason: "Not ready to vote".to_string() })
+		}
 	}
 
 	pub fn is_key_gen_stage(&self) -> bool {
@@ -387,11 +402,18 @@ where
 	}
 
 	pub fn has_finished_rounds(&self) -> bool {
-		!self.finished_rounds.is_empty()
+		let finished = self.votes.values().filter(|v| match {
+			SignState::Finished(_) => true,
+			_ => false,
+		})
+		.count();
+
+		finished > 0
 	}
 
 	pub fn get_finished_rounds(&mut self) -> Vec<DKGSignedPayload> {
-		std::mem::take(&mut self.finished_rounds)
+		// std::mem::take(&mut self.finished_rounds)
+		vec![]
 	}
 
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
@@ -404,7 +426,7 @@ where
 
 	pub fn get_public_key(&self) -> Option<GE> {
 		match self.keygen {
-			KeygenState::Finished(local_key) => {
+			KeygenState::Finished(Ok(local_key)) => {
 				Some(local_key.public_key().clone())
 			},
 			_ => None,
@@ -432,7 +454,7 @@ where
 	}
 
 	fn sign_params(&self) -> SignParams {
-		KeygenParams {
+		SignParams {
 			round_id: self.round_id,
 			party_index: self.party_index,
 			threshold: self.threshold,

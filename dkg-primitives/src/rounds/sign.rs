@@ -31,13 +31,19 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 
 /// Sign state
 
-pub enum SignState<C> {
+pub enum SignState<Clock> 
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	NotStarted(PreSignRounds),
-	Started(SignRounds<C>),
+	Started(SignRounds<Clock>),
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C> {
+impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C> 
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.proceed(at),
@@ -116,7 +122,10 @@ where
 
 /// Sign rounds
 
-pub struct SignRounds<Clock> {
+pub struct SignRounds<Clock> 
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	params: SignParams,
 	started_at: Clock,
 	payload: Vec<u8>,

@@ -159,6 +159,7 @@ pub enum DKGError {
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
 	CreateOfflineStage { reason: String },
+	Vote { reason: String },
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
 	SMNotFinished,

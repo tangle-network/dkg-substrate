@@ -29,13 +29,18 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
-pub enum OfflineState<C> {
+pub enum OfflineState<Clock> where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	NotStarted(PreOfflineRounds),
-	Started(OfflineRounds<C>),
+	Started(OfflineRounds<Clock>),
 	Finished(Result<CompletedOfflineStage, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> {
+impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> 
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.proceed(at),
@@ -115,7 +120,10 @@ where
 
 /// Offline rounds
 
-pub struct OfflineRounds<Clock> {
+pub struct OfflineRounds<Clock> 
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
     params: SignParams,
 	started_at: Clock,
 	round_key: Vec<u8>,

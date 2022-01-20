@@ -31,13 +31,19 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 
 // Keygen state
 
-pub enum KeygenState<C> {
+pub enum KeygenState<Clock>
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	NotStarted(PreKeygenRounds),
-	Started(KeygenRounds<C>),
+	Started(KeygenRounds<Clock>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> {
+impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> 
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.proceed(at),
@@ -117,7 +123,7 @@ where
 
 /// Keygen rounds
 
-pub struct KeygenRounds<Clock> {
+pub struct KeygenRounds<Clock> where Clock: AtLeast32BitUnsigned + Copy {
 	params: KeygenParams,
 	started_at: Clock,
 	keygen: Keygen,
