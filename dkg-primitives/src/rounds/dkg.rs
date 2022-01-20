@@ -12,7 +12,7 @@ use std::{
 };
 
 use super::{keygen::*, offline::*, sign::*};
-
+use std::mem::replace;
 
 use crate::{
 	types::*,
@@ -129,38 +129,66 @@ where
 	}
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<(), DKGError>> {
-		// let proceed_res = match self.stage {
-		// 	Stage::Keygen => self.proceed_keygen(at),
-		// 	Stage::OfflineReady => Ok(false),
-		// 	_ => Ok(false),
-		// };
+		let mut results = vec![];
 
-		// let mut results = vec![];
+		let keygen_proceed_res = self.keygen.proceed(at);
+		if keygen_proceed_res.is_err() {
+			results.push(keygen_proceed_res.map(|_| ()));
+		} else {
+			if self.keygen.is_finished() {
+				let prev_state = replace(&mut self.keygen, KeygenState::Empty); 
+				self.keygen = match prev_state {
+					KeygenState::Started(rounds) => {
+						KeygenState::Finished(rounds.try_finish())
+					},
+					_ => prev_state,
+				}
+			}
+		}
 
-		// match proceed_res {
-		// 	Ok(finished) =>
-		// 		if finished {
-		// 			self.advance_stage();
-		// 		},
-		// 	Err(err) => results.push(Err(err)),
-		// }
+		let offline_keys = self.offlines.keys().cloned().collect::<Vec<_>>();
+		for key in offline_keys {
+			if let Some(mut offline) = self.offlines.remove(&key.clone()) {
+				let res = offline.proceed(at);
+				if res.is_err() {
+					results.push(res.map(|_| ()));
+				}
+				let next_state = if offline.is_finished() {
+					match offline {
+						OfflineState::Started(rounds) => {
+							OfflineState::Finished(rounds.try_finish())
+						},
+						_ => offline
+					}
+				} else {
+					offline
+				};
+				self.offlines.insert(key.clone(), next_state);
+			}
+		}
 
-		// let keys = self.offline_stage.keys().cloned().collect::<Vec<_>>();
-		// for key in &keys {
-		// 	let res = self.proceed_offline_stage(key.clone(), at).map(|_| ());
-		// 	if res.is_err() {
-		// 		results.push(res);
-		// 	}
-		// }
+		let vote_keys = self.votes.keys().cloned().collect::<Vec<_>>();
+		for key in vote_keys {
+			if let Some(mut vote) = self.votes.remove(&key.clone()) {
+				let res = vote.proceed(at);
+				if res.is_err() {
+					results.push(res.map(|_| ()));
+				}
+				let next_state = if vote.is_finished() {
+					match vote {
+						SignState::Started(rounds) => {
+							SignState::Finished(rounds.try_finish())
+						},
+						_ => vote
+					}
+				} else {
+					vote
+				};
+				self.votes.insert(key.clone(), next_state);
+			}
+		}
 
-		// let res = self.proceed_vote(at).map(|_| ());
-
-		// if res.is_err() {
-		// 	results.push(res);
-		// }
-
-		// results
-		vec![]
+		results
 	}
 
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
@@ -203,8 +231,7 @@ where
 
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
-				self.keygen.handle_incoming(msg, at.unwrap())
-
+				self.keygen.handle_incoming(msg, at.or(Some(0u32.into())).unwrap())
 			},
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
@@ -213,7 +240,7 @@ where
 					OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
 				});
 
-				let res = offline.handle_incoming(msg, at.unwrap());
+				let res = offline.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.offlines.remove(&key);
 				}
@@ -226,7 +253,7 @@ where
 					SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
 				});
 
-				let res = vote.handle_incoming(msg, at.unwrap());
+				let res = vote.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.votes.remove(&key);
 				}
@@ -374,9 +401,7 @@ where
 							Ok(())
 						},
 						_ => Err(DKGError::Vote { reason: "Already started".to_string() })
-					};
-					
-					Ok(())
+					}
 				},
 				Err(err) => Err(DKGError::Vote { reason: err.to_string() }),
 			}
@@ -421,8 +446,25 @@ where
 	}
 
 	pub fn get_finished_rounds(&mut self) -> Vec<DKGSignedPayload> {
-		// std::mem::take(&mut self.finished_rounds)
-		vec![]
+		let mut finished: Vec<DKGSignedPayload> = vec![];
+
+		let vote_keys = self.votes.keys().cloned().collect::<Vec<_>>();
+		for key in vote_keys {
+			if let Some(mut vote) = self.votes.remove(&key.clone()) {
+				if vote.is_finished() {
+					match vote {
+						SignState::Finished(Ok(signed_payload)) => {
+							finished.push(signed_payload);
+						},
+						_ => { self.votes.insert(key.clone(), vote); },
+					}
+				} else {
+					self.votes.insert(key.clone(), vote);
+				};
+			}
+		}
+
+		finished
 	}
 
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
@@ -476,20 +518,9 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{MultiPartyECDSARounds, Stage};
+	use super::{MultiPartyECDSARounds};
 	use codec::Encode;
-
-	fn check_all_reached_stage(
-		parties: &Vec<MultiPartyECDSARounds<u32>>,
-		target_stage: Stage,
-	) -> bool {
-		for party in parties.iter() {
-			if party.stage != target_stage {
-				return false
-			}
-		}
-		true
-	}
+	use super::KeygenState;
 
 	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
 		for party in parties.iter() {
@@ -500,7 +531,13 @@ mod tests {
 	}
 
 	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
-		check_all_reached_stage(parties, Stage::OfflineReady)
+		for party in parties.iter() {
+			match &party.keygen {
+				KeygenState::Finished(_) => (),
+				_ => return false,
+			}
+		}
+		true
 	}
 
 	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
@@ -561,7 +598,10 @@ mod tests {
 		let mut msgs_pull = vec![];
 
 		for party in &mut parties.into_iter() {
-			party.proceed(0);
+			let proceed_res = party.proceed(0);
+			for res in proceed_res {
+				println!("Error: {:?}", res);
+			}
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
 		}
@@ -580,7 +620,10 @@ mod tests {
 			}
 
 			for party in &mut parties.into_iter() {
-				party.proceed(0);
+				let proceed_res = party.proceed(0);
+				for res in proceed_res {
+					println!("Error: {:?}", res);
+				}
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
 			}
@@ -596,8 +639,8 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
 		let round_key = 1u32.encode();
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(i, t, n, 0, None, 0, None, None);
-			println!("Starting keygen for party {}, Stage: {:?}", party.party_index, party.stage);
+			let mut party = MultiPartyECDSARounds::new(0, i, t, n, 0, None, None, None);
+			println!("Starting keygen for party {}", party.party_index);
 			party.start_keygen(0, 0).unwrap();
 			parties.push(party);
 		}

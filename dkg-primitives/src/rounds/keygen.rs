@@ -35,6 +35,7 @@ pub enum KeygenState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
+	Empty,
 	NotStarted(PreKeygenRounds),
 	Started(KeygenRounds<Clock>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
@@ -246,7 +247,6 @@ where
 		let keygen = &mut self.keygen;
 
 		trace!(target: "dkg", "🕸️  Handle incoming keygen message");
-		println!("🕸️  Handle incoming keygen message: {:?}", data);
 		if data.keygen_msg.is_empty() {
 			warn!(
 				target: "dkg", "🕸️  Got empty message");
@@ -257,7 +257,6 @@ where
 			Ok(msg) => msg,
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-				println!("🕸️  Error deserializing msg: {:?}", err);
 				return Err(DKGError::GenericError {
 					reason: "Error deserializing keygen msg".to_string(),
 				})
