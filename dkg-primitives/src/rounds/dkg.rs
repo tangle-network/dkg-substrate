@@ -173,17 +173,17 @@ where
 			.collect();
 
 		let offline_messages = self.offlines
-			.values()
+			.values_mut()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |acc, x| { acc.extend(x); acc })
+			.fold(Vec::new(), |mut acc, x| { acc.extend(x); acc })
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Offline(msg))
 			.collect::<Vec<_>>();
 
 		let vote_messages = self.votes
-			.values()
+			.values_mut()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |acc, x| { acc.extend(x); acc })
+			.fold(Vec::new(), |mut acc, x| { acc.extend(x); acc })
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Vote(msg))
 			.collect::<Vec<_>>();
@@ -250,38 +250,45 @@ where
 		);
 		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
 
-		match self.keygen {
+		let keygen_params = self.keygen_params();
+
+		self.keygen = match &self.keygen {
 			KeygenState::NotStarted(pre_keygen) => {
 				match Keygen::new(self.party_index, self.threshold, self.parties) {
 					Ok(new_keygen) => {
-						self.keygen = KeygenState::Started(
+						let mut keygen = KeygenState::Started(
 							KeygenRounds::new(
-								self.keygen_params(),
+								keygen_params,
 								started_at,
 								new_keygen
 							));
-		
+						
 						// Processing pending messages
-						for msg in std::mem::take(&mut pre_keygen.pending_keygen_msgs) {
-							if let Err(err) = self.keygen.handle_incoming(msg, started_at) {
+						for msg in pre_keygen.pending_keygen_msgs.clone() {
+							if let Err(err) = keygen.handle_incoming(msg, started_at) {
 								warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
 							}
-							self.keygen.proceed(started_at)?;
+							keygen.proceed(started_at)?;
 						}
-						trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", &pre_keygen.pending_keygen_msgs.len());
+						trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", pre_keygen.pending_keygen_msgs.len());
 		
-						Ok(())
+						keygen
 					},
-					Err(err) => Err(DKGError::StartKeygen { reason: err.to_string() }),
+					Err(err) => return Err(DKGError::StartKeygen { reason: err.to_string() }),
 				}
 			},
-			_ => Err(DKGError::StartKeygen { reason: "Already started".to_string() }),
-		}
+			_ => return Err(DKGError::StartKeygen { reason: "Already started".to_string() }),
+		};
+
+		Ok(())
 	}
 
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
-		match self.keygen {
+
+		let sign_params = self.sign_params();
+
+		match &self.keygen {
 			KeygenState::Finished(Ok(local_key)) => {
 
 				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
@@ -293,15 +300,15 @@ where
 
 						match offline {
 							OfflineState::NotStarted(pre_offline) => {
-								let new_offline = OfflineState::Started(
+								let mut new_offline = OfflineState::Started(
 									OfflineRounds::new(
-										self.sign_params(),
+										sign_params,
 										started_at,
 										key.clone(),
 										new_offline_stage
 									));
 
-								for msg in pre_offline.pending_offline_msgs {
+								for msg in pre_offline.pending_offline_msgs.clone() {
 									if let Err(err) = new_offline.handle_incoming(msg, started_at) {
 										warn!(target: "dkg", "🕸️  Error handling pending offline msg {:?}", err);
 									}
@@ -332,6 +339,8 @@ where
 		if let Some(OfflineState::Finished(Ok(completed_offline))) = self.offlines.remove(&round_key) {
 			let hash = BigInt::from_bytes(&keccak_256(&data));
 
+			let sign_params = self.sign_params();
+
 			match SignManual::new(hash, completed_offline.clone()) {
 				Ok((sign_manual, sig)) => {
 					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
@@ -342,9 +351,9 @@ where
 
 					match vote {
 						SignState::NotStarted(pre_sign) => {
-							let new_sign = SignState::Started(
+							let mut new_sign = SignState::Started(
 								SignRounds::new(
-									self.sign_params(),
+									sign_params,
 									started_at,
 									data,
 									round_key.clone(),
@@ -352,15 +361,15 @@ where
 									sign_manual
 								));
 							
-							for msg in pre_sign.pending_sign_msgs {
+							for msg in pre_sign.pending_sign_msgs.clone() {
 								if let Err(err) = new_sign.handle_incoming(msg, started_at) {
 									warn!(target: "dkg", "🕸️  Error handling pending vote msg {:?}", err);
 								}
 								new_sign.proceed(started_at)?;
 							}
-							trace!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", key);
+							trace!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", round_key);
 							
-							self.votes.insert(key.clone(), new_sign);
+							self.votes.insert(round_key.clone(), new_sign);
 
 							Ok(())
 						},
@@ -402,7 +411,7 @@ where
 	}
 
 	pub fn has_finished_rounds(&self) -> bool {
-		let finished = self.votes.values().filter(|v| match {
+		let finished = self.votes.values().filter(|v| match v {
 			SignState::Finished(_) => true,
 			_ => false,
 		})
@@ -425,7 +434,7 @@ where
 	}
 
 	pub fn get_public_key(&self) -> Option<GE> {
-		match self.keygen {
+		match &self.keygen {
 			KeygenState::Finished(Ok(local_key)) => {
 				Some(local_key.public_key().clone())
 			},
@@ -460,7 +469,7 @@ where
 			threshold: self.threshold,
 			parties: self.parties,
 			signer_set_id: self.signer_set_id,
-			signers: self.signers,
+			signers: self.signers.clone(),
 		}
 	}
 }

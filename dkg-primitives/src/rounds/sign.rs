@@ -68,20 +68,20 @@ where
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.is_finished(),
-			_ => Ok(true)
+			_ => true
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(sign_rounds) => {
+			Self::Started(ref sign_rounds) => {
 				if sign_rounds.is_finished() {
-					self
+					Ok(self)
 				} else {
-					DKGError::SMNotFinished
+					Err(DKGError::SMNotFinished)
 				}
 			},
-			_ => self
+			_ => Ok(self)
 		}
 	}
 }
@@ -116,7 +116,7 @@ where
 	}
 	
 	fn try_finish(self) -> Result<Vec<DKGVoteMessage>, DKGError> {
-		Ok(self.pending_sign_msgs.take())
+		Ok(self.pending_sign_msgs)
 	}
 }
 
@@ -128,7 +128,6 @@ where
 {
 	params: SignParams,
 	started_at: Clock,
-	payload: Vec<u8>,
 	round_key: Vec<u8>,
 	partial_sig: PartialSignature,
 	sign_tracker: DKGRoundTracker<Vec<u8>, Clock>,
@@ -147,7 +146,7 @@ where
 		partial_sig: PartialSignature,
 		sign_manual: SignManual,
 	) -> Self {
-		let sign_tracker = DKGRoundTracker::default();
+		let mut sign_tracker = DKGRoundTracker::default();
 		sign_tracker.sign_manual = Some(sign_manual);
 		sign_tracker.payload = Some(payload);
 		sign_tracker.started_at = started_at;
@@ -164,7 +163,6 @@ where
 		Self {
 			params,
 			started_at,
-			payload,
 			round_key,
 			partial_sig,
 			sign_tracker,
@@ -183,12 +181,11 @@ where
 		if self.sign_tracker.is_done(self.params.threshold) {
 			return Ok(true)
 		} else {
-			if self.sign_tracker.is_signed_by(self.party_index) &&
+			if self.sign_tracker.is_signed_by(self.params.party_index) &&
 				at - self.sign_tracker.started_at > SIGN_TIMEOUT.into()
 			{
 				let signed_by = self.sign_tracker.get_signed_parties();
-				let mut not_signed_by: Vec<u16> = self
-					.signers
+				let mut not_signed_by: Vec<u16> = self.params.signers
 					.iter()
 					.filter(|v| !signed_by.contains(*v))
 					.map(|v| *v)
@@ -243,9 +240,7 @@ where
 	}
 
 	fn try_finish(self) -> Result<DKGSignedPayload, DKGError> {
-		let mut finished = Vec::new();
-
-		let payload = self.sign_tracker.payload.take();
+		let payload = self.sign_tracker.payload.clone();
 		let sig = self.sign_tracker.complete();
 
 		if let Err(err) = sig {
@@ -309,8 +304,8 @@ where
 		self.votes.keys().map(|v| *v).collect()
 	}
 
-	fn is_done(&self, threshold: usize) -> bool {
-		self.sign_manual.is_some() && self.votes.len() >= threshold
+	fn is_done(&self, threshold: u16) -> bool {
+		self.sign_manual.is_some() && self.votes.len() >= threshold as usize
 	}
 
 	fn complete(mut self) -> Result<SignatureRecid, DKGError> {

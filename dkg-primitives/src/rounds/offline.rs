@@ -66,20 +66,20 @@ where
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.is_finished(),
-			_ => Ok(true)
+			_ => true
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(offline_rounds) => {
+			Self::Started(ref offline_rounds) => {
 				if offline_rounds.is_finished() {
-					self
+					Ok(self)
 				} else {
-					DKGError::SMNotFinished
+					Err(DKGError::SMNotFinished)
 				}
 			},
-			_ => self
+			_ => Ok(self)
 		}
 	}
 }
@@ -114,7 +114,7 @@ where
 	}
 	
 	fn try_finish(self) -> Result<Vec<DKGOfflineMessage>, DKGError> {
-		Ok(self.pending_offline_msgs.take())
+		Ok(self.pending_offline_msgs)
 	}
 }
 
@@ -156,9 +156,9 @@ where
 	/// Proceed to next step
 
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
-		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
+		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.params.party_index);
 
-		let offline_stage = self.offline_stage;
+		let offline_stage = &mut self.offline_stage;
 
 		if offline_stage.wants_to_proceed() {
 			info!(target: "dkg", "🕸️  OfflineStage party {} wants to proceed", offline_stage.party_ind());
@@ -208,7 +208,7 @@ where
 		if offline_stage.is_finished() {
 			Ok(true)
 		} else {
-			if at - self.offline_started_at >
+			if at - self.started_at >
 				OFFLINE_TIMEOUT.into()
 			{
 				if !blame_vec.is_empty() {
@@ -228,12 +228,12 @@ where
 		let mut messages = vec![];
 		trace!(target: "dkg", "🕸️  Getting outgoing offline messages");
 
-		let offline_stage = self.offline_stage;
+		let offline_stage = &mut self.offline_stage;
 
 		if !offline_stage.message_queue().is_empty() {
 			trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", offline_stage.message_queue().len());
 
-			let signer_set_id = self.signer_set_id;
+			let signer_set_id = self.params.signer_set_id;
 
 			for m in offline_stage.message_queue().into_iter() {
 				trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
@@ -260,7 +260,7 @@ where
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
 
-		let offline_stage = self.offline_stage;
+		let offline_stage = &mut self.offline_stage;
 
 		trace!(target: "dkg", "🕸️  Handle incoming offline message");
 		if data.offline_msg.is_empty() {
@@ -314,17 +314,15 @@ where
 		self.offline_stage.is_finished()
 	}
 
-	fn try_finish(self) -> Result<CompletedOfflineStage, DKGError> {
-		let offline_stage = self.offline_stage;
-
+	fn try_finish(mut self) -> Result<CompletedOfflineStage, DKGError> {
 		info!(target: "dkg", "🕸️  Extracting output for offline stage");
-		match offline_stage.pick_output() {
+		match self.offline_stage.pick_output() {
 			Some(Ok(cos)) => {
 				info!(target: "dkg", "🕸️  CompletedOfflineStage is extracted");
 				Ok(cos)
 			},
-			Some(Err(e)) => info!("OfflineStage finished with error result {}", e),
-			None => info!("OfflineStage finished with no result"),
+			Some(Err(err)) => Err(DKGError::CriticalError { reason: err.to_string() }),
+			None => Err(DKGError::GenericError { reason: "OfflineStage finished with no result".to_string() }),
 		}
 	}
 }

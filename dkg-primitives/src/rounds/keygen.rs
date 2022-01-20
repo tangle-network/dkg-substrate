@@ -69,20 +69,20 @@ where
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.is_finished(),
-			_ => Ok(true)
+			_ => true
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(keygen_rounds) => {
+			Self::Started(ref keygen_rounds) => {
 				if keygen_rounds.is_finished() {
-					self
+					Ok(self)
 				} else {
-					DKGError::SMNotFinished
+					Err(DKGError::SMNotFinished)
 				}
 			},
-			_ => self
+			_ => Ok(self)
 		}
 	}
 }
@@ -117,7 +117,7 @@ where
 	}
 	
 	fn try_finish(self) -> Result<Vec<DKGKeygenMessage>, DKGError> {
-		Ok(self.pending_keygen_msgs.take())
+		Ok(self.pending_keygen_msgs)
 	}
 }
 
@@ -153,7 +153,7 @@ where
 	/// Proceed to next step
 
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
-		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
+		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.params.party_index);
 
 		let keygen = &mut self.keygen;
 
@@ -192,7 +192,7 @@ where
 		if keygen.is_finished() {
 			Ok(true)
 		} else {
-			if at - self.keygen_started_at > KEYGEN_TIMEOUT.into() {
+			if at - self.started_at > KEYGEN_TIMEOUT.into() {
 				if !blame_vec.is_empty() {
 					return Err(DKGError::KeygenTimeout { bad_actors: blame_vec })
 				} else {
@@ -207,89 +207,91 @@ where
 	/// Get outgoing messages
 
 	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
-		if let Some(keygen) = self.keygen.as_mut() {
-			trace!(target: "dkg", "🕸️  Getting outgoing keygen messages");
+		trace!(target: "dkg", "🕸️  Getting outgoing keygen messages");
+		
+		let keygen = &mut self.keygen;
 
-			if !keygen.message_queue().is_empty() {
-				trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", keygen.message_queue().len());
+		if !keygen.message_queue().is_empty() {
+			trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", keygen.message_queue().len());
 
-				let keygen_set_id = self.keygen_set_id;
+			let keygen_set_id = self.params.keygen_set_id;
 
-				let enc_messages = keygen
-					.message_queue()
-					.into_iter()
-					.map(|m| {
-						trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
-						let serialized = serde_json::to_string(&m).unwrap();
-						return DKGKeygenMessage {
-							keygen_set_id,
-							keygen_msg: serialized.into_bytes(),
-						}
-					})
-					.collect::<Vec<DKGKeygenMessage>>();
+			let enc_messages = keygen
+				.message_queue()
+				.into_iter()
+				.map(|m| {
+					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
+					let serialized = serde_json::to_string(&m).unwrap();
+					return DKGKeygenMessage {
+						keygen_set_id,
+						keygen_msg: serialized.into_bytes(),
+					}
+				})
+				.collect::<Vec<DKGKeygenMessage>>();
 
-				keygen.message_queue().clear();
-				return enc_messages
-			}
+			keygen.message_queue().clear();
+			return enc_messages
 		}
+
 		vec![]
 	}
 
 	/// Handle incoming messages
 
 	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
-		if data.keygen_set_id != self.keygen_set_id {
+		if data.keygen_set_id != self.params.keygen_set_id {
 			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
 		}
 
-		if let Some(keygen) = self.keygen.as_mut() {
-			trace!(target: "dkg", "🕸️  Handle incoming keygen message");
-			println!("🕸️  Handle incoming keygen message: {:?}", data);
-			if data.keygen_msg.is_empty() {
-				warn!(
-					target: "dkg", "🕸️  Got empty message");
-				return Ok(())
-			}
+		let keygen = &mut self.keygen;
 
-			let msg: Msg<ProtocolMessage> = match serde_json::from_slice(&data.keygen_msg) {
-				Ok(msg) => msg,
-				Err(err) => {
-					error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
-					println!("🕸️  Error deserializing msg: {:?}", err);
-					return Err(DKGError::GenericError {
-						reason: "Error deserializing keygen msg".to_string(),
-					})
-				},
-			};
-
-			if Some(keygen.party_ind()) != msg.receiver &&
-				(msg.receiver.is_some() || msg.sender == keygen.party_ind())
-			{
-				warn!(target: "dkg", "🕸️  Ignore messages sent by self");
-				return Ok(())
-			}
-			trace!(
-				target: "dkg", "🕸️  Party {} got message from={}, broadcast={}: {:?}",
-				keygen.party_ind(),
-				msg.sender,
-				msg.receiver.is_none(),
-				msg.body,
-			);
-			debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
-			match keygen.handle_incoming(msg.clone()) {
-				Ok(()) => (),
-				Err(err) if err.is_critical() => {
-					error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
-					return Err(DKGError::GenericError {
-						reason: "Keygen critical error encountered".to_string(),
-					})
-				},
-				Err(err) => {
-					error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
-				},
-			}
-			debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
+		trace!(target: "dkg", "🕸️  Handle incoming keygen message");
+		println!("🕸️  Handle incoming keygen message: {:?}", data);
+		if data.keygen_msg.is_empty() {
+			warn!(
+				target: "dkg", "🕸️  Got empty message");
+			return Ok(())
 		}
+
+		let msg: Msg<ProtocolMessage> = match serde_json::from_slice(&data.keygen_msg) {
+			Ok(msg) => msg,
+			Err(err) => {
+				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
+				println!("🕸️  Error deserializing msg: {:?}", err);
+				return Err(DKGError::GenericError {
+					reason: "Error deserializing keygen msg".to_string(),
+				})
+			},
+		};
+
+		if Some(keygen.party_ind()) != msg.receiver &&
+			(msg.receiver.is_some() || msg.sender == keygen.party_ind())
+		{
+			warn!(target: "dkg", "🕸️  Ignore messages sent by self");
+			return Ok(())
+		}
+		trace!(
+			target: "dkg", "🕸️  Party {} got message from={}, broadcast={}: {:?}",
+			keygen.party_ind(),
+			msg.sender,
+			msg.receiver.is_none(),
+			msg.body,
+		);
+		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
+		match keygen.handle_incoming(msg.clone()) {
+			Ok(()) => (),
+			Err(err) if err.is_critical() => {
+				error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);
+				return Err(DKGError::GenericError {
+					reason: "Keygen critical error encountered".to_string(),
+				})
+			},
+			Err(err) => {
+				error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
+			},
+		}
+		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
+		
 		Ok(())
 	}
 
@@ -299,8 +301,8 @@ where
 		self.keygen.is_finished()
 	}
 
-	fn try_finish(self) -> Result<LocalKey<Secp256k1>, DKGError> {
-		info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
+	fn try_finish(mut self) -> Result<LocalKey<Secp256k1>, DKGError> {
+		info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.params.round_id);
 		match self.keygen.pick_output() {
 			Some(Ok(key)) => {
 				info!(target: "dkg", "🕸️  local share key is extracted");
