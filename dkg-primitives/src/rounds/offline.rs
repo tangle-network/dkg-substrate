@@ -29,7 +29,8 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
-pub enum OfflineState<Clock> where
+pub enum OfflineState<Clock>
+where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
 	NotStarted(PreOfflineRounds),
@@ -37,21 +38,21 @@ pub enum OfflineState<Clock> where
 	Finished(Result<CompletedOfflineStage, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> 
+impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.proceed(at),
-			_ => Ok(true)
+			_ => Ok(true),
 		}
 	}
 
 	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.get_outgoing(),
-			_ => vec![]
+			_ => vec![],
 		}
 	}
 
@@ -59,27 +60,26 @@ where
 		match self {
 			Self::NotStarted(pre_offline_rounds) => pre_offline_rounds.handle_incoming(data, at),
 			Self::Started(offline_rounds) => offline_rounds.handle_incoming(data, at),
-			_ => Ok(())
+			_ => Ok(()),
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.is_finished(),
-			_ => true
+			_ => true,
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(ref offline_rounds) => {
+			Self::Started(ref offline_rounds) =>
 				if offline_rounds.is_finished() {
 					Ok(self)
 				} else {
 					Err(DKGError::SMNotFinished)
-				}
-			},
-			_ => Ok(self)
+				},
+			_ => Ok(self),
 		}
 	}
 }
@@ -93,10 +93,7 @@ pub struct PreOfflineRounds {
 
 impl PreOfflineRounds {
 	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self{
-			signer_set_id,
-			pending_offline_msgs: Vec::default(),
-		}
+		Self { signer_set_id, pending_offline_msgs: Vec::default() }
 	}
 }
 
@@ -112,7 +109,7 @@ where
 	fn is_finished(&self) -> bool {
 		true
 	}
-	
+
 	fn try_finish(self) -> Result<Vec<DKGOfflineMessage>, DKGError> {
 		Ok(self.pending_offline_msgs)
 	}
@@ -120,11 +117,11 @@ where
 
 /// Offline rounds
 
-pub struct OfflineRounds<Clock> 
+pub struct OfflineRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
-    params: SignParams,
+	params: SignParams,
 	started_at: Clock,
 	round_key: Vec<u8>,
 	offline_stage: OfflineStage,
@@ -138,14 +135,9 @@ where
 		params: SignParams,
 		started_at: C,
 		round_key: Vec<u8>,
-		offline_stage: OfflineStage
+		offline_stage: OfflineStage,
 	) -> Self {
-		Self {
-			params,
-			started_at,
-			round_key,
-			offline_stage,
-		}
+		Self { params, started_at, round_key, offline_stage }
 	}
 }
 
@@ -208,9 +200,7 @@ where
 		if offline_stage.is_finished() {
 			Ok(true)
 		} else {
-			if at - self.started_at >
-				OFFLINE_TIMEOUT.into()
-			{
+			if at - self.started_at > OFFLINE_TIMEOUT.into() {
 				if !blame_vec.is_empty() {
 					return Err(DKGError::OfflineTimeout { bad_actors: blame_vec })
 				} else {
@@ -322,7 +312,9 @@ where
 				Ok(cos)
 			},
 			Some(Err(err)) => Err(DKGError::CriticalError { reason: err.to_string() }),
-			None => Err(DKGError::GenericError { reason: "OfflineStage finished with no result".to_string() }),
+			None => Err(DKGError::GenericError {
+				reason: "OfflineStage finished with no result".to_string(),
+			}),
 		}
 	}
 }

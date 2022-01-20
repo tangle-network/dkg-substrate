@@ -33,7 +33,10 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// DKG State tracker
-pub struct DKGState<C> where C: AtLeast32BitUnsigned + Copy  {
+pub struct DKGState<C>
+where
+	C: AtLeast32BitUnsigned + Copy,
+{
 	pub accepted: bool,
 	pub is_epoch_over: bool,
 	pub listening_for_pub_key: bool,
@@ -47,7 +50,10 @@ pub struct DKGState<C> where C: AtLeast32BitUnsigned + Copy  {
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
-pub struct MultiPartyECDSARounds<Clock> where Clock: AtLeast32BitUnsigned + Copy {
+pub struct MultiPartyECDSARounds<Clock>
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	round_id: RoundId,
 	party_index: u16,
 	threshold: u16,
@@ -124,7 +130,6 @@ where
 	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
 	/// And the keygen stage has not completed
 	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
-
 		false
 	}
 
@@ -136,11 +141,9 @@ where
 			results.push(keygen_proceed_res.map(|_| ()));
 		} else {
 			if self.keygen.is_finished() {
-				let prev_state = replace(&mut self.keygen, KeygenState::Empty); 
+				let prev_state = replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
-					KeygenState::Started(rounds) => {
-						KeygenState::Finished(rounds.try_finish())
-					},
+					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
 					_ => prev_state,
 				}
 			}
@@ -155,10 +158,9 @@ where
 				}
 				let next_state = if offline.is_finished() {
 					match offline {
-						OfflineState::Started(rounds) => {
-							OfflineState::Finished(rounds.try_finish())
-						},
-						_ => offline
+						OfflineState::Started(rounds) =>
+							OfflineState::Finished(rounds.try_finish()),
+						_ => offline,
 					}
 				} else {
 					offline
@@ -176,10 +178,8 @@ where
 				}
 				let next_state = if vote.is_finished() {
 					match vote {
-						SignState::Started(rounds) => {
-							SignState::Finished(rounds.try_finish())
-						},
-						_ => vote
+						SignState::Started(rounds) => SignState::Finished(rounds.try_finish()),
+						_ => vote,
 					}
 				} else {
 					vote
@@ -194,24 +194,33 @@ where
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
-		let mut all_messages: Vec<DKGMsgPayload> = self.keygen
+		let mut all_messages: Vec<DKGMsgPayload> = self
+			.keygen
 			.get_outgoing()
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Keygen(msg))
 			.collect();
 
-		let offline_messages = self.offlines
+		let offline_messages = self
+			.offlines
 			.values_mut()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |mut acc, x| { acc.extend(x); acc })
+			.fold(Vec::new(), |mut acc, x| {
+				acc.extend(x);
+				acc
+			})
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Offline(msg))
 			.collect::<Vec<_>>();
 
-		let vote_messages = self.votes
+		let vote_messages = self
+			.votes
 			.values_mut()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |mut acc, x| { acc.extend(x); acc })
+			.fold(Vec::new(), |mut acc, x| {
+				acc.extend(x);
+				acc
+			})
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Vote(msg))
 			.collect::<Vec<_>>();
@@ -222,17 +231,12 @@ where
 		all_messages
 	}
 
-	pub fn handle_incoming(
-		&mut self,
-		data: DKGMsgPayload,
-		at: Option<C>,
-	) -> Result<(), DKGError> {
+	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: Option<C>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
 		return match data {
-			DKGMsgPayload::Keygen(msg) => {
-				self.keygen.handle_incoming(msg, at.or(Some(0u32.into())).unwrap())
-			},
+			DKGMsgPayload::Keygen(msg) =>
+				self.keygen.handle_incoming(msg, at.or(Some(0u32.into())).unwrap()),
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
@@ -283,13 +287,12 @@ where
 			KeygenState::NotStarted(pre_keygen) => {
 				match Keygen::new(self.party_index, self.threshold, self.parties) {
 					Ok(new_keygen) => {
-						let mut keygen = KeygenState::Started(
-							KeygenRounds::new(
-								keygen_params,
-								started_at,
-								new_keygen
-							));
-						
+						let mut keygen = KeygenState::Started(KeygenRounds::new(
+							keygen_params,
+							started_at,
+							new_keygen,
+						));
+
 						// Processing pending messages
 						for msg in pre_keygen.pending_keygen_msgs.clone() {
 							if let Err(err) = keygen.handle_incoming(msg, started_at) {
@@ -298,7 +301,7 @@ where
 							keygen.proceed(started_at)?;
 						}
 						trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", pre_keygen.pending_keygen_msgs.len());
-		
+
 						keygen
 					},
 					Err(err) => return Err(DKGError::StartKeygen { reason: err.to_string() }),
@@ -317,7 +320,6 @@ where
 
 		match &self.keygen {
 			KeygenState::Finished(Ok(local_key)) => {
-
 				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
 				return match OfflineStage::new(self.party_index, s_l.clone(), local_key.clone()) {
 					Ok(new_offline_stage) => {
@@ -327,13 +329,12 @@ where
 
 						match offline {
 							OfflineState::NotStarted(pre_offline) => {
-								let mut new_offline = OfflineState::Started(
-									OfflineRounds::new(
-										sign_params,
-										started_at,
-										key.clone(),
-										new_offline_stage
-									));
+								let mut new_offline = OfflineState::Started(OfflineRounds::new(
+									sign_params,
+									started_at,
+									key.clone(),
+									new_offline_stage,
+								));
 
 								for msg in pre_offline.pending_offline_msgs.clone() {
 									if let Err(err) = new_offline.handle_incoming(msg, started_at) {
@@ -342,12 +343,14 @@ where
 									new_offline.proceed(started_at)?;
 								}
 								trace!(target: "dkg", "🕸️  Handled pending offline messages for {:?}", key);
-								
+
 								self.offlines.insert(key.clone(), new_offline);
 
 								Ok(())
 							},
-							_ => Err(DKGError::CreateOfflineStage { reason: "Already started".to_string() })
+							_ => Err(DKGError::CreateOfflineStage {
+								reason: "Already started".to_string(),
+							}),
 						}
 					},
 					Err(err) => {
@@ -362,8 +365,15 @@ where
 		}
 	}
 
-	pub fn vote(&mut self, round_key: Vec<u8>, data: Vec<u8>, started_at: C) -> Result<(), DKGError> {
-		if let Some(OfflineState::Finished(Ok(completed_offline))) = self.offlines.remove(&round_key) {
+	pub fn vote(
+		&mut self,
+		round_key: Vec<u8>,
+		data: Vec<u8>,
+		started_at: C,
+	) -> Result<(), DKGError> {
+		if let Some(OfflineState::Finished(Ok(completed_offline))) =
+			self.offlines.remove(&round_key)
+		{
 			let hash = BigInt::from_bytes(&keccak_256(&data));
 
 			let sign_params = self.sign_params();
@@ -378,16 +388,15 @@ where
 
 					match vote {
 						SignState::NotStarted(pre_sign) => {
-							let mut new_sign = SignState::Started(
-								SignRounds::new(
-									sign_params,
-									started_at,
-									data,
-									round_key.clone(),
-									sig,
-									sign_manual
-								));
-							
+							let mut new_sign = SignState::Started(SignRounds::new(
+								sign_params,
+								started_at,
+								data,
+								round_key.clone(),
+								sig,
+								sign_manual,
+							));
+
 							for msg in pre_sign.pending_sign_msgs.clone() {
 								if let Err(err) = new_sign.handle_incoming(msg, started_at) {
 									warn!(target: "dkg", "🕸️  Error handling pending vote msg {:?}", err);
@@ -395,12 +404,12 @@ where
 								new_sign.proceed(started_at)?;
 							}
 							trace!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", round_key);
-							
+
 							self.votes.insert(round_key.clone(), new_sign);
 
 							Ok(())
 						},
-						_ => Err(DKGError::Vote { reason: "Already started".to_string() })
+						_ => Err(DKGError::Vote { reason: "Already started".to_string() }),
 					}
 				},
 				Err(err) => Err(DKGError::Vote { reason: err.to_string() }),
@@ -436,11 +445,14 @@ where
 	}
 
 	pub fn has_finished_rounds(&self) -> bool {
-		let finished = self.votes.values().filter(|v| match v {
-			SignState::Finished(_) => true,
-			_ => false,
-		})
-		.count();
+		let finished = self
+			.votes
+			.values()
+			.filter(|v| match v {
+				SignState::Finished(_) => true,
+				_ => false,
+			})
+			.count();
 
 		finished > 0
 	}
@@ -456,7 +468,9 @@ where
 						SignState::Finished(Ok(signed_payload)) => {
 							finished.push(signed_payload);
 						},
-						_ => { self.votes.insert(key.clone(), vote); },
+						_ => {
+							self.votes.insert(key.clone(), vote);
+						},
 					}
 				} else {
 					self.votes.insert(key.clone(), vote);
@@ -477,9 +491,7 @@ where
 
 	pub fn get_public_key(&self) -> Option<GE> {
 		match &self.keygen {
-			KeygenState::Finished(Ok(local_key)) => {
-				Some(local_key.public_key().clone())
-			},
+			KeygenState::Finished(Ok(local_key)) => Some(local_key.public_key().clone()),
 			_ => None,
 		}
 	}
@@ -518,9 +530,8 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{MultiPartyECDSARounds};
+	use super::{KeygenState, MultiPartyECDSARounds};
 	use codec::Encode;
-	use super::KeygenState;
 
 	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
 		for party in parties.iter() {

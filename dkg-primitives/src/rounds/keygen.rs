@@ -41,21 +41,21 @@ where
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> 
+impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.proceed(at),
-			_ => Ok(true)
+			_ => Ok(true),
 		}
 	}
 
 	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.get_outgoing(),
-			_ => vec![]
+			_ => vec![],
 		}
 	}
 
@@ -63,27 +63,26 @@ where
 		match self {
 			Self::NotStarted(pre_keygen_rounds) => pre_keygen_rounds.handle_incoming(data, at),
 			Self::Started(keygen_rounds) => keygen_rounds.handle_incoming(data, at),
-			_ => Ok(())
+			_ => Ok(()),
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.is_finished(),
-			_ => true
+			_ => true,
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(ref keygen_rounds) => {
+			Self::Started(ref keygen_rounds) =>
 				if keygen_rounds.is_finished() {
 					Ok(self)
 				} else {
 					Err(DKGError::SMNotFinished)
-				}
-			},
-			_ => Ok(self)
+				},
+			_ => Ok(self),
 		}
 	}
 }
@@ -97,10 +96,7 @@ pub struct PreKeygenRounds {
 
 impl PreKeygenRounds {
 	pub fn new(round_id: RoundId) -> Self {
-		Self{
-			round_id,
-			pending_keygen_msgs: Vec::default(),
-		}
+		Self { round_id, pending_keygen_msgs: Vec::default() }
 	}
 }
 
@@ -116,7 +112,7 @@ where
 	fn is_finished(&self) -> bool {
 		true
 	}
-	
+
 	fn try_finish(self) -> Result<Vec<DKGKeygenMessage>, DKGError> {
 		Ok(self.pending_keygen_msgs)
 	}
@@ -124,7 +120,10 @@ where
 
 /// Keygen rounds
 
-pub struct KeygenRounds<Clock> where Clock: AtLeast32BitUnsigned + Copy {
+pub struct KeygenRounds<Clock>
+where
+	Clock: AtLeast32BitUnsigned + Copy,
+{
 	params: KeygenParams,
 	started_at: Clock,
 	keygen: Keygen,
@@ -134,16 +133,8 @@ impl<C> KeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	pub fn new(
-		params: KeygenParams,
-		started_at: C,
-		keygen: Keygen
-	) -> Self {
-		Self {
-			params,
-			started_at,
-			keygen,
-		}
+	pub fn new(params: KeygenParams, started_at: C, keygen: Keygen) -> Self {
+		Self { params, started_at, keygen }
 	}
 }
 
@@ -209,7 +200,7 @@ where
 
 	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
 		trace!(target: "dkg", "🕸️  Getting outgoing keygen messages");
-		
+
 		let keygen = &mut self.keygen;
 
 		if !keygen.message_queue().is_empty() {
@@ -223,10 +214,7 @@ where
 				.map(|m| {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
 					let serialized = serde_json::to_string(&m).unwrap();
-					return DKGKeygenMessage {
-						keygen_set_id,
-						keygen_msg: serialized.into_bytes(),
-					}
+					return DKGKeygenMessage { keygen_set_id, keygen_msg: serialized.into_bytes() }
 				})
 				.collect::<Vec<DKGKeygenMessage>>();
 
@@ -290,7 +278,7 @@ where
 			},
 		}
 		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
-		
+
 		Ok(())
 	}
 

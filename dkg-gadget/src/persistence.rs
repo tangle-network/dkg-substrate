@@ -44,7 +44,7 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if worker.dkg_persistence.initial_check {
-		return;
+		return
 	}
 
 	worker.dkg_persistence.start();

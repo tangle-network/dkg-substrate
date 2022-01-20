@@ -31,7 +31,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 
 /// Sign state
 
-pub enum SignState<Clock> 
+pub enum SignState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
@@ -40,48 +40,47 @@ where
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C> 
+impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.proceed(at),
-			_ => Ok(true)
+			_ => Ok(true),
 		}
 	}
 
 	fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.get_outgoing(),
-			_ => vec![]
+			_ => vec![],
 		}
 	}
 
 	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.handle_incoming(data, at),
-			_ => Ok(())
+			_ => Ok(()),
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.is_finished(),
-			_ => true
+			_ => true,
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Self::Started(ref sign_rounds) => {
+			Self::Started(ref sign_rounds) =>
 				if sign_rounds.is_finished() {
 					Ok(self)
 				} else {
 					Err(DKGError::SMNotFinished)
-				}
-			},
-			_ => Ok(self)
+				},
+			_ => Ok(self),
 		}
 	}
 }
@@ -95,10 +94,7 @@ pub struct PreSignRounds {
 
 impl PreSignRounds {
 	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self{
-			signer_set_id,
-			pending_sign_msgs: Vec::default(),
-		}
+		Self { signer_set_id, pending_sign_msgs: Vec::default() }
 	}
 }
 
@@ -114,7 +110,7 @@ where
 	fn is_finished(&self) -> bool {
 		true
 	}
-	
+
 	fn try_finish(self) -> Result<Vec<DKGVoteMessage>, DKGError> {
 		Ok(self.pending_sign_msgs)
 	}
@@ -122,7 +118,7 @@ where
 
 /// Sign rounds
 
-pub struct SignRounds<Clock> 
+pub struct SignRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
@@ -160,14 +156,7 @@ where
 		};
 		sign_outgoing_msgs.push(msg);
 
-		Self {
-			params,
-			started_at,
-			round_key,
-			partial_sig,
-			sign_tracker,
-			sign_outgoing_msgs,
-		}
+		Self { params, started_at, round_key, partial_sig, sign_tracker, sign_outgoing_msgs }
 	}
 }
 
@@ -185,7 +174,9 @@ where
 				at - self.sign_tracker.started_at > SIGN_TIMEOUT.into()
 			{
 				let signed_by = self.sign_tracker.get_signed_parties();
-				let mut not_signed_by: Vec<u16> = self.params.signers
+				let mut not_signed_by: Vec<u16> = self
+					.params
+					.signers
 					.iter()
 					.filter(|v| !signed_by.contains(*v))
 					.map(|v| *v)
@@ -258,7 +249,9 @@ where
 					trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
 					Ok(signed_payload)
 				},
-				_ => Err(DKGError::GenericError { reason: "Error serializing signature".to_string() }),
+				_ => Err(DKGError::GenericError {
+					reason: "Error serializing signature".to_string(),
+				}),
 			}
 		} else {
 			Err(DKGError::GenericError { reason: "No payload".to_string() })

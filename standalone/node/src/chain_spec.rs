@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
 	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig,
-	GrandpaConfig, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
-	SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
+	GrandpaConfig, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig,
+	SudoConfig, SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
 };
 use hex_literal::hex;
 
@@ -134,7 +134,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Extensions
 		None,
-		
 	))
 }
 
@@ -214,7 +213,6 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Extensions
 		None,
-		
 	))
 }
 
@@ -246,7 +244,8 @@ pub fn arana_testnet_config() -> Result<ChainSpec, String> {
 				],
 				vec![],
 				vec![],
-				crate::testnet_fixtures::get_arana_initial_authorities().iter()
+				crate::testnet_fixtures::get_arana_initial_authorities()
+					.iter()
 					.map(|a| a.0.clone())
 					.collect(),
 				true,
@@ -337,10 +336,6 @@ fn testnet_genesis(
 			threshold: Default::default(),
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
-		dkg_proposals: DKGProposalsConfig {
-			initial_chain_ids,
-			initial_r_ids,
-			initial_proposers,
-		},
+		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
 	}
 }

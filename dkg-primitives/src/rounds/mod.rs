@@ -4,4 +4,3 @@ pub mod offline;
 pub mod sign;
 
 pub use dkg::*;
-
