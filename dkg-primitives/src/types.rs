@@ -108,6 +108,30 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
+pub const KEYGEN_TIMEOUT: u32 = 10;
+pub const OFFLINE_TIMEOUT: u32 = 10;
+pub const SIGN_TIMEOUT: u32 = 3;
+
+pub trait DKGRoundsSM<Payload, Output, Clock> {
+	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+		Ok(false)
+	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		vec![]
+	}
+
+	fn handle_incoming(&mut self, data: Payload, at: Clock) -> Result<(), DKGError> {
+		Ok(())
+	}
+
+	fn is_finished(&self) -> bool {
+		false
+	}
+
+	fn try_finish(self) -> Result<Output, DKGError>;
+}
+
 pub struct KeygenParams {
 	pub round_id: RoundId,
 	pub party_index: u16,

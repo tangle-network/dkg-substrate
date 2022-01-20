@@ -30,44 +30,44 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 pub enum OfflineState<C> {
-	NotStarted(PreOfflineRounds<C>),
+	NotStarted(PreOfflineRounds),
 	Started(OfflineRounds<C>),
 	Finished(Result<CompletedOfflineStage, DKGError>),
 }
 
 impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> {
-	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
-			Started(offline_rounds) => offline_rounds.proceed(at),
+			Self::Started(offline_rounds) => offline_rounds.proceed(at),
 			_ => Ok(true)
 		}
 	}
 
-	fn get_outgoing(&mut self) -> Vec<Payload> {
+	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		match self {
-			Started(offline_rounds) => offline_rounds.get_outgoing(),
+			Self::Started(offline_rounds) => offline_rounds.get_outgoing(),
 			_ => vec![]
 		}
 	}
 
-	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGOfflineMessage, at: C) -> Result<(), DKGError> {
 		match self {
-			NotStarted(pre_offline_rounds) => pre_offline_rounds.handle_incoming(),
-			Started(offline_rounds) => offline_rounds.handle_incoming(),
+			Self::NotStarted(pre_offline_rounds) => pre_offline_rounds.handle_incoming(data, at),
+			Self::Started(offline_rounds) => offline_rounds.handle_incoming(data, at),
 			_ => Ok(())
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
-			Started(offline_rounds) => offline_rounds.is_finished(),
+			Self::Started(offline_rounds) => offline_rounds.is_finished(),
 			_ => Ok(true)
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Started(offline_rounds) => {
+			Self::Started(offline_rounds) => {
 				if offline_rounds.is_finished() {
 					self
 				} else {
@@ -81,15 +81,12 @@ impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C> {
 
 /// Pre-offline rounds
 
-pub struct PreOfflineRounds<Clock> {
+pub struct PreOfflineRounds {
 	signer_set_id: SignerSetId,
-	pending_offline_msgs: Vec<DKGOfflineMessage>,
+	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
 
-impl<C> PreOfflineRounds<C>
-where
-	C: AtLeast32BitUnsigned + Copy,
-{
+impl PreOfflineRounds {
 	pub fn new(signer_set_id: SignerSetId) -> Self {
 		Self{
 			signer_set_id,
@@ -98,20 +95,20 @@ where
 	}
 }
 
-impl<C> DKGRoundsSM<DKGOfflineMessage, Vec<DKGOfflineMessage>, C> for PreOfflineRounds<C>
+impl<C> DKGRoundsSM<DKGOfflineMessage, Vec<DKGOfflineMessage>, C> for PreOfflineRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	pub fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGOfflineMessage, _at: C) -> Result<(), DKGError> {
 		self.pending_offline_msgs.push(data);
 		Ok(())
 	}
 
-	pub fn is_finished(&self) {
+	fn is_finished(&self) -> bool {
 		true
 	}
 	
-	pub fn try_finish(self) -> Result<Vec<DKGOfflineMessage>, DKGError> {
+	fn try_finish(self) -> Result<Vec<DKGOfflineMessage>, DKGError> {
 		Ok(self.pending_offline_msgs.take())
 	}
 }
@@ -121,6 +118,7 @@ where
 pub struct OfflineRounds<Clock> {
     params: SignParams,
 	started_at: Clock,
+	round_key: Vec<u8>,
 	offline_stage: OfflineStage,
 }
 
@@ -130,12 +128,14 @@ where
 {
 	pub fn new(
 		params: SignParams,
-		started_at: Clock,
+		started_at: C,
+		round_key: Vec<u8>,
 		offline_stage: OfflineStage
 	) -> Self {
 		Self {
 			params,
 			started_at,
+			round_key,
 			offline_stage,
 		}
 	}
@@ -147,7 +147,7 @@ where
 {
 	/// Proceed to next step
 
-	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  OfflineStage party {} enter proceed", self.party_index);
 
 		let offline_stage = self.offline_stage;
@@ -216,7 +216,7 @@ where
 
 	/// Get outgoing messages
 
-	pub fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
+	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		let mut messages = vec![];
 		trace!(target: "dkg", "🕸️  Getting outgoing offline messages");
 
@@ -231,7 +231,7 @@ where
 				trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
 				let serialized = serde_json::to_string(&m).unwrap();
 				let msg = DKGOfflineMessage {
-					key: key.clone(),
+					key: self.round_key.clone(),
 					signer_set_id,
 					offline_msg: serialized.into_bytes(),
 				};
@@ -247,7 +247,7 @@ where
 
 	/// Handle incoming messages
 
-	pub fn handle_incoming(&mut self, data: DKGOfflineMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGOfflineMessage, at: C) -> Result<(), DKGError> {
 		if data.signer_set_id != self.params.signer_set_id {
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
@@ -302,11 +302,11 @@ where
 
 	/// Try finish current Stage
 
-	pub fn is_finished(&self) {
+	fn is_finished(&self) -> bool {
 		self.offline_stage.is_finished()
 	}
 
-	pub fn try_finish(self) -> Result<CompletedOfflineStage, DKGError> {
+	fn try_finish(self) -> Result<CompletedOfflineStage, DKGError> {
 		let offline_stage = self.offline_stage;
 
 		info!(target: "dkg", "🕸️  Extracting output for offline stage");

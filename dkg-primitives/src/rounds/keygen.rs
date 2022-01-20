@@ -32,44 +32,44 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 // Keygen state
 
 pub enum KeygenState<C> {
-	NotStarted(PreKeygenRounds<C>),
+	NotStarted(PreKeygenRounds),
 	Started(KeygenRounds<C>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
 
 impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> {
-	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
-			Started(keygen_rounds) => keygen_rounds.proceed(at),
+			Self::Started(keygen_rounds) => keygen_rounds.proceed(at),
 			_ => Ok(true)
 		}
 	}
 
-	fn get_outgoing(&mut self) -> Vec<Payload> {
+	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
 		match self {
-			Started(keygen_rounds) => keygen_rounds.get_outgoing(),
+			Self::Started(keygen_rounds) => keygen_rounds.get_outgoing(),
 			_ => vec![]
 		}
 	}
 
-	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
 		match self {
-			NotStarted(pre_keygen_rounds) => pre_keygen_rounds.handle_incoming(),
-			Started(keygen_rounds) => keygen_rounds.handle_incoming(),
+			Self::NotStarted(pre_keygen_rounds) => pre_keygen_rounds.handle_incoming(data, at),
+			Self::Started(keygen_rounds) => keygen_rounds.handle_incoming(data, at),
 			_ => Ok(())
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
-			Started(keygen_rounds) => keygen_rounds.is_finished(),
+			Self::Started(keygen_rounds) => keygen_rounds.is_finished(),
 			_ => Ok(true)
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Started(keygen_rounds) => {
+			Self::Started(keygen_rounds) => {
 				if keygen_rounds.is_finished() {
 					self
 				} else {
@@ -83,15 +83,12 @@ impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C> {
 
 /// Pre-keygen rounds
 
-pub struct PreKeygenRounds<Clock> {
+pub struct PreKeygenRounds {
 	round_id: RoundId,
-	pending_keygen_msgs: Vec<DKGKeygenMessage>,
+	pub pending_keygen_msgs: Vec<DKGKeygenMessage>,
 }
 
-impl<C> PreKeygenRounds<C>
-where
-	C: AtLeast32BitUnsigned + Copy,
-{
+impl PreKeygenRounds {
 	pub fn new(round_id: RoundId) -> Self {
 		Self{
 			round_id,
@@ -100,20 +97,20 @@ where
 	}
 }
 
-impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds<C>
+impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	pub fn handle_incoming(&mut self, data: DKGKeygenMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, _at: C) -> Result<(), DKGError> {
 		self.pending_keygen_msgs.push(data);
 		Ok(())
 	}
 
-	pub fn is_finished(&self) {
+	fn is_finished(&self) -> bool {
 		true
 	}
 	
-	pub fn try_finish(self) -> Result<Vec<DKGKeygenMessage>, DKGError> {
+	fn try_finish(self) -> Result<Vec<DKGKeygenMessage>, DKGError> {
 		Ok(self.pending_keygen_msgs.take())
 	}
 }
@@ -132,7 +129,7 @@ where
 {
 	pub fn new(
 		params: KeygenParams,
-		started_at: Clock,
+		started_at: C,
 		keygen: Keygen
 	) -> Self {
 		Self {
@@ -143,13 +140,13 @@ where
 	}
 }
 
-impl<C> DKGRoundsSM<DKGKeygenMessage, Result<LocalKey<Secp256k1>, DKGError>, C> for KeygenRounds<C>
+impl<C> DKGRoundsSM<DKGKeygenMessage, LocalKey<Secp256k1>, C> for KeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	/// Proceed to next step
 
-	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		trace!(target: "dkg", "🕸️  Keygen party {} enter proceed", self.party_index);
 
 		let keygen = &mut self.keygen;
@@ -203,7 +200,7 @@ where
 
 	/// Get outgoing messages
 
-	pub fn get_outgoing_messages(&mut self) -> Vec<DKGKeygenMessage> {
+	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
 		if let Some(keygen) = self.keygen.as_mut() {
 			trace!(target: "dkg", "🕸️  Getting outgoing keygen messages");
 
@@ -234,7 +231,7 @@ where
 
 	/// Handle incoming messages
 
-	pub fn handle_incoming(&mut self, data: DKGKeygenMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
 		if data.keygen_set_id != self.keygen_set_id {
 			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
 		}
@@ -292,11 +289,11 @@ where
 
 	/// Try finish
 
-	pub fn is_finished(&self) -> bool {
+	fn is_finished(&self) -> bool {
 		self.keygen.is_finished()
 	}
 
-	pub fn try_finish(self) -> Result<LocalKey<Secp256k1>, DKGError> {
+	fn try_finish(self) -> Result<LocalKey<Secp256k1>, DKGError> {
 		info!(target: "dkg", "🕸️  Keygen is finished, extracting output, round_id: {:?}", self.round_id);
 		match self.keygen.pick_output() {
 			Some(Ok(key)) => {

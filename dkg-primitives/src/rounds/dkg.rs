@@ -1,4 +1,3 @@
-use bincode;
 use codec::Encode;
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
@@ -11,6 +10,9 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
+
+use super::{keygen::*, offline::*, sign::*};
+
 
 use crate::{
 	types::*,
@@ -41,30 +43,6 @@ pub struct DKGState<C> {
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
-const KEYGEN_TIMEOUT: u32 = 10;
-const OFFLINE_TIMEOUT: u32 = 10;
-const SIGN_TIMEOUT: u32 = 3;
-
-pub trait DKGRoundsSM<Payload, Output, Clock> {
-	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
-		Ok(false)
-	}
-
-	fn get_outgoing(&mut self) -> Vec<Payload> {
-		vec![]
-	}
-
-	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
-		Ok(())
-	}
-
-	fn is_finished(&self) -> bool {
-		false
-	}
-
-	fn try_finish(self) -> Result<Output, DKGError>;
-}
-
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
@@ -75,10 +53,10 @@ pub struct MultiPartyECDSARounds<Clock> {
 	threshold: u16,
 	parties: u16,
 
-	create_at: C,
+	created_at: Clock,
 
 	// Key generation
-	keygen: Option<KeygenState<Clock>>,
+	keygen: KeygenState<Clock>,
 	// Offline stage
 	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
 	// Signing rounds
@@ -116,9 +94,12 @@ where
 			party_index,
 			threshold,
 			parties,
+			created_at,
 			keygen: KeygenState::NotStarted(PreKeygenRounds::new(round_id)),
-			offline_stage: HashMap::new(),
-			rounds: HashMap::new(),
+			offlines: HashMap::new(),
+			votes: HashMap::new(),
+			signers: Vec::new(),
+			signer_set_id: 0,
 			local_key_path,
 			public_key,
 			local_keystore,
@@ -126,7 +107,7 @@ where
 	}
 
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
-		self.local_key = Some(local_key)
+		self.keygen = KeygenState::Finished(Ok(local_key));
 	}
 
 	pub fn set_signers(&mut self, signers: Vec<u16>) {
@@ -141,58 +122,49 @@ where
 	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
 	/// And the keygen stage has not completed
 	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
-		let last_stage = self.stage_at_last_receipt;
-		let current_stage = self.stage;
-		let block_diff = current_block_number - self.last_received_at;
-
-		if block_diff >= time_to_restart.unwrap_or(3u32.into()) &&
-			last_stage == current_stage &&
-			self.is_key_gen_stage()
-		{
-			return true
-		}
 
 		false
 	}
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<(), DKGError>> {
-		let proceed_res = match self.stage {
-			Stage::Keygen => self.proceed_keygen(at),
-			Stage::OfflineReady => Ok(false),
-			_ => Ok(false),
-		};
+		// let proceed_res = match self.stage {
+		// 	Stage::Keygen => self.proceed_keygen(at),
+		// 	Stage::OfflineReady => Ok(false),
+		// 	_ => Ok(false),
+		// };
 
-		let mut results = vec![];
+		// let mut results = vec![];
 
-		match proceed_res {
-			Ok(finished) =>
-				if finished {
-					self.advance_stage();
-				},
-			Err(err) => results.push(Err(err)),
-		}
+		// match proceed_res {
+		// 	Ok(finished) =>
+		// 		if finished {
+		// 			self.advance_stage();
+		// 		},
+		// 	Err(err) => results.push(Err(err)),
+		// }
 
-		let keys = self.offline_stage.keys().cloned().collect::<Vec<_>>();
-		for key in &keys {
-			let res = self.proceed_offline_stage(key.clone(), at).map(|_| ());
-			if res.is_err() {
-				results.push(res);
-			}
-		}
+		// let keys = self.offline_stage.keys().cloned().collect::<Vec<_>>();
+		// for key in &keys {
+		// 	let res = self.proceed_offline_stage(key.clone(), at).map(|_| ());
+		// 	if res.is_err() {
+		// 		results.push(res);
+		// 	}
+		// }
 
-		let res = self.proceed_vote(at).map(|_| ());
+		// let res = self.proceed_vote(at).map(|_| ());
 
-		if res.is_err() {
-			results.push(res);
-		}
+		// if res.is_err() {
+		// 	results.push(res);
+		// }
 
-		results
+		// results
+		vec![]
 	}
 
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
-		trace!(target: "dkg", "🕸️  Get outgoing, stage {:?}", self.stage);
+		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
-		let mut all_messages = self.keygen_state
+		let mut all_messages = self.keygen
 			.get_outgoing()
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Keygen(msg))
@@ -201,7 +173,7 @@ where
 		let offline_messages = self.offlines
 			.values()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |acc, x| acc.extend(x))
+			.fold(Vec::new(), |acc, x| { acc.extend(x); acc })
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Offline(msg))
 			.collect::<Vec<_>>();
@@ -209,7 +181,7 @@ where
 		let vote_messages = self.votes
 			.values()
 			.map(|s| s.get_outgoing())
-			.fold(Vec::new(), |acc, x| acc.extend(x))
+			.fold(Vec::new(), |acc, x| { acc.extend(x); acc })
 			.into_iter()
 			.map(|msg| DKGMsgPayload::Vote(msg))
 			.collect::<Vec<_>>();
@@ -223,14 +195,10 @@ where
 	pub fn handle_incoming(
 		&mut self,
 		data: DKGMsgPayload,
-		current_block_number: Option<C>,
+		at: Option<C>,
 	) -> Result<(), DKGError> {
-		trace!(target: "dkg", "🕸️  Handle incoming, stage {:?}", self.stage);
-		if current_block_number.is_some() {
-			self.last_received_at = current_block_number.unwrap();
-		}
+		trace!(target: "dkg", "🕸️  Handle incoming");
 
-		self.stage_at_last_receipt = self.stage;
 		return match data {
 			DKGMsgPayload::Keygen(msg) => {
 				self.keygen.handle_incoming(msg)
@@ -239,23 +207,28 @@ where
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
-				let offline = self.offlines.entry(&key).or_insert_with(|| {
+				let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
 					OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-				})
+				});
 
-				let res = offline.handle_incoming(msg);
+				let res = offline.handle_incoming(msg, at.unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.offlines.remove(&key);
 				}
 				res
 			},
 			DKGMsgPayload::Vote(msg) => {
-				let key = msg.key.clone();
+				let key = msg.round_key.clone();
 
-				let vote = self.votes.entry(&key).or_insert_with(|| {
+				let vote = self.votes.entry(key.clone()).or_insert_with(|| {
 					SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
-				})
-				self.handle_incoming_vote(msg)
+				});
+
+				let res = vote.handle_incoming(msg, at.unwrap());
+				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
+					self.votes.remove(&key);
+				}
+				res
 			},
 			_ => Ok(()),
 		}
@@ -288,7 +261,7 @@ where
 		
 						// Processing pending messages
 						for msg in std::mem::take(&mut pre_keygen.pending_keygen_msgs) {
-							if let Err(err) = self.keygen.handle_incoming(msg) {
+							if let Err(err) = self.keygen.handle_incoming(msg, started_at) {
 								warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
 							}
 							self.keygen.proceed(started_at)?;
@@ -307,14 +280,14 @@ where
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
 		match self.keygen {
-			KeygenState::Finished(local_key) => {
+			KeygenState::Finished(Ok(local_key)) => {
 
 				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
-				return match OfflineStage::new(self.party_index, s_l.clone(), local_key_clone) {
+				return match OfflineStage::new(self.party_index, s_l.clone(), local_key.clone()) {
 					Ok(new_offline_stage) => {
-						let offline = self.offlines.entry(&key).or_insert_with(|| {
+						let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
 							OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-						})
+						});
 
 						match offline {
 							OfflineState::NotStarted(pre_offline) => {
@@ -326,14 +299,14 @@ where
 									));
 
 								for msg in pre_offline.pending_offline_msgs {
-									if let Err(err) = new_offline.handle_incoming(msg) {
+									if let Err(err) = new_offline.handle_incoming(msg, started_at) {
 										warn!(target: "dkg", "🕸️  Error handling pending offline msg {:?}", err);
 									}
-									new_offline.proceed(key.clone(), started_at)?;
+									new_offline.proceed(started_at)?;
 								}
 								trace!(target: "dkg", "🕸️  Handled pending offline messages for {:?}", key);
 								
-								self.offlines.insert(&key, new_offline)
+								self.offlines.insert(key.clone(), new_offline);
 
 								Ok(())
 							},
@@ -361,9 +334,9 @@ where
 				Ok((sign_manual, sig)) => {
 					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
 
-					let vote = self.votes.entry(&key).or_insert_with(|| {
+					let vote = self.votes.entry(&round_key).or_insert_with(|| {
 						SignState::NotStarted(SignRounds::new(self.signer_set_id))
-					})
+					});
 
 					match vote {
 						SignState::NotStarted(pre_sign) => {
@@ -379,7 +352,7 @@ where
 						}
 					}
 					
-					Ok(()))
+					Ok(())
 				},
 				Err(err) => Err(err.to_string()),
 			}
@@ -389,18 +362,21 @@ where
 	}
 
 	pub fn is_key_gen_stage(&self) -> bool {
-		Stage::Keygen == self.stage
+		match self.keygen {
+			KeygenState::Finished(_) => false,
+			_ => true,
+		}
 	}
 
 	pub fn is_offline_ready(&self) -> bool {
-		match self.keygen => {
+		match self.keygen {
 			KeygenState::Finished(_) => true,
 			_ => false,
 		}
 	}
 
 	pub fn is_ready_to_vote(&self, key: Vec<u8>) -> bool {
-		if let Some(offline) == self.offlines.get(&key) {
+		if let Some(offline) = self.offlines.get(&key) {
 			match offline {
 				OfflineState::Finished(_) => true,
 				_ => false,

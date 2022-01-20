@@ -32,43 +32,43 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 /// Sign state
 
 pub enum SignState<C> {
-	NotStarted(PreSignRounds<C>),
+	NotStarted(PreSignRounds),
 	Started(SignRounds<C>),
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
-impl<C> DKGRoundsSM<DKGSignMessage, SignState<C>, C> for SignState<C> {
-	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		match self {
-			Started(sign_rounds) => sign_rounds.proceed(at),
+			Self::Started(sign_rounds) => sign_rounds.proceed(at),
 			_ => Ok(true)
 		}
 	}
 
-	fn get_outgoing(&mut self) -> Vec<Payload> {
+	fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
 		match self {
-			Started(sign_rounds) => sign_rounds.get_outgoing(),
+			Self::Started(sign_rounds) => sign_rounds.get_outgoing(),
 			_ => vec![]
 		}
 	}
 
-	fn handle_incoming(&mut self, data: Payload) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
 		match self {
-			Started(sign_rounds) => sign_rounds.handle_incoming(),
+			Self::Started(sign_rounds) => sign_rounds.handle_incoming(data, at),
 			_ => Ok(())
 		}
 	}
 
 	fn is_finished(&self) -> bool {
 		match self {
-			Started(sign_rounds) => sign_rounds.is_finished(),
+			Self::Started(sign_rounds) => sign_rounds.is_finished(),
 			_ => Ok(true)
 		}
 	}
 
 	fn try_finish(self) -> Result<Self, DKGError> {
 		match self {
-			Started(sign_rounds) => {
+			Self::Started(sign_rounds) => {
 				if sign_rounds.is_finished() {
 					self
 				} else {
@@ -82,15 +82,12 @@ impl<C> DKGRoundsSM<DKGSignMessage, SignState<C>, C> for SignState<C> {
 
 /// Pre-sign rounds
 
-pub struct PreSignRounds<Clock> {
+pub struct PreSignRounds {
 	signer_set_id: SignerSetId,
-	pending_sign_msgs: Vec<DKGSignMessage>,
+	pub pending_sign_msgs: Vec<DKGVoteMessage>,
 }
 
-impl<C> PreSignRounds<C>
-where
-	C: AtLeast32BitUnsigned + Copy,
-{
+impl PreSignRounds {
 	pub fn new(signer_set_id: SignerSetId) -> Self {
 		Self{
 			signer_set_id,
@@ -99,20 +96,20 @@ where
 	}
 }
 
-impl<C> DKGRoundsSM<DKGSignMessage, Vec<DKGSignMessage>, C> for PreSignRounds<C>
+impl<C> DKGRoundsSM<DKGVoteMessage, Vec<DKGVoteMessage>, C> for PreSignRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	pub fn handle_incoming(&mut self, data: DKGSignMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGVoteMessage, _at: C) -> Result<(), DKGError> {
 		self.pending_sign_msgs.push(data);
 		Ok(())
 	}
 
-	pub fn is_finished(&self) {
+	fn is_finished(&self) -> bool {
 		true
 	}
 	
-	pub fn try_finish(self) -> Result<Vec<DKGSignMessage>, DKGError> {
+	fn try_finish(self) -> Result<Vec<DKGVoteMessage>, DKGError> {
 		Ok(self.pending_sign_msgs.take())
 	}
 }
@@ -135,7 +132,7 @@ where
 {
 	pub fn new(
 		params: SignParams,
-		started_at: Clock,
+		started_at: C,
 		payload: Vec<u8>,
 		round_key: Vec<u8>,
 		partial_sig: PartialSignature,
@@ -171,14 +168,14 @@ impl<C> DKGRoundsSM<DKGVoteMessage, DKGSignedPayload, C> for SignRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Proceed to next step for current Stage
+	/// Proceed to next step
 
-	pub fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
+	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		if self.sign_tracker.is_done(self.params.threshold) {
 			return Ok(true)
 		} else {
 			if self.sign_tracker.is_signed_by(self.party_index) &&
-				at - round.started_at > SIGN_TIMEOUT.into()
+				at - self.sign_tracker.started_at > SIGN_TIMEOUT.into()
 			{
 				let signed_by = self.sign_tracker.get_signed_parties();
 				let mut not_signed_by: Vec<u16> = self
@@ -198,16 +195,16 @@ where
 		}
 	}
 
-	/// Get outgoing messages for current Stage
+	/// Get outgoing messages
 
-	pub fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
+	fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
 		trace!(target: "dkg", "🕸️  Getting outgoing vote messages");
 		std::mem::take(&mut self.sign_outgoing_msgs)
 	}
 
-	/// Handle incoming messages for current Stage
+	/// Handle incoming messages
 
-	pub fn handle_incoming(&mut self, data: DKGVoteMessage) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle vote message");
 
 		if data.party_ind == self.params.party_index {
@@ -230,13 +227,13 @@ where
 		Ok(())
 	}
 
-	/// Try finish current Stage
+	/// Try finish
 
-	pub fn is_finished(&self) -> bool {
+	fn is_finished(&self) -> bool {
 		self.sign_tracker.is_done(self.params.threshold)
 	}
 
-	pub fn try_finish(self) -> Result<DKGSignedPayload, DKGError> {
+	fn try_finish(self) -> Result<DKGSignedPayload, DKGError> {
 		let mut finished = Vec::new();
 
 		let payload = self.sign_tracker.payload.take();
