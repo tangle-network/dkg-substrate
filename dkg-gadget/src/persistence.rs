@@ -6,7 +6,6 @@ use crate::{
 use bincode::deserialize;
 use dkg_primitives::{
 	crypto::AuthorityId,
-	types::Stage,
 	utils::{
 		decrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
 		QUEUED_DKG_LOCAL_KEY_FILE,
@@ -167,7 +166,6 @@ where
 						rounds.set_signer_set_id(round_id);
 						rounds.set_signers(signers_set);
 					}
-					rounds.set_stage(Stage::OfflineReady);
 					worker.set_rounds(rounds)
 				}
 			}
@@ -190,7 +188,6 @@ where
 
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					rounds.set_stage(Stage::OfflineReady);
 					// // We set the signer set using the public key as a seed to select signers at random
 					// // We need a 32byte seed, the compressed public key is 32 bytes
 					let seed = &queued_local_key

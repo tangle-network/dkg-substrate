@@ -43,13 +43,13 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	let n = authority_set.authorities.len();
 
 	let rounds = MultiPartyECDSARounds::new(
+		authority_set.id.clone(),
 		u16::try_from(party_inx).unwrap(),
 		thresh,
 		u16::try_from(n).unwrap(),
-		authority_set.id.clone(),
-		local_key_path,
 		created_at,
 		Some(sr25519_public.clone()),
+		local_key_path,
 		local_keystore,
 	);
 

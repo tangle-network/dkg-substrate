@@ -1224,7 +1224,7 @@ where
 							proposal.encode(),
 							latest_block_num,
 						) {
-							error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+							error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
 						} else {
 							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 						}
@@ -1328,7 +1328,7 @@ where
 			};
 
 			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+				error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
 			}
 		}
 		// send messages to all peers

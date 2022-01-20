@@ -67,8 +67,8 @@ pub struct MultiPartyECDSARounds<Clock> where Clock: AtLeast32BitUnsigned + Copy
 	signer_set_id: SignerSetId,
 
 	// File system storage and encryption
-	local_key_path: Option<PathBuf>,
 	public_key: Option<sr25519::Public>,
+	local_key_path: Option<PathBuf>,
 	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
@@ -83,9 +83,9 @@ where
 		party_index: u16,
 		threshold: u16,
 		parties: u16,
-		local_key_path: Option<PathBuf>,
 		created_at: C,
 		public_key: Option<sr25519::Public>,
+		local_key_path: Option<PathBuf>,
 		local_keystore: Option<Arc<LocalKeystore>>,
 	) -> Self {
 		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
@@ -102,8 +102,8 @@ where
 			keygen_set_id: 0,
 			signers: Vec::new(),
 			signer_set_id: 0,
-			local_key_path,
 			public_key,
+			local_key_path,
 			local_keystore,
 		}
 	}
