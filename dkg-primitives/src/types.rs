@@ -113,7 +113,7 @@ pub const OFFLINE_TIMEOUT: u32 = 10;
 pub const SIGN_TIMEOUT: u32 = 3;
 
 pub trait DKGRoundsSM<Payload, Output, Clock> {
-	fn proceed(&mut self, at: Clock) -> Result<bool, DKGError> {
+	fn proceed(&mut self, _at: Clock) -> Result<bool, DKGError> {
 		Ok(false)
 	}
 
@@ -121,7 +121,7 @@ pub trait DKGRoundsSM<Payload, Output, Clock> {
 		vec![]
 	}
 
-	fn handle_incoming(&mut self, data: Payload, at: Clock) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, _data: Payload, _at: Clock) -> Result<(), DKGError> {
 		Ok(())
 	}
 

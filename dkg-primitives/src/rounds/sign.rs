@@ -1,24 +1,11 @@
 use codec::Encode;
-use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use log::{debug, error, info, trace, warn};
-use round_based::{IsCritical, Msg, StateMachine};
-use sc_keystore::LocalKeystore;
-use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
+use curv::arithmetic::Converter;
+use log::{debug, error, trace, warn};
+use sp_core::ecdsa::Signature;
 use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::{
-	collections::{BTreeMap, HashMap},
-	path::PathBuf,
-	sync::Arc,
-};
+use std::collections::BTreeMap;
 
-use crate::{
-	types::*,
-	utils::{select_random_set, store_localkey, vec_usize_to_u16},
-};
-use dkg_runtime_primitives::{
-	keccak_256,
-	offchain_crypto::{Pair as AppPair, Public},
-};
+use crate::{types::*, utils::vec_usize_to_u16};
 
 pub use gg_2020::{
 	party_i::*,
@@ -123,9 +110,7 @@ where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
 	params: SignParams,
-	started_at: Clock,
 	round_key: Vec<u8>,
-	partial_sig: PartialSignature,
 	sign_tracker: DKGRoundTracker<Vec<u8>, Clock>,
 	sign_outgoing_msgs: Vec<DKGVoteMessage>,
 }
@@ -156,7 +141,7 @@ where
 		};
 		sign_outgoing_msgs.push(msg);
 
-		Self { params, started_at, round_key, partial_sig, sign_tracker, sign_outgoing_msgs }
+		Self { params, round_key, sign_tracker, sign_outgoing_msgs }
 	}
 }
 

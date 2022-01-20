@@ -1,27 +1,16 @@
-use codec::Encode;
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use log::{debug, error, info, trace, warn};
-use round_based::{IsCritical, Msg, StateMachine};
+use log::{error, info, trace, warn};
+
 use sc_keystore::LocalKeystore;
-use sp_core::{ecdsa::Signature, sr25519, Pair as TraitPair};
+use sp_core::sr25519;
 use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::{
-	collections::{BTreeMap, HashMap},
-	path::PathBuf,
-	sync::Arc,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use super::{keygen::*, offline::*, sign::*};
 use std::mem::replace;
 
-use crate::{
-	types::*,
-	utils::{select_random_set, store_localkey, vec_usize_to_u16},
-};
-use dkg_runtime_primitives::{
-	keccak_256,
-	offchain_crypto::{Pair as AppPair, Public},
-};
+use crate::types::*;
+use dkg_runtime_primitives::keccak_256;
 
 pub use gg_2020::{
 	party_i::*,
