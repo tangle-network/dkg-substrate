@@ -919,8 +919,7 @@ where
 				),
 			}
 
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some() {
 				self.aggregated_public_keys.get(&round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
@@ -1017,10 +1016,10 @@ where
 				return
 			}
 
+			// TODO: Verify signatures are signed by authorities
 			let key_and_sig = (msg.pub_key, msg.signature);
 			let round_id = msg.round_id;
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some() {
 				self.aggregated_public_keys.get(&round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
