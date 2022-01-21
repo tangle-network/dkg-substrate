@@ -475,7 +475,6 @@ where
 	}
 
 	// *** Block notifications ***
-
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some(latest_header) = &self.latest_header {
 			if latest_header.number() >= header.number() {
@@ -548,7 +547,6 @@ where
 
 		try_restart_dkg(self, header);
 		self.send_outgoing_dkg_messages();
-		self.check_refresh(header);
 		self.create_offline_stages(header);
 		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
@@ -697,7 +695,7 @@ where
 	fn verify_signature_against_authorities(
 		&mut self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
-	) -> Result<DKGMessage<Public>, String> {
+	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
 		let signature = signed_dkg_msg.signature.unwrap_or_default();
@@ -714,7 +712,7 @@ where
 		}
 
 		if authority_accounts.is_none() {
-			return Err("No authorities".into())
+			return Err(DKGError::GenericError { reason: "No authorities".into() })
 		}
 
 		let check_signers = |xs: Vec<AccountId32>| {
@@ -738,7 +736,9 @@ where
 			return Ok(dkg_msg)
 		} else {
 			return Err(
-				"Message signature is not from a registered authority or next authority".into()
+				DKGError::GenericError {
+					reason: "Message signature is not from a registered authority or next authority".into()
+				}
 			)
 		}
 	}
@@ -1197,45 +1197,6 @@ where
 		}
 	}
 
-	// *** Refresh Vote ***
-	// Return if a refresh has been started in this worker,
-	// if not check if it's rime for refresh and start signing the public key
-	// for queued authorities
-	fn check_refresh(&mut self, header: &B::Header) {
-		if self.refresh_in_progress || self.rounds.is_none() {
-			return
-		}
-
-		let latest_block_num = *header.number();
-		let at = BlockId::hash(header.hash());
-		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
-		if let Ok(true) = should_refresh {
-			self.refresh_in_progress = true;
-			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at);
-			if let Ok(Some(pub_key)) = pub_key {
-				match refresh_nonce {
-					Ok(nonce) => {
-						let key = DKGPayloadKey::RefreshVote(nonce);
-						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
-
-						if let Err(err) = self.rounds.as_mut().unwrap().vote(
-							key.encode(),
-							proposal.encode(),
-							latest_block_num,
-						) {
-							error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
-						} else {
-							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
-						}
-						self.send_outgoing_dkg_messages();
-					},
-					_ => {},
-				}
-			}
-		}
-	}
-
 	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
@@ -1319,6 +1280,7 @@ where
 			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
+				ProposalType::RefreshProposal { data } => data,
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
 				ProposalType::TokenAdd { data } => data,
@@ -1327,8 +1289,8 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
+			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 			}
 		}
 		// send messages to all peers
