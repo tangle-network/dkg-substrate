@@ -528,7 +528,7 @@ where
 				if !self.current_validator_set.authorities.is_empty() {
 					self.send_outgoing_dkg_messages();
 				}
-				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
+				self.dkg_state.epoch_is_over = !self.dkg_state.epoch_is_over;
 			} else {
 				// if the DKG has not been prepared / terminated, continue preparing it
 				if !self.dkg_state.accepted || self.queued_keygen_in_progress {
@@ -1224,7 +1224,7 @@ where
 							proposal.encode(),
 							latest_block_num,
 						) {
-							error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+							error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
 						} else {
 							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
 						}
@@ -1328,7 +1328,7 @@ where
 			};
 
 			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {}", err);
+				error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
 			}
 		}
 		// send messages to all peers

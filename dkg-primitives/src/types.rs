@@ -108,35 +108,45 @@ pub struct DKGPublicKeyMessage {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Stage {
-	KeygenReady,
-	Keygen,
-	OfflineReady,
-}
+pub const KEYGEN_TIMEOUT: u32 = 10;
+pub const OFFLINE_TIMEOUT: u32 = 10;
+pub const SIGN_TIMEOUT: u32 = 3;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MiniStage {
-	Offline,
-	ManualReady,
-}
-
-impl Stage {
-	pub fn get_next(self) -> Stage {
-		match self {
-			Stage::KeygenReady => Stage::Keygen,
-			Stage::Keygen => Stage::OfflineReady,
-			Stage::OfflineReady => Stage::OfflineReady,
-		}
+pub trait DKGRoundsSM<Payload, Output, Clock> {
+	fn proceed(&mut self, _at: Clock) -> Result<bool, DKGError> {
+		Ok(false)
 	}
+
+	fn get_outgoing(&mut self) -> Vec<Payload> {
+		vec![]
+	}
+
+	fn handle_incoming(&mut self, _data: Payload, _at: Clock) -> Result<(), DKGError> {
+		Ok(())
+	}
+
+	fn is_finished(&self) -> bool {
+		false
+	}
+
+	fn try_finish(self) -> Result<Output, DKGError>;
 }
 
-impl MiniStage {
-	pub fn get_next(self) -> Self {
-		match self {
-			_ => Self::ManualReady,
-		}
-	}
+pub struct KeygenParams {
+	pub round_id: RoundId,
+	pub party_index: u16,
+	pub threshold: u16,
+	pub parties: u16,
+	pub keygen_set_id: KeygenSetId,
+}
+
+pub struct SignParams {
+	pub round_id: RoundId,
+	pub party_index: u16,
+	pub threshold: u16,
+	pub parties: u16,
+	pub signer_set_id: SignerSetId,
+	pub signers: Vec<u16>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +159,8 @@ pub enum DKGError {
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
 	CreateOfflineStage { reason: String },
+	Vote { reason: String },
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
+	SMNotFinished,
 }

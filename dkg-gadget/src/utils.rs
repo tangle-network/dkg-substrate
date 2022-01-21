@@ -42,16 +42,16 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 
 	let n = authority_set.authorities.len();
 
-	let rounds = MultiPartyECDSARounds::new(
-		u16::try_from(party_inx).unwrap(),
-		thresh,
-		u16::try_from(n).unwrap(),
-		authority_set.id.clone(),
-		local_key_path,
-		created_at,
-		Some(sr25519_public.clone()),
-		local_keystore,
-	);
+	let rounds = MultiPartyECDSARounds::builder()
+		.round_id(authority_set.id.clone())
+		.party_index(u16::try_from(party_inx).unwrap())
+		.threshold(thresh)
+		.parties(u16::try_from(n).unwrap())
+		.created_at(created_at)
+		.public_key(Some(sr25519_public.clone()))
+		.local_key_path(local_key_path)
+		.local_keystore(local_keystore)
+		.build();
 
 	rounds
 }
