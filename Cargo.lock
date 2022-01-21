@@ -5585,6 +5585,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "hex",
  "pallet-session",
  "parity-scale-codec",
  "scale-info",

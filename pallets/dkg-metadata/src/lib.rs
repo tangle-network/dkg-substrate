@@ -96,6 +96,14 @@ pub mod pallet {
 			let _res = Self::submit_genesis_public_key_onchain(block_number);
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
+			let (authority_id, pk) = DKGPublicKey::<T>::get();
+			#[cfg(feature = "std")] // required since we use hex and strings
+			frame_support::log::debug!(
+				target: "dkg",
+				"Current Authority({}) DKG PublicKey (Compressed): 0x{}",
+				authority_id,
+				hex::encode(pk),
+			);
 		}
 	}
 
