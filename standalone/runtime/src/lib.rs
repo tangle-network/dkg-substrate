@@ -111,6 +111,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
+	state_version: 1,
 };
 
 pub mod constants;
@@ -846,7 +847,7 @@ impl_runtime_apis! {
 			dkg_runtime_primitives::UNTRACK_INTERVAL
 		}
 
-		fn refresh_nonce() -> u64 {
+		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}
 

@@ -212,7 +212,7 @@ sp_api::decl_runtime_apis! {
 		/// Get untrack interval for unsigned proposals
 		fn untrack_interval() -> N;
 		/// Get next nonce value for refresh proposal
-		fn refresh_nonce() -> u64;
+		fn refresh_nonce() -> u32;
 		/// Get the time to restart for the dkg keygen
 		fn time_to_restart() -> N;
 	}

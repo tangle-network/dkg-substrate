@@ -7,7 +7,8 @@ use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use super::{keygen::*, offline::*, sign::*};
-use std::mem::replace;
+use std::mem;
+use typed_builder::TypedBuilder;
 
 use crate::types::*;
 use dkg_runtime_primitives::keccak_256;
@@ -27,7 +28,7 @@ where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	pub accepted: bool,
-	pub is_epoch_over: bool,
+	pub epoch_is_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
@@ -39,6 +40,7 @@ where
 /// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
+#[derive(TypedBuilder)]
 pub struct MultiPartyECDSARounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -51,19 +53,28 @@ where
 	created_at: Clock,
 
 	// Key generation
+	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
 	keygen: KeygenState<Clock>,
 	// Offline stage
+	#[builder(default)]
 	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
 	// Signing rounds
+	#[builder(default)]
 	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
+	#[builder(default = 0)]
 	keygen_set_id: KeygenSetId,
+	#[builder(default)]
 	signers: Vec<u16>,
+	#[builder(default = 0)]
 	signer_set_id: SignerSetId,
 
 	// File system storage and encryption
+	#[builder(default)]
 	public_key: Option<sr25519::Public>,
+	#[builder(default)]
 	local_key_path: Option<PathBuf>,
+	#[builder(default)]
 	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
@@ -71,38 +82,6 @@ impl<C> MultiPartyECDSARounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
-	/// Public ///
-
-	pub fn new(
-		round_id: RoundId,
-		party_index: u16,
-		threshold: u16,
-		parties: u16,
-		created_at: C,
-		public_key: Option<sr25519::Public>,
-		local_key_path: Option<PathBuf>,
-		local_keystore: Option<Arc<LocalKeystore>>,
-	) -> Self {
-		trace!(target: "dkg", "🕸️  Creating new MultiPartyECDSARounds, party_index: {}, threshold: {}, parties: {}", party_index, threshold, parties);
-
-		Self {
-			round_id,
-			party_index,
-			threshold,
-			parties,
-			created_at,
-			keygen: KeygenState::NotStarted(PreKeygenRounds::new(round_id)),
-			offlines: HashMap::new(),
-			votes: HashMap::new(),
-			keygen_set_id: 0,
-			signers: Vec::new(),
-			signer_set_id: 0,
-			public_key,
-			local_key_path,
-			local_keystore,
-		}
-	}
-
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.keygen = KeygenState::Finished(Ok(local_key));
 	}
@@ -130,7 +109,7 @@ where
 			results.push(keygen_proceed_res.map(|_| ()));
 		} else {
 			if self.keygen.is_finished() {
-				let prev_state = replace(&mut self.keygen, KeygenState::Empty);
+				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
 					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
 					_ => prev_state,
@@ -272,7 +251,7 @@ where
 
 		let keygen_params = self.keygen_params();
 
-		self.keygen = match &self.keygen {
+		self.keygen = match mem::replace(&mut self.keygen, KeygenState::Empty) {
 			KeygenState::NotStarted(pre_keygen) => {
 				match Keygen::new(self.party_index, self.threshold, self.parties) {
 					Ok(new_keygen) => {
@@ -283,14 +262,15 @@ where
 						));
 
 						// Processing pending messages
-						for msg in pre_keygen.pending_keygen_msgs.clone() {
-							if let Err(err) = keygen.handle_incoming(msg, started_at) {
-								warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
+						if let Ok(pending_keygen_msgs) = pre_keygen.try_finish() {
+							for msg in pending_keygen_msgs.clone() {
+								if let Err(err) = keygen.handle_incoming(msg, started_at) {
+									warn!(target: "dkg", "🕸️  Error handling pending keygen msg {:?}", err);
+								}
+								keygen.proceed(started_at)?;
 							}
-							keygen.proceed(started_at)?;
+							trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", &pending_keygen_msgs.len());
 						}
-						trace!(target: "dkg", "🕸️  Handled {} pending keygen messages", pre_keygen.pending_keygen_msgs.len());
-
 						keygen
 					},
 					Err(err) => return Err(DKGError::StartKeygen { reason: err.to_string() }),
@@ -369,7 +349,7 @@ where
 
 			match SignManual::new(hash, completed_offline.clone()) {
 				Ok((sign_manual, sig)) => {
-					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
+					trace!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
 					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
 						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
@@ -451,7 +431,7 @@ where
 
 		let vote_keys = self.votes.keys().cloned().collect::<Vec<_>>();
 		for key in vote_keys {
-			if let Some(mut vote) = self.votes.remove(&key.clone()) {
+			if let Some(vote) = self.votes.remove(&key.clone()) {
 				if vote.is_finished() {
 					match vote {
 						SignState::Finished(Ok(signed_payload)) => {
@@ -639,7 +619,13 @@ mod tests {
 		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
 		let round_key = 1u32.encode();
 		for i in 1..=n {
-			let mut party = MultiPartyECDSARounds::new(0, i, t, n, 0, None, None, None);
+			let mut party = MultiPartyECDSARounds::builder()
+				.round_id(0)
+				.party_index(i)
+				.threshold(t)
+				.parties(n)
+				.created_at(0)
+				.build();
 			println!("Starting keygen for party {}", party.party_index);
 			party.start_keygen(0, 0).unwrap();
 			parties.push(party);

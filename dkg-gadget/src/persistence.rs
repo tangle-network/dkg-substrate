@@ -188,8 +188,8 @@ where
 
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					// // We set the signer set using the public key as a seed to select signers at random
-					// // We need a 32byte seed, the compressed public key is 32 bytes
+					// We set the signer set using the public key as a seed to select signers at random
+					// We need a 32byte seed, the compressed public key is 32 bytes
 					let seed = &queued_local_key
 						.as_ref()
 						.unwrap()

@@ -359,19 +359,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_anchor_update_signed_proposal(prop: ProposalType) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0))
 	}
 
 	fn handle_token_add_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0))
 	}
 
 	fn handle_token_remove_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0u64))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0))
 	}
 
 	fn handle_wrapping_fee_update_signed_proposal(prop: ProposalType) -> DispatchResult {
@@ -691,17 +691,17 @@ impl<T: Config> Pallet<T> {
 		let (chain_id, nonce) = match eth_transaction {
 			TransactionV2::Legacy(tx) => {
 				let chain_id: u64 = 0;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 			TransactionV2::EIP2930(tx) => {
 				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 			TransactionV2::EIP1559(tx) => {
 				let chain_id: u64 = tx.chain_id;
-				let nonce = tx.nonce.as_u64();
+				let nonce = tx.nonce.as_u32();
 				(chain_id, nonce)
 			},
 		};
@@ -729,20 +729,30 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, srcChainId: 4 Bytes, latestLeafIndex: 4 Bytes, merkleRoot: 32 Bytes) = 80 Bytes
 	fn decode_anchor_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"🕸️ Decoded Anchor Update Proposal: {:?} ({} bytes)",
+			data,
+			data.len(),
+		);
+
 		if data.len() != 80 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		let header = Self::decode_proposal_header(data)?;
 		let mut src_chain_id_bytes = [0u8; 4];
 		src_chain_id_bytes.copy_from_slice(&data[40..44]);
-		let src_chain_id = u32::from_le_bytes(src_chain_id_bytes);
+		let src_chain_id = u32::from_be_bytes(src_chain_id_bytes);
 		let mut latest_leaf_index_bytes = [0u8; 4];
 		latest_leaf_index_bytes.copy_from_slice(&data[44..48]);
-		let latest_leaf_index = u32::from_le_bytes(latest_leaf_index_bytes);
+		let latest_leaf_index = u32::from_be_bytes(latest_leaf_index_bytes);
 		let mut merkle_root_bytes = [0u8; 32];
 		merkle_root_bytes.copy_from_slice(&data[48..80]);
 		// 1. Should we check for the function signature?
 		// 2. Should we check for the chainId != srcChainId?
+		// TODO: do something with them here.
+		let _ = src_chain_id;
+		let _ = latest_leaf_index;
 		Ok(header)
 	}
 

@@ -100,6 +100,14 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 			let _res = Self::submit_genesis_public_key_onchain(block_number);
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
+			let (authority_id, pk) = DKGPublicKey::<T>::get();
+			#[cfg(feature = "std")] // required since we use hex and strings
+			frame_support::log::debug!(
+				target: "dkg",
+				"Current Authority({}) DKG PublicKey (Compressed): 0x{}",
+				authority_id,
+				hex::encode(pk),
+			);
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
@@ -277,7 +285,7 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 	/// Nonce value for next refresh proposal
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_nonce)]
-	pub type RefreshNonce<T: Config> = StorageValue<_, u64, ValueQuery>;
+	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	/// Signature of the DKG public key for the next session
 	#[pallet::storage]
@@ -315,7 +323,7 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 
 	/// Holds public key for immediate past session
 	#[pallet::storage]
-	#[pallet::getter(fn proposers)]
+	#[pallet::getter(fn previous_public_key)]
 	pub type PreviousPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
 
@@ -458,10 +466,6 @@ impl<T: Config> Pallet<T> {
 		authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
-		// As in GRANDPA, we trigger a validator set change only if the the validator
-		// set has actually changed.
-
-		// if new != Self::authorities() {
 		<Authorities<T>>::put(&new);
 		CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
 
@@ -487,12 +491,6 @@ impl<T: Config> Pallet<T> {
 		);
 		<frame_system::Pallet<T>>::deposit_log(log);
 		Self::refresh_dkg_keys();
-		// }
-
-		// if queued != Self::next_authorities() {
-		NextDKGPublicKey::<T>::kill();
-		NextPublicKeySignature::<T>::kill();
-		// }
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
@@ -663,7 +661,7 @@ impl<T: Config> Pallet<T> {
 				// Remove unsigned refresh proposal from queue
 				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 				// Increase nonce value
-				RefreshNonce::<T>::put(refresh_nonce + 1u64);
+				RefreshNonce::<T>::put(refresh_nonce + 1u32);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});
