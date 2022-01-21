@@ -5,9 +5,7 @@ use std::{sync::Arc, time::Duration};
 use dkg_runtime::{AccountId, Balance, Index as Nonce, RuntimeApi};
 
 // Cumulus Imports
-use cumulus_client_consensus_aura::{
-	AuraConsensus, BuildAuraConsensusParams, SlotProportion,
-};
+use cumulus_client_consensus_aura::{AuraConsensus, BuildAuraConsensusParams, SlotProportion};
 use cumulus_client_consensus_common::ParachainConsensus;
 use cumulus_client_network::BlockAnnounceValidator;
 use cumulus_client_service::{

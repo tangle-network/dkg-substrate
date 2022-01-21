@@ -21,10 +21,7 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::{
-	traits::Zero,
-	offchain::storage::StorageValueRef
-};
+use sp_runtime::{offchain::storage::StorageValueRef, traits::Zero};
 use sp_std::{convert::TryFrom, vec::Vec};
 
 pub mod weights;
@@ -294,7 +291,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		return Ok(())
 	}
 
-	fn handle_unsigned_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+	fn handle_unsigned_refresh_proposal(
+		proposal: dkg_runtime_primitives::RefreshProposal,
+	) -> DispatchResult {
 		let unsigned_proposal = ProposalType::RefreshProposal { data: proposal.encode() };
 		UnsignedProposalQueue::<T>::insert(
 			T::ChainId::zero(),
@@ -305,7 +304,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(().into())
 	}
 
-	fn handle_signed_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+	fn handle_signed_refresh_proposal(
+		proposal: dkg_runtime_primitives::RefreshProposal,
+	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
 			T::ChainId::zero(),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
@@ -536,7 +537,8 @@ impl<T: Config> Pallet<T> {
 					.filter(Self::is_existing_proposal)
 					.collect::<Vec<_>>();
 
-				// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and submit those chunks
+				// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and submit
+				// those chunks
 				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {
 					let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
 					let result = signer
@@ -597,7 +599,8 @@ impl<T: Config> Pallet<T> {
 							prop_wrapper.proposals.len()
 						);
 
-						// We get all batches whose submission delay has been satisfied and remove them from offchain storage
+						// We get all batches whose submission delay has been satisfied and remove
+						// them from offchain storage
 						let mut to_remove = Vec::new();
 						for (i, (props, submit_at)) in prop_wrapper.proposals.iter().enumerate() {
 							if *submit_at <= block_number {
@@ -727,7 +730,8 @@ impl<T: Config> Pallet<T> {
 		Ok(header)
 	}
 
-	/// (header: 40 Bytes, srcChainId: 4 Bytes, latestLeafIndex: 4 Bytes, merkleRoot: 32 Bytes) = 80 Bytes
+	/// (header: 40 Bytes, srcChainId: 4 Bytes, latestLeafIndex: 4 Bytes, merkleRoot: 32 Bytes) = 80
+	/// Bytes
 	fn decode_anchor_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
@@ -795,7 +799,8 @@ impl<T: Config> Pallet<T> {
 		Ok(header)
 	}
 
-	/// (header: 40 Bytes, newResourceId: 32, handlerAddress: 20, executionContextAddress: 20) = 112 Bytes
+	/// (header: 40 Bytes, newResourceId: 32, handlerAddress: 20, executionContextAddress: 20) = 112
+	/// Bytes
 	fn decode_resource_id_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
 		if data.len() != 112 {
 			return Err(Error::<T>::ProposalFormatInvalid)?

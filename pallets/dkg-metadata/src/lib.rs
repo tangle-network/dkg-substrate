@@ -25,6 +25,14 @@ use frame_support::{
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 
+use dkg_runtime_primitives::{
+	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
+	utils::{sr25519, to_slice_32, verify_signer_from_set},
+	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
+	RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
+	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+};
 use sp_runtime::{
 	generic::DigestItem,
 	offchain::storage::StorageValueRef,
@@ -32,14 +40,6 @@ use sp_runtime::{
 	Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
-use dkg_runtime_primitives::ProposalHandlerTrait;
-use dkg_runtime_primitives::{
-	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
-	utils::{sr25519, to_slice_32, verify_signer_from_set},
-	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, RefreshProposal,
-	RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-	DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
-};
 
 #[cfg(test)]
 mod mock;
@@ -53,7 +53,7 @@ pub use pallet::*;
 pub mod pallet {
 	use super::*;
 	use dkg_runtime_primitives::ProposalHandlerTrait;
-use frame_support::{ensure, pallet_prelude::*, transactional};
+	use frame_support::{ensure, pallet_prelude::*, transactional};
 	use frame_system::{
 		ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction},
@@ -116,7 +116,7 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					let data = dkg_runtime_primitives::RefreshProposal {
 						nonce: refresh_nonce,
-						pub_key: pub_key.1.clone()
+						pub_key: pub_key.1.clone(),
 					};
 
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
@@ -125,7 +125,7 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 						},
 						Err(e) => {
 							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
-						}
+						},
 					}
 				}
 			}
@@ -736,12 +736,13 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		Self::initialize_authorities(&authorities, &authority_account_ids);
 	}
 
-	// We want to run this function always because there are other factors(forcing a new era) that can affect
-	// changes to the queued validator set that the session pallet will not take not of until the next session, and this
-	// could cause the value of `changed` to be wrong, causing an out of sync between this pallet and the session pallet.
-	// The `changed` value is true most of the times except in rare cases, omitting  that check does not cause any harm, since this function is light weight
-	// we already have a check in the change_authorities function that would ensure the refresh is not run if the authority
-	// set has not changed.
+	// We want to run this function always because there are other factors(forcing a new era) that
+	// can affect changes to the queued validator set that the session pallet will not take not of
+	// until the next session, and this could cause the value of `changed` to be wrong, causing an
+	// out of sync between this pallet and the session pallet. The `changed` value is true most of
+	// the times except in rare cases, omitting  that check does not cause any harm, since this
+	// function is light weight we already have a check in the change_authorities function that
+	// would ensure the refresh is not run if the authority set has not changed.
 	fn on_new_session<'a, I: 'a>(_changed: bool, validators: I, queued_validators: I)
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,

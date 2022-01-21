@@ -107,9 +107,9 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 
 	match recovered_key {
 		Ok(recovered_pub_key) => {
-			// The stored_key public key is 33 bytes long and contains the prefix which is the first byte
-			// The recovered key does not contain the prefix  and is 64 bytes long, we take a slice of the first
-			// 32 bytes because the dkg_key is a compressed public key.
+			// The stored_key public key is 33 bytes long and contains the prefix which is the first
+			// byte The recovered key does not contain the prefix  and is 64 bytes long, we take a
+			// slice of the first 32 bytes because the dkg_key is a compressed public key.
 			frame_support::log::debug!(
 				target: "dkg",
 				"Recovered public key: {:?}",
