@@ -369,7 +369,7 @@ where
 
 			match SignManual::new(hash, completed_offline.clone()) {
 				Ok((sign_manual, sig)) => {
-					trace!(target: "dkg", "🕸️  Creating vote /w key {:?}", &round_key);
+					trace!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
 					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
 						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
