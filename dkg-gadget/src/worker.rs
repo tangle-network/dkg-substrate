@@ -917,8 +917,7 @@ where
 				),
 			}
 
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some() {
 				self.aggregated_public_keys.get(&round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
