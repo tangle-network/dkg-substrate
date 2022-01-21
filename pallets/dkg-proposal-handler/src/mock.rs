@@ -193,6 +193,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = ();
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";

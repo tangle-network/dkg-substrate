@@ -489,9 +489,8 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
-			// TODO: (adoerr) Enacting a new authority set will also implicitly 'conclude'
-			// the currently active DKG voting round by starting a new one. This is
-			// temporary and needs to be replaced by proper round life cycle handling.
+			// TODO: Enacting a new authority set will also implicitly 'conclude'
+			// the currently active DKG voting round by starting a new one.
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
