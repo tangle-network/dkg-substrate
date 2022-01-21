@@ -163,7 +163,7 @@ where
 		local_keystore,
 		dkg_state: DKGState {
 			accepted: false,
-			is_epoch_over: true,
+			epoch_is_over: true,
 			curr_dkg: None,
 			past_dkg: None,
 			listening_for_pub_key: false,

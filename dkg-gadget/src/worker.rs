@@ -528,7 +528,7 @@ where
 				if !self.current_validator_set.authorities.is_empty() {
 					self.send_outgoing_dkg_messages();
 				}
-				self.dkg_state.is_epoch_over = !self.dkg_state.is_epoch_over;
+				self.dkg_state.epoch_is_over = !self.dkg_state.epoch_is_over;
 			} else {
 				// if the DKG has not been prepared / terminated, continue preparing it
 				if !self.dkg_state.accepted || self.queued_keygen_in_progress {

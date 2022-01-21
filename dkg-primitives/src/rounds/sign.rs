@@ -41,7 +41,7 @@ where
 	fn get_outgoing(&mut self) -> Vec<DKGVoteMessage> {
 		match self {
 			Self::Started(sign_rounds) => sign_rounds.get_outgoing(),
-			_ => vec![],
+			_ => Vec::new(),
 		}
 	}
 
@@ -304,22 +304,10 @@ where
 					};
 
 					match sign_err {
-						gg20_sign::rounds::Error::Round1(err_type) =>
-							return Err(DKGError::SignMisbehaviour {
-								bad_actors: vec_usize_to_u16(err_type.bad_actors),
-							}),
-						gg20_sign::rounds::Error::Round2Stage4(err_type) =>
-							return Err(DKGError::SignMisbehaviour {
-								bad_actors: vec_usize_to_u16(err_type.bad_actors),
-							}),
-						gg20_sign::rounds::Error::Round3(err_type) =>
-							return Err(DKGError::SignMisbehaviour {
-								bad_actors: vec_usize_to_u16(err_type.bad_actors),
-							}),
-						gg20_sign::rounds::Error::Round5(err_type) =>
-							return Err(DKGError::SignMisbehaviour {
-								bad_actors: vec_usize_to_u16(err_type.bad_actors),
-							}),
+						gg20_sign::rounds::Error::Round1(err_type) |
+						gg20_sign::rounds::Error::Round2Stage4(err_type) |
+						gg20_sign::rounds::Error::Round3(err_type) |
+						gg20_sign::rounds::Error::Round5(err_type) |
 						gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
 							return Err(DKGError::SignMisbehaviour {
 								bad_actors: vec_usize_to_u16(err_type.bad_actors),
@@ -336,7 +324,7 @@ where
 pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 	let r = sig_recid.r.to_bigint().to_bytes();
 	let s = sig_recid.s.to_bigint().to_bytes();
-	let v = sig_recid.recid;
+	let v = sig_recid.recid + 27u8;
 
 	let mut sig_vec: Vec<u8> = Vec::new();
 

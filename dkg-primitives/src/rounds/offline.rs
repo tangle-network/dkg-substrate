@@ -37,7 +37,7 @@ where
 	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
 		match self {
 			Self::Started(offline_rounds) => offline_rounds.get_outgoing(),
-			_ => vec![],
+			_ => Vec::new(),
 		}
 	}
 
@@ -149,22 +149,10 @@ where
 					println!("Error proceeding offline stage {:?}", err);
 					match err {
 						gg20_sign::Error::ProceedRound(proceed_err) => match proceed_err {
-							gg20_sign::rounds::Error::Round1(err_type) =>
-								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: vec_usize_to_u16(err_type.bad_actors),
-								}),
-							gg20_sign::rounds::Error::Round2Stage4(err_type) =>
-								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: vec_usize_to_u16(err_type.bad_actors),
-								}),
-							gg20_sign::rounds::Error::Round3(err_type) =>
-								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: vec_usize_to_u16(err_type.bad_actors),
-								}),
-							gg20_sign::rounds::Error::Round5(err_type) =>
-								return Err(DKGError::OfflineMisbehaviour {
-									bad_actors: vec_usize_to_u16(err_type.bad_actors),
-								}),
+							gg20_sign::rounds::Error::Round1(err_type) |
+							gg20_sign::rounds::Error::Round2Stage4(err_type) |
+							gg20_sign::rounds::Error::Round3(err_type) |
+							gg20_sign::rounds::Error::Round5(err_type) |
 							gg20_sign::rounds::Error::Round6VerifyProof(err_type) =>
 								return Err(DKGError::OfflineMisbehaviour {
 									bad_actors: vec_usize_to_u16(err_type.bad_actors),
@@ -200,7 +188,7 @@ where
 	/// Get outgoing messages
 
 	fn get_outgoing(&mut self) -> Vec<DKGOfflineMessage> {
-		let mut messages = vec![];
+		let mut messages = Vec::new();
 		trace!(target: "dkg", "🕸️  Getting outgoing offline messages");
 
 		let offline_stage = &mut self.offline_stage;

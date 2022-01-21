@@ -41,7 +41,7 @@ where
 	fn get_outgoing(&mut self) -> Vec<DKGKeygenMessage> {
 		match self {
 			Self::Started(keygen_rounds) => keygen_rounds.get_outgoing(),
-			_ => vec![],
+			_ => Vec::new(),
 		}
 	}
 
@@ -206,9 +206,9 @@ where
 
 			keygen.message_queue().clear();
 			return enc_messages
+		} else {
+			Vec::new()
 		}
-
-		vec![]
 	}
 
 	/// Handle incoming messages
@@ -222,8 +222,7 @@ where
 
 		trace!(target: "dkg", "🕸️  Handle incoming keygen message");
 		if data.keygen_msg.is_empty() {
-			warn!(
-				target: "dkg", "🕸️  Got empty message");
+			warn!(target: "dkg", "🕸️  Got empty message");
 			return Ok(())
 		}
 
@@ -232,7 +231,7 @@ where
 			Err(err) => {
 				error!(target: "dkg", "🕸️  Error deserializing msg: {:?}", err);
 				return Err(DKGError::GenericError {
-					reason: "Error deserializing keygen msg".to_string(),
+					reason: format!("Error deserializing keygen msg, reason: {}", err),
 				})
 			},
 		};
@@ -281,8 +280,10 @@ where
 				info!(target: "dkg", "🕸️  local share key is extracted");
 				Ok(key)
 			},
-			Some(Err(e)) => panic!("Keygen finished with error result {}", e),
-			None => panic!("Keygen finished with no result"),
+			Some(Err(err)) => Err(DKGError::CriticalError { reason: err.to_string() }),
+			None => Err(DKGError::CriticalError {
+				reason: "Keygen finished with no result".to_string(),
+			}),
 		}
 	}
 }

@@ -7,7 +7,7 @@ use sp_runtime::traits::AtLeast32BitUnsigned;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use super::{keygen::*, offline::*, sign::*};
-use std::mem::replace;
+use std::mem;
 
 use crate::types::*;
 use dkg_runtime_primitives::keccak_256;
@@ -27,7 +27,7 @@ where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	pub accepted: bool,
-	pub is_epoch_over: bool,
+	pub epoch_is_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
 	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
@@ -130,7 +130,7 @@ where
 			results.push(keygen_proceed_res.map(|_| ()));
 		} else {
 			if self.keygen.is_finished() {
-				let prev_state = replace(&mut self.keygen, KeygenState::Empty);
+				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
 					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
 					_ => prev_state,
