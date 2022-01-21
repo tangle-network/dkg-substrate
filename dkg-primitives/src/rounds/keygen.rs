@@ -5,6 +5,7 @@ use round_based::{IsCritical, Msg, StateMachine};
 use sp_runtime::traits::AtLeast32BitUnsigned;
 
 use crate::{types::*, utils::vec_usize_to_u16};
+use std::marker::PhantomData;
 
 pub use gg_2020::{
 	party_i::*,
@@ -22,7 +23,7 @@ where
 	Clock: AtLeast32BitUnsigned + Copy,
 {
 	Empty,
-	NotStarted(PreKeygenRounds),
+	NotStarted(PreKeygenRounds<Clock>),
 	Started(KeygenRounds<Clock>),
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
@@ -75,18 +76,18 @@ where
 
 /// Pre-keygen rounds
 
-pub struct PreKeygenRounds {
-	round_id: RoundId,
-	pub pending_keygen_msgs: Vec<DKGKeygenMessage>,
+pub struct PreKeygenRounds<Clock> {
+	pending_keygen_msgs: Vec<DKGKeygenMessage>,
+	clock_type: PhantomData<Clock>,
 }
 
-impl PreKeygenRounds {
-	pub fn new(round_id: RoundId) -> Self {
-		Self { round_id, pending_keygen_msgs: Vec::default() }
+impl<C> PreKeygenRounds<C> {
+	pub fn new() -> Self {
+		Self { pending_keygen_msgs: Vec::default(), clock_type: PhantomData }
 	}
 }
 
-impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds
+impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
