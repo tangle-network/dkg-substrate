@@ -169,11 +169,8 @@ use frame_support::{ensure, pallet_prelude::*, transactional};
 			let origin = ensure_signed(origin)?;
 
 			let authorities = Self::current_authorities_accounts();
-
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-
 			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;

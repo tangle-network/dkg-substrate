@@ -163,6 +163,9 @@ pub enum DKGError {
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
 	SMNotFinished,
+	NotListeningForPublicKey,
+	NoAuthorityAccounts,
+	NoHeader
 }
 
 impl DKGError {
@@ -198,6 +201,7 @@ impl DKGError {
 			DKGError::CriticalError { reason } => format!("Critical error: {}", reason),
 			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
 			DKGError::SMNotFinished => format!("SM not finished"),
+			_ => format!("Unknown error"),
 		}
 	}
 } 
