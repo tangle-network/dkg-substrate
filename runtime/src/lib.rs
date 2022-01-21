@@ -553,6 +553,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 parameter_types! {

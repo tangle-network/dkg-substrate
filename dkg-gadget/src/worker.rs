@@ -475,7 +475,6 @@ where
 	}
 
 	// *** Block notifications ***
-
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some(latest_header) = &self.latest_header {
 			if latest_header.number() >= header.number() {
@@ -490,9 +489,8 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
-			// TODO: (adoerr) Enacting a new authority set will also implicitly 'conclude'
-			// the currently active DKG voting round by starting a new one. This is
-			// temporary and needs to be replaced by proper round life cycle handling.
+			// TODO: Enacting a new authority set will also implicitly 'conclude'
+			// the currently active DKG voting round by starting a new one.
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
@@ -548,7 +546,6 @@ where
 
 		try_restart_dkg(self, header);
 		self.send_outgoing_dkg_messages();
-		self.check_refresh(header);
 		self.create_offline_stages(header);
 		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
@@ -697,7 +694,7 @@ where
 	fn verify_signature_against_authorities(
 		&mut self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
-	) -> Result<DKGMessage<Public>, String> {
+	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
 		let signature = signed_dkg_msg.signature.unwrap_or_default();
@@ -714,7 +711,7 @@ where
 		}
 
 		if authority_accounts.is_none() {
-			return Err("No authorities".into())
+			return Err(DKGError::GenericError { reason: "No authorities".into() })
 		}
 
 		let check_signers = |xs: Vec<AccountId32>| {
@@ -738,7 +735,9 @@ where
 			return Ok(dkg_msg)
 		} else {
 			return Err(
-				"Message signature is not from a registered authority or next authority".into()
+				DKGError::GenericError {
+					reason: "Message signature is not from a registered authority or next authority".into()
+				}
 			)
 		}
 	}
@@ -919,8 +918,7 @@ where
 				),
 			}
 
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some() {
 				self.aggregated_public_keys.get(&round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
@@ -938,193 +936,189 @@ where
 		}
 	}
 
-	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public>) {
+	fn authenticate_msg_origin(
+		&self,
+		is_main_round: bool,
+		authority_accounts: (Vec<AccountId32>, Vec<AccountId32>),
+		msg: &DKGPublicKeyMessage,
+	) -> Result<(), DKGError> {
+		let get_keys = |accts: &Vec<AccountId32>| {
+			accts
+				.iter()
+				.map(|x| {
+					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to sr25519 public key")
+					}))
+				})
+				.collect::<Vec<sr25519::Public>>()
+		};
+
+		let maybe_signers = if is_main_round {
+			get_keys(&authority_accounts.0)
+		} else {
+			get_keys(&authority_accounts.1)
+		};
+
+		if !dkg_runtime_primitives::utils::verify_signer_from_set(
+			maybe_signers,
+			&msg.pub_key,
+			&msg.signature,
+		).1 {
+			return Err(DKGError::GenericError {
+				reason: "Message signature is not from a registered authority".to_string(),
+			});
+		}
+
+		Ok(())
+	}
+
+	fn store_aggregated_public_keys(
+		&mut self,
+		is_gensis_round: bool,
+		round_id: RoundId,
+		keys: &AggregatedPublicKeys,
+		max_extrinsic_delay: NumberFor<B>
+	) -> Result<(), DKGError> {
+		let maybe_offchain = self.backend.offchain_storage();
+		if maybe_offchain.is_none() {
+			return Err(DKGError::GenericError {
+				reason: "No offchain storage available".to_string(),
+			});
+		}
+
+		let mut offchain = maybe_offchain.unwrap();
+		if is_gensis_round {
+			self.dkg_state.listening_for_active_pub_key = false;
+
+			offchain.set(STORAGE_PREFIX,AGGREGATED_PUBLIC_KEYS_AT_GENESIS,&keys.encode());
+			let submit_at = self.generate_random_delay(
+				&self.current_validator_set.authorities,
+				max_extrinsic_delay,
+			);
+			if let Some(submit_at) = submit_at {
+				offchain.set(
+					STORAGE_PREFIX,
+					SUBMIT_GENESIS_KEYS_AT,
+					&submit_at.encode(),
+				);
+			}
+
+			trace!(
+				target: "dkg",
+				"Stored genesis public keys {:?}, delay: {:?}, public keys: {:?}",
+				keys.encode(),
+				submit_at,
+				self.key_store.sr25519_public_keys()
+			);
+		} else {
+			self.dkg_state.listening_for_pub_key = false;
+
+			offchain.set(
+				STORAGE_PREFIX,
+				AGGREGATED_PUBLIC_KEYS,
+				&keys.encode(),
+			);
+
+			let submit_at = self.generate_random_delay(
+				&self.queued_validator_set.authorities,
+				max_extrinsic_delay,
+			);
+			if let Some(submit_at) = submit_at {
+				offchain.set(
+					STORAGE_PREFIX,
+					SUBMIT_KEYS_AT,
+					&submit_at.encode(),
+				);
+			}
+
+			trace!(
+				target: "dkg",
+				"Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}",
+				keys.encode(),
+				submit_at,
+				self.key_store.sr25519_public_keys()
+			);
+
+			let _ = self.aggregated_public_keys.remove(&round_id);
+		}
+
+		Ok(())
+	}
+
+	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public>) -> Result<(), DKGError> {
 		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_active_pub_key {
-			return
+			return Err(DKGError::GenericError {
+				reason: "Not listening for public key broadcast".to_string(),
+			});
 		}
 
 		// Get authority accounts
-		let mut authority_accounts = None;
-		let mut max_extrinsic_delay = None;
-		if let Some(header) = self.latest_header.as_ref() {
-			let at = BlockId::hash(header.hash());
-			let block_number = *header.number();
-			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
-			max_extrinsic_delay =
-				self.client.runtime_api().get_max_extrinsic_delay(&at, block_number).ok();
-			if accounts.is_some() {
-				authority_accounts = accounts;
-			}
-		}
+		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+		let at = BlockId::hash(header.hash());
+		let authority_accounts = self.client
+			.runtime_api()
+			.get_authority_accounts(&at)
+			.ok();
+		if authority_accounts.is_none() { return Err(DKGError::NoAuthorityAccounts); }
+		let max_extrinsic_delay = self
+			.client
+			.runtime_api()
+			.get_max_extrinsic_delay(&at, *header.number())
+			.ok()
+			.unwrap_or(0u32.into());
 
-		if authority_accounts.is_none() {
-			return
-		}
+		match dkg_msg.payload {
+			DKGMsgPayload::PublicKeyBroadcast(msg) => {
+				debug!(target: "dkg", "Received public key broadcast");
 
-		if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-			debug!(target: "dkg", "Received public key broadcast");
-
-			let is_main_round = {
-				if self.rounds.is_some() {
-					msg.round_id == self.rounds.as_ref().unwrap().get_id()
-				} else {
-					false
-				}
-			};
-
-			let can_proceed = {
-				if is_main_round {
-					let maybe_signers = authority_accounts
-						.unwrap()
-						.0
-						.iter()
-						.map(|x| {
-							sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-								panic!("Failed to convert account id to sr25519 public key")
-							}))
-						})
-						.collect::<Vec<sr25519::Public>>();
-
-					dkg_runtime_primitives::utils::verify_signer_from_set(
-						maybe_signers,
-						&msg.pub_key,
-						&msg.signature,
-					)
-					.1
-				} else {
-					let maybe_signers = authority_accounts
-						.unwrap()
-						.1
-						.iter()
-						.map(|x| {
-							sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-								panic!("Failed to convert account id to sr25519 public key")
-							}))
-						})
-						.collect::<Vec<sr25519::Public>>();
-
-					dkg_runtime_primitives::utils::verify_signer_from_set(
-						maybe_signers,
-						&msg.pub_key,
-						&msg.signature,
-					)
-					.1
-				}
-			};
-
-			if !can_proceed {
-				error!("Message signature is not from a registered authority");
-				return
-			}
-
-			let key_and_sig = (msg.pub_key, msg.signature);
-			let round_id = msg.round_id;
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
-				self.aggregated_public_keys.get(&round_id).unwrap().clone()
-			} else {
-				AggregatedPublicKeys::default()
-			};
-
-			if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
-				aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-				self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
-
-				if let Some(latest_header) = self.latest_header.as_ref() {
-					let threshold = self.get_threshold(latest_header).unwrap() as usize;
-					let num_authorities = self.queued_validator_set.authorities.len();
-					let threshold_buffer = num_authorities.saturating_sub(threshold) / 2;
-					if aggregated_public_keys.keys_and_signatures.len() >=
-						(threshold + threshold_buffer)
-					{
-						let offchain = self.backend.offchain_storage();
-
-						if let Some(mut offchain) = offchain {
-							if is_main_round {
-								self.dkg_state.listening_for_active_pub_key = false;
-
-								offchain.set(
-									STORAGE_PREFIX,
-									AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-									&aggregated_public_keys.encode(),
-								);
-
-								if let Some(max_delay) = max_extrinsic_delay {
-									let submit_at = self.generate_random_delay(
-										&self.current_validator_set.authorities,
-										max_delay,
-									);
-									if let Some(submit_at) = submit_at {
-										offchain.set(
-											STORAGE_PREFIX,
-											SUBMIT_GENESIS_KEYS_AT,
-											&submit_at.encode(),
-										);
-									}
-
-									trace!(target: "dkg", "Stored aggregated genesis public keys {:?}, delay: {:?}, public_keysL {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
-								}
-							} else {
-								self.dkg_state.listening_for_pub_key = false;
-
-								offchain.set(
-									STORAGE_PREFIX,
-									AGGREGATED_PUBLIC_KEYS,
-									&aggregated_public_keys.encode(),
-								);
-
-								if let Some(max_delay) = max_extrinsic_delay {
-									let submit_at = self.generate_random_delay(
-										&self.queued_validator_set.authorities,
-										max_delay,
-									);
-									if let Some(submit_at) = submit_at {
-										offchain.set(
-											STORAGE_PREFIX,
-											SUBMIT_KEYS_AT,
-											&submit_at.encode(),
-										);
-									}
-
-									trace!(target: "dkg", "Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}", aggregated_public_keys.encode(), submit_at, self.key_store.sr25519_public_keys());
-								}
-							}
-
-							let _ = self.aggregated_public_keys.remove(&round_id);
-						}
+				let is_main_round = {
+					if self.rounds.is_some() {
+						msg.round_id == self.rounds.as_ref().unwrap().get_id()
+					} else {
+						false
 					}
+				};
+	
+				self.authenticate_msg_origin(is_main_round, authority_accounts.unwrap(), &msg)?;
+	
+				let key_and_sig = (msg.pub_key, msg.signature);
+				let round_id = msg.round_id;
+				let mut aggregated_public_keys = match self.aggregated_public_keys.get(&round_id) {
+					Some(keys) => keys.clone(),
+					None => AggregatedPublicKeys::default(),
+				};
+	
+				if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
+					aggregated_public_keys.keys_and_signatures.push(key_and_sig);
+					self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
 				}
-			}
+				// Fetch the current threshold for the DKG. We will use the
+				// current threshold to determine if we have enough signatures
+				// to submit the next DKG public key.
+				let threshold = self.get_threshold(header).unwrap() as usize;
+				if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+					self.store_aggregated_public_keys(
+						is_main_round,
+						round_id,
+						&aggregated_public_keys,
+						max_extrinsic_delay.into(),
+					)?;
+				}
+			},
+			_ => {},
 		}
+
+		Ok(())
 	}
 
-	// This random delay follows an arithemtic progression
-	// The min value that can be generated is the immediate next block number
-	// The max value that can be generated is the block number represented
-	// by max_delay
+	/// Generate a random delay to wait before taking an action.
+	/// The delay is generated from a random number between 0 and `max_delay`.
 	fn generate_random_delay(
 		&self,
 		authorities: &Vec<AuthorityId>,
 		max_delay: NumberFor<B>,
 	) -> Option<<B::Header as Header>::Number> {
-		if let Some(header) = self.latest_header.as_ref() {
-			let public = self
-				.key_store
-				.authority_id(&self.key_store.public_keys().unwrap())
-				.unwrap_or_else(|| panic!("Halp"));
-
-			let party_inx = if find_index::<AuthorityId>(&authorities[..], &public).is_some() {
-				find_index::<AuthorityId>(&authorities, &public).unwrap() as u32 + 1u32
-			} else {
-				return None
-			};
-
-			let block_number = *header.number();
-
-			let delay = (block_number + 1u32.into()) + (max_delay % party_inx.into());
-			return Some(delay)
-		}
-		None
+		Some(0u32.into())
 	}
 
 	/// Rounds handling
@@ -1194,45 +1188,6 @@ where
 				None
 			},
 			_ => None, // TODO: handle other key types
-		}
-	}
-
-	// *** Refresh Vote ***
-	// Return if a refresh has been started in this worker,
-	// if not check if it's rime for refresh and start signing the public key
-	// for queued authorities
-	fn check_refresh(&mut self, header: &B::Header) {
-		if self.refresh_in_progress || self.rounds.is_none() {
-			return
-		}
-
-		let latest_block_num = *header.number();
-		let at = BlockId::hash(header.hash());
-		let should_refresh = self.client.runtime_api().should_refresh(&at, *header.number());
-		if let Ok(true) = should_refresh {
-			self.refresh_in_progress = true;
-			let pub_key = self.client.runtime_api().next_dkg_pub_key(&at);
-			let refresh_nonce = self.client.runtime_api().refresh_nonce(&at);
-			if let Ok(Some(pub_key)) = pub_key {
-				match refresh_nonce {
-					Ok(nonce) => {
-						let key = DKGPayloadKey::RefreshVote(nonce);
-						let proposal = RefreshProposal { nonce, pub_key: pub_key.clone() };
-
-						if let Err(err) = self.rounds.as_mut().unwrap().vote(
-							key.encode(),
-							proposal.encode(),
-							latest_block_num,
-						) {
-							error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
-						} else {
-							trace!(target: "dkg", "Started key refresh vote for pub_key {:?}", pub_key);
-						}
-						self.send_outgoing_dkg_messages();
-					},
-					_ => {},
-				}
-			}
 		}
 	}
 
@@ -1319,6 +1274,7 @@ where
 			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
+				ProposalType::RefreshProposal { data } => data,
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
 				ProposalType::TokenAdd { data } => data,
@@ -1327,8 +1283,8 @@ where
 				_ => continue,
 			};
 
-			if let Err(err) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {:?}", err);
+			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 			}
 		}
 		// send messages to all peers
@@ -1444,14 +1400,5 @@ where
 				}
 			}
 		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-
-	#[test]
-	fn dummy_test() {
-		assert_eq!(1, 1)
 	}
 }

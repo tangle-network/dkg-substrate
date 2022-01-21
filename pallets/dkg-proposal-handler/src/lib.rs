@@ -21,7 +21,10 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::offchain::storage::StorageValueRef;
+use sp_runtime::{
+	traits::Zero,
+	offchain::storage::StorageValueRef
+};
 use sp_std::{convert::TryFrom, vec::Vec};
 
 pub mod weights;
@@ -289,6 +292,26 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		}
 
 		return Ok(())
+	}
+
+	fn handle_unsigned_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+		let unsigned_proposal = ProposalType::RefreshProposal { data: proposal.encode() };
+		UnsignedProposalQueue::<T>::insert(
+			T::ChainId::zero(),
+			DKGPayloadKey::RefreshVote(proposal.nonce),
+			unsigned_proposal,
+		);
+
+		Ok(().into())
+	}
+
+	fn handle_signed_refresh_proposal(proposal: dkg_runtime_primitives::RefreshProposal) -> DispatchResult {
+		UnsignedProposalQueue::<T>::remove(
+			T::ChainId::zero(),
+			DKGPayloadKey::RefreshVote(proposal.nonce),
+		);
+
+		Ok(().into())
 	}
 
 	fn handle_evm_signed_proposal(prop: ProposalType) -> DispatchResult {

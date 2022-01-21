@@ -57,37 +57,6 @@ fn genesis_session_initializes_authorities() {
 }
 
 #[test]
-fn session_change_updates_authorities() {
-	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
-		init_block(1);
-
-		assert!(0 == DKGMetadata::authority_set_id());
-
-		// no change - no log
-		assert!(System::digest().logs.is_empty());
-
-		init_block(2);
-
-		assert!(1 == DKGMetadata::authority_set_id());
-
-		let want = dkg_log(ConsensusLog::AuthoritiesChange {
-			next_authorities: AuthoritySet {
-				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
-				id: 1,
-			},
-			next_queued_authorities: AuthoritySet {
-				authorities: vec![mock_dkg_id(3), mock_dkg_id(4)],
-				id: 2,
-			},
-		});
-
-		let log = System::digest().logs[0].clone();
-
-		assert_eq!(want, log);
-	});
-}
-
-#[test]
 fn session_change_updates_next_authorities() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
@@ -132,7 +101,7 @@ fn authority_set_updates_work() {
 
 		let vs = DKGMetadata::authority_set();
 
-		assert_eq!(vs.id, 0u64);
+		assert_eq!(vs.id, 1u64);
 		assert_eq!(want[0], vs.authorities[0]);
 		assert_eq!(want[1], vs.authorities[1]);
 
@@ -140,7 +109,7 @@ fn authority_set_updates_work() {
 
 		let vs = DKGMetadata::authority_set();
 
-		assert_eq!(vs.id, 1u64);
+		assert_eq!(vs.id, 2u64);
 		assert_eq!(want[2], vs.authorities[0]);
 		assert_eq!(want[3], vs.authorities[1]);
 	});

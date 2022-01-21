@@ -510,13 +510,14 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = DKGProposalHandler;
 }
 
 parameter_types! {
 	pub const ChainIdentifier: u32 = 5;
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const RefreshDelay: Permill = Permill::from_percent(50);
 	pub const TimeToRestart: BlockNumber = 3;
 }
 

@@ -148,6 +148,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
+	type ProposalHandler = ();
 }
 
 parameter_types! {

@@ -32,7 +32,7 @@ use sp_runtime::{
 	Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
-
+use dkg_runtime_primitives::ProposalHandlerTrait;
 use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
@@ -52,7 +52,8 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::{ensure, pallet_prelude::*};
+	use dkg_runtime_primitives::ProposalHandlerTrait;
+use frame_support::{ensure, pallet_prelude::*, transactional};
 	use frame_system::{
 		ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction},
@@ -76,6 +77,8 @@ pub mod pallet {
 			Self::AccountId,
 		>;
 
+		type ProposalHandler: ProposalHandlerTrait;
+
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
 
@@ -88,6 +91,7 @@ pub mod pallet {
 	}
 
 	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::hooks]
@@ -104,6 +108,29 @@ pub mod pallet {
 				authority_id,
 				hex::encode(pk),
 			);
+		}
+
+		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
+			if Self::should_refresh(n) {
+				let refresh_nonce = Self::refresh_nonce();
+				if let Some(pub_key) = Self::next_dkg_public_key() {
+					let data = dkg_runtime_primitives::RefreshProposal {
+						nonce: refresh_nonce,
+						pub_key: pub_key.1.clone()
+					};
+
+					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+						Ok(()) => {
+							frame_support::log::debug!("Handled refresh proposal");
+						},
+						Err(e) => {
+							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						}
+					}
+				}
+			}
+
+			0
 		}
 	}
 
@@ -141,6 +168,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
@@ -149,11 +177,8 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 
 			let authorities = Self::current_authorities_accounts();
-
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-
 			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;
@@ -175,6 +200,7 @@ pub mod pallet {
 			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
+		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_next_public_key(
 			origin: OriginFor<T>,
@@ -209,6 +235,7 @@ pub mod pallet {
 			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
+		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
@@ -296,7 +323,7 @@ pub mod pallet {
 
 	/// Holds public key for immediate past session
 	#[pallet::storage]
-	#[pallet::getter(fn proposers)]
+	#[pallet::getter(fn previous_public_key)]
 	pub type PreviousPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
 
@@ -439,41 +466,31 @@ impl<T: Config> Pallet<T> {
 		authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
-		// As in GRANDPA, we trigger a validator set change only if the the validator
-		// set has actually changed.
+		<Authorities<T>>::put(&new);
+		CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
 
-		if new != Self::authorities() {
-			<Authorities<T>>::put(&new);
-			CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
+		let next_id = Self::authority_set_id() + 1u64;
 
-			let next_id = Self::authority_set_id() + 1u64;
+		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
+			T::AccountId,
+		>>::on_authority_set_changed(next_id, authorities_accounts);
 
-			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-				dkg_runtime_primitives::AuthoritySetId,
-				T::AccountId,
-			>>::on_authority_set_changed(next_id, authorities_accounts);
+		<AuthoritySetId<T>>::put(next_id);
 
-			<AuthoritySetId<T>>::put(next_id);
-
-			let log: DigestItem = DigestItem::Consensus(
-				DKG_ENGINE_ID,
-				ConsensusLog::AuthoritiesChange {
-					next_authorities: AuthoritySet { authorities: new, id: next_id },
-					next_queued_authorities: AuthoritySet {
-						authorities: queued.clone(),
-						id: next_id + 1u64,
-					},
-				}
-				.encode(),
-			);
-			<frame_system::Pallet<T>>::deposit_log(log);
-			Self::refresh_dkg_keys();
-		}
-
-		if queued != Self::next_authorities() {
-			NextDKGPublicKey::<T>::kill();
-			NextPublicKeySignature::<T>::kill();
-		}
+		let log: DigestItem = DigestItem::Consensus(
+			DKG_ENGINE_ID,
+			ConsensusLog::AuthoritiesChange {
+				next_authorities: AuthoritySet { authorities: new, id: next_id },
+				next_queued_authorities: AuthoritySet {
+					authorities: queued.clone(),
+					id: next_id + 1u64,
+				},
+			}
+			.encode(),
+		);
+		<frame_system::Pallet<T>>::deposit_log(log);
+		Self::refresh_dkg_keys();
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
@@ -641,6 +658,8 @@ impl<T: Config> Pallet<T> {
 					Self::authority_set_id() + 1u64,
 					signature.clone(),
 				));
+				// Remove unsigned refresh proposal from queue
+				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 				// Increase nonce value
 				RefreshNonce::<T>::put(refresh_nonce + 1u32);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
