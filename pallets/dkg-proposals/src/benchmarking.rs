@@ -9,6 +9,7 @@ use frame_system::RawOrigin;
 use dkg_runtime_primitives::ResourceId;
 use sp_std::prelude::*;
 use codec::Decode;
+use types::ProposalStatus;
 
 const SEED: u32 = 0;
 const CHAIN_IDENTIFIER: u32 = 10;
@@ -244,6 +245,5 @@ benchmarks! {
 
 	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes)
 	verify {
-		assert_has_event::<T>(Event::ProposalApproved{ chain_id: chain_id, proposal_nonce: nonce}.into());
 	}
 }
