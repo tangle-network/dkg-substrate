@@ -34,8 +34,9 @@ pub fn insert_controller_account_keys_into_keystore(
 	let seed = &config.network.node_name[..];
 
 	match seed {
-		// When running the chain in dev or local test net, we insert the sr25519 account keys for collator accounts or validator accounts into the keystore
-		// Only if the node running is one of the predefined nodes Alice, Bob, Charlie, Dave, Eve or Ferdie
+		// When running the chain in dev or local test net, we insert the sr25519 account keys for
+		// collator accounts or validator accounts into the keystore Only if the node running is one
+		// of the predefined nodes Alice, Bob, Charlie, Dave, Eve or Ferdie
 		"Alice" | "Bob" | "Charlie" | "Dave" | "Eve" | "Ferdie" => {
 			if chain_type == ChainType::Development || chain_type == ChainType::Local {
 				let pub_key = get_from_seed::<sr25519::Public>(&seed).encode();

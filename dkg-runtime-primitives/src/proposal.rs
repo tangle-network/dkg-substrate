@@ -37,7 +37,7 @@ impl Encode for ProposalHeader {
 		// resource_id contains the chain id already.
 		buf.extend_from_slice(&self.resource_id); // 32 bytes
 		buf.extend_from_slice(&self.function_sig); // 4 bytes
-		// we encode it in big endian that is what EVM expect things to be.
+										   // we encode it in big endian that is what EVM expect things to be.
 		buf.extend_from_slice(&self.nonce.to_be_bytes()); // 4 bytes
 		buf
 	}
@@ -187,44 +187,64 @@ pub trait ProposalHandlerTrait {
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_signed_proposal(
 		_prop: ProposalType,
 		_payload_key: DKGPayloadKey,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_unsigned_refresh_proposal(
-		_proposal: RefreshProposal
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+		_proposal: RefreshProposal,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_signed_refresh_proposal(
-		_proposal: RefreshProposal
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+		_proposal: RefreshProposal,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_evm_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_anchor_update_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_token_add_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_token_remove_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_wrapping_fee_update_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 
 	fn handle_resource_id_update_signed_proposal(
 		_prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult { Ok(().into()) }
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
 }
 
 impl ProposalHandlerTrait for () {}

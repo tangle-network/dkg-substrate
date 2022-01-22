@@ -399,8 +399,7 @@ pub mod pallet {
 		/// from the caller.
 		///
 		/// # <weight>
-		/// - weight of proposed call, regardless of whether execution is
-		///   performed
+		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
 		#[pallet::weight(0)]
 		pub fn acknowledge_proposal(
@@ -445,8 +444,7 @@ pub mod pallet {
 		/// and the status will be updated accordingly.
 		///
 		/// # <weight>
-		/// - weight of proposed call, regardless of whether execution is
-		///   performed
+		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
 		#[pallet::weight(0)]
 		pub fn eval_vote_state(

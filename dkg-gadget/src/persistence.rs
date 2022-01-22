@@ -35,7 +35,8 @@ impl DKGPersistenceState {
 	}
 }
 
-/// We only try to resume the dkg once, if we can find any data for the completed offline stage for the current round
+/// We only try to resume the dkg once, if we can find any data for the completed offline stage for
+/// the current round
 pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,
@@ -95,7 +96,8 @@ where
 						match localkey_deserialized {
 							Ok(localkey_deserialized) => {
 								debug!(target: "dkg", "Recovered local key");
-								// If the current round_id is not the same as the one found in the stored file then the stored data is invalid
+								// If the current round_id is not the same as the one found in the
+								// stored file then the stored data is invalid
 								if round_id == localkey_deserialized.round_id {
 									local_key = Some(localkey_deserialized)
 								}
@@ -154,8 +156,9 @@ where
 				if local_key.is_some() {
 					debug!(target: "dkg_persistence", "Local key set");
 					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					// We create a deterministic signer set using the public key as a seed to the random number generator
-					// We need a 32 byte seed, the compressed public key is 33 bytes
+					// We create a deterministic signer set using the public key as a seed to the
+					// random number generator We need a 32 byte seed, the compressed public key is
+					// 33 bytes
 					let seed =
 						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
 							[1..];
@@ -188,8 +191,8 @@ where
 
 				if queued_local_key.is_some() {
 					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					// We set the signer set using the public key as a seed to select signers at random
-					// We need a 32byte seed, the compressed public key is 32 bytes
+					// We set the signer set using the public key as a seed to select signers at
+					// random We need a 32byte seed, the compressed public key is 32 bytes
 					let seed = &queued_local_key
 						.as_ref()
 						.unwrap()
@@ -251,8 +254,8 @@ where
 	(should_restart_rounds, should_restart_next_rounds)
 }
 
-/// If we ascertain that the protocol has stalled and we are part of the current authority set or queued authority set
-/// We restart the protocol on our end
+/// If we ascertain that the protocol has stalled and we are part of the current authority set or
+/// queued authority set We restart the protocol on our end
 pub(crate) fn try_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
 where
 	B: Block,

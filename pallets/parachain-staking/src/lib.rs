@@ -25,8 +25,7 @@
 //! There is a new round every `<Round<T>>::get().length` blocks.
 //!
 //! At the start of every round,
-//! * issuance is distributed to collators (and their nominators) for block
-//!   authoring
+//! * issuance is distributed to collators (and their nominators) for block authoring
 //! `T::RewardPaymentDelay` rounds ago
 //! * queued collator and nominator exits are executed
 //! * a new set of collators is chosen from the candidates
@@ -1337,8 +1336,7 @@ pub mod pallet {
 
 		#[pallet::weight(<T as Config>::WeightInfo::set_blocks_per_round())]
 		/// Set blocks per round
-		/// - if called with `new` less than length of current round, will
-		///   transition immediately
+		/// - if called with `new` less than length of current round, will transition immediately
 		/// in the next block
 		/// - also updates per-round inflation config
 		pub fn set_blocks_per_round(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {

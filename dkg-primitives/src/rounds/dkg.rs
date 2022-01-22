@@ -95,8 +95,8 @@ where
 	}
 
 	/// A check to know if the protocol has stalled at the keygen stage,
-	/// We take it that the protocol has stalled if keygen messages are not received from other peers after a certain interval
-	/// And the keygen stage has not completed
+	/// We take it that the protocol has stalled if keygen messages are not received from other
+	/// peers after a certain interval And the keygen stage has not completed
 	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
 		false
 	}

@@ -544,7 +544,8 @@ fn proposal_expires() {
 	})
 }
 
-// This test checks if the proposers are set after the DKG authorities are initialized in the genesis session
+// This test checks if the proposers are set after the DKG authorities are initialized in the
+// genesis session
 #[test]
 fn should_get_initial_proposers_from_dkg() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
@@ -567,7 +568,8 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 	})
 }
 
-// Whenever the collator set changes, which in turn would cause the DKG authorities to change, the proposers to should also be changed.
+// Whenever the collator set changes, which in turn would cause the DKG authorities to change, the
+// proposers to should also be changed.
 #[test]
 fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
@@ -580,7 +582,8 @@ fn should_reset_proposers_if_authorities_changed() {
 }
 
 // This tess that only accounts in the proposer set are allowed to make proposals,
-//  when the authority set changes, if an authority has been removed from the set, they should not be able to make proposals anymore.
+//  when the authority set changes, if an authority has been removed from the set, they should not
+// be able to make proposals anymore.
 #[test]
 fn only_current_authorities_should_make_successful_proposals() {
 	let src_id = 1u32;

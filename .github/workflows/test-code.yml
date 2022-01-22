@@ -38,5 +38,9 @@ jobs:
     - name: Check Code
       run: cargo check
 
+    - name: Check Format
+      run: |
+        cargo fmt --all -- --check
+
     - name: Test Code
       run: cargo test

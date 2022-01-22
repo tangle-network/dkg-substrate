@@ -515,8 +515,8 @@ where
 
 				self.best_dkg_block = Some(*header.number());
 
-				// this metric is kind of 'fake'. Best DKG block should only be updated once we have a
-				// signed commitment for the block. Remove once the above TODO is done.
+				// this metric is kind of 'fake'. Best DKG block should only be updated once we have
+				// a signed commitment for the block. Remove once the above TODO is done.
 				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
@@ -734,11 +734,10 @@ where
 		{
 			return Ok(dkg_msg)
 		} else {
-			return Err(
-				DKGError::GenericError {
-					reason: "Message signature is not from a registered authority or next authority".into()
-				}
-			)
+			return Err(DKGError::GenericError {
+				reason: "Message signature is not from a registered authority or next authority"
+					.into(),
+			})
 		}
 	}
 
@@ -918,7 +917,8 @@ where
 				),
 			}
 
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some() {
+			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
+			{
 				self.aggregated_public_keys.get(&round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
@@ -963,10 +963,12 @@ where
 			maybe_signers,
 			&msg.pub_key,
 			&msg.signature,
-		).1 {
+		)
+		.1
+		{
 			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority".to_string(),
-			});
+			})
 		}
 
 		Ok(())
@@ -977,30 +979,26 @@ where
 		is_gensis_round: bool,
 		round_id: RoundId,
 		keys: &AggregatedPublicKeys,
-		max_extrinsic_delay: NumberFor<B>
+		max_extrinsic_delay: NumberFor<B>,
 	) -> Result<(), DKGError> {
 		let maybe_offchain = self.backend.offchain_storage();
 		if maybe_offchain.is_none() {
 			return Err(DKGError::GenericError {
 				reason: "No offchain storage available".to_string(),
-			});
+			})
 		}
 
 		let mut offchain = maybe_offchain.unwrap();
 		if is_gensis_round {
 			self.dkg_state.listening_for_active_pub_key = false;
 
-			offchain.set(STORAGE_PREFIX,AGGREGATED_PUBLIC_KEYS_AT_GENESIS,&keys.encode());
+			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
 			let submit_at = self.generate_random_delay(
 				&self.current_validator_set.authorities,
 				max_extrinsic_delay,
 			);
 			if let Some(submit_at) = submit_at {
-				offchain.set(
-					STORAGE_PREFIX,
-					SUBMIT_GENESIS_KEYS_AT,
-					&submit_at.encode(),
-				);
+				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
 			}
 
 			trace!(
@@ -1013,22 +1011,12 @@ where
 		} else {
 			self.dkg_state.listening_for_pub_key = false;
 
-			offchain.set(
-				STORAGE_PREFIX,
-				AGGREGATED_PUBLIC_KEYS,
-				&keys.encode(),
-			);
+			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
 
-			let submit_at = self.generate_random_delay(
-				&self.queued_validator_set.authorities,
-				max_extrinsic_delay,
-			);
+			let submit_at = self
+				.generate_random_delay(&self.queued_validator_set.authorities, max_extrinsic_delay);
 			if let Some(submit_at) = submit_at {
-				offchain.set(
-					STORAGE_PREFIX,
-					SUBMIT_KEYS_AT,
-					&submit_at.encode(),
-				);
+				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
 			}
 
 			trace!(
@@ -1049,17 +1037,16 @@ where
 		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_active_pub_key {
 			return Err(DKGError::GenericError {
 				reason: "Not listening for public key broadcast".to_string(),
-			});
+			})
 		}
 
 		// Get authority accounts
 		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
 		let at = BlockId::hash(header.hash());
-		let authority_accounts = self.client
-			.runtime_api()
-			.get_authority_accounts(&at)
-			.ok();
-		if authority_accounts.is_none() { return Err(DKGError::NoAuthorityAccounts); }
+		let authority_accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+		if authority_accounts.is_none() {
+			return Err(DKGError::NoAuthorityAccounts)
+		}
 		let max_extrinsic_delay = self
 			.client
 			.runtime_api()
@@ -1078,16 +1065,16 @@ where
 						false
 					}
 				};
-	
+
 				self.authenticate_msg_origin(is_main_round, authority_accounts.unwrap(), &msg)?;
-	
+
 				let key_and_sig = (msg.pub_key, msg.signature);
 				let round_id = msg.round_id;
 				let mut aggregated_public_keys = match self.aggregated_public_keys.get(&round_id) {
 					Some(keys) => keys.clone(),
 					None => AggregatedPublicKeys::default(),
 				};
-	
+
 				if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 					aggregated_public_keys.keys_and_signatures.push(key_and_sig);
 					self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
@@ -1191,7 +1178,8 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as the round key
+	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as
+	/// the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1214,8 +1202,9 @@ where
 				match rounds.create_offline_stage(key.encode(), *header.number()) {
 					Ok(()) => {
 						// We note unsigned proposals for which we have started the offline stage
-						// to prevent overwriting running offline stages when next this function is called
-						// this function is called on every block import and the proposal might still be in the the unsigned proposals queue.
+						// to prevent overwriting running offline stages when next this function is
+						// called this function is called on every block import and the proposal
+						// might still be in the the unsigned proposals queue.
 						self.dkg_state
 							.created_offlinestage_at
 							.insert(key.encode(), *header.number());
@@ -1234,10 +1223,11 @@ where
 	}
 
 	// *** Proposals handling ***
-	/// When we create the offline stage we note that round key since the offline stage and voting process could go on for a number of blocks while the proposal
-	/// is still in the unsigned proposal queue.
-	/// The untrack interval is the number of blocks after which we expect the a voting round to have reached completion for a proposal
-	/// After this time elapses for a round key we remove it from [dkg_state.created_offlinestage_at] since we expect that proposal to
+	/// When we create the offline stage we note that round key since the offline stage and voting
+	/// process could go on for a number of blocks while the proposal is still in the unsigned
+	/// proposal queue. The untrack interval is the number of blocks after which we expect the a
+	/// voting round to have reached completion for a proposal After this time elapses for a round
+	/// key we remove it from [dkg_state.created_offlinestage_at] since we expect that proposal to
 	/// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
@@ -1328,9 +1318,10 @@ where
 				None => OffchainSignedProposals::<NumberFor<B>>::default(),
 			};
 
-			// The signed proposals are submitted in batches, since we want to try and limit duplicate submissions
-			// as much as we can, we add a random submission delay to each batch stored in offchain storage
-			// We use the untrack_interval as the max submission delay here since it's a relatively short period of time.
+			// The signed proposals are submitted in batches, since we want to try and limit
+			// duplicate submissions as much as we can, we add a random submission delay to each
+			// batch stored in offchain storage We use the untrack_interval as the max submission
+			// delay here since it's a relatively short period of time.
 			let submit_at = self
 				.generate_random_delay(&self.current_validator_set.authorities, untrack_interval);
 
