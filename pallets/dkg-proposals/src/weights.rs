@@ -14,8 +14,7 @@
 // --wasm-execution=compiled
 // --pallet
 // pallet-dkg-proposals
-// --extrinsic
-// force_set_maintainer
+// --extrinsic=*
 // --steps
 // 50
 // --repeat
@@ -39,6 +38,9 @@ pub trait WeightInfo {
 	fn whitelist_chain() -> Weight;
 	fn add_proposer() -> Weight;
 	fn remove_proposer() -> Weight;
+	fn acknowledge_proposal() -> Weight;
+	fn reject_proposal() -> Weight;
+	fn eval_vote_state() -> Weight;
 }
 
 /// Weight functions for `pallet_dkg_proposals`.
@@ -46,49 +48,82 @@ pub struct DKGProposalsWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn set_maintainer() -> Weight {
-		(28_000_000 as Weight)
+		(26_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(1 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn force_set_maintainer() -> Weight {
-		(25_000_000 as Weight)
+		(24_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(1 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-
+	// Storage: DKGProposals ProposerThreshold (r:0 w:1)
 	fn set_threshold(_c: u32, ) -> Weight {
-		(19_957_000 as Weight)
+		(19_581_000 as Weight)
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-
-	fn set_resource(_c: u32, ) -> Weight {
-		(2_957_000 as Weight)
+	// Storage: DKGProposals Resources (r:0 w:1)
+	fn set_resource(c: u32, ) -> Weight {
+		(3_278_000 as Weight)
+			// Standard Error: 0
+			.saturating_add((1_000 as Weight).saturating_mul(c as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-
+	// Storage: DKGProposals Resources (r:0 w:1)
 	fn remove_resource(_c: u32, ) -> Weight {
-		(2_589_000 as Weight)
+		(2_440_000 as Weight)
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-
 	// Storage: DKGProposals ChainNonces (r:1 w:1)
 	fn whitelist_chain() -> Weight {
-		(25_000_000 as Weight)
+		(24_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(1 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-
+	// Storage: DKGProposals Proposers (r:1 w:1)
+	// Storage: DKGProposals ProposerCount (r:1 w:1)
 	fn add_proposer() -> Weight {
-		(32_000_000 as Weight)
+		(30_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(2 as Weight))
 			.saturating_add(T::DbWeight::get().writes(2 as Weight))
 	}
-
+	// Storage: DKGProposals Proposers (r:1 w:1)
+	// Storage: DKGProposals ProposerCount (r:1 w:1)
 	fn remove_proposer() -> Weight {
-		(31_000_000 as Weight)
+		(28_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(2 as Weight))
 			.saturating_add(T::DbWeight::get().writes(2 as Weight))
+	}
+	// Storage: DKGProposals Proposers (r:1 w:0)
+	// Storage: DKGProposals ChainNonces (r:1 w:0)
+	// Storage: DKGProposals Resources (r:1 w:0)
+	// Storage: DKGProposals Votes (r:1 w:1)
+	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
+	// Storage: DKGProposals ProposerCount (r:1 w:0)
+	fn acknowledge_proposal() -> Weight {
+		(61_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(6 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+	// Storage: DKGProposals Proposers (r:1 w:0)
+	// Storage: DKGProposals ChainNonces (r:1 w:0)
+	// Storage: DKGProposals Resources (r:1 w:0)
+	// Storage: DKGProposals Votes (r:1 w:1)
+	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
+	// Storage: DKGProposals ProposerCount (r:1 w:0)
+	fn reject_proposal() -> Weight {
+		(64_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(6 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+	// Storage: DKGProposals Votes (r:1 w:1)
+	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
+	// Storage: DKGProposals ProposerCount (r:1 w:0)
+	fn eval_vote_state() -> Weight {
+		(21_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(3 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 
 }
@@ -102,4 +137,7 @@ impl WeightInfo for () {
 	fn whitelist_chain() -> Weight { 0 }
 	fn add_proposer() -> Weight { 0 }
 	fn remove_proposer() -> Weight { 0 }
+	fn acknowledge_proposal() -> Weight { 0 }
+	fn reject_proposal() -> Weight { 0 }
+	fn eval_vote_state() -> Weight { 0 }
 }

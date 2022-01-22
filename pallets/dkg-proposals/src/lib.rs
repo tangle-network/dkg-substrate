@@ -409,7 +409,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is
 		///   performed
 		/// # </weight>
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal())]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -430,7 +430,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal())]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -455,7 +455,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is
 		///   performed
 		/// # </weight>
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state())]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
