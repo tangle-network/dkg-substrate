@@ -904,7 +904,7 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 			list_benchmark!(list, extra, pallet_timestamp, Timestamp);
 			list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
-			list_benchmark!(list, extra, pallet_dkg_proposals, DKGProposals);
+
 
 
 			let storage_info = AllPalletsWithSystem::storage_info();
@@ -940,7 +940,6 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
 			add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);
-			add_benchmark!(params, batches, pallet_dkg_proposals, DKGProposals);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 			Ok(batches)

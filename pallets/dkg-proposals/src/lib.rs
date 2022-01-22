@@ -62,6 +62,11 @@ use scale_info::TypeInfo;
 use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
 use sp_std::prelude::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+mod weights;
+pub use weights::DKGProposalsWeight;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -70,6 +75,7 @@ pub mod pallet {
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AtLeast32Bit;
+	use crate::weights::WeightInfo;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -109,6 +115,8 @@ pub mod pallet {
 		type DKGAccountId: Get<PalletId>;
 
 		type ProposalHandler: ProposalHandlerTrait;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	/// The parameter maintainer who can change the parameters
@@ -298,7 +306,7 @@ pub mod pallet {
 		}
 
 		// Forcefully set the maintainer.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_set_maintainer())]
 		pub fn force_set_maintainer(
 			origin: OriginFor<T>,
 			new_maintainer: T::AccountId,
@@ -321,7 +329,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_threshold(*threshold))]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::set_proposer_threshold(threshold)
@@ -372,7 +380,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
 		pub fn add_proposer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::register_proposer(v)
@@ -383,7 +391,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and removal
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_proposer())]
 		pub fn remove_proposer(
 			origin: OriginFor<T>,
 			v: T::AccountId,
