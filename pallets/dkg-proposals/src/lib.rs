@@ -285,12 +285,11 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Sets the maintainer.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_maintainer())]
 		pub fn set_maintainer(
 			origin: OriginFor<T>,
 			new_maintainer: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			Self::ensure_admin(origin.clone())?;
 			let origin = ensure_signed(origin)?;
 			// ensure parameter setter is the maintainer
 			ensure!(Some(origin.clone()) == Self::maintainer(), Error::<T>::InvalidPermissions);
@@ -340,7 +339,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) write
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_resource(method.len() as u32))]
 		pub fn set_resource(
 			origin: OriginFor<T>,
 			id: ResourceId,
@@ -358,7 +357,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) removal
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_resource(id.len() as u32))]
 		pub fn remove_resource(origin: OriginFor<T>, id: ResourceId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::unregister_resource(id)
@@ -369,7 +368,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::whitelist_chain())]
 		pub fn whitelist_chain(origin: OriginFor<T>, id: T::ChainId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::whitelist(id)

@@ -31,8 +31,12 @@ use frame_support::{traits::Get, weights::Weight};
 use sp_std::marker::PhantomData;
 
 pub trait WeightInfo {
+	fn set_maintainer() -> Weight;
 	fn force_set_maintainer() -> Weight;
 	fn set_threshold(_c: u32, ) -> Weight;
+	fn set_resource(_c: u32, ) -> Weight;
+	fn remove_resource(_c: u32, ) -> Weight;
+	fn whitelist_chain() -> Weight;
 	fn add_proposer() -> Weight;
 	fn remove_proposer() -> Weight;
 }
@@ -40,6 +44,12 @@ pub trait WeightInfo {
 /// Weight functions for `pallet_dkg_proposals`.
 pub struct DKGProposalsWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
+	// Storage: DKGProposals Maintainer (r:1 w:1)
+	fn set_maintainer() -> Weight {
+		(28_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(1 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn force_set_maintainer() -> Weight {
 		(25_000_000 as Weight)
@@ -49,6 +59,23 @@ impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 
 	fn set_threshold(_c: u32, ) -> Weight {
 		(19_957_000 as Weight)
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+
+	fn set_resource(_c: u32, ) -> Weight {
+		(2_957_000 as Weight)
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+
+	fn remove_resource(_c: u32, ) -> Weight {
+		(2_589_000 as Weight)
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+
+	// Storage: DKGProposals ChainNonces (r:1 w:1)
+	fn whitelist_chain() -> Weight {
+		(25_000_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(1 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 
@@ -63,11 +90,16 @@ impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2 as Weight))
 			.saturating_add(T::DbWeight::get().writes(2 as Weight))
 	}
+
 }
 
 impl WeightInfo for () {
+	fn set_maintainer() -> Weight { 0 }
 	fn force_set_maintainer() -> Weight { 0 }
 	fn set_threshold(_c: u32, ) -> Weight { 0 }
+	fn set_resource(_c: u32, ) -> Weight { 0 }
+	fn remove_resource(_c: u32, ) -> Weight { 0 }
+	fn whitelist_chain() -> Weight { 0 }
 	fn add_proposer() -> Weight { 0 }
 	fn remove_proposer() -> Weight { 0 }
 }
