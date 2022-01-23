@@ -148,7 +148,6 @@ pub mod pallet {
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
 			if Self::should_refresh(n) {
-				let refresh_nonce = Self::refresh_nonce();
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					let uncompressed_pub_key = libsecp256k1::PublicKey::parse_slice(
 						&pub_key.1[..],
@@ -159,13 +158,15 @@ pub mod pallet {
 					.unwrap()
 					.to_vec();
 
+					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
-						nonce: refresh_nonce,
+						nonce: next_nonce,
 						pub_key: uncompressed_pub_key,
 					};
 
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
+							RefreshNonce::<T>::put(next_nonce);
 							frame_support::log::debug!("Handled refresh proposal");
 						},
 						Err(e) => {
@@ -480,7 +481,7 @@ pub mod pallet {
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
-			RefreshNonce::<T>::put(1);
+			RefreshNonce::<T>::put(0);
 			TimeToRestart::<T>::put(T::TimeToRestart::get());
 		}
 	}
@@ -726,8 +727,6 @@ impl<T: Config> Pallet<T> {
 				));
 				// Remove unsigned refresh proposal from queue
 				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
-				// Increase nonce value
-				RefreshNonce::<T>::put(refresh_nonce + 1u32);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});

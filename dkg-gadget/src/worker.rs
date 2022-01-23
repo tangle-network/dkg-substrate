@@ -508,8 +508,12 @@ where
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
 
+				let at = BlockId::hash(header.hash());
 				// Reset refresh status
-				self.refresh_in_progress = false;
+				self.refresh_in_progress = self.client
+					.runtime_api()
+					.should_refresh(&at, *header.number())
+					.unwrap_or(false);
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
