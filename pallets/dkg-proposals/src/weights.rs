@@ -34,18 +34,18 @@ pub trait WeightInfo {
 	fn force_set_maintainer() -> Weight;
 	fn set_threshold(_c: u32, ) -> Weight;
 	fn set_resource(_c: u32, ) -> Weight;
-	fn remove_resource(_c: u32, ) -> Weight;
+	fn remove_resource() -> Weight;
 	fn whitelist_chain() -> Weight;
 	fn add_proposer() -> Weight;
 	fn remove_proposer() -> Weight;
-	fn acknowledge_proposal() -> Weight;
-	fn reject_proposal() -> Weight;
-	fn eval_vote_state() -> Weight;
+	fn acknowledge_proposal(_c: u32,) -> Weight;
+	fn reject_proposal(_c: u32,) -> Weight;
+	fn eval_vote_state(_c: u32,) -> Weight;
 }
 
 /// Weight functions for `pallet_dkg_proposals`.
-pub struct DKGProposalsWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
+pub struct WebbWeight<T>(PhantomData<T>);
+impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn set_maintainer() -> Weight {
 		(26_000_000 as Weight)
@@ -71,8 +71,8 @@ impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	// Storage: DKGProposals Resources (r:0 w:1)
-	fn remove_resource(_c: u32, ) -> Weight {
-		(2_440_000 as Weight)
+	fn remove_resource() -> Weight {
+		(7_000_000 as Weight)
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	// Storage: DKGProposals ChainNonces (r:1 w:1)
@@ -101,8 +101,8 @@ impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 	// Storage: DKGProposals Votes (r:1 w:1)
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
-	fn acknowledge_proposal() -> Weight {
-		(61_000_000 as Weight)
+	fn acknowledge_proposal(_c: u32, ) -> Weight {
+		(152_950_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(6 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
@@ -112,16 +112,16 @@ impl<T: frame_system::Config> WeightInfo for DKGProposalsWeight<T> {
 	// Storage: DKGProposals Votes (r:1 w:1)
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
-	fn reject_proposal() -> Weight {
-		(64_000_000 as Weight)
+	fn reject_proposal(_c: u32, ) -> Weight {
+		(149_107_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(6 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	// Storage: DKGProposals Votes (r:1 w:1)
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
-	fn eval_vote_state() -> Weight {
-		(21_000_000 as Weight)
+	fn eval_vote_state(_c: u32, ) -> Weight {
+		(53_677_000 as Weight)
 			.saturating_add(T::DbWeight::get().reads(3 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
@@ -133,11 +133,11 @@ impl WeightInfo for () {
 	fn force_set_maintainer() -> Weight { 0 }
 	fn set_threshold(_c: u32, ) -> Weight { 0 }
 	fn set_resource(_c: u32, ) -> Weight { 0 }
-	fn remove_resource(_c: u32, ) -> Weight { 0 }
+	fn remove_resource() -> Weight { 0 }
 	fn whitelist_chain() -> Weight { 0 }
 	fn add_proposer() -> Weight { 0 }
 	fn remove_proposer() -> Weight { 0 }
-	fn acknowledge_proposal() -> Weight { 0 }
-	fn reject_proposal() -> Weight { 0 }
-	fn eval_vote_state() -> Weight { 0 }
+	fn acknowledge_proposal(_c: u32,) -> Weight { 0 }
+	fn reject_proposal(_c: u32,) -> Weight { 0 }
+	fn eval_vote_state(_c: u32,) -> Weight { 0 }
 }

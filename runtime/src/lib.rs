@@ -581,6 +581,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
 parameter_types! {

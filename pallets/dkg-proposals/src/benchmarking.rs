@@ -39,9 +39,7 @@ benchmarks! {
 		let admin = T::AdminOrigin::successful_origin();
 
 		let maintainer: T::AccountId = account("account", 0, SEED);
-
 		let new_maintainer: T::AccountId  = account("account", 0, SEED);
-
 		Maintainer::<T>::put(maintainer.clone());
 
 	}: _<T::Origin>(admin, maintainer.clone())
@@ -65,11 +63,6 @@ benchmarks! {
 		let admin = T::AdminOrigin::successful_origin();
 
 		let mut resource_id = [0; 32];
-
-		for i in 0..32 {
-			resource_id[i] = i as u8;
-		}
-
 		let bytes = vec![0u8; c as usize];
 
 	}: _<T::Origin>(admin, resource_id, bytes)
@@ -78,17 +71,11 @@ benchmarks! {
 	}
 
 	remove_resource {
-		let c in 1 .. 16_000;
 
 		let admin = T::AdminOrigin::successful_origin();
 
 		let mut resource_id = [0; 32];
-
-		for i in 0..32 {
-			resource_id[i] = i as u8;
-		}
-
-		let bytes = vec![0u8; c as usize];
+		let bytes = vec![0u8; 12];
 
 		Pallet::<T>::register_resource(resource_id, bytes);
 
@@ -129,7 +116,7 @@ benchmarks! {
 	}
 
 	acknowledge_proposal {
-		//let c in 1 .. 16_000;
+		let c in 1 .. 16_000;
 
 		let caller: T::AccountId = whitelisted_caller();
 
@@ -143,7 +130,7 @@ benchmarks! {
 
 		let chain_id: T::ChainId = CHAIN_IDENTIFIER.into();
 
-		let bytes = vec![0u8; 12];
+		let bytes = vec![0u8; c as usize];
 
 		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
 
@@ -169,7 +156,7 @@ benchmarks! {
 	}
 
 	reject_proposal {
-		//let c in 1 .. 16_000;
+		let c in 1 .. 16_000;
 
 		let caller: T::AccountId = whitelisted_caller();
 
@@ -183,7 +170,7 @@ benchmarks! {
 
 		let chain_id: T::ChainId = CHAIN_IDENTIFIER.into();
 
-		//let bytes = vec![0u8; c as usize];
+		let bytes = vec![0u8; c as usize];
 
 		let bytes = vec![0u8; 12];
 
@@ -211,7 +198,7 @@ benchmarks! {
 	}
 
 	eval_vote_state {
-		//let c in 1 .. 16_000;
+		let c in 1 .. 16_000;
 
 		let caller: T::AccountId = whitelisted_caller();
 
@@ -221,7 +208,7 @@ benchmarks! {
 
 		let chain_id: T::ChainId = CHAIN_IDENTIFIER.into();
 
-		//let bytes = vec![0u8; c as usize];
+		let bytes = vec![0u8; c as usize];
 
 		let bytes = vec![0u8; 12];
 

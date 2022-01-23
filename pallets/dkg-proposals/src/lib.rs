@@ -65,7 +65,7 @@ use sp_std::prelude::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 mod weights;
-pub use weights::DKGProposalsWeight;
+pub use weights::WebbWeight;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -91,7 +91,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>>;
+		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
 
 		/// ChainID for anchor edges
 		type ChainId: Encode
@@ -357,7 +357,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) removal
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::set_resource(id.len() as u32))]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_resource())]
 		pub fn remove_resource(origin: OriginFor<T>, id: ResourceId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::unregister_resource(id)
@@ -409,7 +409,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is
 		///   performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal())]
+		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal(prop.as_ref().len().try_into().unwrap()))]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -430,7 +430,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal())]
+		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal(prop.as_ref().len().try_into().unwrap()))]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -455,7 +455,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is
 		///   performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state())]
+		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.as_ref().len().try_into().unwrap()))]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
