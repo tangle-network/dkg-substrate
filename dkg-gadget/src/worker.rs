@@ -1264,7 +1264,19 @@ where
 			}
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
-				ProposalType::RefreshProposal { data } => data,
+				ProposalType::RefreshProposal { data } => {
+					let refresh_prop_data = match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
+						Ok(res) => res,
+						Err(err) => {
+							error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
+							continue
+						},
+					};
+					let mut buf = Vec::new();
+					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
+					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
+					buf.to_vec()
+				},
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::AnchorUpdate { data } => data,
 				ProposalType::TokenAdd { data } => data,
