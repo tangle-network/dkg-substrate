@@ -230,7 +230,8 @@ benchmarks! {
 
 		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id, proposal_bytes.clone(), true);
 
-	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes)
+	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes.clone())
 	verify {
+		assert!(Votes::<T>::get(chain_id, (nonce, proposal_bytes.clone())) != None);
 	}
 }
