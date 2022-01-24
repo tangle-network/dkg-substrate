@@ -37,7 +37,7 @@ use sp_runtime::{
 	generic::DigestItem,
 	offchain::storage::StorageValueRef,
 	traits::{IsMember, Member},
-	Permill, RuntimeAppPublic,
+	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
@@ -114,13 +114,7 @@ pub mod pallet {
 				target: "dkg",
 				"Current Authority({}) DKG PublicKey (Uncompressed): 0x{}",
 				authority_id,
-				hex::encode(libsecp256k1::PublicKey::parse_slice(
-					&pk[..],
-					Some(libsecp256k1::PublicKeyFormat::Compressed),
-				)
-				.map(|pk| pk.serialize())
-				.map_err(|e| Error::<T>::InvalidPublicKeys)
-				.unwrap().to_vec()),
+				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
 			);
 
 			#[cfg(feature = "std")] // required since we use hex and strings
@@ -135,13 +129,7 @@ pub mod pallet {
 					target: "dkg",
 					"Next Authority({}) DKG PublicKey (Uncompressed): 0x{}",
 					next_authority_id,
-					hex::encode(libsecp256k1::PublicKey::parse_slice(
-						&next_pk[..],
-						Some(libsecp256k1::PublicKeyFormat::Compressed),
-					)
-					.map(|pk| pk.serialize())
-					.map_err(|e| Error::<T>::InvalidPublicKeys)
-					.unwrap().to_vec()),
+					hex::encode(Self::decompress_public_key(next_pk).unwrap_or_default()),
 				);
 			}
 		}
@@ -149,14 +137,7 @@ pub mod pallet {
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
 			if Self::should_refresh(n) {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
-					let uncompressed_pub_key = libsecp256k1::PublicKey::parse_slice(
-						&pub_key.1[..],
-						Some(libsecp256k1::PublicKeyFormat::Compressed),
-					)
-					.map(|pk| pk.serialize())
-					.map_err(|e| Error::<T>::InvalidPublicKeys)
-					.unwrap()
-					.to_vec();
+					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
 
 					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
@@ -233,13 +214,8 @@ pub mod pallet {
 					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
 					Self::deposit_event(Event::PublicKeySubmitted {
 						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: libsecp256k1::PublicKey::parse_slice(
-							&key,
-							Some(libsecp256k1::PublicKeyFormat::Compressed),
-						)
-						.map(|pk| pk.serialize())
-						.map_err(|e| Error::<T>::InvalidPublicKeys)
-						.unwrap().to_vec(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
 					});
 					accepted = true;
 
@@ -274,13 +250,8 @@ pub mod pallet {
 					NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
 					Self::deposit_event(Event::NextPublicKeySubmitted {
 						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: libsecp256k1::PublicKey::parse_slice(
-							&key,
-							Some(libsecp256k1::PublicKeyFormat::Compressed),
-						)
-						.map(|pk| pk.serialize())
-						.map_err(|e| Error::<T>::InvalidPublicKeys)
-						.unwrap().to_vec(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
 					});
 					accepted = true;
 
@@ -455,15 +426,9 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Current public key submitted
-		PublicKeySubmitted {
-			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
-		},
+		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key submitted
-		NextPublicKeySubmitted {
-			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
-		},
+		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
 		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
 	}
@@ -495,6 +460,16 @@ impl<T: Config> Pallet<T> {
 
 	pub fn sig_threshold() -> u16 {
 		Self::signature_threshold()
+	}
+
+	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {
+		let result = libsecp256k1::PublicKey::parse_slice(
+			&compressed,
+			Some(libsecp256k1::PublicKeyFormat::Compressed),
+		)
+		.map(|pk| pk.serialize())
+		.map_err(|e| Error::<T>::InvalidPublicKeys)?;
+		Ok(result.to_vec())
 	}
 
 	pub fn process_public_key_submissions(

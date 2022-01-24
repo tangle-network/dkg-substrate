@@ -510,7 +510,8 @@ where
 
 				let at = BlockId::hash(header.hash());
 				// Reset refresh status
-				self.refresh_in_progress = self.client
+				self.refresh_in_progress = self
+					.client
 					.runtime_api()
 					.should_refresh(&at, *header.number())
 					.unwrap_or(false);
@@ -1269,13 +1270,14 @@ where
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
 				ProposalType::RefreshProposal { data } => {
-					let refresh_prop_data = match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
-						Ok(res) => res,
-						Err(err) => {
-							error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
-							continue
-						},
-					};
+					let refresh_prop_data =
+						match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
+							Ok(res) => res,
+							Err(err) => {
+								error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
+								continue
+							},
+						};
 					let mut buf = Vec::new();
 					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
 					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
