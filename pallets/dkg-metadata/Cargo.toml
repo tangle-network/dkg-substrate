@@ -19,7 +19,7 @@ scale-info = { version = "1.0", default-features = false, features = [
 	"derive",
 ] }
 hex = { version = "0.4", default-features = false }
-
+libsecp256k1 = { version = "0.7.0", default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false, optional = true }
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
@@ -47,4 +47,5 @@ std = [
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
+	'libsecp256k1/std',
 ]

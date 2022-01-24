@@ -37,7 +37,7 @@ use sp_runtime::{
 	generic::DigestItem,
 	offchain::storage::StorageValueRef,
 	traits::{IsMember, Member},
-	Permill, RuntimeAppPublic,
+	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
@@ -101,26 +101,53 @@ pub mod pallet {
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
+			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
 				target: "dkg",
 				"Current Authority({}) DKG PublicKey (Compressed): 0x{}",
 				authority_id,
-				hex::encode(pk),
+				hex::encode(pk.clone()),
 			);
+			#[cfg(feature = "std")] // required since we use hex and strings
+			frame_support::log::debug!(
+				target: "dkg",
+				"Current Authority({}) DKG PublicKey (Uncompressed): 0x{}",
+				authority_id,
+				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
+			);
+
+			#[cfg(feature = "std")] // required since we use hex and strings
+			if let Some((next_authority_id, next_pk)) = maybe_next_key {
+				frame_support::log::debug!(
+					target: "dkg",
+					"Next Authority({}) DKG PublicKey (Compressed): 0x{}",
+					next_authority_id,
+					hex::encode(next_pk.clone()),
+				);
+				frame_support::log::debug!(
+					target: "dkg",
+					"Next Authority({}) DKG PublicKey (Uncompressed): 0x{}",
+					next_authority_id,
+					hex::encode(Self::decompress_public_key(next_pk).unwrap_or_default()),
+				);
+			}
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
 			if Self::should_refresh(n) {
-				let refresh_nonce = Self::refresh_nonce();
 				if let Some(pub_key) = Self::next_dkg_public_key() {
+					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
+
+					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
-						nonce: refresh_nonce,
-						pub_key: pub_key.1.clone(),
+						nonce: next_nonce,
+						pub_key: uncompressed_pub_key,
 					};
 
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
+							RefreshNonce::<T>::put(next_nonce);
 							frame_support::log::debug!("Handled refresh proposal");
 						},
 						Err(e) => {
@@ -185,7 +212,11 @@ pub mod pallet {
 			for (key, accounts) in dict.iter() {
 				if accounts.len() >= threshold as usize {
 					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
-					Self::deposit_event(Event::PublicKeySubmitted { pub_key: key.clone() });
+					Self::deposit_event(Event::PublicKeySubmitted {
+						compressed_pub_key: key.clone(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
+					});
 					accepted = true;
 
 					break
@@ -209,18 +240,19 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 
 			let next_authorities = Self::next_authorities_accounts();
-
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
-
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
-
 			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
 				if accounts.len() >= threshold as usize {
 					NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-					Self::deposit_event(Event::NextPublicKeySubmitted { pub_key: key.clone() });
+					Self::deposit_event(Event::NextPublicKeySubmitted {
+						compressed_pub_key: key.clone(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
+					});
 					accepted = true;
 
 					break
@@ -394,9 +426,9 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Current public key submitted
-		PublicKeySubmitted { pub_key: Vec<u8> },
+		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key submitted
-		NextPublicKeySubmitted { pub_key: Vec<u8> },
+		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
 		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
 	}
@@ -428,6 +460,16 @@ impl<T: Config> Pallet<T> {
 
 	pub fn sig_threshold() -> u16 {
 		Self::signature_threshold()
+	}
+
+	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {
+		let result = libsecp256k1::PublicKey::parse_slice(
+			&compressed,
+			Some(libsecp256k1::PublicKeyFormat::Compressed),
+		)
+		.map(|pk| pk.serialize())
+		.map_err(|e| Error::<T>::InvalidPublicKeys)?;
+		Ok(result.to_vec())
 	}
 
 	pub fn process_public_key_submissions(
@@ -660,8 +702,6 @@ impl<T: Config> Pallet<T> {
 				));
 				// Remove unsigned refresh proposal from queue
 				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
-				// Increase nonce value
-				RefreshNonce::<T>::put(refresh_nonce + 1u32);
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 					pub_key_sig: signature.clone(),
 				});
