@@ -70,12 +70,14 @@ pub use weights::WebbWeight;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD};
+	use crate::{
+		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
+		weights::WeightInfo,
+	};
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::AtLeast32Bit;
-	use crate::weights::WeightInfo;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
