@@ -6,6 +6,8 @@ use chacha20poly1305::{
 };
 use codec::Encode;
 use curv::elliptic::curves::Secp256k1;
+use dkg_runtime_primitives::offchain_crypto::Pair as AppPair;
+use sc_keystore::LocalKeystore;
 use sc_service::{ChainType, Configuration};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
@@ -15,6 +17,7 @@ use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
+	sync::Arc,
 };
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
@@ -71,10 +74,21 @@ pub fn store_localkey(
 	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
 	path: PathBuf,
-	secret_key: Vec<u8>,
+	key_store: DKGKeystore,
+	local_keystore: Arc<LocalKeystore>,
 ) -> std::io::Result<()> {
-	let stored_local_key = StoredLocalKey { round_id, local_key: key };
+	let sr25519_public = key_store
+		.as_ref()
+		.sr25519_authority_id(&key_store.as_ref().sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
+	let key_pair = local_keystore
+		.as_ref()
+		.unwrap()
+		.key_pair::<AppPair>(&Public::try_from(&sr25519_public.as_ref().unwrap().0[..]).unwrap());
+	let secret_key = key_pair.to_raw_vec();
+
+	let stored_local_key = StoredLocalKey { round_id, local_key: key };
 	let serialized_data = serialize(&stored_local_key)
 		.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 

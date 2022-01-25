@@ -2,6 +2,8 @@ use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use std::fmt;
 
+use crate::rounds::LocalKey;
+
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
 
@@ -147,6 +149,12 @@ pub struct SignParams {
 	pub parties: u16,
 	pub signer_set_id: SignerSetId,
 	pub signers: Vec<u16>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DKGResult {
+	Empty,
+	KeygenFinished { round_id: RoundId, local_key: LocalKey<Secp256k1> },
 }
 
 #[derive(Debug, Clone)]

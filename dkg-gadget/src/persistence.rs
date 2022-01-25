@@ -244,8 +244,7 @@ where
 		if next_rounds.is_none() {
 			true
 		} else {
-			let stalled =
-				next_rounds.as_ref().unwrap().has_stalled();
+			let stalled = next_rounds.as_ref().unwrap().has_stalled();
 			worker.set_next_rounds(next_rounds.unwrap());
 			stalled
 		}

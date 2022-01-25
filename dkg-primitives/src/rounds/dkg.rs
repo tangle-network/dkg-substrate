@@ -55,7 +55,7 @@ where
 	// Key generation
 	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
 	keygen: KeygenState<Clock>,
-	#[builder(default=false)]
+	#[builder(default = false)]
 	has_stalled: bool,
 	// Offline stage
 	#[builder(default)]
@@ -103,7 +103,7 @@ where
 		self.has_stalled
 	}
 
-	pub fn proceed(&mut self, at: C) -> Vec<Result<(), DKGError>> {
+	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		let mut results = vec![];
 
 		let keygen_proceed_res = self.keygen.proceed(at);
@@ -111,13 +111,19 @@ where
 			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
 				self.has_stalled = true;
 			}
-			results.push(keygen_proceed_res.map(|_| ()));
+			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));
 		} else {
 			if self.keygen.is_finished() {
 				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
 					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
 					_ => prev_state,
+				};
+				if let KeygenState::Finished(Ok(local_key)) = &self.keygen {
+					results.push(Ok(DKGResult::KeygenFinished {
+						round_id: self.round_id,
+						local_key: local_key.clone(),
+					}));
 				}
 			}
 		}
@@ -127,7 +133,7 @@ where
 			if let Some(mut offline) = self.offlines.remove(&key.clone()) {
 				let res = offline.proceed(at);
 				if res.is_err() {
-					results.push(res.map(|_| ()));
+					results.push(res.map(|_| DKGResult::Empty));
 				}
 				let next_state = if offline.is_finished() {
 					match offline {
@@ -147,7 +153,7 @@ where
 			if let Some(mut vote) = self.votes.remove(&key.clone()) {
 				let res = vote.proceed(at);
 				if res.is_err() {
-					results.push(res.map(|_| ()));
+					results.push(res.map(|_| DKGResult::Empty));
 				}
 				let next_state = if vote.is_finished() {
 					match vote {
@@ -393,14 +399,14 @@ where
 		}
 	}
 
-	pub fn is_key_gen_stage(&self) -> bool {
+	pub fn is_keygen_in_progress(&self) -> bool {
 		match self.keygen {
 			KeygenState::Finished(_) => false,
 			_ => true,
 		}
 	}
 
-	pub fn is_offline_ready(&self) -> bool {
+	pub fn is_keygen_finished(&self) -> bool {
 		match self.keygen {
 			KeygenState::Finished(_) => true,
 			_ => false,

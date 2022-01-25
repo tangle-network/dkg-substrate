@@ -49,12 +49,13 @@ use crate::{
 	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 use dkg_primitives::{
-	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
+	utils::store_localkey,
+	types::{DKGError, DKGResult, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
 	AggregatedPublicKeys, ChainId, DKGReport, ProposalType,
 };
 
 use dkg_runtime_primitives::{
-	crypto::{AuthorityId, Public},
+	crypto::{AuthorityId, Public, Pair as AppPair},
 	utils::{sr25519, to_slice_32},
 	OffchainSignedProposals, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
 	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
@@ -578,8 +579,22 @@ where
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 		                     authority_id: Public,
 		                     at: NumberFor<B>|
-		 -> Vec<Result<(), DKGError>> {
+		 -> Vec<Result<DKGResult, DKGError>> {
 			let results = rounds.proceed(at);
+
+			for result in &results {
+				if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
+					if let Some(local_keystore) = &self.local_keystore {
+						store_localkey(
+							key: local_key,
+							round_id,
+							path: self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE),
+							key_store: self.key_store.clone(),
+							local_keystore,
+						);
+					}
+				}
+			}
 
 			for message in rounds.get_outgoing_messages() {
 				let dkg_message = DKGMessage {
@@ -640,8 +655,8 @@ where
 			}
 
 			if self.active_keygen_in_progress {
-				let is_offline_ready = rounds.is_offline_ready();
-				if is_offline_ready {
+				let is_keygen_finished = rounds.is_keygen_finished();
+				if is_keygen_finished {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
@@ -663,8 +678,8 @@ where
 					next_rounds_send_result =
 						send_messages(&mut next_rounds, id, self.get_latest_block_number());
 
-					let is_offline_ready = next_rounds.is_offline_ready();
-					if is_offline_ready {
+					let is_keygen_finished = next_rounds.is_keygen_finished();
+					if is_keygen_finished {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
 						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
@@ -764,7 +779,7 @@ where
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
 
-				if rounds.is_offline_ready() {
+				if rounds.is_keygen_finished() {
 					debug!(target: "dkg", "🕸️  DKG is ready to sign");
 					self.dkg_state.accepted = true;
 				}
@@ -1198,7 +1213,7 @@ where
 
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = vec![];
-		if rounds.is_offline_ready() {
+		if rounds.is_keygen_finished() {
 			for (key, ..) in &unsigned_proposals {
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
