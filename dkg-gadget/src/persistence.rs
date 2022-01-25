@@ -234,7 +234,7 @@ where
 		if rounds.is_none() {
 			true
 		} else {
-			let stalled = rounds.as_ref().unwrap().has_stalled(time_to_restart, *header.number());
+			let stalled = rounds.as_ref().unwrap().has_stalled();
 			worker.set_rounds(rounds.unwrap());
 			stalled
 		}
@@ -245,7 +245,7 @@ where
 			true
 		} else {
 			let stalled =
-				next_rounds.as_ref().unwrap().has_stalled(time_to_restart, *header.number());
+				next_rounds.as_ref().unwrap().has_stalled();
 			worker.set_next_rounds(next_rounds.unwrap());
 			stalled
 		}

@@ -55,6 +55,8 @@ where
 	// Key generation
 	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
 	keygen: KeygenState<Clock>,
+	#[builder(default=false)]
+	has_stalled: bool,
 	// Offline stage
 	#[builder(default)]
 	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
@@ -97,8 +99,8 @@ where
 	/// A check to know if the protocol has stalled at the keygen stage,
 	/// We take it that the protocol has stalled if keygen messages are not received from other
 	/// peers after a certain interval And the keygen stage has not completed
-	pub fn has_stalled(&self, time_to_restart: Option<C>, current_block_number: C) -> bool {
-		false
+	pub fn has_stalled(&self) -> bool {
+		self.has_stalled
 	}
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<(), DKGError>> {
@@ -106,6 +108,9 @@ where
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
+			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
+				self.has_stalled = true;
+			}
 			results.push(keygen_proceed_res.map(|_| ()));
 		} else {
 			if self.keygen.is_finished() {
