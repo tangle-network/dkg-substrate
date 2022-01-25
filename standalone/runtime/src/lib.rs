@@ -514,7 +514,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: u32 = 5;
+	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(50);

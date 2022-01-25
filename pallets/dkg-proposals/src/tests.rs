@@ -116,7 +116,7 @@ fn whitelist_chain() {
 
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), ChainIdType::EVM(0u32)));
 		assert_noop!(
-			DKGProposals::whitelist_chain(Origin::root(), ChainIdType::Substrate(ChainIdentifier::get())),
+			DKGProposals::whitelist_chain(Origin::root(), ChainIdentifier::get()),
 			Error::<Test>::InvalidChainId
 		);
 

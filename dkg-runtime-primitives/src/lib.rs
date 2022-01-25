@@ -19,7 +19,7 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
-	MultiSignature,
+	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
@@ -188,9 +188,9 @@ pub enum ChainIdType<ChainId> {
 	// Substrate(chain_identifier)
 	Substrate(ChainId),
 	// Relay chain(relay_chain_identifier, chain_identifier)
-	RelayChain(Vec<u8>, ChainId),
+	RelayChain(RuntimeString, ChainId),
 	// Parachain(relay_chain_identifier, para_id)
-	Parachain(Vec<u8>, ChainId),
+	Parachain(RuntimeString, ChainId),
 	// Cosmos
 	CosmosSDK(ChainId),
 	// Solana

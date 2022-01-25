@@ -1,4 +1,4 @@
-use sp_runtime::traits::AtLeast32Bit;
+use sp_runtime::{traits::AtLeast32Bit, create_runtime_str};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -83,10 +83,10 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 			chain_id: match chain_type {
 				[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
 				[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
-				[3, 0] => ChainIdType::RelayChain(b"polkadot".to_vec(), ChainId::from(chain_id)),
-				[4, 0] => ChainIdType::RelayChain(b"kusama".to_vec(), ChainId::from(chain_id)),
-				[5, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
-				[6, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
+				[3, 1] => ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
+				[3, 2] => ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
+				[4, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
+				[5, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
 				_ => panic!("Invalid chain type"),
 			},
 			function_sig,
