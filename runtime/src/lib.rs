@@ -581,6 +581,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
 parameter_types! {
@@ -904,6 +905,7 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 			list_benchmark!(list, extra, pallet_timestamp, Timestamp);
 			list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
+
 
 
 			let storage_info = AllPalletsWithSystem::storage_info();

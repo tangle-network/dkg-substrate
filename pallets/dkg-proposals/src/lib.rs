@@ -62,10 +62,18 @@ use scale_info::TypeInfo;
 use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
 use sp_std::prelude::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+mod weights;
+pub use weights::WebbWeight;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use crate::types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD};
+	use crate::{
+		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
+		weights::WeightInfo,
+	};
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
 	use frame_system::pallet_prelude::*;
@@ -85,7 +93,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>>;
+		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
 
 		/// ChainID for anchor edges
 		type ChainId: Encode
@@ -109,6 +117,8 @@ pub mod pallet {
 		type DKGAccountId: Get<PalletId>;
 
 		type ProposalHandler: ProposalHandlerTrait;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	/// The parameter maintainer who can change the parameters
@@ -277,12 +287,11 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Sets the maintainer.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_maintainer())]
 		pub fn set_maintainer(
 			origin: OriginFor<T>,
 			new_maintainer: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			Self::ensure_admin(origin.clone())?;
 			let origin = ensure_signed(origin)?;
 			// ensure parameter setter is the maintainer
 			ensure!(Some(origin.clone()) == Self::maintainer(), Error::<T>::InvalidPermissions);
@@ -298,7 +307,7 @@ pub mod pallet {
 		}
 
 		// Forcefully set the maintainer.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_set_maintainer())]
 		pub fn force_set_maintainer(
 			origin: OriginFor<T>,
 			new_maintainer: T::AccountId,
@@ -321,7 +330,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_threshold(*threshold))]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::set_proposer_threshold(threshold)
@@ -332,7 +341,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) write
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_resource(method.len() as u32))]
 		pub fn set_resource(
 			origin: OriginFor<T>,
 			id: ResourceId,
@@ -350,7 +359,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) removal
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_resource())]
 		pub fn remove_resource(origin: OriginFor<T>, id: ResourceId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::unregister_resource(id)
@@ -361,7 +370,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::whitelist_chain())]
 		pub fn whitelist_chain(origin: OriginFor<T>, id: T::ChainId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::whitelist(id)
@@ -372,7 +381,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
 		pub fn add_proposer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::register_proposer(v)
@@ -383,7 +392,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and removal
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_proposer())]
 		pub fn remove_proposer(
 			origin: OriginFor<T>,
 			v: T::AccountId,
@@ -401,7 +410,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal(prop.as_ref().len().try_into().unwrap()))]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -422,7 +431,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(195_000_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal(prop.as_ref().len().try_into().unwrap()))]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -446,7 +455,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.as_ref().len().try_into().unwrap()))]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
