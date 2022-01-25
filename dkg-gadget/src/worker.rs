@@ -1281,7 +1281,7 @@ where
 				continue
 			}
 
-			let (chain_id_type, payload_key): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
+			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
 				ProposalType::RefreshProposal { data } => {
