@@ -1,13 +1,16 @@
 use crate::{
+	keystore::DKGKeystore,
 	utils::{set_up_rounds, validate_threshold},
 	worker::DKGWorker,
 	Client,
 };
-use bincode::deserialize;
+use bincode::{deserialize, serialize};
 use dkg_primitives::{
 	crypto::AuthorityId,
+	rounds::LocalKey,
+	types::RoundId,
 	utils::{
-		decrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
+		decrypt_data, encrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
 		QUEUED_DKG_LOCAL_KEY_FILE,
 	},
 };
@@ -19,7 +22,15 @@ use log::debug;
 use sc_client_api::Backend;
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
-use std::fs;
+use std::{
+	fs,
+	io::{Error, ErrorKind},
+	path::PathBuf,
+	sync::Arc,
+};
+
+use curv::elliptic::curves::Secp256k1;
+use sc_keystore::LocalKeystore;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -32,6 +43,37 @@ impl DKGPersistenceState {
 
 	pub fn start(&mut self) {
 		self.initial_check = true;
+	}
+}
+
+pub fn store_localkey(
+	key: LocalKey<Secp256k1>,
+	round_id: RoundId,
+	path: PathBuf,
+	key_store: DKGKeystore,
+	local_keystore: Arc<LocalKeystore>,
+) -> std::io::Result<()> {
+	let sr25519_public = key_store
+		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+
+	let key_pair = local_keystore
+		.as_ref()
+		.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
+
+	if let Ok(Some(key_pair)) = key_pair {
+		let secret_key = key_pair.to_raw_vec();
+
+		let stored_local_key = StoredLocalKey { round_id, local_key: key };
+		let serialized_data = serialize(&stored_local_key)
+			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
+
+		let encrypted_data = encrypt_data(serialized_data, secret_key)
+			.map_err(|e| Error::new(ErrorKind::Other, e))?;
+		fs::write(path, &encrypted_data[..])?;
+		Ok(())
+	} else {
+		Err(Error::new(ErrorKind::Other, "".to_string()))
 	}
 }
 

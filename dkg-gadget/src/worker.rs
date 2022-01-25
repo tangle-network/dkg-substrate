@@ -46,18 +46,17 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 use dkg_primitives::{
-	utils::store_localkey,
-	types::{DKGError, DKGResult, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
+	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId},
 	AggregatedPublicKeys, ChainId, DKGReport, ProposalType,
 };
 
 use dkg_runtime_primitives::{
-	crypto::{AuthorityId, Public, Pair as AppPair},
+	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	OffchainSignedProposals, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	OffchainSignedProposals, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
 	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
 	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
@@ -584,12 +583,12 @@ where
 
 			for result in &results {
 				if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-					if let Some(local_keystore) = &self.local_keystore {
-						store_localkey(
-							key: local_key,
+					if let Some(local_keystore) = self.local_keystore.clone() {
+						let _ = store_localkey(
+							local_key,
 							round_id,
-							path: self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE),
-							key_store: self.key_store.clone(),
+							self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE),
+							self.key_store.clone(),
 							local_keystore,
 						);
 					}
