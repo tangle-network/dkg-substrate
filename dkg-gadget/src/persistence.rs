@@ -4,10 +4,10 @@ use crate::{
 	worker::DKGWorker,
 	Client,
 };
-use bincode::{deserialize, serialize};
 use dkg_primitives::{
 	crypto::AuthorityId,
 	rounds::LocalKey,
+	serde_json,
 	types::RoundId,
 	utils::{
 		decrypt_data, encrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
@@ -65,10 +65,10 @@ pub fn store_localkey(
 		let secret_key = key_pair.to_raw_vec();
 
 		let stored_local_key = StoredLocalKey { round_id, local_key: key };
-		let serialized_data = serialize(&stored_local_key)
+		let serialized_data = serde_json::to_string(&stored_local_key)
 			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 
-		let encrypted_data = encrypt_data(serialized_data, secret_key)
+		let encrypted_data = encrypt_data(serialized_data.into_bytes(), secret_key)
 			.map_err(|e| Error::new(ErrorKind::Other, e))?;
 		fs::write(path, &encrypted_data[..])?;
 
@@ -134,7 +134,7 @@ where
 					if let Ok(decrypted_data) = decrypted_data {
 						debug!(target: "dkg", "Decrypted local key successfully");
 						let localkey_deserialized =
-							deserialize::<StoredLocalKey>(&decrypted_data[..]);
+							serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
 
 						match localkey_deserialized {
 							Ok(localkey_deserialized) => {
@@ -169,7 +169,7 @@ where
 
 					if let Ok(decrypted_data) = decrypted_data {
 						let queued_localkey_deserialized =
-							deserialize::<StoredLocalKey>(&decrypted_data[..]);
+							serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
 
 						if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
 							if queued_round_id == queued_localkey_deserialized.round_id {
