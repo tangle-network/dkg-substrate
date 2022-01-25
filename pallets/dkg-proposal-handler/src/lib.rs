@@ -27,6 +27,8 @@ use sp_std::{convert::TryFrom, vec::Vec};
 pub mod weights;
 use weights::WeightInfo;
 
+use dkg_runtime_primitives::ChainIdType;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
@@ -66,7 +68,7 @@ pub mod pallet {
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		T::ChainId,
+		ChainIdType<T::ChainId>,
 		Blake2_128Concat,
 		DKGPayloadKey,
 		ProposalType,
@@ -78,7 +80,7 @@ pub mod pallet {
 	pub type SignedProposals<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		T::ChainId,
+		ChainIdType<T::ChainId>,
 		Blake2_128Concat,
 		DKGPayloadKey,
 		ProposalType,
@@ -94,7 +96,7 @@ pub mod pallet {
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
 			/// The Target EVM chain ID.
-			chain_id: T::ChainId,
+			chain_id: ChainIdType<T::ChainId>,
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
 			/// The Proposal Data.
@@ -218,7 +220,7 @@ pub mod pallet {
 					let (chain_id, nonce) =
 						Self::decode_token_add_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::TokenAddProposal(nonce),
 						prop.clone(),
 					);
@@ -228,7 +230,7 @@ pub mod pallet {
 					let (chain_id, nonce) =
 						Self::decode_token_remove_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::TokenRemoveProposal(nonce),
 						prop.clone(),
 					);
@@ -238,7 +240,7 @@ pub mod pallet {
 					let (chain_id, nonce) =
 						Self::decode_wrapping_fee_update_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 						prop.clone(),
 					);
@@ -248,7 +250,7 @@ pub mod pallet {
 					let (chain_id, nonce) =
 						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 						prop.clone(),
 					);
@@ -280,7 +282,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		{
 			let unsigned_proposal = ProposalType::AnchorUpdate { data: proposal };
 			UnsignedProposalQueue::<T>::insert(
-				T::ChainId::from(chain_id),
+				chain_id,
 				DKGPayloadKey::AnchorUpdateProposal(nonce),
 				unsigned_proposal,
 			);
@@ -296,7 +298,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	) -> DispatchResult {
 		let unsigned_proposal = ProposalType::RefreshProposal { data: proposal.encode() };
 		UnsignedProposalQueue::<T>::insert(
-			T::ChainId::zero(),
+			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
 		);
@@ -308,7 +310,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
-			T::ChainId::zero(),
+			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
@@ -333,7 +335,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			ensure!(
 				UnsignedProposalQueue::<T>::contains_key(
-					chain_id,
+					chain_id.clone(),
 					DKGPayloadKey::EVMProposal(nonce)
 				),
 				Error::<T>::ProposalDoesNotExists
@@ -343,9 +345,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				Error::<T>::ProposalSignatureInvalid
 			);
 
-			SignedProposals::<T>::insert(chain_id, DKGPayloadKey::EVMProposal(nonce), prop.clone());
+			SignedProposals::<T>::insert(
+				chain_id.clone(),
+				DKGPayloadKey::EVMProposal(nonce),
+				prop.clone(),
+			);
 
-			UnsignedProposalQueue::<T>::remove(chain_id, DKGPayloadKey::EVMProposal(nonce));
+			UnsignedProposalQueue::<T>::remove(chain_id.clone(), DKGPayloadKey::EVMProposal(nonce));
 			// Emit event so frontend can react to it.
 			Self::deposit_event(Event::<T>::ProposalSigned {
 				chain_id,
@@ -412,7 +418,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
-				UnsignedProposalQueue::<T>::contains_key(T::ChainId::from(chain_id), payload_key),
+				UnsignedProposalQueue::<T>::contains_key(chain_id.clone(), payload_key),
 				Error::<T>::ProposalDoesNotExists
 			);
 			// log that proposal exist in the unsigned queue
@@ -431,11 +437,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				"submit_signed_proposal: signature is valid"
 			);
 
-			SignedProposals::<T>::insert(T::ChainId::from(chain_id), payload_key, prop.clone());
-			UnsignedProposalQueue::<T>::remove(T::ChainId::from(chain_id), payload_key);
+			SignedProposals::<T>::insert(chain_id.clone(), payload_key, prop.clone());
+			UnsignedProposalQueue::<T>::remove(chain_id.clone(), payload_key);
 			// Emit event so frontend can react to it.
 			Self::deposit_event(Event::<T>::ProposalSigned {
-				chain_id: T::ChainId::from(chain_id),
+				chain_id,
 				key: payload_key,
 				data,
 				signature,
@@ -450,7 +456,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<((T::ChainId, DKGPayloadKey), ProposalType)> {
+	pub fn get_unsigned_proposals() -> Vec<((ChainIdType<T::ChainId>, DKGPayloadKey), ProposalType)>
+	{
 		return UnsignedProposalQueue::<T>::iter()
 			.map(|entry| ((entry.0, entry.1), entry.2.clone()))
 			.collect()
@@ -462,7 +469,7 @@ impl<T: Config> Pallet<T> {
 				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
 					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
 						return !SignedProposals::<T>::contains_key(
-							T::ChainId::from(chain_id),
+							chain_id,
 							DKGPayloadKey::EVMProposal(nonce),
 						)
 					}
@@ -473,7 +480,7 @@ impl<T: Config> Pallet<T> {
 			ProposalType::AnchorUpdateSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::AnchorUpdateProposal(nonce),
 					)
 				}
@@ -482,7 +489,7 @@ impl<T: Config> Pallet<T> {
 			ProposalType::TokenAddSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::TokenAddProposal(nonce),
 					)
 				}
@@ -491,7 +498,7 @@ impl<T: Config> Pallet<T> {
 			ProposalType::TokenRemoveSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::TokenRemoveProposal(nonce),
 					)
 				}
@@ -500,7 +507,7 @@ impl<T: Config> Pallet<T> {
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 					)
 				}
@@ -509,7 +516,7 @@ impl<T: Config> Pallet<T> {
 			ProposalType::ResourceIdUpdateSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
-						T::ChainId::from(chain_id),
+						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 					)
 				}
@@ -690,7 +697,7 @@ impl<T: Config> Pallet<T> {
 
 	fn decode_evm_transaction(
 		eth_transaction: &TransactionV2,
-	) -> core::result::Result<(T::ChainId, ProposalNonce), Error<T>> {
+	) -> core::result::Result<(ChainIdType<T::ChainId>, ProposalNonce), Error<T>> {
 		let (chain_id, nonce) = match eth_transaction {
 			TransactionV2::Legacy(tx) => {
 				let chain_id: u64 = 0;
@@ -714,12 +721,12 @@ impl<T: Config> Pallet<T> {
 			Err(_) => return Err(Error::<T>::ChainIdInvalid)?,
 		};
 
-		return Ok((chain_id, nonce))
+		return Ok((ChainIdType::EVM(chain_id), nonce))
 	}
 
 	/// (resourceId: 32 Bytes, functionSig: 4 Bytes, nonce: 4 Bytes): at least 40 bytes
-	fn decode_proposal_header(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
-		let header = ProposalHeader::decode(&mut &data[..])
+	fn decode_proposal_header(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+		let header = ProposalHeader::<T::ChainId>::decode(&mut &data[..])
 			.map_err(|_| Error::<T>::ProposalFormatInvalid)?;
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
@@ -732,7 +739,7 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, srcChainId: 4 Bytes, latestLeafIndex: 4 Bytes, merkleRoot: 32 Bytes) = 80
 	/// Bytes
-	fn decode_anchor_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+	fn decode_anchor_update_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
 			"🕸️ Decoded Anchor Update Proposal: {:?} ({} bytes)",
@@ -761,7 +768,9 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// (header: 40 Bytes, newFee: 1 Byte) = 41 Bytes
-	fn decode_wrapping_fee_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+	fn decode_wrapping_fee_update_proposal(
+		data: &[u8],
+	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 41 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
@@ -776,7 +785,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// (header: 40 Bytes, newTokenAddress: 20 Bytes) = 60 Bytes
-	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 60 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
@@ -788,7 +797,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// (header: 40 Bytes, removeTokenAddress: 20 Bytes) = 60 Bytes
-	fn decode_token_remove_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+	fn decode_token_remove_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 60 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
@@ -801,7 +810,9 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, newResourceId: 32, handlerAddress: 20, executionContextAddress: 20) = 112
 	/// Bytes
-	fn decode_resource_id_update_proposal(data: &[u8]) -> Result<ProposalHeader, Error<T>> {
+	fn decode_resource_id_update_proposal(
+		data: &[u8],
+	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 112 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}

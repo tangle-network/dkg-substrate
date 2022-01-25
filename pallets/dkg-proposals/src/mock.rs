@@ -356,7 +356,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub fn new_test_ext_initialized(
-	src_id: <Test as pallet::Config>::ChainId,
+	src_id: ChainIdType<<Test as pallet::Config>::ChainId>,
 	r_id: ResourceId,
 	resource: Vec<u8>,
 ) -> sp_io::TestExternalities {

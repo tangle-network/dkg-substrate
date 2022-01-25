@@ -181,6 +181,46 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
 
+#[derive(Encode, Decode, PartialEq, Eq, Clone, RuntimeDebug, scale_info::TypeInfo)]
+pub enum ChainIdType<ChainId> {
+	// EVM(chain_identifier)
+	EVM(ChainId),
+	// Substrate(chain_identifier)
+	Substrate(ChainId),
+	// Relay chain(relay_chain_identifier, chain_identifier)
+	RelayChain(Vec<u8>, ChainId),
+	// Parachain(relay_chain_identifier, para_id)
+	Parachain(Vec<u8>, ChainId),
+	// Cosmos
+	CosmosSDK(ChainId),
+	// Solana
+	Solana(ChainId),
+}
+
+impl<ChainId: Clone> ChainIdType<ChainId> {
+	pub fn inner_id(&self) -> ChainId {
+		match self {
+			ChainIdType::EVM(id) => id.clone(),
+			ChainIdType::Substrate(id) => id.clone(),
+			ChainIdType::RelayChain(_, id) => id.clone(),
+			ChainIdType::Parachain(_, id) => id.clone(),
+			ChainIdType::CosmosSDK(id) => id.clone(),
+			ChainIdType::Solana(id) => id.clone(),
+		}
+	}
+
+	pub fn to_type(&self) -> u16 {
+		match self {
+			ChainIdType::EVM(_) => 1,
+			ChainIdType::Substrate(_) => 2,
+			ChainIdType::RelayChain(_, _) => 3,
+			ChainIdType::Parachain(_, _) => 4,
+			ChainIdType::CosmosSDK(_) => 5,
+			ChainIdType::Solana(_) => 6,
+		}
+	}
+}
+
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 sp_api::decl_runtime_apis! {
@@ -202,7 +242,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)>;
+		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), ProposalType)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(_block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

@@ -1,7 +1,10 @@
+use sp_runtime::traits::AtLeast32Bit;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
+
+use crate::ChainIdType;
 
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
@@ -23,15 +26,15 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct ProposalHeader {
+#[derive(Debug, Clone, PartialEq, Eq, scale_info::TypeInfo)]
+pub struct ProposalHeader<ChainId: AtLeast32Bit + Copy + Encode + Decode> {
 	pub resource_id: ResourceId,
-	pub chain_id: u32,
+	pub chain_id: ChainIdType<ChainId>,
 	pub function_sig: [u8; 4],
 	pub nonce: ProposalNonce,
 }
 
-impl Encode for ProposalHeader {
+impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Encode for ProposalHeader<ChainId> {
 	fn encode(&self) -> Vec<u8> {
 		let mut buf = Vec::new();
 		// resource_id contains the chain id already.
@@ -47,7 +50,7 @@ impl Encode for ProposalHeader {
 	}
 }
 
-impl Decode for ProposalHeader {
+impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<ChainId> {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
 		let mut data = [0u8; 40];
 		input.read(&mut data).map_err(|_| {
@@ -59,6 +62,9 @@ impl Decode for ProposalHeader {
 		// decode the resourceId is the first 32 bytes
 		let mut resource_id = [0u8; 32];
 		resource_id.copy_from_slice(&data[0..32]);
+		// the chain type is the 5th last byte of the **resourceId**
+		let mut chain_type = [0u8; 2];
+		chain_type.copy_from_slice(&data[26..28]);
 		// the chain id is the last 4 bytes of the **resourceId**
 		let mut chain_id_bytes = [0u8; 4];
 		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
@@ -70,9 +76,19 @@ impl Decode for ProposalHeader {
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
 		let nonce = u32::from_be_bytes(nonce_bytes);
-		let header = ProposalHeader {
+		#[cfg(feature = "std")]
+		println!("decode: {:?}", chain_type);
+		let header = ProposalHeader::<ChainId> {
 			resource_id,
-			chain_id,
+			chain_id: match chain_type {
+				[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
+				[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
+				[3, 0] => ChainIdType::RelayChain(b"polkadot".to_vec(), ChainId::from(chain_id)),
+				[4, 0] => ChainIdType::RelayChain(b"kusama".to_vec(), ChainId::from(chain_id)),
+				[5, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
+				[6, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
+				_ => panic!("Invalid chain type"),
+			},
 			function_sig,
 			nonce: ProposalNonce::from(nonce),
 		};
@@ -80,14 +96,18 @@ impl Decode for ProposalHeader {
 	}
 }
 
-impl From<ProposalHeader> for (u32, ProposalNonce) {
-	fn from(header: ProposalHeader) -> Self {
+impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
+	for (ChainIdType<ChainId>, ProposalNonce)
+{
+	fn from(header: ProposalHeader<ChainId>) -> Self {
 		(header.chain_id, header.nonce)
 	}
 }
 
-impl From<ProposalHeader> for (ResourceId, u32, ProposalNonce) {
-	fn from(header: ProposalHeader) -> Self {
+impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
+	for (ResourceId, ChainIdType<ChainId>, ProposalNonce)
+{
+	fn from(header: ProposalHeader<ChainId>) -> Self {
 		(header.resource_id, header.chain_id, header.nonce)
 	}
 }
@@ -181,6 +201,34 @@ impl ProposalType {
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
 		}
 	}
+
+	pub fn to_ethereum_prefixed_data(&self) -> Vec<u8> {
+		let mut prefixed_data = Vec::new();
+		prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n");
+		match self {
+			ProposalType::RefreshProposal { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			ProposalType::AnchorUpdate { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			ProposalType::TokenAdd { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			ProposalType::TokenRemove { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			ProposalType::WrappingFeeUpdate { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			ProposalType::ResourceIdUpdate { data } => {
+				prefixed_data.extend_from_slice(&data[..]);
+			},
+			_ => {},
+		}
+
+		return prefixed_data
+	}
 }
 
 pub trait ProposalHandlerTrait {
@@ -256,11 +304,12 @@ mod tests {
 	#[test]
 	fn proposal_encode_decode() {
 		let mut proposal_data = Vec::with_capacity(80);
-		let chain_id = 5002u32;
+		let chain_id = ChainIdType::EVM(5002u32);
 		let nonce = 0xffu32;
 		let resource_id = {
 			let mut r = [0u8; 32];
-			r[28..32].copy_from_slice(&chain_id.to_be_bytes());
+			r[26..28].copy_from_slice(&chain_id.to_type().to_le_bytes());
+			r[28..32].copy_from_slice(&chain_id.inner_id().to_be_bytes());
 			r
 		};
 		let function_sig = [0xaa, 0xbb, 0xcc, 0xdd];

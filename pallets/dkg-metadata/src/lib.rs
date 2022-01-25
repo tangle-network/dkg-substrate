@@ -364,7 +364,13 @@ pub mod pallet {
 	/// Tracks current proposer set
 	#[pallet::storage]
 	#[pallet::getter(fn historical_rounds)]
-	pub type HistoricalRounds<T: Config> = StorageMap<_, Blake2_256, dkg_runtime_primitives::AuthoritySetId, RoundMetadata, ValueQuery>;
+	pub type HistoricalRounds<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		dkg_runtime_primitives::AuthoritySetId,
+		RoundMetadata,
+		ValueQuery,
+	>;
 
 	/// The current signature threshold (i.e. the `t` in t-of-n)
 	#[pallet::storage]
@@ -721,11 +727,14 @@ impl<T: Config> Pallet<T> {
 			// Insert historical round metadata consisting of the current round's
 			// public key before rotation, the next round's public key, and the refresh
 			// signature signed by the current key refreshing the next.
-			HistoricalRounds::<T>::insert(next_pub_key.clone().unwrap().0, RoundMetadata {
-				curr_round_pub_key: dkg_pub_key.1.clone(),
-				next_round_pub_key: next_pub_key.clone().unwrap().1,
-				refresh_signature: next_pub_key_signature.clone().unwrap(),
-			});
+			HistoricalRounds::<T>::insert(
+				next_pub_key.clone().unwrap().0,
+				RoundMetadata {
+					curr_round_pub_key: dkg_pub_key.1.clone(),
+					next_round_pub_key: next_pub_key.clone().unwrap().1,
+					refresh_signature: next_pub_key_signature.clone().unwrap(),
+				},
+			);
 			// Set new keys
 			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
 			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap());
