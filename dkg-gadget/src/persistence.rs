@@ -71,6 +71,7 @@ pub fn store_localkey(
 		let encrypted_data = encrypt_data(serialized_data, secret_key)
 			.map_err(|e| Error::new(ErrorKind::Other, e))?;
 		fs::write(path, &encrypted_data[..])?;
+
 		Ok(())
 	} else {
 		Err(Error::new(ErrorKind::Other, "".to_string()))

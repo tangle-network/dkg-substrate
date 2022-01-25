@@ -84,6 +84,10 @@ impl<C> MultiPartyECDSARounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
 {
+	pub fn get_local_key_path(&self) -> Option<PathBuf> {
+		self.local_key_path.clone()
+	}
+
 	pub fn set_local_key(&mut self, local_key: LocalKey<Secp256k1>) {
 		self.keygen = KeygenState::Finished(Ok(local_key));
 	}
@@ -96,12 +100,33 @@ where
 		self.signer_set_id = set_id;
 	}
 
+	pub fn dkg_params(&self) -> (u16, u16, u16) {
+		(self.party_index, self.threshold, self.parties)
+	}
+
+	pub fn is_signer(&self) -> bool {
+		self.signers.contains(&self.party_index)
+	}
+
+	pub fn get_public_key(&self) -> Option<GE> {
+		match &self.keygen {
+			KeygenState::Finished(Ok(local_key)) => Some(local_key.public_key().clone()),
+			_ => None,
+		}
+	}
+
+	pub fn get_id(&self) -> RoundId {
+		self.round_id
+	}
+
 	/// A check to know if the protocol has stalled at the keygen stage,
 	/// We take it that the protocol has stalled if keygen messages are not received from other
 	/// peers after a certain interval And the keygen stage has not completed
 	pub fn has_stalled(&self) -> bool {
 		self.has_stalled
 	}
+
+	/// State machine
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		let mut results = vec![];
@@ -424,6 +449,10 @@ where
 		}
 	}
 
+	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
+		return self.votes.contains_key(&round_key)
+	}
+
 	pub fn has_finished_rounds(&self) -> bool {
 		let finished = self
 			.votes
@@ -459,29 +488,6 @@ where
 		}
 
 		finished
-	}
-
-	pub fn dkg_params(&self) -> (u16, u16, u16) {
-		(self.party_index, self.threshold, self.parties)
-	}
-
-	pub fn is_signer(&self) -> bool {
-		self.signers.contains(&self.party_index)
-	}
-
-	pub fn get_public_key(&self) -> Option<GE> {
-		match &self.keygen {
-			KeygenState::Finished(Ok(local_key)) => Some(local_key.public_key().clone()),
-			_ => None,
-		}
-	}
-
-	pub fn get_id(&self) -> RoundId {
-		self.round_id
-	}
-
-	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
-		return self.votes.contains_key(&round_key)
 	}
 
 	/// Utils

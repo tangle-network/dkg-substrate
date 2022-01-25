@@ -584,13 +584,15 @@ where
 			for result in &results {
 				if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
 					if let Some(local_keystore) = self.local_keystore.clone() {
-						let _ = store_localkey(
-							local_key,
-							round_id,
-							self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE),
-							self.key_store.clone(),
-							local_keystore,
-						);
+						if let Some(local_key_path) = rounds.get_local_key_path() {
+							let _ = store_localkey(
+								local_key,
+								round_id,
+								local_key_path,
+								self.key_store.clone(),
+								local_keystore,
+							);
+						}
 					}
 				}
 			}
@@ -602,12 +604,6 @@ where
 					round_id: rounds.get_id(),
 				};
 				let encoded_dkg_message = dkg_message.encode();
-				debug!(
-					target: "dkg",
-					"🕸️  DKG Message: {:?}, encoded: {:?}",
-					dkg_message,
-					encoded_dkg_message
-				);
 
 				let sr25519_public = self
 					.key_store
@@ -632,7 +628,7 @@ where
 						e
 					),
 				}
-				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+				trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
 			}
 			results
 		};
