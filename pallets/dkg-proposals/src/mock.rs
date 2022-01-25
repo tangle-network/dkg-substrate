@@ -244,6 +244,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type WeightInfo = ();
 }
 
 pub fn mock_dkg_id(id: u8) -> DKGId {
