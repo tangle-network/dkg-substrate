@@ -41,6 +41,9 @@ use sp_runtime::{
 };
 use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
+pub mod types;
+use types::RoundMetadata;
+
 #[cfg(test)]
 mod mock;
 
@@ -319,12 +322,6 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_nonce)]
 	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
 
-	/// Signature of the DKG public key for the next session
-	#[pallet::storage]
-	#[pallet::getter(fn next_public_key_signature)]
-	pub type NextPublicKeySignature<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
-
 	/// Session progress required to kickstart refresh process
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_delay)]
@@ -342,6 +339,11 @@ pub mod pallet {
 	pub type NextDKGPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
 
+	/// Signature of the DKG public key for the next session
+	#[pallet::storage]
+	#[pallet::getter(fn next_public_key_signature)]
+	pub type NextPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, OptionQuery>;
+
 	/// Holds active public key for ongoing session
 	#[pallet::storage]
 	#[pallet::getter(fn dkg_public_key)]
@@ -358,6 +360,11 @@ pub mod pallet {
 	#[pallet::getter(fn previous_public_key)]
 	pub type PreviousPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
+
+	/// Tracks current proposer set
+	#[pallet::storage]
+	#[pallet::getter(fn historical_rounds)]
+	pub type HistoricalRounds<T: Config> = StorageMap<_, Blake2_256, dkg_runtime_primitives::AuthoritySetId, RoundMetadata, ValueQuery>;
 
 	/// The current signature threshold (i.e. the `t` in t-of-n)
 	#[pallet::storage]
@@ -560,11 +567,8 @@ impl<T: Config> Pallet<T> {
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
-
 		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
-
 		const RECENTLY_SENT: &str = "Already submitted a key in this session";
-
 		let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
 		if let Ok(Some(submit_at)) = submit_at {
@@ -604,9 +608,7 @@ impl<T: Config> Pallet<T> {
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
 		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
-
 		const RECENTLY_SENT: &str = "Already submitted a key in this session";
-
 		let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
 		if let Ok(Some(submit_at)) = submit_at {
@@ -696,10 +698,7 @@ impl<T: Config> Pallet<T> {
 				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
-				NextPublicKeySignature::<T>::put((
-					Self::authority_set_id() + 1u64,
-					signature.clone(),
-				));
+				NextPublicKeySignature::<T>::put(signature.clone());
 				// Remove unsigned refresh proposal from queue
 				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
@@ -719,8 +718,17 @@ impl<T: Config> Pallet<T> {
 		NextDKGPublicKey::<T>::kill();
 		NextPublicKeySignature::<T>::kill();
 		if next_pub_key.is_some() && next_pub_key_signature.is_some() {
+			// Insert historical round metadata consisting of the current round's
+			// public key before rotation, the next round's public key, and the refresh
+			// signature signed by the current key refreshing the next.
+			HistoricalRounds::<T>::insert(next_pub_key.clone().unwrap().0, RoundMetadata {
+				curr_round_pub_key: dkg_pub_key.1.clone(),
+				next_round_pub_key: next_pub_key.clone().unwrap().1,
+				refresh_signature: next_pub_key_signature.clone().unwrap(),
+			});
+			// Set new keys
 			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
-			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap().1);
+			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap());
 			PreviousPublicKey::<T>::put(dkg_pub_key.clone());
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
@@ -729,7 +737,7 @@ impl<T: Config> Pallet<T> {
 			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {
-					new_key_signature: next_pub_key_signature.unwrap().1,
+					new_key_signature: next_pub_key_signature.unwrap(),
 					old_public_key: dkg_pub_key.1,
 					new_public_key: next_pub_key.unwrap().1,
 				}

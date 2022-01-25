@@ -782,10 +782,7 @@ impl_runtime_apis! {
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
-			if let Some((.., pub_key_sig)) = DKG::next_public_key_signature() {
-				return Some(pub_key_sig)
-			}
-			return None
+			DKG::next_public_key_signature()
 		}
 
 		fn dkg_pub_key() -> Option<Vec<u8>> {
