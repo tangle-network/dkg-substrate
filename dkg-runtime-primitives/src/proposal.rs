@@ -201,34 +201,6 @@ impl ProposalType {
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
 		}
 	}
-
-	pub fn to_ethereum_prefixed_data(&self) -> Vec<u8> {
-		let mut prefixed_data = Vec::new();
-		prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n");
-		match self {
-			ProposalType::RefreshProposal { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			ProposalType::AnchorUpdate { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			ProposalType::TokenAdd { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			ProposalType::TokenRemove { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			ProposalType::WrappingFeeUpdate { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			ProposalType::ResourceIdUpdate { data } => {
-				prefixed_data.extend_from_slice(&data[..]);
-			},
-			_ => {},
-		}
-
-		return prefixed_data
-	}
 }
 
 pub trait ProposalHandlerTrait {

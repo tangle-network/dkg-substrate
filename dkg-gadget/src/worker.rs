@@ -56,9 +56,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	OffchainSignedProposals, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	ChainIdType, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -1249,6 +1249,19 @@ where
 		}
 	}
 
+	fn pre_signing_proposal_handler(chain_id_type: ChainIdType<ChainId>, data: Vec<u8>) -> Vec<u8> {
+		match chain_id_type {
+			ChainIdType::EVM(_) => {
+				let hash = sp_core::keccak_256(&data);
+				let mut prefixed_data = Vec::new();
+				prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
+				prefixed_data.extend_from_slice(&hash[..]);
+				prefixed_data.to_vec()
+			},
+			_ => data,
+		}
+	}
+
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1267,6 +1280,8 @@ where
 			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
+
+			let (chain_id_type, payload_key): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
 				ProposalType::RefreshProposal { data } => {
@@ -1281,13 +1296,17 @@ where
 					let mut buf = Vec::new();
 					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
 					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
-					buf.to_vec()
+					Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
 				},
+				ProposalType::AnchorUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::TokenAdd { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::TokenRemove { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::WrappingFeeUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
-				ProposalType::AnchorUpdate { data } => data,
-				ProposalType::TokenAdd { data } => data,
-				ProposalType::TokenRemove { data } => data,
-				ProposalType::WrappingFeeUpdate { data } => data,
 				_ => continue,
 			};
 
