@@ -43,6 +43,8 @@ mod types;
 mod utils;
 mod worker;
 
+pub use keystore::DKGKeystore;
+
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 
 /// Returns the configuration value to put in

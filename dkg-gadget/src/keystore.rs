@@ -31,7 +31,7 @@ use crate::error;
 /// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize
 /// common cryptographic functionality.
 #[derive(Clone)]
-pub(crate) struct DKGKeystore(Option<SyncCryptoStorePtr>);
+pub struct DKGKeystore(Option<SyncCryptoStorePtr>);
 
 impl DKGKeystore {
 	/// Check if the keystore contains a private key for one of the public keys
