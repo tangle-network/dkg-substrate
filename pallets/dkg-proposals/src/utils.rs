@@ -8,7 +8,7 @@ pub fn derive_resource_id(chain: u32, chain_type: u16, id: &[u8]) -> ResourceId 
 	let chain_type = chain_type.to_le_bytes();
 	r_id[26] = chain_type[0];
 	r_id[27] = chain_type[1];
-	// last 4 bytes of chain id,
+	// last 4 bytes of chain id
 	r_id[28] = chain[0];
 	r_id[29] = chain[1];
 	r_id[30] = chain[2];
