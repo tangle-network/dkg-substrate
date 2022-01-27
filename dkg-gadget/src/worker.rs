@@ -605,10 +605,16 @@ where
 				};
 				let encoded_dkg_message = dkg_message.encode();
 
-				let sr25519_public = self
-					.key_store
-					.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-					.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+				let maybe_sr25519_public = self.key_store.sr25519_authority_id(
+					&self.key_store.sr25519_public_keys().unwrap_or_default(),
+				);
+				let sr25519_public = match maybe_sr25519_public {
+					Some(sr25519_public) => sr25519_public,
+					None => {
+						error!(target: "dkg", "🕸️  Could not find sr25519 key in keystore");
+						break
+					},
+				};
 
 				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
 					Ok(sig) => {
