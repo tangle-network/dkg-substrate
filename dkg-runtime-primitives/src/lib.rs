@@ -18,8 +18,9 @@ use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
+	create_runtime_str,
 	traits::{IdentifyAccount, Verify},
-	MultiSignature, RuntimeString, create_runtime_str,
+	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
@@ -212,9 +213,9 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 	pub fn to_type(&self) -> u16 {
 		match self {
 			ChainIdType::EVM(_) => 1,
-			ChainIdType::Substrate(_)
-				| ChainIdType::RelayChain(_, _)
-				| ChainIdType::Parachain(_, _) => 2,
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) => 2,
 			ChainIdType::CosmosSDK(_) => 3,
 			ChainIdType::Solana(_) => 4,
 		}
@@ -226,24 +227,22 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 		match self {
 			ChainIdType::EVM(_) => [1, 0],
 			ChainIdType::Substrate(_) => [2, 0],
-			ChainIdType::RelayChain(relay, _) => {
+			ChainIdType::RelayChain(relay, _) =>
 				if relay == &polkadot_str {
 					[2, 1]
 				} else if relay == &kusama_str {
 					[2, 2]
 				} else {
 					panic!("Unknown relay chain id: {:?}", relay);
-				}
-			},
-			ChainIdType::Parachain(relay, _) => {
+				},
+			ChainIdType::Parachain(relay, _) =>
 				if relay == &polkadot_str {
 					[2, 128]
 				} else if relay == &kusama_str {
 					[2, 129]
 				} else {
 					panic!("Unknown relay chain id: {:?}", relay);
-				}
-			},
+				},
 			ChainIdType::CosmosSDK(_) => [3, 0],
 			ChainIdType::Solana(_) => [4, 0],
 			_ => panic!("Invalid chain id type"),
@@ -254,9 +253,12 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 		match chain_type {
 			[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
 			[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
-			[2, 1] => ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
-			[2, 2] => ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
-			[2, 128] => ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
+			[2, 1] =>
+				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
+			[2, 2] =>
+				ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
+			[2, 128] =>
+				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
 			[3, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
 			[4, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
 			_ => panic!("Invalid chain id type"),

@@ -19,7 +19,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, TransactionV2, ChainIdType};
+use dkg_runtime_primitives::{keccak_256, ChainIdType, TransactionV2};
 
 use frame_support::traits::{OnFinalize, OnInitialize};
 
