@@ -1,5 +1,4 @@
 use crate::{rounds::LocalKey, types::RoundId};
-use bincode::serialize;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
@@ -11,11 +10,7 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::{
-	fs,
-	io::{Error, ErrorKind},
-	path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
@@ -65,23 +60,6 @@ pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 pub struct StoredLocalKey {
 	pub round_id: RoundId,
 	pub local_key: LocalKey<Secp256k1>,
-}
-
-pub fn store_localkey(
-	key: LocalKey<Secp256k1>,
-	round_id: RoundId,
-	path: PathBuf,
-	secret_key: Vec<u8>,
-) -> std::io::Result<()> {
-	let stored_local_key = StoredLocalKey { round_id, local_key: key };
-
-	let serialized_data = serialize(&stored_local_key)
-		.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
-
-	let encrypted_data =
-		encrypt_data(serialized_data, secret_key).map_err(|e| Error::new(ErrorKind::Other, e))?;
-	fs::write(path, &encrypted_data[..])?;
-	Ok(())
 }
 
 pub fn cleanup(path: PathBuf) -> std::io::Result<()> {

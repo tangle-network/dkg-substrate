@@ -606,20 +606,23 @@ impl<T: Config> Pallet<T> {
 							prop_wrapper.proposals.len()
 						);
 
-						// We get all batches whose submission delay has been satisfied and remove
-						// them from offchain storage
-						let mut to_remove = Vec::new();
-						for (i, (props, submit_at)) in prop_wrapper.proposals.iter().enumerate() {
-							if *submit_at <= block_number {
-								all_proposals.extend_from_slice(&props[..]);
-								to_remove.push(i);
-							}
-						}
-
-						for i in to_remove {
-							prop_wrapper.proposals.swap_remove(i);
-						}
-
+						// We get all batches whose submission delay has been satisfied
+						all_proposals =
+							prop_wrapper
+								.proposals
+								.iter()
+								.filter_map(|(props, submit_at)| {
+									if *submit_at <= block_number {
+										Some(props)
+									} else {
+										None
+									}
+								})
+								.cloned()
+								.flatten()
+								.collect::<Vec<_>>();
+						// then we need to keep only the batches that are not yet submitted
+						prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);
 						Ok(prop_wrapper)
 					},
 					Ok(None) => Err("No signed proposals key stored"),
@@ -637,10 +640,10 @@ impl<T: Config> Pallet<T> {
 		);
 
 		if res.is_err() || all_proposals.is_empty() {
-			Err("Unable to get next proposal batch")?
+			return Err("Unable to get next proposal batch")
 		}
 
-		return Ok(all_proposals)
+		Ok(all_proposals)
 	}
 
 	// *** Validation methods ***

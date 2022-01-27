@@ -46,10 +46,10 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 use dkg_primitives::{
-	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, RoundId},
+	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId},
 	AggregatedPublicKeys, ChainId, DKGReport, ProposalType,
 };
 
@@ -578,8 +578,24 @@ where
 		let send_messages = |rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 		                     authority_id: Public,
 		                     at: NumberFor<B>|
-		 -> Vec<Result<(), DKGError>> {
+		 -> Vec<Result<DKGResult, DKGError>> {
 			let results = rounds.proceed(at);
+
+			for result in &results {
+				if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
+					if let Some(local_keystore) = self.local_keystore.clone() {
+						if let Some(local_key_path) = rounds.get_local_key_path() {
+							let _ = store_localkey(
+								local_key,
+								round_id,
+								local_key_path,
+								self.key_store.clone(),
+								local_keystore,
+							);
+						}
+					}
+				}
+			}
 
 			for message in rounds.get_outgoing_messages() {
 				let dkg_message = DKGMessage {
@@ -588,17 +604,17 @@ where
 					round_id: rounds.get_id(),
 				};
 				let encoded_dkg_message = dkg_message.encode();
-				debug!(
-					target: "dkg",
-					"🕸️  DKG Message: {:?}, encoded: {:?}",
-					dkg_message,
-					encoded_dkg_message
-				);
 
-				let sr25519_public = self
-					.key_store
-					.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-					.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+				let maybe_sr25519_public = self.key_store.sr25519_authority_id(
+					&self.key_store.sr25519_public_keys().unwrap_or_default(),
+				);
+				let sr25519_public = match maybe_sr25519_public {
+					Some(sr25519_public) => sr25519_public,
+					None => {
+						error!(target: "dkg", "🕸️  Could not find sr25519 key in keystore");
+						break
+					},
+				};
 
 				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
 					Ok(sig) => {
@@ -618,7 +634,7 @@ where
 						e
 					),
 				}
-				trace!(target: "dkg", "🕸️  Sent DKG Message {:?}", encoded_dkg_message);
+				trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
 			}
 			results
 		};
@@ -640,8 +656,8 @@ where
 			}
 
 			if self.active_keygen_in_progress {
-				let is_offline_ready = rounds.is_offline_ready();
-				if is_offline_ready {
+				let is_keygen_finished = rounds.is_keygen_finished();
+				if is_keygen_finished {
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
@@ -663,8 +679,8 @@ where
 					next_rounds_send_result =
 						send_messages(&mut next_rounds, id, self.get_latest_block_number());
 
-					let is_offline_ready = next_rounds.is_offline_ready();
-					if is_offline_ready {
+					let is_keygen_finished = next_rounds.is_keygen_finished();
+					if is_keygen_finished {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
 						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
@@ -764,7 +780,7 @@ where
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
 
-				if rounds.is_offline_ready() {
+				if rounds.is_keygen_finished() {
 					debug!(target: "dkg", "🕸️  DKG is ready to sign");
 					self.dkg_state.accepted = true;
 				}
@@ -1198,7 +1214,7 @@ where
 
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = vec![];
-		if rounds.is_offline_ready() {
+		if rounds.is_keygen_finished() {
 			for (key, ..) in &unsigned_proposals {
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue

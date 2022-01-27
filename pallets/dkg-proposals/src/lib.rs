@@ -539,10 +539,7 @@ impl<T: Config> Pallet<T> {
 	/// Whitelist a chain ID for transfer
 	pub fn whitelist(id: ChainIdType<T::ChainId>) -> DispatchResultWithPostInfo {
 		// Cannot whitelist this chain
-		ensure!(
-			id != T::ChainIdentifier::get(),
-			Error::<T>::InvalidChainId
-		);
+		ensure!(id != T::ChainIdentifier::get(), Error::<T>::InvalidChainId);
 		// Cannot whitelist with an existing entry
 		ensure!(!Self::chain_whitelisted(id.clone()), Error::<T>::ChainAlreadyWhitelisted);
 		ChainNonces::<T>::insert(id.clone(), 0);
