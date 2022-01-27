@@ -35,6 +35,7 @@ use sc_client_api::{
 };
 use sc_network_gossip::GossipEngine;
 
+use rand::Rng;
 use sp_api::{
 	offchain::{OffchainStorage, STORAGE_PREFIX},
 	BlockId,
@@ -81,6 +82,8 @@ use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 pub const STORAGE_SET_RETRY_NUM: usize = 5;
+
+pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub(crate) struct WorkerParams<B, BE, C>
 where
@@ -994,7 +997,7 @@ where
 		is_gensis_round: bool,
 		round_id: RoundId,
 		keys: &AggregatedPublicKeys,
-		max_extrinsic_delay: NumberFor<B>,
+		current_block_number: NumberFor<B>,
 	) -> Result<(), DKGError> {
 		let maybe_offchain = self.backend.offchain_storage();
 		if maybe_offchain.is_none() {
@@ -1008,10 +1011,8 @@ where
 			self.dkg_state.listening_for_active_pub_key = false;
 
 			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
-			let submit_at = self.generate_random_delay(
-				&self.current_validator_set.authorities,
-				max_extrinsic_delay,
-			);
+			let submit_at =
+				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
 			if let Some(submit_at) = submit_at {
 				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
 			}
@@ -1028,8 +1029,8 @@ where
 
 			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
 
-			let submit_at = self
-				.generate_random_delay(&self.queued_validator_set.authorities, max_extrinsic_delay);
+			let submit_at =
+				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
 			if let Some(submit_at) = submit_at {
 				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
 			}
@@ -1057,17 +1058,12 @@ where
 
 		// Get authority accounts
 		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+		let current_block_number = header.number().clone();
 		let at = BlockId::hash(header.hash());
 		let authority_accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
 		if authority_accounts.is_none() {
 			return Err(DKGError::NoAuthorityAccounts)
 		}
-		let max_extrinsic_delay = self
-			.client
-			.runtime_api()
-			.get_max_extrinsic_delay(&at, *header.number())
-			.ok()
-			.unwrap_or(0u32.into());
 
 		match dkg_msg.payload {
 			DKGMsgPayload::PublicKeyBroadcast(msg) => {
@@ -1103,7 +1099,7 @@ where
 						is_main_round,
 						round_id,
 						&aggregated_public_keys,
-						max_extrinsic_delay.into(),
+						current_block_number,
 					)?;
 				}
 			},
@@ -1115,12 +1111,14 @@ where
 
 	/// Generate a random delay to wait before taking an action.
 	/// The delay is generated from a random number between 0 and `max_delay`.
-	fn generate_random_delay(
+	fn generate_delayed_submit_at(
 		&self,
-		authorities: &Vec<AuthorityId>,
-		max_delay: NumberFor<B>,
+		start: NumberFor<B>,
+		max_delay: u32,
 	) -> Option<<B::Header as Header>::Number> {
-		Some(0u32.into())
+		let mut rng = rand::thread_rng();
+		let submit_at = start + rng.gen_range(0u32..=max_delay).into();
+		Some(submit_at)
 	}
 
 	/// Rounds handling
@@ -1331,10 +1329,9 @@ where
 			return
 		}
 
-		let untrack_interval = {
+		let current_block_number = {
 			let header = self.latest_header.as_ref().unwrap();
-			let at = BlockId::hash(header.hash());
-			self.client.runtime_api().untrack_interval(&at).unwrap()
+			header.number().clone()
 		};
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {
@@ -1348,10 +1345,9 @@ where
 
 			// The signed proposals are submitted in batches, since we want to try and limit
 			// duplicate submissions as much as we can, we add a random submission delay to each
-			// batch stored in offchain storage We use the untrack_interval as the max submission
-			// delay here since it's a relatively short period of time.
-			let submit_at = self
-				.generate_random_delay(&self.current_validator_set.authorities, untrack_interval);
+			// batch stored in offchain storage
+			let submit_at =
+				self.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
 
 			if let Some(submit_at) = submit_at {
 				prop_wrapper.proposals.push((signed_proposals, submit_at))
