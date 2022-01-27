@@ -7,7 +7,7 @@
 		"dkg-refresh": "ts-node ./src/keyRefresh.ts",
 		"anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
 		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
-		"prepare": "husky install"
+		"script": "ts-node"
 	},
 	"author": "",
 	"license": "ISC",
@@ -18,6 +18,7 @@
 		"ecpair": "^1.0.0",
 		"ethers": "^5.5.2",
 		"jest": "^27.4.5",
+		"ora": "5",
 		"ts-jest": "^27.1.2",
 		"ts-node": "^10.4.0",
 		"typescript": "4.5.4"
@@ -30,7 +31,7 @@
 		"lint-staged": "^12.1.7",
 		"prettier": "2.5.1"
 	},
-  "lint-staged": {
-    "**/*": "prettier --write --ignore-unknown"
-  }
+	"lint-staged": {
+		"**/*": "prettier --write --ignore-unknown"
+	}
 }
