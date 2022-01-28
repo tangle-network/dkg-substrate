@@ -1,10 +1,9 @@
 version: "3"
 
 services:
-
   dkg_alice:
     container_name: alice
-    image: dkg-standalone
+    image: webb-tools/dkg-standalone
     ports:
       - "30333:30333"
       - "9933:9933"
@@ -90,11 +89,11 @@ services:
       - --deterministic
       # - --db=/ganache_data
       - --mnemonic
-      - 'minimum symptom minute gloom tragic situate silver mechanic salad amused elite beef'
+      - "minimum symptom minute gloom tragic situate silver mechanic salad amused elite beef"
       - --networkId
-      - '5777'
+      - "5777"
       - --hostname
-      - '0.0.0.0'
+      - "0.0.0.0"
       - --debug
 
 networks:
