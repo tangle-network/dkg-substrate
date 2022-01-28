@@ -18,19 +18,19 @@ for our testnet.
 `Alice` is our bootnode and is started like so:
 
 ```
-$ RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --alice
+$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
 ```
 
 `Bob` is started like so:
 
 ```
-RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --bob
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
 ```
 
 `Charlie` is started like so:
 
 ```
-RUST_LOG=dkg=trace ./target/debug/dkg-standalone-node --tmp --charlie
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
 ```
 
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
@@ -57,6 +57,37 @@ cargo build --release
 
 > NOTE: You _must_ use the release builds! The optimizations here are required
 > as in debug mode, it is expected that nodes are not able to run fast enough to produce blocks.
+
+### Troubleshooting for Apple Silicon users
+
+Install Homebrew if you have not already. You can check if you have it installed with the following command:
+
+```bash
+brew help
+```
+
+If you do not have it installed open the Terminal application and execute the following commands:
+
+```bash
+# Install Homebrew if necessary https://brew.sh/
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+
+# Make sure Homebrew is up-to-date, install openssl
+brew update
+brew install openssl
+```
+
+❗ **Note:** Native ARM Homebrew installations are only going to be supported at `/opt/homebrew`. After Homebrew installs, make sure to add `/opt/homebrew/bin` to your PATH.
+
+```bash
+echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.bash_profile
+```
+
+In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-darwin` Rust toolchain you need to set the following environment variables:
+
+```bash
+echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
+```
 
 ## Relay Chain
 
