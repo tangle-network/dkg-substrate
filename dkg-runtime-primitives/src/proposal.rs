@@ -1,3 +1,4 @@
+use frame_support::RuntimeDebug;
 use sp_runtime::{create_runtime_str, traits::AtLeast32Bit};
 use sp_std::hash::{Hash, Hasher};
 
@@ -12,7 +13,7 @@ pub type ResourceId = [u8; 32];
 // Proposal Nonces (4 bytes)
 pub type ProposalNonce = u32;
 
-#[derive(Clone, Encode, Decode, scale_info::TypeInfo)]
+#[derive(Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
 pub struct RefreshProposal {
 	pub nonce: ProposalNonce,
 	pub pub_key: Vec<u8>,

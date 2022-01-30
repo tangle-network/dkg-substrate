@@ -138,8 +138,9 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
-			if Self::should_refresh(n) {
+			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
+					RefreshInProgress::<T>::put(true);
 					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
 
 					let next_nonce = Self::refresh_nonce() + 1u32;
@@ -327,6 +328,11 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
 
+	/// Nonce value for next refresh proposal
+	#[pallet::storage]
+	#[pallet::getter(fn refresh_in_progress)]
+	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
+
 	/// Number of blocks that should elapse after which the dkg keygen is restarted
 	/// if it has stalled
 	#[pallet::storage]
@@ -471,6 +477,7 @@ impl<T: Config> Pallet<T> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
 	}
 
+	/// Return the current signing threshold for DKG keygen/signing.
 	pub fn sig_threshold() -> u16 {
 		Self::signature_threshold()
 	}
@@ -698,9 +705,18 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let data = RefreshProposal { nonce: refresh_nonce, pub_key: pub_key.1.clone() };
-			let encoded_data = data.encode();
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &encoded_data)
+			let uncompressed_pub_key = Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
+			let data = RefreshProposal {
+				nonce: refresh_nonce,
+				pub_key: uncompressed_pub_key
+			};
+			let mut buf = Vec::new();
+			buf.extend_from_slice(&data.nonce.to_be_bytes());
+			buf.extend_from_slice(&data.pub_key[..]);
+			let prefixed_proposal = Self::pre_signing_proposal_handler(&buf);
+			#[cfg(feature="std")]
+			println!("Prefixed proposal on-chain verify: {:?}", prefixed_proposal);
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &prefixed_proposal)
 				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
@@ -714,6 +730,14 @@ impl<T: Config> Pallet<T> {
 		}
 
 		Ok(().into())
+	}
+
+	pub fn pre_signing_proposal_handler(data: &[u8]) -> Vec<u8> {
+		let hash = dkg_runtime_primitives::keccak_256(data);
+		let mut prefixed_data = Vec::new();
+		prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
+		prefixed_data.extend_from_slice(&hash[..]);
+		prefixed_data.to_vec()
 	}
 
 	pub fn refresh_dkg_keys() {
@@ -742,7 +766,8 @@ impl<T: Config> Pallet<T> {
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
-
+			// Set refresh in progress to false
+			RefreshInProgress::<T>::put(false);
 			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {

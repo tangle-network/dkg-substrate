@@ -17,6 +17,7 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
+use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -41,7 +42,7 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor},
+	traits::{Block, Header, NumberFor, One},
 	AccountId32,
 };
 
@@ -624,7 +625,6 @@ where
 						let signed_dkg_message =
 							SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
 						let encoded_signed_dkg_message = signed_dkg_message.encode();
-
 						self.gossip_engine.lock().gossip_message(
 							dkg_topic::<B>(),
 							encoded_signed_dkg_message.clone(),
@@ -808,7 +808,10 @@ where
 			}
 		}
 
-		self.handle_public_key_broadcast(dkg_msg.clone());
+		match self.handle_public_key_broadcast(dkg_msg.clone()) {
+			Ok(()) => (),
+			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+		};
 		self.send_outgoing_dkg_messages();
 		self.process_finished_rounds();
 	}
@@ -860,7 +863,6 @@ where
 	}
 
 	/// Offchain features
-
 	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
 		let at = BlockId::hash(header.hash());
 		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
@@ -911,14 +913,16 @@ where
 
 		if let Ok(signature) = self.key_store.sr25519_sign(&sr25519_public, &public_key) {
 			let encoded_signature = signature.encode();
+			let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
+				round_id,
+				pub_key: public_key.clone(),
+				signature: encoded_signature.clone(),
+			});
+			println!("Gossiping public key: {:?}", payload.clone());
 			let message = DKGMessage::<AuthorityId> {
 				id: public.clone(),
 				round_id,
-				payload: DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
-					round_id,
-					pub_key: public_key.clone(),
-					signature: encoded_signature.clone(),
-				}),
+				payload,
 			};
 			let encoded_dkg_message = message.encode();
 
@@ -1147,7 +1151,7 @@ where
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key = <(ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let decoded_key = <(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		match decoded_key {
 			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
 				data: finished_round.payload,
@@ -1197,7 +1201,7 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as
+	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>, DKGPayloadKey) as
 	/// the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
@@ -1337,7 +1341,7 @@ where
 			return
 		}
 
-		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
 		let public = self
 			.key_store
