@@ -472,7 +472,8 @@ parameter_types! {
 }
 
 impl pallet_authorship::Config for Runtime {
-	type EventHandler = (ParachainStaking,);
+	// type EventHandler = (ParachainStaking,); // TODO(appcypher)
+	type EventHandler = (CollatorSelection,);
 	type FilterUncle = ();
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
 	type UncleGenerations = UncleGenerations;
@@ -481,14 +482,18 @@ impl pallet_authorship::Config for Runtime {
 impl pallet_session::Config for Runtime {
 	type Event = Event;
 	type Keys = SessionKeys;
-	type NextSessionRotation = ParachainStaking;
+	// type NextSessionRotation = ParachainStaking; // TODO(appcypher)
 	// Essentially just Aura, but lets be pedantic.
 	type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
-	type SessionManager = ParachainStaking;
-	type ShouldEndSession = ParachainStaking;
+	// type SessionManager = ParachainStaking; // TODO(appcypher)
+	// type ShouldEndSession = ParachainStaking; // TODO(appcypher)
+	type NextSessionRotation = CollatorSelection;
+	type SessionManager = CollatorSelection;
+	type ShouldEndSession = CollatorSelection;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	// we don't have stash and controller, thus we don't need the convert as well.
-	type ValidatorIdOf = parachain_staking::IdentityCollator;
+	// type ValidatorIdOf = parachain_staking::IdentityCollator; // TODO(appcypher)
+	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
@@ -545,12 +550,36 @@ impl parachain_staking::Config for Runtime {
 	type WeightInfo = parachain_staking::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const MinCandidates: u32 = 2;
+	pub const MaxCandidates: u32 = 100;
+	pub const MaxInvulnerables: u32 = 2;
+	pub const KickThreshold: u32 = 2;
+	pub const CollatorSelectionPalletId: PalletId = PalletId(*b"dw/cosel");
+}
+
+impl pallet_collator_selection::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type PotId = CollatorSelectionPalletId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	type KickThreshold = KickThreshold;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
+	type ValidatorRegistration = pallet_collator_selection::Registration<Self>;
+	type WeightInfo = pallet_collator_selection::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
-	type NextSessionRotation = ParachainStaking;
+	// type NextSessionRotation = ParachainStaking; // TODO(appcypher)
+	type NextSessionRotation = CollatorSelection;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
 	type ProposalHandler = DKGProposalHandler;
@@ -678,12 +707,10 @@ construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage} = 21,
 
-
-
-
 		// Collator support. the order of these 4 are important and shall not change.
 		Authorship: pallet_authorship::{Pallet, Call, Storage} = 31,
-		ParachainStaking: parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>} = 32,
+		// ParachainStaking: parachain_staking::{Pallet, Call, Storage, Event<T>, Config<T>} = 32, // TODO(appcypher)
+		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>} = 32,
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 33,
 		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 34,
 		AuraExt: cumulus_pallet_aura_ext::{Pallet, Storage, Config} = 35,
