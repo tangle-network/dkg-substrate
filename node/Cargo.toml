@@ -39,6 +39,7 @@ dkg-runtime-primitives = { path = '../dkg-runtime-primitives' }
 dkg-primitives = { path = '../dkg-primitives' }
 dkg-gadget = { path = '../dkg-gadget' }
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
+pallet-collator-selection = { package = 'pallet-collator-selection', path = '../pallets/collator-selection', default-features = false }
 
 # Substrate Dependencies
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "master" }

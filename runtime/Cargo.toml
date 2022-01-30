@@ -22,6 +22,7 @@ hex-literal = { version = "0.3", optional = true }
 
 # Local Dependencies
 parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
+pallet-collator-selection = { package = 'pallet-collator-selection', path = '../pallets/collator-selection', default-features = false }
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
 pallet-dkg-mmr = { path = '../pallets/dkg-mmr', default-features = false }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
@@ -141,6 +142,7 @@ std = [
 	'pallet-authorship/std',
 	'pallet-session/std',
 	'parachain-staking/std',
+	'pallet-collator-selection/std',
 	'pallet-dkg-metadata/std',
 	'dkg-runtime-primitives/std',
 	'pallet-dkg-proposals/std',

@@ -1997,6 +1997,7 @@ dependencies = [
  "hex-literal",
  "jsonrpc-core",
  "log",
+ "pallet-collator-selection",
  "pallet-parachain-staking",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
@@ -2095,6 +2096,7 @@ dependencies = [
  "pallet-aura",
  "pallet-authorship",
  "pallet-balances",
+ "pallet-collator-selection",
  "pallet-dkg-metadata",
  "pallet-dkg-mmr",
  "pallet-dkg-proposal-handler",
@@ -5544,6 +5546,32 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "pallet-collator-selection"
+version = "3.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-aura",
+ "pallet-authorship",
+ "pallet-balances",
+ "pallet-session",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "rand 0.7.3",
+ "scale-info",
+ "serde",
+ "sp-consensus-aura",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-staking",
+ "sp-std",
+ "sp-tracing",
 ]
 
 [[package]]
