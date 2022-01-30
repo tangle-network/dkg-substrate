@@ -142,13 +142,11 @@ pub mod pallet {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					RefreshInProgress::<T>::put(true);
 					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
-
 					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
 						nonce: next_nonce,
 						pub_key: uncompressed_pub_key,
 					};
-
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
 							RefreshNonce::<T>::put(next_nonce);

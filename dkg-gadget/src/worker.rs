@@ -494,7 +494,7 @@ where
 			// Authority set change or genesis set id triggers new voting rounds
 			//
 			// TODO: Enacting a new authority set will also implicitly 'conclude'
-			// the currently active DKG voting round by starting a new one.
+			//		 the currently active DKG voting round by starting a new one.
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
@@ -511,14 +511,6 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-
-				let at = BlockId::hash(header.hash());
-				// Reset refresh status
-				self.refresh_in_progress = self
-					.client
-					.runtime_api()
-					.should_refresh(&at, *header.number())
-					.unwrap_or(false);
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -918,7 +910,7 @@ where
 				pub_key: public_key.clone(),
 				signature: encoded_signature.clone(),
 			});
-			println!("Gossiping public key: {:?}", payload.clone());
+
 			let message = DKGMessage::<AuthorityId> {
 				id: public.clone(),
 				round_id,

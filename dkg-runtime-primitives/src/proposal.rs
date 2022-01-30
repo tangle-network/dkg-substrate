@@ -77,8 +77,6 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
 		let nonce = u32::from_be_bytes(nonce_bytes);
-		#[cfg(feature = "std")]
-		println!("decode: {:?}", chain_type);
 		let header = ProposalHeader::<ChainId> {
 			resource_id,
 			chain_id: match chain_type {
