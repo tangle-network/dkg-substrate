@@ -703,19 +703,20 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let uncompressed_pub_key = Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
-			let data = RefreshProposal {
-				nonce: refresh_nonce,
-				pub_key: uncompressed_pub_key
-			};
+			let uncompressed_pub_key =
+				Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
+			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
 			let mut buf = Vec::new();
 			buf.extend_from_slice(&data.nonce.to_be_bytes());
 			buf.extend_from_slice(&data.pub_key[..]);
 			let prefixed_proposal = Self::pre_signing_proposal_handler(&buf);
-			#[cfg(feature="std")]
+			#[cfg(feature = "std")]
 			println!("Prefixed proposal on-chain verify: {:?}", prefixed_proposal);
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &prefixed_proposal)
-				.map_err(|_| Error::<T>::InvalidSignature)?;
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(
+				&signature,
+				&prefixed_proposal,
+			)
+			.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put(signature.clone());

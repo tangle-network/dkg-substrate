@@ -911,11 +911,7 @@ where
 				signature: encoded_signature.clone(),
 			});
 
-			let message = DKGMessage::<AuthorityId> {
-				id: public.clone(),
-				round_id,
-				payload,
-			};
+			let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
 			let encoded_dkg_message = message.encode();
 
 			match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -1143,7 +1139,8 @@ where
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key = <(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let decoded_key =
+			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		match decoded_key {
 			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
 				data: finished_round.payload,
@@ -1193,8 +1190,8 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>, DKGPayloadKey) as
-	/// the round key
+	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
+	/// DKGPayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return

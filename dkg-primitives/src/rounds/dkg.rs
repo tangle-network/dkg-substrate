@@ -1,5 +1,5 @@
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use log::{error, info, trace, warn, debug};
+use log::{debug, error, info, trace, warn};
 
 use sc_keystore::LocalKeystore;
 use sp_core::sr25519;
