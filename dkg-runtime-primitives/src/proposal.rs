@@ -90,7 +90,7 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 					ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
 				[4, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
 				[5, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
-				_ => panic!("Invalid chain type"),
+				_ => return Err(codec::Error::from("invalid chain type")),
 			},
 			function_sig,
 			nonce: ProposalNonce::from(nonce),
