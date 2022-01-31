@@ -1,6 +1,5 @@
 use cumulus_primitives_core::ParaId;
-use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT};
-use parachain_staking::{InflationInfo, Range};
+use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT, UNIT};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -222,14 +221,10 @@ fn testnet_genesis(
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
 		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
-		parachain_staking: dkg_runtime::ParachainStakingConfig {
-			candidates: candidates
-				.iter()
-				.cloned()
-				.map(|(account, _, _, bond)| (account, bond))
-				.collect(),
-			nominations,
-			inflation_config: dkg_inflation_config(),
+		collator_selection: parachain_template_runtime::CollatorSelectionConfig {
+			invulnerables: vec![],
+			candidacy_bond: UNIT * 16,
+			..Default::default()
 		},
 		session: dkg_runtime::SessionConfig {
 			keys: candidates

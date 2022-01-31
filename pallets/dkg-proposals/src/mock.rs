@@ -42,7 +42,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Config<T>, Event<T>},
+		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
@@ -174,58 +174,24 @@ impl pallet_aura::Config for Test {
 	type MaxAuthorities = MaxAuthorities;
 }
 
+parameter_types! {
+	pub const Offset: u64 = 0;
+	pub const Period: u64 = 10;
+}
+
 impl pallet_session::Config for Test {
 	type Event = Event;
-	type ValidatorId = AccountId;
-	type ValidatorIdOf = ConvertInto;
-	type ShouldEndSession = ParachainStaking;
-	type NextSessionRotation = ParachainStaking;
-	type SessionManager = ParachainStaking;
-	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	// we don't have stash and controller, thus we don't need the convert as well.
+	type ValidatorIdOf = IdentityCollator;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type SessionManager = CollatorSelection;
+	type SessionHandler = TestSessionHandler;
 	type Keys = MockSessionKeys;
 	type WeightInfo = ();
 }
 
-parameter_types! {
-	pub const MinBlocksPerRound: u32 = 3;
-	pub const BlocksPerRound: u32 = 5;
-	pub const LeaveCandidatesDelay: u32 = 2;
-	pub const LeaveNominatorsDelay: u32 = 2;
-	pub const RevokeNominationDelay: u32 = 2;
-	pub const RewardPaymentDelay: u32 = 2;
-	pub const MinSelectedCandidates: u32 = 5;
-	pub const MaxNominatorsPerCollator: u32 = 4;
-	pub const MaxCollatorsPerNominator: u32 = 4;
-	pub const DefaultCollatorCommission: Perbill = Perbill::from_percent(20);
-	pub const DefaultParachainBondReservePercent: Percent = Percent::from_percent(30);
-	pub const MinCollatorStk: u64 = 10;
-	pub const MinNominatorStk: u64 = 5;
-	pub const MinNomination: u64 = 3;
-	pub const ParachainStakingPalletId: PalletId = PalletId(*b"dw/pcstk");
-}
-
-impl pallet_parachain_staking::Config for Test {
-	type BlocksPerRound = BlocksPerRound;
-	type PalletId = ParachainStakingPalletId;
-	type Currency = Balances;
-	type DefaultCollatorCommission = DefaultCollatorCommission;
-	type DefaultParachainBondReservePercent = DefaultParachainBondReservePercent;
-	type Event = Event;
-	type LeaveCandidatesDelay = LeaveCandidatesDelay;
-	type LeaveNominatorsDelay = LeaveNominatorsDelay;
-	type MaxCollatorsPerNominator = MaxCollatorsPerNominator;
-	type MaxNominatorsPerCollator = MaxNominatorsPerCollator;
-	type MinBlocksPerRound = MinBlocksPerRound;
-	type MinCollatorCandidateStk = MinCollatorStk;
-	type MinCollatorStk = MinCollatorStk;
-	type MinNomination = MinNomination;
-	type MinNominatorStk = MinNominatorStk;
-	type MinSelectedCandidates = MinSelectedCandidates;
-	type MonetaryGovernanceOrigin = frame_system::EnsureRoot<AccountId>;
-	type RevokeNominationDelay = RevokeNominationDelay;
-	type RewardPaymentDelay = RewardPaymentDelay;
-	type WeightInfo = ();
-}
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
@@ -244,6 +210,40 @@ impl pallet_dkg_proposals::Config for Test {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const PotId: PalletId = PalletId(*b"PotStake");
+	pub const MaxCandidates: u32 = 20;
+	pub const MaxInvulnerables: u32 = 20;
+	pub const MinCandidates: u32 = 1;
+	pub const MaxAuthorities: u32 = 100_000;
+}
+
+pub struct IsRegistered;
+impl ValidatorRegistration<u64> for IsRegistered {
+	fn is_registered(id: &u64) -> bool {
+		if *id == 7u64 {
+			false
+		} else {
+			true
+		}
+	}
+}
+
+impl Config for Test {
+	type Event = Event;
+	type Currency = Balances;
+	type UpdateOrigin = EnsureSignedBy<RootAccount, u64>;
+	type PotId = PotId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	type KickThreshold = Period;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = IdentityCollator;
+	type ValidatorRegistration = IsRegistered;
 	type WeightInfo = ();
 }
 
@@ -318,19 +318,8 @@ impl ExtBuilder {
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
-
-		pallet_parachain_staking::GenesisConfig::<Test> {
-			nominations: vec![],
-			candidates: candidates
-				.iter()
-				.cloned()
-				.map(|(account, _, bond)| (account, bond))
-				.collect(),
-			inflation_config: Default::default(),
-		}
-		.assimilate_storage(&mut t)
-		.unwrap();
-
+		// collator selection must be initialized before session.
+		pallet_collator_selection.assimilate_storage(&mut t).unwrap();
 		pallet_session::GenesisConfig::<Test> {
 			keys: candidates
 				.iter()

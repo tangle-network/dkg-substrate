@@ -31,7 +31,6 @@ frame-benchmarking = { default-features = false, git = "https://github.com/parit
 
 [dev-dependencies]
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
-pallet-parachain-staking = { path = "../parachain-staking" }
 pallet-dkg-metadata = { path = "../dkg-metadata" }
 pallet-aura = { git = "https://github.com/paritytech/substrate.git", branch = "master" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate.git", branch = "master" }
