@@ -5767,6 +5767,7 @@ dependencies = [
  "frame-system-benchmarking",
  "pallet-aura",
  "pallet-balances",
+ "pallet-collator-selection",
  "pallet-dkg-metadata",
  "pallet-dkg-proposal-handler",
  "pallet-session",

@@ -30,6 +30,7 @@ frame-system-benchmarking = { default-features = false, git = "https://github.co
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'master', optional = true }
 
 [dev-dependencies]
+pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "master", default-features = false }
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
 pallet-dkg-metadata = { path = "../dkg-metadata" }
 pallet-aura = { git = "https://github.com/paritytech/substrate.git", branch = "master" }
@@ -50,6 +51,7 @@ std = [
 	"frame-system/std",
 	'frame-benchmarking/std',
 	"pallet-balances/std",
+	"pallet-collator-selection/std",
 	"dkg-runtime-primitives/std",
 ]
 runtime-benchmarks = [

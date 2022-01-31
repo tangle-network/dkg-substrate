@@ -145,7 +145,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
-	type NextSessionRotation = ParachainStaking;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
 	type ProposalHandler = ();
@@ -258,7 +258,7 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 pub(crate) fn roll_to(n: u64) {
 	while System::block_number() < n {
 		Balances::on_finalize(System::block_number());
-		ParachainStaking::on_finalize(System::block_number());
+		CollatorSelection::on_finalize(System::block_number());
 		Session::on_finalize(System::block_number());
 		Aura::on_finalize(System::block_number());
 		System::on_finalize(System::block_number());
@@ -266,7 +266,7 @@ pub(crate) fn roll_to(n: u64) {
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
 		Balances::on_initialize(System::block_number());
-		ParachainStaking::on_initialize(System::block_number());
+		CollatorSelection::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
@@ -319,6 +319,7 @@ impl ExtBuilder {
 		.assimilate_storage(&mut t)
 		.unwrap();
 		// collator selection must be initialized before session.
+		// TODO: Add candidates to the collator selection system directly.
 		pallet_collator_selection.assimilate_storage(&mut t).unwrap();
 		pallet_session::GenesisConfig::<Test> {
 			keys: candidates
