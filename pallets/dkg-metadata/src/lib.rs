@@ -29,7 +29,7 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	ProposalType, RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
 	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
 	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
@@ -135,7 +135,7 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
-			if Self::should_refresh(n) {
+			if Self::should_refresh(n) && !Self::is_refreshing() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
 
@@ -682,6 +682,10 @@ impl<T: Config> Pallet<T> {
 			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
 		}
 		false
+	}
+
+	pub fn is_refreshing() -> bool {
+		T::ProposalHandler::has_unsigned_refresh_proposals()
 	}
 
 	pub fn verify_pub_key_signature(

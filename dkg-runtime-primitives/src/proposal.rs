@@ -204,6 +204,10 @@ pub trait ProposalHandlerTrait {
 		Ok(().into())
 	}
 
+	fn has_unsigned_refresh_proposals() -> bool {
+		false
+	}
+
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
 	) -> frame_support::pallet_prelude::DispatchResult {

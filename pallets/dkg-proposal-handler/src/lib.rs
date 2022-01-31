@@ -304,6 +304,17 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(().into())
 	}
 
+	fn has_unsigned_refresh_proposals() -> bool {
+		let refresh_cnt = UnsignedProposalQueue::<T>::iter()
+			.filter(|entry| match &entry.2 {
+				ProposalType::RefreshProposal { data: _ } => true,
+				_ => false,
+			})
+			.count();
+
+		refresh_cnt > 0
+	}
+
 	fn handle_signed_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
