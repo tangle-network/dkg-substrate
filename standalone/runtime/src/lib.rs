@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
-	mmr::MmrLeafVersion, ChainId, DKGPayloadKey, ProposalNonce, ProposalType,
+	mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, ProposalNonce, ProposalType,
 };
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
@@ -236,7 +236,7 @@ impl pallet_timestamp::Config for Runtime {
 
 parameter_types! {
 	// How often we trigger a new session. (Number of blocks * BLOCK_TIME)
-	pub const Period: BlockNumber = 30;
+	pub const Period: BlockNumber = 20;
 	pub const Offset: BlockNumber = 0;
 }
 
@@ -515,7 +515,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: u32 = 5;
+	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(50);
@@ -819,10 +819,7 @@ impl_runtime_apis! {
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
-			if let Some((.., pub_key_sig)) = DKG::next_public_key_signature() {
-				return Some(pub_key_sig)
-			}
-			return None
+			DKG::next_public_key_signature()
 		}
 
 		fn dkg_pub_key() -> Option<Vec<u8>> {
@@ -833,7 +830,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 

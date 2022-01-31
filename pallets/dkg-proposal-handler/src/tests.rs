@@ -6,7 +6,7 @@ use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
-	DKGPayloadKey, EIP2930Transaction, OffchainSignedProposals, ProposalAction,
+	ChainIdType, DKGPayloadKey, EIP2930Transaction, OffchainSignedProposals, ProposalAction,
 	ProposalHandlerTrait, ProposalHeader, ProposalType, TransactionAction, TransactionV2,
 	OFFCHAIN_SIGNED_PROPOSALS, U256,
 };
@@ -73,7 +73,11 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 	})
@@ -83,8 +87,8 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 fn handle_anchor_update_proposal_success() {
 	execute_test_with(|| {
 		let proposal_raw: Vec<u8> = vec![
-			0, 0, 0, 0, 0, 0, 0, 0, 223, 22, 158, 136, 193, 21, 177, 236, 107, 47, 234, 158, 193,
-			108, 153, 64, 171, 132, 14, 7, 0, 0, 5, 57, 68, 52, 123, 169, 0, 0, 0, 1, 0, 0, 122,
+			0, 0, 0, 0, 0, 0, 223, 22, 158, 136, 193, 21, 177, 236, 107, 47, 234, 158, 193, 108,
+			153, 64, 171, 132, 14, 7, 1, 0, 0, 0, 5, 57, 68, 52, 123, 169, 0, 0, 0, 1, 0, 0, 122,
 			105, 0, 0, 0, 0, 37, 168, 34, 127, 179, 164, 10, 49, 149, 165, 172, 173, 194, 178, 58,
 			98, 176, 16, 209, 39, 221, 166, 75, 249, 181, 131, 238, 94, 88, 214, 203, 31,
 		];
@@ -108,7 +112,11 @@ fn store_signed_proposal_offchain() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -130,7 +138,11 @@ fn submit_signed_proposal_onchain_success() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -154,7 +166,11 @@ fn submit_signed_proposal_success() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -166,11 +182,19 @@ fn submit_signed_proposal_success() {
 		));
 
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_none(),
 			true
 		);
 		assert_eq!(
-			DKGProposalHandler::signed_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::signed_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 	});
@@ -187,7 +211,11 @@ fn submit_signed_proposal_already_exists() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -199,11 +227,19 @@ fn submit_signed_proposal_already_exists() {
 		));
 
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_none(),
 			true
 		);
 		assert_eq!(
-			DKGProposalHandler::signed_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::signed_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -213,7 +249,11 @@ fn submit_signed_proposal_already_exists() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -223,11 +263,19 @@ fn submit_signed_proposal_already_exists() {
 		));
 
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_none(),
 			true
 		);
 		assert_eq!(
-			DKGProposalHandler::signed_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::signed_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 	});
@@ -256,7 +304,11 @@ fn submit_signed_proposal_fail_invalid_sig() {
 			ProposalAction::Sign(0)
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 
@@ -274,11 +326,19 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		);
 
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(0, DKGPayloadKey::EVMProposal(0)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_some(),
 			true
 		);
 		assert_eq!(
-			DKGProposalHandler::signed_proposals(0, DKGPayloadKey::EVMProposal(0)).is_none(),
+			DKGProposalHandler::signed_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::EVMProposal(0)
+			)
+			.is_none(),
 			true
 		);
 	});
@@ -286,12 +346,12 @@ fn submit_signed_proposal_fail_invalid_sig() {
 
 pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
 	// Create the proposal Header
-	let mut header = ProposalHeader {
+	let mut header = ProposalHeader::<u32> {
 		resource_id: [
-			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
 			0, 0, 1,
 		],
-		chain_id: 1,
+		chain_id: ChainIdType::EVM(1),
 		function_sig: [0x26, 0x57, 0x88, 0x01],
 		nonce: 1,
 	};
@@ -333,7 +393,11 @@ fn force_submit_should_work_with_valid_proposals() {
 			make_proposal::<20>(ProposalType::TokenAdd { data: vec![] })
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenAddProposal(1)).is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::TokenAddProposal(1)
+			)
+			.is_some(),
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
@@ -341,8 +405,11 @@ fn force_submit_should_work_with_valid_proposals() {
 			make_proposal::<20>(ProposalType::TokenRemove { data: vec![] })
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::TokenRemoveProposal(1))
-				.is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::TokenRemoveProposal(1)
+			)
+			.is_some(),
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
@@ -350,8 +417,11 @@ fn force_submit_should_work_with_valid_proposals() {
 			make_proposal::<1>(ProposalType::WrappingFeeUpdate { data: vec![] })
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
-				.is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+			)
+			.is_some(),
 			true
 		);
 
@@ -360,8 +430,11 @@ fn force_submit_should_work_with_valid_proposals() {
 			make_proposal::<72>(ProposalType::ResourceIdUpdate { data: vec![] })
 		));
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(1, DKGPayloadKey::WrappingFeeUpdateProposal(1))
-				.is_some(),
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+			)
+			.is_some(),
 			true
 		);
 	});

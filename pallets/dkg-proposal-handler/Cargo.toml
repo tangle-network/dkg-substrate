@@ -42,7 +42,7 @@ runtime-benchmarks = [
 	"hex-literal", 
 	"frame-system/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
-	"pallet-dkg-metadata/runtime-benchmarks"
+	"pallet-dkg-metadata/runtime-benchmarks",
 ]
 std = [
 	"codec/std",
@@ -55,5 +55,5 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"dkg-runtime-primitives/std",
-	"pallet-dkg-metadata/std"
+	"pallet-dkg-metadata/std",
 ]

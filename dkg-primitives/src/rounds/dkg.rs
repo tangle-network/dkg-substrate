@@ -1,5 +1,5 @@
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 
 use sc_keystore::LocalKeystore;
 use sp_core::sr25519;
@@ -37,7 +37,7 @@ where
 }
 
 /// State machine structure for performing Keygen, Offline stage and Sign rounds
-/// HashMap and BtreeMap keys are encoded formats of (ChainId, DKGPayloadKey)
+/// HashMap and BtreeMap keys are encoded formats of (ChainIdType<ChainId>, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
 #[derive(TypedBuilder)]
@@ -385,7 +385,7 @@ where
 
 			match SignManual::new(hash, completed_offline.clone()) {
 				Ok((sign_manual, sig)) => {
-					trace!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
+					debug!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
 					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
 						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))

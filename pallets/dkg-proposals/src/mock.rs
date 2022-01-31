@@ -106,7 +106,7 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: u32 = 5;
+	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
@@ -357,7 +357,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub fn new_test_ext_initialized(
-	src_id: <Test as pallet::Config>::ChainId,
+	src_id: ChainIdType<<Test as pallet::Config>::ChainId>,
 	r_id: ResourceId,
 	resource: Vec<u8>,
 ) -> sp_io::TestExternalities {

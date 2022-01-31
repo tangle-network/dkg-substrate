@@ -17,6 +17,7 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
+use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -41,7 +42,7 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor},
+	traits::{Block, Header, NumberFor, One},
 	AccountId32,
 };
 
@@ -57,9 +58,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	OffchainSignedProposals, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	ChainIdType, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -493,7 +494,7 @@ where
 			// Authority set change or genesis set id triggers new voting rounds
 			//
 			// TODO: Enacting a new authority set will also implicitly 'conclude'
-			// the currently active DKG voting round by starting a new one.
+			//		 the currently active DKG voting round by starting a new one.
 			if active.id != self.current_validator_set.id ||
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
@@ -510,14 +511,6 @@ where
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-
-				let at = BlockId::hash(header.hash());
-				// Reset refresh status
-				self.refresh_in_progress = self
-					.client
-					.runtime_api()
-					.should_refresh(&at, *header.number())
-					.unwrap_or(false);
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
@@ -608,17 +601,22 @@ where
 				};
 				let encoded_dkg_message = dkg_message.encode();
 
-				let sr25519_public = self
-					.key_store
-					.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-					.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+				let maybe_sr25519_public = self.key_store.sr25519_authority_id(
+					&self.key_store.sr25519_public_keys().unwrap_or_default(),
+				);
+				let sr25519_public = match maybe_sr25519_public {
+					Some(sr25519_public) => sr25519_public,
+					None => {
+						error!(target: "dkg", "🕸️  Could not find sr25519 key in keystore");
+						break
+					},
+				};
 
 				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
 					Ok(sig) => {
 						let signed_dkg_message =
 							SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
 						let encoded_signed_dkg_message = signed_dkg_message.encode();
-
 						self.gossip_engine.lock().gossip_message(
 							dkg_topic::<B>(),
 							encoded_signed_dkg_message.clone(),
@@ -802,7 +800,10 @@ where
 			}
 		}
 
-		self.handle_public_key_broadcast(dkg_msg.clone());
+		match self.handle_public_key_broadcast(dkg_msg.clone()) {
+			Ok(()) => (),
+			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+		};
 		self.send_outgoing_dkg_messages();
 		self.process_finished_rounds();
 	}
@@ -854,7 +855,6 @@ where
 	}
 
 	/// Offchain features
-
 	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
 		let at = BlockId::hash(header.hash());
 		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
@@ -905,15 +905,13 @@ where
 
 		if let Ok(signature) = self.key_store.sr25519_sign(&sr25519_public, &public_key) {
 			let encoded_signature = signature.encode();
-			let message = DKGMessage::<AuthorityId> {
-				id: public.clone(),
+			let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
 				round_id,
-				payload: DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
-					round_id,
-					pub_key: public_key.clone(),
-					signature: encoded_signature.clone(),
-				}),
-			};
+				pub_key: public_key.clone(),
+				signature: encoded_signature.clone(),
+			});
+
+			let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
 			let encoded_dkg_message = message.encode();
 
 			match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -1141,7 +1139,8 @@ where
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key = <(ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let decoded_key =
+			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		match decoded_key {
 			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
 				data: finished_round.payload,
@@ -1191,8 +1190,8 @@ where
 		}
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (ChainId, DKGPayloadKey) as
-	/// the round key
+	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
+	/// DKGPayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1257,6 +1256,19 @@ where
 		}
 	}
 
+	fn pre_signing_proposal_handler(chain_id_type: ChainIdType<ChainId>, data: Vec<u8>) -> Vec<u8> {
+		match chain_id_type {
+			ChainIdType::EVM(_) => {
+				let hash = sp_core::keccak_256(&data);
+				let mut prefixed_data = Vec::new();
+				prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
+				prefixed_data.extend_from_slice(&hash[..]);
+				prefixed_data.to_vec()
+			},
+			_ => data,
+		}
+	}
+
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1275,6 +1287,8 @@ where
 			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
+
+			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
 				ProposalType::RefreshProposal { data } => {
@@ -1289,13 +1303,17 @@ where
 					let mut buf = Vec::new();
 					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
 					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
-					buf.to_vec()
+					Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
 				},
+				ProposalType::AnchorUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::TokenAdd { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::TokenRemove { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::WrappingFeeUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
-				ProposalType::AnchorUpdate { data } => data,
-				ProposalType::TokenAdd { data } => data,
-				ProposalType::TokenRemove { data } => data,
-				ProposalType::WrappingFeeUpdate { data } => data,
 				_ => continue,
 			};
 
@@ -1312,7 +1330,7 @@ where
 			return
 		}
 
-		debug!(target: "dkg", "🕸️  saving signed proposal in offchain starage");
+		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
 		let public = self
 			.key_store

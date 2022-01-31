@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, DKGPayloadKey, ProposalNonce, ProposalType};
+use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, ProposalNonce, ProposalType};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -557,7 +557,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: u32 = 5;
+	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Parachain(create_runtime_str!("webb"), 5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
@@ -783,10 +783,7 @@ impl_runtime_apis! {
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
-			if let Some((.., pub_key_sig)) = DKG::next_public_key_signature() {
-				return Some(pub_key_sig)
-			}
-			return None
+			DKG::next_public_key_signature()
 		}
 
 		fn dkg_pub_key() -> Option<Vec<u8>> {
@@ -797,7 +794,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<((ChainId, DKGPayloadKey), ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), ProposalType)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
