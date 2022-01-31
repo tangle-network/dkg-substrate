@@ -794,7 +794,7 @@ impl<T: Config> Pallet<T> {
 		let header = Self::decode_proposal_header(data)?;
 		let mut new_token_address_bytes = [0u8; 20];
 		new_token_address_bytes.copy_from_slice(&data[40..60]);
-		let new_token_address = Address::from(new_token_address_bytes);
+		let _new_token_address = Address::from(new_token_address_bytes);
 		Ok(header)
 	}
 
@@ -806,7 +806,7 @@ impl<T: Config> Pallet<T> {
 		let header = Self::decode_proposal_header(data)?;
 		let mut token_address_bytes = [0u8; 20];
 		token_address_bytes.copy_from_slice(&data[40..60]);
-		let token_address = Address::from(token_address_bytes);
+		let _token_address = Address::from(token_address_bytes);
 		Ok(header)
 	}
 
@@ -821,10 +821,10 @@ impl<T: Config> Pallet<T> {
 		new_resource_id_bytes.copy_from_slice(&data[40..72]);
 		let mut handler_address_bytes = [0u8; 20];
 		handler_address_bytes.copy_from_slice(&data[72..92]);
-		let handler_address = Address::from(handler_address_bytes);
+		let _handler_address = Address::from(handler_address_bytes);
 		let mut execution_context_address_bytes = [0u8; 20];
 		execution_context_address_bytes.copy_from_slice(&data[92..112]);
-		let execution_context_address = Address::from(execution_context_address_bytes);
+		let _execution_context_address = Address::from(execution_context_address_bytes);
 		Ok(header)
 	}
 
