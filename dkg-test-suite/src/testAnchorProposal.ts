@@ -2,6 +2,7 @@ import { ApiPromise } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
 import {
 	AnchorUpdateProposal,
+	ChainIdType,
 	encodeUpdateAnchorProposal,
 	hexToBytes,
 	makeResourceId,
@@ -13,7 +14,11 @@ import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
 
-const resourceId = makeResourceId('0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667', 5002);
+const resourceId = makeResourceId(
+	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+	ChainIdType.EVM,
+	5002
+);
 const anchorUpdateProposal: AnchorUpdateProposal = {
 	header: {
 		resourceId,
@@ -37,9 +42,9 @@ async function testAnchorProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
 	).publicKey.toString('hex');
-
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', { EVM: 5002 });
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
-		5002,
+		chainIdType,
 		{ anchorupdateproposal: 0 },
 		(res: any) => {
 			if (res) {
@@ -87,7 +92,8 @@ async function sendAnchorProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(0, 5001, resourceId, prop);
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', { EVM: 5001 });
+	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(0, chainIdType, resourceId, prop);
 
 	const unsub = await proposalCall.signAndSend(alice, ({ events = [], status }) => {
 		console.log(`Current status is: ${status.type}`);
