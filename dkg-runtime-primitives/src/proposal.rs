@@ -126,6 +126,8 @@ pub enum DKGPayloadKey {
 	ResourceIdUpdateProposal(ProposalNonce),
 	MaxDepositLimitUpdateProposal(ProposalNonce),
 	MinWithdrawLimitUpdateProposal(ProposalNonce),
+	MaxExtLimitUpdateProposal(ProposalNonce),
+	MaxFeeLimitUpdateProposal(ProposalNonce),
 }
 
 impl PartialEq for DKGPayloadKey {
@@ -138,6 +140,10 @@ impl PartialEq for DKGPayloadKey {
 			(Self::TokenRemoveProposal(l0), Self::TokenRemoveProposal(r0)) => l0 == r0,
 			(Self::WrappingFeeUpdateProposal(l0), Self::WrappingFeeUpdateProposal(r0)) => l0 == r0,
 			(Self::ResourceIdUpdateProposal(l0), Self::ResourceIdUpdateProposal(r0)) => l0 == r0,
+			(Self::MaxDepositLimitUpdateProposal(l0), Self::MaxDepositLimitUpdateProposal(r0)) => l0 == r0,
+			(Self::MinWithdrawLimitUpdateProposal(l0), Self::MinWithdrawLimitUpdateProposal(r0)) => l0 == r0,
+			(Self::MaxExtLimitUpdateProposal(l0), Self::MaxExtLimitUpdateProposal(r0)) => l0 == r0,
+			(Self::MaxFeeLimitUpdateProposal(l0), Self::MaxFeeLimitUpdateProposal(r0)) => l0 == r0,
 			_ => false,
 		}
 	}
@@ -168,10 +174,14 @@ pub enum ProposalType {
 	WrappingFeeUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 	ResourceIdUpdate { data: Vec<u8> },
 	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	MaxDepositLimitUpdateProposal { data: Vec<u8> },
-	MaxDepositLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
-	MinWithdrawalLimitUpdateProposal { data: Vec<u8> },
-	MinWithdrawalLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
+	MaxDepositLimitUpdate { data: Vec<u8> },
+	MaxDepositLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+	MinWithdrawalLimitUpdate { data: Vec<u8> },
+	MinWithdrawalLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+	MaxExtLimitUpdate { data: Vec<u8> },
+	MaxExtLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+	MaxFeeLimitUpdate { data: Vec<u8> },
+	MaxFeeLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 impl ProposalType {
@@ -190,10 +200,14 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => data.clone(),
 			ProposalType::ResourceIdUpdate { data } => data.clone(),
 			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
-			ProposalType::MaxDepositLimitUpdateProposal { data } => data.clone(),
-			ProposalType::MaxDepositLimitUpdateProposalSigned { data, .. } => data.clone(),
-			ProposalType::MinWithdrawalLimitUpdateProposal { data } => data.clone(),
-			ProposalType::MinWithdrawalLimitUpdateProposalSigned { data, .. } => data.clone(),
+			ProposalType::MaxDepositLimitUpdate { data } => data.clone(),
+			ProposalType::MaxDepositLimitUpdateSigned { data, .. } => data.clone(),
+			ProposalType::MinWithdrawalLimitUpdate { data } => data.clone(),
+			ProposalType::MinWithdrawalLimitUpdateSigned { data, .. } => data.clone(),
+			ProposalType::MaxExtLimitUpdate { data } => data.clone(),
+			ProposalType::MaxExtLimitUpdateSigned { data, .. } => data.clone(),
+			ProposalType::MaxFeeLimitUpdate { data } => data.clone(),
+			ProposalType::MaxFeeLimitUpdateSigned { data, .. } => data.clone(),
 		}
 	}
 
@@ -212,10 +226,14 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { signature, .. } => signature.clone(),
 			ProposalType::ResourceIdUpdate { .. } => Vec::new(),
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::MaxDepositLimitUpdateProposal { .. } => Vec::new(),
-			ProposalType::MaxDepositLimitUpdateProposalSigned { signature, .. } => signature.clone(),
-			ProposalType::MinWithdrawalLimitUpdateProposal { .. } => Vec::new(),
-			ProposalType::MinWithdrawalLimitUpdateProposalSigned { signature, .. } => signature.clone(),
+			ProposalType::MaxDepositLimitUpdate { .. } => Vec::new(),
+			ProposalType::MaxDepositLimitUpdateSigned { signature, .. } => signature.clone(),
+			ProposalType::MinWithdrawalLimitUpdate { .. } => Vec::new(),
+			ProposalType::MinWithdrawalLimitUpdateSigned { signature, .. } => signature.clone(),
+			ProposalType::MaxExtLimitUpdate { .. } => Vec::new(),
+			ProposalType::MaxExtLimitUpdateSigned { signature, .. } => signature.clone(),
+			ProposalType::MaxFeeLimitUpdate { .. } => Vec::new(),
+			ProposalType::MaxFeeLimitUpdateSigned { signature, .. } => signature.clone(),
 		}
 	}
 }
@@ -290,6 +308,18 @@ pub trait ProposalHandlerTrait {
 	}
 
 	fn handle_withdraw_limit_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
+	fn handle_ext_limit_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
+	fn handle_fee_limit_update_signed_proposal(
 		_prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())

@@ -196,11 +196,17 @@ pub mod pallet {
 					ProposalType::ResourceIdUpdateSigned { .. } =>
 						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
-					ProposalType::MaxDepositLimitUpdateProposalSigned { .. } =>
+					ProposalType::MaxDepositLimitUpdateSigned { .. } =>
 						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
-					ProposalType::MinWithdrawalLimitUpdateProposalSigned { .. } =>
+					ProposalType::MinWithdrawalLimitUpdateSigned { .. } =>
 						Self::handle_withdraw_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxExtLimitUpdateSigned { .. } =>
+						Self::handle_ext_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxFeeLimitUpdateSigned { .. } =>
+						Self::handle_fee_limit_update_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				}
 			}
@@ -262,7 +268,7 @@ pub mod pallet {
 					);
 					Ok(().into())
 				},
-				ProposalType::MaxDepositLimitUpdateProposal { ref data } => {
+				ProposalType::MaxDepositLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
 						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
@@ -272,12 +278,32 @@ pub mod pallet {
 					);
 					Ok(().into())
 				},
-				ProposalType::MinWithdrawalLimitUpdateProposal { ref data } => {
+				ProposalType::MinWithdrawalLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
 						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MaxExtLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MaxFeeLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -429,6 +455,18 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
 	}
 
+	fn handle_ext_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
+	}
+
+	fn handle_fee_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
+	}
+
 	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key_type: DKGPayloadKey,
@@ -565,7 +603,7 @@ impl<T: Config> Pallet<T> {
 				}
 				false
 			},
-			ProposalType::MaxDepositLimitUpdateProposalSigned { data, .. } => {
+			ProposalType::MaxDepositLimitUpdateSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
@@ -574,11 +612,29 @@ impl<T: Config> Pallet<T> {
 				}
 				false
 			},
-			ProposalType::MinWithdrawalLimitUpdateProposalSigned { data, .. } => {
+			ProposalType::MinWithdrawalLimitUpdateSigned { data, .. } => {
 				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
 						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxExtLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxFeeLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
 					)
 				}
 				false
