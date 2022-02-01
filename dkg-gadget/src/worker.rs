@@ -379,7 +379,7 @@ where
 				if let Err(err) = std::fs::copy(queued_path, path) {
 					error!("Error copying queued key {:?}", &err);
 				} else {
-					info!("Successfully copied queued key to current key");
+					debug!("Successfully copied queued key to current key");
 				}
 			}
 			self.next_rounds.take()
