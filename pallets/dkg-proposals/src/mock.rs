@@ -8,7 +8,10 @@ use frame_support::{
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
 	PalletId,
 };
-use frame_system::{self as system};
+use frame_support::metadata::StorageEntryModifier::Default;
+use frame_support::traits::ValidatorRegistration;
+use frame_system::{self as system, EnsureRoot, EnsureSignedBy};
+use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendTransactionTypes};
 pub use pallet_balances;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -20,6 +23,8 @@ use sp_runtime::{
 	},
 	Perbill, Percent, Permill,
 };
+use pallet_collator_selection::{IdentityCollator};
+use pallet_session::{TestSessionHandler};
 
 use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
@@ -151,6 +156,25 @@ impl pallet_dkg_metadata::Config for Test {
 	type ProposalHandler = ();
 }
 
+ord_parameter_types! {
+	pub const RootAccount: u64 = 777;
+}
+
+impl pallet_collator_selection::Config for Test {
+	type Event = Event;
+	type Currency = Balances;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type PotId = PotId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	type KickThreshold = Period;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = IdentityCollator;
+	type ValidatorRegistration = Session;
+	type WeightInfo = ();
+}
+
 parameter_types! {
 	pub const MinimumPeriod: u64 = 1;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
@@ -218,7 +242,6 @@ parameter_types! {
 	pub const MaxCandidates: u32 = 20;
 	pub const MaxInvulnerables: u32 = 20;
 	pub const MinCandidates: u32 = 1;
-	pub const MaxAuthorities: u32 = 100_000;
 }
 
 pub struct IsRegistered;
@@ -230,21 +253,6 @@ impl ValidatorRegistration<u64> for IsRegistered {
 			true
 		}
 	}
-}
-
-impl Config for Test {
-	type Event = Event;
-	type Currency = Balances;
-	type UpdateOrigin = EnsureSignedBy<RootAccount, u64>;
-	type PotId = PotId;
-	type MaxCandidates = MaxCandidates;
-	type MinCandidates = MinCandidates;
-	type MaxInvulnerables = MaxInvulnerables;
-	type KickThreshold = Period;
-	type ValidatorId = <Self as frame_system::Config>::AccountId;
-	type ValidatorIdOf = IdentityCollator;
-	type ValidatorRegistration = IsRegistered;
-	type WeightInfo = ();
 }
 
 pub fn mock_dkg_id(id: u8) -> DKGId {
@@ -306,6 +314,7 @@ impl ExtBuilder {
 			(mock_pub_key(2), mock_dkg_id(2), 1000),
 			(mock_pub_key(3), mock_dkg_id(3), 1000),
 		];
+
 		pallet_balances::GenesisConfig::<Test> {
 			balances: vec![
 				(dkg_id, ENDOWED_BALANCE),
@@ -318,9 +327,15 @@ impl ExtBuilder {
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
+
 		// collator selection must be initialized before session.
 		// TODO: Add candidates to the collator selection system directly.
-		pallet_collator_selection.assimilate_storage(&mut t).unwrap();
+		pallet_collator_selection::GenesisConfig::<Test> {
+			desired_candidates: 2,
+			candidacy_bond: Default::default(), // TODO(appcypher): Set this to something.
+			invulnerables: Default::default(), // TODO(appcypher): Set this to something.
+		}.assimilate_storage(&mut t).unwrap();
+
 		pallet_session::GenesisConfig::<Test> {
 			keys: candidates
 				.iter()

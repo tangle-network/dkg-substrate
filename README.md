@@ -225,7 +225,7 @@ mkdir -p resources
 ./target/release/dkg-standalone-node export-genesis-wasm > ./resources/para-2000-wasm
 ```
 
-> **NOTE**: we have set the `para_ID` to be **2000** is _mushere. Tht_ be unique for all parathreads/chains
+> **NOTE**: we have set the `para_ID` to be **2000** here. This _must_ be unique for all parathreads/chains
 > on the relay chain you register with. You _must_ reserve this first on the relay chain for the
 > testnet or mainnet.
 
