@@ -366,8 +366,10 @@ pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
 		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
 		ProposalType::ResourceIdUpdate { .. } => ProposalType::ResourceIdUpdate { data: buf },
 		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
-		ProposalType::MaxDepositLimitUpdate { .. } => ProposalType::MaxDepositLimitUpdate { data: buf },
-		ProposalType::MinWithdrawalLimitUpdate { .. } => ProposalType::MinWithdrawalLimitUpdate { data: buf },
+		ProposalType::MaxDepositLimitUpdate { .. } =>
+			ProposalType::MaxDepositLimitUpdate { data: buf },
+		ProposalType::MinWithdrawalLimitUpdate { .. } =>
+			ProposalType::MinWithdrawalLimitUpdate { data: buf },
 		ProposalType::MaxExtLimitUpdate { .. } => ProposalType::MaxExtLimitUpdate { data: buf },
 		ProposalType::MaxFeeLimitUpdate { .. } => ProposalType::MaxFeeLimitUpdate { data: buf },
 		_ => panic!("Invalid proposal type"),
