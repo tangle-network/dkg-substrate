@@ -256,6 +256,16 @@ pub mod pallet {
 					);
 					Ok(().into())
 				},
+				ProposalType::DepositLimitUpdateProposal { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::DepositLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				}
 				_ => Err(Error::<T>::ProposalFormatInvalid)?,
 			}
 		}
@@ -391,6 +401,12 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
 	}
 
+	fn handle_deposit_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::DepositLimitUpdateProposal(0))
+	}
+
 	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key_type: DKGPayloadKey,
@@ -415,6 +431,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+				DKGPayloadKey::DepositLimitUpdateProposal(_) =>
+					DKGPayloadKey::DepositLimitUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
