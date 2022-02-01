@@ -1314,7 +1314,7 @@ where
 				ProposalType::WrappingFeeUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
-				ProposalType::DepositLimitUpdateProposal { data } =>
+				ProposalType::MaxDepositLimitUpdateProposal { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				_ => continue,
 			};

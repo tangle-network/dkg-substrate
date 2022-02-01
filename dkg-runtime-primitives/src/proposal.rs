@@ -124,7 +124,7 @@ pub enum DKGPayloadKey {
 	TokenRemoveProposal(ProposalNonce),
 	WrappingFeeUpdateProposal(ProposalNonce),
 	ResourceIdUpdateProposal(ProposalNonce),
-	DepositLimitUpdateProposal(ProposalNonce),
+	MaxDepositLimitUpdateProposal(ProposalNonce),
 }
 
 impl PartialEq for DKGPayloadKey {
@@ -167,8 +167,8 @@ pub enum ProposalType {
 	WrappingFeeUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 	ResourceIdUpdate { data: Vec<u8> },
 	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	DepositLimitUpdateProposal { data: Vec<u8> },
-	DepositLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
+	MaxDepositLimitUpdateProposal { data: Vec<u8> },
+	MaxDepositLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 impl ProposalType {
@@ -187,8 +187,8 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => data.clone(),
 			ProposalType::ResourceIdUpdate { data } => data.clone(),
 			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
-			ProposalType::DepositLimitUpdateProposal { data } => data.clone(),
-			ProposalType::DepositLimitUpdateProposalSigned { data, .. } => data.clone(),
+			ProposalType::MaxDepositLimitUpdateProposal { data } => data.clone(),
+			ProposalType::MaxDepositLimitUpdateProposalSigned { data, .. } => data.clone(),
 		}
 	}
 
@@ -207,8 +207,8 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { signature, .. } => signature.clone(),
 			ProposalType::ResourceIdUpdate { .. } => Vec::new(),
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::DepositLimitUpdateProposal { .. } => Vec::new(),
-			ProposalType::DepositLimitUpdateProposalSigned { signature, .. } => signature.clone(),
+			ProposalType::MaxDepositLimitUpdateProposal { .. } => Vec::new(),
+			ProposalType::MaxDepositLimitUpdateProposalSigned { signature, .. } => signature.clone(),
 		}
 	}
 }

@@ -256,12 +256,12 @@ pub mod pallet {
 					);
 					Ok(().into())
 				},
-				ProposalType::DepositLimitUpdateProposal { ref data } => {
+				ProposalType::MaxDepositLimitUpdateProposal { ref data } => {
 					let (chain_id, nonce) =
 						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
-						DKGPayloadKey::DepositLimitUpdateProposal(nonce),
+						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -404,7 +404,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_deposit_limit_update_signed_proposal(
 		prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::DepositLimitUpdateProposal(0))
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
 	}
 
 	fn handle_signed_proposal(
@@ -431,8 +431,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-				DKGPayloadKey::DepositLimitUpdateProposal(_) =>
-					DKGPayloadKey::DepositLimitUpdateProposal(nonce),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
+					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(

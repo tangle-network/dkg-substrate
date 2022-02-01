@@ -440,12 +440,12 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(ProposalType::DepositLimitUpdateProposal { data: vec![] })
+			make_proposal::<32>(ProposalType::MaxDepositLimitUpdateProposal { data: vec![] })
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
-				DKGPayloadKey::DepositLimitUpdateProposal(1)
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(1)
 			)
 			.is_some(),
 			true
