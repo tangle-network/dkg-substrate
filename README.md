@@ -225,7 +225,7 @@ mkdir -p resources
 ./target/release/dkg-standalone-node export-genesis-wasm > ./resources/para-2000-wasm
 ```
 
-> **NOTE**: we have set the `para_ID` to be **2000** here. This _must_ be unique for all parathreads/chains
+> **NOTE**: we have set the `para_ID` to be **2000** is _mushere. Tht_ be unique for all parathreads/chains
 > on the relay chain you register with. You _must_ reserve this first on the relay chain for the
 > testnet or mainnet.
 
@@ -292,15 +292,6 @@ The DKG runtime is uses the following pallets which are central to how the proto
 
 This pallet essentially tracks the information about the current and next authority sets, including the set Ids.
 It does this by implementing the `OneSessionHandler` trait which allows it to receieve both new and queued authority sets when the session changes.
-
-## pallet-parachain-staking
-
-This is a custom staking pallet that handles collator selection, This pallet helps the protocol select new collators based on amount staked.
-It also allows for nominators, who back collators by staking their assets, both collators and nominators are rewarded after every session comes to an end.
-Reward for collators and their nominators is dependent on how many points accrued by the collator during the session,
-these points are gained by successfully authoring blocks.
-
-This pallet implements the `SessionManager` trait and that way is able to provide the the selected collators as validators to the session pallet.
 
 ## pallet-dkg-proposals
 

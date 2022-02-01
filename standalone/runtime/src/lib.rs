@@ -278,8 +278,8 @@ impl onchain::Config for Runtime {
 parameter_types! {
 	pub const OffendingValidatorsThreshold: Perbill = Perbill::from_percent(17);
 	pub const SessionsPerEra: sp_staking::SessionIndex = 6;
-	pub const BondingDuration: pallet_staking::EraIndex = 24 * 28;
-	pub const SlashDeferDuration: pallet_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
+	pub const BondingDuration: sp_staking::EraIndex = 24 * 28;
+	pub const SlashDeferDuration: sp_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
 	pub const MaxNominatorRewardedPerValidator: u32 = 256;
 	pub OffchainRepeat: BlockNumber = 5;
@@ -290,6 +290,12 @@ pub struct StakingBenchmarkingConfig;
 impl pallet_staking::BenchmarkingConfig for StakingBenchmarkingConfig {
 	type MaxNominators = ConstU32<1000>;
 	type MaxValidators = ConstU32<1000>;
+}
+
+pub const MAX_NOMINATIONS: u32 = <NposSolution16 as sp_npos_elections::NposSolution>::LIMIT as u32;
+
+parameter_types! {
+	pub const MaxNominations: u32 = MAX_NOMINATIONS;
 }
 
 impl pallet_staking::Config for Runtime {
@@ -320,8 +326,7 @@ impl pallet_staking::Config for Runtime {
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
-
-	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+	type MaxNominations = MaxNominations;
 }
 
 parameter_types! {
@@ -363,8 +368,6 @@ sp_npos_elections::generate_solution_type!(
 		Accuracy = sp_runtime::PerU16,
 	>(16)
 );
-
-pub const MAX_NOMINATIONS: u32 = <NposSolution16 as sp_npos_elections::NposSolution>::LIMIT as u32;
 
 /// The numbers configured here could always be more than the the maximum limits
 /// of staking pallet to ensure election snapshot will not run out of memory.
@@ -464,6 +467,7 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type UnsignedPhase = UnsignedPhase;
 	type VoterSnapshotPerBlock = VoterSnapshotPerBlock;
 	type WeightInfo = pallet_election_provider_multi_phase::weights::SubstrateWeight<Self>;
+	type GovernanceFallback = onchain::OnChainSequentialPhragmen<Self>;
 }
 
 parameter_types! {
