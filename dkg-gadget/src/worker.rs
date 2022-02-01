@@ -365,14 +365,23 @@ where
 		);
 
 		let mut local_key_path = None;
+		let mut queued_local_key_path = None;
 
-		if self.base_path.is_some() {
-			local_key_path = Some(self.base_path.as_ref().unwrap().join(DKG_LOCAL_KEY_FILE));
+		if let Some(base_path) = &self.base_path {
+			local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
+			queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 		let latest_block_num = self.get_latest_block_number();
 
 		self.rounds = if self.next_rounds.is_some() {
+			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
+				if let Err(err) = std::fs::copy(queued_path, path) {
+					error!("Error copying queued key {:?}", &err);
+				} else {
+					info!("Successfully copied queued key to current key");
+				}
+			}
 			self.next_rounds.take()
 		} else {
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID &&

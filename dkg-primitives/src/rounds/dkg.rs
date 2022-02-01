@@ -141,15 +141,18 @@ where
 			if self.keygen.is_finished() {
 				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
-					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
+					KeygenState::Started(rounds) => {
+						let finish_result = rounds.try_finish();
+						if let Ok(local_key) = &finish_result {
+							results.push(Ok(DKGResult::KeygenFinished {
+								round_id: self.round_id,
+								local_key: local_key.clone(),
+							}));
+						}
+						KeygenState::Finished(finish_result)
+					},
 					_ => prev_state,
 				};
-				if let KeygenState::Finished(Ok(local_key)) = &self.keygen {
-					results.push(Ok(DKGResult::KeygenFinished {
-						round_id: self.round_id,
-						local_key: local_key.clone(),
-					}));
-				}
 			}
 		}
 

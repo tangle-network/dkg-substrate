@@ -53,6 +53,8 @@ pub fn store_localkey(
 	key_store: DKGKeystore,
 	local_keystore: Arc<LocalKeystore>,
 ) -> std::io::Result<()> {
+	debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
+
 	let sr25519_public = key_store
 		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
@@ -70,8 +72,9 @@ pub fn store_localkey(
 
 		let encrypted_data = encrypt_data(serialized_data.into_bytes(), secret_key)
 			.map_err(|e| Error::new(ErrorKind::Other, e))?;
-		fs::write(path, &encrypted_data[..])?;
+		fs::write(path.clone(), &encrypted_data[..])?;
 
+		debug!(target: "dkg_persistence", "Successfully stored local key for {:?}", &path);
 		Ok(())
 	} else {
 		Err(Error::new(ErrorKind::Other, "".to_string()))
@@ -154,7 +157,7 @@ where
 					}
 				}
 			} else {
-				debug!(target: "dkg", "Failed to read local key file");
+				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {

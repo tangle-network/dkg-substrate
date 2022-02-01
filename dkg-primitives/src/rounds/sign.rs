@@ -231,7 +231,7 @@ where
 						signature: signature.encode(),
 					};
 
-					trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
+					debug!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
 					Ok(signed_payload)
 				},
 				_ => Err(DKGError::GenericError {
