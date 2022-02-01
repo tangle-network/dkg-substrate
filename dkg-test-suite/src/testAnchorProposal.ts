@@ -32,10 +32,10 @@ const anchorUpdateProposal: AnchorUpdateProposal = {
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
-
+	await registerResourceId(api);
+	await waitNfinalizedBlocks(api, 6, 20 * 7);
 	await sendAnchorProposal(api);
-
-	await waitNfinalizedBlocks(api, 4, 20 * 7);
+	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
@@ -76,6 +76,27 @@ async function testAnchorProposal() {
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
 	unsubSignedProps();
+}
+
+async function registerResourceId(api: ApiPromise) {
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+
+	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
+	console.log('Registering resource id');
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsub();
+		}
+	});
 }
 
 async function sendAnchorProposal(api: ApiPromise) {

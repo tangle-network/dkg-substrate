@@ -8,17 +8,17 @@ COMMON_ARGS="-lerror -ldkg=debug -ldkg_metadata=debug -ldkg_proposal_handler=deb
 
 function run-alice-node() {
     PROMPT_COMMAND='echo -en "\033]0;Alice Node\a"'
-    eval "$NODE --alice -d /tmp/alice $COMMON_ARGS"
+    eval "$NODE --alice --tmp $COMMON_ARGS"
 }
 
 function run-bob-node() {
     PROMPT_COMMAND='echo -en "\033]0;Bob Node\a"'
-    eval "$NODE --bob -d /tmp/bob $COMMON_ARGS"
+    eval "$NODE --bob --tmp $COMMON_ARGS"
 }
 
 function run-charlie-node() {
     PROMPT_COMMAND='echo -en "\033]0;Charlie Node\a"'
-    eval "$NODE --charlie -d /tmp/charlie $COMMON_ARGS"
+    eval "$NODE --charlie --tmp $COMMON_ARGS"
 }
 
 echo "To use this script, run the following command:"
