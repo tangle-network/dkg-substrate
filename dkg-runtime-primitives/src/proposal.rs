@@ -140,8 +140,12 @@ impl PartialEq for DKGPayloadKey {
 			(Self::TokenRemoveProposal(l0), Self::TokenRemoveProposal(r0)) => l0 == r0,
 			(Self::WrappingFeeUpdateProposal(l0), Self::WrappingFeeUpdateProposal(r0)) => l0 == r0,
 			(Self::ResourceIdUpdateProposal(l0), Self::ResourceIdUpdateProposal(r0)) => l0 == r0,
-			(Self::MaxDepositLimitUpdateProposal(l0), Self::MaxDepositLimitUpdateProposal(r0)) => l0 == r0,
-			(Self::MinWithdrawLimitUpdateProposal(l0), Self::MinWithdrawLimitUpdateProposal(r0)) => l0 == r0,
+			(Self::MaxDepositLimitUpdateProposal(l0), Self::MaxDepositLimitUpdateProposal(r0)) =>
+				l0 == r0,
+			(
+				Self::MinWithdrawLimitUpdateProposal(l0),
+				Self::MinWithdrawLimitUpdateProposal(r0),
+			) => l0 == r0,
 			(Self::MaxExtLimitUpdateProposal(l0), Self::MaxExtLimitUpdateProposal(r0)) => l0 == r0,
 			(Self::MaxFeeLimitUpdateProposal(l0), Self::MaxFeeLimitUpdateProposal(r0)) => l0 == r0,
 			_ => false,

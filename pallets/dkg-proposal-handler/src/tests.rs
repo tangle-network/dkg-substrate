@@ -460,7 +460,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				ChainIdType::EVM(1),
 				DKGPayloadKey::MinWithdrawLimitUpdateProposal(1)
 			)
-				.is_some(),
+			.is_some(),
 			true
 		);
 
@@ -473,7 +473,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				ChainIdType::EVM(1),
 				DKGPayloadKey::MaxExtLimitUpdateProposal(1)
 			)
-				.is_some(),
+			.is_some(),
 			true
 		);
 
@@ -486,7 +486,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				ChainIdType::EVM(1),
 				DKGPayloadKey::MaxFeeLimitUpdateProposal(1)
 			)
-				.is_some(),
+			.is_some(),
 			true
 		);
 	});

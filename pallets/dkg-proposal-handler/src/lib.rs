@@ -307,7 +307,7 @@ pub mod pallet {
 						prop.clone(),
 					);
 					Ok(().into())
-				}
+				},
 				_ => Err(Error::<T>::ProposalFormatInvalid)?,
 			}
 		}
@@ -905,7 +905,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// (header: 40 Bytes, newTokenAddress: 20 Bytes) = 60 Bytes
-	fn   decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 60 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
@@ -994,9 +994,7 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, max_ext_limit_bytes: 32) = 72
 	/// Bytes
-	fn decode_max_ext_limit_proposal(
-		data: &[u8],
-	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+	fn decode_max_ext_limit_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 72 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
@@ -1008,9 +1006,7 @@ impl<T: Config> Pallet<T> {
 
 	/// (header: 40 Bytes, max_fee_limit_bytes: 32) = 72
 	/// Bytes
-	fn decode_max_fee_limit_proposal(
-		data: &[u8],
-	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+	fn decode_max_fee_limit_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 72 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
