@@ -125,6 +125,7 @@ pub enum DKGPayloadKey {
 	WrappingFeeUpdateProposal(ProposalNonce),
 	ResourceIdUpdateProposal(ProposalNonce),
 	MaxDepositLimitUpdateProposal(ProposalNonce),
+	MinWithdrawLimitUpdateProposal(ProposalNonce),
 }
 
 impl PartialEq for DKGPayloadKey {
@@ -169,6 +170,8 @@ pub enum ProposalType {
 	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 	MaxDepositLimitUpdateProposal { data: Vec<u8> },
 	MaxDepositLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
+	MinWithdrawalLimitUpdateProposal { data: Vec<u8> },
+	MinWithdrawalLimitUpdateProposalSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 impl ProposalType {
@@ -189,6 +192,8 @@ impl ProposalType {
 			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
 			ProposalType::MaxDepositLimitUpdateProposal { data } => data.clone(),
 			ProposalType::MaxDepositLimitUpdateProposalSigned { data, .. } => data.clone(),
+			ProposalType::MinWithdrawalLimitUpdateProposal { data } => data.clone(),
+			ProposalType::MinWithdrawalLimitUpdateProposalSigned { data, .. } => data.clone(),
 		}
 	}
 
@@ -209,6 +214,8 @@ impl ProposalType {
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
 			ProposalType::MaxDepositLimitUpdateProposal { .. } => Vec::new(),
 			ProposalType::MaxDepositLimitUpdateProposalSigned { signature, .. } => signature.clone(),
+			ProposalType::MinWithdrawalLimitUpdateProposal { .. } => Vec::new(),
+			ProposalType::MinWithdrawalLimitUpdateProposalSigned { signature, .. } => signature.clone(),
 		}
 	}
 }
@@ -277,6 +284,12 @@ pub trait ProposalHandlerTrait {
 	}
 
 	fn handle_deposit_limit_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
+	fn handle_withdraw_limit_update_signed_proposal(
 		_prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())

@@ -1171,6 +1171,16 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
+			Ok((_chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MaxDepositLimitUpdateProposalSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MinWithdrawalLimitUpdateProposalSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
 			Ok((_chain_id, DKGPayloadKey::RefreshVote(nonce))) => {
 				let offchain = self.backend.offchain_storage();
 
@@ -1315,6 +1325,9 @@ where
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::MaxDepositLimitUpdateProposal { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				_ => continue,
+				ProposalType::MinWithdrawalLimitUpdateProposal { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				_ => continue,
 			};

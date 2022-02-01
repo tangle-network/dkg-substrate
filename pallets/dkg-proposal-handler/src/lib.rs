@@ -196,6 +196,12 @@ pub mod pallet {
 					ProposalType::ResourceIdUpdateSigned { .. } =>
 						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxDepositLimitUpdateProposalSigned { .. } =>
+						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MinWithdrawalLimitUpdateProposalSigned { .. } =>
+						Self::handle_withdraw_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				}
 			}
 
@@ -262,6 +268,16 @@ pub mod pallet {
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MinWithdrawalLimitUpdateProposal { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -407,6 +423,12 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
 	}
 
+	fn handle_withdraw_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
+	}
+
 	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key_type: DKGPayloadKey,
@@ -433,6 +455,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
 					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
+				DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
+					DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
@@ -536,6 +561,24 @@ impl<T: Config> Pallet<T> {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxDepositLimitUpdateProposalSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MinWithdrawalLimitUpdateProposalSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
 					)
 				}
 				false
@@ -806,7 +849,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// (header: 40 Bytes, newTokenAddress: 20 Bytes) = 60 Bytes
-	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+	fn   decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 60 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
