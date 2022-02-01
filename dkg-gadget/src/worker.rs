@@ -1171,6 +1171,11 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
+			Ok((_chain_id, DKGPayloadKey::RescueTokensProposal(_nonce))) =>
+				Some(ProposalType::RescueTokensSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
 			Ok((_chain_id, DKGPayloadKey::RefreshVote(nonce))) => {
 				let offchain = self.backend.offchain_storage();
 
@@ -1312,6 +1317,8 @@ where
 				ProposalType::TokenRemove { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::WrappingFeeUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::RescueTokens { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
 				_ => continue,

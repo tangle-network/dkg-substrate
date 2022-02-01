@@ -365,6 +365,7 @@ pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
 		ProposalType::TokenAdd { .. } => ProposalType::TokenAdd { data: buf },
 		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
 		ProposalType::ResourceIdUpdate { .. } => ProposalType::ResourceIdUpdate { data: buf },
+		ProposalType::RescueTokens { .. } => ProposalType::RescueTokens { data: buf },
 		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
@@ -424,7 +425,18 @@ fn force_submit_should_work_with_valid_proposals() {
 			.is_some(),
 			true
 		);
-
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<72>(ProposalType::RescueTokens { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::RescueTokensProposal(1)
+			)
+			.is_some(),
+			true
+		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
 			make_proposal::<72>(ProposalType::ResourceIdUpdate { data: vec![] })
@@ -432,7 +444,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
-				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+				DKGPayloadKey::ResourceIdUpdateProposal(1)
 			)
 			.is_some(),
 			true

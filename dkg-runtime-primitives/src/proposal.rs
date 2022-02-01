@@ -124,6 +124,7 @@ pub enum DKGPayloadKey {
 	TokenRemoveProposal(ProposalNonce),
 	WrappingFeeUpdateProposal(ProposalNonce),
 	ResourceIdUpdateProposal(ProposalNonce),
+	RescueTokensProposal(ProposalNonce),
 }
 
 impl PartialEq for DKGPayloadKey {
@@ -136,6 +137,7 @@ impl PartialEq for DKGPayloadKey {
 			(Self::TokenRemoveProposal(l0), Self::TokenRemoveProposal(r0)) => l0 == r0,
 			(Self::WrappingFeeUpdateProposal(l0), Self::WrappingFeeUpdateProposal(r0)) => l0 == r0,
 			(Self::ResourceIdUpdateProposal(l0), Self::ResourceIdUpdateProposal(r0)) => l0 == r0,
+			(Self::RescueTokensProposal(l0), Self::RescueTokensProposal(r0)) => l0 == r0,
 			_ => false,
 		}
 	}
@@ -166,6 +168,8 @@ pub enum ProposalType {
 	WrappingFeeUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
 	ResourceIdUpdate { data: Vec<u8> },
 	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+	RescueTokens { data: Vec<u8> },
+	RescueTokensSigned { data: Vec<u8>, signature: Vec<u8> },
 }
 
 impl ProposalType {
@@ -184,6 +188,8 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { data, .. } => data.clone(),
 			ProposalType::ResourceIdUpdate { data } => data.clone(),
 			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
+			ProposalType::RescueTokens { data } => data.clone(),
+			ProposalType::RescueTokensSigned { data, .. } => data.clone(),
 		}
 	}
 
@@ -202,6 +208,8 @@ impl ProposalType {
 			ProposalType::WrappingFeeUpdateSigned { signature, .. } => signature.clone(),
 			ProposalType::ResourceIdUpdate { .. } => Vec::new(),
 			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
+			ProposalType::RescueTokens { .. } => Vec::new(),
+			ProposalType::RescueTokensSigned { signature, .. } => signature.clone(),
 		}
 	}
 }
@@ -264,6 +272,12 @@ pub trait ProposalHandlerTrait {
 	}
 
 	fn handle_resource_id_update_signed_proposal(
+		_prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
+	fn handle_rescue_tokens_signed_proposal(
 		_prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())

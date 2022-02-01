@@ -168,6 +168,7 @@ pub mod pallet {
 					ProposalType::TokenAddSigned { data, signature } => (data, signature),
 					ProposalType::TokenRemoveSigned { data, signature } => (data, signature),
 					ProposalType::WrappingFeeUpdateSigned { data, signature } => (data, signature),
+					ProposalType::RescueTokensSigned { data, signature } => (data, signature),
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				};
 
@@ -195,6 +196,8 @@ pub mod pallet {
 						Self::handle_wrapping_fee_update_signed_proposal(prop.clone())?,
 					ProposalType::ResourceIdUpdateSigned { .. } =>
 						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
+					ProposalType::RescueTokensSigned { .. } =>
+						Self::handle_rescue_tokens_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				}
 			}
@@ -252,6 +255,16 @@ pub mod pallet {
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::RescueTokens { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_rescue_tokens_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::RescueTokensProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -391,6 +404,10 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
 	}
 
+	fn handle_rescue_tokens_signed_proposal(prop: ProposalType) -> DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
+	}
+
 	fn handle_signed_proposal(
 		prop: ProposalType,
 		payload_key_type: DKGPayloadKey,
@@ -415,6 +432,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+				DKGPayloadKey::RescueTokensProposal(_) =>
+					DKGPayloadKey::RescueTokensProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
@@ -518,6 +537,15 @@ impl<T: Config> Pallet<T> {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::RescueTokensSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::RescueTokensProposal(nonce),
 					)
 				}
 				false
@@ -828,6 +856,24 @@ impl<T: Config> Pallet<T> {
 		let mut execution_context_address_bytes = [0u8; 20];
 		execution_context_address_bytes.copy_from_slice(&data[92..112]);
 		let execution_context_address = Address::from(execution_context_address_bytes);
+		Ok(header)
+	}
+
+	/// (header: 40 Bytes, tokenAddress: 20 bytes, to: 20 bytes, amountToRescue: 32 bytes)) = 112
+	/// Bytes
+	fn decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+		if data.len() != 112 {
+			return Err(Error::<T>::ProposalFormatInvalid)?
+		}
+		let header = Self::decode_proposal_header(data)?;
+		let mut token_address_bytes = [0u8; 20];
+		token_address_bytes.copy_from_slice(&data[40..60]);
+		let token_address = Address::from(token_address_bytes);
+		let mut to_bytes = [0u8; 20];
+		to_bytes.copy_from_slice(&data[60..80]);
+		let to = Address::from(to_bytes);
+		let mut amount_to_rescue_bytes = [0u8; 32];
+		amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
 		Ok(header)
 	}
 
