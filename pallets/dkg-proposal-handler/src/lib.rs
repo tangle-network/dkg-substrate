@@ -270,7 +270,7 @@ pub mod pallet {
 				},
 				ProposalType::MaxDepositLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
-						Self::decode_max_deposit_limit_proposal(&data).map(Into::into)?;
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
@@ -280,7 +280,7 @@ pub mod pallet {
 				},
 				ProposalType::MinWithdrawalLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
-						Self::decode_min_withdrawal_limit_proposal(&data).map(Into::into)?;
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
@@ -290,7 +290,7 @@ pub mod pallet {
 				},
 				ProposalType::MaxExtLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
-						Self::decode_max_ext_limit_proposal(&data).map(Into::into)?;
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
@@ -300,7 +300,7 @@ pub mod pallet {
 				},
 				ProposalType::MaxFeeLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
-						Self::decode_max_fee_limit_proposal(&data).map(Into::into)?;
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
@@ -964,55 +964,17 @@ impl<T: Config> Pallet<T> {
 		Ok(header)
 	}
 
-	/// (header: 40 Bytes, max_deposit_limit_bytes: 32) = 72
-	/// Bytes
-	fn decode_max_deposit_limit_proposal(
-		data: &[u8],
-	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 72 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
-		let header = Self::decode_proposal_header(data)?;
-		let mut max_deposit_limit_bytes = [0u8; 32];
-		max_deposit_limit_bytes.copy_from_slice(&data[40..72]);
-		Ok(header)
-	}
-
 	/// (header: 40 Bytes, min_withdrawal_limit_bytes: 32) = 72
 	/// Bytes
-	fn decode_min_withdrawal_limit_proposal(
+	fn decode_configurable_limit_proposal(
 		data: &[u8],
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 72 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut min_withdrawal_limit_bytes = [0u8; 32];
-		min_withdrawal_limit_bytes.copy_from_slice(&data[40..72]);
-		Ok(header)
-	}
-
-	/// (header: 40 Bytes, max_ext_limit_bytes: 32) = 72
-	/// Bytes
-	fn decode_max_ext_limit_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 72 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
-		let header = Self::decode_proposal_header(data)?;
-		let mut max_ext_limit_bytes = [0u8; 32];
-		max_ext_limit_bytes.copy_from_slice(&data[40..72]);
-		Ok(header)
-	}
-
-	/// (header: 40 Bytes, max_fee_limit_bytes: 32) = 72
-	/// Bytes
-	fn decode_max_fee_limit_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 72 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
-		let header = Self::decode_proposal_header(data)?;
-		let mut max_fee_limit_bytes = [0u8; 32];
-		max_fee_limit_bytes.copy_from_slice(&data[40..72]);
+		let mut configurable_limit_bytes = [0u8; 32];
+		configurable_limit_bytes.copy_from_slice(&data[40..72]);
 		Ok(header)
 	}
 
