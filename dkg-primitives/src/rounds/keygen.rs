@@ -193,7 +193,7 @@ where
 		if !keygen.message_queue().is_empty() {
 			trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", keygen.message_queue().len());
 
-			let keygen_set_id = self.params.keygen_set_id;
+			let round_id = self.params.round_id;
 
 			let enc_messages = keygen
 				.message_queue()
@@ -201,7 +201,7 @@ where
 				.map(|m| {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
 					let serialized = serde_json::to_string(&m).unwrap();
-					return DKGKeygenMessage { keygen_set_id, keygen_msg: serialized.into_bytes() }
+					return DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
 				})
 				.collect::<Vec<DKGKeygenMessage>>();
 
@@ -215,8 +215,8 @@ where
 	/// Handle incoming messages
 
 	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
-		if data.keygen_set_id != self.params.keygen_set_id {
-			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
+		if data.round_id != self.params.round_id {
+			return Err(DKGError::GenericError { reason: "Round ids do not match".to_string() })
 		}
 
 		let keygen = &mut self.keygen;

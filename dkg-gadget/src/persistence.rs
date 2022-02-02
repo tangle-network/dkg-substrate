@@ -210,9 +210,8 @@ where
 							[1..];
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						let round_id = rounds.get_id();
-						rounds.set_signer_set_id(round_id);
+					if let Ok(mut signers_set) = signers_set {
+						signers_set.sort();
 						rounds.set_signers(signers_set);
 					}
 					worker.set_rounds(rounds)
@@ -248,9 +247,8 @@ where
 						.to_bytes(true)[1..];
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						let round_id = rounds.get_id();
-						rounds.set_signer_set_id(round_id);
+					if let Ok(mut signers_set) = signers_set {
+						signers_set.sort();
 						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
@@ -348,7 +346,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(authority_set.id, latest_block_num);
+		let _ = rounds.start_keygen(latest_block_num);
 		worker.active_keygen_in_progress = true;
 		worker.dkg_state.listening_for_active_pub_key = true;
 		worker.set_rounds(rounds);
@@ -371,7 +369,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(queued_authority_set.id, latest_block_num);
+		let _ = rounds.start_keygen(latest_block_num);
 		worker.queued_keygen_in_progress = true;
 		worker.dkg_state.listening_for_pub_key = true;
 		worker.set_next_rounds(rounds);

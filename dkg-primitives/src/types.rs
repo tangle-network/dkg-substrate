@@ -8,11 +8,10 @@ pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
 
 /// A typedef for keygen set id
-pub type KeygenSetId = u64;
+pub type RoundId = u64;
 /// A typedef for signer set id
 pub type SignerSetId = u64;
-/// A typedef for keygen set id
-pub type RoundId = u64;
+
 pub use dkg_runtime_primitives::DKGPayloadKey;
 
 /// DKG (distributed key generation) message.
@@ -63,7 +62,7 @@ pub enum DKGMsgPayload {
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGKeygenMessage {
 	/// Keygen set epoch id
-	pub keygen_set_id: KeygenSetId,
+	pub round_id: RoundId,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
 }
@@ -139,7 +138,6 @@ pub struct KeygenParams {
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
-	pub keygen_set_id: KeygenSetId,
 }
 
 pub struct SignParams {
@@ -147,8 +145,8 @@ pub struct SignParams {
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
-	pub signer_set_id: SignerSetId,
 	pub signers: Vec<u16>,
+	pub signer_set_id: SignerSetId,
 }
 
 #[derive(Debug, Clone)]

@@ -72,13 +72,12 @@ where
 /// Pre-offline rounds
 
 pub struct PreOfflineRounds {
-	signer_set_id: SignerSetId,
 	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
 
 impl PreOfflineRounds {
-	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self { signer_set_id, pending_offline_msgs: Vec::default() }
+	pub fn new() -> Self {
+		Self { pending_offline_msgs: Vec::default() }
 	}
 }
 

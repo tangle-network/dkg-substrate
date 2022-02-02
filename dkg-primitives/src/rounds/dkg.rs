@@ -10,7 +10,7 @@ use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::types::*;
+use crate::{types::*, utils::select_random_set};
 use dkg_runtime_primitives::keccak_256;
 
 pub use gg_2020::{
@@ -57,19 +57,14 @@ where
 	keygen: KeygenState<Clock>,
 	#[builder(default = false)]
 	has_stalled: bool,
-	// Offline stage
-	#[builder(default)]
-	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
-	// Signing rounds
-	#[builder(default)]
-	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
-	#[builder(default = 0)]
-	keygen_set_id: KeygenSetId,
+	// Signing
 	#[builder(default)]
 	signers: Vec<u16>,
-	#[builder(default = 0)]
-	signer_set_id: SignerSetId,
+	#[builder(default)]
+	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
+	#[builder(default)]
+	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
 	// File system storage and encryption
 	#[builder(default)]
@@ -94,10 +89,6 @@ where
 
 	pub fn set_signers(&mut self, signers: Vec<u16>) {
 		self.signers = signers;
-	}
-
-	pub fn set_signer_set_id(&mut self, set_id: SignerSetId) {
-		self.signer_set_id = set_id;
 	}
 
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
@@ -129,6 +120,10 @@ where
 	/// State machine
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
+		debug!(target: "dkg", 
+			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
+			&self.round_id, &self.signers);
+
 		let mut results = vec![];
 
 		let keygen_proceed_res = self.keygen.proceed(at);
@@ -144,6 +139,8 @@ where
 					KeygenState::Started(rounds) => {
 						let finish_result = rounds.try_finish();
 						if let Ok(local_key) = &finish_result {
+							self.generate_and_set_signers(local_key);
+
 							results.push(Ok(DKGResult::KeygenFinished {
 								round_id: self.round_id,
 								local_key: local_key.clone(),
@@ -247,9 +244,10 @@ where
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
-				let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
-					OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-				});
+				let offline = self
+					.offlines
+					.entry(key.clone())
+					.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
 				let res = offline.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
@@ -260,9 +258,10 @@ where
 			DKGMsgPayload::Vote(msg) => {
 				let key = msg.round_key.clone();
 
-				let vote = self.votes.entry(key.clone()).or_insert_with(|| {
-					SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
-				});
+				let vote = self
+					.votes
+					.entry(key.clone())
+					.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
 				let res = vote.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
@@ -274,11 +273,7 @@ where
 		}
 	}
 
-	pub fn start_keygen(
-		&mut self,
-		keygen_set_id: KeygenSetId,
-		started_at: C,
-	) -> Result<(), DKGError> {
+	pub fn start_keygen(&mut self, started_at: C) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
 			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
@@ -286,7 +281,6 @@ where
 			self.threshold,
 			self.parties,
 		);
-		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
 
 		let keygen_params = self.keygen_params();
 
@@ -327,13 +321,17 @@ where
 		let sign_params = self.sign_params();
 
 		match &self.keygen {
-			KeygenState::Finished(Ok(local_key)) => {
-				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
-				return match OfflineStage::new(self.party_index, s_l.clone(), local_key.clone()) {
+			KeygenState::Finished(Ok(local_key)) =>
+				return match OfflineStage::new(
+					self.party_index,
+					self.signers.clone(),
+					local_key.clone(),
+				) {
 					Ok(new_offline_stage) => {
-						let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
-							OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-						});
+						let offline = self
+							.offlines
+							.entry(key.clone())
+							.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
 						match offline {
 							OfflineState::NotStarted(pre_offline) => {
@@ -365,8 +363,7 @@ where
 						error!("Error creating new offline stage {}", err);
 						Err(DKGError::CreateOfflineStage { reason: err.to_string() })
 					},
-				}
-			},
+				},
 			_ => Err(DKGError::CreateOfflineStage {
 				reason: "Cannot start offline stage, Keygen is not complete".to_string(),
 			}),
@@ -390,9 +387,10 @@ where
 				Ok((sign_manual, sig)) => {
 					debug!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
-					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
-						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
-					});
+					let vote = self
+						.votes
+						.entry(round_key.clone())
+						.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
 					match vote {
 						SignState::NotStarted(pre_sign) => {
@@ -495,24 +493,35 @@ where
 
 	/// Utils
 
+	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
+		let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
+		let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
+		if let Ok(mut signers_set) = signers_set {
+			signers_set.sort();
+			self.set_signers(signers_set);
+		}
+	}
+
 	fn keygen_params(&self) -> KeygenParams {
 		KeygenParams {
 			round_id: self.round_id,
 			party_index: self.party_index,
 			threshold: self.threshold,
 			parties: self.parties,
-			keygen_set_id: self.keygen_set_id,
 		}
 	}
 
 	fn sign_params(&self) -> SignParams {
+		// TODO: Currently we use round_id as signer_set_id for consistency,
+		// but eventually we want to derive this id from both round_id and signers vec
 		SignParams {
 			round_id: self.round_id,
 			party_index: self.party_index,
 			threshold: self.threshold,
 			parties: self.parties,
-			signer_set_id: self.signer_set_id,
 			signers: self.signers.clone(),
+			signer_set_id: self.round_id,
 		}
 	}
 }

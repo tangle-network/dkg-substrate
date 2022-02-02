@@ -75,13 +75,12 @@ where
 /// Pre-sign rounds
 
 pub struct PreSignRounds {
-	signer_set_id: SignerSetId,
 	pub pending_sign_msgs: Vec<DKGVoteMessage>,
 }
 
 impl PreSignRounds {
-	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self { signer_set_id, pending_sign_msgs: Vec::default() }
+	pub fn new() -> Self {
+		Self { pending_sign_msgs: Vec::default() }
 	}
 }
 
