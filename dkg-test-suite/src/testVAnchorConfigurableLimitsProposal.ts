@@ -5,95 +5,14 @@ import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert } from '@polkadot/util';
+import { apiProposalTypes } from './proposalTypes';
 
 const raw_data =
 	'00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001';
 const tokenUpdateProp = new Uint8Array(hexToBytes(raw_data));
 
 async function testDirectProposal() {
-	const api = await ApiPromise.create({
-		provider,
-		types: {
-			ProposalType: {
-				_enum: [
-					'EVMUnsigned',
-					'EVMSigned',
-					'AnchorUpdate',
-					'AnchorUpdateSigned',
-					'TokenUpdate',
-					'TokenUpdateSigned',
-					'WrappingFeeUpdate',
-					'WrappingFeeUpdateSigned',
-                    // TODO: Add proposals for configurable limits
-					'MaxDepositLimitUpdate',
-					'MaxDepositLimitUpdateSigned',
-					'MinWithdrawalLimitUpdate',
-					'MinWithdrawalLimitUpdateSigned',
-					'MaxExtLimitUpdate',
-					'MaxExtLimitUpdateSigned',
-					'MaxFeeLimitUpdate',
-					'MaxFeeLimitUpdateSigned'
-				],
-			},
-			EVMUnsigned: {
-				data: 'Vec<u8>',
-			},
-			EVMSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			AnchorUpdate: {
-				data: 'Vec<u8>',
-			},
-			AnchorUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			TokenUpdate: {
-				data: 'Vec<u8>',
-			},
-			TokenUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			WrappingFeeUpdate: {
-				data: 'Vec<u8>',
-			},
-			WrappingFeeUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MaxDepositLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MaxDepositLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MinWithdrawalLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MinWithdrawalLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MaxExtLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MaxExtLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MaxFeeLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MaxFeeLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-            // TODO: Add proposals for configurable limits
-		},
-	});
+	const api = await apiProposalTypes();
 
 	await waitNfinalizedBlocks(api, 10, 20 * 5);
 
@@ -156,8 +75,6 @@ async function sendSudoProposal(api: ApiPromise) {
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 
-    // TODO: Change the forced extrinsic to be a configurable limit proposal
-    // TODO: Send proposals for each configurable limit
 	const callMaxDepositLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
 		MaxDepositLimitUpdate: {
 			data: `0x${raw_data}`,
