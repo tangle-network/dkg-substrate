@@ -1317,6 +1317,7 @@ where
 				_ => continue,
 			};
 
+			debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 			}
