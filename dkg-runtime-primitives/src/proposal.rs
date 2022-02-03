@@ -165,86 +165,40 @@ pub enum ProposalAction {
 }
 
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub enum ProposalType {
-	RefreshProposal { data: Vec<u8> },
-	EVMUnsigned { data: Vec<u8> },
-	EVMSigned { data: Vec<u8>, signature: Vec<u8> },
-	AnchorUpdate { data: Vec<u8> },
-	AnchorUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	TokenAdd { data: Vec<u8> },
-	TokenAddSigned { data: Vec<u8>, signature: Vec<u8> },
-	TokenRemove { data: Vec<u8> },
-	TokenRemoveSigned { data: Vec<u8>, signature: Vec<u8> },
-	WrappingFeeUpdate { data: Vec<u8> },
-	WrappingFeeUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	ResourceIdUpdate { data: Vec<u8> },
-	ResourceIdUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	RescueTokens { data: Vec<u8> },
-	RescueTokensSigned { data: Vec<u8>, signature: Vec<u8> },
-	MaxDepositLimitUpdate { data: Vec<u8> },
-	MaxDepositLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	MinWithdrawalLimitUpdate { data: Vec<u8> },
-	MinWithdrawalLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	MaxExtLimitUpdate { data: Vec<u8> },
-	MaxExtLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
-	MaxFeeLimitUpdate { data: Vec<u8> },
-	MaxFeeLimitUpdateSigned { data: Vec<u8>, signature: Vec<u8> },
+pub enum Proposal {
+	Signed { kind: ProposalKind, data: Vec<u8>, signature: Vec<u8> },
+	Unsigned { kind: ProposalKind, data: Vec<u8> },
 }
 
-impl ProposalType {
-	pub fn data(&self) -> Vec<u8> {
+#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
+pub enum ProposalKind {
+	Refresh,
+	EVM,
+	AnchorUpdate,
+	TokenAdd,
+	TokenRemove,
+	WrappingFeeUpdate,
+	ResourceIdUpdate,
+	RescueTokens,
+	MaxDepositLimitUpdate,
+	MinWithdrawalLimitUpdate,
+	MaxExtLimitUpdate,
+	MaxFeeLimitUpdate,
+}
+
+impl Proposal {
+	pub fn data(&self) -> &Vec<u8> {
+		use Proposal::*;
 		match self {
-			ProposalType::RefreshProposal { data } => data.clone(),
-			ProposalType::EVMUnsigned { data } => data.clone(),
-			ProposalType::EVMSigned { data, .. } => data.clone(),
-			ProposalType::AnchorUpdate { data } => data.clone(),
-			ProposalType::AnchorUpdateSigned { data, .. } => data.clone(),
-			ProposalType::TokenAdd { data } => data.clone(),
-			ProposalType::TokenAddSigned { data, .. } => data.clone(),
-			ProposalType::TokenRemove { data } => data.clone(),
-			ProposalType::TokenRemoveSigned { data, .. } => data.clone(),
-			ProposalType::WrappingFeeUpdate { data } => data.clone(),
-			ProposalType::WrappingFeeUpdateSigned { data, .. } => data.clone(),
-			ProposalType::ResourceIdUpdate { data } => data.clone(),
-			ProposalType::ResourceIdUpdateSigned { data, .. } => data.clone(),
-			ProposalType::RescueTokens { data } => data.clone(),
-			ProposalType::RescueTokensSigned { data, .. } => data.clone(),
-			ProposalType::MaxDepositLimitUpdate { data } => data.clone(),
-			ProposalType::MaxDepositLimitUpdateSigned { data, .. } => data.clone(),
-			ProposalType::MinWithdrawalLimitUpdate { data } => data.clone(),
-			ProposalType::MinWithdrawalLimitUpdateSigned { data, .. } => data.clone(),
-			ProposalType::MaxExtLimitUpdate { data } => data.clone(),
-			ProposalType::MaxExtLimitUpdateSigned { data, .. } => data.clone(),
-			ProposalType::MaxFeeLimitUpdate { data } => data.clone(),
-			ProposalType::MaxFeeLimitUpdateSigned { data, .. } => data.clone(),
+			Signed { data, .. } | Unsigned { data, .. } => data,
 		}
 	}
 
 	pub fn signature(&self) -> Vec<u8> {
+		use Proposal::*;
 		match self {
-			ProposalType::RefreshProposal { .. } => Vec::new(),
-			ProposalType::EVMUnsigned { .. } => Vec::new(),
-			ProposalType::EVMSigned { signature, .. } => signature.clone(),
-			ProposalType::AnchorUpdate { .. } => Vec::new(),
-			ProposalType::AnchorUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::TokenAdd { .. } => Vec::new(),
-			ProposalType::TokenAddSigned { signature, .. } => signature.clone(),
-			ProposalType::TokenRemove { .. } => Vec::new(),
-			ProposalType::TokenRemoveSigned { signature, .. } => signature.clone(),
-			ProposalType::WrappingFeeUpdate { .. } => Vec::new(),
-			ProposalType::WrappingFeeUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::ResourceIdUpdate { .. } => Vec::new(),
-			ProposalType::ResourceIdUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::RescueTokens { .. } => Vec::new(),
-			ProposalType::RescueTokensSigned { signature, .. } => signature.clone(),
-			ProposalType::MaxDepositLimitUpdate { .. } => Vec::new(),
-			ProposalType::MaxDepositLimitUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::MinWithdrawalLimitUpdate { .. } => Vec::new(),
-			ProposalType::MinWithdrawalLimitUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::MaxExtLimitUpdate { .. } => Vec::new(),
-			ProposalType::MaxExtLimitUpdateSigned { signature, .. } => signature.clone(),
-			ProposalType::MaxFeeLimitUpdate { .. } => Vec::new(),
-			ProposalType::MaxFeeLimitUpdateSigned { signature, .. } => signature.clone(),
+			Signed { signature, .. } => signature.clone(),
+			Unsigned { .. } => Vec::new(),
 		}
 	}
 }
@@ -258,7 +212,7 @@ pub trait ProposalHandlerTrait {
 	}
 
 	fn handle_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 		_payload_key: DKGPayloadKey,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
@@ -277,67 +231,67 @@ pub trait ProposalHandlerTrait {
 	}
 
 	fn handle_evm_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_anchor_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_token_add_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_token_remove_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_wrapping_fee_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_resource_id_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_rescue_tokens_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_deposit_limit_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_withdraw_limit_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_ext_limit_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
 	fn handle_fee_limit_update_signed_proposal(
-		_prop: ProposalType,
+		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}

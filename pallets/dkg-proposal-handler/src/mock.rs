@@ -24,7 +24,7 @@ use dkg_runtime_primitives::{keccak_256, ChainIdType, TransactionV2};
 use frame_support::traits::{OnFinalize, OnInitialize};
 
 use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, EIP2930Transaction, ProposalType, TransactionAction, U256,
+	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction, U256,
 };
 use std::sync::Arc;
 
@@ -300,7 +300,7 @@ pub fn mock_sign_msg(
 	keystore.ecdsa_sign_prehashed(dkg_runtime_primitives::crypto::Public::ID, &pub_key, msg)
 }
 
-pub fn mock_signed_proposal(eth_tx: TransactionV2) -> ProposalType {
+pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -309,5 +309,5 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2) -> ProposalType {
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return ProposalType::EVMSigned { data: eth_tx_ser.clone(), signature: sig_vec }
+	return Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser.clone(), signature: sig_vec }
 }
