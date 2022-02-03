@@ -19,11 +19,12 @@ const resourceId = makeResourceId(
 	ChainIdType.EVM,
 	5002
 );
+let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
 const anchorUpdateProposal: AnchorUpdateProposal = {
 	header: {
 		resourceId,
 		functionSignature: '0xdeadbeef',
-		nonce: 0,
+		nonce,
 	},
 	srcChainId: 5001,
 	lastLeafIndex: 0,
@@ -45,7 +46,7 @@ async function testAnchorProposal() {
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', { EVM: 5002 });
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
 		chainIdType,
-		{ anchorupdateproposal: 0 },
+		{ anchorupdateproposal: nonce },
 		(res: any) => {
 			if (res) {
 				const parsedResult = JSON.parse(JSON.stringify(res));
