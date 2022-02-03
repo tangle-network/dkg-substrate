@@ -66,12 +66,13 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -107,10 +108,11 @@ fn store_signed_proposal_offchain() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -133,10 +135,11 @@ fn submit_signed_proposal_onchain_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -161,10 +164,11 @@ fn submit_signed_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -189,6 +193,7 @@ fn submit_signed_proposal_success() {
 			.is_none(),
 			true
 		);
+
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
 				ChainIdType::EVM(0),
@@ -206,10 +211,11 @@ fn submit_signed_proposal_already_exists() {
 		// First submission
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -234,6 +240,7 @@ fn submit_signed_proposal_already_exists() {
 			.is_none(),
 			true
 		);
+
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
 				ChainIdType::EVM(0),
@@ -244,10 +251,11 @@ fn submit_signed_proposal_already_exists() {
 		);
 
 		// Second submission
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -299,10 +307,11 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		};
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			tx_v_2.encode(),
-			ProposalAction::Sign(0)
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
+
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(0),
@@ -387,12 +396,10 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Proposal {
 #[test]
 fn force_submit_should_fail_with_invalid_proposal_type() {
 	execute_test_with(|| {
-		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
-
 		assert_err!(
 			DKGProposalHandler::force_submit_unsigned_proposal(
 				Origin::root(),
-				Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() }
+				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] }
 			),
 			crate::Error::<Test>::ProposalFormatInvalid
 		);
