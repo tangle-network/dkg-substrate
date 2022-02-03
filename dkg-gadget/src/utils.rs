@@ -3,7 +3,6 @@ use codec::Codec;
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
 };
-use dkg_runtime_primitives::DKGPayloadKey;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
@@ -47,10 +46,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.party_index(u16::try_from(party_inx).unwrap())
 		.threshold(thresh)
 		.parties(u16::try_from(n).unwrap())
-		.created_at(created_at)
-		.public_key(Some(sr25519_public.clone()))
 		.local_key_path(local_key_path)
-		.local_keystore(local_keystore)
 		.build();
 
 	rounds

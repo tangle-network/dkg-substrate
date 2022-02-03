@@ -1,10 +1,8 @@
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
 
-use sc_keystore::LocalKeystore;
-use sp_core::sr25519;
 use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf};
 
 use super::{keygen::*, offline::*, sign::*};
 use std::mem;
@@ -50,8 +48,6 @@ where
 	threshold: u16,
 	parties: u16,
 
-	created_at: Clock,
-
 	// Key generation
 	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
 	keygen: KeygenState<Clock>,
@@ -68,11 +64,7 @@ where
 
 	// File system storage and encryption
 	#[builder(default)]
-	public_key: Option<sr25519::Public>,
-	#[builder(default)]
 	local_key_path: Option<PathBuf>,
-	#[builder(default)]
-	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -91,12 +83,12 @@ where
 		self.signers = signers;
 	}
 
-	pub fn dkg_params(&self) -> (u16, u16, u16) {
-		(self.party_index, self.threshold, self.parties)
-	}
-
 	pub fn is_signer(&self) -> bool {
 		self.signers.contains(&self.party_index)
+	}
+
+	pub fn dkg_params(&self) -> (u16, u16, u16) {
+		(self.party_index, self.threshold, self.parties)
 	}
 
 	pub fn get_public_key(&self) -> Option<GE> {
@@ -128,7 +120,7 @@ where
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
-			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
+			if let Err(DKGError::KeygenTimeout { bad_actors: _ }) = &keygen_proceed_res {
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));
@@ -140,6 +132,7 @@ where
 						let finish_result = rounds.try_finish();
 						if let Ok(local_key) = &finish_result {
 							self.generate_and_set_signers(local_key);
+							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 
 							results.push(Ok(DKGResult::KeygenFinished {
 								round_id: self.round_id,
@@ -316,17 +309,20 @@ where
 	}
 
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
-		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
+		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
 
 		let sign_params = self.sign_params();
+		let offline_i = match self.get_offline_stage_index() {
+			Some(i) => i,
+			None => {
+				trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+				return Ok(())
+			},
+		};
 
 		match &self.keygen {
 			KeygenState::Finished(Ok(local_key)) =>
-				return match OfflineStage::new(
-					self.party_index,
-					self.signers.clone(),
-					local_key.clone(),
-				) {
+				return match OfflineStage::new(offline_i, self.signers.clone(), local_key.clone()) {
 					Ok(new_offline_stage) => {
 						let offline = self
 							.offlines
@@ -439,10 +435,10 @@ where
 		}
 	}
 
-	pub fn is_ready_to_vote(&self, key: Vec<u8>) -> bool {
-		if let Some(offline) = self.offlines.get(&key) {
+	pub fn is_ready_to_vote(&self, round_key: Vec<u8>) -> bool {
+		if let Some(offline) = self.offlines.get(&round_key) {
 			match offline {
-				OfflineState::Finished(_) => true,
+				OfflineState::Finished(Ok(_)) => true,
 				_ => false,
 			}
 		} else {
@@ -492,6 +488,15 @@ where
 	}
 
 	/// Utils
+
+	fn get_offline_stage_index(&self) -> Option<u16> {
+		for (i, &keygen_i) in (1..).zip(&self.signers) {
+			if self.party_index == keygen_i {
+				return Some(i)
+			}
+		}
+		None
+	}
 
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
@@ -552,7 +557,7 @@ mod tests {
 	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		let round_key = 1u32.encode();
 		for party in parties.iter() {
-			if !party.is_ready_to_vote(round_key.clone()) {
+			if party.is_signer() && !party.is_ready_to_vote(round_key.clone()) {
 				return false
 			}
 		}
@@ -561,10 +566,7 @@ mod tests {
 
 	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
-			if !party.is_signer() {
-				continue
-			}
-			if !party.has_finished_rounds() {
+			if party.is_signer() && !party.has_finished_rounds() {
 				return false
 			}
 		}
@@ -573,25 +575,27 @@ mod tests {
 
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
 		for party in &mut parties.into_iter() {
-			let mut finished_rounds = party.get_finished_rounds();
+			if party.is_signer() {
+				let mut finished_rounds = party.get_finished_rounds();
 
-			if finished_rounds.len() == 1 {
-				let finished_round = finished_rounds.remove(0);
+				if finished_rounds.len() == 1 {
+					let finished_round = finished_rounds.remove(0);
 
-				let message = b"Webb".encode();
+					let message = b"Webb".encode();
 
-				assert!(
-					dkg_runtime_primitives::utils::validate_ecdsa_signature(
-						&message,
-						&finished_round.signature
-					),
-					"Invalid signature for party {}",
-					party.party_index
-				);
+					assert!(
+						dkg_runtime_primitives::utils::validate_ecdsa_signature(
+							&message,
+							&finished_round.signature
+						),
+						"Invalid signature for party {}",
+						party.party_index
+					);
 
-				println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
-			} else {
-				panic!("No signature extracted")
+					println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
+				} else {
+					panic!("No signature extracted")
+				}
 			}
 		}
 
@@ -609,7 +613,9 @@ mod tests {
 		for party in &mut parties.into_iter() {
 			let proceed_res = party.proceed(0);
 			for res in proceed_res {
-				println!("Error: {:?}", res);
+				if let Err(err) = res {
+					println!("Error: {:?}", err);
+				}
 			}
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
@@ -631,7 +637,9 @@ mod tests {
 			for party in &mut parties.into_iter() {
 				let proceed_res = party.proceed(0);
 				for res in proceed_res {
-					println!("Error: {:?}", res);
+					if let Err(err) = res {
+						println!("Error: {:?}", err);
+					}
 				}
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
@@ -642,6 +650,8 @@ mod tests {
 				return
 			}
 		}
+
+		panic!("Not all parties finished");
 	}
 
 	fn simulate_multi_party(t: u16, n: u16) {
@@ -653,10 +663,9 @@ mod tests {
 				.party_index(i)
 				.threshold(t)
 				.parties(n)
-				.created_at(0)
 				.build();
 			println!("Starting keygen for party {}", party.party_index);
-			party.start_keygen(0, 0).unwrap();
+			party.start_keygen(0).unwrap();
 			parties.push(party);
 		}
 
@@ -682,7 +691,10 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
 			println!("Vote for party {}", party.party_index);
-			party.vote(round_key.clone(), "Webb".encode(), 0).unwrap();
+			match party.vote(round_key.clone(), "Webb".encode(), 0) {
+				Ok(()) => (),
+				Err(_err) => (),
+			}
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
 
