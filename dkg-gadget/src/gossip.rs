@@ -27,7 +27,7 @@ use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
 use dkg_primitives::types::DKGMessage;
-use dkg_runtime_primitives::{crypto::Public};
+use dkg_runtime_primitives::crypto::Public;
 
 // Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
@@ -52,10 +52,9 @@ pub(crate) struct GossipValidator<B>
 where
 	B: Block,
 {
-	// TODO: fields are never read; check if intentional
-	_topic: B::Hash,
-	_known_votes: RwLock<KnownVotes<B>>,
-	_next_rebroadcast: Mutex<Instant>,
+	topic: B::Hash,
+	known_votes: RwLock<KnownVotes<B>>,
+	next_rebroadcast: Mutex<Instant>,
 }
 
 impl<B> GossipValidator<B>
@@ -69,14 +68,14 @@ where
 			next_rebroadcast: Mutex::new(Instant::now() + REBROADCAST_AFTER),
 		}
 	}
-
+	// TODO: note_round is never used; check if intentional
 	/// Note a voting round.
 	///
 	/// Noting `round` will keep `round` live.
 	///
 	/// We retain the [`MAX_LIVE_GOSSIP_ROUNDS`] most **recent** voting rounds as live.
 	/// As long as a voting round is live, it will be gossiped to peer nodes.
-	pub(crate) fn note_round(&self, round: NumberFor<B>) {
+	pub(crate) fn _note_round(&self, round: NumberFor<B>) {
 		debug!(target: "dkg", "🕸️  About to note round #{}", round);
 
 		let mut live = self.known_votes.write();
@@ -93,11 +92,11 @@ where
 			}
 		}
 	}
-
-	fn add_known(known_votes: &mut KnownVotes<B>, round: &NumberFor<B>, hash: MessageHash) {
+	// TODO: add_known is never used; check if intentional
+	fn _add_known(known_votes: &mut KnownVotes<B>, round: &NumberFor<B>, hash: MessageHash) {
 		known_votes.get_mut(round).map(|known| known.insert(hash));
 	}
-
+	// TODO: is_live is never used; check if intentional
 	// Note that we will always keep the most recent unseen round alive.
 	//
 	// This is a preliminary fix and the detailed description why we are
@@ -105,7 +104,7 @@ where
 	//
 	// https://github.com/paritytech/grandpa-bridge-gadget/issues/237
 	//
-	fn is_live(known_votes: &KnownVotes<B>, round: &NumberFor<B>) -> bool {
+	fn _is_live(known_votes: &KnownVotes<B>, round: &NumberFor<B>) -> bool {
 		let unseen_round = if let Some(max_known_round) = known_votes.keys().last() {
 			round > max_known_round
 		} else {
@@ -114,8 +113,8 @@ where
 
 		known_votes.contains_key(round) || unseen_round
 	}
-
-	fn is_known(known_votes: &KnownVotes<B>, round: &NumberFor<B>, hash: &MessageHash) -> bool {
+	// TODO: is_known is never used; check if intentional
+	fn _is_known(known_votes: &KnownVotes<B>, round: &NumberFor<B>, hash: &MessageHash) -> bool {
 		known_votes.get(round).map(|known| known.contains(hash)).unwrap_or(false)
 	}
 }

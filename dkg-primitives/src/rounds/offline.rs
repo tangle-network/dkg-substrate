@@ -72,8 +72,7 @@ where
 /// Pre-offline rounds
 
 pub struct PreOfflineRounds {
-	// TODO: field _signer_set_id never used; check if intentional
-	_signer_set_id: SignerSetId,
+	signer_set_id: SignerSetId,
 	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
 

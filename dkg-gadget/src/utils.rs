@@ -54,9 +54,9 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 
 	rounds
 }
-
+// TODO: find_mmr_root_digest is never used; check if intentional
 /// Extract the MMR root hash from a digest in the given header, if it exists.
-pub fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
+pub fn _find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
 where
 	B: Block,
 	Id: Codec,

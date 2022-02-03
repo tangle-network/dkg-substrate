@@ -57,9 +57,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ChainIdType, OffchainSignedProposals, RefreshProposalSigned,
-	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
-	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	ChainIdType, OffchainSignedProposals, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
+	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID, OFFCHAIN_PUBLIC_KEY_SIG,
+	OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 
 use crate::{
@@ -220,8 +220,8 @@ where
 	pub fn keystore_ref(&self) -> DKGKeystore {
 		self.key_store.clone()
 	}
-
-	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
+	// TODO: gossip_engine_ref is never used; check if intentional
+	pub fn _gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
 		self.gossip_engine.clone()
 	}
 
@@ -277,8 +277,8 @@ where
 		let at = BlockId::hash(header.hash());
 		return self.client.runtime_api().signature_threshold(&at).ok()
 	}
-
-	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
+	// TODO: fn get_time_to_restart is never used; check if intentional
+	pub fn _get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
 		let at = BlockId::hash(header.hash());
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
@@ -1335,13 +1335,10 @@ where
 				ProposalType::EVMUnsigned { data } => data,
 				ProposalType::MaxDepositLimitUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
 				ProposalType::MinWithdrawalLimitUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
 				ProposalType::MaxExtLimitUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
 				ProposalType::MaxFeeLimitUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				_ => continue,

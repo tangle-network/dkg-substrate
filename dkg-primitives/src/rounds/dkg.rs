@@ -49,8 +49,7 @@ where
 	party_index: u16,
 	threshold: u16,
 	parties: u16,
-	// TODO: unused field _created_at; check if intentional
-	_created_at: Clock,
+	created_at: Clock,
 
 	// Key generation
 	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
@@ -72,14 +71,12 @@ where
 	signer_set_id: SignerSetId,
 
 	// File system storage and encryption
-	// TODO: unused field _public_key; check if intentional
 	#[builder(default)]
-	_public_key: Option<sr25519::Public>,
+	public_key: Option<sr25519::Public>,
 	#[builder(default)]
 	local_key_path: Option<PathBuf>,
-	// TODO: unused field local_keystore; check if intentional
 	#[builder(default)]
-	_local_keystore: Option<Arc<LocalKeystore>>,
+	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -135,7 +132,7 @@ where
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
-			if let Err(DKGError::KeygenTimeout { _ }) = &keygen_proceed_res {
+			if let Err(DKGError::KeygenTimeout { bad_actors: _ }) = &keygen_proceed_res {
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));

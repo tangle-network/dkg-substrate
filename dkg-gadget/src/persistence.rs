@@ -261,7 +261,8 @@ where
 /// protocol is stuck at the keygen stage
 pub(crate) fn should_restart_dkg<B, C, BE>(
 	worker: &mut DKGWorker<B, C, BE>,
-	header: &B::Header,
+	// TODO: param is never used; check if intentional
+	_header: &B::Header,
 ) -> (bool, bool)
 where
 	B: Block,
@@ -271,7 +272,7 @@ where
 {
 	let rounds = worker.take_rounds();
 	let next_rounds = worker.take_next_rounds();
-	
+
 	let should_restart_rounds = {
 		if rounds.is_none() {
 			true

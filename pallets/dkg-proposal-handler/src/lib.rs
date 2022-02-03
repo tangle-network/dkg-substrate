@@ -12,9 +12,9 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	Address, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait,
-	ProposalHeader, ProposalNonce, ProposalType, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
+	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalHeader, ProposalNonce,
+	ProposalType, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -195,16 +195,12 @@ pub mod pallet {
 						Self::handle_wrapping_fee_update_signed_proposal(prop.clone())?,
 					ProposalType::ResourceIdUpdateSigned { .. } =>
 						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					ProposalType::MaxDepositLimitUpdateSigned { .. } =>
 						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					ProposalType::MinWithdrawalLimitUpdateSigned { .. } =>
 						Self::handle_withdraw_limit_update_signed_proposal(prop.clone())?,
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					ProposalType::MaxExtLimitUpdateSigned { .. } =>
 						Self::handle_ext_limit_update_signed_proposal(prop.clone())?,
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					ProposalType::MaxFeeLimitUpdateSigned { .. } =>
 						Self::handle_fee_limit_update_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
@@ -493,7 +489,6 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
 					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
-				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 				DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
 					DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
@@ -943,18 +938,16 @@ impl<T: Config> Pallet<T> {
 		execution_context_address_bytes.copy_from_slice(&data[92..112]);
 		Ok(header)
 	}
-
-	fn decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+	// TODO: decode_rescue_tokens_proposal is never used; check if intentional
+	fn _decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 112 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
 		let header = Self::decode_proposal_header(data)?;
 		let mut token_address_bytes = [0u8; 20];
 		token_address_bytes.copy_from_slice(&data[40..60]);
-		let token_address = Address::from(token_address_bytes);
 		let mut to_bytes = [0u8; 20];
 		to_bytes.copy_from_slice(&data[60..80]);
-		let to = Address::from(to_bytes);
 		let mut amount_to_rescue_bytes = [0u8; 32];
 		amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
 		Ok(header)
