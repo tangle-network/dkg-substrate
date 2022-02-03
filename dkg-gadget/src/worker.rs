@@ -17,7 +17,6 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -42,7 +41,7 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor, One},
+	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
@@ -58,7 +57,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	ChainIdType, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
+	ChainIdType, OffchainSignedProposals, RefreshProposalSigned,
 	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, GENESIS_AUTHORITY_SET_ID,
 	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
@@ -850,7 +849,7 @@ where
 		}
 	}
 
-	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
+	fn handle_dkg_report(&mut self, _dkg_report: DKGReport) {
 		// TODO: handle report by taking slashing action
 	}
 

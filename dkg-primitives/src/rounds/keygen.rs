@@ -213,8 +213,8 @@ where
 	}
 
 	/// Handle incoming messages
-
-	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
+	// TODO: unused param at; check if intentional
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, _at: C) -> Result<(), DKGError> {
 		if data.keygen_set_id != self.params.keygen_set_id {
 			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
 		}

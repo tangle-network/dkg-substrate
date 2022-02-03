@@ -26,8 +26,8 @@ use parking_lot::{Mutex, RwLock};
 use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
-use dkg_primitives::types::{DKGMessage, DKGPayloadKey};
-use dkg_runtime_primitives::{crypto::Public, ChainId, MmrRootHash};
+use dkg_primitives::types::DKGMessage;
+use dkg_runtime_primitives::{crypto::Public};
 
 // Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
@@ -52,9 +52,10 @@ pub(crate) struct GossipValidator<B>
 where
 	B: Block,
 {
-	topic: B::Hash,
-	known_votes: RwLock<KnownVotes<B>>,
-	next_rebroadcast: Mutex<Instant>,
+	// TODO: fields are never read; check if intentional
+	_topic: B::Hash,
+	_known_votes: RwLock<KnownVotes<B>>,
+	_next_rebroadcast: Mutex<Instant>,
 }
 
 impl<B> GossipValidator<B>

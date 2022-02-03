@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
-	mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, ProposalNonce, ProposalType,
+	mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, ProposalType,
 };
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{

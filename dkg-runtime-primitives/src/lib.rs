@@ -116,7 +116,6 @@ pub mod offchain_crypto {
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
-	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
 	/// Identity of a DKG authority using ECDSA as its crypto.

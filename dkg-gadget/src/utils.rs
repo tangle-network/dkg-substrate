@@ -3,7 +3,6 @@ use codec::Codec;
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
 };
-use dkg_runtime_primitives::DKGPayloadKey;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;

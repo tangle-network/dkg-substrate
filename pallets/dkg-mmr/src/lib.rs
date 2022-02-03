@@ -73,7 +73,6 @@ where
 pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
-		use sp_core::crypto::Public;
 		let compressed_key = a.as_slice();
 
 		libsecp256k1::PublicKey::parse_slice(

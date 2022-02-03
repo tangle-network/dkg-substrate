@@ -486,7 +486,7 @@ impl<T: Config> Pallet<T> {
 			Some(libsecp256k1::PublicKeyFormat::Compressed),
 		)
 		.map(|pk| pk.serialize())
-		.map_err(|e| Error::<T>::InvalidPublicKeys)?;
+		.map_err(|_| Error::<T>::InvalidPublicKeys)?;
 		Ok(result.to_vec())
 	}
 
@@ -657,7 +657,8 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_public_key_signature_onchain(
-		block_number: T::BlockNumber,
+		// TODO: param is not used; check if intentional
+		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
 

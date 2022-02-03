@@ -271,8 +271,7 @@ where
 {
 	let rounds = worker.take_rounds();
 	let next_rounds = worker.take_next_rounds();
-	let time_to_restart = worker.get_time_to_restart(header);
-
+	
 	let should_restart_rounds = {
 		if rounds.is_none() {
 			true

@@ -23,14 +23,12 @@ use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
-use scale_info::Path;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
-use sc_service::BasePath;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;

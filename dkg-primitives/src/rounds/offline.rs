@@ -72,7 +72,8 @@ where
 /// Pre-offline rounds
 
 pub struct PreOfflineRounds {
-	signer_set_id: SignerSetId,
+	// TODO: field _signer_set_id never used; check if intentional
+	_signer_set_id: SignerSetId,
 	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
 
@@ -217,8 +218,8 @@ where
 	}
 
 	/// Handle incoming messages
-
-	fn handle_incoming(&mut self, data: DKGOfflineMessage, at: C) -> Result<(), DKGError> {
+	// TODO: unused param at; check if intentional
+	fn handle_incoming(&mut self, data: DKGOfflineMessage, _at: C) -> Result<(), DKGError> {
 		if data.signer_set_id != self.params.signer_set_id {
 			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
 		}
