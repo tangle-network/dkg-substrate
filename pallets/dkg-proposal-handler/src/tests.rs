@@ -366,6 +366,12 @@ pub fn make_proposal<const N: usize>(prop: ProposalType) -> ProposalType {
 		ProposalType::WrappingFeeUpdate { .. } => ProposalType::WrappingFeeUpdate { data: buf },
 		ProposalType::ResourceIdUpdate { .. } => ProposalType::ResourceIdUpdate { data: buf },
 		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
+		ProposalType::MaxDepositLimitUpdate { .. } =>
+			ProposalType::MaxDepositLimitUpdate { data: buf },
+		ProposalType::MinWithdrawalLimitUpdate { .. } =>
+			ProposalType::MinWithdrawalLimitUpdate { data: buf },
+		ProposalType::MaxExtLimitUpdate { .. } => ProposalType::MaxExtLimitUpdate { data: buf },
+		ProposalType::MaxFeeLimitUpdate { .. } => ProposalType::MaxFeeLimitUpdate { data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
 }
@@ -433,6 +439,58 @@ fn force_submit_should_work_with_valid_proposals() {
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
 				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<32>(ProposalType::MaxDepositLimitUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<32>(ProposalType::MinWithdrawalLimitUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::MinWithdrawLimitUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<32>(ProposalType::MaxExtLimitUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::MaxExtLimitUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<32>(ProposalType::MaxFeeLimitUpdate { data: vec![] })
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::MaxFeeLimitUpdateProposal(1)
 			)
 			.is_some(),
 			true
