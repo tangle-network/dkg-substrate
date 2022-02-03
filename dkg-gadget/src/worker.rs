@@ -1304,17 +1304,10 @@ where
 				ProposalType::TokenRemove { data } => data,
 				ProposalType::WrappingFeeUpdate { data } => data,
 				ProposalType::EVMUnsigned { data } => data,
-				ProposalType::MaxDepositLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
-				ProposalType::MinWithdrawalLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
-				ProposalType::MaxExtLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
-				ProposalType::MaxFeeLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::MaxDepositLimitUpdate { data } => data,
+				ProposalType::MinWithdrawalLimitUpdate { data } => data,
+				ProposalType::MaxExtLimitUpdate { data } => data,
+				ProposalType::MaxFeeLimitUpdate { data } => data,
 				_ => continue,
 			};
 
