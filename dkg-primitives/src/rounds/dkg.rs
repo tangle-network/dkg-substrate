@@ -489,6 +489,9 @@ where
 
 	/// Utils
 
+	/// Returns our party's index in signers vec if any.
+	/// Indexing starts from 1.
+	/// OfflineStage must be created using this index if present (not the original keygen index)
 	fn get_offline_stage_index(&self) -> Option<u16> {
 		for (i, &keygen_i) in (1..).zip(&self.signers) {
 			if self.party_index == keygen_i {
