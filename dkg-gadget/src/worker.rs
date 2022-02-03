@@ -1173,6 +1173,9 @@ where
 				}),
 			Ok((_chain_id, DKGPayloadKey::RescueTokensProposal(_nonce))) =>
 				Some(ProposalType::RescueTokensSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
 			Ok((_chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(_nonce))) =>
 				Some(ProposalType::MaxDepositLimitUpdateSigned {
 					data: finished_round.payload,

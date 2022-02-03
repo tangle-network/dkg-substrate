@@ -317,7 +317,7 @@ pub trait ProposalHandlerTrait {
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
-  
+
 	fn handle_deposit_limit_update_signed_proposal(
 		_prop: ProposalType,
 	) -> frame_support::pallet_prelude::DispatchResult {

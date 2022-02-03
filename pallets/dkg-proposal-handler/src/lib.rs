@@ -280,7 +280,7 @@ pub mod pallet {
 						prop.clone(),
 					);
 					Ok(().into())
-        },
+				},
 				ProposalType::MaxDepositLimitUpdate { ref data } => {
 					let (chain_id, nonce) =
 						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
@@ -458,29 +458,21 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 	fn handle_rescue_tokens_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
-  }
+	}
 
-	fn handle_deposit_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_deposit_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
 	}
 
-	fn handle_withdraw_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_withdraw_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
 	}
 
-	fn handle_ext_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_ext_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
 	}
 
-	fn handle_fee_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_fee_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
 	}
 
