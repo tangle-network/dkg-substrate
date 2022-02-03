@@ -1256,19 +1256,6 @@ where
 		}
 	}
 
-	fn pre_signing_proposal_handler(chain_id_type: ChainIdType<ChainId>, data: Vec<u8>) -> Vec<u8> {
-		match chain_id_type {
-			ChainIdType::EVM(_) => {
-				let hash = sp_core::keccak_256(&data);
-				let mut prefixed_data = Vec::new();
-				prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
-				prefixed_data.extend_from_slice(&hash[..]);
-				prefixed_data.to_vec()
-			},
-			_ => data,
-		}
-	}
-
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1291,28 +1278,11 @@ where
 			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			let data = match proposal {
-				ProposalType::RefreshProposal { data } => {
-					let refresh_prop_data =
-						match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
-							Ok(res) => res,
-							Err(err) => {
-								error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
-								continue
-							},
-						};
-					let mut buf = Vec::new();
-					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
-					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
-					Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
-				},
-				ProposalType::AnchorUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::TokenAdd { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::TokenRemove { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::WrappingFeeUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
+				ProposalType::RefreshProposal { data } => data,
+				ProposalType::AnchorUpdate { data } => data,
+				ProposalType::TokenAdd { data } => data,
+				ProposalType::TokenRemove { data } => data,
+				ProposalType::WrappingFeeUpdate { data } => data,
 				ProposalType::EVMUnsigned { data } => data,
 				_ => continue,
 			};
