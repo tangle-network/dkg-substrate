@@ -63,6 +63,18 @@ export const printValidators = async function (api: ApiPromise) {
 	}
 };
 
+const LE = true;
+const BE = false;
+export const enum ChainIdType {
+	UNKNOWN = 0x0000,
+	EVM = 0x0100,
+	SUBSTRATE = 0x0200,
+	POLKADOT_RELAYCHAIN = 0x0301,
+	KUSAMA_RELAYCHAIN = 0x0302,
+	COSMOS = 0x0400,
+	SOLANA = 0x0500,
+}
+
 /**
  * Proposal Header is the first 40 bytes of any proposal and it contains the following information:
  * - resource id (32 bytes)
@@ -75,6 +87,13 @@ export interface ProposalHeader {
 	 * 32 bytes Hex-encoded string of the `ResourceID` for this proposal.
 	 */
 	readonly resourceId: string;
+	/**
+	 * 2 bytes (u16) encoded as the last 2 bytes of the resource id **just** before the chainId.
+	 *
+	 * **Note**: this value is optional here since we can read it from the `ResourceID`, but would be provided for you if
+	 * you want to decode the proposal header from bytes.
+	 **/
+	chainIdType?: ChainIdType;
 	/**
 	 * 4 bytes number (u32) of the `chainId` this also encoded in the last 4 bytes of the `ResourceID`.
 	 *
@@ -105,15 +124,37 @@ export function encodeProposalHeader(data: ProposalHeader): Uint8Array {
 
 export function decodeProposalHeader(header: Uint8Array): ProposalHeader {
 	const resourceId = u8aToHex(header.slice(0, 32));
-	const chainId = new DataView(header.buffer).getUint32(32 - 4, false);
+	const chainIdTypeInt = new DataView(header.buffer).getUint16(32 - 6, BE);
+	const chainIdType = castToChainIdType(chainIdTypeInt);
+	const chainId = new DataView(header.buffer).getUint32(32 - 4, BE);
 	const functionSignature = u8aToHex(header.slice(32, 36));
-	const nonce = new DataView(header.buffer).getUint32(36, false);
+	const nonce = new DataView(header.buffer).getUint32(36, BE);
 	return {
 		resourceId,
 		chainId,
+		chainIdType,
 		functionSignature,
 		nonce,
 	};
+}
+
+function castToChainIdType(v: number): ChainIdType {
+	switch (v) {
+		case 0x0100:
+			return ChainIdType.EVM;
+		case 0x0200:
+			return ChainIdType.SUBSTRATE;
+		case 0x0301:
+			return ChainIdType.POLKADOT_RELAYCHAIN;
+		case 0x0302:
+			return ChainIdType.KUSAMA_RELAYCHAIN;
+		case 0x0400:
+			return ChainIdType.COSMOS;
+		case 0x0500:
+			return ChainIdType.SOLANA;
+		default:
+			return ChainIdType.UNKNOWN;
+	}
 }
 
 /**
@@ -170,23 +211,26 @@ export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdatePropos
 
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
- * - 28 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
- * to make it 28 bytes.
+ * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
+ * to make it 26 bytes.
+ * - 2 bytes of the `chainIdType` encoded as the last 2 bytes just before the `chainId`.
  * - 4 bytes of the `chainId` which is the last 4 bytes.
  */
-export function makeResourceId(addr: string, chainId: number): string {
+export function makeResourceId(addr: string, chainIdType: ChainIdType, chainId: number): string {
 	const rId = new Uint8Array(32);
 	const address = hexToU8a(addr).slice(0, 20);
-	rId.set(address, 8); // 8 -> 28
+	rId.set(address, 6); // 6 -> 26
 	const view = new DataView(rId.buffer);
-	view.setUint32(28, chainId, false); // 28 -> 32
+	view.setUint16(26, chainIdType, BE); // 26 -> 28
+	view.setUint32(28, chainId, BE); // 28 -> 32
 	return u8aToHex(rId);
 }
 
 function _testEncodeDecode() {
 	const anchorHandlerAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 	const chainId = 0xcafe;
-	const resourceId = makeResourceId(anchorHandlerAddress, chainId);
+	const chainIdType = ChainIdType.EVM;
+	const resourceId = makeResourceId(anchorHandlerAddress, chainIdType, chainId);
 	const functionSignature = '0xdeadbeef';
 	const nonce = 0xdad;
 	const header: ProposalHeader = {
@@ -212,10 +256,7 @@ function _testEncodeDecode() {
 	const updateProposalEncoded = encodeUpdateAnchorProposal(updateProposal);
 	const updateProposalDecoded = decodeUpdateAnchorProposal(updateProposalEncoded);
 	assert(updateProposalDecoded.header.resourceId === resourceId, 'resourceId');
-	assert(
-		updateProposalDecoded.header.functionSignature === functionSignature,
-		'functionSignature'
-	);
+	assert(updateProposalDecoded.header.functionSignature === functionSignature, 'functionSignature');
 	assert(updateProposalDecoded.header.nonce === nonce, 'nonce');
 	assert(updateProposalDecoded.srcChainId === srcChainId, 'srcChainId');
 	assert(updateProposalDecoded.lastLeafIndex === lastLeafIndex, 'lastLeafIndex');

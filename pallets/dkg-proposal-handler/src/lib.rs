@@ -199,6 +199,18 @@ pub mod pallet {
 					ProposalType::RescueTokensSigned { .. } =>
 						Self::handle_rescue_tokens_signed_proposal(prop.clone())?,
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxDepositLimitUpdateSigned { .. } =>
+						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MinWithdrawalLimitUpdateSigned { .. } =>
+						Self::handle_withdraw_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxExtLimitUpdateSigned { .. } =>
+						Self::handle_ext_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					ProposalType::MaxFeeLimitUpdateSigned { .. } =>
+						Self::handle_fee_limit_update_signed_proposal(prop.clone())?,
+					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				}
 			}
 
@@ -265,6 +277,46 @@ pub mod pallet {
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::RescueTokensProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+        },
+				ProposalType::MaxDepositLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MinWithdrawalLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MaxExtLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::MaxFeeLimitUpdate { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -406,6 +458,30 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 	fn handle_rescue_tokens_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
+  }
+
+	fn handle_deposit_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
+	}
+
+	fn handle_withdraw_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
+	}
+
+	fn handle_ext_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
+	}
+
+	fn handle_fee_limit_update_signed_proposal(
+		prop: ProposalType,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
 	}
 
 	fn handle_signed_proposal(
@@ -434,6 +510,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 				DKGPayloadKey::RescueTokensProposal(_) =>
 					DKGPayloadKey::RescueTokensProposal(nonce),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
+					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
+				DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
+					DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
 				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
 			};
 			ensure!(
@@ -546,6 +627,42 @@ impl<T: Config> Pallet<T> {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
 						DKGPayloadKey::RescueTokensProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxDepositLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MinWithdrawalLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxExtLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::MaxFeeLimitUpdateSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
 					)
 				}
 				false
@@ -874,6 +991,20 @@ impl<T: Config> Pallet<T> {
 		let to = Address::from(to_bytes);
 		let mut amount_to_rescue_bytes = [0u8; 32];
 		amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
+		Ok(header)
+	}
+
+	/// (header: 40 Bytes, min_withdrawal_limit_bytes: 32) = 72
+	/// Bytes
+	fn decode_configurable_limit_proposal(
+		data: &[u8],
+	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+		if data.len() != 72 {
+			return Err(Error::<T>::ProposalFormatInvalid)?
+		}
+		let header = Self::decode_proposal_header(data)?;
+		let mut configurable_limit_bytes = [0u8; 32];
+		configurable_limit_bytes.copy_from_slice(&data[40..72]);
 		Ok(header)
 	}
 

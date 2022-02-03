@@ -75,12 +75,12 @@ async function sendSudoProposal(api: ApiPromise) {
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 
-	const call = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		TokenUpdate: {
+	const callMaxDepositLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+		MaxDepositLimitUpdate: {
 			data: `0x${raw_data}`,
 		},
 	});
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
+	const unsubMaxDeposit = await api.tx.sudo.sudo(callMaxDepositLimit).signAndSend(alice, ({ events = [], status }) => {
 		console.log(`Current status is: ${status.type}`);
 
 		if (status.isFinalized) {
@@ -90,7 +90,64 @@ async function sendSudoProposal(api: ApiPromise) {
 				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
 			});
 
-			unsub();
+			unsubMaxDeposit();
+		}
+	});
+
+	const callMinWithdrawalLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+		MaxDepositLimitUpdate: {
+			data: `0x${raw_data}`,
+		},
+	});
+	const unsubMinWithdrawalLimit = await api.tx.sudo.sudo(callMinWithdrawalLimit).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsubMinWithdrawalLimit();
+		}
+	});
+
+	const callMaxExtLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+		MaxDepositLimitUpdate: {
+			data: `0x${raw_data}`,
+		},
+	});
+	const unsubMaxExtLimit = await api.tx.sudo.sudo(callMaxExtLimit).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsubMaxExtLimit();
+		}
+	});
+
+	const callMaxFeeLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+		MaxDepositLimitUpdate: {
+			data: `0x${raw_data}`,
+		},
+	});
+	const unsubMaxFeeLimit = await api.tx.sudo.sudo(callMaxFeeLimit).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsubMaxFeeLimit();
 		}
 	});
 }
