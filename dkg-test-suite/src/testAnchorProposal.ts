@@ -1,4 +1,5 @@
 import { ApiPromise } from '@polkadot/api';
+import { Option, Bytes } from '@polkadot/types';
 import { Keyring } from '@polkadot/keyring';
 import {
 	AnchorUpdateProposal,
@@ -34,8 +35,8 @@ const anchorUpdateProposal: AnchorUpdateProposal = {
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
 	await registerResourceId(api);
-	await waitNfinalizedBlocks(api, 6, 20 * 7);
 	await sendAnchorProposal(api);
+	console.log('Waiting for the DKG to Sign the proposal');
 	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
@@ -80,6 +81,13 @@ async function testAnchorProposal() {
 }
 
 async function registerResourceId(api: ApiPromise) {
+	// quick check if the resourceId is already registered
+	const res = await api.query.dKGProposals.resources(resourceId);
+	const val = new Option(api.registry, Bytes, res);
+	if (val.isSome) {
+		console.log(`Resource id ${resourceId} is already registered, skipping`);
+		return;
+	}
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
