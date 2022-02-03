@@ -168,6 +168,7 @@ pub mod pallet {
 					ProposalType::TokenAddSigned { data, signature } => (data, signature),
 					ProposalType::TokenRemoveSigned { data, signature } => (data, signature),
 					ProposalType::WrappingFeeUpdateSigned { data, signature } => (data, signature),
+					ProposalType::RescueTokensSigned { data, signature } => (data, signature),
 					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 				};
 
@@ -195,6 +196,8 @@ pub mod pallet {
 						Self::handle_wrapping_fee_update_signed_proposal(prop.clone())?,
 					ProposalType::ResourceIdUpdateSigned { .. } =>
 						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
+					ProposalType::RescueTokensSigned { .. } =>
+						Self::handle_rescue_tokens_signed_proposal(prop.clone())?,
 					ProposalType::MaxDepositLimitUpdateSigned { .. } =>
 						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
 					ProposalType::MinWithdrawalLimitUpdateSigned { .. } =>
@@ -260,6 +263,16 @@ pub mod pallet {
 					UnsignedProposalQueue::<T>::insert(
 						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+						prop.clone(),
+					);
+					Ok(().into())
+				},
+				ProposalType::RescueTokens { ref data } => {
+					let (chain_id, nonce) =
+						Self::decode_rescue_tokens_proposal(&data).map(Into::into)?;
+					UnsignedProposalQueue::<T>::insert(
+						chain_id,
+						DKGPayloadKey::RescueTokensProposal(nonce),
 						prop.clone(),
 					);
 					Ok(().into())
@@ -439,27 +452,23 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
 	}
 
-	fn handle_deposit_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_rescue_tokens_signed_proposal(prop: ProposalType) -> DispatchResult {
+		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
+	}
+
+	fn handle_deposit_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
 	}
 
-	fn handle_withdraw_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_withdraw_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
 	}
 
-	fn handle_ext_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_ext_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
 	}
 
-	fn handle_fee_limit_update_signed_proposal(
-		prop: ProposalType,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_fee_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
 	}
 
@@ -487,6 +496,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
 					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+				DKGPayloadKey::RescueTokensProposal(_) =>
+					DKGPayloadKey::RescueTokensProposal(nonce),
 				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
 					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
 				DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
@@ -594,6 +605,15 @@ impl<T: Config> Pallet<T> {
 					return !SignedProposals::<T>::contains_key(
 						chain_id,
 						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+					)
+				}
+				false
+			},
+			ProposalType::RescueTokensSigned { data, .. } => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
+					return !SignedProposals::<T>::contains_key(
+						chain_id,
+						DKGPayloadKey::RescueTokensProposal(nonce),
 					)
 				}
 				false
@@ -938,8 +958,10 @@ impl<T: Config> Pallet<T> {
 		execution_context_address_bytes.copy_from_slice(&data[92..112]);
 		Ok(header)
 	}
-	// TODO: decode_rescue_tokens_proposal is never used; check if intentional
-	fn _decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
+
+	/// (header: 40 Bytes, tokenAddress: 20 bytes, to: 20 bytes, amountToRescue: 32 bytes)) = 112
+	/// Bytes
+	fn decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		if data.len() != 112 {
 			return Err(Error::<T>::ProposalFormatInvalid)?
 		}
