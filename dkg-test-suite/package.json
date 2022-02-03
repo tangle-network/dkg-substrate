@@ -7,6 +7,7 @@
 		"dkg-refresh": "ts-node ./src/keyRefresh.ts",
 		"anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
 		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
+		"vanchor-configurable-limit-proposals": "ts-node ./src/testVAnchorConfigurableLimitsProposal.ts",
 		"script": "ts-node"
 	},
 	"author": "",

@@ -2,6 +2,7 @@ import { ApiPromise } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
 import {
 	AnchorUpdateProposal,
+	ChainIdType,
 	encodeUpdateAnchorProposal,
 	hexToBytes,
 	makeResourceId,
@@ -13,7 +14,11 @@ import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
 
-const resourceId = makeResourceId('0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667', 5002);
+const resourceId = makeResourceId(
+	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+	ChainIdType.EVM,
+	5002
+);
 const anchorUpdateProposal: AnchorUpdateProposal = {
 	header: {
 		resourceId,
@@ -27,19 +32,19 @@ const anchorUpdateProposal: AnchorUpdateProposal = {
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
-
+	await registerResourceId(api);
+	await waitNfinalizedBlocks(api, 6, 20 * 7);
 	await sendAnchorProposal(api);
-
-	await waitNfinalizedBlocks(api, 4, 20 * 7);
+	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
 	).publicKey.toString('hex');
-
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', { EVM: 5002 });
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
-		5002,
+		chainIdType,
 		{ anchorupdateproposal: 0 },
 		(res: any) => {
 			if (res) {
@@ -73,6 +78,27 @@ async function testAnchorProposal() {
 	unsubSignedProps();
 }
 
+async function registerResourceId(api: ApiPromise) {
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+
+	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
+	console.log('Registering resource id');
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({ phase, event: { data, method, section } }) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsub();
+		}
+	});
+}
+
 async function sendAnchorProposal(api: ApiPromise) {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
@@ -87,7 +113,8 @@ async function sendAnchorProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(0, 5001, resourceId, prop);
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', { EVM: 5001 });
+	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(0, chainIdType, resourceId, prop);
 
 	const unsub = await proposalCall.signAndSend(alice, ({ events = [], status }) => {
 		console.log(`Current status is: ${status.type}`);

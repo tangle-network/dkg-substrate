@@ -283,7 +283,7 @@ pub mod pallet {
 		fn build(&self) {
 			for chain_id in self.initial_chain_ids.iter() {
 				ChainNonces::<T>::insert(
-					ChainIdType::<T::ChainId>::Substrate(chain_id.clone()),
+					ChainIdType::<T::ChainId>::EVM(chain_id.clone()),
 					ProposalNonce::default(),
 				);
 			}

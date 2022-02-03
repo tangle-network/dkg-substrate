@@ -1170,6 +1170,26 @@ where
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
+			Ok((_chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MaxDepositLimitUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MinWithdrawalLimitUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MaxExtLimitUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
+			Ok((_chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(_nonce))) =>
+				Some(ProposalType::MaxFeeLimitUpdateSigned {
+					data: finished_round.payload,
+					signature: finished_round.signature,
+				}),
 			Ok((_chain_id, DKGPayloadKey::RefreshVote(nonce))) => {
 				let offchain = self.backend.offchain_storage();
 
@@ -1313,9 +1333,21 @@ where
 				ProposalType::WrappingFeeUpdate { data } =>
 					Self::pre_signing_proposal_handler(chain_id_type, data),
 				ProposalType::EVMUnsigned { data } => data,
+				ProposalType::MaxDepositLimitUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				_ => continue,
+				ProposalType::MinWithdrawalLimitUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				_ => continue,
+				ProposalType::MaxExtLimitUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
+				_ => continue,
+				ProposalType::MaxFeeLimitUpdate { data } =>
+					Self::pre_signing_proposal_handler(chain_id_type, data),
 				_ => continue,
 			};
 
+			debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 			}

@@ -236,7 +236,8 @@ impl pallet_timestamp::Config for Runtime {
 
 parameter_types! {
 	// How often we trigger a new session. (Number of blocks * BLOCK_TIME)
-	pub const Period: BlockNumber = 20;
+	// 600 blocks * 3 secs = 900s = ~30 minutes
+	pub const Period: BlockNumber = 600;
 	pub const Offset: BlockNumber = 0;
 }
 

@@ -410,7 +410,7 @@ where
 								}
 								new_sign.proceed(started_at)?;
 							}
-							trace!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", round_key);
+							debug!(target: "dkg", "🕸️  Handled pending vote messages for {:?}", round_key);
 
 							self.votes.insert(round_key.clone(), new_sign);
 
