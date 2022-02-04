@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::Encode;
-use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, ProposalType};
+use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -794,7 +794,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), ProposalType)> {
+		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), Proposal)> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 

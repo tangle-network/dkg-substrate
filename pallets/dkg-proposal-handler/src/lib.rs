@@ -13,8 +13,8 @@ mod tests;
 
 use dkg_runtime_primitives::{
 	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalHeader, ProposalNonce,
-	ProposalType, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
+	ProposalKind, ProposalNonce, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -35,7 +35,9 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey, ProposalType};
+	use dkg_runtime_primitives::{
+		utils::ensure_signed_by_dkg, DKGPayloadKey, Proposal, ProposalKind,
+	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::AtLeast32BitUnsigned;
@@ -62,7 +64,7 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// /// All unsigned proposals.
+	/// All unsigned proposals.
 	#[pallet::storage]
 	#[pallet::getter(fn unsigned_proposals)]
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
@@ -71,7 +73,7 @@ pub mod pallet {
 		ChainIdType<T::ChainId>,
 		Blake2_128Concat,
 		DKGPayloadKey,
-		ProposalType,
+		Proposal,
 	>;
 
 	/// All signed proposals.
@@ -83,7 +85,7 @@ pub mod pallet {
 		ChainIdType<T::ChainId>,
 		Blake2_128Concat,
 		DKGPayloadKey,
-		ProposalType,
+		Proposal,
 	>;
 
 	#[pallet::event]
@@ -92,7 +94,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
-		ProposalAdded(T::AccountId, ProposalType),
+		ProposalAdded(T::AccountId, Proposal),
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
 			/// The Target EVM chain ID.
@@ -145,7 +147,7 @@ pub mod pallet {
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
 			origin: OriginFor<T>,
-			props: Vec<ProposalType>,
+			props: Vec<Proposal>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
@@ -153,7 +155,8 @@ pub mod pallet {
 				props.len() <= T::MaxSubmissionsPerBatch::get() as usize,
 				Error::<T>::ProposalsLengthOverflow
 			);
-			// log the caller, and the prop
+
+			// log the caller, and the props.
 			frame_support::log::debug!(
 				target: "dkg_proposal_handler",
 				"submit_signed_proposal: props: {:?} by {:?}",
@@ -162,52 +165,48 @@ pub mod pallet {
 			);
 
 			for prop in &props {
-				let (data, signature) = match prop {
-					ProposalType::EVMSigned { data, signature } => (data, signature),
-					ProposalType::AnchorUpdateSigned { data, signature } => (data, signature),
-					ProposalType::TokenAddSigned { data, signature } => (data, signature),
-					ProposalType::TokenRemoveSigned { data, signature } => (data, signature),
-					ProposalType::WrappingFeeUpdateSigned { data, signature } => (data, signature),
-					ProposalType::RescueTokensSigned { data, signature } => (data, signature),
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
-				};
+				if let Proposal::Signed { kind, data, signature } = prop {
+					ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+						.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
 
-				ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
-					.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
+					// now we need to log the data and signature
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal: data: {:?}, signature: {:?}",
+						data,
+						signature
+					);
 
-				// now we need to log the data and signature
-				frame_support::log::debug!(
-					target: "dkg_proposal_handler",
-					"submit_signed_proposal: data: {:?}, signature: {:?}",
-					data,
-					signature
-				);
+					let prop = prop.clone();
 
-				match prop {
-					ProposalType::EVMSigned { .. } =>
-						Self::handle_evm_signed_proposal(prop.clone())?,
-					ProposalType::AnchorUpdateSigned { .. } =>
-						Self::handle_anchor_update_signed_proposal(prop.clone())?,
-					ProposalType::TokenAddSigned { .. } =>
-						Self::handle_token_add_signed_proposal(prop.clone())?,
-					ProposalType::TokenRemoveSigned { .. } =>
-						Self::handle_token_remove_signed_proposal(prop.clone())?,
-					ProposalType::WrappingFeeUpdateSigned { .. } =>
-						Self::handle_wrapping_fee_update_signed_proposal(prop.clone())?,
-					ProposalType::ResourceIdUpdateSigned { .. } =>
-						Self::handle_resource_id_update_signed_proposal(prop.clone())?,
-					ProposalType::RescueTokensSigned { .. } =>
-						Self::handle_rescue_tokens_signed_proposal(prop.clone())?,
-					ProposalType::MaxDepositLimitUpdateSigned { .. } =>
-						Self::handle_deposit_limit_update_signed_proposal(prop.clone())?,
-					ProposalType::MinWithdrawalLimitUpdateSigned { .. } =>
-						Self::handle_withdraw_limit_update_signed_proposal(prop.clone())?,
-					ProposalType::MaxExtLimitUpdateSigned { .. } =>
-						Self::handle_ext_limit_update_signed_proposal(prop.clone())?,
-					ProposalType::MaxFeeLimitUpdateSigned { .. } =>
-						Self::handle_fee_limit_update_signed_proposal(prop.clone())?,
-					_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					match kind {
+						ProposalKind::EVM => Self::handle_evm_signed_proposal(prop)?,
+						ProposalKind::TokenAdd => Self::handle_token_add_signed_proposal(prop)?,
+						ProposalKind::TokenRemove =>
+							Self::handle_token_remove_signed_proposal(prop)?,
+						ProposalKind::AnchorUpdate =>
+							Self::handle_anchor_update_signed_proposal(prop)?,
+						ProposalKind::WrappingFeeUpdate =>
+							Self::handle_wrapping_fee_update_signed_proposal(prop)?,
+						ProposalKind::ResourceIdUpdate =>
+							Self::handle_resource_id_update_signed_proposal(prop)?,
+						ProposalKind::RescueTokens =>
+							Self::handle_rescue_tokens_signed_proposal(prop)?,
+						ProposalKind::MaxDepositLimitUpdate =>
+							Self::handle_deposit_limit_update_signed_proposal(prop)?,
+						ProposalKind::MinWithdrawalLimitUpdate =>
+							Self::handle_withdraw_limit_update_signed_proposal(prop)?,
+						ProposalKind::MaxExtLimitUpdate =>
+							Self::handle_ext_limit_update_signed_proposal(prop)?,
+						ProposalKind::MaxFeeLimitUpdate =>
+							Self::handle_fee_limit_update_signed_proposal(prop)?,
+						_ => Err(Error::<T>::ProposalSignatureInvalid)?,
+					}
+
+					continue
 				}
+
+				Err(Error::<T>::ProposalSignatureInvalid)?;
 			}
 
 			Ok(().into())
@@ -221,143 +220,111 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
-			prop: ProposalType,
+			prop: Proposal,
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
 			ensure_root(origin)?;
+
 			// We ensure that only certain proposals are valid this way
-			match prop {
-				ProposalType::TokenAdd { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_token_add_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::TokenAddProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::TokenRemove { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_token_remove_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::TokenRemoveProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::WrappingFeeUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_wrapping_fee_update_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::ResourceIdUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_resource_id_update_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::RescueTokens { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_rescue_tokens_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::RescueTokensProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::MaxDepositLimitUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::MinWithdrawalLimitUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::MaxExtLimitUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				ProposalType::MaxFeeLimitUpdate { ref data } => {
-					let (chain_id, nonce) =
-						Self::decode_configurable_limit_proposal(&data).map(Into::into)?;
-					UnsignedProposalQueue::<T>::insert(
-						chain_id,
-						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
-						prop.clone(),
-					);
-					Ok(().into())
-				},
-				_ => Err(Error::<T>::ProposalFormatInvalid)?,
+			if let Proposal::Unsigned { kind, data } = &prop {
+				let chain_key = match kind {
+					ProposalKind::EVM => {
+						let eth_transaction = TransactionV2::decode(&mut &data[..])
+							.map_err(|_| Error::<T>::ProposalFormatInvalid)?;
+
+						ensure!(
+							Self::validate_ethereum_tx(&eth_transaction),
+							Error::<T>::ProposalFormatInvalid
+						);
+
+						let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
+						Some((chain_id, DKGPayloadKey::EVMProposal(nonce)))
+					},
+					ProposalKind::TokenAdd => {
+						let (chain_id, nonce) =
+							Self::decode_token_add_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::TokenAddProposal(nonce)))
+					},
+					ProposalKind::TokenRemove => {
+						let (chain_id, nonce) =
+							Self::decode_token_remove_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::TokenRemoveProposal(nonce)))
+					},
+					ProposalKind::WrappingFeeUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_wrapping_fee_update_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(nonce)))
+					},
+					ProposalKind::ResourceIdUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::ResourceIdUpdateProposal(nonce)))
+					},
+					ProposalKind::RescueTokens => {
+						let (chain_id, nonce) =
+							Self::decode_rescue_tokens_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::RescueTokensProposal(nonce)))
+					},
+					ProposalKind::MaxDepositLimitUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce)))
+					},
+					ProposalKind::MinWithdrawalLimitUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce)))
+					},
+					ProposalKind::MaxExtLimitUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(nonce)))
+					},
+					ProposalKind::MaxFeeLimitUpdate => {
+						let (chain_id, nonce) =
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
+						Some((chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce)))
+					},
+					_ => None,
+				};
+
+				if let Some((chain_id, key)) = chain_key {
+					UnsignedProposalQueue::<T>::insert(chain_id, key, prop.clone());
+					return Ok(().into())
+				}
 			}
+
+			Err(Error::<T>::ProposalFormatInvalid)?
 		}
 	}
 }
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
-		if let Ok(eth_transaction) = TransactionV2::decode(&mut &proposal[..]) {
-			ensure!(
-				Self::validate_ethereum_tx(&eth_transaction),
-				Error::<T>::ProposalFormatInvalid
-			);
-
-			let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
-			let unsigned_proposal = ProposalType::EVMUnsigned { data: proposal };
-			UnsignedProposalQueue::<T>::insert(
-				chain_id,
-				DKGPayloadKey::EVMProposal(nonce),
-				unsigned_proposal,
-			);
-		} else if let Ok((chain_id, nonce)) =
+		if let Ok((chain_id, nonce)) =
 			Self::decode_anchor_update_proposal(&proposal).map(Into::into)
 		{
-			let unsigned_proposal = ProposalType::AnchorUpdate { data: proposal };
+			let unsigned_proposal =
+				Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::AnchorUpdate };
+
 			UnsignedProposalQueue::<T>::insert(
 				chain_id,
 				DKGPayloadKey::AnchorUpdateProposal(nonce),
 				unsigned_proposal,
 			);
-		} else {
-			return Err(Error::<T>::ProposalFormatInvalid)?
+
+			return Ok(())
 		}
 
-		return Ok(())
+		Err(Error::<T>::ProposalFormatInvalid)?
 	}
 
 	fn handle_unsigned_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
-		let unsigned_proposal = ProposalType::RefreshProposal { data: proposal.encode() };
+		let unsigned_proposal =
+			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
+
 		UnsignedProposalQueue::<T>::insert(
 			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
@@ -378,7 +345,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(().into())
 	}
 
-	fn handle_evm_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_evm_signed_proposal(prop: Proposal) -> DispatchResult {
 		let data = prop.data();
 		let signature = prop.signature();
 		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
@@ -417,7 +384,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::deposit_event(Event::<T>::ProposalSigned {
 				chain_id,
 				key: DKGPayloadKey::EVMProposal(nonce),
-				data,
+				data: data.clone(),
 				signature,
 			});
 			Ok(().into())
@@ -426,56 +393,53 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		}
 	}
 
-	fn handle_anchor_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_anchor_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0))
 	}
 
 	fn handle_token_add_signed_proposal(
-		prop: ProposalType,
+		prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0))
 	}
 
 	fn handle_token_remove_signed_proposal(
-		prop: ProposalType,
+		prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0))
 	}
 
-	fn handle_wrapping_fee_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_wrapping_fee_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::WrappingFeeUpdateProposal(0))
 	}
 
 	fn handle_resource_id_update_signed_proposal(
-		prop: ProposalType,
+		prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
 	}
 
-	fn handle_rescue_tokens_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_rescue_tokens_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
 	}
 
-	fn handle_deposit_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_deposit_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
 	}
 
-	fn handle_withdraw_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_withdraw_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
 	}
 
-	fn handle_ext_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_ext_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
 	}
 
-	fn handle_fee_limit_update_signed_proposal(prop: ProposalType) -> DispatchResult {
+	fn handle_fee_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
 		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
 	}
 
-	fn handle_signed_proposal(
-		prop: ProposalType,
-		payload_key_type: DKGPayloadKey,
-	) -> DispatchResult {
+	fn handle_signed_proposal(prop: Proposal, payload_key_type: DKGPayloadKey) -> DispatchResult {
 		let data = prop.data();
 		let signature = prop.signature();
 		if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
@@ -530,7 +494,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::deposit_event(Event::<T>::ProposalSigned {
 				chain_id,
 				key: payload_key,
-				data,
+				data: data.clone(),
 				signature,
 			});
 			Ok(())
@@ -543,119 +507,106 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<((ChainIdType<T::ChainId>, DKGPayloadKey), ProposalType)>
-	{
+	pub fn get_unsigned_proposals() -> Vec<((ChainIdType<T::ChainId>, DKGPayloadKey), Proposal)> {
 		return UnsignedProposalQueue::<T>::iter()
 			.map(|entry| ((entry.0, entry.1), entry.2.clone()))
 			.collect()
 	}
 
-	pub fn is_existing_proposal(x: &ProposalType) -> bool {
-		match x {
-			ProposalType::EVMSigned { data, .. } => {
-				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-					if let Ok((chain_id, nonce)) = Self::decode_evm_transaction(&eth_transaction) {
-						return !SignedProposals::<T>::contains_key(
-							chain_id,
-							DKGPayloadKey::EVMProposal(nonce),
-						)
-					}
-				}
+	pub fn is_existing_proposal(prop: &Proposal) -> bool {
+		if let Proposal::Signed { kind, ref data, .. } = prop {
+			let mut found = None;
 
-				false
-			},
-			ProposalType::AnchorUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::AnchorUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::TokenAddSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::TokenAddProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::TokenRemoveSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::TokenRemoveProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::WrappingFeeUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::ResourceIdUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::RescueTokensSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::RescueTokensProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::MaxDepositLimitUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::MinWithdrawalLimitUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::MaxExtLimitUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			ProposalType::MaxFeeLimitUpdateSigned { data, .. } => {
-				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(data).map(Into::into) {
-					return !SignedProposals::<T>::contains_key(
-						chain_id,
-						DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
-					)
-				}
-				false
-			},
-			_ => false,
+			match kind {
+				ProposalKind::EVM =>
+					if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+						if let Ok((chain_id, nonce)) =
+							Self::decode_evm_transaction(&eth_transaction)
+						{
+							found = Some((chain_id, DKGPayloadKey::EVMProposal(nonce)));
+						}
+					},
+				ProposalKind::AnchorUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(&data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::AnchorUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::TokenAdd => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(&data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::TokenAddProposal(nonce)));
+					}
+				},
+				ProposalKind::TokenRemove => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::TokenRemoveProposal(nonce)));
+					}
+				},
+				ProposalKind::WrappingFeeUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::ResourceIdUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::ResourceIdUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::RescueTokens => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::RescueTokensProposal(nonce)));
+					}
+				},
+				ProposalKind::MaxDepositLimitUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found =
+							Some((chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::MinWithdrawalLimitUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found =
+							Some((chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::MaxExtLimitUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(nonce)));
+					}
+				},
+				ProposalKind::MaxFeeLimitUpdate => {
+					if let Ok((chain_id, nonce)) =
+						Self::decode_proposal_header(data).map(Into::into)
+					{
+						found = Some((chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce)));
+					}
+				},
+				_ => (),
+			};
+
+			if let Some((chain_id, key)) = found {
+				return !SignedProposals::<T>::contains_key(chain_id, key)
+			}
 		}
+
+		false
 	}
 
 	// *** Offchain worker methods ***
@@ -717,7 +668,7 @@ impl<T: Config> Pallet<T> {
 
 	fn get_next_offchain_signed_proposal(
 		block_number: T::BlockNumber,
-	) -> Result<Vec<ProposalType>, &'static str> {
+	) -> Result<Vec<Proposal>, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut all_proposals = Vec::new();

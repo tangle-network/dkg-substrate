@@ -51,7 +51,7 @@ use crate::{
 };
 use dkg_primitives::{
 	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId},
-	AggregatedPublicKeys, ChainId, DKGReport, ProposalType,
+	AggregatedPublicKeys, ChainId, DKGReport, Proposal, ProposalKind,
 };
 
 use dkg_runtime_primitives::{
@@ -1136,62 +1136,72 @@ where
 		self.process_signed_proposals(proposals);
 	}
 
-	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<ProposalType> {
+	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key =
 			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+
 		match decoded_key {
-			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(ProposalType::EVMSigned {
+			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(Proposal::Signed {
+				kind: ProposalKind::EVM,
 				data: finished_round.payload,
 				signature: finished_round.signature,
 			}),
 			Ok((_chain_id, DKGPayloadKey::AnchorUpdateProposal(_nonce))) =>
-				Some(ProposalType::AnchorUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::AnchorUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
-			Ok((_chain_id, DKGPayloadKey::TokenAddProposal(_nonce))) =>
-				Some(ProposalType::TokenAddSigned {
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::TokenRemoveProposal(_nonce))) =>
-				Some(ProposalType::TokenRemoveSigned {
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
+			Ok((_chain_id, DKGPayloadKey::TokenAddProposal(_nonce))) => Some(Proposal::Signed {
+				kind: ProposalKind::TokenAdd,
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
+			Ok((_chain_id, DKGPayloadKey::TokenRemoveProposal(_nonce))) => Some(Proposal::Signed {
+				kind: ProposalKind::TokenRemove,
+				data: finished_round.payload,
+				signature: finished_round.signature,
+			}),
 			Ok((_chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(_nonce))) =>
-				Some(ProposalType::WrappingFeeUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::WrappingFeeUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::ResourceIdUpdateProposal(_nonce))) =>
-				Some(ProposalType::ResourceIdUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::ResourceIdUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::RescueTokensProposal(_nonce))) =>
-				Some(ProposalType::RescueTokensSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::RescueTokens,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(_nonce))) =>
-				Some(ProposalType::MaxDepositLimitUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::MaxDepositLimitUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(_nonce))) =>
-				Some(ProposalType::MinWithdrawalLimitUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::MinWithdrawalLimitUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(_nonce))) =>
-				Some(ProposalType::MaxExtLimitUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::MaxExtLimitUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
 			Ok((_chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(_nonce))) =>
-				Some(ProposalType::MaxFeeLimitUpdateSigned {
+				Some(Proposal::Signed {
+					kind: ProposalKind::MaxFeeLimitUpdate,
 					data: finished_round.payload,
 					signature: finished_round.signature,
 				}),
@@ -1314,53 +1324,54 @@ where
 
 			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
-			let data = match proposal {
-				ProposalType::RefreshProposal { data } => {
-					let refresh_prop_data =
-						match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
-							Ok(res) => res,
-							Err(err) => {
-								error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
-								continue
-							},
-						};
-					let mut buf = Vec::new();
-					buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
-					buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
-					Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
-				},
-				ProposalType::AnchorUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::TokenAdd { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::TokenRemove { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::WrappingFeeUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::RescueTokens { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::EVMUnsigned { data } => data,
-				ProposalType::MaxDepositLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::MinWithdrawalLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::MaxExtLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				ProposalType::MaxFeeLimitUpdate { data } =>
-					Self::pre_signing_proposal_handler(chain_id_type, data),
-				_ => continue,
-			};
 
-			debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
-			if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
-				error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+			if let Proposal::Unsigned { kind, data } = proposal {
+				let data = match kind {
+					ProposalKind::Refresh => {
+						let refresh_prop_data =
+							match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
+								Ok(res) => res,
+								Err(err) => {
+									error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
+									continue
+								},
+							};
+						let mut buf = Vec::new();
+						buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
+						buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
+						Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
+					},
+					ProposalKind::AnchorUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::TokenAdd =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::TokenRemove =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::RescueTokens =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxDepositLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MinWithdrawalLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxExtLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxFeeLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::EVM => data,
+					_ => continue,
+				};
+
+				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
+				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+				}
 			}
 		}
 		// send messages to all peers
 		self.send_outgoing_dkg_messages();
 	}
 
-	fn process_signed_proposals(&mut self, signed_proposals: Vec<ProposalType>) {
+	fn process_signed_proposals(&mut self, signed_proposals: Vec<Proposal>) {
 		if signed_proposals.is_empty() {
 			return
 		}
@@ -1393,7 +1404,7 @@ where
 			let mut prop_wrapper = match old_val.clone() {
 				Some(ser_props) =>
 					OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
-				None => OffchainSignedProposals::<NumberFor<B>>::default(),
+				None => Default::default(),
 			};
 
 			// The signed proposals are submitted in batches, since we want to try and limit
