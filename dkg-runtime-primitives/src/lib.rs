@@ -70,7 +70,7 @@ pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
 pub struct OffchainSignedProposals<BlockNumber> {
-	pub proposals: Vec<(Vec<ProposalType>, BlockNumber)>,
+	pub proposals: Vec<(Vec<Proposal>, BlockNumber)>,
 }
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
@@ -289,7 +289,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), ProposalType)>;
+		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), Proposal)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(_block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

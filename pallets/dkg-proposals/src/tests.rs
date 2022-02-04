@@ -12,10 +12,9 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_does_not_have_event, assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to,
-	ExtBuilder, ParachainStaking,
+	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, ParachainStaking,
 };
-use dkg_runtime_primitives::{ProposalHeader, ProposalType};
+use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
@@ -191,7 +190,7 @@ fn add_remove_relayer() {
 	})
 }
 
-pub fn make_proposal<const N: usize>(prop: ProposalType) -> Vec<u8> {
+pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
 	// Create the proposal Header
 	let header = ProposalHeader {
 		resource_id: [
@@ -208,10 +207,12 @@ pub fn make_proposal<const N: usize>(prop: ProposalType) -> Vec<u8> {
 	buf.extend_from_slice(&[0u8; N]);
 
 	match prop {
-		ProposalType::AnchorUpdate { .. } => ProposalType::AnchorUpdate { data: buf },
+		Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, .. } =>
+			Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
 	.data()
+	.clone()
 }
 
 #[test]
@@ -221,7 +222,10 @@ fn create_successful_proposal() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(ProposalType::AnchorUpdate { data: vec![] });
+		let proposal = make_proposal::<40>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
 			Origin::signed(mock_pub_key(PROPOSER_A)),
@@ -311,7 +315,10 @@ fn create_unsucessful_proposal() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(ProposalType::AnchorUpdate { data: vec![] });
+		let proposal = make_proposal::<40>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -401,7 +408,10 @@ fn execute_after_threshold_change() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(ProposalType::AnchorUpdate { data: vec![] });
+		let proposal = make_proposal::<40>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -473,7 +483,10 @@ fn proposal_expires() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(ProposalType::AnchorUpdate { data: vec![] });
+		let proposal = make_proposal::<40>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -613,7 +626,10 @@ fn only_current_authorities_should_make_successful_proposals() {
 		assert_eq!(DKGProposals::resource_exists(r_id), true);
 
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(ProposalType::AnchorUpdate { data: vec![] });
+		let proposal = make_proposal::<40>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
 
 		assert_err!(
 			DKGProposals::reject_proposal(
