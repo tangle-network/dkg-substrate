@@ -453,7 +453,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<72>(ProposalType::RescueTokens { data: vec![] })
+			make_proposal::<72>(Proposal::Unsigned {
+				kind: ProposalKind::RescueTokens,
+				data: vec![]
+			})
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
@@ -481,7 +484,10 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(ProposalType::MaxDepositLimitUpdate { data: vec![] })
+			make_proposal::<32>(Proposal::Unsigned {
+				kind: ProposalKind::MaxDepositLimitUpdate,
+				data: vec![]
+			})
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
@@ -494,7 +500,10 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(ProposalType::MinWithdrawalLimitUpdate { data: vec![] })
+			make_proposal::<32>(Proposal::Unsigned {
+				kind: ProposalKind::MinWithdrawalLimitUpdate,
+				data: vec![]
+			})
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
@@ -507,7 +516,10 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(ProposalType::MaxExtLimitUpdate { data: vec![] })
+			make_proposal::<32>(Proposal::Unsigned {
+				kind: ProposalKind::MaxExtLimitUpdate,
+				data: vec![]
+			})
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
@@ -520,7 +532,10 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(ProposalType::MaxFeeLimitUpdate { data: vec![] })
+			make_proposal::<32>(Proposal::Unsigned {
+				kind: ProposalKind::MaxFeeLimitUpdate,
+				data: vec![]
+			})
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(

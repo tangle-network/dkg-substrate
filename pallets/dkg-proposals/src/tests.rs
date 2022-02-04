@@ -211,7 +211,8 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
 			Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: buf },
 		_ => panic!("Invalid proposal type"),
 	}
-	.data().clone()
+	.data()
+	.clone()
 }
 
 #[test]

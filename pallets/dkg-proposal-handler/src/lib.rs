@@ -65,7 +65,7 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// /// All unsigned proposals.
+	/// All unsigned proposals.
 	#[pallet::storage]
 	#[pallet::getter(fn unsigned_proposals)]
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
@@ -189,15 +189,13 @@ pub mod pallet {
 						WrappingFeeUpdate =>
 							Self::handle_wrapping_fee_update_signed_proposal(prop)?,
 						ResourceIdUpdate => Self::handle_resource_id_update_signed_proposal(prop)?,
-						RescueTokensSigned => Self::handle_rescue_tokens_signed_proposal(prop)?,
-						MaxDepositLimitUpdateSigned =>
+						RescueTokens => Self::handle_rescue_tokens_signed_proposal(prop)?,
+						MaxDepositLimitUpdate =>
 							Self::handle_deposit_limit_update_signed_proposal(prop)?,
-						MinWithdrawalLimitUpdateSigned =>
+						MinWithdrawalLimitUpdate =>
 							Self::handle_withdraw_limit_update_signed_proposal(prop)?,
-						MaxExtLimitUpdateSigned =>
-							Self::handle_ext_limit_update_signed_proposal(prop)?,
-						MaxFeeLimitUpdateSigned =>
-							Self::handle_fee_limit_update_signed_proposal(prop)?,
+						MaxExtLimitUpdate => Self::handle_ext_limit_update_signed_proposal(prop)?,
+						MaxFeeLimitUpdate => Self::handle_fee_limit_update_signed_proposal(prop)?,
 						_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					}
 
@@ -262,27 +260,27 @@ pub mod pallet {
 					},
 					RescueTokens => {
 						let (chain_id, nonce) =
-							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+							Self::decode_rescue_tokens_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::RescueTokensProposal(nonce)))
 					},
 					MaxDepositLimitUpdate => {
 						let (chain_id, nonce) =
-							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce)))
 					},
 					MinWithdrawalLimitUpdate => {
 						let (chain_id, nonce) =
-							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce)))
 					},
 					MaxExtLimitUpdate => {
 						let (chain_id, nonce) =
-							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(nonce)))
 					},
 					MaxFeeLimitUpdate => {
 						let (chain_id, nonce) =
-							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
+							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce)))
 					},
 					_ => None,

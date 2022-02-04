@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, ProposalNonce, Proposal};
+use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal, ProposalNonce};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
