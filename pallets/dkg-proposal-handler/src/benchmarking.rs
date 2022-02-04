@@ -16,7 +16,7 @@ use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
 use sp_std::vec::Vec;
 
 use dkg_runtime_primitives::{
-	keccak_256, EIP2930Transaction, ProposalType, TransactionAction, TransactionV2,
+	keccak_256, EIP2930Transaction, Proposal, ProposalKind, TransactionAction, TransactionV2,
 };
 
 pub fn mock_eth_tx_eip2930(nonce: u8) -> EIP2930Transaction {
@@ -39,7 +39,7 @@ pub fn mock_sign_msg(msg: &[u8; 32], pub_key: &ecdsa::Public) -> ecdsa::Signatur
 	ecdsa_sign_prehashed(KEY_TYPE, pub_key, msg).expect("Expected a valid signature")
 }
 
-pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> ProposalType {
+pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> Proposal {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -48,7 +48,11 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> P
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return ProposalType::EVMSigned { data: eth_tx_ser.clone(), signature: sig_vec }
+	return Proposal::Signed {
+		kind: ProposalKind::EVM,
+		data: eth_tx_ser.clone(),
+		signature: sig_vec,
+	}
 }
 
 benchmarks! {
@@ -60,7 +64,10 @@ benchmarks! {
 		let mut signed_proposals = Vec::new();
 		for i in 0..n as usize {
 			let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(i as u8));
-			let proposal = <Pallet<T> as ProposalHandlerTrait>::handle_unsigned_proposal(tx.encode(), ProposalAction::Sign(i as u8));
+			let proposal = <Pallet<T> as ProposalHandlerTrait>::force_submit_unsigned_proposal(Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: eth_tx_ser.clone()
+			});
 			let signed_prop = mock_signed_proposal(tx, &dkg_pub_key);
 			signed_proposals.push(signed_prop)
 		}
@@ -74,7 +81,8 @@ benchmarks! {
 	}
 
 	force_submit_unsigned_proposal {
-		let proposal = ProposalType::TokenAdd {
+		let proposal = Proposal::Unsigned {
+			kind: ProposalKind::TokenAdd,
 			data: hex!("00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001").to_vec()
 		};
 
