@@ -1291,19 +1291,6 @@ where
 		}
 	}
 
-	fn pre_signing_proposal_handler(chain_id_type: ChainIdType<ChainId>, data: Vec<u8>) -> Vec<u8> {
-		match chain_id_type {
-			ChainIdType::EVM(_) => {
-				let hash = sp_core::keccak_256(&data);
-				let mut prefixed_data = Vec::new();
-				prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
-				prefixed_data.extend_from_slice(&hash[..]);
-				prefixed_data.to_vec()
-			},
-			_ => data,
-		}
-	}
-
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
 		if self.rounds.is_none() {
 			return
@@ -1328,36 +1315,15 @@ where
 
 			if let Proposal::Unsigned { kind, data } = proposal {
 				let data = match kind {
-					ProposalKind::Refresh => {
-						let refresh_prop_data =
-							match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
-								Ok(res) => res,
-								Err(err) => {
-									error!(target: "dkg", "Error decoding RefreshProposal {:?}", err);
-									continue
-								},
-							};
-						let mut buf = Vec::new();
-						buf.extend_from_slice(&refresh_prop_data.nonce.to_be_bytes());
-						buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
-						Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
-					},
-					ProposalKind::AnchorUpdate =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::TokenAdd =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::TokenRemove =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::RescueTokens =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::MaxDepositLimitUpdate =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::MinWithdrawalLimitUpdate =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::MaxExtLimitUpdate =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
-					ProposalKind::MaxFeeLimitUpdate =>
-						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::Refresh => data,
+					ProposalKind::AnchorUpdate => data,
+					ProposalKind::TokenAdd => data,
+					ProposalKind::TokenRemove => data,
+					ProposalKind::RescueTokens => data,
+					ProposalKind::MaxDepositLimitUpdate => data,
+					ProposalKind::MinWithdrawalLimitUpdate => data,
+					ProposalKind::MaxExtLimitUpdate => data,
+					ProposalKind::MaxFeeLimitUpdate => data,
 					ProposalKind::EVM => data,
 					_ => continue,
 				};
