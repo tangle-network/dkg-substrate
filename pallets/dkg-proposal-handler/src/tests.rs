@@ -374,18 +374,17 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Proposal {
 	buf.extend_from_slice(&[0u8; N]);
 
 	if let Proposal::Unsigned { kind, .. } = prop {
-		use ProposalKind::*;
 		return match kind {
-			TokenAdd => Proposal::Unsigned { kind, data: buf },
-			TokenRemove => Proposal::Unsigned { kind, data: buf },
-			WrappingFeeUpdate => Proposal::Unsigned { kind, data: buf },
-			ResourceIdUpdate => Proposal::Unsigned { kind, data: buf },
-			AnchorUpdate => Proposal::Unsigned { kind, data: buf },
-			RescueTokens => Proposal::Unsigned { kind, data: buf },
-			MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::TokenAdd => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::TokenRemove => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::WrappingFeeUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::ResourceIdUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::AnchorUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::RescueTokens => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			_ => panic!("Invalid proposal type"),
 		}
 	}

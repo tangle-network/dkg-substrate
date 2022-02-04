@@ -188,17 +188,15 @@ pub enum ProposalKind {
 
 impl Proposal {
 	pub fn data(&self) -> &Vec<u8> {
-		use Proposal::*;
 		match self {
-			Signed { data, .. } | Unsigned { data, .. } => data,
+			Proposal::Signed { data, .. } | Proposal::Unsigned { data, .. } => data,
 		}
 	}
 
 	pub fn signature(&self) -> Vec<u8> {
-		use Proposal::*;
 		match self {
-			Signed { signature, .. } => signature.clone(),
-			Unsigned { .. } => Vec::new(),
+			Proposal::Signed { signature, .. } => signature.clone(),
+			Proposal::Unsigned { .. } => Vec::new(),
 		}
 	}
 }

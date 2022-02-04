@@ -1327,10 +1327,8 @@ where
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
 			if let Proposal::Unsigned { kind, data } = proposal {
-				use ProposalKind::*;
-
 				let data = match kind {
-					Refresh => {
+					ProposalKind::Refresh => {
 						let refresh_prop_data =
 							match dkg_runtime_primitives::RefreshProposal::decode(&mut &data[..]) {
 								Ok(res) => res,
@@ -1344,17 +1342,23 @@ where
 						buf.extend_from_slice(&refresh_prop_data.pub_key[..]);
 						Self::pre_signing_proposal_handler(chain_id_type, buf.to_vec())
 					},
-					AnchorUpdate => Self::pre_signing_proposal_handler(chain_id_type, data),
-					TokenAdd => Self::pre_signing_proposal_handler(chain_id_type, data),
-					TokenRemove => Self::pre_signing_proposal_handler(chain_id_type, data),
-					RescueTokens => Self::pre_signing_proposal_handler(chain_id_type, data),
-					MaxDepositLimitUpdate =>
+					ProposalKind::AnchorUpdate =>
 						Self::pre_signing_proposal_handler(chain_id_type, data),
-					MinWithdrawalLimitUpdate =>
+					ProposalKind::TokenAdd =>
 						Self::pre_signing_proposal_handler(chain_id_type, data),
-					MaxExtLimitUpdate => Self::pre_signing_proposal_handler(chain_id_type, data),
-					MaxFeeLimitUpdate => Self::pre_signing_proposal_handler(chain_id_type, data),
-					EVM => data,
+					ProposalKind::TokenRemove =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::RescueTokens =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxDepositLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MinWithdrawalLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxExtLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::MaxFeeLimitUpdate =>
+						Self::pre_signing_proposal_handler(chain_id_type, data),
+					ProposalKind::EVM => data,
 					_ => continue,
 				};
 

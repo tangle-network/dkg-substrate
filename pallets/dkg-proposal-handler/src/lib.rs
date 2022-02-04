@@ -180,22 +180,27 @@ pub mod pallet {
 
 					let prop = prop.clone();
 
-					use ProposalKind::*;
 					match kind {
-						EVM => Self::handle_evm_signed_proposal(prop)?,
-						TokenAdd => Self::handle_token_add_signed_proposal(prop)?,
-						TokenRemove => Self::handle_token_remove_signed_proposal(prop)?,
-						AnchorUpdate => Self::handle_anchor_update_signed_proposal(prop)?,
-						WrappingFeeUpdate =>
+						ProposalKind::EVM => Self::handle_evm_signed_proposal(prop)?,
+						ProposalKind::TokenAdd => Self::handle_token_add_signed_proposal(prop)?,
+						ProposalKind::TokenRemove =>
+							Self::handle_token_remove_signed_proposal(prop)?,
+						ProposalKind::AnchorUpdate =>
+							Self::handle_anchor_update_signed_proposal(prop)?,
+						ProposalKind::WrappingFeeUpdate =>
 							Self::handle_wrapping_fee_update_signed_proposal(prop)?,
-						ResourceIdUpdate => Self::handle_resource_id_update_signed_proposal(prop)?,
-						RescueTokens => Self::handle_rescue_tokens_signed_proposal(prop)?,
-						MaxDepositLimitUpdate =>
+						ProposalKind::ResourceIdUpdate =>
+							Self::handle_resource_id_update_signed_proposal(prop)?,
+						ProposalKind::RescueTokens =>
+							Self::handle_rescue_tokens_signed_proposal(prop)?,
+						ProposalKind::MaxDepositLimitUpdate =>
 							Self::handle_deposit_limit_update_signed_proposal(prop)?,
-						MinWithdrawalLimitUpdate =>
+						ProposalKind::MinWithdrawalLimitUpdate =>
 							Self::handle_withdraw_limit_update_signed_proposal(prop)?,
-						MaxExtLimitUpdate => Self::handle_ext_limit_update_signed_proposal(prop)?,
-						MaxFeeLimitUpdate => Self::handle_fee_limit_update_signed_proposal(prop)?,
+						ProposalKind::MaxExtLimitUpdate =>
+							Self::handle_ext_limit_update_signed_proposal(prop)?,
+						ProposalKind::MaxFeeLimitUpdate =>
+							Self::handle_fee_limit_update_signed_proposal(prop)?,
 						_ => Err(Error::<T>::ProposalSignatureInvalid)?,
 					}
 
@@ -223,10 +228,8 @@ pub mod pallet {
 
 			// We ensure that only certain proposals are valid this way
 			if let Proposal::Unsigned { kind, data } = &prop {
-				use ProposalKind::*;
-
 				let chain_key = match kind {
-					EVM => {
+					ProposalKind::EVM => {
 						let eth_transaction = TransactionV2::decode(&mut &data[..])
 							.map_err(|_| Error::<T>::ProposalFormatInvalid)?;
 
@@ -238,47 +241,47 @@ pub mod pallet {
 						let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
 						Some((chain_id, DKGPayloadKey::EVMProposal(nonce)))
 					},
-					TokenAdd => {
+					ProposalKind::TokenAdd => {
 						let (chain_id, nonce) =
 							Self::decode_token_add_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::TokenAddProposal(nonce)))
 					},
-					TokenRemove => {
+					ProposalKind::TokenRemove => {
 						let (chain_id, nonce) =
 							Self::decode_token_remove_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::TokenRemoveProposal(nonce)))
 					},
-					WrappingFeeUpdate => {
+					ProposalKind::WrappingFeeUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_wrapping_fee_update_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(nonce)))
 					},
-					ResourceIdUpdate => {
+					ProposalKind::ResourceIdUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_resource_id_update_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::ResourceIdUpdateProposal(nonce)))
 					},
-					RescueTokens => {
+					ProposalKind::RescueTokens => {
 						let (chain_id, nonce) =
 							Self::decode_rescue_tokens_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::RescueTokensProposal(nonce)))
 					},
-					MaxDepositLimitUpdate => {
+					ProposalKind::MaxDepositLimitUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce)))
 					},
-					MinWithdrawalLimitUpdate => {
+					ProposalKind::MinWithdrawalLimitUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce)))
 					},
-					MaxExtLimitUpdate => {
+					ProposalKind::MaxExtLimitUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(nonce)))
 					},
-					MaxFeeLimitUpdate => {
+					ProposalKind::MaxFeeLimitUpdate => {
 						let (chain_id, nonce) =
 							Self::decode_configurable_limit_proposal(data).map(Into::into)?;
 						Some((chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce)))
@@ -514,12 +517,10 @@ impl<T: Config> Pallet<T> {
 
 	pub fn is_existing_proposal(prop: &Proposal) -> bool {
 		if let Proposal::Signed { kind, ref data, .. } = prop {
-			use ProposalKind::*;
-
 			let mut found = None;
 
 			match kind {
-				EVM =>
+				ProposalKind::EVM =>
 					if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
 						if let Ok((chain_id, nonce)) =
 							Self::decode_evm_transaction(&eth_transaction)
@@ -527,49 +528,49 @@ impl<T: Config> Pallet<T> {
 							found = Some((chain_id, DKGPayloadKey::EVMProposal(nonce)));
 						}
 					},
-				AnchorUpdate => {
+				ProposalKind::AnchorUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(&data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::AnchorUpdateProposal(nonce)));
 					}
 				},
-				TokenAdd => {
+				ProposalKind::TokenAdd => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(&data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::TokenAddProposal(nonce)));
 					}
 				},
-				TokenRemove => {
+				ProposalKind::TokenRemove => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::TokenRemoveProposal(nonce)));
 					}
 				},
-				WrappingFeeUpdate => {
+				ProposalKind::WrappingFeeUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(nonce)));
 					}
 				},
-				ResourceIdUpdate => {
+				ProposalKind::ResourceIdUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::ResourceIdUpdateProposal(nonce)));
 					}
 				},
-				RescueTokens => {
+				ProposalKind::RescueTokens => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::RescueTokensProposal(nonce)));
 					}
 				},
-				MaxDepositLimitUpdate => {
+				ProposalKind::MaxDepositLimitUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
@@ -577,7 +578,7 @@ impl<T: Config> Pallet<T> {
 							Some((chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce)));
 					}
 				},
-				MinWithdrawalLimitUpdate => {
+				ProposalKind::MinWithdrawalLimitUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
@@ -585,14 +586,14 @@ impl<T: Config> Pallet<T> {
 							Some((chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce)));
 					}
 				},
-				MaxExtLimitUpdate => {
+				ProposalKind::MaxExtLimitUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
 						found = Some((chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(nonce)));
 					}
 				},
-				MaxFeeLimitUpdate => {
+				ProposalKind::MaxFeeLimitUpdate => {
 					if let Ok((chain_id, nonce)) =
 						Self::decode_proposal_header(data).map(Into::into)
 					{
