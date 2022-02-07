@@ -208,10 +208,12 @@ where
 					let seed =
 						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
 							[1..];
+
+					// Signers are chosen from ids used in Keygen phase starting from 1 to n
+					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
 					if let Ok(mut signers_set) = signers_set {
-						signers_set.sort();
 						rounds.set_signers(signers_set);
 					}
 					worker.set_rounds(rounds)
@@ -245,10 +247,12 @@ where
 						.clone()
 						.public_key()
 						.to_bytes(true)[1..];
+
+					// Signers are chosen from ids used in Keygen phase starting from 1 to n
+					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
 					if let Ok(mut signers_set) = signers_set {
-						signers_set.sort();
 						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
