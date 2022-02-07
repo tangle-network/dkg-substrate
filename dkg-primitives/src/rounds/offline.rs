@@ -14,6 +14,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+/// Wrapper state-machine for Offline rounds
 pub enum OfflineState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -70,7 +71,7 @@ where
 }
 
 /// Pre-offline rounds
-
+/// Used to collect incoming messages from other peers which started earlier
 pub struct PreOfflineRounds {
 	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
@@ -100,7 +101,7 @@ where
 }
 
 /// Offline rounds
-
+/// Main state, corresponds to gg20 OfflineStage state-machine
 pub struct OfflineRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,

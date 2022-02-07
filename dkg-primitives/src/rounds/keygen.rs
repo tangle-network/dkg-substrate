@@ -16,8 +16,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
-// Keygen state
-
+/// Wrapper state-machine for Keygen rounds
 pub enum KeygenState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -75,7 +74,7 @@ where
 }
 
 /// Pre-keygen rounds
-
+/// Used to collect incoming messages from other peers which started earlier
 pub struct PreKeygenRounds<Clock> {
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
 	clock_type: PhantomData<Clock>,
@@ -106,7 +105,7 @@ where
 }
 
 /// Keygen rounds
-
+/// Main state, corresponds to gg20 Keygen state-machine
 pub struct KeygenRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
