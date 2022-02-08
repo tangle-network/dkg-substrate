@@ -16,8 +16,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
-// Keygen state
-
+/// Wrapper state-machine for Keygen rounds
 pub enum KeygenState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -75,7 +74,7 @@ where
 }
 
 /// Pre-keygen rounds
-
+/// Used to collect incoming messages from other peers which started earlier
 pub struct PreKeygenRounds<Clock> {
 	pending_keygen_msgs: Vec<DKGKeygenMessage>,
 	clock_type: PhantomData<Clock>,
@@ -106,7 +105,7 @@ where
 }
 
 /// Keygen rounds
-
+/// Main state, corresponds to gg20 Keygen state-machine
 pub struct KeygenRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -193,7 +192,7 @@ where
 		if !keygen.message_queue().is_empty() {
 			trace!(target: "dkg", "🕸️  Outgoing messages, queue len: {}", keygen.message_queue().len());
 
-			let keygen_set_id = self.params.keygen_set_id;
+			let round_id = self.params.round_id;
 
 			let enc_messages = keygen
 				.message_queue()
@@ -201,7 +200,7 @@ where
 				.map(|m| {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
 					let serialized = serde_json::to_string(&m).unwrap();
-					return DKGKeygenMessage { keygen_set_id, keygen_msg: serialized.into_bytes() }
+					return DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
 				})
 				.collect::<Vec<DKGKeygenMessage>>();
 
@@ -215,8 +214,8 @@ where
 	/// Handle incoming messages
 
 	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
-		if data.keygen_set_id != self.params.keygen_set_id {
-			return Err(DKGError::GenericError { reason: "Keygen set ids do not match".to_string() })
+		if data.round_id != self.params.round_id {
+			return Err(DKGError::GenericError { reason: "Round ids do not match".to_string() })
 		}
 
 		let keygen = &mut self.keygen;

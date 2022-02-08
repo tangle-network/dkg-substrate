@@ -16,8 +16,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
-/// Sign state
-
+/// Wrapper state-machine for Sign rounds
 pub enum SignState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -73,15 +72,14 @@ where
 }
 
 /// Pre-sign rounds
-
+/// Used to collect incoming messages from other peers which started earlier
 pub struct PreSignRounds {
-	signer_set_id: SignerSetId,
 	pub pending_sign_msgs: Vec<DKGVoteMessage>,
 }
 
 impl PreSignRounds {
-	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self { signer_set_id, pending_sign_msgs: Vec::default() }
+	pub fn new() -> Self {
+		Self { pending_sign_msgs: Vec::default() }
 	}
 }
 
@@ -104,7 +102,7 @@ where
 }
 
 /// Sign rounds
-
+/// Main state, corresponds to gg20 SignManual one round signing object
 pub struct SignRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -231,7 +229,7 @@ where
 						signature: signature.encode(),
 					};
 
-					trace!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
+					debug!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
 					Ok(signed_payload)
 				},
 				_ => Err(DKGError::GenericError {

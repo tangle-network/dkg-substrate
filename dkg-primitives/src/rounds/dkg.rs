@@ -1,16 +1,14 @@
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use log::{debug, error, info, trace, warn};
 
-use sc_keystore::LocalKeystore;
-use sp_core::sr25519;
 use sp_runtime::traits::AtLeast32BitUnsigned;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf};
 
 use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::types::*;
+use crate::{types::*, utils::select_random_set};
 use dkg_runtime_primitives::keccak_256;
 
 pub use gg_2020::{
@@ -50,34 +48,23 @@ where
 	threshold: u16,
 	parties: u16,
 
-	created_at: Clock,
-
 	// Key generation
 	#[builder(default=KeygenState::NotStarted(PreKeygenRounds::new()))]
 	keygen: KeygenState<Clock>,
 	#[builder(default = false)]
 	has_stalled: bool,
-	// Offline stage
+
+	// Signing
+	#[builder(default)]
+	signers: Vec<u16>,
 	#[builder(default)]
 	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
-	// Signing rounds
 	#[builder(default)]
 	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
-	#[builder(default = 0)]
-	keygen_set_id: KeygenSetId,
-	#[builder(default)]
-	signers: Vec<u16>,
-	#[builder(default = 0)]
-	signer_set_id: SignerSetId,
-
 	// File system storage and encryption
 	#[builder(default)]
-	public_key: Option<sr25519::Public>,
-	#[builder(default)]
 	local_key_path: Option<PathBuf>,
-	#[builder(default)]
-	local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -96,16 +83,12 @@ where
 		self.signers = signers;
 	}
 
-	pub fn set_signer_set_id(&mut self, set_id: SignerSetId) {
-		self.signer_set_id = set_id;
+	pub fn is_signer(&self) -> bool {
+		self.signers.contains(&self.party_index)
 	}
 
 	pub fn dkg_params(&self) -> (u16, u16, u16) {
 		(self.party_index, self.threshold, self.parties)
-	}
-
-	pub fn is_signer(&self) -> bool {
-		self.signers.contains(&self.party_index)
 	}
 
 	pub fn get_public_key(&self) -> Option<GE> {
@@ -129,11 +112,15 @@ where
 	/// State machine
 
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
+		debug!(target: "dkg", 
+			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
+			&self.round_id, &self.signers);
+
 		let mut results = vec![];
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
-			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
+			if let Err(DKGError::KeygenTimeout { bad_actors: _ }) = &keygen_proceed_res {
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));
@@ -141,15 +128,21 @@ where
 			if self.keygen.is_finished() {
 				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
 				self.keygen = match prev_state {
-					KeygenState::Started(rounds) => KeygenState::Finished(rounds.try_finish()),
+					KeygenState::Started(rounds) => {
+						let finish_result = rounds.try_finish();
+						if let Ok(local_key) = &finish_result {
+							self.generate_and_set_signers(local_key);
+							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
+
+							results.push(Ok(DKGResult::KeygenFinished {
+								round_id: self.round_id,
+								local_key: local_key.clone(),
+							}));
+						}
+						KeygenState::Finished(finish_result)
+					},
 					_ => prev_state,
 				};
-				if let KeygenState::Finished(Ok(local_key)) = &self.keygen {
-					results.push(Ok(DKGResult::KeygenFinished {
-						round_id: self.round_id,
-						local_key: local_key.clone(),
-					}));
-				}
 			}
 		}
 
@@ -244,9 +237,10 @@ where
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
-				let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
-					OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-				});
+				let offline = self
+					.offlines
+					.entry(key.clone())
+					.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
 				let res = offline.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
@@ -257,9 +251,10 @@ where
 			DKGMsgPayload::Vote(msg) => {
 				let key = msg.round_key.clone();
 
-				let vote = self.votes.entry(key.clone()).or_insert_with(|| {
-					SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
-				});
+				let vote = self
+					.votes
+					.entry(key.clone())
+					.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
 				let res = vote.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
@@ -271,11 +266,7 @@ where
 		}
 	}
 
-	pub fn start_keygen(
-		&mut self,
-		keygen_set_id: KeygenSetId,
-		started_at: C,
-	) -> Result<(), DKGError> {
+	pub fn start_keygen(&mut self, started_at: C) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
 			"🕸️  Starting new DKG w/ party_index {:?}, threshold {:?}, size {:?}",
@@ -283,7 +274,6 @@ where
 			self.threshold,
 			self.parties,
 		);
-		trace!(target: "dkg", "🕸️  Keygen set id: {}", keygen_set_id);
 
 		let keygen_params = self.keygen_params();
 
@@ -319,18 +309,25 @@ where
 	}
 
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
-		info!(target: "dkg", "🕸️  Creating offline stage for {:?}", &key);
+		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
 
 		let sign_params = self.sign_params();
+		let offline_i = match self.get_offline_stage_index() {
+			Some(i) => i,
+			None => {
+				trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+				return Ok(())
+			},
+		};
 
 		match &self.keygen {
-			KeygenState::Finished(Ok(local_key)) => {
-				let s_l = (1..=self.dkg_params().2).collect::<Vec<_>>();
-				return match OfflineStage::new(self.party_index, s_l.clone(), local_key.clone()) {
+			KeygenState::Finished(Ok(local_key)) =>
+				return match OfflineStage::new(offline_i, self.signers.clone(), local_key.clone()) {
 					Ok(new_offline_stage) => {
-						let offline = self.offlines.entry(key.clone()).or_insert_with(|| {
-							OfflineState::NotStarted(PreOfflineRounds::new(self.signer_set_id))
-						});
+						let offline = self
+							.offlines
+							.entry(key.clone())
+							.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
 						match offline {
 							OfflineState::NotStarted(pre_offline) => {
@@ -362,8 +359,7 @@ where
 						error!("Error creating new offline stage {}", err);
 						Err(DKGError::CreateOfflineStage { reason: err.to_string() })
 					},
-				}
-			},
+				},
 			_ => Err(DKGError::CreateOfflineStage {
 				reason: "Cannot start offline stage, Keygen is not complete".to_string(),
 			}),
@@ -387,9 +383,10 @@ where
 				Ok((sign_manual, sig)) => {
 					debug!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
-					let vote = self.votes.entry(round_key.clone()).or_insert_with(|| {
-						SignState::NotStarted(PreSignRounds::new(self.signer_set_id))
-					});
+					let vote = self
+						.votes
+						.entry(round_key.clone())
+						.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
 					match vote {
 						SignState::NotStarted(pre_sign) => {
@@ -438,10 +435,10 @@ where
 		}
 	}
 
-	pub fn is_ready_to_vote(&self, key: Vec<u8>) -> bool {
-		if let Some(offline) = self.offlines.get(&key) {
+	pub fn is_ready_to_vote(&self, round_key: Vec<u8>) -> bool {
+		if let Some(offline) = self.offlines.get(&round_key) {
 			match offline {
-				OfflineState::Finished(_) => true,
+				OfflineState::Finished(Ok(_)) => true,
 				_ => false,
 			}
 		} else {
@@ -492,24 +489,47 @@ where
 
 	/// Utils
 
+	/// Returns our party's index in signers vec if any.
+	/// Indexing starts from 1.
+	/// OfflineStage must be created using this index if present (not the original keygen index)
+	fn get_offline_stage_index(&self) -> Option<u16> {
+		for (i, &keygen_i) in (1..).zip(&self.signers) {
+			if self.party_index == keygen_i {
+				return Some(i)
+			}
+		}
+		None
+	}
+
+	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
+		let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
+		let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
+		if let Ok(mut signers_set) = signers_set {
+			signers_set.sort();
+			self.set_signers(signers_set);
+		}
+	}
+
 	fn keygen_params(&self) -> KeygenParams {
 		KeygenParams {
 			round_id: self.round_id,
 			party_index: self.party_index,
 			threshold: self.threshold,
 			parties: self.parties,
-			keygen_set_id: self.keygen_set_id,
 		}
 	}
 
 	fn sign_params(&self) -> SignParams {
+		// TODO: Currently we use round_id as signer_set_id for consistency,
+		// but eventually we want to derive this id from both round_id and signers vec
 		SignParams {
 			round_id: self.round_id,
 			party_index: self.party_index,
 			threshold: self.threshold,
 			parties: self.parties,
-			signer_set_id: self.signer_set_id,
 			signers: self.signers.clone(),
+			signer_set_id: self.round_id,
 		}
 	}
 }
@@ -540,7 +560,7 @@ mod tests {
 	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		let round_key = 1u32.encode();
 		for party in parties.iter() {
-			if !party.is_ready_to_vote(round_key.clone()) {
+			if party.is_signer() && !party.is_ready_to_vote(round_key.clone()) {
 				return false
 			}
 		}
@@ -549,10 +569,7 @@ mod tests {
 
 	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
-			if !party.is_signer() {
-				continue
-			}
-			if !party.has_finished_rounds() {
+			if party.is_signer() && !party.has_finished_rounds() {
 				return false
 			}
 		}
@@ -561,25 +578,27 @@ mod tests {
 
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
 		for party in &mut parties.into_iter() {
-			let mut finished_rounds = party.get_finished_rounds();
+			if party.is_signer() {
+				let mut finished_rounds = party.get_finished_rounds();
 
-			if finished_rounds.len() == 1 {
-				let finished_round = finished_rounds.remove(0);
+				if finished_rounds.len() == 1 {
+					let finished_round = finished_rounds.remove(0);
 
-				let message = b"Webb".encode();
+					let message = b"Webb".encode();
 
-				assert!(
-					dkg_runtime_primitives::utils::validate_ecdsa_signature(
-						&message,
-						&finished_round.signature
-					),
-					"Invalid signature for party {}",
-					party.party_index
-				);
+					assert!(
+						dkg_runtime_primitives::utils::validate_ecdsa_signature(
+							&message,
+							&finished_round.signature
+						),
+						"Invalid signature for party {}",
+						party.party_index
+					);
 
-				println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
-			} else {
-				panic!("No signature extracted")
+					println!("Party {}; sig: {:?}", party.party_index, &finished_round.signature);
+				} else {
+					panic!("No signature extracted")
+				}
 			}
 		}
 
@@ -597,7 +616,9 @@ mod tests {
 		for party in &mut parties.into_iter() {
 			let proceed_res = party.proceed(0);
 			for res in proceed_res {
-				println!("Error: {:?}", res);
+				if let Err(err) = res {
+					println!("Error: {:?}", err);
+				}
 			}
 
 			msgs_pull.append(&mut party.get_outgoing_messages());
@@ -619,7 +640,9 @@ mod tests {
 			for party in &mut parties.into_iter() {
 				let proceed_res = party.proceed(0);
 				for res in proceed_res {
-					println!("Error: {:?}", res);
+					if let Err(err) = res {
+						println!("Error: {:?}", err);
+					}
 				}
 
 				msgs_pull.append(&mut party.get_outgoing_messages());
@@ -630,6 +653,8 @@ mod tests {
 				return
 			}
 		}
+
+		panic!("Not all parties finished");
 	}
 
 	fn simulate_multi_party(t: u16, n: u16) {
@@ -641,10 +666,9 @@ mod tests {
 				.party_index(i)
 				.threshold(t)
 				.parties(n)
-				.created_at(0)
 				.build();
 			println!("Starting keygen for party {}", party.party_index);
-			party.start_keygen(0, 0).unwrap();
+			party.start_keygen(0).unwrap();
 			parties.push(party);
 		}
 
@@ -670,7 +694,10 @@ mod tests {
 		let parties_refs = &mut parties;
 		for party in &mut parties_refs.into_iter() {
 			println!("Vote for party {}", party.party_index);
-			party.vote(round_key.clone(), "Webb".encode(), 0).unwrap();
+			match party.vote(round_key.clone(), "Webb".encode(), 0) {
+				Ok(()) => (),
+				Err(_err) => (),
+			}
 		}
 		run_simulation(&mut parties, check_all_signatures_ready);
 

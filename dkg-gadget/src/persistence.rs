@@ -53,6 +53,8 @@ pub fn store_localkey(
 	key_store: DKGKeystore,
 	local_keystore: Arc<LocalKeystore>,
 ) -> std::io::Result<()> {
+	debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
+
 	let sr25519_public = key_store
 		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
@@ -70,8 +72,9 @@ pub fn store_localkey(
 
 		let encrypted_data = encrypt_data(serialized_data.into_bytes(), secret_key)
 			.map_err(|e| Error::new(ErrorKind::Other, e))?;
-		fs::write(path, &encrypted_data[..])?;
+		fs::write(path.clone(), &encrypted_data[..])?;
 
+		debug!(target: "dkg_persistence", "Successfully stored local key for {:?}", &path);
 		Ok(())
 	} else {
 		Err(Error::new(ErrorKind::Other, "".to_string()))
@@ -154,7 +157,7 @@ where
 					}
 				}
 			} else {
-				debug!(target: "dkg", "Failed to read local key file");
+				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
@@ -205,11 +208,12 @@ where
 					let seed =
 						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
 							[1..];
+
+					// Signers are chosen from ids used in Keygen phase starting from 1 to n
+					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						let round_id = rounds.get_id();
-						rounds.set_signer_set_id(round_id);
+					if let Ok(mut signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_rounds(rounds)
@@ -243,11 +247,12 @@ where
 						.clone()
 						.public_key()
 						.to_bytes(true)[1..];
+
+					// Signers are chosen from ids used in Keygen phase starting from 1 to n
+					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						let round_id = rounds.get_id();
-						rounds.set_signer_set_id(round_id);
+					if let Ok(mut signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
@@ -345,7 +350,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(authority_set.id, latest_block_num);
+		let _ = rounds.start_keygen(latest_block_num);
 		worker.active_keygen_in_progress = true;
 		worker.dkg_state.listening_for_active_pub_key = true;
 		worker.set_rounds(rounds);
@@ -368,7 +373,7 @@ where
 			worker.local_keystore.clone(),
 		);
 
-		let _ = rounds.start_keygen(queued_authority_set.id, latest_block_num);
+		let _ = rounds.start_keygen(latest_block_num);
 		worker.queued_keygen_in_progress = true;
 		worker.dkg_state.listening_for_pub_key = true;
 		worker.set_next_rounds(rounds);

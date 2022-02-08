@@ -14,6 +14,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 	gg_2020::state_machine::{keygen as gg20_keygen, sign as gg20_sign, traits::RoundBlame},
 };
 
+/// Wrapper state-machine for Offline rounds
 pub enum OfflineState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -70,15 +71,14 @@ where
 }
 
 /// Pre-offline rounds
-
+/// Used to collect incoming messages from other peers which started earlier
 pub struct PreOfflineRounds {
-	signer_set_id: SignerSetId,
 	pub pending_offline_msgs: Vec<DKGOfflineMessage>,
 }
 
 impl PreOfflineRounds {
-	pub fn new(signer_set_id: SignerSetId) -> Self {
-		Self { signer_set_id, pending_offline_msgs: Vec::default() }
+	pub fn new() -> Self {
+		Self { pending_offline_msgs: Vec::default() }
 	}
 }
 
@@ -101,7 +101,7 @@ where
 }
 
 /// Offline rounds
-
+/// Main state, corresponds to gg20 OfflineStage state-machine
 pub struct OfflineRounds<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -220,7 +220,12 @@ where
 
 	fn handle_incoming(&mut self, data: DKGOfflineMessage, at: C) -> Result<(), DKGError> {
 		if data.signer_set_id != self.params.signer_set_id {
-			return Err(DKGError::GenericError { reason: "Signer set ids do not match".to_string() })
+			return Err(DKGError::GenericError {
+				reason: format!(
+					"Incoming Signer set id {} does not match our id {}",
+					data.signer_set_id, self.params.signer_set_id
+				),
+			})
 		}
 
 		let offline_stage = &mut self.offline_stage;
