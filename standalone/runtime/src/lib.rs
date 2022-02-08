@@ -235,9 +235,8 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-	// How often we trigger a new session. (Number of blocks * BLOCK_TIME)
-	// 600 blocks * 3 secs = 900s = ~30 minutes
-	pub const Period: BlockNumber = 600;
+	// How often we trigger a new session.
+	pub const Period: BlockNumber = 5 * MINUTES;
 	pub const Offset: BlockNumber = 0;
 }
 
@@ -508,6 +507,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
+	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;

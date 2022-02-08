@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use dkg_runtime_primitives::traits::OnDKGPublicKeyChangeHandler;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://substrate.dev/docs/en/knowledgebase/runtime/frame>
@@ -90,12 +91,20 @@ pub mod pallet {
 	>;
 
 	#[pallet::event]
-	//#[pallet::metadata(T::AccountId = "AccountId")]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		ProposalAdded(T::AccountId, Proposal),
+		/// Event Emitted when we encounter a Proposal with invalid Signature.
+		InvalidProposalSignature {
+			/// The Type of the Proposal.
+			kind: ProposalKind,
+			/// Proposal Payload.
+			data: Vec<u8>,
+			/// The Invalid Signature.
+			invalid_signature: Vec<u8>,
+		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
 			/// The Target EVM chain ID.
@@ -167,8 +176,32 @@ pub mod pallet {
 
 			for prop in &props {
 				if let Proposal::Signed { kind, data, signature } = prop {
-					ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
-						.map_err(|_| Error::<T>::ProposalSignatureInvalid)?;
+					let result =
+						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+							.map_err(|_| Error::<T>::ProposalSignatureInvalid);
+					match result {
+						Ok(_) => {
+							// Do nothing, it is all good.
+						},
+						Err(e) => {
+							// this is a bad signature.
+							// we emit it as an event.
+							Self::deposit_event(Event::InvalidProposalSignature {
+								kind: kind.clone(),
+								data: data.clone(),
+								invalid_signature: signature.clone(),
+							});
+							frame_support::log::error!(
+								target: "dkg_proposal_handler",
+								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",
+								kind,
+								data,
+								signature
+							);
+							// skip it.
+							continue
+						},
+					}
 
 					// now we need to log the data and signature
 					frame_support::log::debug!(
@@ -306,7 +339,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::decode_anchor_update_proposal(&proposal).map(Into::into)
 		{
 			let unsigned_proposal =
-				Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::AnchorUpdate };
+				Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 
 			UnsignedProposalQueue::<T>::insert(
 				chain_id,
@@ -674,55 +707,54 @@ impl<T: Config> Pallet<T> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut all_proposals = Vec::new();
-		let res = proposals_ref.mutate::<OffchainSignedProposals<T::BlockNumber>, &'static str, _>(
-			|res| {
-				match res {
-					Ok(Some(mut prop_wrapper)) => {
-						// log the proposals
-						frame_support::log::debug!(
-							target: "dkg_proposal_handler",
-							"Offchain signed proposals: {:?}",
-							prop_wrapper.proposals
-						);
-						// log how many proposal batches are left
-						frame_support::log::debug!(
-							target: "dkg_proposal_handler",
-							"Offchain signed proposals left: {}",
-							prop_wrapper.proposals.len()
-						);
+		let res = proposals_ref.mutate::<OffchainSignedProposals<T::BlockNumber>, _, _>(|res| {
+			match res {
+				Ok(Some(mut prop_wrapper)) => {
+					// log the proposals
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"Offchain signed proposals: {:?}",
+						prop_wrapper.proposals
+					);
+					// log how many proposal batches are left
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"Offchain signed proposals left: {}",
+						prop_wrapper.proposals.len()
+					);
 
-						// We get all batches whose submission delay has been satisfied
-						all_proposals =
-							prop_wrapper
-								.proposals
-								.iter()
-								.filter_map(|(props, submit_at)| {
-									if *submit_at <= block_number {
-										Some(props)
-									} else {
-										None
-									}
-								})
-								.cloned()
-								.flatten()
-								.collect::<Vec<_>>();
-						// then we need to keep only the batches that are not yet submitted
-						prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);
-						Ok(prop_wrapper)
-					},
-					Ok(None) => Err("No signed proposals key stored"),
-					Err(e) => {
-						// log the error
-						frame_support::log::warn!(
-							target: "dkg_proposal_handler",
-							"Failed to read offchain signed proposals: {:?}",
-							e
-						);
-						Err("Error decoding offchain signed proposals")
-					},
-				}
-			},
-		);
+					// We get all batches whose submission delay has been satisfied
+					all_proposals = prop_wrapper
+						.proposals
+						.iter()
+						.filter_map(
+							|(props, submit_at)| {
+								if *submit_at <= block_number {
+									Some(props)
+								} else {
+									None
+								}
+							},
+						)
+						.cloned()
+						.flatten()
+						.collect::<Vec<_>>();
+					// then we need to keep only the batches that are not yet submitted
+					prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);
+					Ok(prop_wrapper)
+				},
+				Ok(None) => Err("No signed proposals key stored"),
+				Err(e) => {
+					// log the error
+					frame_support::log::warn!(
+						target: "dkg_proposal_handler",
+						"Failed to read offchain signed proposals: {:?}",
+						e
+					);
+					Err("Error decoding offchain signed proposals")
+				},
+			}
+		});
 
 		if res.is_err() || all_proposals.is_empty() {
 			return Err("Unable to get next proposal batch")
