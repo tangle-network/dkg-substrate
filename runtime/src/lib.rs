@@ -549,6 +549,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type DKGId = DKGId;
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
+	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
 	type NextSessionRotation = ParachainStaking;
 	type RefreshDelay = RefreshDelay;

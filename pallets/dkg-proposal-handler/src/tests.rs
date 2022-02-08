@@ -326,16 +326,16 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		let signed_proposal = Proposal::Signed {
 			kind: ProposalKind::EVM,
 			data: tx_v_2.encode(),
-			signature: invalid_sig,
+			signature: invalid_sig.clone(),
 		};
 
-		assert_err!(
-			DKGProposalHandler::submit_signed_proposals(
-				Origin::signed(sr25519::Public::from_raw([1; 32])),
-				vec![signed_proposal]
-			),
-			crate::Error::<Test>::ProposalSignatureInvalid
-		);
+		// it does not return an error, however the proposal is not added to the list.
+		// This is because the signature is invalid, and we are batch processing.
+		// we could check for the event that is emitted.
+		assert_ok!(DKGProposalHandler::submit_signed_proposals(
+			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			vec![signed_proposal]
+		));
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(

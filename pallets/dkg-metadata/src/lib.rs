@@ -55,7 +55,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::ProposalHandlerTrait;
+	use dkg_runtime_primitives::{traits::OnDKGPublicKeyChangeHandler, ProposalHandlerTrait};
 	use frame_support::{ensure, pallet_prelude::*, transactional};
 	use frame_system::{
 		ensure_signed,
@@ -78,6 +78,10 @@ pub mod pallet {
 		type OnAuthoritySetChangeHandler: OnAuthoritySetChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,
 			Self::AccountId,
+		>;
+
+		type OnDKGPublicKeyChangeHandler: OnDKGPublicKeyChangeHandler<
+			dkg_runtime_primitives::AuthoritySetId,
 		>;
 
 		type ProposalHandler: ProposalHandlerTrait;
@@ -871,5 +875,9 @@ impl<T: Config> IsMember<T::DKGId> for Pallet<T> {
 impl<T: Config> GetDKGPublicKey for Pallet<T> {
 	fn dkg_key() -> Vec<u8> {
 		Self::dkg_public_key().1
+	}
+
+	fn previous_dkg_key() -> Vec<u8> {
+		Self::previous_public_key().1
 	}
 }

@@ -85,7 +85,7 @@ pub fn to_slice_32(val: &[u8]) -> Option<[u8; 32]> {
 		return Some(key)
 	}
 
-	return None
+	None
 }
 
 /// This function takes the ecdsa signature and the unhashed data
@@ -100,7 +100,7 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 		dkg_key
 	);
 	if dkg_key.len() != 33 {
-		Err(BadOrigin)?
+		return Err(BadOrigin)
 	}
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature);
@@ -115,11 +115,23 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 				"Recovered public key: {:?}",
 				recovered_pub_key
 			);
-			if recovered_pub_key[..32] != dkg_key[1..].to_vec() {
-				Err(BadOrigin)?
+			let signer = &recovered_pub_key[..32];
+			let current_dkg = &dkg_key[1..];
+			// now we do check if the signer is not the current dkg or the previous one.
+			let is_not_current_dkg = signer != current_dkg;
+			if is_not_current_dkg {
+				let prev_key = T::previous_dkg_key();
+				if prev_key.len() != 33 {
+					return Err(BadOrigin)
+				}
+				let prev_dkg = &prev_key[1..];
+				let is_not_prev_dkg = signer != prev_dkg;
+				if is_not_prev_dkg {
+					return Err(BadOrigin)
+				}
 			}
 		},
-		Err(_) => Err(BadOrigin)?,
+		Err(_) => return Err(BadOrigin),
 	}
 
 	Ok(())
