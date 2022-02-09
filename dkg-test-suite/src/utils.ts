@@ -1,6 +1,7 @@
 import { ApiPromise } from '@polkadot/api';
 import { WsProvider } from '@polkadot/api';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
+import child from 'child_process';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
@@ -62,6 +63,50 @@ export const printValidators = async function (api: ApiPromise) {
 		);
 	}
 };
+
+export function startStandaloneNode(
+	authority: 'alice' | 'bob' | 'charlie',
+	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
+): child.ChildProcess {
+	// get the git root path
+	const ports = {
+		alice: 9944,
+		bob: 9945,
+		charlie: 9946,
+	};
+	const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+	const proc = child.spawn(
+		`./target/release/dkg-standalone-node`,
+		[
+			`--port=${ports[authority]}`,
+			options.printLogs ? '-linfo' : '-lerror',
+			options.tmp ? '--tmp' : '',
+			// only print logs from the charlie node
+			...(authority === 'charlie'
+				? [
+						'-ldkg=debug',
+						'-ldkg_metadata=debug',
+						'-lruntime::offchain=debug',
+						'-ldkg_proposal_handler=debug',
+				  ]
+				: []),
+			`--${authority}`,
+		],
+		{
+			cwd: gitRoot,
+		}
+	);
+
+	proc.stdout.on('data', (data) => {
+		console.log(data.toString());
+	});
+
+	proc.stderr.on('data', (data) => {
+		console.log(data.toString());
+	});
+
+	return proc;
+}
 
 const LE = true;
 const BE = false;

@@ -9,7 +9,7 @@
 		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
 		"vanchor-configurable-limit-proposals": "ts-node ./src/testVAnchorConfigurableLimitsProposal.ts",
 		"script": "ts-node",
-		"test": "jest --forceExit --detectOpenHandles --passWithNoTests"
+		"test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit"
 	},
 	"author": "",
 	"license": "ISC",
@@ -17,8 +17,10 @@
 		"@polkadot/api": "^6.11.1",
 		"@polkadot/util": "^8.1.2",
 		"@webb-tools/fixed-bridge": "^0.0.2",
+		"@webb-tools/protocol-solidity": "^0.1.3",
 		"ecpair": "^1.0.0",
-		"ethers": "^5.5.2",
+		"ethers": "^5.5.4",
+		"ganache": "^7.0.2",
 		"jest": "^27.4.5",
 		"ora": "5",
 		"ts-jest": "^27.1.2",
@@ -36,17 +38,5 @@
 	},
 	"lint-staged": {
 		"**/*": "prettier --write --ignore-unknown"
-	},
-	"jest": {
-		"testEnvironment": "node",
-		"transform": {
-			"^.+\\.tsx?$": "ts-jest"
-		},
-		"testRegex": "tests/.*\\.test\\.ts$",
-		"moduleFileExtensions": [
-			"ts",
-			"js"
-		],
-		"preset": "ts-jest"
-	}
+	}	
 }
