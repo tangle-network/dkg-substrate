@@ -8,7 +8,8 @@
 		"anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
 		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
 		"vanchor-configurable-limit-proposals": "ts-node ./src/testVAnchorConfigurableLimitsProposal.ts",
-		"script": "ts-node"
+		"script": "ts-node",
+		"test": "jest --forceExit --detectOpenHandles --passWithNoTests"
 	},
 	"author": "",
 	"license": "ISC",
@@ -28,11 +29,24 @@
 		"node": "17.x.x"
 	},
 	"devDependencies": {
+		"@types/jest": "^27.4.0",
 		"husky": "^7.0.4",
 		"lint-staged": "^12.1.7",
 		"prettier": "2.5.1"
 	},
 	"lint-staged": {
 		"**/*": "prettier --write --ignore-unknown"
+	},
+	"jest": {
+		"testEnvironment": "node",
+		"transform": {
+			"^.+\\.tsx?$": "ts-jest"
+		},
+		"testRegex": "tests/.*\\.test\\.ts$",
+		"moduleFileExtensions": [
+			"ts",
+			"js"
+		],
+		"preset": "ts-jest"
 	}
 }
