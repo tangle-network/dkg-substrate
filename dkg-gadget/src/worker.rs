@@ -1330,9 +1330,10 @@ where
 				};
 
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
-				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+				rounds.vote(key.encode(), data, latest_block_num).map_err(|| {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
-				}
+					self.handle_dkg_error(e);
+				})?;
 			}
 		}
 		// send messages to all peers
