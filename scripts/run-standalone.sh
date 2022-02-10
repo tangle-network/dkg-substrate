@@ -3,7 +3,7 @@
 set -e
 
 echo "*** Start Webb DKG Node ***"
-./target/release/dkg-standalone-node --tmp -lerror --alice &
+./target/release/dkg-standalone-node --tmp -lerror --alice --rpc-cors all --ws-external &
 ./target/release/dkg-standalone-node --tmp -lerror --bob &
 ./target/release/dkg-standalone-node --tmp \
     -lerror \

@@ -1,7 +1,9 @@
 import { ApiPromise } from '@polkadot/api';
 import { WsProvider } from '@polkadot/api';
+import { Bytes, Tuple, u32 } from '@polkadot/types';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
+import { ECPair } from 'ecpair';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
@@ -66,17 +68,10 @@ export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie',
 	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
 ): child.ChildProcess {
-	// get the git root path
-	const ports = {
-		alice: 9944,
-		bob: 9945,
-		charlie: 9946,
-	};
 	const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
 	const proc = child.spawn(
 		`./target/release/dkg-standalone-node`,
 		[
-			`--port=${ports[authority]}`,
 			options.printLogs ? '-linfo' : '-lerror',
 			options.tmp ? '--tmp' : '',
 			// only print logs from the charlie node
@@ -104,6 +99,26 @@ export function startStandaloneNode(
 	});
 
 	return proc;
+}
+/**
+ * Wait until the DKG Public Key is available and return it uncompressed.
+ * @param api the current connected api.
+ */
+export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promise<string> {
+	return new Promise(async (resolve, _reject) => {
+		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async (header) => {
+			const res = await api.query.dkg.dKGPublicKey();
+			const json = res.toJSON() as [number, string];
+			if (json && json[1] !== '0x') {
+				const key = json[1];
+				const dkgPubKey = ECPair.fromPublicKey(Buffer.from(key.slice(2), 'hex'), {
+					compressed: false,
+				}).publicKey.toString('hex');
+				unsubscribe();
+				resolve(dkgPubKey);
+			}
+		});
+	});
 }
 
 const LE = true;

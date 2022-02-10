@@ -1,10 +1,11 @@
 import { jest } from '@jest/globals';
-import { startStandaloneNode } from '../src/utils';
+import { startStandaloneNode, waitUntilDKGPublicKeyStoredOnChain } from '../src/utils';
 import { LocalChain } from '../src/localEvm';
 import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
 import { SignatureBridge } from '@webb-tools/fixed-bridge/lib/packages/fixed-bridge/src/SignatureBridge';
 import { MintableToken } from '@webb-tools/tokens';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 
 describe('Update SignatureBridge Governor', () => {
 	const SECONDS = 1000;
@@ -12,6 +13,7 @@ describe('Update SignatureBridge Governor', () => {
 	const ACC2_PK = '0x0000000000000000000000000000000000000000000000000000000000000002';
 	jest.setTimeout(60 * SECONDS);
 
+	let polkadotApi: ApiPromise;
 	let aliceNode: ChildProcess;
 	let bobNode: ChildProcess;
 	let charlieNode: ChildProcess;
@@ -78,6 +80,10 @@ describe('Update SignatureBridge Governor', () => {
 		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
 		await token2.approveSpending(anchor2.contract.address);
 		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
+		polkadotApi = await ApiPromise.create({
+			provider: new WsProvider('ws://127.0.0.1:9944'),
+		});
+		await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 	});
 
 	test('it should pass', () => {
@@ -85,6 +91,7 @@ describe('Update SignatureBridge Governor', () => {
 	});
 
 	afterAll(async () => {
+		await polkadotApi.disconnect();
 		aliceNode?.kill();
 		bobNode?.kill();
 		charlieNode?.kill();
