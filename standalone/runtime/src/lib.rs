@@ -843,10 +843,6 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn untrack_interval() -> BlockNumber {
-			dkg_runtime_primitives::UNTRACK_INTERVAL
-		}
-
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}

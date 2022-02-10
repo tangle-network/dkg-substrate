@@ -110,7 +110,10 @@ where
 	}
 
 	/// State machine
-
+	/// Proceeds through the keygen.
+	/// If the keygen is finished, we extract the `local_key` and set its
+	/// state to `KeygenState::Finished`. We decide on the signing set
+	/// when the `local_key` is extracted.
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		debug!(target: "dkg", 
 			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
@@ -131,7 +134,7 @@ where
 					KeygenState::Started(rounds) => {
 						let finish_result = rounds.try_finish();
 						if let Ok(local_key) = &finish_result {
-							self.generate_and_set_signers(local_key);
+							self.generate_and_set_signers(local_key, Vec::new());
 							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 
 							results.push(Ok(DKGResult::KeygenFinished {
@@ -250,7 +253,7 @@ where
 			},
 			DKGMsgPayload::Vote(msg) => {
 				let key = msg.round_key.clone();
-
+				// Get the `SignState` or create a new one for this vote (a threshold signature).
 				let vote = self
 					.votes
 					.entry(key.clone())
@@ -312,6 +315,7 @@ where
 		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
 
 		let sign_params = self.sign_params();
+		// Get the offline index in the signer set (different than the party index).
 		let offline_i = match self.get_offline_stage_index() {
 			Some(i) => i,
 			None => {
@@ -501,12 +505,26 @@ where
 		None
 	}
 
-	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+	/// Generates the signer set by randomly selecting t+1 signers
+	/// to participate in the signing protocol. We set the signers in the local
+	/// storage once selected.
+	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>, bad: Vec<u16>) -> Result<(), DKGError> {
+		let (party_index, threshold, parties) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
-		let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
+		let set = (1..=parties).collect::<Vec<_>>();
+		let good_set = set
+			.iter()
+			.filter(|&i| bad.contains(i))
+			.collect::<Vec<_>>();
+
+		if good_set.len() <= threshold as usize {
+			return Err(DKGError::Keygen {
+				reason: format!("Not enough good signers: {} < {}", good_set.len(), threshold),
+			});
+		}
+
+		let signers_set = select_random_set(seed, good_set, threshold + 1);
 		if let Ok(mut signers_set) = signers_set {
-			signers_set.sort();
 			self.set_signers(signers_set);
 		}
 	}

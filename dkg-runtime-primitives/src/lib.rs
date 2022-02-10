@@ -296,8 +296,6 @@ sp_api::decl_runtime_apis! {
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
-		/// Get untrack interval for unsigned proposals
-		fn untrack_interval() -> N;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
 		/// Get the time to restart for the dkg keygen

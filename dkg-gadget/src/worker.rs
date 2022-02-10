@@ -815,7 +815,9 @@ where
 			DKGError::KeygenTimeout { ref bad_actors } => bad_actors.clone(),
 			DKGError::OfflineMisbehaviour { ref bad_actors } => bad_actors.clone(),
 			DKGError::OfflineTimeout { ref bad_actors } => bad_actors.clone(),
+			// TODO: Recreate offline stages for these failed sign protocols
 			DKGError::SignMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			// TODO: Recreate offline stages for these failed sign protocols
 			DKGError::SignTimeout { ref bad_actors } => bad_actors.clone(),
 			_ => Default::default(),
 		};
@@ -1282,7 +1284,7 @@ where
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
-			let untrack_interval = self.client.runtime_api().untrack_interval(&at).unwrap();
+			let untrack_interval = dkg_runtime_primitives::UNTRACK_INTERVAL;
 
 			if diff >= untrack_interval {
 				self.dkg_state.created_offlinestage_at.remove(&key);
