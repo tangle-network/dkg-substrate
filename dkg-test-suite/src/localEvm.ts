@@ -14,30 +14,30 @@ export type GanacheAccounts = {
 	secretKey: string;
 };
 
-export async function startGanacheServer(
+export function startGanacheServer(
 	port: number,
 	networkId: number,
 	populatedAccounts: GanacheAccounts[],
 	options: any = {}
-): Promise<Server<'ethereum'>> {
+): Server<'ethereum'> {
 	const ganacheServer = ganache.server({
 		accounts: populatedAccounts,
-		blockTime: 1,
 		quiet: true,
 		network_id: networkId,
 		chainId: networkId,
 		...options,
 	});
 
-	await ganacheServer.listen(port);
-	console.log(`Ganache Started on http://127.0.0.1:${port} ..`);
+	ganacheServer.listen(port).then(() => {
+		process.stdout.write(`Ganache Started on http://127.0.0.1:${port} ..\n`);
+	});
 
 	return ganacheServer;
 }
 
 export class LocalChain {
 	public readonly endpoint: string;
-	private readonly server: any;
+	private readonly server: Server<'ethereum'>;
 	constructor(
 		public readonly name: string,
 		public readonly chainId: number,
@@ -52,7 +52,7 @@ export class LocalChain {
 	}
 
 	public async stop() {
-		this.server.close();
+		await this.server.close();
 	}
 
 	public async deployToken(

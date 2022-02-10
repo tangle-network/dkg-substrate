@@ -1,12 +1,13 @@
-import { ApiPromise } from '@polkadot/api';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
-import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from './utils';
+import { hexToBytes, listenOneBlock, waitNfinalizedBlocks } from './utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert } from '@polkadot/util';
 import { apiProposalTypes } from './proposalTypes';
 
+const provider = new WsProvider('ws://127.0.0.1:9944');
 const raw_data =
 	'00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001';
 const tokenUpdateProp = new Uint8Array(hexToBytes(raw_data));

@@ -5,8 +5,6 @@ import child from 'child_process';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-export const provider = new WsProvider('ws://127.0.0.1:9944');
-
 export const hexToBytes = function (hex: any) {
 	for (var bytes = [], c = 0; c < hex.length; c += 2) {
 		bytes.push(parseInt(hex.substr(c, 2), 16));
@@ -98,11 +96,11 @@ export function startStandaloneNode(
 	);
 
 	proc.stdout.on('data', (data) => {
-		console.log(data.toString());
+		process.stdout.write(data);
 	});
 
 	proc.stderr.on('data', (data) => {
-		console.log(data.toString());
+		process.stdout.write(data);
 	});
 
 	return proc;

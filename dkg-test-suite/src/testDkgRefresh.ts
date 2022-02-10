@@ -1,7 +1,8 @@
-import { ApiPromise } from '@polkadot/api';
-import { provider, waitNfinalizedBlocks } from './utils';
+import { ApiPromise, WsProvider } from '@polkadot/api';
+import { waitNfinalizedBlocks } from './utils';
 import ora from 'ora';
 
+const provider = new WsProvider('ws://127.0.0.1:9944');
 async function testDkgRefresh() {
 	const ROUNDS = 3;
 	const api = await ApiPromise.create({ provider });

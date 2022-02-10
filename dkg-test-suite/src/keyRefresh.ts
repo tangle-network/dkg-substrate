@@ -1,6 +1,8 @@
-import { ApiPromise, Keyring } from '@polkadot/api';
-import { provider, waitNfinalizedBlocks } from './utils';
+import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
+import { waitNfinalizedBlocks } from './utils';
 import { assert } from '@polkadot/util';
+
+const provider = new WsProvider('ws://127.0.0.1:9944');
 
 async function dkg_refresh() {
 	const api = await ApiPromise.create({ provider });

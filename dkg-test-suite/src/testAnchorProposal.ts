@@ -1,4 +1,4 @@
-import { ApiPromise } from '@polkadot/api';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Option, Bytes } from '@polkadot/types';
 import { Keyring } from '@polkadot/keyring';
 import {
@@ -7,7 +7,6 @@ import {
 	encodeUpdateAnchorProposal,
 	hexToBytes,
 	makeResourceId,
-	provider,
 	waitNfinalizedBlocks,
 } from './utils';
 import { ethers } from 'ethers';
@@ -15,6 +14,7 @@ import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
 
+const provider = new WsProvider('ws://127.0.0.1:9944');
 const resourceId = makeResourceId(
 	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 	ChainIdType.EVM,
