@@ -8,6 +8,7 @@
 		"anchor-proposals": "ts-node ./src/testAnchorProposal.ts",
 		"sudo-proposals": "ts-node ./src/testDirectProposal.ts",
 		"vanchor-configurable-limit-proposals": "ts-node ./src/testVAnchorConfigurableLimitsProposal.ts",
+		"token-proposals": "ts-node src/testTokenProposals.ts",
 		"script": "ts-node"
 	},
 	"author": "",
