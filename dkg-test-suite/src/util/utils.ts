@@ -271,6 +271,37 @@ export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal
 	};
 }
 
+export interface WrappingFeeUpdateProposal {
+	/**
+	 * The Token Remove Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly newFee: string;
+}
+
+export function encodeWrappingFeeUpdateProposal(proposal: WrappingFeeUpdateProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const wrappingFeeUpdateProposal = new Uint8Array(40 + 1);
+	wrappingFeeUpdateProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.newFee).slice(0, 1);
+	wrappingFeeUpdateProposal.set(newFee, 40); // 40 -> 41
+	return wrappingFeeUpdateProposal;
+}
+
+export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUpdateProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 41
+	const newFee = u8aToHex(data.slice(40, 41)); // 40 -> 41
+	return {
+		header,
+		newFee
+	};
+}
+
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
  * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
