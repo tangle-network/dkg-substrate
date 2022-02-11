@@ -158,7 +158,7 @@ where
 		let signed_by_self = self.sign_tracker.is_signed_by(self.params.party_index);
 		let sign_timeout_exhausted = at - self.sign_tracker.started_at > SIGN_TIMEOUT.into();
 		// If so, identify all bad actors and return an error
-		if  signed_by_self && sign_timeout_exhausted {
+		if signed_by_self && sign_timeout_exhausted {
 			let signed_by = self.sign_tracker.get_signed_parties();
 			let mut not_signed_by: Vec<u16> = self
 				.params

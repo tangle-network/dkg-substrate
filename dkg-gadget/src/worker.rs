@@ -869,7 +869,7 @@ where
 				} else {
 					self.authority_reputations.insert(offender, -1);
 				}
-			}
+			},
 			DKGReport::SigningMisbehavior { offender } => {
 				debug!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
 				// Deduct 1 point from reputation
@@ -878,7 +878,7 @@ where
 				} else {
 					self.authority_reputations.insert(offender, -1);
 				}
-			}
+			},
 		}
 	}
 
@@ -1282,9 +1282,7 @@ where
 					// to prevent overwriting running offline stages when next this function is
 					// called this function is called on every block import and the proposal
 					// might still be in the the unsigned proposals queue.
-					self.dkg_state
-						.created_offlinestage_at
-						.insert(key.encode(), *header.number());
+					self.dkg_state.created_offlinestage_at.insert(key.encode(), *header.number());
 				}
 			}
 		}
@@ -1308,7 +1306,9 @@ where
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
-			let untrack_interval = <<B as Block>::Header as Header>::Number::from(dkg_runtime_primitives::UNTRACK_INTERVAL);
+			let untrack_interval = <<B as Block>::Header as Header>::Number::from(
+				dkg_runtime_primitives::UNTRACK_INTERVAL,
+			);
 
 			if diff >= untrack_interval {
 				self.dkg_state.created_offlinestage_at.remove(&key);

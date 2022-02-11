@@ -8,8 +8,7 @@ use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_core::sr25519;
 use sp_runtime::generic::OpaqueDigestItemId;
-use std::sync::Arc;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -42,14 +41,9 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
 	// Compute the reputations of only the currently selected authorities for these rounds
 	let mut authority_set_reputations = HashMap::new();
-	authority_set.authorities
-		.iter()
-		.for_each(|id| {
-			authority_set_reputations.insert(
-				id.clone(),
-				*reputations.get(id).unwrap_or(&0i64),
-			);
-		});
+	authority_set.authorities.iter().for_each(|id| {
+		authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
+	});
 	let n = authority_set.authorities.len();
 	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()

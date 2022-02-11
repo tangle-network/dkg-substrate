@@ -9,8 +9,7 @@ use std::mem;
 use typed_builder::TypedBuilder;
 
 use crate::{types::*, utils::select_random_set};
-use dkg_runtime_primitives::keccak_256;
-use dkg_runtime_primitives::crypto::AuthorityId;
+use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
 	party_i::*,
