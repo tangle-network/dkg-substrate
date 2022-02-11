@@ -13,10 +13,11 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	Address, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
-	ProposalHandlerTrait, ProposalHeader, ProposalKind, ProposalNonce, TransactionV2,
-	OFFCHAIN_SIGNED_PROPOSALS,
+	Address,
+	ChainIdType::{Substrate, EVM},
+	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
+	ProposalKind, ProposalNonce, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -867,23 +868,29 @@ impl<T: Config> Pallet<T> {
 			data.len(),
 		);
 
-		if data.len() != 80 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut src_chain_id_bytes = [0u8; 4];
-		src_chain_id_bytes.copy_from_slice(&data[40..44]);
-		let src_chain_id = u32::from_be_bytes(src_chain_id_bytes);
-		let mut latest_leaf_index_bytes = [0u8; 4];
-		latest_leaf_index_bytes.copy_from_slice(&data[44..48]);
-		let latest_leaf_index = u32::from_be_bytes(latest_leaf_index_bytes);
-		let mut merkle_root_bytes = [0u8; 32];
-		merkle_root_bytes.copy_from_slice(&data[48..80]);
-		// 1. Should we check for the function signature?
-		// 2. Should we check for the chainId != srcChainId?
-		// TODO: do something with them here.
-		let _ = src_chain_id;
-		let _ = latest_leaf_index;
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 80 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut src_chain_id_bytes = [0u8; 4];
+				src_chain_id_bytes.copy_from_slice(&data[40..44]);
+				let src_chain_id = u32::from_be_bytes(src_chain_id_bytes);
+				let mut latest_leaf_index_bytes = [0u8; 4];
+				latest_leaf_index_bytes.copy_from_slice(&data[44..48]);
+				let latest_leaf_index = u32::from_be_bytes(latest_leaf_index_bytes);
+				let mut merkle_root_bytes = [0u8; 32];
+				merkle_root_bytes.copy_from_slice(&data[48..80]);
+				// 1. Should we check for the function signature?
+				// 2. Should we check for the chainId != srcChainId?
+				// TODO: do something with them here.
+				let _ = src_chain_id;
+				let _ = latest_leaf_index;
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 
@@ -891,40 +898,58 @@ impl<T: Config> Pallet<T> {
 	fn decode_wrapping_fee_update_proposal(
 		data: &[u8],
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 41 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let new_fee = data.last().copied().expect("len is 41");
-		// check if the fee is valid by checking if it is between 0 and 100
-		// note that u8 is unsigned, so we need to check for 0x00 and 0xFF
-		if new_fee > 100 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 41 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let new_fee = data.last().copied().expect("len is 41");
+				// check if the fee is valid by checking if it is between 0 and 100
+				// note that u8 is unsigned, so we need to check for 0x00 and 0xFF
+				if new_fee > 100 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+			},
+			Substrate(ChainId) => {},
+			_ => {},
 		}
 		Ok(header)
 	}
 
 	/// (header: 40 Bytes, newTokenAddress: 20 Bytes) = 60 Bytes
 	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 60 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut new_token_address_bytes = [0u8; 20];
-		new_token_address_bytes.copy_from_slice(&data[40..60]);
-		let new_token_address = Address::from(new_token_address_bytes);
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 60 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut new_token_address_bytes = [0u8; 20];
+				new_token_address_bytes.copy_from_slice(&data[40..60]);
+				let new_token_address = Address::from(new_token_address_bytes);
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 
-	/// (header: 40 Bytes, removeTokenAddress: 20 Bytes) = 60 Bytes
+	/// (header: 40 Bytes, tokenAddress: 20 Bytes) = 60 Bytes
 	fn decode_token_remove_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 60 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut token_address_bytes = [0u8; 20];
-		token_address_bytes.copy_from_slice(&data[40..60]);
-		let token_address = Address::from(token_address_bytes);
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 60 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut token_address_bytes = [0u8; 20];
+				token_address_bytes.copy_from_slice(&data[40..60]);
+				let token_address = Address::from(token_address_bytes);
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 
@@ -933,36 +958,48 @@ impl<T: Config> Pallet<T> {
 	fn decode_resource_id_update_proposal(
 		data: &[u8],
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 112 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut new_resource_id_bytes = [0u8; 32];
-		new_resource_id_bytes.copy_from_slice(&data[40..72]);
-		let mut handler_address_bytes = [0u8; 20];
-		handler_address_bytes.copy_from_slice(&data[72..92]);
-		let handler_address = Address::from(handler_address_bytes);
-		let mut execution_context_address_bytes = [0u8; 20];
-		execution_context_address_bytes.copy_from_slice(&data[92..112]);
-		let execution_context_address = Address::from(execution_context_address_bytes);
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 112 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut new_resource_id_bytes = [0u8; 32];
+				new_resource_id_bytes.copy_from_slice(&data[40..72]);
+				let mut handler_address_bytes = [0u8; 20];
+				handler_address_bytes.copy_from_slice(&data[72..92]);
+				let handler_address = Address::from(handler_address_bytes);
+				let mut execution_context_address_bytes = [0u8; 20];
+				execution_context_address_bytes.copy_from_slice(&data[92..112]);
+				let execution_context_address = Address::from(execution_context_address_bytes);
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 
 	/// (header: 40 Bytes, tokenAddress: 20 bytes, to: 20 bytes, amountToRescue: 32 bytes)) = 112
 	/// Bytes
 	fn decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 112 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut token_address_bytes = [0u8; 20];
-		token_address_bytes.copy_from_slice(&data[40..60]);
-		let token_address = Address::from(token_address_bytes);
-		let mut to_bytes = [0u8; 20];
-		to_bytes.copy_from_slice(&data[60..80]);
-		let to = Address::from(to_bytes);
-		let mut amount_to_rescue_bytes = [0u8; 32];
-		amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 112 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut token_address_bytes = [0u8; 20];
+				token_address_bytes.copy_from_slice(&data[40..60]);
+				let token_address = Address::from(token_address_bytes);
+				let mut to_bytes = [0u8; 20];
+				to_bytes.copy_from_slice(&data[60..80]);
+				let to = Address::from(to_bytes);
+				let mut amount_to_rescue_bytes = [0u8; 32];
+				amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 
@@ -971,12 +1008,18 @@ impl<T: Config> Pallet<T> {
 	fn decode_configurable_limit_proposal(
 		data: &[u8],
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
-		if data.len() != 72 {
-			return Err(Error::<T>::ProposalFormatInvalid)?
-		}
 		let header = Self::decode_proposal_header(data)?;
-		let mut configurable_limit_bytes = [0u8; 32];
-		configurable_limit_bytes.copy_from_slice(&data[40..72]);
+		match header.chain_id {
+			EVM(ChainId) => {
+				if data.len() != 72 {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+				let mut configurable_limit_bytes = [0u8; 32];
+				configurable_limit_bytes.copy_from_slice(&data[40..72]);
+			},
+			Substrate(ChainId) => {},
+			_ => {},
+		}
 		Ok(header)
 	}
 

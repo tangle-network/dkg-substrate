@@ -221,7 +221,7 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 		}
 	}
 
-	pub fn to_bytes(&self) -> [u8; 2] {
+	pub fn get_type_bytes(&self) -> [u8; 2] {
 		let polkadot_str = create_runtime_str!("polkadot");
 		let kusama_str = create_runtime_str!("kusama");
 		match self {
