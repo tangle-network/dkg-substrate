@@ -8,8 +8,9 @@ use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
 	ChainIdType, DKGPayloadKey, EIP2930Transaction, OffchainSignedProposals, Proposal,
 	ProposalAction, ProposalHandlerTrait, ProposalHeader, ProposalKind, TransactionAction,
-	TransactionV2, OFFCHAIN_SIGNED_PROPOSALS, U256,
+	TransactionV2, U256,
 };
+use dkg_runtime_primitives::offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS;
 use sp_core::{sr25519, H256};
 use sp_runtime::offchain::storage::MutateStorageError;
 

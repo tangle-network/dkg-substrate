@@ -15,7 +15,7 @@ use dkg_primitives::{
 	},
 };
 use dkg_runtime_primitives::{
-	offchain_crypto::{Pair as AppPair, Public},
+	offchain::crypto::{Pair as AppPair, Public},
 	DKGApi,
 };
 use log::debug;

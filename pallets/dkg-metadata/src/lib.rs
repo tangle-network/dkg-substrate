@@ -29,9 +29,11 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+};
+use dkg_runtime_primitives::offchain::storage_keys::{
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+	OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 use sp_runtime::{
 	generic::DigestItem,
