@@ -9,7 +9,7 @@ import {ethers} from 'ethers';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, unsubSignedPropsUtil} from "../util/resource";
+import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "../util/resource";
 import {tokenAddProposal} from "../util/proposals";
 
 async function testTokenAddProposal() {
@@ -60,19 +60,7 @@ async function sendTokenAddProposal(api: ApiPromise) {
 	});
 	const proposalCall = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
 
-	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
-		console.log(`Current status is: ${status.type}`);
-
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
-
-			events.forEach(({phase, event: {data, method, section}}) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
-
-			unsub();
-		}
-	});
+	await signAndSendUtil(api, proposalCall, alice);
 }
 
 // Run
