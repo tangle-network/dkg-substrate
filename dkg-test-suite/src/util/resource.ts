@@ -1,13 +1,49 @@
 import {ApiPromise} from "@polkadot/api";
 import {Bytes, Option} from "@polkadot/types";
 import {Keyring} from "@polkadot/keyring";
-import {ChainIdType, makeResourceId} from "./utils";
+import {ChainIdType, encodeTokenAddProposal, makeResourceId} from "./utils";
+import {tokenAddProposal} from "./proposals";
+import {keccak256} from "@ethersproject/keccak256";
+import {ethers} from "ethers";
+import {assert} from "@polkadot/util";
 
 export const resourceId = makeResourceId(
 	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 	ChainIdType.EVM,
 	5002
 );
+
+export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dkgPubKey: any, proposalType: any, propHash: any) {
+	return await api.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		proposalType,
+		(res: any) => {
+			if (res) {
+				const parsedResult = JSON.parse(JSON.stringify(res));
+				console.log(`Signed token add prop: ${JSON.stringify(parsedResult)}`);
+
+				if (parsedResult) {
+					const sig = parsedResult.anchorUpdateSigned.signature;
+					console.log(`Signature: ${sig}`);
+
+					//const propHash = keccak256(encodeTokenAddProposal(tokenAddProposal));
+					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
+					console.log(`Recovered public key: ${recoveredPubKey}`);
+					console.log(`DKG public key: ${dkgPubKey}`);
+
+					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
+					if (recoveredPubKey == dkgPubKey) {
+						console.log(`Public keys match`);
+						process.exit(0);
+					} else {
+						console.error(`Public keys do not match`);
+						process.exit(-1);
+					}
+				}
+			}
+		}
+	);
+}
 
 export async function registerResourceId(api: ApiPromise) {
 	// quick check if the resourceId is already registered
