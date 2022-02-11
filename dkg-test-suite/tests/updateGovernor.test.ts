@@ -1,9 +1,16 @@
 import { jest } from '@jest/globals';
-import { startStandaloneNode, waitUntilDKGPublicKeyStoredOnChain } from '../src/utils';
+import 'jest-extended';
+import {
+	fetchDkgPublicKey,
+	fetchDkgPublicKeySignature,
+	startStandaloneNode,
+	waitUntilDKGPublicKeyStoredOnChain,
+} from '../src/utils';
 import { LocalChain } from '../src/localEvm';
 import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
 import { SignatureBridge } from '@webb-tools/fixed-bridge/lib/packages/fixed-bridge/src/SignatureBridge';
+import { SignatureBridge as SignatureBridgeContract } from '@webb-tools/contracts';
 import { MintableToken } from '@webb-tools/tokens';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 
@@ -86,8 +93,24 @@ describe('Update SignatureBridge Governor', () => {
 		await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 	});
 
-	test('it should pass', () => {
-		expect(true).toBe(true);
+	test('should be able to transfer ownership Governor (without the signature)', async () => {
+		// fetch the current DKG from dkg chain.
+		const dkgPublicKey = await fetchDkgPublicKey(polkadotApi);
+		expect(dkgPublicKey).toBeString();
+		const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
+		const contract = signatureSide.contract as SignatureBridgeContract;
+		contract.connect(localChain.provider());
+		// query the current governor
+		const governor = await contract.governor();
+		let nextGovernorAddress = ethers.utils.getAddress(
+			'0x' + ethers.utils.keccak256(dkgPublicKey!).slice(-40)
+		);
+		const tx = await contract.transferOwnership(nextGovernorAddress, 1);
+		await expect(tx.wait()).toResolve();
+		// check that the new governor is the same as the one we just set.
+		const newGovernor = await contract.governor();
+		expect(newGovernor).not.toEqualCaseInsensitive(governor);
+		expect(newGovernor).toEqualCaseInsensitive(nextGovernorAddress);
 	});
 
 	afterAll(async () => {

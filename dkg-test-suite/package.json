@@ -33,10 +33,11 @@
 	"devDependencies": {
 		"@types/jest": "^27.4.0",
 		"husky": "^7.0.4",
+		"jest-extended": "^2.0.0",
 		"lint-staged": "^12.1.7",
 		"prettier": "2.5.1"
 	},
 	"lint-staged": {
 		"**/*": "prettier --write --ignore-unknown"
-	}	
+	}
 }

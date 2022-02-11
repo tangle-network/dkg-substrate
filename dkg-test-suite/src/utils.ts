@@ -100,25 +100,54 @@ export function startStandaloneNode(
 
 	return proc;
 }
+
 /**
  * Wait until the DKG Public Key is available and return it uncompressed.
  * @param api the current connected api.
  */
 export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promise<string> {
 	return new Promise(async (resolve, _reject) => {
-		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async (header) => {
-			const res = await api.query.dkg.dKGPublicKey();
-			const json = res.toJSON() as [number, string];
-			if (json && json[1] !== '0x') {
-				const key = json[1];
-				const dkgPubKey = ECPair.fromPublicKey(Buffer.from(key.slice(2), 'hex'), {
-					compressed: false,
-				}).publicKey.toString('hex');
+		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async () => {
+			const dkgKey = await fetchDkgPublicKey(api);
+			if (dkgKey) {
 				unsubscribe();
-				resolve(dkgPubKey);
+				resolve(dkgKey);
 			}
 		});
 	});
+}
+
+/**
+ * Fetch DKG Public Key and return it **uncompressed**.
+ * returns `null` if the key is not yet available.
+ * @param api the current connected api.
+ */
+export async function fetchDkgPublicKey(api: ApiPromise): Promise<`0x${string}` | null> {
+	const res = await api.query.dkg.dKGPublicKey();
+	const json = res.toJSON() as [number, string];
+	if (json && json[1] !== '0x') {
+		const key = json[1];
+		const dkgPubKey = ECPair.fromPublicKey(Buffer.from(key.slice(2), 'hex'), {
+			compressed: false,
+		}).publicKey.toString('hex');
+		return `0x${dkgPubKey}`;
+	} else {
+		return null;
+	}
+}
+
+/**
+ * Fetch DKG Public Key signature and return it.
+ * returns `null` if the key is not yet available.
+ * @param api the current connected api.
+ */
+export async function fetchDkgPublicKeySignature(api: ApiPromise): Promise<`0x${string}` | null> {
+	const sig = await api.query.dkg.dKGPublicKeySignature();
+	if (!sig.isEmpty) {
+		return sig.toHex();
+	} else {
+		return null;
+	}
 }
 
 const LE = true;
