@@ -9,6 +9,7 @@ use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_core::sr25519;
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -36,17 +37,29 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	local_key_path: Option<std::path::PathBuf>,
 	created_at: N,
 	local_keystore: Option<Arc<LocalKeystore>>,
+	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
-
+	// Compute the reputations of only the currently selected authorities for these rounds
+	let mut authority_set_reputations = HashMap::new();
+	authority_set.authorities
+		.iter()
+		.for_each(|id| {
+			authority_set_reputations.insert(
+				id.clone(),
+				*reputations.get(id).unwrap_or(&0i64),
+			);
+		});
 	let n = authority_set.authorities.len();
-
+	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()
 		.round_id(authority_set.id.clone())
 		.party_index(u16::try_from(party_inx).unwrap())
 		.threshold(thresh)
 		.parties(u16::try_from(n).unwrap())
 		.local_key_path(local_key_path)
+		.reputations(authority_set_reputations)
+		.authorities(authority_set.authorities.clone())
 		.build();
 
 	rounds

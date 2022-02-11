@@ -27,6 +27,7 @@ use std::{
 	io::{Error, ErrorKind},
 	path::PathBuf,
 	sync::Arc,
+	collections::HashMap,
 };
 
 use curv::elliptic::curves::Secp256k1;
@@ -197,6 +198,7 @@ where
 					Some(local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
+					&HashMap::<AuthorityId, i64>::new(),
 				);
 
 				if local_key.is_some() {
@@ -234,6 +236,7 @@ where
 					Some(queued_local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
+					&HashMap::<AuthorityId, i64>::new(),
 				);
 
 				if queued_local_key.is_some() {
@@ -348,6 +351,7 @@ where
 			local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
+			&HashMap::<AuthorityId, i64>::new(),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);
@@ -371,6 +375,7 @@ where
 			queued_local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
+			&HashMap::<AuthorityId, i64>::new(),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);

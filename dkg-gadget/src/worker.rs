@@ -139,6 +139,8 @@ where
 	refresh_in_progress: bool,
 	/// keep track of the broadcast public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	/// Reputation system (party index -> reputation)
+	pub authority_reputations: HashMap<AuthorityId, i64>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -198,6 +200,7 @@ where
 			queued_validator_set: AuthoritySet::empty(),
 			latest_header: None,
 			last_signed_id: 0,
+			authority_reputations: HashMap::new(),
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
@@ -254,7 +257,7 @@ where
 		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
 		} else {
-			let at = BlockId::hash(header.hash());
+			let at: BlockId<B> = BlockId::hash(header.hash());
 			self.client.runtime_api().authority_set(&at).ok()
 		};
 
@@ -275,12 +278,12 @@ where
 	}
 
 	pub fn get_threshold(&self, header: &B::Header) -> Option<u16> {
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().signature_threshold(&at).ok()
 	}
 
 	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
@@ -302,7 +305,7 @@ where
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
-			let at = BlockId::hash(header.hash());
+			let at: BlockId<B> = BlockId::hash(header.hash());
 			Some((
 				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default(),
 				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default(),
@@ -395,6 +398,7 @@ where
 					local_key_path,
 					*header.number(),
 					self.local_keystore.clone(),
+					&self.authority_reputations,
 				))
 			} else {
 				None
@@ -462,6 +466,7 @@ where
 				local_key_path,
 				*header.number(),
 				self.local_keystore.clone(),
+				&self.authority_reputations,
 			));
 			self.dkg_state.listening_for_pub_key = true;
 			match self.next_rounds.as_mut().unwrap().start_keygen(latest_block_num) {
@@ -717,7 +722,7 @@ where
 		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
 
 		if let Some(header) = self.latest_header.as_ref() {
-			let at = BlockId::hash(header.hash());
+			let at: BlockId<B> = BlockId::hash(header.hash());
 			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
 
 			if accounts.is_some() {
@@ -853,11 +858,33 @@ where
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
 		// TODO: handle report by taking slashing action
+		match dkg_report {
+			// Keygen misbehavior possibly leads to keygen failure. This should be slashed
+			// more severely than sign misbehavior events.
+			DKGReport::KeygenMisbehavior { offender } => {
+				debug!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
+				// Deduct 1 point from reputation
+				if let Some(mut rep) = self.authority_reputations.get_mut(&offender) {
+					*rep -= 1;
+				} else {
+					self.authority_reputations.insert(offender, -1);
+				}
+			}
+			DKGReport::SigningMisbehavior { offender } => {
+				debug!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
+				// Deduct 1 point from reputation
+				if let Some(mut rep) = self.authority_reputations.get_mut(&offender) {
+					*rep -= 1;
+				} else {
+					self.authority_reputations.insert(offender, -1);
+				}
+			}
+		}
 	}
 
 	/// Offchain features
 	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
 		let dkg_public_key = self.client.runtime_api().dkg_pub_key(&at);
 		let public_key_sig = self.client.runtime_api().next_pub_key_sig(&at);
@@ -1058,7 +1085,7 @@ where
 		// Get authority accounts
 		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
 		let current_block_number = header.number().clone();
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		let authority_accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
 		if authority_accounts.is_none() {
 			return Err(DKGError::NoAuthorityAccounts)
@@ -1233,40 +1260,37 @@ where
 			return
 		}
 
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
 			Err(_) => return,
 		};
 
 		let rounds = self.rounds.as_mut().unwrap();
-		let mut errors = vec![];
+		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
 			for (key, ..) in &unsigned_proposals {
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}
 
-				match rounds.create_offline_stage(key.encode(), *header.number()) {
-					Ok(()) => {
-						// We note unsigned proposals for which we have started the offline stage
-						// to prevent overwriting running offline stages when next this function is
-						// called this function is called on every block import and the proposal
-						// might still be in the the unsigned proposals queue.
-						self.dkg_state
-							.created_offlinestage_at
-							.insert(key.encode(), *header.number());
-					},
-					Err(err) => {
-						error!("Error Creating offline stage {:?}", &err);
-						errors.push(err)
-					},
+				if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
+					error!(target: "dkg", "Failed to create offline stage: {:?}", e);
+					errors.push(e);
+				} else {
+					// We note unsigned proposals for which we have started the offline stage
+					// to prevent overwriting running offline stages when next this function is
+					// called this function is called on every block import and the proposal
+					// might still be in the the unsigned proposals queue.
+					self.dkg_state
+						.created_offlinestage_at
+						.insert(key.encode(), *header.number());
 				}
 			}
 		}
 
-		for err in &errors {
-			self.handle_dkg_error(err.clone());
+		for e in errors {
+			self.handle_dkg_error(e);
 		}
 	}
 
@@ -1279,12 +1303,12 @@ where
 	/// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
-			let untrack_interval = dkg_runtime_primitives::UNTRACK_INTERVAL;
+			let untrack_interval = <<B as Block>::Header as Header>::Number::from(dkg_runtime_primitives::UNTRACK_INTERVAL);
 
 			if diff >= untrack_interval {
 				self.dkg_state.created_offlinestage_at.remove(&key);
@@ -1298,7 +1322,7 @@ where
 		}
 
 		let latest_block_num = self.get_latest_block_number();
-		let at = BlockId::hash(header.hash());
+		let at: BlockId<B> = BlockId::hash(header.hash());
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
 			Err(_) => return,
@@ -1306,6 +1330,7 @@ where
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 		let rounds = self.rounds.as_mut().unwrap();
+		let mut errors = Vec::new();
 		for (key, proposal) in unsigned_proposals {
 			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
@@ -1330,13 +1355,17 @@ where
 				};
 
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
-				rounds.vote(key.encode(), data, latest_block_num).map_err(|| {
+				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
-					self.handle_dkg_error(e);
-				})?;
+					errors.push(e);
+				};
 			}
 		}
-		// send messages to all peers
+		// Handle all errors
+		for e in errors {
+			self.handle_dkg_error(e);
+		}
+		// Send messages to all peers
 		self.send_outgoing_dkg_messages();
 	}
 

@@ -10,6 +10,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{types::*, utils::select_random_set};
 use dkg_runtime_primitives::keccak_256;
+use dkg_runtime_primitives::crypto::AuthorityId;
 
 pub use gg_2020::{
 	party_i::*,
@@ -65,6 +66,14 @@ where
 	// File system storage and encryption
 	#[builder(default)]
 	local_key_path: Option<PathBuf>,
+
+	// Reputations
+	#[builder(default)]
+	reputations: HashMap<AuthorityId, i64>,
+
+	// Authorities
+	#[builder(default)]
+	authorities: Vec<AuthorityId>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -134,7 +143,8 @@ where
 					KeygenState::Started(rounds) => {
 						let finish_result = rounds.try_finish();
 						if let Ok(local_key) = &finish_result {
-							self.generate_and_set_signers(local_key, Vec::new());
+							// TODO: Understand setting signers more deeply
+							self.generate_and_set_signers(local_key);
 							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 
 							results.push(Ok(DKGResult::KeygenFinished {
@@ -508,23 +518,43 @@ where
 	/// Generates the signer set by randomly selecting t+1 signers
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
-	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>, bad: Vec<u16>) -> Result<(), DKGError> {
-		let (party_index, threshold, parties) = self.dkg_params();
+	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+		let (_, threshold, _) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		let set = (1..=parties).collect::<Vec<_>>();
-		let good_set = set
-			.iter()
-			.filter(|&i| bad.contains(i))
-			.collect::<Vec<_>>();
 
-		if good_set.len() <= threshold as usize {
-			return Err(DKGError::Keygen {
-				reason: format!("Not enough good signers: {} < {}", good_set.len(), threshold),
-			});
+		let good_parties: Vec<u16> = self.authorities.iter().enumerate()
+			.filter(|(_, a)| self.reputations.get(a).unwrap_or(&0i64) >= &0i64)
+			.map(|(index, _)| (index + 1) as u16)
+			.collect();
+		// If there aren't enough good authorities
+		let signers_set: Result<Vec<u16>, &str>;
+		if good_parties.len() <= threshold as usize {
+			// Get bad party indices and their reputations
+			// Bad parties are those with negative reputation.
+			let mut bad_parties_and_reps: Vec<(u16, i64)> = self.authorities.iter().enumerate()
+				.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
+				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
+				.map(|(index, rep)| ((index + 1) as u16, rep))
+				.collect::<Vec<(u16, i64)>>();
+			// Sort them in descending order
+			bad_parties_and_reps.sort_by(|a, b| b.1.cmp(&a.1));
+			// Get the best bad parties to fill `threshold + 1` slots
+			let needed_bad_parties = bad_parties_and_reps.iter()
+				.take((threshold  as usize) + 1 - good_parties.len())
+				.map(|k| k.0)
+				.collect::<Vec<u16>>();
+			// Join the good and bad parties to get the final signers set
+			let good_and_bad_authorities: Vec<u16> = good_parties
+				.iter()
+				.chain(needed_bad_parties.iter())
+				.map(|i| *i)
+				.collect();
+			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
+		} else {
+			signers_set = select_random_set(seed, good_parties, threshold + 1);
 		}
 
-		let signers_set = select_random_set(seed, good_set, threshold + 1);
-		if let Ok(mut signers_set) = signers_set {
+		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);
 		}
 	}
