@@ -62,35 +62,23 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 		// decode the resourceId is the first 32 bytes
 		let mut resource_id = [0u8; 32];
 		resource_id.copy_from_slice(&data[0..32]);
-		// the chain type is the 5th last byte of the **resourceId**
-		let mut chain_type = [0u8; 2];
-		chain_type.copy_from_slice(&data[26..28]);
-		// the chain id is the last 4 bytes of the **resourceId**
+		// The chain type is the 5th and 6th last byte of the **resourceId**
+		let mut chain_type_bytes = [0u8; 2];
+		chain_type_bytes.copy_from_slice(&data[26..28]);
+		// The chain id is the last 4 bytes of the **resourceId**
 		let mut chain_id_bytes = [0u8; 4];
 		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
-		let chain_id = u32::from_be_bytes(chain_id_bytes);
-		// the function signature is the next first 4 bytes after the resourceId.
+		// The function signature is the next first 4 bytes after the resourceId.
 		let mut function_sig = [0u8; 4];
 		function_sig.copy_from_slice(&data[32..36]);
-		// the nonce is the last 4 bytes of the header (also considered as the first arg).
+		// The nonce is the last 4 bytes of the header (also considered as the first arg).
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
 		let nonce = u32::from_be_bytes(nonce_bytes);
+		// Create the header
 		let header = ProposalHeader::<ChainId> {
 			resource_id,
-			chain_id: match chain_type {
-				[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
-				[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
-				[3, 1] => ChainIdType::RelayChain(
-					create_runtime_str!("polkadot"),
-					ChainId::from(chain_id),
-				),
-				[3, 2] =>
-					ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
-				[4, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
-				[5, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
-				_ => return Err(codec::Error::from("invalid chain type")),
-			},
+			chain_id: ChainIdType::from_raw_parts(chain_type_bytes, chain_id_bytes),
 			function_sig,
 			nonce: ProposalNonce::from(nonce),
 		};
@@ -199,6 +187,12 @@ impl Proposal {
 			Proposal::Unsigned { .. } => Vec::new(),
 		}
 	}
+
+	pub fn kind(&self) -> ProposalKind {
+		match self {
+			Proposal::Signed { kind, .. } | Proposal::Unsigned { kind, .. } => kind.clone(),
+		}
+	}
 }
 
 pub trait ProposalHandlerTrait {
@@ -211,7 +205,6 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_proposal(
 		_prop: Proposal,
-		_payload_key: DKGPayloadKey,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
@@ -224,72 +217,6 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_evm_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_anchor_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_token_add_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_token_remove_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_wrapping_fee_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_resource_id_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_rescue_tokens_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_deposit_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_withdraw_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_ext_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_fee_limit_update_signed_proposal(
-		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}

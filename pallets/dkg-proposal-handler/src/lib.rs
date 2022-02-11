@@ -14,7 +14,7 @@ mod tests;
 
 use dkg_runtime_primitives::{
 	Address,
-	ChainIdType::{Substrate, EVM},
+	ChainIdType,
 	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
 	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
 	ProposalKind, ProposalNonce, TransactionV2, OFFCHAIN_SIGNED_PROPOSALS,
@@ -29,8 +29,6 @@ use sp_std::{convert::TryFrom, vec::Vec};
 
 pub mod weights;
 use weights::WeightInfo;
-
-use dkg_runtime_primitives::ChainIdType;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -214,29 +212,7 @@ pub mod pallet {
 
 					let prop = prop.clone();
 
-					match kind {
-						ProposalKind::EVM => Self::handle_evm_signed_proposal(prop)?,
-						ProposalKind::TokenAdd => Self::handle_token_add_signed_proposal(prop)?,
-						ProposalKind::TokenRemove =>
-							Self::handle_token_remove_signed_proposal(prop)?,
-						ProposalKind::AnchorUpdate =>
-							Self::handle_anchor_update_signed_proposal(prop)?,
-						ProposalKind::WrappingFeeUpdate =>
-							Self::handle_wrapping_fee_update_signed_proposal(prop)?,
-						ProposalKind::ResourceIdUpdate =>
-							Self::handle_resource_id_update_signed_proposal(prop)?,
-						ProposalKind::RescueTokens =>
-							Self::handle_rescue_tokens_signed_proposal(prop)?,
-						ProposalKind::MaxDepositLimitUpdate =>
-							Self::handle_deposit_limit_update_signed_proposal(prop)?,
-						ProposalKind::MinWithdrawalLimitUpdate =>
-							Self::handle_withdraw_limit_update_signed_proposal(prop)?,
-						ProposalKind::MaxExtLimitUpdate =>
-							Self::handle_ext_limit_update_signed_proposal(prop)?,
-						ProposalKind::MaxFeeLimitUpdate =>
-							Self::handle_fee_limit_update_signed_proposal(prop)?,
-						_ => Err(Error::<T>::ProposalSignatureInvalid)?,
-					}
+					Self::handle_signed_proposal(prop)?;
 
 					continue
 				}
@@ -380,163 +356,91 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(().into())
 	}
 
-	fn handle_evm_signed_proposal(prop: Proposal) -> DispatchResult {
+	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
 		let data = prop.data();
 		let signature = prop.signature();
-		if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
-			// log that we are decoding the transaction as TransactionV2
-			frame_support::log::debug!(
-				target: "dkg_proposal_handler",
-				"submit_signed_proposal: decoding as TransactionV2"
-			);
-			ensure!(
-				Self::validate_ethereum_tx(&eth_transaction),
-				Error::<T>::ProposalFormatInvalid
-			);
 
-			let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
+		let (chain_id, nonce) = match prop.kind() {
+			ProposalKind::EVM => {
+				if let Ok(eth_transaction) = TransactionV2::decode(&mut &data[..]) {
+					// log that we are decoding the transaction as TransactionV2
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal: decoding as TransactionV2"
+					);
+					ensure!(
+						Self::validate_ethereum_tx(&eth_transaction),
+						Error::<T>::ProposalFormatInvalid
+					);
+		
+					let (chain_id, nonce) = Self::decode_evm_transaction(&eth_transaction)?;
+					(chain_id, nonce)
+				} else {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+			},
+			_ => {
+				if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
+					(chain_id, nonce)
+				} else {
+					return Err(Error::<T>::ProposalFormatInvalid)?
+				}
+			}
+		};
+		// log the chain id and nonce
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"submit_signed_proposal: chain_id: {:?}, nonce: {:?}",
+			chain_id,
+			nonce
+		);
 
-			ensure!(
-				UnsignedProposalQueue::<T>::contains_key(
-					chain_id.clone(),
-					DKGPayloadKey::EVMProposal(nonce)
-				),
-				Error::<T>::ProposalDoesNotExists
-			);
-			ensure!(
-				Self::validate_proposal_signature(&data, &signature),
-				Error::<T>::ProposalSignatureInvalid
-			);
+		let payload_key = match prop.kind() {
+			EVM => DKGPayloadKey::EVMProposal(nonce),
+			AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
+			TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
+			TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
+			WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+			ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+			RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
+			MaxDepositLimitUpdate => DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+			MinWithdrawalLimitUpdate => DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+			MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+			MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
+			_ => return Err(Error::<T>::ProposalFormatInvalid)?,
+		};
 
-			SignedProposals::<T>::insert(
-				chain_id.clone(),
-				DKGPayloadKey::EVMProposal(nonce),
-				prop.clone(),
-			);
+		ensure!(
+			UnsignedProposalQueue::<T>::contains_key(chain_id.clone(), payload_key),
+			Error::<T>::ProposalDoesNotExists
+		);
+		// log that proposal exist in the unsigned queue
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"submit_signed_proposal: proposal exist in the unsigned queue"
+		);
+		ensure!(
+			Self::validate_proposal_signature(&data, &signature),
+			Error::<T>::ProposalSignatureInvalid
+		);
 
-			UnsignedProposalQueue::<T>::remove(chain_id.clone(), DKGPayloadKey::EVMProposal(nonce));
-			// Emit event so frontend can react to it.
-			Self::deposit_event(Event::<T>::ProposalSigned {
-				chain_id,
-				key: DKGPayloadKey::EVMProposal(nonce),
-				data: data.clone(),
-				signature,
-			});
-			Ok(().into())
-		} else {
-			Err(Error::<T>::ProposalFormatInvalid)?
-		}
-	}
+		// log that the signature is valid
+		frame_support::log::debug!(
+			target: "dkg_proposal_handler",
+			"submit_signed_proposal: signature is valid"
+		);
 
-	fn handle_anchor_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::AnchorUpdateProposal(0))
-	}
+		SignedProposals::<T>::insert(chain_id.clone(), payload_key, prop.clone());
+		UnsignedProposalQueue::<T>::remove(chain_id.clone(), payload_key);
+		// Emit event so frontend can react to it.
+		Self::deposit_event(Event::<T>::ProposalSigned {
+			chain_id,
+			key: payload_key,
+			data: data.clone(),
+			signature,
+		});
 
-	fn handle_token_add_signed_proposal(
-		prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenAddProposal(0))
-	}
-
-	fn handle_token_remove_signed_proposal(
-		prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::TokenRemoveProposal(0))
-	}
-
-	fn handle_wrapping_fee_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::WrappingFeeUpdateProposal(0))
-	}
-
-	fn handle_resource_id_update_signed_proposal(
-		prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::ResourceIdUpdateProposal(0))
-	}
-
-	fn handle_rescue_tokens_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::RescueTokensProposal(0))
-	}
-
-	fn handle_deposit_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxDepositLimitUpdateProposal(0))
-	}
-
-	fn handle_withdraw_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::MinWithdrawLimitUpdateProposal(0))
-	}
-
-	fn handle_ext_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxExtLimitUpdateProposal(0))
-	}
-
-	fn handle_fee_limit_update_signed_proposal(prop: Proposal) -> DispatchResult {
-		Self::handle_signed_proposal(prop, DKGPayloadKey::MaxFeeLimitUpdateProposal(0))
-	}
-
-	fn handle_signed_proposal(prop: Proposal, payload_key_type: DKGPayloadKey) -> DispatchResult {
-		let data = prop.data();
-		let signature = prop.signature();
-		if let Ok((chain_id, nonce)) = Self::decode_proposal_header(&data).map(Into::into) {
-			// log the chain id and nonce
-			frame_support::log::debug!(
-				target: "dkg_proposal_handler",
-				"submit_signed_proposal: chain_id: {:?}, nonce: {:?}",
-				chain_id,
-				nonce
-			);
-
-			let payload_key = match payload_key_type {
-				DKGPayloadKey::AnchorUpdateProposal(_) =>
-					DKGPayloadKey::AnchorUpdateProposal(nonce),
-				DKGPayloadKey::TokenAddProposal(_) => DKGPayloadKey::TokenAddProposal(nonce),
-				DKGPayloadKey::TokenRemoveProposal(_) => DKGPayloadKey::TokenRemoveProposal(nonce),
-				DKGPayloadKey::WrappingFeeUpdateProposal(_) =>
-					DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-				DKGPayloadKey::ResourceIdUpdateProposal(_) =>
-					DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-				DKGPayloadKey::RescueTokensProposal(_) =>
-					DKGPayloadKey::RescueTokensProposal(nonce),
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
-					DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
-				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
-				DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
-					DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
-				_ => return Err(Error::<T>::ProposalFormatInvalid)?,
-			};
-			ensure!(
-				UnsignedProposalQueue::<T>::contains_key(chain_id.clone(), payload_key),
-				Error::<T>::ProposalDoesNotExists
-			);
-			// log that proposal exist in the unsigned queue
-			frame_support::log::debug!(
-				target: "dkg_proposal_handler",
-				"submit_signed_proposal: proposal exist in the unsigned queue"
-			);
-			ensure!(
-				Self::validate_proposal_signature(&data, &signature),
-				Error::<T>::ProposalSignatureInvalid
-			);
-
-			// log that the signature is valid
-			frame_support::log::debug!(
-				target: "dkg_proposal_handler",
-				"submit_signed_proposal: signature is valid"
-			);
-
-			SignedProposals::<T>::insert(chain_id.clone(), payload_key, prop.clone());
-			UnsignedProposalQueue::<T>::remove(chain_id.clone(), payload_key);
-			// Emit event so frontend can react to it.
-			Self::deposit_event(Event::<T>::ProposalSigned {
-				chain_id,
-				key: payload_key,
-				data: data.clone(),
-				signature,
-			});
-			Ok(())
-		} else {
-			Err(Error::<T>::ProposalFormatInvalid)?
-		}
+		Ok(())
 	}
 }
 
@@ -870,7 +774,7 @@ impl<T: Config> Pallet<T> {
 
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 80 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -888,7 +792,7 @@ impl<T: Config> Pallet<T> {
 				let _ = src_chain_id;
 				let _ = latest_leaf_index;
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -900,7 +804,7 @@ impl<T: Config> Pallet<T> {
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 41 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -911,7 +815,7 @@ impl<T: Config> Pallet<T> {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -921,7 +825,7 @@ impl<T: Config> Pallet<T> {
 	fn decode_token_add_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 60 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -929,7 +833,7 @@ impl<T: Config> Pallet<T> {
 				new_token_address_bytes.copy_from_slice(&data[40..60]);
 				let new_token_address = Address::from(new_token_address_bytes);
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -939,7 +843,7 @@ impl<T: Config> Pallet<T> {
 	fn decode_token_remove_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 60 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -947,7 +851,7 @@ impl<T: Config> Pallet<T> {
 				token_address_bytes.copy_from_slice(&data[40..60]);
 				let token_address = Address::from(token_address_bytes);
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -960,7 +864,7 @@ impl<T: Config> Pallet<T> {
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 112 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -973,7 +877,7 @@ impl<T: Config> Pallet<T> {
 				execution_context_address_bytes.copy_from_slice(&data[92..112]);
 				let execution_context_address = Address::from(execution_context_address_bytes);
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -984,7 +888,7 @@ impl<T: Config> Pallet<T> {
 	fn decode_rescue_tokens_proposal(data: &[u8]) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 112 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
@@ -997,7 +901,7 @@ impl<T: Config> Pallet<T> {
 				let mut amount_to_rescue_bytes = [0u8; 32];
 				amount_to_rescue_bytes.copy_from_slice(&data[80..112]);
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)
@@ -1010,14 +914,14 @@ impl<T: Config> Pallet<T> {
 	) -> Result<ProposalHeader<T::ChainId>, Error<T>> {
 		let header = Self::decode_proposal_header(data)?;
 		match header.chain_id {
-			EVM(ChainId) => {
+			ChainIdType::EVM(ChainId) => {
 				if data.len() != 72 {
 					return Err(Error::<T>::ProposalFormatInvalid)?
 				}
 				let mut configurable_limit_bytes = [0u8; 32];
 				configurable_limit_bytes.copy_from_slice(&data[40..72]);
 			},
-			Substrate(ChainId) => {},
+			ChainIdType::Substrate(ChainId) => {},
 			_ => {},
 		}
 		Ok(header)

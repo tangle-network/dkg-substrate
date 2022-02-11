@@ -6,6 +6,7 @@ pub mod mmr;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
+pub mod handlers;
 
 use crypto::AuthorityId;
 pub use ethereum::*;
@@ -19,7 +20,7 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	create_runtime_str,
-	traits::{IdentifyAccount, Verify},
+	traits::{IdentifyAccount, Verify, AtLeast32Bit},
 	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
@@ -198,7 +199,7 @@ pub enum ChainIdType<ChainId> {
 	Solana(ChainId),
 }
 
-impl<ChainId: Clone> ChainIdType<ChainId> {
+impl<ChainId: Clone + AtLeast32Bit> ChainIdType<ChainId> {
 	pub fn inner_id(&self) -> ChainId {
 		match self {
 			ChainIdType::EVM(id) => id.clone(),
@@ -247,6 +248,13 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 			ChainIdType::Solana(_) => [4, 0],
 			_ => panic!("Invalid chain id type"),
 		}
+	}
+
+	pub fn from_raw_parts(chain_type_bytes: [u8; 2], chain_id_bytes: [u8; 4]) -> Self {
+		Self::get_full_repr(
+			chain_type_bytes,
+			ChainId::from(u32::from_be_bytes(chain_id_bytes))
+		)
 	}
 
 	pub fn get_full_repr(chain_type: [u8; 2], chain_id: ChainId) -> Self {
