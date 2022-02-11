@@ -1,6 +1,6 @@
 import { ApiPromise } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
-import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from './util/utils';
+import { hexToBytes, listenOneBlock, provider, waitNfinalizedBlocks } from './utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';

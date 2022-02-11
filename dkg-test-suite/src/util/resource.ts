@@ -2,7 +2,7 @@ import {ApiPromise} from "@polkadot/api";
 import {Bytes, Option} from "@polkadot/types";
 import {KeyringPair} from "@polkadot/keyring/types";
 import {Keyring} from "@polkadot/keyring";
-import {ChainIdType, makeResourceId} from "./utils";
+import {ChainIdType, makeResourceId} from "../utils";
 import {ethers} from "ethers";
 import {assert} from "@polkadot/util";
 

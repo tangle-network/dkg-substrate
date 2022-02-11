@@ -4,7 +4,7 @@ import {
 	TokenRemoveProposal,
 	VAnchorConfigurableLimitProposal,
 	WrappingFeeUpdateProposal
-} from "./utils";
+} from "../utils";
 import {resourceId} from "./resource";
 
 let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;

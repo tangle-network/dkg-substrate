@@ -1,5 +1,5 @@
 import { ApiPromise, Keyring } from '@polkadot/api';
-import { provider, waitNfinalizedBlocks } from './util/utils';
+import { provider, waitNfinalizedBlocks } from './utils';
 import { assert } from '@polkadot/util';
 
 async function dkg_refresh() {

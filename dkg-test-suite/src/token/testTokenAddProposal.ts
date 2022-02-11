@@ -4,7 +4,7 @@ import {
 	encodeTokenAddProposal,
 	provider,
 	waitNfinalizedBlocks,
-} from '../util/utils';
+} from '../utils';
 import {ethers} from 'ethers';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
