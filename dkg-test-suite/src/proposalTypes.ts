@@ -1,5 +1,5 @@
 import {ApiPromise} from "@polkadot/api";
-import {provider} from "./utils";
+import {provider} from "./util/utils";
 
 export const apiProposalTypes = function() {
 	return ApiPromise.create({

@@ -1,5 +1,5 @@
 import { ApiPromise } from '@polkadot/api';
-import { provider, waitNfinalizedBlocks } from './utils';
+import { provider, waitNfinalizedBlocks } from './util/utils';
 import ora from 'ora';
 
 async function testDkgRefresh() {

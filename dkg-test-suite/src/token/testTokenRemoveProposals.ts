@@ -1,31 +1,16 @@
 import {ApiPromise} from '@polkadot/api';
-import {Option, Bytes} from '@polkadot/types';
 import {Keyring} from '@polkadot/keyring';
 import {
-	ChainIdType, encodeTokenRemoveProposal,
-	makeResourceId,
-	provider, TokenRemoveProposal,
+	 encodeTokenRemoveProposal,
+	provider,
 	waitNfinalizedBlocks,
-} from '../utils';
+} from '../util/utils';
 import {ethers} from 'ethers';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-
-const resourceId = makeResourceId(
-	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
-	ChainIdType.EVM,
-	5002
-);
-let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
-const tokenRemoveProposal: TokenRemoveProposal = {
-	header: {
-		resourceId,
-		functionSignature: '0xdeadbeef',
-		nonce,
-	},
-	removeTokenAddress: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
-};
+import {registerResourceId, resourceId} from "../util/resource";
+import {tokenRemoveProposal} from "../util/proposals";
 
 async function testTokenRemoveProposal() {
 	const api = await ApiPromise.create({provider});
@@ -42,7 +27,7 @@ async function testTokenRemoveProposal() {
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
 	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
 		chainIdType,
-		{tokenremoveproposal: nonce},
+		{tokenremoveproposal: tokenRemoveProposal.header.nonce},
 		(res: any) => {
 			if (res) {
 				const parsedResult = JSON.parse(JSON.stringify(res));
@@ -73,34 +58,6 @@ async function testTokenRemoveProposal() {
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
 	unsubSignedProps();
-}
-
-async function registerResourceId(api: ApiPromise) {
-	// quick check if the resourceId is already registered
-	const res = await api.query.dKGProposals.resources(resourceId);
-	const val = new Option(api.registry, Bytes, res);
-	if (val.isSome) {
-		console.log(`Resource id ${resourceId} is already registered, skipping`);
-		return;
-	}
-	const keyring = new Keyring({type: 'sr25519'});
-	const alice = keyring.addFromUri('//Alice');
-
-	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
-	console.log('Registering resource id');
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({events = [], status}) => {
-		console.log(`Current status is: ${status.type}`);
-
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
-
-			events.forEach(({phase, event: {data, method, section}}) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
-
-			unsub();
-		}
-	});
 }
 
 async function sendTokenRemoveProposal(api: ApiPromise) {

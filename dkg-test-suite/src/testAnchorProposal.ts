@@ -9,7 +9,7 @@ import {
 	makeResourceId,
 	provider,
 	waitNfinalizedBlocks,
-} from './utils';
+} from './util/utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
