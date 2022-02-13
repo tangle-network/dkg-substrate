@@ -27,15 +27,21 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
+pub trait ChainIdTrait: AtLeast32Bit + Copy + Encode + Decode + sp_std::fmt::Debug {}
+
+impl ChainIdTrait for u32 {}
+impl ChainIdTrait for u64 {}
+impl ChainIdTrait for u128 {}
+
 #[derive(Debug, Clone, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct ProposalHeader<ChainId: AtLeast32Bit + Copy + Encode + Decode> {
+pub struct ProposalHeader<C: ChainIdTrait> {
 	pub resource_id: ResourceId,
-	pub chain_id: ChainIdType<ChainId>,
+	pub chain_id: ChainIdType<C>,
 	pub function_sig: [u8; 4],
 	pub nonce: ProposalNonce,
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Encode for ProposalHeader<ChainId> {
+impl<C: ChainIdTrait> Encode for ProposalHeader<C> {
 	fn encode(&self) -> Vec<u8> {
 		let mut buf = Vec::new();
 		// resource_id contains the chain id already.
@@ -50,7 +56,7 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Encode for ProposalHeader<C
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<ChainId> {
+impl<C: ChainIdTrait> Decode for ProposalHeader<C> {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
 		let mut data = [0u8; 40];
 		input.read(&mut data).map_err(|_| {
@@ -76,7 +82,7 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 		nonce_bytes.copy_from_slice(&data[36..40]);
 		let nonce = u32::from_be_bytes(nonce_bytes);
 		// Create the header
-		let header = ProposalHeader::<ChainId> {
+		let header = ProposalHeader::<C> {
 			resource_id,
 			chain_id: ChainIdType::from_raw_parts(chain_type_bytes, chain_id_bytes),
 			function_sig,
@@ -86,18 +92,14 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
-	for (ChainIdType<ChainId>, ProposalNonce)
-{
-	fn from(header: ProposalHeader<ChainId>) -> Self {
+impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ChainIdType<C>, ProposalNonce) {
+	fn from(header: ProposalHeader<C>) -> Self {
 		(header.chain_id, header.nonce)
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
-	for (ResourceId, ChainIdType<ChainId>, ProposalNonce)
-{
-	fn from(header: ProposalHeader<ChainId>) -> Self {
+impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ResourceId, ChainIdType<C>, ProposalNonce) {
+	fn from(header: ProposalHeader<C>) -> Self {
 		(header.resource_id, header.chain_id, header.nonce)
 	}
 }
@@ -193,6 +195,25 @@ impl Proposal {
 			Proposal::Signed { kind, .. } | Proposal::Unsigned { kind, .. } => kind.clone(),
 		}
 	}
+
+	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
+		match self.kind() {
+			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
+			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
+			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
+			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
+			ProposalKind::WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
+			ProposalKind::MaxDepositLimitUpdate =>
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+			ProposalKind::MinWithdrawalLimitUpdate =>
+				DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+			ProposalKind::MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+			ProposalKind::MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
+			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
+		}
+	}
 }
 
 pub trait ProposalHandlerTrait {
@@ -203,9 +224,7 @@ pub trait ProposalHandlerTrait {
 		Ok(().into())
 	}
 
-	fn handle_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
