@@ -16,17 +16,9 @@ pub struct EvmTxProposal<C: ChainIdTrait> {
 
 /// https://github.com/webb-tools/protocol-solidity/issues/83
 /// Proposal Data: [
-///     resourceId          - 32 bytes [0..32]
-///     functionSig         - 4 bytes  [32..36]
-///     nonce               - 4 bytes  [36..40]
-///     tokenAddress        - 20 bytes  [40..60]
+///     bytes        		- variable [0..]
 /// ]
-/// Total Bytes: 32 + 4 + 4 + 20 = 60
 pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<EvmTxProposal<C>, ValidationError> {
-	if data.len() != 60 {
-		return Err(ValidationError::InvalidParameter("Proposal data must be 60 bytes".to_string()))?
-	}
-
 	let eth_transaction = TransactionV2::decode(&mut &data[..])
 		.map_err(|_| ValidationError::InvalidParameter("Invalid transaction".to_string()))?;
 

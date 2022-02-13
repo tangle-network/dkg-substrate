@@ -1313,20 +1313,6 @@ where
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
 			if let Proposal::Unsigned { kind, data } = proposal {
-				let data = match kind {
-					ProposalKind::Refresh => data,
-					ProposalKind::AnchorUpdate => data,
-					ProposalKind::TokenAdd => data,
-					ProposalKind::TokenRemove => data,
-					ProposalKind::RescueTokens => data,
-					ProposalKind::MaxDepositLimitUpdate => data,
-					ProposalKind::MinWithdrawalLimitUpdate => data,
-					ProposalKind::MaxExtLimitUpdate => data,
-					ProposalKind::MaxFeeLimitUpdate => data,
-					ProposalKind::EVM => data,
-					_ => continue,
-				};
-
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());

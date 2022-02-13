@@ -25,10 +25,9 @@ pub fn decode_proposal<C: ChainIdTrait>(
 ) -> Result<(ChainIdType<C>, DKGPayloadKey), ValidationError> {
 	// First parse if EVM tx proposal
 	match proposal.kind() {
-		ProposalKind::EVM => {
+		ProposalKind::EVM =>
 			return evm::evm_tx::create(&proposal.data())
-				.map(|p| (p.chain_id, DKGPayloadKey::EVMProposal(p.nonce)))
-		},
+				.map(|p| (p.chain_id, DKGPayloadKey::EVMProposal(p.nonce))),
 		_ => {},
 	}
 
