@@ -1140,72 +1140,19 @@ where
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key =
 			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let payload_key = match decoded_key {
+			Ok((chain_id, key)) => key,
+			Err(err) => return None,
+		};
 
-		match decoded_key {
-			Ok((_chain_id, DKGPayloadKey::EVMProposal(_nonce))) => Some(Proposal::Signed {
-				kind: ProposalKind::EVM,
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			Ok((_chain_id, DKGPayloadKey::AnchorUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::AnchorUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::TokenAddProposal(_nonce))) => Some(Proposal::Signed {
-				kind: ProposalKind::TokenAdd,
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			Ok((_chain_id, DKGPayloadKey::TokenRemoveProposal(_nonce))) => Some(Proposal::Signed {
-				kind: ProposalKind::TokenRemove,
-				data: finished_round.payload,
-				signature: finished_round.signature,
-			}),
-			Ok((_chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::WrappingFeeUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::ResourceIdUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::ResourceIdUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::RescueTokensProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::RescueTokens,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::MaxDepositLimitUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::MinWithdrawalLimitUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::MaxExtLimitUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(_nonce))) =>
-				Some(Proposal::Signed {
-					kind: ProposalKind::MaxFeeLimitUpdate,
-					data: finished_round.payload,
-					signature: finished_round.signature,
-				}),
-			Ok((_chain_id, DKGPayloadKey::RefreshVote(nonce))) => {
+		let make_signed_proposal = |kind: ProposalKind| Proposal::Signed {
+			kind,
+			data: finished_round.payload,
+			signature: finished_round.signature.clone(),
+		};
+
+		let signed_proposal = match payload_key {
+			DKGPayloadKey::RefreshVote(nonce) => {
 				let offchain = self.backend.offchain_storage();
 
 				if let Some(mut offchain) = offchain {
@@ -1218,10 +1165,32 @@ where
 
 					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
 				}
-				None
+
+				return None
 			},
-			_ => None, // TODO: handle other key types
-		}
+			DKGPayloadKey::EVMProposal(_) => make_signed_proposal(ProposalKind::EVM),
+			DKGPayloadKey::AnchorUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::AnchorUpdate),
+			DKGPayloadKey::TokenAddProposal(_) => make_signed_proposal(ProposalKind::TokenAdd),
+			DKGPayloadKey::TokenRemoveProposal(_) =>
+				make_signed_proposal(ProposalKind::TokenRemove),
+			DKGPayloadKey::WrappingFeeUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::WrappingFeeUpdate),
+			DKGPayloadKey::ResourceIdUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::ResourceIdUpdate),
+			DKGPayloadKey::RescueTokensProposal(_) =>
+				make_signed_proposal(ProposalKind::RescueTokens),
+			DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::MaxDepositLimitUpdate),
+			DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::MinWithdrawalLimitUpdate),
+			DKGPayloadKey::MaxExtLimitUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::MaxExtLimitUpdate),
+			DKGPayloadKey::MaxFeeLimitUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::MaxFeeLimitUpdate),
+		};
+
+		Some(signed_proposal)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
