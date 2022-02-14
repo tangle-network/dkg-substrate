@@ -13,11 +13,11 @@ mod mock;
 mod tests;
 
 use dkg_runtime_primitives::{
-	Address, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
-	ProposalHandlerTrait, ProposalHeader, ProposalKind, ProposalNonce, TransactionV2,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, Address, DKGPayloadKey,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
+	ProposalKind, ProposalNonce, TransactionV2,
 };
-use dkg_runtime_primitives::offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS;
 use frame_support::pallet_prelude::*;
 use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},

@@ -26,14 +26,14 @@ use frame_support::{
 use frame_system::offchain::{SendSignedTransaction, Signer};
 
 use dkg_runtime_primitives::{
+	offchain::storage_keys::{
+		AGGREGATED_MISBEHAVIOR_REPORTS, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+		OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	},
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
-	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
-};
-use dkg_runtime_primitives::offchain::storage_keys::{
-	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-	OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	AggregatedMisbehaviorReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog,
+	ProposalHandlerTrait, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -109,6 +109,7 @@ pub mod pallet {
 			let _res = Self::submit_genesis_public_key_onchain(block_number);
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
+			let _res = Self::submit_misbehavior_reports_onchain(block_number);
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
@@ -306,6 +307,29 @@ pub mod pallet {
 			Self::verify_pub_key_signature(origin, &signature_proposal.signature)
 		}
 
+		#[transactional]
+		#[pallet::weight(0)]
+		pub fn submit_misbehavior_reports(
+			origin: OriginFor<T>,
+			reports: AggregatedMisbehaviorReports,
+		) -> DispatchResultWithPostInfo {
+			let origin = ensure_signed(origin)?;
+
+			let authorities = Self::current_authorities_accounts();
+			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
+			let valid_reporters = Self::process_misbehavior_reports(reports, authorities);
+			let threshold = Self::signature_threshold();
+
+			if valid_reporters.len() >= threshold as usize {
+				Self::deposit_event(Event::MisbehaviorReportsSubmitted {
+					reporters: valid_reporters.clone(),
+				});
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidMisbehaviorReports.into())
+		}
+
 		#[pallet::weight(0)]
 		pub fn set_time_to_restart(
 			origin: OriginFor<T>,
@@ -415,6 +439,23 @@ pub mod pallet {
 	pub(super) type NextAuthoritiesAccounts<T: Config> =
 		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
+	/// Tracks misbehavior reports
+	#[pallet::storage]
+	#[pallet::getter(fn misbehavior_reports)]
+	pub type MisbehaviorReports<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		(dkg_runtime_primitives::AuthoritySetId, dkg_runtime_primitives::crypto::AuthorityId),
+		AggregatedMisbehaviorReports,
+		OptionQuery,
+	>;
+
+	/// Tracks authority reputations
+	#[pallet::storage]
+	#[pallet::getter(fn authority_reputations)]
+	pub type AuthorityReputations<T: Config> =
+		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, u32, ValueQuery>;
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
@@ -442,6 +483,8 @@ pub mod pallet {
 		UsedSignature,
 		/// Invalid public key signature submission
 		InvalidSignature,
+		/// Invalid misbehavior reports
+		InvalidMisbehaviorReports,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -454,6 +497,8 @@ pub mod pallet {
 		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
 		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+		/// Misbehavior reports submitted
+		MisbehaviorReportsSubmitted { reporters: Vec<sr25519::Public> },
 	}
 
 	#[cfg(feature = "std")]
@@ -524,6 +569,35 @@ impl<T: Config> Pallet<T> {
 		}
 
 		return dict
+	}
+
+	pub fn process_misbehavior_reports(
+		reports: AggregatedMisbehaviorReports,
+		authorities: Vec<T::AccountId>,
+	) -> Vec<sr25519::Public> {
+		let mut valid_reporters = Vec::new();
+		for (inx, signature) in reports.signatures.iter().enumerate() {
+			let maybe_signers = authorities
+				.iter()
+				.map(|x| {
+					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to sr25519 public key")
+					}))
+				})
+				.collect::<Vec<sr25519::Public>>();
+
+			let mut signed_payload = Vec::new();
+			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
+			signed_payload.extend_from_slice(reports.offender.as_ref());
+
+			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, &signature);
+
+			if can_proceed.1 && !valid_reporters.contains(&reports.reporters[inx]) {
+				valid_reporters.push(reports.reporters[inx]);
+			}
+		}
+
+		return valid_reporters
 	}
 
 	fn change_authorities(
@@ -663,7 +737,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_public_key_signature_onchain(
-		block_number: T::BlockNumber,
+		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
 		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
 
@@ -683,9 +757,39 @@ impl<T: Config> Pallet<T> {
 			let _ = signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 				signature_proposal: refresh_proposal.clone(),
 			});
-			frame_support::log::debug!(target: "dkg", "Offchain Submitting public key sig onchain {:?}", refresh_proposal.signature);
+			frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
 
 			pub_key_sig_ref.clear();
+		}
+
+		return Ok(())
+	}
+
+	fn submit_misbehavior_reports_onchain(
+		_block_number: T::BlockNumber,
+	) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+		}
+
+		let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOR_REPORTS);
+		let agg_misbehaviour_reports = agg_reports_ref.get::<AggregatedMisbehaviorReports>();
+
+		if let Ok(Some(reports)) = agg_misbehaviour_reports {
+			// If this offender has already been reported, don't report it again.
+			if Self::misbehavior_reports((reports.round_id, reports.offender.clone())).is_some() {
+				agg_reports_ref.clear();
+				return Ok(())
+			}
+
+			let _ = signer.send_signed_transaction(|_account| Call::submit_misbehavior_reports {
+				reports: reports.clone(),
+			});
+
+			frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+
+			agg_reports_ref.clear();
 		}
 
 		return Ok(())

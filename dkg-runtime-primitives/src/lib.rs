@@ -3,16 +3,17 @@
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
 pub mod mmr;
+pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
-pub mod offchain;
 
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
 pub use proposal::*;
+use sp_application_crypto::sr25519;
 
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
@@ -65,6 +66,18 @@ pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
 pub struct AggregatedPublicKeys {
 	/// A vector of public keys and signature pairs [/public_key/] , [/signature/]
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
+}
+
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
+pub struct AggregatedMisbehaviorReports {
+	/// The round id the offense took place in
+	pub round_id: u64,
+	/// The offending authority
+	pub offender: crypto::AuthorityId,
+	/// A list of reporters
+	pub reporters: Vec<sr25519::Public>,
+	/// A list of signed reports
+	pub signatures: Vec<Vec<u8>>,
 }
 
 impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
@@ -138,11 +151,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	MmrRoot(MmrRootHash),
 	/// The DKG keys have changed
 	#[codec(index = 4)]
-	KeyRefresh {
-		old_public_key: Vec<u8>,
-		new_public_key: Vec<u8>,
-		new_key_signature: Vec<u8>
-	},
+	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
 
 #[derive(Encode, Decode, PartialEq, Eq, Clone, RuntimeDebug, scale_info::TypeInfo)]

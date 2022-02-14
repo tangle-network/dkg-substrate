@@ -52,18 +52,18 @@ use crate::{
 };
 use dkg_primitives::{
 	types::{DKGError, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId},
-	AggregatedPublicKeys, ChainId, DKGReport, Proposal, ProposalKind,
+	ChainId, DKGReport, Proposal, ProposalKind,
 };
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	offchain::storage_keys::{
+		AGGREGATED_MISBEHAVIOR_REPORTS, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	},
 	utils::{sr25519, to_slice_32},
-	ChainIdType, OffchainSignedProposals, RefreshProposal, RefreshProposalSigned,
-	GENESIS_AUTHORITY_SET_ID,
-};
-use dkg_runtime_primitives::offchain::storage_keys::{
-	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-	OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	AggregatedMisbehaviorReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
+	RefreshProposal, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -140,8 +140,10 @@ where
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
 	refresh_in_progress: bool,
-	/// keep track of the broadcast public keys and signatures
+	/// Tracking for the broadcasted public keys and signatures
 	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	/// Tracking for the misbehaviour reports
+	aggregated_misbehaviour_reports: HashMap<(RoundId, AuthorityId), AggregatedMisbehaviorReports>,
 	/// Reputation system (party index -> reputation)
 	pub authority_reputations: HashMap<AuthorityId, i64>,
 	/// dkg state
@@ -209,6 +211,7 @@ where
 			active_keygen_in_progress: false,
 			refresh_in_progress: false,
 			aggregated_public_keys: HashMap::new(),
+			aggregated_misbehaviour_reports: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
@@ -811,6 +814,12 @@ where
 			Ok(()) => (),
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
+
+		match self.handle_misbehaviour_report(dkg_msg.clone()) {
+			Ok(()) => (),
+			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+		};
+
 		self.send_outgoing_dkg_messages();
 		self.process_finished_rounds();
 	}
@@ -823,9 +832,7 @@ where
 			DKGError::KeygenTimeout { ref bad_actors } => bad_actors.clone(),
 			DKGError::OfflineMisbehaviour { ref bad_actors } => bad_actors.clone(),
 			DKGError::OfflineTimeout { ref bad_actors } => bad_actors.clone(),
-			// TODO: Recreate offline stages for these failed sign protocols
 			DKGError::SignMisbehaviour { ref bad_actors } => bad_actors.clone(),
-			// TODO: Recreate offline stages for these failed sign protocols
 			DKGError::SignTimeout { ref bad_actors } => bad_actors.clone(),
 			_ => Default::default(),
 		};
@@ -987,8 +994,9 @@ where
 		&self,
 		is_main_round: bool,
 		authority_accounts: (Vec<AccountId32>, Vec<AccountId32>),
-		msg: &DKGPublicKeyMessage,
-	) -> Result<(), DKGError> {
+		msg: &[u8],
+		signature: &[u8],
+	) -> Result<sr25519::Public, DKGError> {
 		let get_keys = |accts: &Vec<AccountId32>| {
 			accts
 				.iter()
@@ -1006,19 +1014,16 @@ where
 			get_keys(&authority_accounts.1)
 		};
 
-		if !dkg_runtime_primitives::utils::verify_signer_from_set(
-			maybe_signers,
-			&msg.pub_key,
-			&msg.signature,
-		)
-		.1
-		{
+		let (maybe_signer, success) =
+			dkg_runtime_primitives::utils::verify_signer_from_set(maybe_signers, msg, signature);
+
+		if !success {
 			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority".to_string(),
-			})
+			})?
 		}
 
-		Ok(())
+		Ok(maybe_signer.unwrap())
 	}
 
 	fn store_aggregated_public_keys(
@@ -1106,7 +1111,12 @@ where
 					}
 				};
 
-				self.authenticate_msg_origin(is_main_round, authority_accounts.unwrap(), &msg)?;
+				self.authenticate_msg_origin(
+					is_main_round,
+					authority_accounts.unwrap(),
+					&msg.pub_key,
+					&msg.signature,
+				)?;
 
 				let key_and_sig = (msg.pub_key, msg.signature);
 				let round_id = msg.round_id;
@@ -1130,6 +1140,103 @@ where
 						&aggregated_public_keys,
 						current_block_number,
 					)?;
+				}
+			},
+			_ => {},
+		}
+
+		Ok(())
+	}
+
+	fn store_aggregated_misbehaviour_reports(
+		&mut self,
+		reports: &AggregatedMisbehaviorReports,
+	) -> Result<(), DKGError> {
+		let maybe_offchain = self.backend.offchain_storage();
+		if maybe_offchain.is_none() {
+			return Err(DKGError::GenericError {
+				reason: "No offchain storage available".to_string(),
+			})
+		}
+
+		let mut offchain = maybe_offchain.unwrap();
+		offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOR_REPORTS, &reports.clone().encode());
+		trace!(
+			target: "dkg",
+			"Stored aggregated misbehaviour reports {:?}",
+			reports.encode()
+		);
+
+		let _ = self
+			.aggregated_misbehaviour_reports
+			.remove(&(reports.round_id, reports.offender.clone()));
+
+		Ok(())
+	}
+
+	fn handle_misbehaviour_report(
+		&mut self,
+		dkg_msg: DKGMessage<AuthorityId>,
+	) -> Result<(), DKGError> {
+		// Get authority accounts
+		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+		let current_block_number = header.number().clone();
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		let authority_accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+		if authority_accounts.is_none() {
+			return Err(DKGError::NoAuthorityAccounts)
+		}
+
+		match dkg_msg.payload {
+			DKGMsgPayload::MisbehaviorBroadcast(msg) => {
+				debug!(target: "dkg", "Received misbehaviour report");
+
+				let is_main_round = {
+					if self.rounds.is_some() {
+						msg.round_id == self.rounds.as_ref().unwrap().get_id()
+					} else {
+						false
+					}
+				};
+				// Create packed message
+				let mut signed_payload = Vec::new();
+				signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
+				signed_payload.extend_from_slice(msg.offender.as_ref());
+				// Authenticate the message against the current authorities
+				let reporter = self.authenticate_msg_origin(
+					is_main_round,
+					authority_accounts.unwrap(),
+					&signed_payload,
+					&msg.signature,
+				)?;
+				// Add new report to the aggregated reports
+				let round_id = msg.round_id.clone();
+				let mut misbehaviour_reports = match self
+					.aggregated_misbehaviour_reports
+					.get(&(round_id, msg.offender.clone()))
+				{
+					Some(reports) => reports.clone(),
+					None => AggregatedMisbehaviorReports {
+						round_id,
+						offender: msg.offender.clone(),
+						reporters: Vec::new(),
+						signatures: Vec::new(),
+					},
+				};
+
+				if !misbehaviour_reports.reporters.contains(&reporter) {
+					misbehaviour_reports.reporters.push(reporter);
+					misbehaviour_reports.signatures.push(msg.signature);
+					self.aggregated_misbehaviour_reports
+						.insert((round_id, msg.offender), misbehaviour_reports.clone());
+				}
+
+				// Fetch the current threshold for the DKG. We will use the
+				// current threshold to determine if we have enough signatures
+				// to submit the next DKG public key.
+				let threshold = self.get_threshold(header).unwrap() as usize;
+				if misbehaviour_reports.reporters.len() >= threshold {
+					self.store_aggregated_misbehaviour_reports(&misbehaviour_reports)?;
 				}
 			},
 			_ => {},

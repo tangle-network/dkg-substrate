@@ -1,8 +1,8 @@
+use crate::rounds::LocalKey;
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
+use dkg_runtime_primitives::crypto::AuthorityId;
 use std::fmt;
-
-use crate::rounds::LocalKey;
 
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
@@ -44,6 +44,7 @@ impl<ID> fmt::Display for DKGMessage<ID> {
 			DKGMsgPayload::Offline(_) => "Offline",
 			DKGMsgPayload::Vote(_) => "Vote",
 			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
+			DKGMsgPayload::MisbehaviorBroadcast(_) => "MisbehaviorBroadcast",
 		};
 		write!(f, "DKGMessage of type {}", label)
 	}
@@ -56,6 +57,7 @@ pub enum DKGMsgPayload {
 	Offline(DKGOfflineMessage),
 	Vote(DKGVoteMessage),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
+	MisbehaviorBroadcast(DKGMisbehaviourMessage),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -106,6 +108,16 @@ pub struct DKGPublicKeyMessage {
 	pub round_id: RoundId,
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
+	pub signature: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct DKGMisbehaviourMessage {
+	pub round_id: RoundId,
+	/// Offending authority's id
+	pub offender: AuthorityId,
+	/// Authority's signature for this report
 	pub signature: Vec<u8>,
 }
 
