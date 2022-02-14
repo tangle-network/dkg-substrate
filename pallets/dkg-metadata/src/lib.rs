@@ -28,10 +28,10 @@ use frame_system::offchain::{SendSignedTransaction, Signer};
 use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
-	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT, ProposalKind, Proposal,
+	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, Proposal,
+	ProposalHandlerTrait, ProposalKind, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -710,11 +710,8 @@ impl<T: Config> Pallet<T> {
 			let uncompressed_pub_key =
 				Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
 			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(
-				&signature,
-				&data.encode(),
-			)
-			.map_err(|_| Error::<T>::InvalidSignature)?;
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put(signature.clone());
