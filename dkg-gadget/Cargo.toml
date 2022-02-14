@@ -42,7 +42,6 @@ sc-service = { git = "https://github.com/paritytech/substrate", branch = "master
 
 round-based = { version = "0.1.4", features = [] }
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.2.1"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
 
 # Local dependencies
@@ -51,3 +50,5 @@ dkg-primitives = { path = "../dkg-primitives", default-features = false }
 
 [dev-dependencies]
 sc-network-test = { git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
+
+[features]

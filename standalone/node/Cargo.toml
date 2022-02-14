@@ -22,16 +22,23 @@ rand = "0.7.2"
 codec = { package = "parity-scale-codec", version = "2.0.0" }
 hex-literal = { package = "hex-literal", version = "0.3.3" }
 
-sc-cli = { git = "https://github.com/paritytech/substrate", branch = "master", features = ["wasmtime"] }
+sc-cli = { git = "https://github.com/paritytech/substrate", branch = "master", features = [
+	"wasmtime",
+] }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "master" }
-sc-executor = { git = "https://github.com/paritytech/substrate", branch = "master", features = ["wasmtime"] }
-sc-service = { git = "https://github.com/paritytech/substrate", branch = "master", features = ["wasmtime"] }
+sc-executor = { git = "https://github.com/paritytech/substrate", branch = "master", features = [
+	"wasmtime",
+] }
+sc-service = { git = "https://github.com/paritytech/substrate", branch = "master", features = [
+	"wasmtime",
+] }
 sc-telemetry = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-transaction-pool-api = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "master" }
+sc-consensus-manual-seal = { git = "https://github.com/paritytech/substrate", rev = "9eddaec3" }
 sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-consensus = { git = "https://github.com/paritytech/substrate", branch = "master" }
 sc-finality-grandpa = { git = "https://github.com/paritytech/substrate", branch = "master" }
@@ -68,6 +75,5 @@ substrate-build-script-utils = { git = "https://github.com/paritytech/substrate"
 
 [features]
 default = []
-runtime-benchmarks = [
-	"dkg-standalone-runtime/runtime-benchmarks",
-]
+runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks"]
+manual-seal = []

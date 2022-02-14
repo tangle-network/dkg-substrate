@@ -107,8 +107,17 @@ pub fn new_partial(
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
+	#[cfg(feature = "manual-seal")]
+	let import_queue = sc_consensus_manual_seal::import_queue(
+		Box::new(()),
+		&task_manager.spawn_essential_handle(),
+		config.prometheus_registry(),
+	);
+
+	#[cfg(not(feature = "manual-seal"))]
 	let slot_duration = sc_consensus_aura::slot_duration(&*client)?.slot_duration();
 
+	#[cfg(not(feature = "manual-seal"))]
 	let import_queue =
 		sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _, _>(ImportQueueParams {
 			block_import: grandpa_block_import.clone(),
