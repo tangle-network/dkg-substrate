@@ -553,7 +553,7 @@ where
 		// 	signers_set = select_random_set(seed, good_parties, threshold + 1);
 		// }
 
-		let set = (1..parties).collect::<Vec<u16>>();
+		let set = (1..=parties).collect::<Vec<u16>>();
 		let signers_set = select_random_set(seed, set, threshold + 1);
 		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);

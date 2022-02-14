@@ -820,11 +820,15 @@ impl<T: Config> Pallet<T> {
 			let uncompressed_pub_key =
 				Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
 			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(
-				&signature,
-				&data.encode(),
-			)
-			.map_err(|_| Error::<T>::InvalidSignature)?;
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+				.map_err(|_| {
+					frame_support::log::debug!(
+						target: "dkg",
+						"Invalid signature: {:?}",
+						signature
+					);
+					Error::<T>::InvalidSignature
+				})?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put(signature.clone());
