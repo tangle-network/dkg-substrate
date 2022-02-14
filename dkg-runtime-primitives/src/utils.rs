@@ -107,16 +107,17 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 
 	match recovered_key {
 		Ok(recovered_pub_key) => {
+			let current_dkg = &dkg_key[1..];
 			// The stored_key public key is 33 bytes long and contains the prefix which is the first
-			// byte The recovered key does not contain the prefix  and is 64 bytes long, we take a
+			// byte.
+			// The recovered key does not contain the prefix and is 64 bytes long, we take a
 			// slice of the first 32 bytes because the dkg_key is a compressed public key.
 			frame_support::log::debug!(
 				target: "dkg",
-				"Recovered public key: {:?}",
-				recovered_pub_key
+				"Recovered: \npublic key: {:?}\ncurr_key: {:?}",
+				recovered_pub_key, current_dkg
 			);
 			let signer = &recovered_pub_key[..32];
-			let current_dkg = &dkg_key[1..];
 			// now we do check if the signer is not the current dkg or the previous one.
 			let is_not_current_dkg = signer != current_dkg;
 			if is_not_current_dkg {
