@@ -284,6 +284,17 @@ reporting _parachain_ blocks:
 
 **Note the delay here!** It may take some time for your relay chain to enter a new epoch.
 
+### Code Coverage
+
+You need to have docker installed to generate code coverage.
+
+```sh
+docker build -t cov -f docker/Coverage.Dockerfile .
+```
+
+```sh
+docker run --security-opt seccomp=unconfined cov
+```
 ### Pallets
 
 The DKG runtime is uses the following pallets which are central to how the protocol functions.
@@ -327,12 +338,12 @@ It also provides a type that has an implementation for converting `ECDSA` keys t
 ### Note on Offchain workers
 
 The DKG makes use of offchain workers to submit some extrinsics back on chain and the runtime validates that the origin of such extrinsics is part of the active or queued authoritiy set, if running a development node or a local test net, the sr25519 account keys
-for the predefined validators Alice, Bob, etc, have been added to the keystore for convenience. 
+for the predefined validators Alice, Bob, etc, have been added to the keystore for convenience.
 
 If running a live chain as a validator or collator, please add your sr25519 account keys to the node's local keystore either by using the `author_insertKey` RPC or using the `key` subcommand (`dkg-standalone-node key insert --key-type acco --scheme sr25519 --suri <path-secret-phrase>`) of the node cli
 
 > Key Type is acco
 > Scheme is sr25519
 
-**Note** 
+**Note**
 For the standalone node the account being added to the keystore should be the Stash account used in staking not the Controller account
