@@ -38,6 +38,18 @@ where
 /// HashMap and BtreeMap keys are encoded formats of (ChainIdType<ChainId>, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
+///
+/// Each of KeygenState, OfflineState and SignState is an enum of several sub-states.
+/// All of them implement DKGRoundsSM trait for conveniece, but otherwise allow to be
+/// pattern-matched to access internal state defined in keygen.rs, offline.rs, sing.rs.
+///
+/// They all share similar pattern of enum cases, where:
+/// 1. NotStarted - is meant to only collect incoming messages in case some other party
+/// has started earlier than us and already sent some messages.
+/// 2. Started - sub-state is essentially the wrapper around corresponding
+/// multi-party-ecdsa's state machine (Keygen, OfflineStage, SignManual)
+/// 3. Finished - final sub-state with either execution result or error.
+/// 4. Empty - special case for Keygen is a workaround to avoid using Option for self.keygen.
 #[derive(TypedBuilder)]
 pub struct MultiPartyECDSARounds<Clock>
 where
@@ -104,13 +116,17 @@ where
 
 	/// A check to know if the protocol has stalled at the keygen stage,
 	/// We take it that the protocol has stalled if keygen messages are not received from other
-	/// peers after a certain interval And the keygen stage has not completed
+	/// peers after a certain interval And the keygen stage has not completed.
 	pub fn has_stalled(&self) -> bool {
 		self.has_stalled
 	}
 
 	/// State machine
 
+	/// Tries to proceed and make state transition if necessary for:
+	/// 1. KeygenState if keygen is still in progress
+	/// 2. Every OfflineState in self.offlines map
+	/// 3. Every SignState in self.votes map
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		debug!(target: "dkg", 
 			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
@@ -188,6 +204,8 @@ where
 		results
 	}
 
+	/// Collects and returns outgoing messages from
+	/// KeygenState, every OfflineState and every SignState.
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
@@ -228,6 +246,13 @@ where
 		all_messages
 	}
 
+	/// Depending on the DKGMsgPayload type, dispatches the message to:
+	/// 1. KeygenState
+	/// 2. OfflineState with the key corresponding to the one in the payload
+	/// 3. SignState with the key corresponding to the one in the payload
+	///
+	/// If no OfflineState or SignState with the key in the payload is present in the corresponding map,
+	/// a new entry with initial state is created (OfflineState::NotStarted or SignState::NotStarted)
 	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: Option<C>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
@@ -266,6 +291,8 @@ where
 		}
 	}
 
+	/// Starts keygen process for the current party.
+	/// All incoming keygen messages collected so far will be proccessed immediately.
 	pub fn start_keygen(&mut self, started_at: C) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
@@ -308,6 +335,8 @@ where
 		Ok(())
 	}
 
+	/// Starts new offline stage for the provided key.
+	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
 
@@ -366,6 +395,8 @@ where
 		}
 	}
 
+	/// Starts new signing process for the provided key.
+	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn vote(
 		&mut self,
 		round_key: Vec<u8>,
