@@ -17,4 +17,4 @@ pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
 pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_proposals";
 
 // Key for offchain storage of aggregated derived public keys
-pub const AGGREGATED_MISBEHAVIOR_REPORTS: &[u8] = b"dkg-metadata::misbehavior";
+pub const AGGREGATED_MISBEHAVIOUR_REPORTS: &[u8] = b"dkg-metadata::misbehaviour";

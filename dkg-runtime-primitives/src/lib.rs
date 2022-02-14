@@ -70,7 +70,7 @@ pub struct AggregatedPublicKeys {
 }
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviorReports {
+pub struct AggregatedMisbehaviourReports {
 	/// The round id the offense took place in
 	pub round_id: u64,
 	/// The offending authority
@@ -123,8 +123,8 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 }
 
 pub enum DKGReport {
-	KeygenMisbehavior { offender: AuthorityId },
-	SigningMisbehavior { offender: AuthorityId },
+	KeygenMisbehaviour { offender: AuthorityId },
+	SigningMisbehaviour { offender: AuthorityId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
@@ -288,7 +288,7 @@ sp_api::decl_runtime_apis! {
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
-		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, u32)>;
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal

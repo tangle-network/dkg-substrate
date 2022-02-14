@@ -44,7 +44,7 @@ impl<ID> fmt::Display for DKGMessage<ID> {
 			DKGMsgPayload::Offline(_) => "Offline",
 			DKGMsgPayload::Vote(_) => "Vote",
 			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
-			DKGMsgPayload::MisbehaviorBroadcast(_) => "MisbehaviorBroadcast",
+			DKGMsgPayload::MisbehaviourBroadcast(_) => "MisbehaviourBroadcast",
 		};
 		write!(f, "DKGMessage of type {}", label)
 	}
@@ -57,7 +57,7 @@ pub enum DKGMsgPayload {
 	Offline(DKGOfflineMessage),
 	Vote(DKGVoteMessage),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
-	MisbehaviorBroadcast(DKGMisbehaviourMessage),
+	MisbehaviourBroadcast(DKGMisbehaviourMessage),
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

@@ -198,7 +198,7 @@ where
 					Some(local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
-					&HashMap::<AuthorityId, i64>::new(),
+					&worker.get_authority_reputations(header),
 				);
 
 				if local_key.is_some() {
@@ -236,7 +236,7 @@ where
 					Some(queued_local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
-					&HashMap::<AuthorityId, i64>::new(),
+					&worker.get_authority_reputations(header),
 				);
 
 				if queued_local_key.is_some() {
@@ -351,7 +351,7 @@ where
 			local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
-			&HashMap::<AuthorityId, i64>::new(),
+			&worker.get_authority_reputations(header),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);
@@ -375,7 +375,7 @@ where
 			queued_local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
-			&HashMap::<AuthorityId, i64>::new(),
+			&worker.get_authority_reputations(header),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);

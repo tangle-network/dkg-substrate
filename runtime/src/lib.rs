@@ -805,7 +805,7 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, u32)> {
+		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, i64)> {
 			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
 		}
 
