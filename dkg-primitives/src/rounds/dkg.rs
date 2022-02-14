@@ -520,41 +520,43 @@ where
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
 		let (_, threshold, parties) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		// // Get the parties with non-negative reputation
-		// let good_parties: Vec<u16> = self.authorities.iter().enumerate()
-		// 	.filter(|(_, a)| self.reputations.get(a).unwrap_or(&0i64) >= &0i64)
-		// 	.map(|(index, _)| (index + 1) as u16)
-		// 	.collect();
-		// // If there aren't enough good authorities
-		// let signers_set: Result<Vec<u16>, &str>;
-		// if good_parties.len() <= threshold as usize {
-		// 	// Get bad party indices and their reputations
-		// 	// Bad parties are those with negative reputation.
-		// 	let mut bad_parties_and_reps: Vec<(u16, i64)> = self.authorities.iter().enumerate()
-		// 		.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
-		// 		.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
-		// 		.map(|(index, rep)| ((index + 1) as u16, rep))
-		// 		.collect::<Vec<(u16, i64)>>();
-		// 	// Sort them in descending order
-		// 	bad_parties_and_reps.sort_by(|a, b| b.1.cmp(&a.1));
-		// 	// Get the best bad parties to fill `threshold + 1` slots
-		// 	let needed_bad_parties = bad_parties_and_reps.iter()
-		// 		.take((threshold  as usize) + 1 - good_parties.len())
-		// 		.map(|k| k.0)
-		// 		.collect::<Vec<u16>>();
-		// 	// Join the good and bad parties to get the final signers set
-		// 	let good_and_bad_authorities: Vec<u16> = good_parties
-		// 		.iter()
-		// 		.chain(needed_bad_parties.iter())
-		// 		.map(|i| *i)
-		// 		.collect();
-		// 	signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
-		// } else {
-		// 	signers_set = select_random_set(seed, good_parties, threshold + 1);
-		// }
+		// Get the parties with non-negative reputation
+		let good_parties: Vec<u16> = self
+			.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, a)| self.reputations.get(a).unwrap_or(&0i64) >= &0i64)
+			.map(|(index, _)| (index + 1) as u16)
+			.collect();
+		// If there aren't enough good authorities
+		let signers_set: Result<Vec<u16>, &str>;
+		if good_parties.len() <= threshold as usize {
+			// Get bad party indices and their reputations. Bad parties are those with negative
+			// reputation.
+			let mut bad_parties_and_reps: Vec<(u16, i64)> = self
+				.authorities
+				.iter()
+				.enumerate()
+				.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
+				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
+				.map(|(index, rep)| ((index + 1) as u16, rep))
+				.collect::<Vec<(u16, i64)>>();
+			// Sort them in descending order
+			bad_parties_and_reps.sort_by(|a, b| b.1.cmp(&a.1));
+			// Get the best bad parties to fill `threshold + 1` slots
+			let needed_bad_parties = bad_parties_and_reps
+				.iter()
+				.take((threshold as usize) + 1 - good_parties.len())
+				.map(|k| k.0)
+				.collect::<Vec<u16>>();
+			// Join the good and bad parties to get the final signers set
+			let good_and_bad_authorities: Vec<u16> =
+				good_parties.iter().chain(needed_bad_parties.iter()).map(|i| *i).collect();
+			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
+		} else {
+			signers_set = select_random_set(seed, good_parties, threshold + 1);
+		}
 
-		let set = (1..=parties).collect::<Vec<u16>>();
-		let signers_set = select_random_set(seed, set, threshold + 1);
 		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);
 		}
