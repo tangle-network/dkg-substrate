@@ -222,7 +222,7 @@ fn create_successful_proposal() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(Proposal::Unsigned {
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![],
 		});
@@ -315,7 +315,7 @@ fn create_unsucessful_proposal() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(Proposal::Unsigned {
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![],
 		});
@@ -408,7 +408,7 @@ fn execute_after_threshold_change() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(Proposal::Unsigned {
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![],
 		});
@@ -483,7 +483,7 @@ fn proposal_expires() {
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(Proposal::Unsigned {
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![],
 		});
@@ -626,7 +626,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 		assert_eq!(DKGProposals::resource_exists(r_id), true);
 
 		let prop_id = 1;
-		let proposal = make_proposal::<40>(Proposal::Unsigned {
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![],
 		});
