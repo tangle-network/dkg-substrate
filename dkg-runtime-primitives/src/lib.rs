@@ -266,6 +266,8 @@ sp_api::decl_runtime_apis! {
 		fn get_max_extrinsic_delay(_block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
+		/// Reputations for authorities
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, u32)>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal

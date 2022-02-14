@@ -317,6 +317,7 @@ pub mod pallet {
 
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
+			let offender = reports.offender.clone();
 			let valid_reporters = Self::process_misbehavior_reports(reports, authorities);
 			let threshold = Self::signature_threshold();
 
@@ -324,6 +325,9 @@ pub mod pallet {
 				Self::deposit_event(Event::MisbehaviorReportsSubmitted {
 					reporters: valid_reporters.clone(),
 				});
+				// Deduct one point for misbehavior report
+				let reputation = AuthorityReputations::<T>::get(&offender);
+				AuthorityReputations::<T>::insert(&offender, reputation - 1);
 				return Ok(().into())
 			}
 

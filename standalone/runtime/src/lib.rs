@@ -843,6 +843,10 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
+		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, u32)> {
+			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
+		}
+
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}
