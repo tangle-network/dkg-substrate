@@ -209,6 +209,131 @@ export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdatePropos
 	};
 }
 
+export interface TokenAddProposal {
+	/**
+	 * The Token Add Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly newTokenAddress: string;
+}
+
+export interface TokenRemoveProposal {
+	/**
+	 * The Token Remove Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly removeTokenAddress: string;
+}
+
+export function encodeTokenAddProposal(proposal: TokenAddProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const tokenAddProposal = new Uint8Array(40 + 20);
+	tokenAddProposal.set(header, 0); // 0 -> 40
+	const address = hexToU8a(proposal.newTokenAddress).slice(0, 20);
+	tokenAddProposal.set(address, 40); // 40 -> 60
+	return tokenAddProposal;
+}
+
+export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	return {
+		header,
+		newTokenAddress
+	};
+}
+
+export function encodeTokenRemoveProposal(proposal: TokenRemoveProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const tokenAddProposal = new Uint8Array(40 + 20);
+	tokenAddProposal.set(header, 0); // 0 -> 40
+	const address = hexToU8a(proposal.removeTokenAddress).slice(0, 20);
+	tokenAddProposal.set(address, 40); // 40 -> 60
+	return tokenAddProposal;
+}
+
+export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const removeTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	return {
+		header,
+		removeTokenAddress
+	};
+}
+
+export interface WrappingFeeUpdateProposal {
+	/**
+	 * The Wrapping Fee Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 1 byte Hex-encoded string.
+	 */
+	readonly newFee: string;
+}
+
+export function encodeWrappingFeeUpdateProposal(proposal: WrappingFeeUpdateProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const wrappingFeeUpdateProposal = new Uint8Array(40 + 1);
+	wrappingFeeUpdateProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.newFee).slice(0, 1);
+	wrappingFeeUpdateProposal.set(newFee, 40); // 40 -> 41
+	return wrappingFeeUpdateProposal;
+}
+
+export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUpdateProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newFee = u8aToHex(data.slice(40, 41)); // 40 -> 41
+	return {
+		header,
+		newFee
+	};
+}
+
+
+export interface VAnchorConfigurableLimitProposal {
+	/**
+	 * The Wrapping Fee Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 32 bytes Hex-encoded string.
+	 */
+	readonly min_withdrawal_limit_bytes: string;
+}
+
+export function encodeVAnchorConfigurableLimitProposal(proposal: VAnchorConfigurableLimitProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const vAnchorConfigurableLimitProposal = new Uint8Array(40 + 32);
+	vAnchorConfigurableLimitProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.min_withdrawal_limit_bytes).slice(0, 1);
+	vAnchorConfigurableLimitProposal.set(newFee, 40); // 40 -> 41
+	return vAnchorConfigurableLimitProposal;
+}
+
+export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAnchorConfigurableLimitProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const min_withdrawal_limit_bytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	return {
+		header,
+		min_withdrawal_limit_bytes
+	};
+}
+
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
  * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
