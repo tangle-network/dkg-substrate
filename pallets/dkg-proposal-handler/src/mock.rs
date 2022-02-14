@@ -240,7 +240,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 
 	SyncCryptoStore::sr25519_generate_new(
 		&keystore,
-		dkg_runtime_primitives::offchain_crypto::Public::ID,
+		dkg_runtime_primitives::offchain::crypto::Public::ID,
 		Some(PHRASE),
 	)
 	.unwrap();
