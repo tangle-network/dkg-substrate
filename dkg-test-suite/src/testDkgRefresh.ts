@@ -1,5 +1,5 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
-import { waitNfinalizedBlocks } from './utils';
+import { waitNfinalizedBlocks, waitForTheNextSession } from './utils';
 import ora from 'ora';
 
 const provider = new WsProvider('ws://127.0.0.1:9944');
@@ -41,25 +41,6 @@ async function fetchPublicKey(
 		authorityId: json[0],
 		publicKey: json[1],
 	};
-}
-
-function waitForTheNextSession(api: ApiPromise) {
-	return new Promise(async (reolve, _) => {
-		const currentBlock = await api.rpc.chain.getHeader();
-		// Subscribe to system events via storage
-		const unsub = await api.query.system.events((events) => {
-			// Loop through the Vec<EventRecord>
-			events.forEach((record) => {
-				const { event } = record;
-				if (event.section === 'session' && event.method === 'NewSession') {
-					// Unsubscribe from the storage
-					unsub();
-					// Resolve the promise
-					reolve(void 0);
-				}
-			});
-		});
-	});
 }
 
 testDkgRefresh()

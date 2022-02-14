@@ -73,6 +73,9 @@ export function startStandaloneNode(
 		`./target/release/dkg-standalone-node`,
 		[
 			options.printLogs ? '-linfo' : '-lerror',
+			'--rpc-cors',
+			'all',
+			'--ws-external',
 			options.tmp ? '--tmp' : '',
 			// only print logs from the charlie node
 			...(authority === 'charlie'
@@ -99,6 +102,27 @@ export function startStandaloneNode(
 	});
 
 	return proc;
+}
+
+/**
+ * Waits until a new session is started.
+ */
+export async function waitForTheNextSession(api: ApiPromise): Promise<void> {
+	return new Promise(async (reolve, _) => {
+		// Subscribe to system events via storage
+		const unsub = await api.query.system.events((events) => {
+			// Loop through the Vec<EventRecord>
+			events.forEach((record) => {
+				const { event } = record;
+				if (event.section === 'session' && event.method === 'NewSession') {
+					// Unsubscribe from the storage
+					unsub();
+					// Resolve the promise
+					reolve(void 0);
+				}
+			});
+		});
+	});
 }
 
 /**
