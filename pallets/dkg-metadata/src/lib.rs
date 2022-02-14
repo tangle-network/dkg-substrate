@@ -28,10 +28,10 @@ use frame_system::offchain::{SendSignedTransaction, Signer};
 use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
-	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, AGGREGATED_PUBLIC_KEYS,
-	AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID, OFFCHAIN_PUBLIC_KEY_SIG,
-	SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+	AggregatedPublicKeys, AuthorityIndex, AuthoritySet, ConsensusLog, Proposal,
+	ProposalHandlerTrait, ProposalKind, RefreshProposal, RefreshProposalSigned,
+	AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, DKG_ENGINE_ID,
+	OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -554,7 +554,7 @@ impl<T: Config> Pallet<T> {
 			.encode(),
 		);
 		<frame_system::Pallet<T>>::deposit_log(log);
-		Self::refresh_dkg_keys();
+		Self::refresh_keys();
 
 		<NextAuthorities<T>>::put(&queued);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
@@ -710,17 +710,8 @@ impl<T: Config> Pallet<T> {
 			let uncompressed_pub_key =
 				Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
 			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
-			let mut buf = Vec::new();
-			buf.extend_from_slice(&data.nonce.to_be_bytes());
-			buf.extend_from_slice(&data.pub_key[..]);
-			let prefixed_proposal = Self::pre_signing_proposal_handler(&buf);
-			#[cfg(feature = "std")]
-			println!("Prefixed proposal on-chain verify: {:?}", prefixed_proposal);
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(
-				&signature,
-				&prefixed_proposal,
-			)
-			.map_err(|_| Error::<T>::InvalidSignature)?;
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put(signature.clone());
@@ -735,15 +726,7 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	pub fn pre_signing_proposal_handler(data: &[u8]) -> Vec<u8> {
-		let hash = dkg_runtime_primitives::keccak_256(data);
-		let mut prefixed_data = Vec::new();
-		prefixed_data.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
-		prefixed_data.extend_from_slice(&hash[..]);
-		prefixed_data.to_vec()
-	}
-
-	pub fn refresh_dkg_keys() {
+	pub fn refresh_keys() {
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
 		let dkg_pub_key = Self::dkg_public_key();

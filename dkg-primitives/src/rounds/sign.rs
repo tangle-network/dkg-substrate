@@ -46,6 +46,7 @@ where
 
 	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
 		match self {
+			Self::NotStarted(pre_rounds) => pre_rounds.handle_incoming(data, at),
 			Self::Started(sign_rounds) => sign_rounds.handle_incoming(data, at),
 			_ => Ok(()),
 		}

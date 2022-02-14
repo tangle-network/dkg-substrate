@@ -27,15 +27,21 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
+pub trait ChainIdTrait: AtLeast32Bit + Copy + Encode + Decode + sp_std::fmt::Debug {}
+
+impl ChainIdTrait for u32 {}
+impl ChainIdTrait for u64 {}
+impl ChainIdTrait for u128 {}
+
 #[derive(Debug, Clone, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct ProposalHeader<ChainId: AtLeast32Bit + Copy + Encode + Decode> {
+pub struct ProposalHeader<C: ChainIdTrait> {
 	pub resource_id: ResourceId,
-	pub chain_id: ChainIdType<ChainId>,
+	pub chain_id: ChainIdType<C>,
 	pub function_sig: [u8; 4],
 	pub nonce: ProposalNonce,
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Encode for ProposalHeader<ChainId> {
+impl<C: ChainIdTrait> Encode for ProposalHeader<C> {
 	fn encode(&self) -> Vec<u8> {
 		let mut buf = Vec::new();
 		// resource_id contains the chain id already.
@@ -50,7 +56,7 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Encode for ProposalHeader<C
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<ChainId> {
+impl<C: ChainIdTrait> Decode for ProposalHeader<C> {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
 		let mut data = [0u8; 40];
 		input.read(&mut data).map_err(|_| {
@@ -62,35 +68,23 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 		// decode the resourceId is the first 32 bytes
 		let mut resource_id = [0u8; 32];
 		resource_id.copy_from_slice(&data[0..32]);
-		// the chain type is the 5th last byte of the **resourceId**
-		let mut chain_type = [0u8; 2];
-		chain_type.copy_from_slice(&data[26..28]);
-		// the chain id is the last 4 bytes of the **resourceId**
+		// The chain type is the 5th and 6th last byte of the **resourceId**
+		let mut chain_type_bytes = [0u8; 2];
+		chain_type_bytes.copy_from_slice(&data[26..28]);
+		// The chain id is the last 4 bytes of the **resourceId**
 		let mut chain_id_bytes = [0u8; 4];
 		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
-		let chain_id = u32::from_be_bytes(chain_id_bytes);
-		// the function signature is the next first 4 bytes after the resourceId.
+		// The function signature is the next first 4 bytes after the resourceId.
 		let mut function_sig = [0u8; 4];
 		function_sig.copy_from_slice(&data[32..36]);
-		// the nonce is the last 4 bytes of the header (also considered as the first arg).
+		// The nonce is the last 4 bytes of the header (also considered as the first arg).
 		let mut nonce_bytes = [0u8; 4];
 		nonce_bytes.copy_from_slice(&data[36..40]);
 		let nonce = u32::from_be_bytes(nonce_bytes);
-		let header = ProposalHeader::<ChainId> {
+		// Create the header
+		let header = ProposalHeader::<C> {
 			resource_id,
-			chain_id: match chain_type {
-				[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
-				[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
-				[3, 1] => ChainIdType::RelayChain(
-					create_runtime_str!("polkadot"),
-					ChainId::from(chain_id),
-				),
-				[3, 2] =>
-					ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
-				[4, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
-				[5, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
-				_ => return Err(codec::Error::from("invalid chain type")),
-			},
+			chain_id: ChainIdType::from_raw_parts(chain_type_bytes, chain_id_bytes),
 			function_sig,
 			nonce: ProposalNonce::from(nonce),
 		};
@@ -98,18 +92,14 @@ impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> Decode for ProposalHeader<C
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
-	for (ChainIdType<ChainId>, ProposalNonce)
-{
-	fn from(header: ProposalHeader<ChainId>) -> Self {
+impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ChainIdType<C>, ProposalNonce) {
+	fn from(header: ProposalHeader<C>) -> Self {
 		(header.chain_id, header.nonce)
 	}
 }
 
-impl<ChainId: AtLeast32Bit + Copy + Encode + Decode> From<ProposalHeader<ChainId>>
-	for (ResourceId, ChainIdType<ChainId>, ProposalNonce)
-{
-	fn from(header: ProposalHeader<ChainId>) -> Self {
+impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ResourceId, ChainIdType<C>, ProposalNonce) {
+	fn from(header: ProposalHeader<C>) -> Self {
 		(header.resource_id, header.chain_id, header.nonce)
 	}
 }
@@ -199,6 +189,31 @@ impl Proposal {
 			Proposal::Unsigned { .. } => Vec::new(),
 		}
 	}
+
+	pub fn kind(&self) -> ProposalKind {
+		match self {
+			Proposal::Signed { kind, .. } | Proposal::Unsigned { kind, .. } => kind.clone(),
+		}
+	}
+
+	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
+		match self.kind() {
+			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
+			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
+			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
+			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
+			ProposalKind::WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
+			ProposalKind::MaxDepositLimitUpdate =>
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+			ProposalKind::MinWithdrawalLimitUpdate =>
+				DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+			ProposalKind::MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+			ProposalKind::MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
+			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
+		}
+	}
 }
 
 pub trait ProposalHandlerTrait {
@@ -209,10 +224,7 @@ pub trait ProposalHandlerTrait {
 		Ok(().into())
 	}
 
-	fn handle_signed_proposal(
-		_prop: Proposal,
-		_payload_key: DKGPayloadKey,
-	) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
 
@@ -224,72 +236,6 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_evm_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_anchor_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_token_add_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_token_remove_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_wrapping_fee_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_resource_id_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_rescue_tokens_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_deposit_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_withdraw_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_ext_limit_update_signed_proposal(
-		_prop: Proposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_fee_limit_update_signed_proposal(
-		_prop: Proposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}

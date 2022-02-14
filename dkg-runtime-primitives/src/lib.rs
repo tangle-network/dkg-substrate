@@ -2,6 +2,7 @@
 // NOTE: needed to silence warnings about generated code in `decl_runtime_apis`
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
+pub mod handlers;
 pub mod mmr;
 pub mod proposal;
 pub mod traits;
@@ -19,7 +20,7 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	create_runtime_str,
-	traits::{IdentifyAccount, Verify},
+	traits::{AtLeast32Bit, IdentifyAccount, Verify},
 	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
@@ -198,7 +199,7 @@ pub enum ChainIdType<ChainId> {
 	Solana(ChainId),
 }
 
-impl<ChainId: Clone> ChainIdType<ChainId> {
+impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 	pub fn inner_id(&self) -> ChainId {
 		match self {
 			ChainIdType::EVM(id) => id.clone(),
@@ -221,7 +222,7 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 		}
 	}
 
-	pub fn to_bytes(&self) -> [u8; 2] {
+	pub fn get_type_bytes(&self) -> [u8; 2] {
 		let polkadot_str = create_runtime_str!("polkadot");
 		let kusama_str = create_runtime_str!("kusama");
 		match self {
@@ -247,6 +248,26 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 			ChainIdType::Solana(_) => [4, 0],
 			_ => panic!("Invalid chain id type"),
 		}
+	}
+
+	pub fn from_raw(bytes: &[u8]) -> Self {
+		let mut chain_type_bytes = [0u8; 2];
+		let mut chain_id_bytes = [0u8; 4];
+		if bytes.len() == 6 {
+			chain_type_bytes.copy_from_slice(&bytes[0..2]);
+			chain_id_bytes.copy_from_slice(&bytes[2..6]);
+		}
+
+		if bytes.len() == 8 {
+			chain_type_bytes.copy_from_slice(&bytes[2..4]);
+			chain_id_bytes.copy_from_slice(&bytes[4..8]);
+		}
+
+		Self::from_raw_parts(chain_type_bytes, chain_id_bytes)
+	}
+
+	pub fn from_raw_parts(chain_type_bytes: [u8; 2], chain_id_bytes: [u8; 4]) -> Self {
+		Self::get_full_repr(chain_type_bytes, ChainId::from(u32::from_be_bytes(chain_id_bytes)))
 	}
 
 	pub fn get_full_repr(chain_type: [u8; 2], chain_id: ChainId) -> Self {
