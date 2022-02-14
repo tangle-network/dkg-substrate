@@ -251,8 +251,9 @@ where
 	/// 2. OfflineState with the key corresponding to the one in the payload
 	/// 3. SignState with the key corresponding to the one in the payload
 	///
-	/// If no OfflineState or SignState with the key in the payload is present in the corresponding map,
-	/// a new entry with initial state is created (OfflineState::NotStarted or SignState::NotStarted)
+	/// If no OfflineState or SignState with the key in the payload is present in the corresponding
+	/// map, a new entry with initial state is created (OfflineState::NotStarted or
+	/// SignState::NotStarted)
 	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: Option<C>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
