@@ -284,12 +284,47 @@ export interface WrappingFeeUpdateProposal {
 	readonly newFee: string;
 }
 
+export interface WrappingFeeUpdateProposal {
+	/**
+	 * The Wrapping Fee Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 1 byte Hex-encoded string.
+	 */
+	readonly newFee: string;
+}
+
+export interface WrappingFeeUpdateProposalSubstrate {
+	/**
+	 * The Wrapping Fee Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 1 byte Hex-encoded string.
+	 */
+	readonly call: string;
+}
+
 export function encodeWrappingFeeUpdateProposal(proposal: WrappingFeeUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const wrappingFeeUpdateProposal = new Uint8Array(40 + 1);
 	wrappingFeeUpdateProposal.set(header, 0); // 0 -> 40
 	const newFee = hexToU8a(proposal.newFee).slice(0, 1);
 	wrappingFeeUpdateProposal.set(newFee, 40); // 40 -> 41
+	return wrappingFeeUpdateProposal;
+}
+
+export function encodeWrappingFeeUpdateProposalSubstrate(proposal: WrappingFeeUpdateProposalSubstrate): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const wrappingFeeUpdateProposal = new Uint8Array(40 + 20);
+	wrappingFeeUpdateProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.call).slice(0, 20);
+	wrappingFeeUpdateProposal.set(newFee, 40); // 40 -> 60
 	return wrappingFeeUpdateProposal;
 }
 

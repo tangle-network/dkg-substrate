@@ -3,7 +3,8 @@ import {
 	TokenAddProposal,
 	TokenRemoveProposal,
 	VAnchorConfigurableLimitProposal,
-	WrappingFeeUpdateProposal
+	WrappingFeeUpdateProposal,
+	WrappingFeeUpdateProposalSubstrate
 } from "../utils";
 import {resourceId} from "./resource";
 
@@ -45,6 +46,15 @@ export const wrappingFeeUpdateProposal: WrappingFeeUpdateProposal = {
 		nonce,
 	},
 	newFee: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const wrappingFeeUpdateProposalSubstrate: WrappingFeeUpdateProposalSubstrate = {
+	header: {
+		resourceId,
+		functionSignature: '0x00000000',
+		nonce,
+	},
+	call: '0x66666666666666668686868686868666',
 };
 
 export const vAnchorConfigurableLimitProposal: VAnchorConfigurableLimitProposal = {
