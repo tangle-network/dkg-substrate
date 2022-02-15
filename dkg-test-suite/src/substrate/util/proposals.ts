@@ -8,7 +8,25 @@ let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 
 export const wrappingFeeUpdateProposal: SubstrateProposal = {
 	header: {
 		resourceId,
-		functionSignature: '0xdeadbeef',
+		functionSignature: '0x00000000',
+		nonce,
+	},
+	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const tokenAddProposal: SubstrateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0x00000000',
+		nonce,
+	},
+	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const tokenRemoveProposal: SubstrateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0x00000000',
 		nonce,
 	},
 	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
