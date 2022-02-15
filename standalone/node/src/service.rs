@@ -4,6 +4,7 @@ use dkg_gadget::DKG_PROTOCOL_NAME;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::{BlockBackend, ExecutorProvider};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
+use sc_consensus_manual_seal::consensus::timestamp::SlotTimestampProvider;
 use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
@@ -33,6 +34,16 @@ type FullClient = sc_service::TFullClient<Block, RuntimeApi, Executor>;
 type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
+#[cfg(not(feature = "manual-seal"))]
+type Extra = (
+	sc_finality_grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, FullSelectChain>,
+	sc_finality_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
+	Option<Telemetry>,
+);
+
+#[cfg(feature = "manual-seal")]
+type Extra = Option<Telemetry>;
+
 pub fn new_partial(
 	config: &Configuration,
 ) -> Result<
@@ -42,16 +53,7 @@ pub fn new_partial(
 		FullSelectChain,
 		sc_consensus::DefaultImportQueue<Block, FullClient>,
 		sc_transaction_pool::FullPool<Block, FullClient>,
-		(
-			sc_finality_grandpa::GrandpaBlockImport<
-				FullBackend,
-				Block,
-				FullClient,
-				FullSelectChain,
-			>,
-			sc_finality_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
-			Option<Telemetry>,
-		),
+		Extra,
 	>,
 	ServiceError,
 > {
@@ -79,7 +81,7 @@ pub fn new_partial(
 
 	let (client, backend, keystore_container, task_manager) =
 		sc_service::new_full_parts::<Block, RuntimeApi, Executor>(
-			&config,
+			config,
 			telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
 			executor,
 		)?;
@@ -100,6 +102,7 @@ pub fn new_partial(
 		client.clone(),
 	);
 
+	#[cfg(not(feature = "manual-seal"))]
 	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
 		client.clone(),
 		&(client.clone() as Arc<_>),
@@ -109,7 +112,7 @@ pub fn new_partial(
 
 	#[cfg(feature = "manual-seal")]
 	let import_queue = sc_consensus_manual_seal::import_queue(
-		Box::new(()),
+		Box::new(client.clone()),
 		&task_manager.spawn_essential_handle(),
 		config.prometheus_registry(),
 	);
@@ -151,7 +154,10 @@ pub fn new_partial(
 		keystore_container,
 		select_chain,
 		transaction_pool,
+		#[cfg(not(feature = "manual-seal"))]
 		other: (grandpa_block_import, grandpa_link, telemetry),
+		#[cfg(feature = "manual-seal")]
+		other: telemetry,
 	})
 }
 
@@ -172,8 +178,14 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		mut keystore_container,
 		select_chain,
 		transaction_pool,
-		other: (block_import, grandpa_link, mut telemetry),
+		other,
 	} = new_partial(&config)?;
+
+	#[cfg(not(feature = "manual-seal"))]
+	let (block_import, grandpa_link, mut telemetry) = other;
+
+	#[cfg(feature = "manual-seal")]
+	let mut telemetry = other;
 
 	if let Some(url) = &config.keystore_remote {
 		match remote_keystore(url) {
@@ -224,18 +236,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
 
-	let rpc_extensions_builder = {
-		let client = client.clone();
-		let pool = transaction_pool.clone();
-
-		Box::new(move |deny_unsafe, _| {
-			let deps =
-				crate::rpc::FullDeps { client: client.clone(), pool: pool.clone(), deny_unsafe };
-
-			Ok(crate::rpc::create_full(deps))
-		})
-	};
-
 	let base_path = if config.base_path.is_some() {
 		match config.base_path.as_ref() {
 			Some(BasePath::Permanenent(path_buf)) => Some(path_buf.clone()),
@@ -252,78 +252,16 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		);
 	}
 
-	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-		network: network.clone(),
-		client: client.clone(),
-		keystore: keystore_container.sync_keystore(),
-		task_manager: &mut task_manager,
-		transaction_pool: transaction_pool.clone(),
-		rpc_extensions_builder,
-		backend: backend.clone(),
-		system_rpc_tx,
-		config,
-		telemetry: telemetry.as_mut(),
-	})?;
-
 	// if the node isn't actively participating in consensus then it doesn't
 	// need a keystore, regardless of which protocol we use below.
 	let keystore =
 		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
 
-	if role.is_authority() {
-		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
-			task_manager.spawn_handle(),
-			client.clone(),
-			transaction_pool,
-			prometheus_registry.as_ref(),
-			telemetry.as_ref().map(|x| x.handle()),
-		);
-
-		let can_author_with =
-			sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone());
-
-		let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
-		let raw_slot_duration = slot_duration.slot_duration();
-
-		let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _, _>(
-			StartAuraParams {
-				slot_duration,
-				client: client.clone(),
-				select_chain,
-				block_import,
-				proposer_factory,
-				create_inherent_data_providers: move |_, ()| async move {
-					let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-
-					let slot =
-						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
-							*timestamp,
-							raw_slot_duration,
-						);
-
-					Ok((timestamp, slot))
-				},
-				force_authoring,
-				backoff_authoring_blocks,
-				keystore: keystore_container.sync_keystore(),
-				can_author_with,
-				sync_oracle: network.clone(),
-				justification_sync_link: network.clone(),
-				block_proposal_slot_portion: SlotProportion::new(2f32 / 3f32),
-				max_block_proposal_slot_portion: None,
-				telemetry: telemetry.as_ref().map(|x| x.handle()),
-			},
-		)?;
-
-		// the AURA authoring task is considered essential, i.e. if it
-		// fails we take down the service with it.
-		task_manager
-			.spawn_essential_handle()
-			.spawn_blocking("aura", Some("block-authoring"), aura);
-
+	let rpc_client = client.clone();
+	let command_sink = if role.is_authority() {
 		let dkg_params = dkg_gadget::DKGParams {
-			client,
-			backend,
+			client: client.clone(),
+			backend: backend.clone(),
 			key_store: keystore.clone(),
 			network: network.clone(),
 			min_block_delta: 4,
@@ -339,8 +277,139 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			None,
 			dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
 		);
-	}
 
+		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
+			task_manager.spawn_handle(),
+			client.clone(),
+			transaction_pool.clone(),
+			prometheus_registry.as_ref(),
+			telemetry.as_ref().map(|x| x.handle()),
+		);
+
+		if cfg!(feature = "manual-seal") {
+			use futures::prelude::*;
+			// Channel for the rpc handler to communicate with the authorship task.
+			let (command_sink, commands_stream) = futures::channel::mpsc::channel(1024);
+
+			let pool = transaction_pool.pool().clone();
+			let import_stream = pool.validated_pool().import_notification_stream().map(|_| {
+				sc_consensus_manual_seal::rpc::EngineCommand::SealNewBlock {
+					create_empty: false,
+					finalize: true,
+					parent_hash: None,
+					sender: None,
+				}
+			});
+			let authorship_future = sc_consensus_manual_seal::run_manual_seal(
+				sc_consensus_manual_seal::ManualSealParams {
+					block_import: client.clone(),
+					env: proposer_factory,
+					client: client.clone(),
+					pool: transaction_pool.clone(),
+					commands_stream: futures::stream_select!(commands_stream, import_stream),
+					select_chain,
+					consensus_data_provider: None,
+					create_inherent_data_providers: Box::new(move |_, _| {
+						let client = client.clone();
+						async move {
+							let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+							Ok(timestamp)
+						}
+					}),
+				},
+			);
+			// we spawn the future on a background thread managed by service.
+			task_manager.spawn_essential_handle().spawn_blocking(
+				"manual-seal",
+				Some("block-authoring"),
+				authorship_future,
+			);
+			Some(command_sink)
+		} else {
+			#[cfg(not(feature = "manual-seal"))]
+			{
+				let can_author_with =
+					sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone());
+
+				let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+				let raw_slot_duration = slot_duration.slot_duration();
+
+				let aura =
+					sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _, _>(
+						StartAuraParams {
+							slot_duration,
+							client,
+							select_chain,
+							block_import,
+							proposer_factory,
+							create_inherent_data_providers: move |_, ()| async move {
+								let timestamp =
+									sp_timestamp::InherentDataProvider::from_system_time();
+
+								let slot =
+						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+							*timestamp,
+							raw_slot_duration,
+						);
+
+								Ok((timestamp, slot))
+							},
+							force_authoring,
+							backoff_authoring_blocks,
+							keystore: keystore_container.sync_keystore(),
+							can_author_with,
+							sync_oracle: network.clone(),
+							justification_sync_link: network.clone(),
+							block_proposal_slot_portion: SlotProportion::new(2f32 / 3f32),
+							max_block_proposal_slot_portion: None,
+							telemetry: telemetry.as_ref().map(|x| x.handle()),
+						},
+					)?;
+
+				// the AURA authoring task is considered essential, i.e. if it
+				// fails we take down the service with it.
+				task_manager.spawn_essential_handle().spawn_blocking(
+					"aura",
+					Some("block-authoring"),
+					aura,
+				);
+			}
+			None
+		}
+	} else {
+		None
+	};
+
+	let rpc_extensions_builder = {
+		let client = rpc_client.clone();
+		let pool = transaction_pool.clone();
+
+		Box::new(move |deny_unsafe, _| {
+			let deps = crate::rpc::FullDeps {
+				client: client.clone(),
+				pool: pool.clone(),
+				command_sink: command_sink.clone(),
+				deny_unsafe,
+			};
+
+			Ok(crate::rpc::create_full(deps))
+		})
+	};
+
+	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+		network: network.clone(),
+		client: rpc_client,
+		keystore: keystore_container.sync_keystore(),
+		task_manager: &mut task_manager,
+		transaction_pool,
+		rpc_extensions_builder,
+		backend,
+		system_rpc_tx,
+		config,
+		telemetry: telemetry.as_mut(),
+	})?;
+
+	#[cfg(not(feature = "manual-seal"))]
 	let grandpa_config = sc_finality_grandpa::Config {
 		// FIXME #1578 make this available through chainspec
 		gossip_duration: Duration::from_millis(333),
@@ -353,6 +422,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		protocol_name: grandpa_protocol_name,
 	};
 
+	#[cfg(not(feature = "manual-seal"))]
 	if enable_grandpa {
 		// start the full GRANDPA voter
 		// NOTE: non-authorities could run the GRANDPA observer protocol, but at

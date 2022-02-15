@@ -13,8 +13,12 @@ repository = "https://github.com/webb-tools/dkg-substrate"
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
-scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = [
+	"derive",
+] }
+scale-info = { version = "1.0", default-features = false, features = [
+	"derive",
+] }
 
 pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
@@ -40,12 +44,12 @@ sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v
 sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 pallet-mmr = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
-pallet-staking-reward-curve = {default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16"}
-pallet-election-provider-multi-phase = {default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16"}
-sp-npos-elections = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false}
-frame-election-provider-support = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false}
-sp-staking = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false}
-sp-io = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false}
+pallet-staking-reward-curve = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+pallet-election-provider-multi-phase = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+sp-npos-elections = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
+frame-election-provider-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
+sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
@@ -106,7 +110,7 @@ std = [
 	'sp-npos-elections/std',
 	'frame-election-provider-support/std',
 	'sp-staking/std',
-	'sp-io/std'
+	'sp-io/std',
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",
@@ -119,6 +123,7 @@ runtime-benchmarks = [
 	"sp-runtime/runtime-benchmarks",
 	"pallet-dkg-proposal-handler/runtime-benchmarks",
 	"pallet-dkg-proposals/runtime-benchmarks",
-	"pallet-dkg-metadata/runtime-benchmarks"
+	"pallet-dkg-metadata/runtime-benchmarks",
 ]
 
+manual-seal = []

@@ -17,15 +17,22 @@ targets = ["x86_64-unknown-linux-gnu"]
 name = "dkg-standalone-node"
 
 [dependencies]
+futures = "0.3.15"
 structopt = "0.3.8"
 rand = "0.7.2"
 codec = { package = "parity-scale-codec", version = "2.0.0" }
 hex-literal = { package = "hex-literal", version = "0.3.3" }
 
-sc-cli = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = ["wasmtime"] }
+sc-cli = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = [
+	"wasmtime",
+] }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
-sc-executor = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = ["wasmtime"] }
-sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = ["wasmtime"] }
+sc-executor = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = [
+	"wasmtime",
+] }
+sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = [
+	"wasmtime",
+] }
 sc-telemetry = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
@@ -34,6 +41,8 @@ sc-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = 
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+sc-consensus-manual-seal = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+sp-inherents = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-finality-grandpa = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sp-finality-grandpa = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
@@ -68,6 +77,5 @@ substrate-build-script-utils = { git = "https://github.com/paritytech/substrate"
 
 [features]
 default = []
-runtime-benchmarks = [
-	"dkg-standalone-runtime/runtime-benchmarks",
-]
+runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks"]
+manual-seal = ["dkg-standalone-runtime/manual-seal"]

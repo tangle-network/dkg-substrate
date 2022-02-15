@@ -7,9 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{
-	mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, Proposal, ProposalNonce,
-};
+use dkg_runtime_primitives::{mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -229,6 +227,9 @@ parameter_types! {
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
+	#[cfg(feature = "manual-seal")]
+	type OnTimestampSet = ();
+	#[cfg(not(feature = "manual-seal"))]
 	type OnTimestampSet = Aura;
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = ();

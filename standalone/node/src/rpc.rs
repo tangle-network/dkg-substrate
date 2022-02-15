@@ -5,8 +5,12 @@
 
 #![warn(missing_docs)]
 
-use dkg_standalone_runtime::{opaque::Block, AccountId, Balance, Index as Nonce};
+use dkg_standalone_runtime::{opaque::Block, AccountId, Balance, Hash, Index as Nonce};
 use sc_client_api::AuxStore;
+use sc_consensus_manual_seal::{
+	rpc::{ManualSeal, ManualSealApi},
+	EngineCommand,
+};
 pub use sc_rpc::{DenyUnsafe, SubscriptionTaskExecutor};
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
@@ -25,6 +29,8 @@ pub struct FullDeps<C, P> {
 	pub pool: Arc<P>,
 	/// Whether to deny unsafe calls
 	pub deny_unsafe: DenyUnsafe,
+	/// Manual seal command sink
+	pub command_sink: Option<jsonrpc_core::futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 }
 
 /// Instantiate all full RPC extensions.
@@ -46,12 +52,19 @@ where
 	use substrate_frame_rpc_system::{FullSystem, SystemApi};
 
 	let mut io = jsonrpc_core::IoHandler::default();
-	let FullDeps { client, pool, deny_unsafe } = deps;
+	let FullDeps { client, pool, deny_unsafe, command_sink } = deps;
 
 	io.extend_with(SystemApi::to_delegate(FullSystem::new(client.clone(), pool, deny_unsafe)));
 
 	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client.clone())));
 
+	if let Some(command_sink) = command_sink {
+		io.extend_with(
+			// We provide the rpc handler with the sending end of the channel to allow the rpc
+			// send EngineCommands to the background block authorship task.
+			ManualSealApi::to_delegate(ManualSeal::new(command_sink)),
+		);
+	}
 	// Extend this RPC with a custom API by using the following syntax.
 	// `YourRpcStruct` should have a reference to a client, which is needed
 	// to call into the runtime.
