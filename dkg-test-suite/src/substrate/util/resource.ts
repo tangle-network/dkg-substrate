@@ -37,7 +37,7 @@ export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dk
 				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
 
 				if (parsedResult) {
-					const sig = parsedResult.anchorUpdateSigned.signature;
+					const sig = parsedResult.signed.signature;
 					console.log(`Signature: ${sig}`);
 
 					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);

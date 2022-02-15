@@ -6,6 +6,8 @@
 	"scripts": {
 		"dkg-refresh": "ts-node ./src/evm/keyRefresh.ts",
 		"anchor-proposals": "ts-node ./src/evm/testAnchorProposal.ts",
+		"anchor-create-proposal-substrate": "ts-node ./src/substrate/testAnchorCreateProposal.ts",
+		"anchor-update-proposal-substrate": "ts-node ./src/substrate/testAnchorUpdateProposal.ts",
 		"sudo-proposals": "ts-node ./src/evm/testDirectProposal.ts",
 		"max-deposit-limit-update-proposal": "ts-node ./src/evm/v-anchor-configurable-limit/testMaxDepositLimitUpdateProposal.ts",
 		"max-ext-limit-update-proposal": "ts-node ./src/evm/v-anchor-configurable-limit/testMaxExtLimitUpdate.ts",

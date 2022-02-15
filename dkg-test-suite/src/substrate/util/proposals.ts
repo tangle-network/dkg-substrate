@@ -31,3 +31,21 @@ export const tokenRemoveProposal: SubstrateProposal = {
 	},
 	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 };
+
+export const anchorUpdateProposal: SubstrateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0x00000000',
+		nonce,
+	},
+	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const anchorCreateProposal: SubstrateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0x00000000',
+		nonce,
+	},
+	encodedCall: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
