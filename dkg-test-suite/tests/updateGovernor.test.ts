@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
+	fastForward,
+	fastForwardTo,
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
 	startStandaloneNode,
@@ -32,6 +34,8 @@ describe('Update SignatureBridge Governor', () => {
 	let wallet2: ethers.Wallet;
 
 	let signatureBridge: SignatureBridge;
+
+	let sealingHandle: ReturnType<typeof setInterval>;
 
 	beforeAll(async () => {
 		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
@@ -88,10 +92,16 @@ describe('Update SignatureBridge Governor', () => {
 		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
 		await token2.approveSpending(anchor2.contract.address);
 		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
+
 		polkadotApi = await ApiPromise.create({
 			provider: new WsProvider('ws://127.0.0.1:9944'),
 		});
 
+		await fastForward(polkadotApi, 25);
+		// a background interval to seal the blocks
+		sealingHandle = setInterval(async () => {
+			await fastForward(polkadotApi, 1);
+		}, 1000);
 		// Update the signature bridge governor.
 		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 		expect(dkgPublicKey).toBeString();
@@ -114,11 +124,12 @@ describe('Update SignatureBridge Governor', () => {
 		// force new era, to ensure a new session.
 		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
-		await waitForTheNextSession(polkadotApi);
+		await Promise.race([fastForwardTo(polkadotApi, 110), waitForTheNextSession(polkadotApi)]);
 		expect(true).toBe(true);
 	});
 
 	afterAll(async () => {
+		clearInterval(sealingHandle);
 		await polkadotApi.disconnect();
 		aliceNode?.kill();
 		bobNode?.kill();

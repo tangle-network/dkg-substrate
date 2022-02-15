@@ -38,6 +38,25 @@ export const waitNfinalizedBlocks = async function (api: ApiPromise, n: number, 
 	});
 };
 
+/**
+ * @description: fast forward {n} blocks from the current block number.
+ */
+export async function fastForward(api: ApiPromise, n: number): Promise<void> {
+	for (let i = 0; i < n; i++) {
+		const createEmpty = true;
+		const finalize = true;
+		await api.rpc.engine.createBlock(createEmpty, finalize);
+	}
+}
+
+export async function fastForwardTo(api: ApiPromise, blockNumber: number): Promise<void> {
+	const currentBlockNumber = await api.rpc.chain.getHeader();
+	const diff = blockNumber - currentBlockNumber.number.toNumber();
+	if (diff > 0) {
+		await fastForward(api, diff);
+	}
+}
+
 export const printValidators = async function (api: ApiPromise) {
 	const [{ nonce: accountNonce }, now, validators] = await Promise.all([
 		api.query.system.account(ALICE),

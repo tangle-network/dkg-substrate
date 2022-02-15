@@ -304,17 +304,14 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 				sc_consensus_manual_seal::ManualSealParams {
 					block_import: client.clone(),
 					env: proposer_factory,
-					client: client.clone(),
+					client,
 					pool: transaction_pool.clone(),
 					commands_stream: futures::stream_select!(commands_stream, import_stream),
 					select_chain,
 					consensus_data_provider: None,
-					create_inherent_data_providers: Box::new(move |_, _| {
-						let client = client.clone();
-						async move {
-							let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-							Ok(timestamp)
-						}
+					create_inherent_data_providers: Box::new(move |_, _| async move {
+						let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+						Ok(timestamp)
 					}),
 				},
 			);
