@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert } from '@polkadot/util';
-import { apiProposalTypes } from './proposalTypes';
+import { apiProposalTypes } from '../proposalTypes';
 
 const raw_data =
 	'00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001';

@@ -14,7 +14,7 @@
 		"token-add-proposal": "ts-node ./src/token/testTokenAddProposal.ts",
 		"token-remove-proposal": "ts-node ./src/token/testTokenRemoveProposal.ts",
 		"wrapping-fee-update-proposal": "ts-node ./src/testWrappingFeeUpdateProposal.ts",
-		"wrapping-fee-update-proposal-substrate": "ts-node ./src/testWrappingFeeUpdateProposalSubstrate.ts",
+		"wrapping-fee-update-proposal-substrate": "ts-node ./src/substrate/testWrappingFeeUpdateProposal.ts",
 		"script": "ts-node"
 	},
 	"author": "",

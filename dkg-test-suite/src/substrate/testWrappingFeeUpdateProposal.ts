@@ -1,15 +1,15 @@
-import { ApiPromise } from '@polkadot/api';
-import { Keyring } from '@polkadot/keyring';
+import {ApiPromise} from '@polkadot/api';
+import {Keyring} from '@polkadot/keyring';
 import {
-	encodeWrappingFeeUpdateProposalSubstrate,
+	encodeSubstrateProposal,
 	provider,
 	waitNfinalizedBlocks,
 } from './utils';
-import { keccak256 } from '@ethersproject/keccak256';
-import { ECPair } from 'ecpair';
-import { assert, u8aToHex } from '@polkadot/util';
-import { registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil } from "./util/resource";
-import { wrappingFeeUpdateProposalSubstrate } from "./util/proposals";
+import {keccak256} from '@ethersproject/keccak256';
+import {ECPair} from 'ecpair';
+import {assert, u8aToHex} from '@polkadot/util';
+import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "./util/resource";
+import {wrappingFeeUpdateProposal} from "./util/proposals";
 
 async function testWrappingFeeUpdateProposal() {
 	const api = await ApiPromise.create({provider});
@@ -23,10 +23,10 @@ async function testWrappingFeeUpdateProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{compressed: false}
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {Substrate: 5002});
-	const propHash = keccak256(encodeWrappingFeeUpdateProposalSubstrate(wrappingFeeUpdateProposalSubstrate));
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
+	const propHash = keccak256(encodeSubstrateProposal(wrappingFeeUpdateProposal, 40));
 
-	const proposalType = {wrappingfeeupdateproposal: wrappingFeeUpdateProposalSubstrate.header.nonce}
+	const proposalType = {wrappingfeeupdateproposal: wrappingFeeUpdateProposal.header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -44,12 +44,12 @@ async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeWrappingFeeUpdateProposalSubstrate(wrappingFeeUpdateProposalSubstrate));
+	const prop = u8aToHex(encodeSubstrateProposal(wrappingFeeUpdateProposal, 40));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
+	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
