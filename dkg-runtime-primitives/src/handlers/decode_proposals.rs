@@ -38,6 +38,15 @@ pub fn decode_proposal<C: ChainIdTrait>(
 		decode_proposal_header(proposal.data()).map(Into::into)?;
 
 	match proposal.kind() {
+		ProposalKind::AnchorCreate => match chain_id {
+			ChainIdType::EVM(_) => panic!("should not exist"),
+			ChainIdType::Substrate(_) => substrate::anchor_create::create(&proposal.data())
+				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorCreateProposal(p.header.nonce))),
+			ChainIdType::RelayChain(_, _) => todo!(),
+			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
+			ChainIdType::Solana(_) => panic!("Unimplemented"),
+		},
 		ProposalKind::AnchorUpdate => match chain_id {
 			ChainIdType::EVM(_) => evm::anchor_update::create(&proposal.data())
 				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorUpdateProposal(p.header.nonce))),
