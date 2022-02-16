@@ -23,7 +23,6 @@ use sc_client_api::Backend;
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
 use std::{
-	collections::HashMap,
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,

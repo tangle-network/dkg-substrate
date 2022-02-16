@@ -14,10 +14,9 @@ mod mock;
 #[cfg(test)]
 mod tests;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, Address, ChainIdTrait, ChainIdType,
-	DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
-	ProposalKind, ProposalNonce, TransactionV2,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ChainIdTrait, ChainIdType, DKGPayloadKey,
+	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalKind,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
