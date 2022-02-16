@@ -6,6 +6,7 @@ import {
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
 	startStandaloneNode,
+	waitForTheNextDkgPublicKey,
 	waitForTheNextSession,
 	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
@@ -19,9 +20,10 @@ import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 
 describe('Update SignatureBridge Governor', () => {
 	const SECONDS = 1000;
+	const BLOCK_TIME = 3 * SECONDS;
 	const ACC1_PK = '0x0000000000000000000000000000000000000000000000000000000000000001';
 	const ACC2_PK = '0x0000000000000000000000000000000000000000000000000000000000000002';
-	jest.setTimeout(60 * SECONDS);
+	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
 
 	let polkadotApi: ApiPromise;
 	let aliceNode: ChildProcess;
@@ -97,11 +99,10 @@ describe('Update SignatureBridge Governor', () => {
 			provider: new WsProvider('ws://127.0.0.1:9944'),
 		});
 
-		await fastForward(polkadotApi, 25);
 		// a background interval to seal the blocks
 		sealingHandle = setInterval(async () => {
 			await fastForward(polkadotApi, 1);
-		}, 1000);
+		}, BLOCK_TIME);
 		// Update the signature bridge governor.
 		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 		expect(dkgPublicKey).toBeString();
@@ -121,19 +122,25 @@ describe('Update SignatureBridge Governor', () => {
 	});
 
 	test('should be able to transfer ownership to new Governor with Signature', async () => {
-		// force new era, to ensure a new session.
-		const keyring = new Keyring({ type: 'sr25519' });
-		const alice = keyring.addFromUri('//Alice');
-		await Promise.race([fastForwardTo(polkadotApi, 110), waitForTheNextSession(polkadotApi)]);
+		// stop auto-sealing for now.
+		clearInterval(sealingHandle);
+		// then we move faster.
+		await fastForwardTo(polkadotApi, 100, { delayBetweenBlocks: 1000 }); // to trigger a new session.
+		await waitForTheNextSession(polkadotApi);
+		// now start manual sealing again.
+		sealingHandle = setInterval(async () => {
+			await fastForward(polkadotApi, 1);
+		}, BLOCK_TIME);
+		await waitForTheNextDkgPublicKey(polkadotApi);
 		expect(true).toBe(true);
 	});
 
 	afterAll(async () => {
 		clearInterval(sealingHandle);
 		await polkadotApi.disconnect();
-		aliceNode?.kill();
-		bobNode?.kill();
-		charlieNode?.kill();
+		aliceNode?.kill('SIGINT');
+		bobNode?.kill('SIGINT');
+		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
 	});
 });

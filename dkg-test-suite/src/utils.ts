@@ -1,6 +1,4 @@
 import { ApiPromise } from '@polkadot/api';
-import { WsProvider } from '@polkadot/api';
-import { Bytes, Tuple, u32 } from '@polkadot/types';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
@@ -41,19 +39,29 @@ export const waitNfinalizedBlocks = async function (api: ApiPromise, n: number, 
 /**
  * @description: fast forward {n} blocks from the current block number.
  */
-export async function fastForward(api: ApiPromise, n: number): Promise<void> {
+export async function fastForward(
+	api: ApiPromise,
+	n: number,
+	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = { delayBetweenBlocks: 5 }
+): Promise<void> {
 	for (let i = 0; i < n; i++) {
 		const createEmpty = true;
-		const finalize = true;
+		const finalize = i % 10 === 0; // finalize every 10 blocks
 		await api.rpc.engine.createBlock(createEmpty, finalize);
+		// sleep for delayBetweenBlocks milliseconds
+		await new Promise((resolve) => setTimeout(resolve, delayBetweenBlocks));
 	}
 }
 
-export async function fastForwardTo(api: ApiPromise, blockNumber: number): Promise<void> {
+export async function fastForwardTo(
+	api: ApiPromise,
+	blockNumber: number,
+	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = { delayBetweenBlocks: 0 }
+): Promise<void> {
 	const currentBlockNumber = await api.rpc.chain.getHeader();
 	const diff = blockNumber - currentBlockNumber.number.toNumber();
 	if (diff > 0) {
-		await fastForward(api, diff);
+		await fastForward(api, diff, { delayBetweenBlocks });
 	}
 }
 
@@ -92,17 +100,23 @@ export function startStandaloneNode(
 		`./target/release/dkg-standalone-node`,
 		[
 			options.printLogs ? '-linfo' : '-lerror',
-			'--rpc-cors',
-			'all',
-			'--ws-external',
 			options.tmp ? '--tmp' : '',
-			// only print logs from the charlie node
-			...(authority === 'charlie'
+			...(authority == 'alice'
+				? ['--node-key', '0000000000000000000000000000000000000000000000000000000000000001']
+				: [
+						'--bootnodes',
+						'/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp',
+				  ]),
+			// only print logs from the alice node
+			...(authority === 'alice'
 				? [
 						'-ldkg=debug',
 						'-ldkg_metadata=debug',
 						'-lruntime::offchain=debug',
 						'-ldkg_proposal_handler=debug',
+						'--rpc-cors',
+						'all',
+						'--ws-external',
 				  ]
 				: []),
 			`--${authority}`,
@@ -144,6 +158,27 @@ export async function waitForTheNextSession(api: ApiPromise): Promise<void> {
 	});
 }
 
+/**
+ * Waits until a new session is started.
+ */
+export async function waitForTheNextDkgPublicKey(api: ApiPromise): Promise<void> {
+	return new Promise(async (reolve, _) => {
+		// Subscribe to system events via storage
+		const unsub = await api.query.system.events((events) => {
+			// Loop through the Vec<EventRecord>
+			events.forEach((record) => {
+				const { event } = record;
+				// dkg.NextPublicKeySubmitted
+				if (event.section === 'dkg' && event.method === 'NextPublicKeySubmitted') {
+					// Unsubscribe from the storage
+					unsub();
+					// Resolve the promise
+					reolve(void 0);
+				}
+			});
+		});
+	});
+}
 /**
  * Wait until the DKG Public Key is available and return it uncompressed.
  * @param api the current connected api.

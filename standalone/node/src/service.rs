@@ -294,7 +294,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			let pool = transaction_pool.pool().clone();
 			let import_stream = pool.validated_pool().import_notification_stream().map(|_| {
 				sc_consensus_manual_seal::rpc::EngineCommand::SealNewBlock {
-					create_empty: false,
+					create_empty: true,
 					finalize: true,
 					parent_hash: None,
 					sender: None,
