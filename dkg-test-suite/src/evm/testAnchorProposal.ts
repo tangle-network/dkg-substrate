@@ -5,11 +5,13 @@ import {
 	AnchorUpdateProposal,
 	ChainIdType,
 	encodeUpdateAnchorProposal,
-	hexToBytes,
 	makeResourceId,
-	provider,
-	waitNfinalizedBlocks,
 } from './utils';
+import {
+	provider,
+	hexToBytes,
+	waitNfinalizedBlocks,
+} from '../utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';

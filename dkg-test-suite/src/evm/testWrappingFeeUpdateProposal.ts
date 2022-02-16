@@ -1,9 +1,11 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeWrappingFeeUpdateProposal,
 	provider,
 	waitNfinalizedBlocks,
+} from '../utils';
+import {
+	encodeWrappingFeeUpdateProposal,
 } from './utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';

@@ -1,10 +1,12 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	 encodeTokenRemoveProposal,
 	provider,
 	waitNfinalizedBlocks,
-} from '../utils';
+} from '../../utils';
+import {
+	encodeTokenRemoveProposal,
+} from '../utils'
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';

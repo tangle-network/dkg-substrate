@@ -1,9 +1,11 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeTokenAddProposal,
 	provider,
 	waitNfinalizedBlocks,
+} from '../../utils';
+import {
+	encodeTokenAddProposal
 } from '../utils';
 import {ethers} from 'ethers';
 import {keccak256} from '@ethersproject/keccak256';
