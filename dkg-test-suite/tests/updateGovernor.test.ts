@@ -20,6 +20,7 @@ import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 
 describe('Update SignatureBridge Governor', () => {
 	const SECONDS = 1000;
+	const MINUTES = 60 * SECONDS;
 	const BLOCK_TIME = 3 * SECONDS;
 	const ACC1_PK = '0x0000000000000000000000000000000000000000000000000000000000000001';
 	const ACC2_PK = '0x0000000000000000000000000000000000000000000000000000000000000002';
@@ -99,10 +100,6 @@ describe('Update SignatureBridge Governor', () => {
 			provider: new WsProvider('ws://127.0.0.1:9944'),
 		});
 
-		// a background interval to seal the blocks
-		sealingHandle = setInterval(async () => {
-			await fastForward(polkadotApi, 1);
-		}, BLOCK_TIME);
 		// Update the signature bridge governor.
 		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 		expect(dkgPublicKey).toBeString();
@@ -123,14 +120,11 @@ describe('Update SignatureBridge Governor', () => {
 
 	test('should be able to transfer ownership to new Governor with Signature', async () => {
 		// stop auto-sealing for now.
-		clearInterval(sealingHandle);
+		// clearInterval(sealingHandle);
+		let nextSessionBlockNumber = (3 * MINUTES) / BLOCK_TIME;
 		// then we move faster.
-		await fastForwardTo(polkadotApi, 100, { delayBetweenBlocks: 1000 }); // to trigger a new session.
+		// await fastForwardTo(polkadotApi, nextSessionBlockNumber, { delayBetweenBlocks: 1000 }); // to trigger a new session.
 		await waitForTheNextSession(polkadotApi);
-		// now start manual sealing again.
-		sealingHandle = setInterval(async () => {
-			await fastForward(polkadotApi, 1);
-		}, BLOCK_TIME);
 		await waitForTheNextDkgPublicKey(polkadotApi);
 		expect(true).toBe(true);
 	});

@@ -314,6 +314,16 @@ pub mod pallet {
 			TimeToRestart::<T>::put(interval);
 			Ok(().into())
 		}
+
+		#[pallet::weight(0)]
+		#[transactional]
+		pub fn force_refresh_dkg(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			let next_id = Self::authority_set_id() + 1u64;
+			<AuthoritySetId<T>>::put(next_id);
+			Self::refresh_dkg_keys();
+			Ok(().into())
+		}
 	}
 
 	/// Public key Signatures for past sessions
@@ -714,14 +724,8 @@ impl<T: Config> Pallet<T> {
 			let mut buf = Vec::new();
 			buf.extend_from_slice(&data.nonce.to_be_bytes());
 			buf.extend_from_slice(&data.pub_key[..]);
-			let prefixed_proposal = Self::pre_signing_proposal_handler(&buf);
-			#[cfg(feature = "std")]
-			println!("Prefixed proposal on-chain verify: {:?}", prefixed_proposal);
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(
-				&signature,
-				&prefixed_proposal,
-			)
-			.map_err(|_| Error::<T>::InvalidSignature)?;
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &buf)
+				.map_err(|_| Error::<T>::InvalidSignature)?;
 
 			if Self::next_public_key_signature().is_none() {
 				NextPublicKeySignature::<T>::put(signature.clone());
