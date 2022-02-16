@@ -15,7 +15,7 @@ use dkg_primitives::{
 	},
 };
 use dkg_runtime_primitives::{
-	offchain_crypto::{Pair as AppPair, Public},
+	offchain::crypto::{Pair as AppPair, Public},
 	DKGApi,
 };
 use log::debug;
@@ -197,6 +197,7 @@ where
 					Some(local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
+					&worker.get_authority_reputations(header),
 				);
 
 				if local_key.is_some() {
@@ -234,6 +235,7 @@ where
 					Some(queued_local_key_path),
 					*header.number(),
 					worker.local_keystore.clone(),
+					&worker.get_authority_reputations(header),
 				);
 
 				if queued_local_key.is_some() {
@@ -348,6 +350,7 @@ where
 			local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
+			&worker.get_authority_reputations(header),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);
@@ -371,6 +374,7 @@ where
 			queued_local_key_path,
 			*header.number(),
 			worker.local_keystore.clone(),
+			&worker.get_authority_reputations(header),
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);
