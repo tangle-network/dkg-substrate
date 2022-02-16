@@ -1,4 +1,4 @@
-name: Test Code
+name: CI
 
 on:
   pull_request:
@@ -10,13 +10,41 @@ on:
 
 jobs:
   test-code:
-    runs-on: ubuntu-20.04
+    name: ${{ matrix.make.name }} (${{ matrix.os }})
+    # Set up matrix for future os test checks
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+      # Only running tests and checks for ubuntu right now
+        os: [ubuntu-latest]
+        # Only using nightly toolchain
+        rust: [nightly]
+        # Setup to execute cargo check, fmt, and make use of nextest run for unit tests
+        make:
+          - name: Check code
+            task: "check"
+          - name: Check Format
+            task: "fmt --all -- --check"
+          - name: Test Code
+            task: "nextest run"
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v2
 
-      # Steps taken from https://github.com/actions/cache/blob/master/examples.md#rust---cargo
+    - name: Install cargo-nextest
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-nextest
+        version: 0.9
+
+    - name: Install toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust }}
+    # Preserve directories between job runs
     - name: Cache cargo registry
       uses: actions/cache@v2
       with:
@@ -25,22 +53,9 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+            ${{ runner.os }}-cargo-
 
-    - name: Install toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: nightly
-    # Enable this for clippy linting.
-    # - name: Check and Lint Code
-    #   run: cargo +nightly-2020-05-07 clippy -- -D warnings
-
-    - name: Check Code
-      run: cargo check
-
-    - name: Check Format
-      run: |
-        cargo fmt --all -- --check
-
-    - name: Test Code
-      run: cargo test
+    # Runs actual checks, fmt, and tests  
+    - name: ${{ matrix.make.name }}
+      run: cargo ${{ matrix.make.task }}
