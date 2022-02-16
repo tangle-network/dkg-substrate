@@ -46,7 +46,7 @@ export async function fastForward(
 ): Promise<void> {
 	for (let i = 0; i < n; i++) {
 		const createEmpty = true;
-		const finalize = i % 10 === 0; // finalize every 10 blocks
+		const finalize = true;
 		await api.rpc.engine.createBlock(createEmpty, finalize);
 		// sleep for delayBetweenBlocks milliseconds
 		await new Promise((resolve) => setTimeout(resolve, delayBetweenBlocks));
@@ -96,11 +96,20 @@ export function startStandaloneNode(
 	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
 ): child.ChildProcess {
 	const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+	const nodePath = `${gitRoot}/target/release/dkg-standalone-node`;
+	const ports = {
+		alice: { ws: 9944, http: 9933, p2p: 30333 },
+		bob: { ws: 9945, http: 9934, p2p: 30334 },
+		charlie: { ws: 9946, http: 9935, p2p: 30335 },
+	};
 	const proc = child.spawn(
-		`./target/release/dkg-standalone-node`,
+		nodePath,
 		[
 			options.printLogs ? '-linfo' : '-lerror',
 			options.tmp ? '--tmp' : '',
+			`--ws-port=${ports[authority].ws}`,
+			`--rpc-port=${ports[authority].http}`,
+			`--port=${ports[authority].p2p}`,
 			...(authority == 'alice'
 				? ['--node-key', '0000000000000000000000000000000000000000000000000000000000000001']
 				: [
