@@ -27,6 +27,8 @@ where
 	Finished(Result<LocalKey<Secp256k1>, DKGError>),
 }
 
+/// Implementation of DKGRoundsSM trait that dispatches calls
+/// to the current internal state if applicable.
 impl<C> DKGRoundsSM<DKGKeygenMessage, KeygenState<C>, C> for KeygenState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,

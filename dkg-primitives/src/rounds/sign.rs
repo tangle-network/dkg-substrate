@@ -26,6 +26,8 @@ where
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
+/// Implementation of DKGRoundsSM trait that dispatches calls
+/// to the current internal state if applicable.
 impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -244,6 +246,8 @@ where
 	}
 }
 
+/// Convenience struct to accumulate partial signatures
+/// and later construct the full signature.
 struct DKGRoundTracker<Payload, Clock> {
 	votes: BTreeMap<u16, PartialSignature>,
 	sign_manual: Option<SignManual>,

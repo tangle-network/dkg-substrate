@@ -24,6 +24,8 @@ where
 	Finished(Result<CompletedOfflineStage, DKGError>),
 }
 
+/// Implementation of DKGRoundsSM trait that dispatches calls
+/// to the current internal state if applicable.
 impl<C> DKGRoundsSM<DKGOfflineMessage, OfflineState<C>, C> for OfflineState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
