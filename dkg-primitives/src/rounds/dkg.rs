@@ -135,7 +135,7 @@ where
 	/// 1. KeygenState if keygen is still in progress
 	/// 2. Every OfflineState in self.offlines map
 	/// 3. Every SignState in self.votes map
-  ///
+	///
 	/// If the keygen is finished, we extract the `local_key` and set its
 	/// state to `KeygenState::Finished`. We decide on the signing set
 	/// when the `local_key` is extracted.
