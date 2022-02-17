@@ -647,7 +647,7 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+				debug!(target: "dkg-signing", "🕸️  Local authority id: {:?}", id.clone());
 				rounds_send_result = send_messages(&mut rounds, id.clone(), self.get_latest_block_number());
 				current_authority_id = id.clone();
 			} else {
@@ -663,7 +663,7 @@ where
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					debug!(
-						target: "dkg", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+						target: "dkg-signing", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
 						current_authority_id,
 						hex::encode(pub_key.clone())
 					);
