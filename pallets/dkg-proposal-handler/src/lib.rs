@@ -371,7 +371,7 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_public_key_signature_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(b"submit_signed_proposal_onchain::lock");
 		{
 			let _guard = lock.lock();
 
