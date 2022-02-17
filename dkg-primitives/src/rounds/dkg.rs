@@ -9,7 +9,7 @@ use std::mem;
 use typed_builder::TypedBuilder;
 
 use crate::{types::*, utils::select_random_set};
-use dkg_runtime_primitives::keccak_256;
+use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
 	party_i::*,
@@ -38,6 +38,18 @@ where
 /// HashMap and BtreeMap keys are encoded formats of (ChainIdType<ChainId>, DKGPayloadKey)
 /// Using DKGPayloadKey only will cause collisions when proposals with the same nonce but from
 /// different chains are submitted
+///
+/// Each of KeygenState, OfflineState and SignState is an enum of several sub-states.
+/// All of them implement DKGRoundsSM trait for conveniece, but otherwise allow to be
+/// pattern-matched to access internal state defined in keygen.rs, offline.rs, sing.rs.
+///
+/// They all share similar pattern of enum cases, where:
+/// 1. NotStarted - is meant to only collect incoming messages in case some other party
+/// has started earlier than us and already sent some messages.
+/// 2. Started - sub-state is essentially the wrapper around corresponding
+/// multi-party-ecdsa's state machine (Keygen, OfflineStage, SignManual)
+/// 3. Finished - final sub-state with either execution result or error.
+/// 4. Empty - special case for Keygen is a workaround to avoid using Option for self.keygen.
 #[derive(TypedBuilder)]
 pub struct MultiPartyECDSARounds<Clock>
 where
@@ -65,6 +77,14 @@ where
 	// File system storage and encryption
 	#[builder(default)]
 	local_key_path: Option<PathBuf>,
+
+	// Reputations
+	#[builder(default)]
+	reputations: HashMap<AuthorityId, i64>,
+
+	// Authorities
+	#[builder(default)]
+	authorities: Vec<AuthorityId>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -104,13 +124,21 @@ where
 
 	/// A check to know if the protocol has stalled at the keygen stage,
 	/// We take it that the protocol has stalled if keygen messages are not received from other
-	/// peers after a certain interval And the keygen stage has not completed
+	/// peers after a certain interval And the keygen stage has not completed.
 	pub fn has_stalled(&self) -> bool {
 		self.has_stalled
 	}
 
 	/// State machine
 
+	/// Tries to proceed and make state transition if necessary for:
+	/// 1. KeygenState if keygen is still in progress
+	/// 2. Every OfflineState in self.offlines map
+	/// 3. Every SignState in self.votes map
+	///
+	/// If the keygen is finished, we extract the `local_key` and set its
+	/// state to `KeygenState::Finished`. We decide on the signing set
+	/// when the `local_key` is extracted.
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		debug!(target: "dkg", 
 			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
@@ -131,6 +159,7 @@ where
 					KeygenState::Started(rounds) => {
 						let finish_result = rounds.try_finish();
 						if let Ok(local_key) = &finish_result {
+							// TODO: Understand setting signers more deeply
 							self.generate_and_set_signers(local_key);
 							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 
@@ -188,6 +217,8 @@ where
 		results
 	}
 
+	/// Collects and returns outgoing messages from
+	/// KeygenState, every OfflineState and every SignState.
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
@@ -228,6 +259,14 @@ where
 		all_messages
 	}
 
+	/// Depending on the DKGMsgPayload type, dispatches the message to:
+	/// 1. KeygenState
+	/// 2. OfflineState with the key corresponding to the one in the payload
+	/// 3. SignState with the key corresponding to the one in the payload
+	///
+	/// If no OfflineState or SignState with the key in the payload is present in the corresponding
+	/// map, a new entry with initial state is created (OfflineState::NotStarted or
+	/// SignState::NotStarted)
 	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: Option<C>) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
@@ -250,7 +289,7 @@ where
 			},
 			DKGMsgPayload::Vote(msg) => {
 				let key = msg.round_key.clone();
-
+				// Get the `SignState` or create a new one for this vote (a threshold signature).
 				let vote = self
 					.votes
 					.entry(key.clone())
@@ -266,6 +305,8 @@ where
 		}
 	}
 
+	/// Starts keygen process for the current party.
+	/// All incoming keygen messages collected so far will be proccessed immediately.
 	pub fn start_keygen(&mut self, started_at: C) -> Result<(), DKGError> {
 		info!(
 			target: "dkg",
@@ -308,10 +349,13 @@ where
 		Ok(())
 	}
 
+	/// Starts new offline stage for the provided key.
+	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
 		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
 
 		let sign_params = self.sign_params();
+		// Get the offline index in the signer set (different than the party index).
 		let offline_i = match self.get_offline_stage_index() {
 			Some(i) => i,
 			None => {
@@ -366,6 +410,8 @@ where
 		}
 	}
 
+	/// Starts new signing process for the provided key.
+	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn vote(
 		&mut self,
 		round_key: Vec<u8>,
@@ -501,12 +547,50 @@ where
 		None
 	}
 
+	/// Generates the signer set by randomly selecting t+1 signers
+	/// to participate in the signing protocol. We set the signers in the local
+	/// storage once selected.
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+		let (_, threshold, parties) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		let set = (1..=self.dkg_params().2).collect::<Vec<_>>();
-		let signers_set = select_random_set(seed, set, self.dkg_params().1 + 1);
-		if let Ok(mut signers_set) = signers_set {
-			signers_set.sort();
+		// Get the parties with non-negative reputation
+		let good_parties: Vec<u16> = self
+			.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, a)| self.reputations.get(a).unwrap_or(&0i64) >= &0i64)
+			.map(|(index, _)| (index + 1) as u16)
+			.collect();
+		// If there aren't enough good authorities
+		let signers_set: Result<Vec<u16>, &str>;
+		if good_parties.len() <= threshold as usize {
+			// Get bad party indices and their reputations. Bad parties are those with negative
+			// reputation.
+			let mut bad_parties_and_reps: Vec<(u16, i64)> = self
+				.authorities
+				.iter()
+				.enumerate()
+				.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
+				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
+				.map(|(index, rep)| ((index + 1) as u16, rep))
+				.collect::<Vec<(u16, i64)>>();
+			// Sort them in descending order
+			bad_parties_and_reps.sort_by(|a, b| b.1.cmp(&a.1));
+			// Get the best bad parties to fill `threshold + 1` slots
+			let needed_bad_parties = bad_parties_and_reps
+				.iter()
+				.take((threshold as usize) + 1 - good_parties.len())
+				.map(|k| k.0)
+				.collect::<Vec<u16>>();
+			// Join the good and bad parties to get the final signers set
+			let good_and_bad_authorities: Vec<u16> =
+				good_parties.iter().chain(needed_bad_parties.iter()).map(|i| *i).collect();
+			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
+		} else {
+			signers_set = select_random_set(seed, good_parties, threshold + 1);
+		}
+
+		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);
 		}
 	}
