@@ -37,7 +37,10 @@ use dkg_runtime_primitives::{
 };
 use sp_runtime::{
 	generic::DigestItem,
-	offchain::storage::StorageValueRef,
+	offchain::{
+		storage::StorageValueRef,
+		storage_lock::{StorageLock, Time},
+	},
 	traits::{IsMember, Member},
 	DispatchError, Permill, RuntimeAppPublic,
 };
@@ -661,142 +664,161 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
-		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
-		const RECENTLY_SENT: &str = "Already submitted a key in this session";
-		let submit_at = submit_at_ref.get::<T::BlockNumber>();
+		let mut lock = StorageLock::<Time>::new(b"submit_genesis_public_key_onchain::lock");
+		{
+			let _guard = lock.lock();
+			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
+			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
+			const RECENTLY_SENT: &str = "Already submitted a key in this session";
+			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
-		if let Ok(Some(submit_at)) = submit_at {
-			if block_number < submit_at {
-				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
-				return Ok(())
+			if let Ok(Some(submit_at)) = submit_at {
+				if block_number < submit_at {
+					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					return Ok(())
+				} else {
+					submit_at_ref.clear();
+				}
 			} else {
-				submit_at_ref.clear();
+				Err(RECENTLY_SENT)?
 			}
-		} else {
-			Err(RECENTLY_SENT)?
-		}
 
-		if !Self::dkg_public_key().1.is_empty() {
-			agg_key_ref.clear();
+			if !Self::dkg_public_key().1.is_empty() {
+				agg_key_ref.clear();
+				return Ok(())
+			}
+
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			}
+
+			if let Ok(Some(agg_keys)) = agg_keys {
+				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+					keys_and_signatures: agg_keys.clone(),
+				});
+
+				agg_key_ref.clear();
+			}
+
 			return Ok(())
 		}
-
-		let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
-		}
-
-		if let Ok(Some(agg_keys)) = agg_keys {
-			let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
-				keys_and_signatures: agg_keys.clone(),
-			});
-
-			agg_key_ref.clear();
-		}
-
-		return Ok(())
 	}
 
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
-		let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
-		const RECENTLY_SENT: &str = "Already submitted a key in this session";
-		let submit_at = submit_at_ref.get::<T::BlockNumber>();
+		let mut lock = StorageLock::<Time>::new(b"submit_next_public_key_onchain::lock");
+		{
+			let _guard = lock.lock();
+			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
+			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
+			const RECENTLY_SENT: &str = "Already submitted a key in this session";
+			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
-		if let Ok(Some(submit_at)) = submit_at {
-			if block_number < submit_at {
-				frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
-				return Ok(())
+			if let Ok(Some(submit_at)) = submit_at {
+				if block_number < submit_at {
+					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					return Ok(())
+				} else {
+					submit_at_ref.clear();
+				}
 			} else {
-				submit_at_ref.clear();
+				Err(RECENTLY_SENT)?
 			}
-		} else {
-			Err(RECENTLY_SENT)?
-		}
 
-		if Self::next_dkg_public_key().is_some() {
-			agg_key_ref.clear();
+			if Self::next_dkg_public_key().is_some() {
+				agg_key_ref.clear();
+				return Ok(())
+			}
+
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			}
+
+			if let Ok(Some(agg_keys)) = agg_keys {
+				let _res = signer.send_signed_transaction(|_account| {
+					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
+				});
+
+				agg_key_ref.clear();
+			}
+
 			return Ok(())
 		}
-
-		let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
-		}
-
-		if let Ok(Some(agg_keys)) = agg_keys {
-			let _res = signer.send_signed_transaction(|_account| Call::submit_next_public_key {
-				keys_and_signatures: agg_keys.clone(),
-			});
-
-			agg_key_ref.clear();
-		}
-
-		return Ok(())
 	}
 
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
+		let mut lock = StorageLock::<Time>::new(b"submit_public_key_signature_onchain::lock");
+		{
+			let _guard = lock.lock();
+			let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
 
-		if Self::next_public_key_signature().is_some() {
-			pub_key_sig_ref.clear();
+			if Self::next_public_key_signature().is_some() {
+				pub_key_sig_ref.clear();
+				return Ok(())
+			}
+
+			let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
+
+			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			}
+
+			if let Ok(Some(refresh_proposal)) = refresh_proposal {
+				let _ =
+					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
+						signature_proposal: refresh_proposal.clone(),
+					});
+				frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+
+				pub_key_sig_ref.clear();
+			}
+
 			return Ok(())
 		}
-
-		let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
-
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
-		}
-
-		if let Ok(Some(refresh_proposal)) = refresh_proposal {
-			let _ = signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
-				signature_proposal: refresh_proposal.clone(),
-			});
-			frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
-
-			pub_key_sig_ref.clear();
-		}
-
-		return Ok(())
 	}
 
 	fn submit_misbehaviour_reports_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
-		}
-
-		let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOUR_REPORTS);
-		let agg_misbehaviour_reports = agg_reports_ref.get::<AggregatedMisbehaviourReports>();
-
-		if let Ok(Some(reports)) = agg_misbehaviour_reports {
-			// If this offender has already been reported, don't report it again.
-			if Self::misbehaviour_reports((reports.round_id, reports.offender.clone())).is_some() {
-				agg_reports_ref.clear();
-				return Ok(())
+		let mut lock = StorageLock::<Time>::new(b"submit_misbehaviour_reports_onchain::lock");
+		{
+			let _guard = lock.lock();
+			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
 			}
 
-			let _ = signer.send_signed_transaction(|_account| Call::submit_misbehaviour_reports {
-				reports: reports.clone(),
-			});
+			let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOUR_REPORTS);
+			let agg_misbehaviour_reports = agg_reports_ref.get::<AggregatedMisbehaviourReports>();
 
-			frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+			if let Ok(Some(reports)) = agg_misbehaviour_reports {
+				// If this offender has already been reported, don't report it again.
+				if Self::misbehaviour_reports((reports.round_id, reports.offender.clone()))
+					.is_some()
+				{
+					agg_reports_ref.clear();
+					return Ok(())
+				}
 
-			agg_reports_ref.clear();
+				let _ = signer.send_signed_transaction(|_account| {
+					Call::submit_misbehaviour_reports { reports: reports.clone() }
+				});
+
+				frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+
+				agg_reports_ref.clear();
+			}
+
+			return Ok(())
 		}
-
-		return Ok(())
 	}
 
 	pub fn should_refresh(now: T::BlockNumber) -> bool {
