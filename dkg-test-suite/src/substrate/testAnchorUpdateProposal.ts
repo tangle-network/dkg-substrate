@@ -1,8 +1,14 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeSubstrateProposal,
-} from './utils';
+	ChainIdType,
+	encodeSubstrateProposal, 
+	makeResourceId,
+	registerResourceId, 
+	signAndSendUtil, 
+	unsubSignedPropsUtil,
+	substratePalletResourceId,
+} from './util/utils';
 import {
 	provider,
 	waitNfinalizedBlocks,
@@ -11,8 +17,7 @@ import {ethers} from 'ethers';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "./util/resource";
-import {anchorUpdateProposal} from "./util/proposals";
+import {getAnchorUpdateProposal} from "./util/proposals";
 
 async function testAnchorUpdateProposal() {
 	const api = await ApiPromise.create({provider});
@@ -27,9 +32,9 @@ async function testAnchorUpdateProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
-	const propHash = keccak256(encodeSubstrateProposal(anchorUpdateProposal, 3000));
+	const propHash = keccak256(encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000));
 
-	const proposalType = {anchorupdateproposal: anchorUpdateProposal.header.nonce}
+	const proposalType = {anchorupdateproposal: getAnchorUpdateProposal(api).header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -47,10 +52,10 @@ async function sendAnchorUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeSubstrateProposal(anchorUpdateProposal, 3000));
+	const prop = u8aToHex(encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
-	console.log(`Resource id is: ${resourceId}`);
+	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'AnchorUpdate');

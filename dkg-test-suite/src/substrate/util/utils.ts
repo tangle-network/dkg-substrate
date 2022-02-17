@@ -1,4 +1,11 @@
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
+import {ApiPromise} from "@polkadot/api";
+import {Bytes, Option} from "@polkadot/types";
+import {KeyringPair} from "@polkadot/keyring/types";
+import {Keyring} from "@polkadot/keyring";
+import {ethers} from "ethers";
+
+
 
 const LE = true;
 const BE = false;
@@ -143,40 +150,81 @@ export function decodeSubstrateProposal(data: Uint8Array): SubstrateProposal {
 	};
 }
 
+export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
+	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
+		console.log(`Current status is: ${status.type}`);
 
-function _testEncodeDecode() {
-	// const anchorHandlerAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-	// const chainId = 0xcafe;
-	// const chainIdType = ChainIdType.SUBSTRATE;
-	// const resourceId = makeResourceId(chainIdType, chainId);
-	// const functionSignature = '0x00000000';
-	// const nonce = 0xdad;
-	// const header: ProposalHeader = {
-	// 	resourceId,
-	// 	functionSignature,
-	// 	nonce,
-	// };
-	// const srcChainId = 0xbabe;
-	// const lastLeafIndex = 0xfeed;
-	// const merkleRoot = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
-	// const updateProposal: AnchorUpdateProposal = {
-	// 	header,
-	// 	srcChainId,
-	// 	lastLeafIndex,
-	// 	merkleRoot,
-	// };
-	// const headerEncoded = encodeProposalHeader(header);
-	// const headerDecoded = decodeProposalHeader(headerEncoded);
-	// assert(headerDecoded.resourceId === resourceId, 'resourceId');
-	// assert(headerDecoded.functionSignature === functionSignature, 'functionSignature');
-	// assert(headerDecoded.nonce === nonce, 'nonce');
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-	// const updateProposalEncoded = encodeUpdateAnchorProposal(updateProposal);
-	// const updateProposalDecoded = decodeUpdateAnchorProposal(updateProposalEncoded);
-	// assert(updateProposalDecoded.header.resourceId === resourceId, 'resourceId');
-	// assert(updateProposalDecoded.header.functionSignature === functionSignature, 'functionSignature');
-	// assert(updateProposalDecoded.header.nonce === nonce, 'nonce');
-	// assert(updateProposalDecoded.srcChainId === srcChainId, 'srcChainId');
-	// assert(updateProposalDecoded.lastLeafIndex === lastLeafIndex, 'lastLeafIndex');
-	// assert(updateProposalDecoded.merkleRoot === merkleRoot, 'merkleRoot');
+			events.forEach(({phase, event: {data, method, section}}) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsub();
+		}
+	});
+}
+
+export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dkgPubKey: any, proposalType: any, propHash: any) {
+	return await api.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		proposalType,
+		(res: any) => {
+			if (res) {
+				const parsedResult = JSON.parse(JSON.stringify(res));
+				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
+
+				if (parsedResult) {
+					const sig = parsedResult.signed.signature;
+					console.log(`Signature: ${sig}`);
+
+					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
+					console.log(`Recovered public key: ${recoveredPubKey}`);
+					console.log(`DKG public key: ${dkgPubKey}`);
+
+					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
+					if (recoveredPubKey == dkgPubKey) {
+						console.log(`Public keys match`);
+						process.exit(0);
+					} else {
+						console.error(`Public keys do not match`);
+						process.exit(-1);
+					}
+				}
+			}
+		}
+	);
+}
+export const substratePalletResourceId = makeResourceId(
+	ChainIdType.SUBSTRATE,
+	5002,
+);
+
+export async function registerResourceId(api: ApiPromise) {
+	// quick check if the resourceId is already registered
+	const res = await api.query.dKGProposals.resources(substratePalletResourceId);
+	const val = new Option(api.registry, Bytes, res);
+	if (val.isSome) {
+		console.log(`Resource id ${substratePalletResourceId} is already registered, skipping`);
+		return;
+	}
+	const keyring = new Keyring({type: 'sr25519'});
+	const alice = keyring.addFromUri('//Alice');
+
+	const call = api.tx.dKGProposals.setResource(substratePalletResourceId, '0x00');
+	console.log('Registering resource id');
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({events = [], status}) => {
+		console.log(`Current status is: ${status.type}`);
+
+		if (status.isFinalized) {
+			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+
+			events.forEach(({phase, event: {data, method, section}}) => {
+				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+			});
+
+			unsub();
+		}
+	});
 }

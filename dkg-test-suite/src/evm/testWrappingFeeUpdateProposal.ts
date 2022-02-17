@@ -6,11 +6,14 @@ import {
 } from '../utils';
 import {
 	encodeWrappingFeeUpdateProposal,
-} from './utils';
+	registerResourceId, 
+	resourceId, 
+	signAndSendUtil, 
+	unsubSignedPropsUtil
+} from './util/utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "./util/resource";
 import {wrappingFeeUpdateProposal} from "./util/proposals";
 
 async function testWrappingFeeUpdateProposal() {

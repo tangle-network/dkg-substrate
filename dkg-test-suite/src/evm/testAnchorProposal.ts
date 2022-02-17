@@ -6,7 +6,11 @@ import {
 	ChainIdType,
 	encodeUpdateAnchorProposal,
 	makeResourceId,
-} from './utils';
+	registerResourceId,
+	resourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
+} from './util/utils';
 import {
 	provider,
 	hexToBytes,
@@ -16,12 +20,6 @@ import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
-import {
-	registerResourceId,
-	resourceId,
-	signAndSendUtil,
-	unsubSignedPropsUtil
-} from "./util/resource";
 import {anchorUpdateProposal} from "./util/proposals";
 
 async function testAnchorProposal() {

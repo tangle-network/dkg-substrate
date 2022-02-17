@@ -2,13 +2,18 @@ import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
 	encodeVAnchorConfigurableLimitProposal,
+	registerResourceId, 
+	resourceId, 
+	signAndSendUtil, 
+	unsubSignedPropsUtil
+} from '../util/utils';
+import {
 	provider,
 	waitNfinalizedBlocks,
-} from '../utils';
+} from '../../utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "../util/resource";
 import {vAnchorConfigurableLimitProposal} from "../util/proposals";
 
 async function testMinWithdrawalLimitUpdateProposal() {

@@ -6,16 +6,14 @@ import {
 } from '../../utils';
 import {
 	encodeTokenRemoveProposal,
-} from '../utils'
-import {keccak256} from '@ethersproject/keccak256';
-import {ECPair} from 'ecpair';
-import {assert, u8aToHex} from '@polkadot/util';
-import {
 	registerResourceId,
 	resourceId,
 	signAndSendUtil,
-	unsubSignedPropsUtil
-} from "../util/resource";
+	unsubSignedPropsUtil,
+} from '../util/utils'
+import {keccak256} from '@ethersproject/keccak256';
+import {ECPair} from 'ecpair';
+import {assert, u8aToHex} from '@polkadot/util';
 import {tokenRemoveProposal} from "../util/proposals";
 
 async function testTokenRemoveProposal() {

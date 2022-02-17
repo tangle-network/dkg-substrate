@@ -1,8 +1,14 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
+	ChainIdType,
 	encodeSubstrateProposal,
-} from '../utils';
+	makeResourceId,
+	registerResourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
+	substratePalletResourceId,
+} from '../util/utils';
 import {
 	provider,
 	waitNfinalizedBlocks,
@@ -10,13 +16,7 @@ import {
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {
-	registerResourceId,
-	resourceId,
-	signAndSendUtil,
-	unsubSignedPropsUtil
-} from "../util/resource";
-import {tokenRemoveProposal} from "../util/proposals";
+import {getTokenRemoveProposal} from "../util/proposals";
 
 async function testTokenRemoveProposal() {
 	const api = await ApiPromise.create({provider});
@@ -31,8 +31,8 @@ async function testTokenRemoveProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
-	const proposalType = {tokenremoveproposal: tokenRemoveProposal.header.nonce};
-	const propHash = keccak256(encodeSubstrateProposal(tokenRemoveProposal, 3000));
+	const proposalType = {tokenremoveproposal: getTokenRemoveProposal(api).header.nonce};
+	const propHash = keccak256(encodeSubstrateProposal(getTokenRemoveProposal(api), 3000));
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -50,10 +50,10 @@ async function sendTokenRemoveProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeSubstrateProposal(tokenRemoveProposal, 3000));
+	const prop = u8aToHex(encodeSubstrateProposal(getTokenRemoveProposal(api), 3000));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
-	console.log(`Resource id is: ${resourceId}`);
+	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenRemove');

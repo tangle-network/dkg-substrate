@@ -1,8 +1,14 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeSubstrateProposal,
-} from './utils';
+	ChainIdType,
+	encodeSubstrateProposal, 
+	makeResourceId,
+	registerResourceId, 
+	signAndSendUtil, 
+	unsubSignedPropsUtil,
+	substratePalletResourceId,
+} from './util/utils';
 import {
 	provider,
 	waitNfinalizedBlocks,
@@ -10,8 +16,7 @@ import {
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "./util/resource";
-import {wrappingFeeUpdateProposal} from "./util/proposals";
+import {getWrappingFeeUpdateProposal} from "./util/proposals";
 
 async function testWrappingFeeUpdateProposal() {
 	const api = await ApiPromise.create({provider});
@@ -26,9 +31,9 @@ async function testWrappingFeeUpdateProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
-	const propHash = keccak256(encodeSubstrateProposal(wrappingFeeUpdateProposal, 3000));
+	const propHash = keccak256(encodeSubstrateProposal(getWrappingFeeUpdateProposal(api), 3000));
 
-	const proposalType = {wrappingfeeupdateproposal: wrappingFeeUpdateProposal.header.nonce}
+	const proposalType = {wrappingfeeupdateproposal: getWrappingFeeUpdateProposal(api).header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -46,10 +51,10 @@ async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeSubstrateProposal(wrappingFeeUpdateProposal, 3000));
+	const prop = u8aToHex(encodeSubstrateProposal(getWrappingFeeUpdateProposal(api), 3000));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
-	console.log(`Resource id is: ${resourceId}`);
+	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
