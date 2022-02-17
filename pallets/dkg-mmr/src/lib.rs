@@ -120,6 +120,7 @@ pub mod pallet {
 	/// DKG-MMR pallet.
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// The module's configuration trait.

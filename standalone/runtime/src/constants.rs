@@ -54,6 +54,9 @@ pub mod time {
 	/// `SLOT_DURATION` should have the same value.
 	///
 	/// <https://research.web3.foundation/en/latest/polkadot/block-production/Babe.html#-6.-practical-results>
+	#[cfg(feature = "manual-seal")]
+	pub const MILLISECS_PER_BLOCK: Moment = 1000;
+	#[cfg(not(feature = "manual-seal"))]
 	pub const MILLISECS_PER_BLOCK: Moment = 3000;
 	pub const SECS_PER_BLOCK: Moment = MILLISECS_PER_BLOCK / 1000;
 

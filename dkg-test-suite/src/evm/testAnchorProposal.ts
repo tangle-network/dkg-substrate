@@ -1,26 +1,19 @@
-import { ApiPromise } from '@polkadot/api';
-import { Option, Bytes } from '@polkadot/types';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
 import {
-	AnchorUpdateProposal,
-	ChainIdType,
 	encodeUpdateAnchorProposal,
-	makeResourceId,
 	registerResourceId,
 	resourceId,
 	signAndSendUtil,
 	unsubSignedPropsUtil,
 } from './util/utils';
-import {
-	provider,
-	hexToBytes,
-	waitNfinalizedBlocks,
-} from '../utils';
-import { ethers } from 'ethers';
+import { waitNfinalizedBlocks } from '../utils';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
-import { assert, u8aToHex } from '@polkadot/util';
-import {anchorUpdateProposal} from "./util/proposals";
+import { u8aToHex } from '@polkadot/util';
+
+const provider = new WsProvider('ws://127.0.0.1:9944');
+import { anchorUpdateProposal } from './util/proposals';
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
@@ -38,9 +31,15 @@ async function testAnchorProposal() {
 
 	const propHash = keccak256(encodeUpdateAnchorProposal(anchorUpdateProposal));
 
-	const proposalType = { anchorupdateproposal: anchorUpdateProposal.header.nonce }
+	const proposalType = { anchorupdateproposal: anchorUpdateProposal.header.nonce };
 
-	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
+	const unsubSignedProps: any = await unsubSignedPropsUtil(
+		api,
+		chainIdType,
+		dkgPubKey,
+		proposalType,
+		propHash
+	);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 

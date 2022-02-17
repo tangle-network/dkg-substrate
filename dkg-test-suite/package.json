@@ -18,16 +18,18 @@
 		"token-remove-proposal-substrate": "ts-node ./src/substrate/token/testTokenRemoveProposal.ts",
 		"wrapping-fee-update-proposal-evm": "ts-node ./src/evm/testWrappingFeeUpdateProposal.ts",
 		"wrapping-fee-update-proposal-substrate": "ts-node ./src/substrate/testWrappingFeeUpdateProposal.ts",
-		"script": "ts-node"
+		"script": "ts-node",
+		"test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit"
 	},
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
 		"@polkadot/api": "^6.11.1",
 		"@polkadot/util": "^8.1.2",
-		"@webb-tools/fixed-bridge": "^0.0.2",
+		"@webb-tools/protocol-solidity": "^0.1.3",
 		"ecpair": "^1.0.0",
-		"ethers": "^5.5.2",
+		"ethers": "^5.5.4",
+		"ganache": "^7.0.2",
 		"jest": "^27.4.5",
 		"ora": "5",
 		"ts-jest": "^27.1.2",
@@ -38,7 +40,9 @@
 		"node": "17.x.x"
 	},
 	"devDependencies": {
+		"@types/jest": "^27.4.0",
 		"husky": "^7.0.4",
+		"jest-extended": "^2.0.0",
 		"lint-staged": "^12.1.7",
 		"prettier": "2.5.1"
 	},

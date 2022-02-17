@@ -91,6 +91,7 @@ pub mod pallet {
 
 	/// Pallet for parachain staking
 	#[pallet::pallet]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]

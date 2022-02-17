@@ -7,9 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{
-	mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, Proposal, ProposalNonce,
-};
+use dkg_runtime_primitives::{mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -229,14 +227,26 @@ parameter_types! {
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
+	#[cfg(feature = "manual-seal")]
+	type OnTimestampSet = ();
+	#[cfg(not(feature = "manual-seal"))]
 	type OnTimestampSet = Aura;
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = ();
 }
 
+#[cfg(feature = "integration-tests")]
 parameter_types! {
 	// How often we trigger a new session.
-	pub const Period: BlockNumber = 20;
+	// during integration tests, we use manual sessions.
+	pub const Period: BlockNumber = 6 * HOURS;
+	pub const Offset: BlockNumber = 0;
+}
+
+#[cfg(not(feature = "integration-tests"))]
+parameter_types! {
+	// How often we trigger a new session.
+	pub const Period: BlockNumber = 3 * MINUTES;
 	pub const Offset: BlockNumber = 0;
 }
 
@@ -278,8 +288,8 @@ impl onchain::Config for Runtime {
 parameter_types! {
 	pub const OffendingValidatorsThreshold: Perbill = Perbill::from_percent(17);
 	pub const SessionsPerEra: sp_staking::SessionIndex = 6;
-	pub const BondingDuration: pallet_staking::EraIndex = 24 * 28;
-	pub const SlashDeferDuration: pallet_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
+	pub const BondingDuration: u32 = 24 * 28;
+	pub const SlashDeferDuration: u32 = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
 	pub const MaxNominatorRewardedPerValidator: u32 = 256;
 	pub OffchainRepeat: BlockNumber = 5;

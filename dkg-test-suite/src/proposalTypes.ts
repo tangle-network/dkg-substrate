@@ -1,7 +1,6 @@
-import {ApiPromise} from "@polkadot/api";
-import {provider} from "./utils";
-
-export const apiProposalTypes = function() {
+import { ApiPromise, WsProvider } from '@polkadot/api';
+const provider = new WsProvider('ws://127.0.0.1:9944');
+export const apiProposalTypes = function () {
 	return ApiPromise.create({
 		provider,
 		types: {
@@ -22,7 +21,7 @@ export const apiProposalTypes = function() {
 					'MaxExtLimitUpdate',
 					'MaxExtLimitUpdateSigned',
 					'MaxFeeLimitUpdate',
-					'MaxFeeLimitUpdateSigned'
+					'MaxFeeLimitUpdateSigned',
 				],
 			},
 			EVMUnsigned: {
@@ -83,4 +82,4 @@ export const apiProposalTypes = function() {
 			},
 		},
 	});
-}
+};
