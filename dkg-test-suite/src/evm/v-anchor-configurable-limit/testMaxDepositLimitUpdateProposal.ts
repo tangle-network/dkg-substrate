@@ -1,20 +1,25 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeWrappingFeeUpdateProposal,
+	encodeVAnchorConfigurableLimitProposal,
+	registerResourceId, 
+	resourceId,
+	signAndSendUtil, 
+	unsubSignedPropsUtil
+} from '../util/utils';
+import {
 	provider,
-	waitNfinalizedBlocks,
-} from './utils';
+	waitNfinalizedBlocks
+} from '../../utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "./util/resource";
-import {wrappingFeeUpdateProposal} from "./util/proposals";
+import {vAnchorConfigurableLimitProposal} from "../util/proposals";
 
-async function testWrappingFeeUpdateProposal() {
+async function testMaxDepositLimitUpdateProposal() {
 	const api = await ApiPromise.create({provider});
 	await registerResourceId(api);
-	await sendWrappingFeeUpdateProposal(api);
+	await sendMaxDepositLimitUpdateProposal(api);
 	console.log('Waiting for the DKG to Sign the proposal');
 	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
@@ -24,9 +29,9 @@ async function testWrappingFeeUpdateProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
-	const propHash = keccak256(encodeWrappingFeeUpdateProposal(wrappingFeeUpdateProposal));
+	const propHash = keccak256(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
 
-	const proposalType = {wrappingfeeupdateproposal: wrappingFeeUpdateProposal.header.nonce}
+	const proposalType = {maxdepositlimitupdateproposal: vAnchorConfigurableLimitProposal.header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -35,7 +40,7 @@ async function testWrappingFeeUpdateProposal() {
 	unsubSignedProps();
 }
 
-async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
+async function sendMaxDepositLimitUpdateProposal(api: ApiPromise) {
 	const keyring = new Keyring({type: 'sr25519'});
 	const alice = keyring.addFromUri('//Alice');
 
@@ -44,13 +49,13 @@ async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeWrappingFeeUpdateProposal(wrappingFeeUpdateProposal));
+	const prop = u8aToHex(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5001});
-	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
+	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'MaxDepositLimitUpdate');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
@@ -63,6 +68,6 @@ async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
 }
 
 // Run
-testWrappingFeeUpdateProposal()
+testMaxDepositLimitUpdateProposal()
 	.catch(console.error)
 	.finally(() => process.exit());

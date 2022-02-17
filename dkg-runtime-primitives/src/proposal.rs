@@ -144,6 +144,7 @@ impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ResourceId, ChainIdType<C>, P
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
+	AnchorCreateProposal(ProposalNonce),
 	AnchorUpdateProposal(ProposalNonce),
 	TokenAddProposal(ProposalNonce),
 	TokenRemoveProposal(ProposalNonce),
@@ -161,6 +162,7 @@ impl PartialEq for DKGPayloadKey {
 		match (self, other) {
 			(Self::EVMProposal(l0), Self::EVMProposal(r0)) => l0 == r0,
 			(Self::RefreshVote(l0), Self::RefreshVote(r0)) => l0 == r0,
+			(Self::AnchorCreateProposal(l0), Self::AnchorCreateProposal(r0)) => l0 == r0,
 			(Self::AnchorUpdateProposal(l0), Self::AnchorUpdateProposal(r0)) => l0 == r0,
 			(Self::TokenAddProposal(l0), Self::TokenAddProposal(r0)) => l0 == r0,
 			(Self::TokenRemoveProposal(l0), Self::TokenRemoveProposal(r0)) => l0 == r0,
@@ -200,6 +202,7 @@ pub enum Proposal {
 pub enum ProposalKind {
 	Refresh,
 	EVM,
+	AnchorCreate,
 	AnchorUpdate,
 	TokenAdd,
 	TokenRemove,
@@ -235,6 +238,7 @@ impl Proposal {
 	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
 		match self.kind() {
 			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
+			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce),
 			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
 			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
 			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),

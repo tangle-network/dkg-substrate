@@ -1,21 +1,25 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeTokenAddProposal,
 	provider,
 	waitNfinalizedBlocks,
-} from '../utils';
-import {ethers} from 'ethers';
+} from '../../utils';
+import {
+	encodeTokenRemoveProposal,
+	registerResourceId,
+	resourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
+} from '../util/utils'
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "../util/resource";
-import {tokenAddProposal} from "../util/proposals";
+import {tokenRemoveProposal} from "../util/proposals";
 
-async function testTokenAddProposal() {
+async function testTokenRemoveProposal() {
 	const api = await ApiPromise.create({provider});
 	await registerResourceId(api);
-	await sendTokenAddProposal(api);
+	await sendTokenRemoveProposal(api);
 	console.log('Waiting for the DKG to Sign the proposal');
 	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
@@ -25,9 +29,8 @@ async function testTokenAddProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
-	const propHash = keccak256(encodeTokenAddProposal(tokenAddProposal));
-
-	const proposalType = {tokenaddproposal: tokenAddProposal.header.nonce}
+	const proposalType = {tokenremoveproposal: tokenRemoveProposal.header.nonce};
+	const propHash = keccak256(encodeTokenRemoveProposal(tokenRemoveProposal));
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -36,7 +39,7 @@ async function testTokenAddProposal() {
 	unsubSignedProps();
 }
 
-async function sendTokenAddProposal(api: ApiPromise) {
+async function sendTokenRemoveProposal(api: ApiPromise) {
 	const keyring = new Keyring({type: 'sr25519'});
 	const alice = keyring.addFromUri('//Alice');
 
@@ -45,13 +48,13 @@ async function sendTokenAddProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeTokenAddProposal(tokenAddProposal));
+	const prop = u8aToHex(encodeTokenRemoveProposal(tokenRemoveProposal));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5001});
-	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
+	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenRemove');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
@@ -64,6 +67,6 @@ async function sendTokenAddProposal(api: ApiPromise) {
 }
 
 // Run
-testTokenAddProposal()
+testTokenRemoveProposal()
 	.catch(console.error)
 	.finally(() => process.exit());

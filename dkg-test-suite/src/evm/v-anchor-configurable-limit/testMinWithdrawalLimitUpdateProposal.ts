@@ -2,19 +2,24 @@ import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
 	encodeVAnchorConfigurableLimitProposal,
+	registerResourceId, 
+	resourceId, 
+	signAndSendUtil, 
+	unsubSignedPropsUtil
+} from '../util/utils';
+import {
 	provider,
 	waitNfinalizedBlocks,
-} from '../utils';
+} from '../../utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {registerResourceId, resourceId, signAndSendUtil, unsubSignedPropsUtil} from "../util/resource";
 import {vAnchorConfigurableLimitProposal} from "../util/proposals";
 
-async function testMaxDepositLimitUpdateProposal() {
+async function testMinWithdrawalLimitUpdateProposal() {
 	const api = await ApiPromise.create({provider});
 	await registerResourceId(api);
-	await sendMaxDepositLimitUpdateProposal(api);
+	await sendMinWithdrawalLimitUpdateProposal(api);
 	console.log('Waiting for the DKG to Sign the proposal');
 	await waitNfinalizedBlocks(api, 8, 20 * 7);
 
@@ -26,7 +31,7 @@ async function testMaxDepositLimitUpdateProposal() {
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
 	const propHash = keccak256(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
 
-	const proposalType = {maxdepositlimitupdateproposal: vAnchorConfigurableLimitProposal.header.nonce}
+	const proposalType = {minwithdrawallimitupdateproposal: vAnchorConfigurableLimitProposal.header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -35,7 +40,7 @@ async function testMaxDepositLimitUpdateProposal() {
 	unsubSignedProps();
 }
 
-async function sendMaxDepositLimitUpdateProposal(api: ApiPromise) {
+async function sendMinWithdrawalLimitUpdateProposal(api: ApiPromise) {
 	const keyring = new Keyring({type: 'sr25519'});
 	const alice = keyring.addFromUri('//Alice');
 
@@ -50,7 +55,7 @@ async function sendMaxDepositLimitUpdateProposal(api: ApiPromise) {
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5001});
-	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'MaxDepositLimitUpdate');
+	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'MinWithdrawalLimitUpdate');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
@@ -63,6 +68,6 @@ async function sendMaxDepositLimitUpdateProposal(api: ApiPromise) {
 }
 
 // Run
-testMaxDepositLimitUpdateProposal()
+testMinWithdrawalLimitUpdateProposal()
 	.catch(console.error)
 	.finally(() => process.exit());

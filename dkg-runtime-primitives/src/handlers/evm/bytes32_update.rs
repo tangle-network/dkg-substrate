@@ -20,7 +20,7 @@ pub struct Bytes32UpdateProposal<C: ChainIdTrait> {
 /// Total Bytes: 32 + 4 + 4 + 32 = 72
 pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<Bytes32UpdateProposal<C>, ValidationError> {
 	if data.len() != 72 {
-		return Err(ValidationError::InvalidParameter("Proposal data must be 41 bytes".to_string()))?
+		return Err(ValidationError::InvalidParameter("Proposal data must be 72 bytes".to_string()))?
 	}
 	let header: ProposalHeader<C> = decode_proposal_header(data)?;
 

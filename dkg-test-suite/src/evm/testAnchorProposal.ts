@@ -1,27 +1,18 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
-import { Option, Bytes } from '@polkadot/types';
 import { Keyring } from '@polkadot/keyring';
 import {
-	AnchorUpdateProposal,
-	ChainIdType,
 	encodeUpdateAnchorProposal,
-	hexToBytes,
-	makeResourceId,
-	waitNfinalizedBlocks,
-} from './utils';
-import { ethers } from 'ethers';
-import { keccak256 } from '@ethersproject/keccak256';
-import { ECPair } from 'ecpair';
-import { assert, u8aToHex } from '@polkadot/util';
-
-const provider = new WsProvider('ws://127.0.0.1:9944');
-let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
-import {
 	registerResourceId,
 	resourceId,
 	signAndSendUtil,
 	unsubSignedPropsUtil,
-} from './util/resource';
+} from './util/utils';
+import { waitNfinalizedBlocks } from '../utils';
+import { keccak256 } from '@ethersproject/keccak256';
+import { ECPair } from 'ecpair';
+import { u8aToHex } from '@polkadot/util';
+
+const provider = new WsProvider('ws://127.0.0.1:9944');
 import { anchorUpdateProposal } from './util/proposals';
 
 async function testAnchorProposal() {
