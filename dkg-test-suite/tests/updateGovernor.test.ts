@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
+	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
 	fetchDkgRefreshNonce,
@@ -75,12 +76,9 @@ describe('Update SignatureBridge Governor', () => {
 		});
 
 		// Update the signature bridge governor.
-		let dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
+		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 		expect(dkgPublicKey).toBeString();
-		dkgPublicKey = `0x${dkgPublicKey.slice(4)}`;
-		let governorAddress = ethers.utils.getAddress(
-			`0x${ethers.utils.keccak256(dkgPublicKey).slice(-40)}`
-		);
+		const governorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey);
 
 		let intialGovernors = {
 			[localChain.chainId]: wallet1,
@@ -137,27 +135,19 @@ describe('Update SignatureBridge Governor', () => {
 			waitForPublicKeySignatureToChange(polkadotApi),
 		]);
 		// then we fetch them.
-		let dkgPublicKey = await fetchDkgPublicKey(polkadotApi);
+		const dkgPublicKey = await fetchDkgPublicKey(polkadotApi);
 		const dkgPublicKeySignature = await fetchDkgPublicKeySignature(polkadotApi);
 		const refreshNonce = await fetchDkgRefreshNonce(polkadotApi);
 		expect(dkgPublicKey).toBeString();
 		expect(dkgPublicKeySignature).toBeString();
 		expect(refreshNonce).toBeGreaterThan(0);
-		// remove the 0x04 prefix.
-		dkgPublicKey = `0x${dkgPublicKey!.slice(4)}`;
 		// now we can transfer ownership.
 		const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
 		const contract = signatureSide.contract;
 		contract.connect(localChain.provider());
 		const governor = await contract.governor();
-		console.log(`governor: ${governor}`);
-		let nextGovernorAddress = ethers.utils.getAddress(
-			`0x${ethers.utils.keccak256(dkgPublicKey!).slice(-40)}`
-		);
-		console.log(`nextGovernor: ${nextGovernorAddress}`);
-		console.log(`publicKey: ${dkgPublicKey}`);
-		console.log(`refreshNonce: ${refreshNonce}`);
-		console.log(`signature: ${dkgPublicKeySignature}`);
+		let nextGovernorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey!);
+		// sanity check
 		expect(nextGovernorAddress).not.toEqualCaseInsensitive(governor);
 		const tx = await contract.transferOwnershipWithSignaturePubKey(
 			dkgPublicKey!,

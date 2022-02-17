@@ -2,6 +2,7 @@ import { ApiPromise, Keyring } from '@polkadot/api';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
+import { ethers } from 'ethers';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
@@ -197,10 +198,10 @@ export async function waitForEvent(
 }
 
 /**
- * Wait until the DKG Public Key is available and return it uncompressed.
+ * Wait until the DKG Public Key is available and return it uncompressed without the `04` prefix byte.
  * @param api the current connected api.
  */
-export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promise<string> {
+export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promise<`0x${string}`> {
 	return new Promise(async (resolve, _reject) => {
 		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async () => {
 			const dkgKey = await fetchDkgPublicKey(api);
@@ -213,7 +214,7 @@ export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promi
 }
 
 /**
- * Fetch DKG Public Key and return it **uncompressed**.
+ * Fetch DKG Public Key and return it **uncompressed** without the `04` prefix byte.
  * returns `null` if the key is not yet available.
  * @param api the current connected api.
  */
@@ -225,7 +226,8 @@ export async function fetchDkgPublicKey(api: ApiPromise): Promise<`0x${string}` 
 		const dkgPubKey = ECPair.fromPublicKey(Buffer.from(key.slice(2), 'hex'), {
 			compressed: false,
 		}).publicKey.toString('hex');
-		return `0x${dkgPubKey}`;
+		// now we remove the `04` prefix byte and return it.
+		return `0x${dkgPubKey.slice(2)}`;
 	} else {
 		return null;
 	}
@@ -270,6 +272,12 @@ export async function triggerDkgManualRenonce(api: ApiPromise): Promise<void> {
 			unsub();
 		}
 	});
+}
+
+export function ethAddressFromUncompressedPublicKey(publicKey: `0x${string}`): `0x${string}` {
+	const pubKeyHash = ethers.utils.keccak256(publicKey); // we hash it.
+	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
+	return address as `0x${string}`;
 }
 
 const LE = true;
