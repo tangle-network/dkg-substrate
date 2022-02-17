@@ -46,6 +46,9 @@ use sp_runtime::{
 	AccountId32,
 };
 
+use hex_literal::hex;
+use sp_core::crypto::UncheckedInto;
+
 use crate::{
 	keystore::DKGKeystore,
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
@@ -636,13 +639,17 @@ where
 		let mut keys_to_gossip = Vec::new();
 		let mut rounds_send_result = vec![];
 		let mut next_rounds_send_result = vec![];
+		let mut current_authority_id= hex!["036aec5853fba2662f31ba89e859ac100daa6c58dc8fdaf0555565663f2b99f8f2"]
+			.unchecked_into();
 
 		if let Some(mut rounds) = self.rounds.take() {
+
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
 				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-				rounds_send_result = send_messages(&mut rounds, id, self.get_latest_block_number());
+				rounds_send_result = send_messages(&mut rounds, id.clone(), self.get_latest_block_number());
+				current_authority_id = id.clone();
 			} else {
 				error!(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC."
@@ -655,6 +662,11 @@ where
 					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+					debug!(
+						target: "dkg-signing", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+						current_authority_id,
+						hex::encode(pub_key.clone())
+					);
 					let round_id = rounds.get_id();
 					keys_to_gossip.push((round_id, pub_key));
 				}
@@ -671,13 +683,18 @@ where
 				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 				if let Some(mut next_rounds) = self.next_rounds.take() {
 					next_rounds_send_result =
-						send_messages(&mut next_rounds, id, self.get_latest_block_number());
+						send_messages(&mut next_rounds, id.clone(), self.get_latest_block_number());
 
 					let is_keygen_finished = next_rounds.is_keygen_finished();
 					if is_keygen_finished {
 						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 						self.queued_keygen_in_progress = false;
 						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+						debug!(
+								target: "dkg", "Next Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+								id.clone(),
+								hex::encode(pub_key.clone())
+						);
 						keys_to_gossip.push((next_rounds.get_id(), pub_key));
 					}
 					self.next_rounds = Some(next_rounds);
@@ -1296,8 +1313,10 @@ where
 		if signed_proposals.is_empty() {
 			return
 		}
-
-		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
+		frame_support::log::debug!(
+				target: "dkg-signing",
+				"🕸️  saving signed proposal in offchain storage");
+		//debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
 		let public = self
 			.key_store
@@ -1345,7 +1364,11 @@ where
 					old_val.as_deref(),
 					&prop_wrapper.encode(),
 				) {
-					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
+					frame_support::log::debug!(
+				target: "dkg-signing",
+				"🕸️  Successfully saved signed proposals in offchain storage");
+					//debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain
+					// storage");
 					break
 				}
 			}
