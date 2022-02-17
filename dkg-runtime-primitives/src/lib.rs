@@ -2,7 +2,9 @@
 // NOTE: needed to silence warnings about generated code in `decl_runtime_apis`
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
+pub mod handlers;
 pub mod mmr;
+pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
@@ -12,6 +14,7 @@ pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
 pub use proposal::*;
+use sp_application_crypto::sr25519;
 
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
@@ -19,7 +22,7 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	create_runtime_str,
-	traits::{IdentifyAccount, Verify},
+	traits::{AtLeast32Bit, IdentifyAccount, Verify},
 	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
@@ -50,22 +53,7 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
-// Key for offchain storage of aggregated derived public keys
-pub const AGGREGATED_PUBLIC_KEYS: &[u8] = b"dkg-metadata::public_key";
-
-// Key for offchain storage of aggregated derived public keys for genesis authorities
-pub const AGGREGATED_PUBLIC_KEYS_AT_GENESIS: &[u8] = b"dkg-metadata::genesis_public_keys";
-
-// Key for offchain storage of derived public key
-pub const SUBMIT_KEYS_AT: &[u8] = b"dkg-metadata::submit_keys_at";
-
-// Key for offchain storage of derived public key
-pub const SUBMIT_GENESIS_KEYS_AT: &[u8] = b"dkg-metadata::submit_genesis_keys_at";
-
-// Key for offchain storage of derived public key signature
-pub const OFFCHAIN_PUBLIC_KEY_SIG: &[u8] = b"dkg-metadata::public_key_sig";
-// Key for offchain signed proposals storage
-pub const OFFCHAIN_SIGNED_PROPOSALS: &[u8] = b"dkg-proposal-handler::signed_proposals";
+// Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
@@ -81,36 +69,21 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
+pub struct AggregatedMisbehaviourReports {
+	/// The round id the offense took place in
+	pub round_id: u64,
+	/// The offending authority
+	pub offender: crypto::AuthorityId,
+	/// A list of reporters
+	pub reporters: Vec<sr25519::Public>,
+	/// A list of signed reports
+	pub signatures: Vec<Vec<u8>>,
+}
+
 impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
 	fn default() -> Self {
 		Self { proposals: Vec::default() }
-	}
-}
-
-pub mod offchain_crypto {
-	use sp_core::sr25519::Signature as Sr25519Signature;
-	use sp_runtime::{
-		app_crypto::{app_crypto, sr25519},
-		key_types::ACCOUNT,
-		traits::Verify,
-		MultiSignature, MultiSigner,
-	};
-	app_crypto!(sr25519, ACCOUNT);
-
-	pub struct OffchainAuthId;
-
-	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OffchainAuthId {
-		type RuntimeAppPublic = Public;
-		type GenericSignature = sp_core::sr25519::Signature;
-		type GenericPublic = sp_core::sr25519::Public;
-	}
-
-	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature>
-		for OffchainAuthId
-	{
-		type RuntimeAppPublic = Public;
-		type GenericSignature = sp_core::sr25519::Signature;
-		type GenericPublic = sp_core::sr25519::Public;
 	}
 }
 
@@ -150,8 +123,8 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 }
 
 pub enum DKGReport {
-	KeygenMisbehavior { offender: AuthorityId },
-	SigningMisbehavior { offender: AuthorityId },
+	KeygenMisbehaviour { offender: AuthorityId },
+	SigningMisbehaviour { offender: AuthorityId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
@@ -177,7 +150,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	/// MMR root hash.
 	#[codec(index = 3)]
 	MmrRoot(MmrRootHash),
-	/// The authority keys have changed
+	/// The DKG keys have changed
 	#[codec(index = 4)]
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
@@ -198,7 +171,7 @@ pub enum ChainIdType<ChainId> {
 	Solana(ChainId),
 }
 
-impl<ChainId: Clone> ChainIdType<ChainId> {
+impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 	pub fn inner_id(&self) -> ChainId {
 		match self {
 			ChainIdType::EVM(id) => id.clone(),
@@ -221,7 +194,7 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 		}
 	}
 
-	pub fn to_bytes(&self) -> [u8; 2] {
+	pub fn get_type_bytes(&self) -> [u8; 2] {
 		let polkadot_str = create_runtime_str!("polkadot");
 		let kusama_str = create_runtime_str!("kusama");
 		match self {
@@ -247,6 +220,26 @@ impl<ChainId: Clone> ChainIdType<ChainId> {
 			ChainIdType::Solana(_) => [4, 0],
 			_ => panic!("Invalid chain id type"),
 		}
+	}
+
+	pub fn from_raw(bytes: &[u8]) -> Self {
+		let mut chain_type_bytes = [0u8; 2];
+		let mut chain_id_bytes = [0u8; 4];
+		if bytes.len() == 6 {
+			chain_type_bytes.copy_from_slice(&bytes[0..2]);
+			chain_id_bytes.copy_from_slice(&bytes[2..6]);
+		}
+
+		if bytes.len() == 8 {
+			chain_type_bytes.copy_from_slice(&bytes[2..4]);
+			chain_id_bytes.copy_from_slice(&bytes[4..8]);
+		}
+
+		Self::from_raw_parts(chain_type_bytes, chain_id_bytes)
+	}
+
+	pub fn from_raw_parts(chain_type_bytes: [u8; 2], chain_id_bytes: [u8; 4]) -> Self {
+		Self::get_full_repr(chain_type_bytes, ChainId::from(u32::from_be_bytes(chain_id_bytes)))
 	}
 
 	pub fn get_full_repr(chain_type: [u8; 2], chain_id: ChainId) -> Self {
@@ -294,10 +287,10 @@ sp_api::decl_runtime_apis! {
 		fn get_max_extrinsic_delay(_block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
+		/// Reputations for authorities
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
-		/// Get untrack interval for unsigned proposals
-		fn untrack_interval() -> N;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
 		/// Get the time to restart for the dkg keygen

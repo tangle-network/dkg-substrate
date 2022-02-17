@@ -509,7 +509,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type Event = Event;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
-	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
@@ -527,7 +527,7 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type ChainId = u32;
-	type OffChainAuthId = dkg_runtime_primitives::offchain_crypto::OffchainAuthId;
+	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
@@ -844,8 +844,8 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn untrack_interval() -> BlockNumber {
-			dkg_runtime_primitives::UNTRACK_INTERVAL
+		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, i64)> {
+			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
 		}
 
 		fn refresh_nonce() -> u32 {

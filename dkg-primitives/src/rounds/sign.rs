@@ -26,6 +26,8 @@ where
 	Finished(Result<DKGSignedPayload, DKGError>),
 }
 
+/// Implementation of DKGRoundsSM trait that dispatches calls
+/// to the current internal state if applicable.
 impl<C> DKGRoundsSM<DKGVoteMessage, SignState<C>, C> for SignState<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -46,6 +48,7 @@ where
 
 	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
 		match self {
+			Self::NotStarted(pre_rounds) => pre_rounds.handle_incoming(data, at),
 			Self::Started(sign_rounds) => sign_rounds.handle_incoming(data, at),
 			_ => Ok(()),
 		}
@@ -152,26 +155,27 @@ where
 	fn proceed(&mut self, at: C) -> Result<bool, DKGError> {
 		if self.sign_tracker.is_done(self.params.threshold) {
 			return Ok(true)
+		}
+		// Check if we have signed the message and that the timeout has exhausted
+		let signed_by_self = self.sign_tracker.is_signed_by(self.params.party_index);
+		let sign_timeout_exhausted = at - self.sign_tracker.started_at > SIGN_TIMEOUT.into();
+		// If so, identify all bad actors and return an error
+		if signed_by_self && sign_timeout_exhausted {
+			let signed_by = self.sign_tracker.get_signed_parties();
+			let mut not_signed_by: Vec<u16> = self
+				.params
+				.signers
+				.iter()
+				.filter(|v| !signed_by.contains(*v))
+				.map(|v| *v)
+				.collect();
+
+			let mut bad_actors: Vec<u16> = Vec::new();
+			bad_actors.append(&mut not_signed_by);
+
+			Err(DKGError::SignTimeout { bad_actors })
 		} else {
-			if self.sign_tracker.is_signed_by(self.params.party_index) &&
-				at - self.sign_tracker.started_at > SIGN_TIMEOUT.into()
-			{
-				let signed_by = self.sign_tracker.get_signed_parties();
-				let mut not_signed_by: Vec<u16> = self
-					.params
-					.signers
-					.iter()
-					.filter(|v| !signed_by.contains(*v))
-					.map(|v| *v)
-					.collect();
-
-				let mut bad_actors: Vec<u16> = Vec::new();
-				bad_actors.append(&mut not_signed_by);
-
-				Err(DKGError::SignTimeout { bad_actors })
-			} else {
-				Ok(false)
-			}
+			Ok(false)
 		}
 	}
 
@@ -242,6 +246,8 @@ where
 	}
 }
 
+/// Convenience struct to accumulate partial signatures
+/// and later construct the full signature.
 struct DKGRoundTracker<Payload, Clock> {
 	votes: BTreeMap<u16, PartialSignature>,
 	sign_manual: Option<SignManual>,
