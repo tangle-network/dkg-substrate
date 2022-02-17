@@ -1313,10 +1313,8 @@ where
 		if signed_proposals.is_empty() {
 			return
 		}
-		frame_support::log::debug!(
-				target: "dkg-signing",
-				"🕸️  saving signed proposal in offchain storage");
-		//debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
+
+		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
 		let public = self
 			.key_store
