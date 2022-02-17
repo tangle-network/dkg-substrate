@@ -46,9 +46,6 @@ use sp_runtime::{
 	AccountId32,
 };
 
-use hex_literal::hex;
-use sp_core::crypto::UncheckedInto;
-
 use crate::{
 	keystore::DKGKeystore,
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
