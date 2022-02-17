@@ -150,6 +150,35 @@ pub fn decode_proposal<C: ChainIdTrait>(
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},
+		ProposalKind::SetTreasuryHandler => match chain_id {
+			ChainIdType::EVM(_) => evm::set_treasury_handler::create(&proposal.data()).map(|p| {
+				(p.header.chain_id, DKGPayloadKey::SetTreasuryHandlerProposal(p.header.nonce))
+			}),
+			ChainIdType::Substrate(_) => todo!(),
+			ChainIdType::RelayChain(_, _) => todo!(),
+			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
+			ChainIdType::Solana(_) => panic!("Unimplemented"),
+		},
+		ProposalKind::SetVerifier => match chain_id {
+			ChainIdType::EVM(_) => evm::set_verifier::create(&proposal.data())
+				.map(|p| (p.header.chain_id, DKGPayloadKey::SetVerifierProposal(p.header.nonce))),
+			ChainIdType::Substrate(_) => todo!(),
+			ChainIdType::RelayChain(_, _) => todo!(),
+			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
+			ChainIdType::Solana(_) => panic!("Unimplemented"),
+		},
+		ProposalKind::FeeRecipientUpdate => match chain_id {
+			ChainIdType::EVM(_) => evm::fee_recipient_update::create(&proposal.data()).map(|p| {
+				(p.header.chain_id, DKGPayloadKey::FeeRecipientUpdateProposal(p.header.nonce))
+			}),
+			ChainIdType::Substrate(_) => todo!(),
+			ChainIdType::RelayChain(_, _) => todo!(),
+			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
+			ChainIdType::Solana(_) => panic!("Unimplemented"),
+		},
 		_ => Err(ValidationError::UnimplementedProposalKind),
 	}
 }
