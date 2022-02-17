@@ -663,7 +663,7 @@ where
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					debug!(
-						target: "dkg-signing", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+						target: "dkg", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
 						current_authority_id,
 						hex::encode(pub_key.clone())
 					);
