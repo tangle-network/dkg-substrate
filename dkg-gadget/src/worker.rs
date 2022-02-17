@@ -639,8 +639,7 @@ where
 		let mut keys_to_gossip = Vec::new();
 		let mut rounds_send_result = vec![];
 		let mut next_rounds_send_result = vec![];
-		let mut current_authority_id= hex!["036aec5853fba2662f31ba89e859ac100daa6c58dc8fdaf0555565663f2b99f8f2"]
-			.unchecked_into();
+		let mut current_authority_id= None;
 
 		if let Some(mut rounds) = self.rounds.take() {
 
@@ -649,7 +648,7 @@ where
 			{
 				debug!(target: "dkg-signing", "🕸️  Local authority id: {:?}", id.clone());
 				rounds_send_result = send_messages(&mut rounds, id.clone(), self.get_latest_block_number());
-				current_authority_id = id.clone();
+				current_authority_id = Some(id.clone());
 			} else {
 				error!(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC."
@@ -663,7 +662,7 @@ where
 					self.active_keygen_in_progress = false;
 					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					debug!(
-						target: "dkg-signing", "Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+						target: "dkg-signing", "Authority({:?}) DKG PublicKey Generated (Compressed): 0x{}",
 						current_authority_id,
 						hex::encode(pub_key.clone())
 					);
@@ -691,7 +690,7 @@ where
 						self.queued_keygen_in_progress = false;
 						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 						debug!(
-								target: "dkg", "Next Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
+								target: "dkg-signing", "Next Authority({}) DKG PublicKey Generated (Compressed): 0x{}",
 								id.clone(),
 								hex::encode(pub_key.clone())
 						);
