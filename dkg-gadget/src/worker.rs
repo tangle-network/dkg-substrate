@@ -1364,11 +1364,7 @@ where
 					old_val.as_deref(),
 					&prop_wrapper.encode(),
 				) {
-					frame_support::log::debug!(
-				target: "dkg-signing",
-				"🕸️  Successfully saved signed proposals in offchain storage");
-					//debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain
-					// storage");
+					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
 					break
 				}
 			}
