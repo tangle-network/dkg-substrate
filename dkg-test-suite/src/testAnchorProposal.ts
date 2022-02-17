@@ -13,34 +13,16 @@ import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
-<<<<<<< HEAD
 
 const provider = new WsProvider('ws://127.0.0.1:9944');
-const resourceId = makeResourceId(
-	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
-	ChainIdType.EVM,
-	5002
-);
 let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
-const anchorUpdateProposal: AnchorUpdateProposal = {
-	header: {
-		resourceId,
-		functionSignature: '0xdeadbeef',
-		nonce,
-	},
-	srcChainId: 5001,
-	lastLeafIndex: 0,
-	merkleRoot: '0x0000000000000000000000000000000000000000000000000000000000000000',
-};
-=======
 import {
 	registerResourceId,
 	resourceId,
 	signAndSendUtil,
-	unsubSignedPropsUtil
-} from "./util/resource";
-import {anchorUpdateProposal} from "./util/proposals";
->>>>>>> master
+	unsubSignedPropsUtil,
+} from './util/resource';
+import { anchorUpdateProposal } from './util/proposals';
 
 async function testAnchorProposal() {
 	const api = await ApiPromise.create({ provider });
@@ -58,9 +40,15 @@ async function testAnchorProposal() {
 
 	const propHash = keccak256(encodeUpdateAnchorProposal(anchorUpdateProposal));
 
-	const proposalType = { anchorupdateproposal: anchorUpdateProposal.header.nonce }
+	const proposalType = { anchorupdateproposal: anchorUpdateProposal.header.nonce };
 
-	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
+	const unsubSignedProps: any = await unsubSignedPropsUtil(
+		api,
+		chainIdType,
+		dkgPubKey,
+		proposalType,
+		propHash
+	);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 

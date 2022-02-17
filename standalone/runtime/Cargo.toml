@@ -126,4 +126,5 @@ runtime-benchmarks = [
 	"pallet-dkg-metadata/runtime-benchmarks",
 ]
 
+integration-tests = []
 manual-seal = []

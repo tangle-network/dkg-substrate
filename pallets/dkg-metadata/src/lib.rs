@@ -41,7 +41,7 @@ use sp_runtime::{
 	traits::{IsMember, Member},
 	DispatchError, Permill, RuntimeAppPublic,
 };
-use sp_std::{collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
+use sp_std::{borrow::ToOwned, collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
 
 pub mod types;
 use types::RoundMetadata;
@@ -185,7 +185,7 @@ pub mod pallet {
 			);
 			// set the new maintainer
 			SignatureThreshold::<T>::try_mutate(|threshold| {
-				*threshold = new_threshold.clone();
+				*threshold = new_threshold;
 				Ok(().into())
 			})
 		}
@@ -324,7 +324,7 @@ pub mod pallet {
 
 			if valid_reporters.len() >= threshold as usize {
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
-					reporters: valid_reporters.clone(),
+					reporters: valid_reporters,
 				});
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
@@ -345,14 +345,57 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Manually Renonce the `RefreshNonce` (increment it by one).
+		///
+		/// * `origin` - The account that is calling this must be root.
+		/// **Important**: This function is only available for testing purposes.
 		#[pallet::weight(0)]
 		#[transactional]
-		pub fn force_refresh_dkg(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn manual_renonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			let next_id = Self::authority_set_id() + 1u64;
-			<AuthoritySetId<T>>::put(next_id);
-			Self::refresh_keys();
+			if Self::refresh_in_progress() {
+				return Err(Error::<T>::RefreshInProgress.into())
+			}
+			let next_nonce = Self::refresh_nonce() + 1u32;
+			RefreshNonce::<T>::put(next_nonce);
 			Ok(().into())
+		}
+
+		/// Manual Trigger DKG Refresh process.
+		///
+		/// * `origin` - The account that is initiating the refresh process and must be root.
+		/// **Important**: This function is only available for testing purposes.
+		#[pallet::weight(0)]
+		#[transactional]
+		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			if Self::refresh_in_progress() {
+				return Err(Error::<T>::RefreshInProgress.into())
+			}
+			if let Some(pub_key) = Self::next_dkg_public_key() {
+				RefreshInProgress::<T>::put(true);
+				let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
+				let next_nonce = Self::refresh_nonce() + 1u32;
+				let data = dkg_runtime_primitives::RefreshProposal {
+					nonce: next_nonce,
+					pub_key: uncompressed_pub_key,
+				};
+
+				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+					Ok(()) => {
+						RefreshNonce::<T>::put(next_nonce);
+						ShouldManualRefresh::<T>::put(true);
+						frame_support::log::debug!("Handled refresh proposal");
+						Ok(().into())
+					},
+					Err(e) => {
+						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						Err(Error::<T>::ManualRefreshFailed.into())
+					},
+				}
+			} else {
+				Err(Error::<T>::NoNextPublicKey.into())
+			}
 		}
 	}
 
@@ -371,10 +414,15 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
 
-	/// Nonce value for next refresh proposal
+	/// Check if there is a refresh in progress.
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_in_progress)]
 	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	/// Should we manually trigger a DKG refresh process.
+	#[pallet::storage]
+	#[pallet::getter(fn should_manual_refresh)]
+	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Number of blocks that should elapse after which the dkg keygen is restarted
 	/// if it has stalled
@@ -500,6 +548,12 @@ pub mod pallet {
 		InvalidSignature,
 		/// Invalid misbehaviour reports
 		InvalidMisbehaviourReports,
+		/// DKG Refresh is already in progress.
+		RefreshInProgress,
+		/// Manual DKG Refresh failed to progress.
+		ManualRefreshFailed,
+		/// No NextPublicKey stored on-chain.
+		NoNextPublicKey,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -512,8 +566,14 @@ pub mod pallet {
 		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
 		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+		/// Current Public Key Changed.
+		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		/// Current Public Key Signature Changed.
+		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted { reporters: Vec<sr25519::Public> },
+		/// Refresh DKG Keys Finished (forcefully).
+		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
 	}
 
 	#[cfg(feature = "std")]
@@ -552,8 +612,13 @@ impl<T: Config> Pallet<T> {
 			Some(libsecp256k1::PublicKeyFormat::Compressed),
 		)
 		.map(|pk| pk.serialize())
-		.map_err(|e| Error::<T>::InvalidPublicKeys)?;
-		Ok(result.to_vec())
+		.map_err(|_| Error::<T>::InvalidPublicKeys)?;
+		if result.len() == 65 {
+			// remove the 0x04 prefix
+			Ok(result[1..].to_vec())
+		} else {
+			Ok(result.to_vec())
+		}
 	}
 
 	pub fn process_public_key_submissions(
@@ -583,7 +648,7 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 
-		return dict
+		dict
 	}
 
 	pub fn process_misbehaviour_reports(
@@ -605,14 +670,14 @@ impl<T: Config> Pallet<T> {
 			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
-			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, &signature);
+			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, signature);
 
 			if can_proceed.1 && !valid_reporters.contains(&reports.reporters[inx]) {
 				valid_reporters.push(reports.reporters[inx]);
 			}
 		}
 
-		return valid_reporters
+		valid_reporters
 	}
 
 	fn change_authorities(
@@ -685,7 +750,7 @@ impl<T: Config> Pallet<T> {
 				submit_at_ref.clear();
 			}
 		} else {
-			Err(RECENTLY_SENT)?
+			return Err(RECENTLY_SENT)
 		}
 
 		if !Self::dkg_public_key().1.is_empty() {
@@ -697,7 +762,9 @@ impl<T: Config> Pallet<T> {
 
 		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)
 		}
 
 		if let Ok(Some(agg_keys)) = agg_keys {
@@ -708,7 +775,7 @@ impl<T: Config> Pallet<T> {
 			agg_key_ref.clear();
 		}
 
-		return Ok(())
+		Ok(())
 	}
 
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
@@ -725,7 +792,7 @@ impl<T: Config> Pallet<T> {
 				submit_at_ref.clear();
 			}
 		} else {
-			Err(RECENTLY_SENT)?
+			return Err(RECENTLY_SENT)
 		}
 
 		if Self::next_dkg_public_key().is_some() {
@@ -737,7 +804,9 @@ impl<T: Config> Pallet<T> {
 
 		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)
 		}
 
 		if let Ok(Some(agg_keys)) = agg_keys {
@@ -748,7 +817,7 @@ impl<T: Config> Pallet<T> {
 			agg_key_ref.clear();
 		}
 
-		return Ok(())
+		Ok(())
 	}
 
 	fn submit_public_key_signature_onchain(
@@ -765,7 +834,9 @@ impl<T: Config> Pallet<T> {
 
 		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)
 		}
 
 		if let Ok(Some(refresh_proposal)) = refresh_proposal {
@@ -777,7 +848,7 @@ impl<T: Config> Pallet<T> {
 			pub_key_sig_ref.clear();
 		}
 
-		return Ok(())
+		Ok(())
 	}
 
 	fn submit_misbehaviour_reports_onchain(
@@ -785,7 +856,9 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), &'static str> {
 		let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 		if !signer.can_sign() {
-			Err("No local accounts available. Consider adding one via `author_insertKey` RPC.")?
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)
 		}
 
 		let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOUR_REPORTS);
@@ -807,7 +880,7 @@ impl<T: Config> Pallet<T> {
 			agg_reports_ref.clear();
 		}
 
-		return Ok(())
+		Ok(())
 	}
 
 	pub fn should_refresh(now: T::BlockNumber) -> bool {
@@ -828,12 +901,11 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResultWithPostInfo {
 		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let uncompressed_pub_key =
-				Self::decompress_public_key(pub_key.1.clone()).unwrap_or_default();
+			let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
 			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(signature, &data.encode())
 				.map_err(|_| {
-					frame_support::log::debug!(
+					frame_support::log::error!(
 						target: "dkg",
 						"Invalid signature: {:?}",
 						signature
@@ -842,12 +914,19 @@ impl<T: Config> Pallet<T> {
 				})?;
 
 			if Self::next_public_key_signature().is_none() {
-				NextPublicKeySignature::<T>::put(signature.clone());
+				NextPublicKeySignature::<T>::put(signature.to_owned());
 				// Remove unsigned refresh proposal from queue
 				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-					pub_key_sig: signature.clone(),
+					pub_key_sig: signature.to_owned(),
 				});
+				if Self::should_manual_refresh() {
+					ShouldManualRefresh::<T>::put(false);
+					let next_authority_set_id = Self::authority_set_id() + 1u64;
+					AuthoritySetId::<T>::put(next_authority_set_id);
+					Self::refresh_keys();
+					Self::deposit_event(Event::RefreshKeysFinished { next_authority_set_id });
+				}
 			}
 		}
 
@@ -861,21 +940,22 @@ impl<T: Config> Pallet<T> {
 		let pub_key_signature = Self::public_key_signature();
 		NextDKGPublicKey::<T>::kill();
 		NextPublicKeySignature::<T>::kill();
-		if next_pub_key.is_some() && next_pub_key_signature.is_some() {
+		let v = next_pub_key.zip(next_pub_key_signature);
+		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Insert historical round metadata consisting of the current round's
 			// public key before rotation, the next round's public key, and the refresh
 			// signature signed by the current key refreshing the next.
 			HistoricalRounds::<T>::insert(
-				next_pub_key.clone().unwrap().0,
+				next_pub_key.0,
 				RoundMetadata {
 					curr_round_pub_key: dkg_pub_key.1.clone(),
-					next_round_pub_key: next_pub_key.clone().unwrap().1,
-					refresh_signature: next_pub_key_signature.clone().unwrap(),
+					next_round_pub_key: next_pub_key.clone().1,
+					refresh_signature: next_pub_key_signature.clone(),
 				},
 			);
 			// Set new keys
-			DKGPublicKey::<T>::put(next_pub_key.clone().unwrap());
-			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone().unwrap());
+			DKGPublicKey::<T>::put(next_pub_key.clone());
+			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone());
 			PreviousPublicKey::<T>::put(dkg_pub_key.clone());
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
@@ -885,13 +965,22 @@ impl<T: Config> Pallet<T> {
 			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {
-					new_key_signature: next_pub_key_signature.unwrap(),
+					new_key_signature: next_pub_key_signature.clone(),
 					old_public_key: dkg_pub_key.1,
-					new_public_key: next_pub_key.unwrap().1,
+					new_public_key: next_pub_key.1.clone(),
 				}
 				.encode(),
 			);
+			let uncompressed_pub_key = Self::decompress_public_key(next_pub_key.1.clone()).unwrap();
 			<frame_system::Pallet<T>>::deposit_log(log);
+			// Emit events so other front-end know that.
+			Self::deposit_event(Event::PublicKeyChanged {
+				uncompressed_pub_key,
+				compressed_pub_key: next_pub_key.1,
+			});
+			Self::deposit_event(Event::PublicKeySignatureChanged {
+				pub_key_sig: next_pub_key_signature,
+			})
 		}
 	}
 
@@ -900,8 +989,8 @@ impl<T: Config> Pallet<T> {
 		let session_length = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
 		>>::average_session_length();
-		let max_delay = Permill::from_percent(50) * (refresh_delay * session_length);
-		max_delay
+
+		Permill::from_percent(50) * (refresh_delay * session_length)
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]

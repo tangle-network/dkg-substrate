@@ -1,20 +1,21 @@
 import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
-	fastForward,
-	fastForwardTo,
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
+	fetchDkgRefreshNonce,
+	sleep,
 	startStandaloneNode,
-	waitForTheNextDkgPublicKey,
-	waitForTheNextSession,
+	triggerDkgManualRefresh,
+	triggerDkgManualRenonce,
+	waitForPublicKeySignatureToChange,
+	waitForPublicKeyToChange,
 	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
 import { LocalChain } from '../src/localEvm';
 import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
-import { SignatureBridge } from '@webb-tools/fixed-bridge/lib/packages/fixed-bridge/src/SignatureBridge';
-import { SignatureBridge as SignatureBridgeContract } from '@webb-tools/contracts';
+import { Bridges } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
 import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 
@@ -36,14 +37,12 @@ describe('Update SignatureBridge Governor', () => {
 	let wallet1: ethers.Wallet;
 	let wallet2: ethers.Wallet;
 
-	let signatureBridge: SignatureBridge;
-
-	let sealingHandle: ReturnType<typeof setInterval>;
+	let signatureBridge: Bridges.SignatureBridge;
 
 	beforeAll(async () => {
 		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
 		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
-		charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: true });
+		charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
 
 		localChain = new LocalChain('local', 5001, [
 			{
@@ -70,14 +69,42 @@ describe('Update SignatureBridge Governor', () => {
 		// Deploy the token.
 		const localToken = await localChain.deployToken('Webb Token', 'WEBB', wallet1);
 		const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
+
+		polkadotApi = await ApiPromise.create({
+			provider: new WsProvider('ws://127.0.0.1:9944'),
+		});
+
+		// Update the signature bridge governor.
+		let dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
+		expect(dkgPublicKey).toBeString();
+		dkgPublicKey = `0x${dkgPublicKey.slice(4)}`;
+		let governorAddress = ethers.utils.getAddress(
+			`0x${ethers.utils.keccak256(dkgPublicKey).slice(-40)}`
+		);
+
+		let intialGovernors = {
+			[localChain.chainId]: wallet1,
+			[localChain2.chainId]: wallet2,
+		};
+
 		// Depoly the signature bridge.
 		signatureBridge = await localChain.deploySignatureBridge(
 			localChain2,
 			localToken,
 			localToken2,
 			wallet1,
-			wallet2
+			wallet2,
+			intialGovernors
 		);
+		const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
+		const contract = signatureSide.contract;
+		contract.connect(localChain.provider());
+		// now we transferOwnership, forcefully.
+		const tx = await contract.transferOwnership(governorAddress, 1);
+		expect(tx.wait()).toResolve();
+		// check that the new governor is the same as the one we just set.
+		const currentGovernor = await contract.governor();
+		expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
 
 		// get the anhor on localchain1
 		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
@@ -95,22 +122,48 @@ describe('Update SignatureBridge Governor', () => {
 		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
 		await token2.approveSpending(anchor2.contract.address);
 		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
+	});
 
-		polkadotApi = await ApiPromise.create({
-			provider: new WsProvider('ws://127.0.0.1:9944'),
-		});
-
-		// Update the signature bridge governor.
-		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
+	test('should be able to transfer ownership to new Governor with Signature', async () => {
+		// we trigger a manual renonce since we already transfered the ownership before.
+		await triggerDkgManualRenonce(polkadotApi);
+		// for some reason, we have to wait for a bit ¯\_(ツ)_/¯.
+		await sleep(2 * BLOCK_TIME);
+		// we trigger a manual DKG Refresh.
+		await triggerDkgManualRefresh(polkadotApi);
+		// then we wait until the dkg public key and its signature to get changed.
+		await Promise.all([
+			waitForPublicKeyToChange(polkadotApi),
+			waitForPublicKeySignatureToChange(polkadotApi),
+		]);
+		// then we fetch them.
+		let dkgPublicKey = await fetchDkgPublicKey(polkadotApi);
+		const dkgPublicKeySignature = await fetchDkgPublicKeySignature(polkadotApi);
+		const refreshNonce = await fetchDkgRefreshNonce(polkadotApi);
 		expect(dkgPublicKey).toBeString();
+		expect(dkgPublicKeySignature).toBeString();
+		expect(refreshNonce).toBeGreaterThan(0);
+		// remove the 0x04 prefix.
+		dkgPublicKey = `0x${dkgPublicKey!.slice(4)}`;
+		// now we can transfer ownership.
 		const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
-		const contract = signatureSide.contract as SignatureBridgeContract;
+		const contract = signatureSide.contract;
 		contract.connect(localChain.provider());
 		const governor = await contract.governor();
+		console.log(`governor: ${governor}`);
 		let nextGovernorAddress = ethers.utils.getAddress(
 			`0x${ethers.utils.keccak256(dkgPublicKey!).slice(-40)}`
 		);
-		const tx = await contract.transferOwnership(nextGovernorAddress, 1);
+		console.log(`nextGovernor: ${nextGovernorAddress}`);
+		console.log(`publicKey: ${dkgPublicKey}`);
+		console.log(`refreshNonce: ${refreshNonce}`);
+		console.log(`signature: ${dkgPublicKeySignature}`);
+		expect(nextGovernorAddress).not.toEqualCaseInsensitive(governor);
+		const tx = await contract.transferOwnershipWithSignaturePubKey(
+			dkgPublicKey!,
+			refreshNonce,
+			dkgPublicKeySignature!
+		);
 		await expect(tx.wait()).toResolve();
 		// check that the new governor is the same as the one we just set.
 		const newGovernor = await contract.governor();
@@ -118,19 +171,7 @@ describe('Update SignatureBridge Governor', () => {
 		expect(newGovernor).toEqualCaseInsensitive(nextGovernorAddress);
 	});
 
-	test('should be able to transfer ownership to new Governor with Signature', async () => {
-		// stop auto-sealing for now.
-		// clearInterval(sealingHandle);
-		let nextSessionBlockNumber = (3 * MINUTES) / BLOCK_TIME;
-		// then we move faster.
-		// await fastForwardTo(polkadotApi, nextSessionBlockNumber, { delayBetweenBlocks: 1000 }); // to trigger a new session.
-		await waitForTheNextSession(polkadotApi);
-		await waitForTheNextDkgPublicKey(polkadotApi);
-		expect(true).toBe(true);
-	});
-
 	afterAll(async () => {
-		clearInterval(sealingHandle);
 		await polkadotApi.disconnect();
 		aliceNode?.kill('SIGINT');
 		bobNode?.kill('SIGINT');

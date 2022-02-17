@@ -1,9 +1,8 @@
 import ganache from 'ganache';
 import { ethers } from 'ethers';
 import { Server } from 'ganache';
-import { Bridge } from '@webb-tools/fixed-bridge';
-import { SignatureBridge } from '@webb-tools/fixed-bridge/lib/packages/fixed-bridge/src/SignatureBridge';
-import { SignatureBridge as SignatureBridgeContract } from '@webb-tools/contracts/lib/SignatureBridge';
+import { Bridges } from '@webb-tools/protocol-solidity';
+import { BridgeInput, DeployerConfig, GovernorConfig } from '@webb-tools/interfaces';
 import { MintableToken } from '@webb-tools/tokens';
 import { fetchComponentsFromFilePaths } from '@webb-tools/utils';
 import path from 'path';
@@ -63,58 +62,18 @@ export class LocalChain {
 		return MintableToken.createToken(name, symbol, wallet);
 	}
 
-	public async deployBridge(
-		otherChain: LocalChain,
-		localToken: MintableToken,
-		otherToken: MintableToken,
-		localWallet: ethers.Signer,
-		otherWallet: ethers.Signer
-	): Promise<Bridge> {
-		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
-		localWallet.connect(this.provider());
-		otherWallet.connect(otherChain.provider());
-		const bridgeInput = {
-			anchorInputs: {
-				asset: {
-					[this.chainId]: [localToken.contract.address],
-					[otherChain.chainId]: [otherToken.contract.address],
-				},
-				anchorSizes: [ethers.utils.parseEther('1')],
-			},
-			chainIDs: [this.chainId, otherChain.chainId],
-		};
-		const deployerConfig = {
-			[this.chainId]: localWallet,
-			[otherChain.chainId]: otherWallet,
-		};
-		const zkComponents = await fetchComponentsFromFilePaths(
-			path.resolve(
-				gitRoot,
-				'dkg-test-suite',
-				'protocol-solidity-fixtures/fixtures/bridge/2/poseidon_bridge_2.wasm'
-			),
-			path.resolve(
-				gitRoot,
-				'dkg-test-suite',
-				'protocol-solidity-fixtures/fixtures/bridge/2/witness_calculator.js'
-			),
-			path.resolve(__dirname, '../protocol-solidity-fixtures/fixtures/bridge/2/circuit_final.zkey')
-		);
-
-		return Bridge.deployBridge(bridgeInput, deployerConfig, zkComponents);
-	}
-
 	public async deploySignatureBridge(
 		otherChain: LocalChain,
 		localToken: MintableToken,
 		otherToken: MintableToken,
 		localWallet: ethers.Signer,
-		otherWallet: ethers.Signer
-	): Promise<SignatureBridge> {
+		otherWallet: ethers.Signer,
+		intinalGovernors: GovernorConfig
+	): Promise<Bridges.SignatureBridge> {
 		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
 		localWallet.connect(this.provider());
 		otherWallet.connect(otherChain.provider());
-		const bridgeInput = {
+		const bridgeInput: BridgeInput = {
 			anchorInputs: {
 				asset: {
 					[this.chainId]: [localToken.contract.address],
@@ -124,7 +83,7 @@ export class LocalChain {
 			},
 			chainIDs: [this.chainId, otherChain.chainId],
 		};
-		const deployerConfig = {
+		const deployerConfig: DeployerConfig = {
 			[this.chainId]: localWallet,
 			[otherChain.chainId]: otherWallet,
 		};
@@ -146,6 +105,11 @@ export class LocalChain {
 			)
 		);
 
-		return SignatureBridge.deployBridge(bridgeInput, deployerConfig, zkComponents);
+		return Bridges.SignatureBridge.deployFixedDepositBridge(
+			bridgeInput,
+			deployerConfig,
+			intinalGovernors,
+			zkComponents
+		);
 	}
 }

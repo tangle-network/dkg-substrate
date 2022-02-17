@@ -1,9 +1,13 @@
-import { ApiPromise } from '@polkadot/api';
+import { ApiPromise, Keyring } from '@polkadot/api';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+
+export async function sleep(ms: number) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export const hexToBytes = function (hex: any) {
 	for (var bytes = [], c = 0; c < hex.length; c += 2) {
@@ -114,7 +118,7 @@ export function startStandaloneNode(
 				? ['--node-key', '0000000000000000000000000000000000000000000000000000000000000001']
 				: [
 						'--bootnodes',
-						'/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp',
+						`/ip4/127.0.0.1/tcp/${ports['alice'].p2p}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp`,
 				  ]),
 			// only print logs from the alice node
 			...(authority === 'alice'
@@ -150,13 +154,38 @@ export function startStandaloneNode(
  * Waits until a new session is started.
  */
 export async function waitForTheNextSession(api: ApiPromise): Promise<void> {
+	return waitForEvent(api, 'session', 'NewSession');
+}
+
+export async function waitForTheNextDkgPublicKey(api: ApiPromise): Promise<void> {
+	return waitForEvent(api, 'dkg', 'NextPublicKeySubmitted');
+}
+
+export async function waitForTheNextDkgPublicKeySignature(api: ApiPromise): Promise<void> {
+	return waitForEvent(api, 'dkg', 'NextPublicKeySignatureSubmitted');
+}
+
+export async function waitForPublicKeyToChange(api: ApiPromise): Promise<void> {
+	return waitForEvent(api, 'dkg', 'PublicKeyChanged');
+}
+
+export async function waitForPublicKeySignatureToChange(api: ApiPromise): Promise<void> {
+	return waitForEvent(api, 'dkg', 'PublicKeySignatureChanged');
+}
+
+export async function waitForEvent(
+	api: ApiPromise,
+	pallet: string,
+	eventVariant: string
+): Promise<void> {
 	return new Promise(async (reolve, _) => {
 		// Subscribe to system events via storage
 		const unsub = await api.query.system.events((events) => {
 			// Loop through the Vec<EventRecord>
 			events.forEach((record) => {
 				const { event } = record;
-				if (event.section === 'session' && event.method === 'NewSession') {
+				// dkg.NextPublicKeySubmitted
+				if (event.section === pallet && event.method === eventVariant) {
 					// Unsubscribe from the storage
 					unsub();
 					// Resolve the promise
@@ -167,27 +196,6 @@ export async function waitForTheNextSession(api: ApiPromise): Promise<void> {
 	});
 }
 
-/**
- * Waits until a new session is started.
- */
-export async function waitForTheNextDkgPublicKey(api: ApiPromise): Promise<void> {
-	return new Promise(async (reolve, _) => {
-		// Subscribe to system events via storage
-		const unsub = await api.query.system.events((events) => {
-			// Loop through the Vec<EventRecord>
-			events.forEach((record) => {
-				const { event } = record;
-				// dkg.NextPublicKeySubmitted
-				if (event.section === 'dkg' && event.method === 'NextPublicKeySubmitted') {
-					// Unsubscribe from the storage
-					unsub();
-					// Resolve the promise
-					reolve(void 0);
-				}
-			});
-		});
-	});
-}
 /**
  * Wait until the DKG Public Key is available and return it uncompressed.
  * @param api the current connected api.
@@ -235,6 +243,33 @@ export async function fetchDkgPublicKeySignature(api: ApiPromise): Promise<`0x${
 	} else {
 		return null;
 	}
+}
+
+export async function fetchDkgRefreshNonce(api: ApiPromise): Promise<number> {
+	const nonce = await api.query.dkg.refreshNonce();
+	return nonce.toJSON() as number;
+}
+
+export async function triggerDkgManualRefresh(api: ApiPromise): Promise<void> {
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+	const call = api.tx.dkg.manualRefresh();
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status }) => {
+		if (status.isFinalized) {
+			unsub();
+		}
+	});
+}
+
+export async function triggerDkgManualRenonce(api: ApiPromise): Promise<void> {
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+	const call = api.tx.dkg.manualRenonce();
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status }) => {
+		if (status.isFinalized) {
+			unsub();
+		}
+	});
 }
 
 const LE = true;
@@ -423,7 +458,7 @@ export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
 	const newTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newTokenAddress
+		newTokenAddress,
 	};
 }
 
@@ -441,7 +476,7 @@ export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal
 	const removeTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		removeTokenAddress
+		removeTokenAddress,
 	};
 }
 
@@ -472,10 +507,9 @@ export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUp
 	const newFee = u8aToHex(data.slice(40, 41)); // 40 -> 41
 	return {
 		header,
-		newFee
+		newFee,
 	};
 }
-
 
 export interface VAnchorConfigurableLimitProposal {
 	/**
@@ -490,7 +524,9 @@ export interface VAnchorConfigurableLimitProposal {
 	readonly min_withdrawal_limit_bytes: string;
 }
 
-export function encodeVAnchorConfigurableLimitProposal(proposal: VAnchorConfigurableLimitProposal): Uint8Array {
+export function encodeVAnchorConfigurableLimitProposal(
+	proposal: VAnchorConfigurableLimitProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const vAnchorConfigurableLimitProposal = new Uint8Array(40 + 32);
 	vAnchorConfigurableLimitProposal.set(header, 0); // 0 -> 40
@@ -499,12 +535,14 @@ export function encodeVAnchorConfigurableLimitProposal(proposal: VAnchorConfigur
 	return vAnchorConfigurableLimitProposal;
 }
 
-export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAnchorConfigurableLimitProposal {
+export function decodeVAnchorConfigurableLimitProposal(
+	data: Uint8Array
+): VAnchorConfigurableLimitProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const min_withdrawal_limit_bytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		min_withdrawal_limit_bytes
+		min_withdrawal_limit_bytes,
 	};
 }
 

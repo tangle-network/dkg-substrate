@@ -1,4 +1,5 @@
 use frame_support::RuntimeDebug;
+use scale_info::TypeInfo;
 use sp_runtime::{create_runtime_str, traits::AtLeast32Bit};
 use sp_std::hash::{Hash, Hasher};
 
@@ -13,10 +14,45 @@ pub type ResourceId = [u8; 32];
 // Proposal Nonces (4 bytes)
 pub type ProposalNonce = u32;
 
-#[derive(Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
+#[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
 pub struct RefreshProposal {
 	pub nonce: ProposalNonce,
 	pub pub_key: Vec<u8>,
+}
+
+impl Decode for RefreshProposal {
+	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		let mut data = [0u8; NONCE_LEN + 64];
+		input.read(&mut data).map_err(|_| {
+			codec::Error::from("input bytes are less than the expected size (68 bytes)")
+		})?;
+		// _NOTE_: rustc won't generate bounds check for the following slice
+		// since we know the length of the slice is at least 68 bytes already.
+		let mut nonce_bytes = [0u8; NONCE_LEN];
+		let mut pub_key_bytes = [0u8; 64];
+		nonce_bytes.copy_from_slice(&data[0..NONCE_LEN]);
+		pub_key_bytes.copy_from_slice(&data[NONCE_LEN..]);
+		let nonce = ProposalNonce::from_be_bytes(nonce_bytes);
+		let pub_key = pub_key_bytes.to_vec();
+		Ok(Self { nonce, pub_key })
+	}
+}
+
+impl Encode for RefreshProposal {
+	fn encode(&self) -> Vec<u8> {
+		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		let mut ret = [0u8; NONCE_LEN + 64];
+		let nonce = self.nonce.to_be_bytes();
+		ret[0..NONCE_LEN].copy_from_slice(&nonce);
+		ret[NONCE_LEN..(NONCE_LEN + 64)].copy_from_slice(&self.pub_key);
+		ret.into()
+	}
+
+	fn encoded_size(&self) -> usize {
+		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		NONCE_LEN + 64
+	}
 }
 
 #[derive(

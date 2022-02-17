@@ -78,4 +78,5 @@ substrate-build-script-utils = { git = "https://github.com/paritytech/substrate"
 [features]
 default = []
 runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks"]
+integration-tests = ["dkg-standalone-runtime/integration-tests"]
 manual-seal = ["dkg-standalone-runtime/manual-seal"]
