@@ -8,7 +8,7 @@ import {
 	sleep,
 	startStandaloneNode,
 	triggerDkgManualRefresh,
-	triggerDkgManualRenonce,
+	triggerDkgManuaIncrementNonce,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
 	waitUntilDKGPublicKeyStoredOnChain,
@@ -124,7 +124,7 @@ describe('Update SignatureBridge Governor', () => {
 
 	test('should be able to transfer ownership to new Governor with Signature', async () => {
 		// we trigger a manual renonce since we already transfered the ownership before.
-		await triggerDkgManualRenonce(polkadotApi);
+		await triggerDkgManuaIncrementNonce(polkadotApi);
 		// for some reason, we have to wait for a bit ¯\_(ツ)_/¯.
 		await sleep(2 * BLOCK_TIME);
 		// we trigger a manual DKG Refresh.

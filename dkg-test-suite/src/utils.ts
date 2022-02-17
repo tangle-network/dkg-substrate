@@ -263,10 +263,10 @@ export async function triggerDkgManualRefresh(api: ApiPromise): Promise<void> {
 	});
 }
 
-export async function triggerDkgManualRenonce(api: ApiPromise): Promise<void> {
+export async function triggerDkgManuaIncrementNonce(api: ApiPromise): Promise<void> {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
-	const call = api.tx.dkg.manualRenonce();
+	const call = api.tx.dkg.manualIncrementNonce();
 	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status }) => {
 		if (status.isFinalized) {
 			unsub();

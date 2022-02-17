@@ -345,13 +345,13 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Manually Renonce the `RefreshNonce` (increment it by one).
+		/// Manually Update the `RefreshNonce` (increment it by one).
 		///
 		/// * `origin` - The account that is calling this must be root.
 		/// **Important**: This function is only available for testing purposes.
 		#[pallet::weight(0)]
 		#[transactional]
-		pub fn manual_renonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			if Self::refresh_in_progress() {
 				return Err(Error::<T>::RefreshInProgress.into())
