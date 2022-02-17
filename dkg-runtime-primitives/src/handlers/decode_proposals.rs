@@ -5,6 +5,8 @@ use crate::{
 };
 use codec::{alloc::string::ToString, Decode};
 
+use super::substrate;
+
 pub fn decode_proposal_header<C: ChainIdTrait>(
 	data: &[u8],
 ) -> Result<ProposalHeader<C>, ValidationError> {
@@ -36,30 +38,44 @@ pub fn decode_proposal<C: ChainIdTrait>(
 		decode_proposal_header(proposal.data()).map(Into::into)?;
 
 	match proposal.kind() {
+		ProposalKind::AnchorCreate => match chain_id {
+			ChainIdType::EVM(_) => panic!("should not exist"),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) => substrate::anchor_create::create(&proposal.data())
+				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorCreateProposal(p.header.nonce))),
+			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
+			ChainIdType::Solana(_) => panic!("Unimplemented"),
+		},
 		ProposalKind::AnchorUpdate => match chain_id {
 			ChainIdType::EVM(_) => evm::anchor_update::create(&proposal.data())
 				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorUpdateProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) => substrate::anchor_update::create(&proposal.data())
+				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorUpdateProposal(p.header.nonce))),
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},
 		ProposalKind::TokenAdd => match chain_id {
 			ChainIdType::EVM(_) => evm::add_token_to_set::create(&proposal.data())
 				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenAddProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) => substrate::add_token_to_pool_share::create(&proposal.data())
+				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenAddProposal(p.header.nonce))),
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},
 		ProposalKind::TokenRemove => match chain_id {
 			ChainIdType::EVM(_) => evm::remove_token_from_set::create(&proposal.data())
 				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenRemoveProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) =>
+				substrate::remove_token_from_pool_share::create(&proposal.data()).map(|p| {
+					(p.header.chain_id, DKGPayloadKey::TokenRemoveProposal(p.header.nonce))
+				}),
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},
@@ -67,9 +83,11 @@ pub fn decode_proposal<C: ChainIdTrait>(
 			ChainIdType::EVM(_) => evm::fee_update::create(&proposal.data()).map(|p| {
 				(p.header.chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce))
 			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) => substrate::fee_update::create(&proposal.data()).map(|p| {
+				(p.header.chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce))
+			}),
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},

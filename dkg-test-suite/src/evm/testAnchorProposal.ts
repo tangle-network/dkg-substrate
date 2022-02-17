@@ -5,21 +5,21 @@ import {
 	AnchorUpdateProposal,
 	ChainIdType,
 	encodeUpdateAnchorProposal,
-	hexToBytes,
 	makeResourceId,
+	registerResourceId,
+	resourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
+} from './util/utils';
+import {
 	provider,
+	hexToBytes,
 	waitNfinalizedBlocks,
-} from './utils';
+} from '../utils';
 import { ethers } from 'ethers';
 import { keccak256 } from '@ethersproject/keccak256';
 import { ECPair } from 'ecpair';
 import { assert, u8aToHex } from '@polkadot/util';
-import {
-	registerResourceId,
-	resourceId,
-	signAndSendUtil,
-	unsubSignedPropsUtil
-} from "./util/resource";
 import {anchorUpdateProposal} from "./util/proposals";
 
 async function testAnchorProposal() {
