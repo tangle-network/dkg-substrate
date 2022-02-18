@@ -37,7 +37,7 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-nextest
-        version: 0.9
+        version: latest
 
     - name: Install toolchain
       uses: actions-rs/toolchain@v1
@@ -53,8 +53,6 @@ jobs:
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-            ${{ runner.os }}-cargo-
 
     # Runs actual checks, fmt, and tests  
     - name: ${{ matrix.make.name }}
