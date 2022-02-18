@@ -1,25 +1,22 @@
 import { jest } from '@jest/globals';
-import { ApiPromise, WsProvider } from '@polkadot/api';
-import { Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken } from '@webb-tools/tokens';
+import 'jest-extended';
+import {
+    AnchorUpdateProposal,
+    ChainIdType,
+	ethAddressFromUncompressedPublicKey,
+	makeResourceId,
+	startStandaloneNode,
+	waitUntilDKGPublicKeyStoredOnChain,
+} from '../src/utils';
+import { LocalChain } from '../src/localEvm';
 import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
-import 'jest-extended';
+import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
+import { MintableToken } from '@webb-tools/tokens';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 import { ACC1_PK, ACC2_PK, BLOCK_TIME } from '../src/constants';
-import { LocalChain } from '../src/localEvm';
-import {
-	ethAddressFromUncompressedPublicKey,
-	fetchDkgPublicKey,
-	fetchDkgPublicKeySignature,
-	fetchDkgRefreshNonce,
-	sleep,
-	startStandaloneNode, triggerDkgManuaIncrementNonce, triggerDkgManualRefresh, waitForPublicKeySignatureToChange,
-	waitForPublicKeyToChange,
-	waitUntilDKGPublicKeyStoredOnChain
-} from '../src/utils';
 
-describe('Update SignatureBridge Governor', () => {
-
+describe('Anchor Update Proposal', () => {
 	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
 
 	let polkadotApi: ApiPromise;
@@ -116,43 +113,39 @@ describe('Update SignatureBridge Governor', () => {
 		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
 	});
 
-	test('should be able to transfer ownership to new Governor with Signature', async () => {
-		// we trigger a manual renonce since we already transfered the ownership before.
-		await triggerDkgManuaIncrementNonce(polkadotApi);
-		// for some reason, we have to wait for a bit ¯\_(ツ)_/¯.
-		await sleep(2 * BLOCK_TIME);
-		// we trigger a manual DKG Refresh.
-		await triggerDkgManualRefresh(polkadotApi);
-		// then we wait until the dkg public key and its signature to get changed.
-		await Promise.all([
-			waitForPublicKeyToChange(polkadotApi),
-			waitForPublicKeySignatureToChange(polkadotApi),
-		]);
-		// then we fetch them.
-		const dkgPublicKey = await fetchDkgPublicKey(polkadotApi);
-		const dkgPublicKeySignature = await fetchDkgPublicKeySignature(polkadotApi);
-		const refreshNonce = await fetchDkgRefreshNonce(polkadotApi);
-		expect(dkgPublicKey).toBeString();
-		expect(dkgPublicKeySignature).toBeString();
-		expect(refreshNonce).toBeGreaterThan(0);
-		// now we can transfer ownership.
-		const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
-		const contract = signatureSide.contract;
-		contract.connect(localChain.provider());
-		const governor = await contract.governor();
-		let nextGovernorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey!);
-		// sanity check
-		expect(nextGovernorAddress).not.toEqualCaseInsensitive(governor);
-		const tx = await contract.transferOwnershipWithSignaturePubKey(
-			dkgPublicKey!,
-			refreshNonce,
-			dkgPublicKeySignature!
-		);
-		await expect(tx.wait()).toResolve();
-		// check that the new governor is the same as the one we just set.
-		const newGovernor = await contract.governor();
-		expect(newGovernor).not.toEqualCaseInsensitive(governor);
-		expect(newGovernor).toEqualCaseInsensitive(nextGovernorAddress);
+	test('should be able to sign Update Anchor Proposal', async () => {
+		// get the anhor on localchain1
+		const anchor = signatureBridge.getAnchor(
+			localChain.chainId,
+			ethers.utils.parseEther('1')
+		)! as Anchors.Anchor;
+		await anchor.setSigner(wallet1);
+		// check the merkle root
+		const merkleRoot1 = await anchor.contract.getLastRoot();
+		// get the anchor on localchain2
+		const anchor2 = signatureBridge.getAnchor(
+			localChain2.chainId,
+			ethers.utils.parseEther('1')
+		)! as Anchors.Anchor;
+		await anchor2.setSigner(wallet2);
+		// check the merkle root
+		const merkleRoot2 = await anchor2.contract.getLastRoot();
+
+		// create a deposit on localchain1
+		const deposit = await anchor.deposit(localChain2.chainId);
+		// now check the new merkel root.
+		const newMerkleRoot1 = await anchor.contract.getLastRoot();
+		expect(newMerkleRoot1).not.toEqual(merkleRoot1);
+		// create anchor update proposal to be sent to the dkg.
+		const anchorHandlerAddress = await anchor2.getHandler();
+		const resourceId = makeResourceId(anchorHandlerAddress, ChainIdType.EVM, localChain.chainId);
+		const proposalPayload: AnchorUpdateProposal = {
+			header: {
+				resourceId,
+				functionSignature: ''
+				nonce: 0,
+			}
+		}
 	});
 
 	afterAll(async () => {

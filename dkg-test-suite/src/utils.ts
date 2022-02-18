@@ -96,10 +96,25 @@ export const printValidators = async function (api: ApiPromise) {
 	}
 };
 
+// a global variable to check if the node is already running or not.
+// to avoid running multiple nodes with the same authority at the same time.
+const __NODE_STATE: {
+	[authorityId: string]: {
+		process: child.ChildProcess | null;
+		isRunning: boolean;
+	};
+} = {
+	alice: { isRunning: false, process: null },
+	bob: { isRunning: false, process: null },
+	charlie: { isRunning: false, process: null },
+};
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie',
 	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
 ): child.ChildProcess {
+	if (__NODE_STATE[authority].isRunning) {
+		return __NODE_STATE[authority].process!;
+	}
 	const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
 	const nodePath = `${gitRoot}/target/release/dkg-standalone-node`;
 	const ports = {
@@ -140,6 +155,9 @@ export function startStandaloneNode(
 		}
 	);
 
+	__NODE_STATE[authority].isRunning = true;
+	__NODE_STATE[authority].process = proc;
+
 	proc.stdout.on('data', (data) => {
 		process.stdout.write(data);
 	});
@@ -148,6 +166,11 @@ export function startStandaloneNode(
 		process.stdout.write(data);
 	});
 
+	proc.on('close', (code) => {
+		__NODE_STATE[authority].isRunning = false;
+		__NODE_STATE[authority].process = null;
+		console.log(`${authority} node exited with code ${code}`);
+	});
 	return proc;
 }
 
@@ -376,6 +399,7 @@ function castToChainIdType(v: number): ChainIdType {
 
 /**
  * Anchor Update Proposal is the next 40 bytes (after the header) and it contains the following information:
+ * - src chain type (2 bytes) just before the src chain id.
  * - src chain id (4 bytes) encoded as the 4 bytes.
  * - last leaf index (4 bytes).
  * - merkle root (32 bytes).
