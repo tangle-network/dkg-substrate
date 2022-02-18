@@ -95,9 +95,12 @@ pub fn decode_proposal<C: ChainIdTrait>(
 			ChainIdType::EVM(_) => evm::resource_id_update::create(&proposal.data()).map(|p| {
 				(p.header.chain_id, DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce))
 			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
+			ChainIdType::Substrate(_) |
+			ChainIdType::RelayChain(_, _) |
+			ChainIdType::Parachain(_, _) =>
+				substrate::resource_id_update::create(&proposal.data()).map(|p| {
+					(p.header.chain_id, DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce))
+				}),
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},

@@ -289,6 +289,55 @@ export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAncho
 	};
 }
 
+export interface ResourceIdUpdateProposal {
+	/**
+	 * The ResourceId Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 32 bytes new resource Id
+	 */
+	readonly newResourceId: string;
+
+	/**
+	 * 20 bytes associated handler address
+	 */
+	readonly handlerAddress: string;
+
+	/**
+	 * 20 bytes execution context address
+	 */
+	readonly executionContextAddress: string;
+}
+
+export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const newResourceId = hexToU8a(proposal.newResourceId).slice(0, 32);
+	const handlerAddress = hexToU8a(proposal.handlerAddress).slice(32, 52);
+	const executionContextAddress = hexToU8a(proposal.executionContextAddress).slice(52, 72);
+	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + 20 + 20);
+	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
+	resourceIdUpdateProposal.set(newResourceId, 40); // 40 -> 72
+	resourceIdUpdateProposal.set(handlerAddress, 72); // 72 -> 92
+	resourceIdUpdateProposal.set(executionContextAddress, 92); 
+	return resourceIdUpdateProposal;
+}
+
+export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newResourceId = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	const handlerAddress = u8aToHex(data.slice(72, 92)); // 72 -> 92
+	const executionContextAddress = u8aToHex(data.slice(92, 112)); // 92 -> 112
+	return {
+		header,
+		newResourceId,
+		handlerAddress,
+		executionContextAddress,
+	};
+}
+
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
  * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
@@ -349,6 +398,12 @@ export const resourceId = makeResourceId(
 	5002
 );
 
+export const newResourceId = makeResourceId(
+	'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b660',
+	ChainIdType.EVM,
+	5002
+);
+
 export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
 	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
 		console.log(`Current status is: ${status.type}`);
@@ -375,7 +430,7 @@ export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dk
 				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
 
 				if (parsedResult) {
-					const sig = parsedResult.anchorUpdateSigned.signature;
+					const sig = parsedResult.signed.signature;
 					console.log(`Signature: ${sig}`);
 
 					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
