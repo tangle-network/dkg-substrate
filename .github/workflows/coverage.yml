@@ -31,6 +31,9 @@ jobs:
           apt-get install -y clang libssl-dev llvm libudev-dev libgmp3-dev && \
           rm -rf /var/lib/apt/lists/*
 
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+        
       - name: Generate code coverage
         run: |
           SKIP_WASM_BUILD=1 cargo +nightly tarpaulin --out Xml \
