@@ -419,6 +419,9 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain_type: ChainIdType<Cha
 			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::SetTreasuryHandler => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::FeeRecipientUpdate => Proposal::Unsigned { kind, data: buf },
 			_ => panic!("Invalid proposal type"),
 		}
 	}
@@ -578,6 +581,54 @@ fn force_submit_should_work_with_valid_proposals() {
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
 				DKGPayloadKey::MaxFeeLimitUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<20>(
+				Proposal::Unsigned { kind: ProposalKind::SetTreasuryHandler, data: vec![] },
+				ChainIdType::EVM(1)
+			)
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::SetTreasuryHandlerProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<20>(
+				Proposal::Unsigned { kind: ProposalKind::SetVerifier, data: vec![] },
+				ChainIdType::EVM(1)
+			)
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::SetVerifierProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<20>(
+				Proposal::Unsigned { kind: ProposalKind::FeeRecipientUpdate, data: vec![] },
+				ChainIdType::EVM(1)
+			)
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(1),
+				DKGPayloadKey::FeeRecipientUpdateProposal(1)
 			)
 			.is_some(),
 			true

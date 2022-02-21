@@ -289,6 +289,99 @@ export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAncho
 	};
 }
 
+export interface SetTreasuryHandlerProposal {
+	/**
+	 * The Token Add Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly newTreasuryHandler: string;
+}
+
+export function encodeSetTreasuryHandlerProposal(proposal: SetTreasuryHandlerProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const setTreasuryHandlerProposal = new Uint8Array(40 + 20);
+	setTreasuryHandlerProposal.set(header, 0); // 0 -> 40
+	const address = hexToU8a(proposal.newTreasuryHandler).slice(0, 20);
+	setTreasuryHandlerProposal.set(address, 40); // 40 -> 60
+	return setTreasuryHandlerProposal;
+}
+
+export function decodeSetTreasuryHandlerProposal(data: Uint8Array): SetTreasuryHandlerProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newTreasuryHandler = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	return {
+		header,
+		newTreasuryHandler
+	};
+}
+
+export interface SetVerifierProposal {
+	/**
+	 * The Token Add Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly newVerifier: string;
+}
+
+export function encodeSetVerifierProposal(proposal: SetVerifierProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const setVerifierProposal = new Uint8Array(40 + 20);
+	setVerifierProposal.set(header, 0); // 0 -> 40
+	const address = hexToU8a(proposal.newVerifier).slice(0, 20);
+	setVerifierProposal.set(address, 40); // 40 -> 60
+	return setVerifierProposal;
+}
+
+export function decodeSetVerifierProposal(data: Uint8Array): SetVerifierProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newVerifier = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	return {
+		header,
+		newVerifier
+	};
+}
+
+export interface FeeRecipientUpdateProposal {
+	/**
+	 * The Token Add Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly newFeeRecipient: string;
+}
+
+export function encodeFeeRecipientUpdateProposal(proposal: FeeRecipientUpdateProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const feeRecipientUpdateProposal = new Uint8Array(40 + 20);
+	feeRecipientUpdateProposal.set(header, 0); // 0 -> 40
+	const address = hexToU8a(proposal.newFeeRecipient).slice(0, 20);
+	feeRecipientUpdateProposal.set(address, 40); // 40 -> 60
+	return feeRecipientUpdateProposal;
+}
+
+export function decodeFeeRecipientUpdateProposal(data: Uint8Array): FeeRecipientUpdateProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newFeeRecipient = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	return {
+		header,
+		newFeeRecipient
+	};
+}
+
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
  * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
@@ -375,7 +468,7 @@ export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dk
 				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
 
 				if (parsedResult) {
-					const sig = parsedResult.anchorUpdateSigned.signature;
+					const sig = parsedResult.signed.signature;
 					console.log(`Signature: ${sig}`);
 
 					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
