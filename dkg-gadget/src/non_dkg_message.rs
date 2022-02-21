@@ -1,24 +1,31 @@
 // Handles non-dkg messages
 
-use sc_client_api::Backend;
-use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block, Header};
-use dkg_primitives::crypto::Public;
-use crate::worker::DKGWorker;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
-use dkg_runtime_primitives::AggregatedPublicKeys;
-use dkg_runtime_primitives::crypto::AuthorityId;
-use dkg_runtime_primitives::DKGApi;
-use crate::Client;
+use crate::{worker::DKGWorker, Client};
+use dkg_primitives::{
+	crypto::Public,
+	types::{DKGError, DKGMessage, DKGMsgPayload},
+};
+use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
 use log::debug;
+use sc_client_api::Backend;
+use sp_runtime::{
+	generic::BlockId,
+	traits::{Block, Header},
+};
 
-pub(crate) fn handle_public_key_broadcast<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>, dkg_msg: DKGMessage<Public>) -> Result<(), DKGError>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
-	if !dkg_worker.dkg_state.listening_for_pub_key && !dkg_worker.dkg_state.listening_for_active_pub_key {
+pub(crate) fn handle_public_key_broadcast<B, C, BE>(
+	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_msg: DKGMessage<Public>,
+) -> Result<(), DKGError>
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if !dkg_worker.dkg_state.listening_for_pub_key &&
+		!dkg_worker.dkg_state.listening_for_active_pub_key
+	{
 		return Err(DKGError::GenericError {
 			reason: "Not listening for public key broadcast".to_string(),
 		})
@@ -54,14 +61,17 @@ pub(crate) fn handle_public_key_broadcast<B, C, BE>(mut dkg_worker: &mut DKGWork
 
 			let key_and_sig = (msg.pub_key, msg.signature);
 			let round_id = msg.round_id;
-			let mut aggregated_public_keys = match dkg_worker.aggregated_public_keys.get(&round_id) {
+			let mut aggregated_public_keys = match dkg_worker.aggregated_public_keys.get(&round_id)
+			{
 				Some(keys) => keys.clone(),
 				None => AggregatedPublicKeys::default(),
 			};
 
 			if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 				aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-				dkg_worker.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
+				dkg_worker
+					.aggregated_public_keys
+					.insert(round_id, aggregated_public_keys.clone());
 			}
 			// Fetch the current threshold for the DKG. We will use the
 			// current threshold to determine if we have enough signatures

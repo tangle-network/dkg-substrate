@@ -48,8 +48,8 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
+	non_dkg_message::handle_public_key_broadcast,
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
-	non_dkg_message::handle_public_key_broadcast
 };
 use dkg_primitives::{
 	types::{
@@ -85,7 +85,6 @@ use dkg_primitives::{
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -825,7 +824,7 @@ where
 			}
 		}
 
-		match handle_public_key_broadcast(self,dkg_msg.clone()) {
+		match handle_public_key_broadcast(self, dkg_msg.clone()) {
 			Ok(()) => (),
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
