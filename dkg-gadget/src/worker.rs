@@ -1405,6 +1405,12 @@ where
 				make_signed_proposal(ProposalKind::MaxExtLimitUpdate),
 			DKGPayloadKey::MaxFeeLimitUpdateProposal(_) =>
 				make_signed_proposal(ProposalKind::MaxFeeLimitUpdate),
+			DKGPayloadKey::SetVerifierProposal(_) =>
+				make_signed_proposal(ProposalKind::SetVerifier),
+			DKGPayloadKey::SetTreasuryHandlerProposal(_) =>
+				make_signed_proposal(ProposalKind::SetTreasuryHandler),
+			DKGPayloadKey::FeeRecipientUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::FeeRecipientUpdate),
 		};
 
 		Some(signed_proposal)
