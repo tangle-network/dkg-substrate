@@ -42,6 +42,7 @@ mod persistence;
 mod types;
 mod utils;
 mod worker;
+mod non_dkg_message;
 
 pub use keystore::DKGKeystore;
 

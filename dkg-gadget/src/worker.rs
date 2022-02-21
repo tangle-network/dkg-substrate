@@ -49,6 +49,7 @@ use sp_runtime::{
 use crate::{
 	keystore::DKGKeystore,
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	non_dkg_message::handle_public_key_broadcast
 };
 use dkg_primitives::{
 	types::{
@@ -85,6 +86,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
+
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
 pub const STORAGE_SET_RETRY_NUM: usize = 5;
@@ -114,7 +116,7 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 {
-	client: Arc<C>,
+	pub client: Arc<C>,
 	backend: Arc<BE>,
 	key_store: DKGKeystore,
 	gossip_engine: Arc<Mutex<GossipEngine<B>>>,
@@ -122,7 +124,7 @@ where
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
 	metrics: Option<Metrics>,
-	rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
+	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
@@ -131,7 +133,7 @@ where
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
-	latest_header: Option<B::Header>,
+	pub latest_header: Option<B::Header>,
 	/// Current validator set
 	current_validator_set: AuthoritySet<Public>,
 	/// Queued validator set
@@ -143,7 +145,7 @@ where
 	/// public key refresh in progress
 	refresh_in_progress: bool,
 	/// Tracking for the broadcasted public keys and signatures
-	aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
 	aggregated_misbehaviour_reports: HashMap<(RoundId, AuthorityId), AggregatedMisbehaviourReports>,
 	/// dkg state
@@ -823,7 +825,7 @@ where
 			}
 		}
 
-		match self.handle_public_key_broadcast(dkg_msg.clone()) {
+		match handle_public_key_broadcast(self,dkg_msg.clone()) {
 			Ok(()) => (),
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
@@ -1066,7 +1068,7 @@ where
 		}
 	}
 
-	fn authenticate_msg_origin(
+	pub fn authenticate_msg_origin(
 		&self,
 		is_main_round: bool,
 		authority_accounts: (Vec<AccountId32>, Vec<AccountId32>),
@@ -1102,7 +1104,7 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
-	fn store_aggregated_public_keys(
+	pub fn store_aggregated_public_keys(
 		&mut self,
 		is_gensis_round: bool,
 		round_id: RoundId,
@@ -1154,71 +1156,6 @@ where
 			);
 
 			let _ = self.aggregated_public_keys.remove(&round_id);
-		}
-
-		Ok(())
-	}
-
-	fn handle_public_key_broadcast(&mut self, dkg_msg: DKGMessage<Public>) -> Result<(), DKGError> {
-		if !self.dkg_state.listening_for_pub_key && !self.dkg_state.listening_for_active_pub_key {
-			return Err(DKGError::GenericError {
-				reason: "Not listening for public key broadcast".to_string(),
-			})
-		}
-
-		// Get authority accounts
-		let header = self.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-		let current_block_number = header.number().clone();
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		let authority_accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
-		if authority_accounts.is_none() {
-			return Err(DKGError::NoAuthorityAccounts)
-		}
-
-		match dkg_msg.payload {
-			DKGMsgPayload::PublicKeyBroadcast(msg) => {
-				debug!(target: "dkg", "Received public key broadcast");
-
-				let is_main_round = {
-					if self.rounds.is_some() {
-						msg.round_id == self.rounds.as_ref().unwrap().get_id()
-					} else {
-						false
-					}
-				};
-
-				self.authenticate_msg_origin(
-					is_main_round,
-					authority_accounts.unwrap(),
-					&msg.pub_key,
-					&msg.signature,
-				)?;
-
-				let key_and_sig = (msg.pub_key, msg.signature);
-				let round_id = msg.round_id;
-				let mut aggregated_public_keys = match self.aggregated_public_keys.get(&round_id) {
-					Some(keys) => keys.clone(),
-					None => AggregatedPublicKeys::default(),
-				};
-
-				if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
-					aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-					self.aggregated_public_keys.insert(round_id, aggregated_public_keys.clone());
-				}
-				// Fetch the current threshold for the DKG. We will use the
-				// current threshold to determine if we have enough signatures
-				// to submit the next DKG public key.
-				let threshold = self.get_threshold(header).unwrap() as usize;
-				if aggregated_public_keys.keys_and_signatures.len() >= threshold {
-					self.store_aggregated_public_keys(
-						is_main_round,
-						round_id,
-						&aggregated_public_keys,
-						current_block_number,
-					)?;
-				}
-			},
-			_ => {},
 		}
 
 		Ok(())
