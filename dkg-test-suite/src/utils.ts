@@ -1,4 +1,5 @@
 import { ApiPromise, Keyring } from '@polkadot/api';
+import { Bytes, Option } from '@polkadot/types';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
@@ -208,7 +209,6 @@ export async function waitForEvent(
 			// Loop through the Vec<EventRecord>
 			events.forEach((record) => {
 				const { event } = record;
-				// dkg.NextPublicKeySubmitted
 				if (event.section === pallet && event.method === eventVariant) {
 					// Unsubscribe from the storage
 					unsub();
@@ -301,6 +301,38 @@ export function ethAddressFromUncompressedPublicKey(publicKey: `0x${string}`): `
 	const pubKeyHash = ethers.utils.keccak256(publicKey); // we hash it.
 	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
 	return address as `0x${string}`;
+}
+
+export async function registerResourceId(api: ApiPromise, resourceId: string): Promise<void> {
+	// quick check if the resourceId is already registered
+	const res = await api.query.dKGProposals.resources(resourceId);
+	const val = new Option(api.registry, Bytes, res);
+	if (val.isSome) {
+		return;
+	}
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+
+	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
+	return new Promise(async (resolve, reject) => {
+		const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status, events }) => {
+			if (status.isFinalized) {
+				unsub();
+				const success = events.find(({ event }) => api.events.system.ExtrinsicSuccess.is(event));
+				if (success) {
+					resolve();
+				} else {
+					reject(new Error('Failed to register resourceId'));
+				}
+			}
+		});
+	});
+}
+/**
+ * Encode function Signature in the Solidity format.
+ */
+export function encodeFunctionSignature(func: string): `0x${string}` {
+	return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(func)).slice(0, 10) as `0x${string}`;
 }
 
 const LE = true;
@@ -398,7 +430,7 @@ function castToChainIdType(v: number): ChainIdType {
 }
 
 /**
- * Anchor Update Proposal is the next 40 bytes (after the header) and it contains the following information:
+ * Anchor Update Proposal is the next 42 bytes (after the header) and it contains the following information:
  * - src chain type (2 bytes) just before the src chain id.
  * - src chain id (4 bytes) encoded as the 4 bytes.
  * - last leaf index (4 bytes).
@@ -411,6 +443,11 @@ export interface AnchorUpdateProposal {
 	 * See `encodeProposalHeader` for more details.
 	 */
 	readonly header: ProposalHeader;
+	/**
+	 * 2 bytes (u16) encoded as the last 2 bytes.
+	 *
+	 **/
+	readonly chainIdType: ChainIdType;
 	/**
 	 * 4 bytes number (u32) of the `srcChainId`.
 	 */
@@ -427,23 +464,27 @@ export interface AnchorUpdateProposal {
 
 export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const updateProposal = new Uint8Array(40 + 40);
+	const updateProposal = new Uint8Array(40 + 42);
 	updateProposal.set(header, 0); // 0 -> 40
 	const view = new DataView(updateProposal.buffer);
-	view.setUint32(40, proposal.srcChainId, false); // 40 -> 44
-	view.setUint32(44, proposal.lastLeafIndex, false); // 44 -> 48
+	view.setUint16(40, proposal.chainIdType, false); // 40 -> 42
+	view.setUint32(42, proposal.srcChainId, false); // 42 -> 46
+	view.setUint32(46, proposal.lastLeafIndex, false); // 46 -> 50
 	const merkleRoot = hexToU8a(proposal.merkleRoot).slice(0, 32);
-	updateProposal.set(merkleRoot, 48); // 48 -> 80
+	updateProposal.set(merkleRoot, 50); // 50 -> 82
 	return updateProposal;
 }
 
 export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
-	const srcChainId = new DataView(data.buffer).getUint32(40, false); // 40 -> 44
-	const lastLeafIndex = new DataView(data.buffer).getUint32(44, false); // 44 -> 48
-	const merkleRoot = u8aToHex(data.slice(48, 80)); // 48 -> 80
+	const chainIdTypeInt = new DataView(data.buffer).getUint16(40, false); // 40 -> 42
+	const chainIdType = castToChainIdType(chainIdTypeInt);
+	const srcChainId = new DataView(data.buffer).getUint32(42, false); // 42 -> 46
+	const lastLeafIndex = new DataView(data.buffer).getUint32(46, false); // 46 -> 50
+	const merkleRoot = u8aToHex(data.slice(50, 80)); // 50 -> 82
 	return {
 		header,
+		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
@@ -612,6 +653,7 @@ function _testEncodeDecode() {
 	const merkleRoot = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 	const updateProposal: AnchorUpdateProposal = {
 		header,
+		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,

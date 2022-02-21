@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-
 set -e
+
+pushd .
+
+# The following line ensure we run from the project root
+PROJECT_ROOT=`git rev-parse --show-toplevel`
+cd $PROJECT_ROOT
 
 echo "*** Start Webb DKG Node ***"
 ./target/release/dkg-standalone-node --tmp -lerror --alice --rpc-cors all --ws-external --ws-port 9944 &
@@ -13,3 +18,4 @@ echo "*** Start Webb DKG Node ***"
     -lruntime::offchain=debug \
     -ldkg_proposal_handler=debug \
     --charlie
+popd
