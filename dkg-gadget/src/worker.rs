@@ -48,7 +48,7 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	non_dkg_message::handle_public_key_broadcast,
+	non_dkg_message::{gossip_public_key, handle_public_key_broadcast},
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 use dkg_primitives::{
@@ -117,8 +117,8 @@ where
 {
 	pub client: Arc<C>,
 	backend: Arc<BE>,
-	key_store: DKGKeystore,
-	gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub key_store: DKGKeystore,
+	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	gossip_validator: Arc<GossipValidator<B>>,
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
@@ -715,7 +715,7 @@ where
 		}
 
 		for (round_id, pub_key) in &keys_to_gossip {
-			self.gossip_public_key(pub_key.clone(), *round_id);
+			gossip_public_key(self, pub_key.clone(), *round_id);
 		}
 
 		for res in &rounds_send_result {
@@ -932,66 +932,6 @@ where
 					offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);
 				}
 			}
-		}
-	}
-
-	fn gossip_public_key(&mut self, public_key: Vec<u8>, round_id: RoundId) {
-		let sr25519_public = self
-			.key_store
-			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
-
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find an ecdsa key in keystore"));
-
-		if let Ok(signature) = self.key_store.sr25519_sign(&sr25519_public, &public_key) {
-			let encoded_signature = signature.encode();
-			let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
-				round_id,
-				pub_key: public_key.clone(),
-				signature: encoded_signature.clone(),
-			});
-
-			let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
-			let encoded_dkg_message = message.encode();
-
-			match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
-				Ok(sig) => {
-					let signed_dkg_message =
-						SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
-					let encoded_signed_dkg_message = signed_dkg_message.encode();
-
-					self.gossip_engine.lock().gossip_message(
-						dkg_topic::<B>(),
-						encoded_signed_dkg_message.clone(),
-						true,
-					);
-				},
-				Err(e) => trace!(
-					target: "dkg",
-					"🕸️  Error signing DKG message: {:?}",
-					e
-				),
-			}
-
-			let mut aggregated_public_keys = if self.aggregated_public_keys.get(&round_id).is_some()
-			{
-				self.aggregated_public_keys.get(&round_id).unwrap().clone()
-			} else {
-				AggregatedPublicKeys::default()
-			};
-
-			aggregated_public_keys
-				.keys_and_signatures
-				.push((public_key.clone(), encoded_signature));
-
-			self.aggregated_public_keys.insert(round_id, aggregated_public_keys);
-
-			debug!(target: "dkg", "Gossiping local node  {:?} public key and signature", public)
-		} else {
-			error!(target: "dkg", "Could not sign public key");
 		}
 	}
 
