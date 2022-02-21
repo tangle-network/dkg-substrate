@@ -48,9 +48,11 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	non_dkg_message::{gossip_public_key, handle_public_key_broadcast},
 	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
+
+use crate::messages::public_key_gossip::{gossip_public_key, handle_public_key_broadcast};
+
 use dkg_primitives::{
 	types::{
 		DKGError, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId,
