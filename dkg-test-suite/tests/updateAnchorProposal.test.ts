@@ -8,6 +8,7 @@ import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	registerResourceId,
+	sleep,
 	startStandaloneNode,
 	waitForEvent,
 	waitUntilDKGPublicKeyStoredOnChain,
@@ -18,7 +19,7 @@ import { ethers } from 'ethers';
 import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
 import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME } from '../src/constants';
+import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
 import { u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
@@ -251,5 +252,6 @@ describe('Anchor Update Proposal', () => {
 		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
 		await localChain2?.stop();
+		await sleep(5 * SECONDS);
 	});
 });

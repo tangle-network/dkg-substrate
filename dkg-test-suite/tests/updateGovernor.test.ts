@@ -5,7 +5,7 @@ import { MintableToken } from '@webb-tools/tokens';
 import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
 import 'jest-extended';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME } from '../src/constants';
+import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
 import { LocalChain } from '../src/localEvm';
 import {
 	ethAddressFromUncompressedPublicKey,
@@ -164,5 +164,6 @@ describe('Update SignatureBridge Governor', () => {
 		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
 		await localChain2?.stop();
+		await sleep(5 * SECONDS);
 	});
 });
