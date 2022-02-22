@@ -138,7 +138,7 @@ export function startStandaloneNode(
 						`/ip4/127.0.0.1/tcp/${ports['alice'].p2p}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp`,
 				  ]),
 			// only print logs from the alice node
-			...(authority === 'alice'
+			...(authority === 'alice' && options.printLogs
 				? [
 						'-ldkg=debug',
 						'-ldkg_metadata=debug',

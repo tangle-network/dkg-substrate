@@ -7,9 +7,7 @@ import {
 	encodeUpdateAnchorProposal,
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
-	makeResourceId,
 	registerResourceId,
-	sleep,
 	startStandaloneNode,
 	waitForEvent,
 	waitUntilDKGPublicKeyStoredOnChain,
@@ -94,17 +92,6 @@ describe('Anchor Update Proposal', () => {
 			wallet2,
 			initialGovernors
 		);
-		// update the signature bridge governor on both chains.
-		const sides = signatureBridge.bridgeSides.values();
-		for (const signatureSide of sides) {
-			const contract = signatureSide.contract;
-			// now we transferOwnership, forcefully.
-			const tx = await contract.transferOwnership(governorAddress, 1);
-			expect(tx.wait()).toResolve();
-			// check that the new governor is the same as the one we just set.
-			const currentGovernor = await contract.governor();
-			expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
-		}
 		// get the anhor on localchain1
 		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
 		await anchor.setSigner(wallet1);
@@ -121,6 +108,21 @@ describe('Anchor Update Proposal', () => {
 		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
 		await token2.approveSpending(anchor2.contract.address);
 		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
+
+		// now we set the resourceIds Mapping.
+		const bridgeSide2 = signatureBridge.getBridgeSide(localChain2.chainId)!;
+		await bridgeSide2.setResourceWithSignature(anchor2);
+		// update the signature bridge governor on both chains.
+		const sides = signatureBridge.bridgeSides.values();
+		for (const signatureSide of sides) {
+			const contract = signatureSide.contract;
+			// now we transferOwnership, forcefully.
+			const tx = await contract.transferOwnership(governorAddress, 1);
+			expect(tx.wait()).toResolve();
+			// check that the new governor is the same as the one we just set.
+			const currentGovernor = await contract.governor();
+			expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
+		}
 	});
 
 	test('should be able to sign Update Anchor Proposal', async () => {
@@ -138,8 +140,6 @@ describe('Anchor Update Proposal', () => {
 			ethers.utils.parseEther('1')
 		)! as Anchors.Anchor;
 		await anchor2.setSigner(wallet2);
-		// check the merkle root
-		const merkleRoot2 = await anchor2.contract.getLastRoot();
 
 		// create a deposit on localchain1
 		const deposit = await anchor.deposit(localChain2.chainId);
@@ -148,8 +148,7 @@ describe('Anchor Update Proposal', () => {
 		expect(newMerkleRoot1).not.toEqual(merkleRoot1);
 		const lastLeafIndex = deposit.index;
 		// create anchor update proposal to be sent to the dkg.
-		const anchorHandlerAddress = await anchor2.getHandler();
-		const resourceId = makeResourceId(anchorHandlerAddress, ChainIdType.EVM, localChain2.chainId);
+		const resourceId = await anchor2.createResourceId();
 		const proposalPayload: AnchorUpdateProposal = {
 			header: {
 				resourceId,
@@ -223,31 +222,22 @@ describe('Anchor Update Proposal', () => {
 		const currentGovernor = await contract.governor();
 		const currentDkgPublicKey = await fetchDkgPublicKey(polkadotApi);
 		const currentDkgAddress = ethAddressFromUncompressedPublicKey(currentDkgPublicKey!);
-		console.log({ currentGovernor, currentDkgAddress });
 		expect(currentGovernor).toEqualCaseInsensitive(currentDkgAddress);
 		// now we log the proposal data, signature, and if it is signed by the current governor or not.
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.signed.data,
 			dkgProposal.signed.signature
 		);
-		console.log({
-			proposalData: dkgProposal.signed.data,
-			signature: dkgProposal.signed.signature,
-			isSignedByGovernor,
-		});
-
 		expect(isSignedByGovernor).toBeTrue();
 		// check that we have the resouceId mapping.
 		const val = await contract._resourceIDToHandlerAddress(resourceId);
-		console.log({ resourceIdMapping: val });
+		const anchorHandlerAddress = await anchor2.getHandler();
 		expect(val).toEqual(anchorHandlerAddress);
 		const tx2 = await contract.executeProposalWithSignature(
 			dkgProposal.signed.data,
-			dkgProposal.signed.signature,
-			{ gasLimit: 0x5b8d80 }
+			dkgProposal.signed.signature
 		);
-		const result = await tx2.wait();
-		expect(result.status).toEqual(0);
+		await expect(tx2.wait()).toResolve();
 		// now we shall check the new merkle root on the other chain.
 		const newMerkleRoots = await anchor2.contract.getLatestNeighborRoots();
 		// the merkle root should be included now.
