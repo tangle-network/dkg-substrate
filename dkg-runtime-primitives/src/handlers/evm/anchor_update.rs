@@ -23,7 +23,7 @@ pub struct AnchorUpdateProposal<C: ChainIdTrait> {
 /// Total Bytes: 32 + 4 + 4 + 6 + 4 + 32 = 82
 pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<AnchorUpdateProposal<C>, ValidationError> {
 	if data.len() != 82 {
-		return Err(ValidationError::InvalidParameter("Proposal data must be 80 bytes".to_string()))?
+		return Err(ValidationError::InvalidParameter("Proposal data must be 82 bytes".to_string()))
 	}
 	let header: ProposalHeader<C> = decode_proposal_header(data)?;
 
