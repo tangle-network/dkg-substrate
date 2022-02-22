@@ -37,6 +37,7 @@ mod error;
 mod gossip;
 mod keyring;
 mod keystore;
+pub mod messages;
 mod metrics;
 mod persistence;
 mod types;
