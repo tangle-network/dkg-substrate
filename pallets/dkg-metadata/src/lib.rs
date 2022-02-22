@@ -27,8 +27,11 @@ use frame_system::offchain::{SendSignedTransaction, Signer};
 
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{
-		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-		OFFCHAIN_PUBLIC_KEY_SIG, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
+		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK,
+		AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+		AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK, AGGREGATED_PUBLIC_KEYS_LOCK,
+		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_PUBLIC_KEY_SIG_LOCK, SUBMIT_GENESIS_KEYS_AT,
+		SUBMIT_KEYS_AT,
 	},
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
@@ -740,7 +743,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK);
 		{
 			let _guard = lock.lock();
 			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
@@ -786,7 +789,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS);
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
 		{
 			let _guard = lock.lock();
 
@@ -835,7 +838,7 @@ impl<T: Config> Pallet<T> {
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(OFFCHAIN_PUBLIC_KEY_SIG);
+		let mut lock = StorageLock::<Time>::new(OFFCHAIN_PUBLIC_KEY_SIG_LOCK);
 		{
 			let _guard = lock.lock();
 
@@ -872,7 +875,7 @@ impl<T: Config> Pallet<T> {
 	fn submit_misbehaviour_reports_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(AGGREGATED_MISBEHAVIOUR_REPORTS);
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK);
 		{
 			let _guard = lock.lock();
 
