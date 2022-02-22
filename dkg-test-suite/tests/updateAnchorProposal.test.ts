@@ -250,5 +250,6 @@ describe('Anchor Update Proposal', () => {
 		bobNode?.kill('SIGINT');
 		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
+		await localChain2?.stop();
 	});
 });

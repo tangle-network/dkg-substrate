@@ -13,13 +13,15 @@ import {
 	fetchDkgPublicKeySignature,
 	fetchDkgRefreshNonce,
 	sleep,
-	startStandaloneNode, triggerDkgManuaIncrementNonce, triggerDkgManualRefresh, waitForPublicKeySignatureToChange,
+	startStandaloneNode,
+	triggerDkgManuaIncrementNonce,
+	triggerDkgManualRefresh,
+	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
-	waitUntilDKGPublicKeyStoredOnChain
+	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
 
 describe('Update SignatureBridge Governor', () => {
-
 	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
 
 	let polkadotApi: ApiPromise;
@@ -161,5 +163,6 @@ describe('Update SignatureBridge Governor', () => {
 		bobNode?.kill('SIGINT');
 		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
+		await localChain2?.stop();
 	});
 });
