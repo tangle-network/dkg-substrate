@@ -14,9 +14,10 @@ mod mock;
 #[cfg(test)]
 mod tests;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ChainIdTrait, ChainIdType, DKGPayloadKey,
-	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalKind,
+	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN},
+	ChainIdTrait, ChainIdType, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
+	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
+	ProposalHandlerTrait, ProposalKind,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -371,7 +372,7 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_signed_proposal_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN);
 		{
 			let _guard = lock.lock();
 

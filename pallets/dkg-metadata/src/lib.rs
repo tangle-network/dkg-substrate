@@ -740,7 +740,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_genesis_public_key_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
 		{
 			let _guard = lock.lock();
 			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
@@ -786,7 +786,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_next_public_key_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS);
 		{
 			let _guard = lock.lock();
 
@@ -835,7 +835,7 @@ impl<T: Config> Pallet<T> {
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_public_key_signature_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(OFFCHAIN_PUBLIC_KEY_SIG);
 		{
 			let _guard = lock.lock();
 
@@ -872,7 +872,7 @@ impl<T: Config> Pallet<T> {
 	fn submit_misbehaviour_reports_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(b"submit_public_key_signature_onchain::lock");
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_MISBEHAVIOUR_REPORTS);
 		{
 			let _guard = lock.lock();
 
