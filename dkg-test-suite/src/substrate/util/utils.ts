@@ -1,11 +1,9 @@
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
-import {ApiPromise} from "@polkadot/api";
-import {Bytes, Option} from "@polkadot/types";
-import {KeyringPair} from "@polkadot/keyring/types";
-import {Keyring} from "@polkadot/keyring";
-import {ethers} from "ethers";
-
-
+import { ApiPromise } from '@polkadot/api';
+import { Bytes, Option } from '@polkadot/types';
+import { KeyringPair } from '@polkadot/keyring/types';
+import { Keyring } from '@polkadot/keyring';
+import { ethers } from 'ethers';
 
 const LE = true;
 const BE = false;
@@ -130,23 +128,26 @@ export interface SubstrateProposal {
 	readonly call: string;
 }
 
-export function encodeSubstrateProposal(proposal: SubstrateProposal, lengthOfCall: number): Uint8Array {
+export function encodeSubstrateProposal(
+	proposal: SubstrateProposal,
+	lengthOfCall: number
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const substrateProposal = new Uint8Array(40 + lengthOfCall); 
+	const substrateProposal = new Uint8Array(40 + lengthOfCall);
 	substrateProposal.set(header, 0); // 0 -> 40
 	const hexifiedCall = new Buffer(proposal.call).toString('hex');
-	const encodedCall = hexToU8a(hexifiedCall).slice(0,);
+	const encodedCall = hexToU8a(hexifiedCall).slice(0);
 	substrateProposal.set(encodedCall, 40); // 40 -> END
 	return substrateProposal;
 }
 
 export function decodeSubstrateProposal(data: Uint8Array): SubstrateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
-	const hexifiedCall = u8aToHex(data.slice(40,)); // 40 -> 60
-	const decodedCall = new Buffer(hexifiedCall, 'hex').toString(); 
+	const hexifiedCall = u8aToHex(data.slice(40)); // 40 -> 60
+	const decodedCall = new Buffer(hexifiedCall, 'hex').toString();
 	return {
 		header,
-		call: decodedCall
+		call: decodedCall,
 	};
 }
 
@@ -190,22 +191,30 @@ export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpda
 }
 
 export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
-	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
-		console.log(`Current status is: ${status.type}`);
+	const unsub = await api.tx.sudo
+		.sudo(proposalCall)
+		.signAndSend(alice, ({ events = [], status }) => {
+			console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }
 
-export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dkgPubKey: any, proposalType: any, propHash: any) {
+export async function unsubSignedPropsUtil(
+	api: ApiPromise,
+	chainIdType: any,
+	dkgPubKey: any,
+	proposalType: any,
+	propHash: any
+) {
 	return await api.query.dKGProposalHandler.signedProposals(
 		chainIdType,
 		proposalType,
@@ -235,10 +244,7 @@ export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dk
 		}
 	);
 }
-export const substratePalletResourceId = makeResourceId(
-	ChainIdType.SUBSTRATE,
-	5002,
-);
+export const substratePalletResourceId = makeResourceId(ChainIdType.SUBSTRATE, 5002);
 
 export async function registerResourceId(api: ApiPromise) {
 	// quick check if the resourceId is already registered
@@ -248,18 +254,18 @@ export async function registerResourceId(api: ApiPromise) {
 		console.log(`Resource id ${substratePalletResourceId} is already registered, skipping`);
 		return;
 	}
-	const keyring = new Keyring({type: 'sr25519'});
+	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
 	const call = api.tx.dKGProposals.setResource(substratePalletResourceId, '0x00');
 	console.log('Registering resource id');
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({events = [], status}) => {
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
 		console.log(`Current status is: ${status.type}`);
 
 		if (status.isFinalized) {
 			console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
+			events.forEach(({ phase, event: { data, method, section } }) => {
 				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
 			});
 

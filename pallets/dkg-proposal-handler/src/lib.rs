@@ -14,16 +14,23 @@ mod mock;
 #[cfg(test)]
 mod tests;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ChainIdTrait, ChainIdType, DKGPayloadKey,
-	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage,
-	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalKind,
+	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
+	ChainIdTrait, ChainIdType, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
+	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
+	ProposalHandlerTrait, ProposalKind,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::{offchain::storage::StorageValueRef, traits::Zero};
+use sp_runtime::{
+	offchain::{
+		storage::StorageValueRef,
+		storage_lock::{StorageLock, Time},
+	},
+	traits::Zero,
+};
 use sp_std::{convert::TryFrom, vec::Vec};
 
 pub mod weights;
@@ -365,58 +372,65 @@ impl<T: Config> Pallet<T> {
 	// *** Offchain worker methods ***
 
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			return Err(
-				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-			)?
-		}
-		match Self::get_next_offchain_signed_proposal(block_number) {
-			Ok(next_proposals) => {
-				// We filter out all proposals that are already on chain
-				let filtered_proposals = next_proposals
-					.iter()
-					.cloned()
-					.filter(Self::is_existing_proposal)
-					.collect::<Vec<_>>();
+		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK);
+		{
+			let _guard = lock.lock();
 
-				// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and submit
-				// those chunks
-				for chunk in filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize) {
-					let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
-					let result = signer
-						.send_signed_transaction(|_| call.clone())
-						.into_iter()
-						.map(|(_, r)| r)
-						.collect::<Result<Vec<_>, _>>()
-						.map_err(|()| "Unable to submit unsigned transaction.");
-					// Display error if the signed tx fails.
-					if result.is_err() {
-						frame_support::log::error!(
-							target: "dkg_proposal_handler",
-							"failure: failed to send unsigned transactiion to chain: {:?}",
-							call,
-						);
-					} else {
-						// log the result of the transaction submission
-						frame_support::log::debug!(
-							target: "dkg_proposal_handler",
-							"Submitted unsigned transaction for signed proposal: {:?}",
-							call,
-						);
+			let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				return Err(
+					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+				)?
+			}
+			match Self::get_next_offchain_signed_proposal(block_number) {
+				Ok(next_proposals) => {
+					// We filter out all proposals that are already on chain
+					let filtered_proposals = next_proposals
+						.iter()
+						.cloned()
+						.filter(Self::is_existing_proposal)
+						.collect::<Vec<_>>();
+
+					// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and
+					// submit those chunks
+					for chunk in
+						filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize)
+					{
+						let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
+						let result = signer
+							.send_signed_transaction(|_| call.clone())
+							.into_iter()
+							.map(|(_, r)| r)
+							.collect::<Result<Vec<_>, _>>()
+							.map_err(|()| "Unable to submit unsigned transaction.");
+						// Display error if the signed tx fails.
+						if result.is_err() {
+							frame_support::log::error!(
+								target: "dkg_proposal_handler",
+								"failure: failed to send unsigned transactiion to chain: {:?}",
+								call,
+							);
+						} else {
+							// log the result of the transaction submission
+							frame_support::log::debug!(
+								target: "dkg_proposal_handler",
+								"Submitted unsigned transaction for signed proposal: {:?}",
+								call,
+							);
+						}
 					}
-				}
-			},
-			Err(e) => {
-				// log the error
-				frame_support::log::warn!(
-					target: "dkg_proposal_handler",
-					"Failed to get next signed proposal: {}",
-					e
-				);
-			},
-		};
-		return Ok(())
+				},
+				Err(e) => {
+					// log the error
+					frame_support::log::warn!(
+						target: "dkg_proposal_handler",
+						"Failed to get next signed proposal: {}",
+						e
+					);
+				},
+			};
+			return Ok(())
+		}
 	}
 
 	fn get_next_offchain_signed_proposal(

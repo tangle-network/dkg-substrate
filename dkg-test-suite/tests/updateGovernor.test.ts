@@ -1,5 +1,12 @@
 import { jest } from '@jest/globals';
+import { ApiPromise, WsProvider } from '@polkadot/api';
+import { Bridges } from '@webb-tools/protocol-solidity';
+import { MintableToken } from '@webb-tools/tokens';
+import { ChildProcess } from 'child_process';
+import { ethers } from 'ethers';
 import 'jest-extended';
+import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
+import { LocalChain } from '../src/localEvm';
 import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
@@ -7,25 +14,14 @@ import {
 	fetchDkgRefreshNonce,
 	sleep,
 	startStandaloneNode,
-	triggerDkgManualRefresh,
 	triggerDkgManuaIncrementNonce,
+	triggerDkgManualRefresh,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
 	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
-import { LocalChain } from '../src/localEvm';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
-import { Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken } from '@webb-tools/tokens';
-import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 
 describe('Update SignatureBridge Governor', () => {
-	const SECONDS = 1000;
-	const MINUTES = 60 * SECONDS;
-	const BLOCK_TIME = 3 * SECONDS;
-	const ACC1_PK = '0x0000000000000000000000000000000000000000000000000000000000000001';
-	const ACC2_PK = '0x0000000000000000000000000000000000000000000000000000000000000002';
 	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
 
 	let polkadotApi: ApiPromise;
@@ -167,5 +163,7 @@ describe('Update SignatureBridge Governor', () => {
 		bobNode?.kill('SIGINT');
 		charlieNode?.kill('SIGINT');
 		await localChain?.stop();
+		await localChain2?.stop();
+		await sleep(5 * SECONDS);
 	});
 });
