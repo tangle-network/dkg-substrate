@@ -1,9 +1,9 @@
 import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
-	AnchorUpdateProposal,
+	TokenAddProposal,
 	ChainIdType,
-	encodeFunctionSignature,
+	encodeFunctionSignature, encodeTokenAddProposal,
 	encodeUpdateAnchorProposal,
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
@@ -126,7 +126,7 @@ describe('Anchor Update Proposal', () => {
 		}
 	});
 
-	test('should be able to sign Update Anchor Proposal', async () => {
+	test('should be able to sign Token Add Proposal', async () => {
 		// get the anchor on localchain1
 		const anchor = signatureBridge.getAnchor(
 			localChain.chainId,
@@ -150,7 +150,7 @@ describe('Anchor Update Proposal', () => {
 		const lastLeafIndex = deposit.index;
 		// create anchor update proposal to be sent to the dkg.
 		const resourceId = await anchor2.createResourceId();
-		const proposalPayload: AnchorUpdateProposal = {
+		const proposalPayload: TokenAddProposal = {
 			header: {
 				resourceId,
 				functionSignature: encodeFunctionSignature(
@@ -160,14 +160,11 @@ describe('Anchor Update Proposal', () => {
 				chainId: localChain2.chainId,
 				chainIdType: ChainIdType.EVM,
 			},
-			chainIdType: ChainIdType.EVM,
-			srcChainId: localChain.chainId,
-			merkleRoot: newMerkleRoot1,
-			lastLeafIndex,
+			newTokenAddress: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 		};
 		// register proposal resourceId.
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
-		const proposalBytes = encodeUpdateAnchorProposal(proposalPayload);
+		const proposalBytes = encodeTokenAddProposal(proposalPayload);
 		// get alice account to send the transaction to the dkg node.
 		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
@@ -175,12 +172,14 @@ describe('Anchor Update Proposal', () => {
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
 			EVM: localChain2.chainId,
 		});
-		const proposalCall = polkadotApi.tx.dKGProposals.acknowledgeProposal(
-			proposalPayload.header.nonce,
-			chainIdType,
-			resourceId,
-			prop
-		);
+		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
+		const runtimeProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+			Unsigned: {
+				kind: kind,
+				data: prop
+			}
+		});
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(runtimeProposal);
 		const tx = new Promise<void>(async (resolve, reject) => {
 			const unsub = await proposalCall.signAndSend(alice, ({ events, status }) => {
 				if (status.isFinalized) {
@@ -201,14 +200,14 @@ describe('Anchor Update Proposal', () => {
 		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
 		// now we need to query the proposal and its signature.
 		const key = {
-			AnchorUpdateProposal: proposalPayload.header.nonce,
+			TokenAddProposal: proposalPayload.header.nonce,
 		};
 		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
 		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 		expect(value.isSome).toBeTrue();
 		const dkgProposal = value.unwrap().toJSON() as {
 			signed: {
-				kind: 'AnchorUpdate';
+				kind: 'TokenAdd';
 				data: HexString;
 				signature: HexString;
 			};
