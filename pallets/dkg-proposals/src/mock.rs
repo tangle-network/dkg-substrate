@@ -380,6 +380,14 @@ pub fn new_test_ext_initialized(
 	t
 }
 
+pub fn manually_set_proposer_count(count: u32) -> sp_io::TestExternalities {
+	let mut t = new_test_ext();
+	t.execute_with(|| {
+		ProposerCount::<Test>::put(count);
+	});
+	t
+}
+
 // Checks events against the latest. A contiguous set of events must be
 // provided. They must include the most recent event, but do not have to include
 // every past event.

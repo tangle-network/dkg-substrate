@@ -53,13 +53,16 @@ use dkg_runtime_primitives::{
 	ResourceId,
 };
 use frame_support::{
-	pallet_prelude::{ensure, DispatchResultWithPostInfo},
+	pallet_prelude::{ensure, DispatchError, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, Get},
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
 use scale_info::TypeInfo;
-use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
+use sp_runtime::{
+	traits::{AccountIdConversion, Saturating},
+	RuntimeDebug,
+};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
 
@@ -256,6 +259,8 @@ pub mod pallet {
 		ProposalAlreadyComplete,
 		/// Lifetime of proposal has been exceeded
 		ProposalExpired,
+		/// Proposer Count is Zero
+		ProposerCountIsZero,
 	}
 
 	#[pallet::hooks]
@@ -492,6 +497,26 @@ impl<T: Config> Pallet<T> {
 	pub fn ensure_admin(o: T::Origin) -> DispatchResultWithPostInfo {
 		T::AdminOrigin::try_origin(o).map(|_| ()).or_else(ensure_root)?;
 		Ok(().into())
+	}
+
+	// Gives the height of the proposer set Merkle tree
+	// Right now this takes O(log(size of proposer set)) time but can likely be reduced
+	pub fn log_proposer_count() -> u32 {
+		if Self::proposer_count() == 1 {
+			1
+		} else {
+			let two: u32 = 2;
+			let mut h = 0;
+			while two.saturating_pow(h) < Self::proposer_count() {
+				h += 1;
+			}
+			h
+		}
+	}
+
+	pub fn merkelize_proposer_set() -> Result<Vec<u8>, DispatchError> {
+		ensure!(Self::proposer_count() != 0, Error::<T>::ProposerCountIsZero);
+		Self::Proposers
 	}
 
 	/// Checks if who is a proposer

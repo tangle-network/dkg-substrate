@@ -12,7 +12,8 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, ParachainStaking,
+	assert_has_event, manually_set_proposer_count, mock_pub_key, new_test_ext_initialized, roll_to,
+	ExtBuilder, ParachainStaking,
 };
 use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
@@ -669,4 +670,26 @@ fn only_current_authorities_should_make_successful_proposals() {
 			crate::Error::<Test>::MustBeProposer
 		);
 	})
+}
+
+#[test]
+fn test_log_proposers_count() {
+	manually_set_proposer_count(18).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 5);
+	});
+	manually_set_proposer_count(16).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 4);
+	});
+	manually_set_proposer_count(1).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 1);
+	});
+	manually_set_proposer_count(2).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 1);
+	});
+	manually_set_proposer_count(100).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 7);
+	});
+	manually_set_proposer_count(0).execute_with(|| {
+		assert_eq!(DKGProposals::log_proposer_count(), 7);
+	});
 }
