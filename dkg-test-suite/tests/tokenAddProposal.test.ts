@@ -24,7 +24,7 @@ import { u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 
-describe('Anchor Update Proposal', () => {
+describe('Token Add Proposal', () => {
 	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
 
 	let polkadotApi: ApiPromise;
@@ -154,7 +154,7 @@ describe('Anchor Update Proposal', () => {
 			header: {
 				resourceId,
 				functionSignature: encodeFunctionSignature(
-					anchor.contract.interface.functions['updateEdge(uint256,bytes32,uint256)'].format()
+					anchor.contract.interface.functions['add(address,uint256)'].format()
 				),
 				nonce: 1,
 				chainId: localChain2.chainId,
@@ -190,6 +190,7 @@ describe('Anchor Update Proposal', () => {
 					if (success) {
 						resolve();
 					} else {
+						console.log(`Error, proposal failed ${success}`);
 						reject(new Error('Proposal failed'));
 					}
 				}
