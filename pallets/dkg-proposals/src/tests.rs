@@ -5,7 +5,7 @@ use std::vec;
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
+		assert_events, new_test_ext, Balances, ChainType, DKGProposals, Event, Origin,
 		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
 		TEST_THRESHOLD,
 	},
@@ -19,21 +19,20 @@ use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
 
-use crate::utils::derive_resource_id;
+use webb_resource_id::derive_resource_id;
 
 #[test]
 fn derive_ids() {
-	let chain: u32 = 0xaabbccdd;
-	let chain_type: u16 = 1;
+	let chain_id_with_type: u64 = 0x0100aabbccdd;
 	let id = [
 		0x21, 0x60, 0x5f, 0x71, 0x84, 0x5f, 0x37, 0x2a, 0x9e, 0xd8, 0x42, 0x53, 0xd2, 0xd0, 0x24,
 		0xb7, 0xb1, 0x09, 0x99, 0xf4,
 	];
-	let r_id = derive_resource_id(chain, chain_type, &id);
+	let r_id = derive_resource_id(chain_id_with_type, &id);
 	let expected = [
 		0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x21, 0x60, 0x5f, 0x71, 0x84, 0x5f, 0x37, 0x2a, 0x9e, 0xd8,
-		0x42, 0x53, 0xd2, 0xd0, 0x24, 0xb7, 0xb1, 0x09, 0x99, 0xf4, 0x01, 0x0, 0xdd, 0xcc, 0xbb,
-		0xaa,
+		0x42, 0x53, 0xd2, 0xd0, 0x24, 0xb7, 0xb1, 0x09, 0x99, 0xf4, 0x01, 0x0, 0xaa, 0xbb, 0xcc,
+		0xdd,
 	];
 	assert_eq!(r_id, expected);
 }
@@ -115,7 +114,7 @@ fn whitelist_chain() {
 
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), ChainIdType::EVM(0u32)));
 		assert_noop!(
-			DKGProposals::whitelist_chain(Origin::root(), ChainIdentifier::get()),
+			DKGProposals::whitelist_chain(Origin::root(), ChainType::get()),
 			Error::<Test>::InvalidChainId
 		);
 
@@ -218,7 +217,7 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
 #[test]
 fn create_successful_proposal() {
 	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+	let r_id = derive_resource_id(src_id.to_u64(), b"remark");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
@@ -311,7 +310,7 @@ fn create_successful_proposal() {
 #[test]
 fn create_unsucessful_proposal() {
 	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"transfer");
+	let r_id = derive_resource_id(src_id.to_u64(), b"transfer");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
@@ -404,7 +403,7 @@ fn create_unsucessful_proposal() {
 #[test]
 fn execute_after_threshold_change() {
 	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"transfer");
+	let r_id = derive_resource_id(src_id.to_u64(), b"transfer");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
@@ -479,7 +478,7 @@ fn execute_after_threshold_change() {
 #[test]
 fn proposal_expires() {
 	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+	let r_id = derive_resource_id(src_id.to_u64(), b"remark");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = 1;
@@ -613,7 +612,7 @@ fn should_reset_proposers_if_authorities_changed() {
 #[test]
 fn only_current_authorities_should_make_successful_proposals() {
 	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+	let r_id = derive_resource_id(src_id.to_u64(), b"remark");
 
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));

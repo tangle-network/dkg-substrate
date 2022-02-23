@@ -20,6 +20,9 @@ sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkad
 frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 
+# TODO(appcypher): Adjust
+webb-resource-id = { default-features = false, git = "https://github.com/webb-tools/webb-rs.git", branch = "stephen/consolidate-utils" }
+
 [dev-dependencies]
 hex = { version = "0.4", default-features = false }
 

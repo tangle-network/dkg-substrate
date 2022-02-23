@@ -60,7 +60,7 @@ parameter_types! {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
+	pub const ChainType: ChainIdType<u32> = ChainIdType::Substrate(5);
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
@@ -150,7 +150,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
 	type ChainId = u32;
-	type ChainIdentifier = ChainIdentifier;
+	type ChainType = ChainType;
 	type Event = Event;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;

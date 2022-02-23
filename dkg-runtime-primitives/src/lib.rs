@@ -22,11 +22,12 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	create_runtime_str,
-	traits::{AtLeast32Bit, IdentifyAccount, Verify},
+	traits::{IdentifyAccount, Verify},
 	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
+use webb_resource_id::compute_chain_id_with_type;
 
 /// Utility fn to calculate keccak 256 has
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {
@@ -220,6 +221,11 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 			ChainIdType::Solana(_) => [4, 0],
 			_ => panic!("Invalid chain id type"),
 		}
+	}
+
+	pub fn to_u64(&self) -> u64 {
+		let chain_id = self.inner_id().try_into().unwrap_or_default();
+		compute_chain_id_with_type(chain_id, self.get_type_bytes())
 	}
 
 	pub fn from_raw(bytes: &[u8]) -> Self {

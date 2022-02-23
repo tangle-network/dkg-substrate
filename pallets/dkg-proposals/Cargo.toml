@@ -29,6 +29,9 @@ pallet-balances = { default-features = false, git = "https://github.com/parityte
 frame-system-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.16', optional = true }
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.16', optional = true }
 
+# TODO(appcypher): Adjust
+webb-resource-id = { default-features = false, git = "https://github.com/webb-tools/webb-rs.git", branch = "stephen/consolidate-utils" }
+
 [dev-dependencies]
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
 pallet-parachain-staking = { path = "../parachain-staking" }

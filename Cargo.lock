@@ -2141,6 +2141,7 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "tiny-keccak",
+ "webb-resource-id",
 ]
 
 [[package]]
@@ -5661,6 +5662,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "webb-resource-id",
 ]
 
 [[package]]
@@ -11899,6 +11901,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "632f73e236b219150ea279196e54e610f5dbafa5d61786303d4da54f84e47fce"
 dependencies = [
  "cfg-if 1.0.0",
+ "serde",
+ "serde_json",
  "wasm-bindgen-macro",
 ]
 
@@ -12181,6 +12185,15 @@ name = "web-sys"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38eb105f1c59d9eaa6b5cdc92b859d85b926e82cb2e0945cd0c9259faa6fe9fb"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "webb-resource-id"
+version = "0.1.0"
+source = "git+https://github.com/webb-tools/webb-rs.git?branch=stephen/consolidate-utils#82018d0668f99c574fa521e557c29dfb64dc1583"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

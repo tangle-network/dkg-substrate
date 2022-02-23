@@ -1,5 +1,6 @@
 use dkg_runtime_primitives::ResourceId;
 
+// TODO(appcypher): Remove. Also byte order of chain id wrong here.
 /// Helper function to concatenate a chain ID and some bytes to produce a
 /// resource ID. The common format is (26 bytes unique ID + 2 bytes chain type + 4 byte chain ID).
 pub fn derive_resource_id(chain: u32, chain_type: u16, id: &[u8]) -> ResourceId {
