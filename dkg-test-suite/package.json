@@ -13,6 +13,8 @@
 		"max-ext-limit-update-proposal-evm": "ts-node ./src/evm/v-anchor-configurable-limit/testMaxExtLimitUpdate.ts",
 		"max-fee-limit-update-proposal-evm": "ts-node ./src/evm/v-anchor-configurable-limit/testMaxFeeLimitUpdateProposal.ts",
 		"min-withdrawal-limit-update-proposal-evm": "ts-node ./src/evm/v-anchor-configurable-limit/testMinWithdrawalLimitUpdateProposal.ts",
+		"resource-id-update-proposal-evm": "ts-node ./src/evm/testResourceIdUpdateProposal.ts",
+		"resource-id-update-proposal-substrate": "ts-node ./src/substrate/testResourceIdUpdateProposal.ts",
 		"set-treasury-handler-proposal-evm": "ts-node ./src/evm/testSetTreasuryHandlerProposal.ts",
 		"set-verifier-proposal-evm": "ts-node ./src/evm/testSetVerifierProposal.ts",
 		"token-add-proposal-evm": "ts-node ./src/evm/token/testTokenAddProposal.ts",

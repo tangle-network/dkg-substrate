@@ -18,11 +18,12 @@ import { ChildProcess } from 'child_process';
 import { ethers } from 'ethers';
 import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
-import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
+import { ApiPromise, Keyring } from '@polkadot/api';
 import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
 import { u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
+import { provider } from '../src/utils'
 
 describe('Anchor Update Proposal', () => {
 	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
@@ -71,7 +72,7 @@ describe('Anchor Update Proposal', () => {
 		const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
 
 		polkadotApi = await ApiPromise.create({
-			provider: new WsProvider('ws://127.0.0.1:9944'),
+			provider
 		});
 
 		// Update the signature bridge governor.

@@ -1,4 +1,4 @@
-import { ApiPromise, Keyring } from '@polkadot/api';
+import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 import { Bytes, Option } from '@polkadot/types';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
@@ -6,6 +6,8 @@ import { ECPair } from 'ecpair';
 import { ethers } from 'ethers';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+
+export const provider = new WsProvider('ws://127.0.0.1:9944');
 
 export async function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));

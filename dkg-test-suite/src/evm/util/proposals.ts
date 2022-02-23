@@ -1,10 +1,12 @@
 import {
 	AnchorUpdateProposal,
+	ResourceIdUpdateProposal,
 	TokenAddProposal,
 	TokenRemoveProposal,
 	VAnchorConfigurableLimitProposal,
 	WrappingFeeUpdateProposal,
 	resourceId,
+	newResourceId,
 	SetTreasuryHandlerProposal,
 	SetVerifierProposal,
 	FeeRecipientUpdateProposal,
@@ -67,6 +69,18 @@ export const setTreasuryHandlerProposal: SetTreasuryHandlerProposal = {
 		nonce,
 	},
 	newTreasuryHandler: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const resourceIdUpdateProposal: ResourceIdUpdateProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0xdeadbeef',
+		nonce,
+	},
+	// Dummy Values
+	newResourceId: newResourceId,
+	handlerAddress: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b668',
+	executionContextAddress: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 };
 
 export const setVerifierProposal: SetVerifierProposal = {
