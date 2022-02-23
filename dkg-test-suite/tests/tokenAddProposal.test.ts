@@ -154,7 +154,7 @@ describe('Token Add Proposal', () => {
 			header: {
 				resourceId,
 				functionSignature: encodeFunctionSignature(
-					anchor.contract.interface.functions['add(address,uint256)'].format()
+					anchor.contract.interface.functions['updateEdge(uint256,bytes32,uint256)'].format()
 				),
 				nonce: 1,
 				chainId: localChain2.chainId,
