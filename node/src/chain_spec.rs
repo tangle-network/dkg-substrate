@@ -11,7 +11,7 @@ use sp_runtime::{
 };
 
 /// Specialized `ChainSpec` for the normal parachain runtime.
-pub type ChainSpec = sc_service::GenericChainSpec<egg_runtime::GenesisConfig, Extensions>;
+pub type ChainSpec = sc_service::GenericChainSpec<dkg_runtime::GenesisConfig, Extensions>;
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -40,8 +40,8 @@ pub fn get_dkg_keys_from_seed(seed: &str) -> DKGId {
 ///
 /// The input must be a tuple of individual keys (a single arg for now since we
 /// have just one key).
-pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> egg_runtime::SessionKeys {
-	egg_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
+pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> dkg_runtime::SessionKeys {
+	dkg_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
 }
 
 /// The extensions for the [`ChainSpec`].
@@ -191,24 +191,24 @@ fn testnet_genesis(
 	invulnerables: Vec<(AccountId, AuraId, DKGId)>,
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
-) -> egg_runtime::GenesisConfig {
-	egg_runtime::GenesisConfig {
-		system: egg_runtime::SystemConfig {
-			code: egg_runtime::WASM_BINARY
+) -> dkg_runtime::GenesisConfig {
+	dkg_runtime::GenesisConfig {
+		system: dkg_runtime::SystemConfig {
+			code: dkg_runtime::WASM_BINARY
 				.expect("WASM binary was not build, please build it!")
 				.to_vec(),
 		},
-		sudo: egg_runtime::SudoConfig { key: Some(root_key) },
-		balances: egg_runtime::BalancesConfig {
+		sudo: dkg_runtime::SudoConfig { key: Some(root_key) },
+		balances: dkg_runtime::BalancesConfig {
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
-		parachain_info: egg_runtime::ParachainInfoConfig { parachain_id: id },
-		collator_selection: egg_runtime::CollatorSelectionConfig {
+		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
+		collator_selection: dkg_runtime::CollatorSelectionConfig {
 			invulnerables: invulnerables.iter().cloned().map(|(acc, _, _)| acc).collect(),
 			candidacy_bond: EXISTENTIAL_DEPOSIT * 16,
 			..Default::default()
 		},
-		session: egg_runtime::SessionConfig {
+		session: dkg_runtime::SessionConfig {
 			keys: invulnerables
 				.iter()
 				.cloned()
@@ -224,7 +224,7 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: egg_runtime::DKGConfig {
+		dkg: dkg_runtime::DKGConfig {
 			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
 			threshold: Default::default(),
 			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
