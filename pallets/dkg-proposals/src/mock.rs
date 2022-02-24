@@ -165,10 +165,6 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
-parameter_types! {
-	pub const MaxAuthorities: u32 = 100_000;
-}
-
 impl pallet_aura::Config for Test {
 	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
 	type DisabledValidators = ();
@@ -176,7 +172,7 @@ impl pallet_aura::Config for Test {
 }
 
 parameter_types! {
-	pub const Period: u32 = 1 * HOURS;
+	pub const Period: u32 = 10;
 	pub const Offset: u32 = 0;
 	pub const MaxAuthorities: u32 = 100_000;
 }
