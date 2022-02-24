@@ -154,7 +154,7 @@ describe('Token Add Proposal', () => {
 			header: {
 				resourceId,
 				functionSignature: encodeFunctionSignature(
-					anchor.contract.interface.functions['updateEdge(uint256,bytes32,uint256)'].format()
+					"add(address,uint256)"
 				),
 				nonce: 1,
 				chainId: localChain2.chainId,
@@ -196,7 +196,9 @@ describe('Token Add Proposal', () => {
 				}
 			});
 		});
-		await expect(tx).toResolve();
+		const result = await tx;
+		console.log(`result is ${result}`);
+		//await expect(tx).toResolve();
 		// now we need to wait until the proposal to be signed on chain.
 		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
 		// now we need to query the proposal and its signature.
