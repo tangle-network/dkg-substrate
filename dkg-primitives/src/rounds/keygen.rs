@@ -138,7 +138,7 @@ where
 		let keygen = &mut self.keygen;
 
 		if keygen.wants_to_proceed() {
-			info!(target: "dkg", "🕸️  Keygen party {} wants to proceed", keygen.party_ind());
+			debug!(target: "dkg", "🕸️  Keygen party {} wants to proceed", keygen.party_ind());
 			trace!(target: "dkg", "🕸️  before: {:?}", keygen);
 
 			match keygen.proceed() {

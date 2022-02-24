@@ -625,7 +625,9 @@ where
 				}
 			}
 
-			for message in rounds.get_outgoing_messages() {
+			let messages = rounds.get_outgoing_messages();
+			debug!(target: "dkg", "🕸️  Sending DKG messages: ({:?} msgs)", messages.len());
+			for message in messages {
 				let dkg_message = DKGMessage {
 					id: authority_id.clone(),
 					payload: message,
@@ -649,6 +651,7 @@ where
 						let signed_dkg_message =
 							SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
 						let encoded_signed_dkg_message = signed_dkg_message.encode();
+						debug!(target: "dkg", "🕸️  Sending DKG message: ({:?} bytes)", encoded_signed_dkg_message.len());
 						self.gossip_engine.lock().gossip_message(
 							dkg_topic::<B>(),
 							encoded_signed_dkg_message.clone(),
@@ -661,7 +664,7 @@ where
 						e
 					),
 				}
-				trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
+				debug!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
 			}
 			results
 		};
@@ -696,7 +699,7 @@ where
 			self.rounds = Some(rounds);
 		}
 
-		// Check if a there's a key gen process running for the queued authority set
+		// Check if a there's a keygen process running for the queued authority set
 		if self.queued_keygen_in_progress {
 			if let Some(id) =
 				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
@@ -1325,8 +1328,6 @@ where
 		let mut dkg =
 			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
-					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
-
 					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
 				},
 			));
@@ -1353,9 +1354,10 @@ where
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
 						if let Ok(raw) = self.verify_signature_against_authorities(dkg_msg.clone()) {
+							debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
 							self.process_incoming_dkg_message(raw);
 						} else {
-							error!(target: "dkg", "🕸️  Received message with invalid signature");
+							debug!(target: "dkg", "🕸️  Received message with invalid signature");
 						}
 					} else {
 						return;

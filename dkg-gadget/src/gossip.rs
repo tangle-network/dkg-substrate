@@ -130,7 +130,7 @@ where
 		data: &[u8],
 	) -> ValidationResult<B::Hash> {
 		let mut data_copy = data;
-		trace!(target: "dkg", "🕸️  Got a message: {:?}, from: {:?}", data_copy, sender);
+		debug!(target: "dkg", "🕸️  Got a message ({:?} bytes) from: {:?}", data_copy.len(), sender);
 		match DKGMessage::<Public>::decode(&mut data_copy) {
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got dkg message: {:?}, from: {:?}", msg, sender);
