@@ -23,7 +23,7 @@ import { MintableToken, GovernedTokenWrapper, TokenWrapperHandler } from '@webb-
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { provider } from '../src/utils';
 import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import { u8aToHex } from '@polkadot/util';
+import {hexToNumber, numberToHex, u8aToHex} from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 import { signAndSendUtil } from '../src/evm/util/utils';
@@ -147,7 +147,7 @@ describe('Wrapping Fee Update Proposal', () => {
 				chainIdType: ChainIdType.EVM,
 				chainId: localChain.chainId,
 			},
-			newFee: "50",
+			newFee: "0x50",
 		};
 		// register proposal resourceId.
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
@@ -204,7 +204,8 @@ describe('Wrapping Fee Update Proposal', () => {
 		);
 		await expect(tx2.wait()).toResolve();
 		// Want to check that token was actually added
-		//expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeTrue();
+		const fee = await governedToken.contract.getFee();
+		expect(hexToNumber("0x50")).toEqual(fee);
 	});
 
 	afterAll(async () => {
