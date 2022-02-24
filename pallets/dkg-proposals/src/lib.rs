@@ -517,11 +517,12 @@ impl<T: Config> Pallet<T> {
 
 	pub fn pre_process_for_merkelize() -> Vec<[u8; 32]> {
 		let height = Self::log_proposer_count();
-		let vec_of_hashes: Vec<[u8; 32]> = Vec::new();
-		let vec_of_hashes: Vec<[u8; 32]> = vec_keys.map(|x| keccak_256(&x.encode()[..])).collect();
+		let mut vec_keys = Proposers::<T>::iter_keys();
+		let mut vec_of_hashes: Vec<[u8; 32]> =
+			vec_keys.map(|x| keccak_256(&x.encode()[..])).collect();
 		// Pad vec_of_hashes to have length 2^height
 		let two = 2;
-		while vec_of_hashes.len() != two.saturating_pow(height) {
+		while vec_of_hashes.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
 			vec_of_hashes.push([0u8; 32]);
 		}
 		vec_of_hashes
@@ -533,15 +534,15 @@ impl<T: Config> Pallet<T> {
 		layer_above
 	}
 
-	pub fn merkelize_proposer_set() {
-		let mut vec_of_hashes = Self::pre_process_for_merkelize();
-		let height = Self::log_proposer_count();
-		while height > 0 {
-			vec_of_hashes = Self::hash_layer(vec_of_hashes);
-			height -= 1;
-		}
-		vec_of_hashes.get(0).unwrap_or_default().to_vec()
-	}
+	// pub fn merkelize_proposer_set() {
+	// 	let mut vec_of_hashes = Self::pre_process_for_merkelize();
+	// 	let height = Self::log_proposer_count();
+	// 	while height > 0 {
+	// 		vec_of_hashes = Self::hash_layer(vec_of_hashes);
+	// 		height -= 1;
+	// 	}
+	// 	vec_of_hashes.get(0).unwrap_or_default().to_vec()
+	// }
 
 	/// Checks if who is a proposer
 	pub fn is_proposer(who: &T::AccountId) -> bool {
