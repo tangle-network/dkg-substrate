@@ -482,7 +482,6 @@ impl pallet_authorship::Config for Runtime {
 parameter_types! {
 	pub const Period: u32 = 2 * MINUTES;
 	pub const Offset: u32 = 0;
-	pub const MaxAuthorities: u32 = 100_000;
 }
 
 impl pallet_session::Config for Runtime {

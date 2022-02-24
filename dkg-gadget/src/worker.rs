@@ -415,6 +415,7 @@ where
 			self.next_rounds.take()
 		} else {
 			let is_authority = find_index(&next_authorities.authorities[..], &public).is_some();
+			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
 				Some(set_up_rounds(
 					&next_authorities,
