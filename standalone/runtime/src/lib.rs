@@ -553,16 +553,6 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
-parameter_types! {
-	pub LeafVersion: MmrLeafVersion = MmrLeafVersion::new(1, 5);
-}
-
-impl pallet_dkg_mmr::Config for Runtime {
-	type LeafVersion = LeafVersion;
-	type DKGAuthorityToMerkleLeaf = pallet_dkg_mmr::DKGEcdsaToEthereum;
-	type ParachainHeads = ();
-}
-
 type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
 
 /// Configure Merkle Mountain Range pallet.
@@ -572,7 +562,7 @@ impl pallet_mmr::Config for Runtime {
 	type Hash = MmrHash;
 	type OnNewRoot = pallet_dkg_mmr::DepositDKGDigest<Runtime>;
 	type WeightInfo = ();
-	type LeafData = DKGMMR;
+	type LeafData = ();
 }
 
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
@@ -651,8 +641,7 @@ construct_runtime!(
 		DKG: pallet_dkg_metadata,
 		DKGProposals: pallet_dkg_proposals,
 		MMR: pallet_mmr,
-		DKGProposalHandler: pallet_dkg_proposal_handler,
-		DKGMMR: pallet_dkg_mmr
+		DKGProposalHandler: pallet_dkg_proposal_handler
 	}
 );
 
