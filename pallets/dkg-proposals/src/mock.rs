@@ -265,6 +265,7 @@ pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
 pub const PROPOSER_A: u8 = 2;
 pub const PROPOSER_B: u8 = 3;
 pub const PROPOSER_C: u8 = 4;
+pub const SMALL_BALANCE: u64 = 100_000;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
@@ -304,17 +305,13 @@ impl ExtBuilder {
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		// pallet_parachain_staking::GenesisConfig::<Test> {
-		// 	nominations: vec![],
-		// 	candidates: candidates
-		// 		.iter()
-		// 		.cloned()
-		// 		.map(|(account, _, bond)| (account, bond))
-		// 		.collect(),
-		// 	inflation_config: Default::default(),
-		// }
-		// .assimilate_storage(&mut t)
-		// .unwrap();
+		pallet_collator_selection::GenesisConfig::<Test> {
+			invulnerables: candidates.iter().cloned().map(|(acc, _, _)| acc).collect(),
+			candidacy_bond: SMALL_BALANCE,
+			..Default::default()
+		}
+		.assimilate_storage(&mut t)
+		.unwrap();
 
 		pallet_session::GenesisConfig::<Test> {
 			keys: candidates
