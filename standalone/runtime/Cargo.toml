@@ -54,7 +54,6 @@ sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0
 # Local dependencies
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 pallet-dkg-metadata = { path = '../../pallets/dkg-metadata', default-features = false }
-pallet-dkg-mmr = { path = '../../pallets/dkg-mmr', default-features = false }
 pallet-dkg-proposals = { path = '../../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../../pallets/dkg-proposal-handler', default-features = false }
 
@@ -104,7 +103,6 @@ std = [
 	'pallet-dkg-metadata/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
-	'pallet-dkg-mmr/std',
 	'pallet-mmr/std',
 	'pallet-election-provider-multi-phase/std',
 	'sp-npos-elections/std',
