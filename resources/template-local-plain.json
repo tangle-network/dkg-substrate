@@ -77,7 +77,9 @@
       },
       "collatorSelection": {
         "invulnerables": [
-          "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+          "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+          "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y"
         ],
         "candidacyBond": 16000000000,
         "desiredCandidates": 0
@@ -91,6 +93,22 @@
               "aura": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
               "dkg": "KW39r9CJjAVzmkf9zQ4YDb2hqfAVGdRqn53eRqyruqpxAP5YL"
             }
+          ],
+          [
+            "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            {
+              "aura": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+              "dkg": "KWByAN7WfZABWS5AoWqxriRmF5f2jnDqy3rB5pfHLGkY93ibN"
+            }
+          ],
+          [
+            "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+            "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+            {
+              "aura": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+              "dkg": "KWBpGtyJLBkJERdZT1a1uu19c2uPpZm9nFd8SGtCfRUAT3Y4w"
+            }
           ]
         ]
       },
@@ -100,11 +118,15 @@
       "auraExt": null,
       "dkg": {
         "authorities": [
-          "KW39r9CJjAVzmkf9zQ4YDb2hqfAVGdRqn53eRqyruqpxAP5YL"
+          "KW39r9CJjAVzmkf9zQ4YDb2hqfAVGdRqn53eRqyruqpxAP5YL",
+          "KWByAN7WfZABWS5AoWqxriRmF5f2jnDqy3rB5pfHLGkY93ibN",
+          "KWBpGtyJLBkJERdZT1a1uu19c2uPpZm9nFd8SGtCfRUAT3Y4w"
         ],
         "threshold": 0,
         "authorityIds": [
-          "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+          "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+          "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y"
         ]
       },
       "dkgProposals": {
