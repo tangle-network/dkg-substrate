@@ -200,7 +200,7 @@ parameter_types! {
 // We allow root only to execute privileged collator selection operations.
 pub type CollatorSelectionUpdateOrigin = EnsureRoot<AccountId>;
 
-impl pallet_collator_selection::Config for Runtime {
+impl pallet_collator_selection::Config for Test {
 	type Event = Event;
 	type Currency = Balances;
 	type UpdateOrigin = CollatorSelectionUpdateOrigin;
