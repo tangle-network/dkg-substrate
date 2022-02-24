@@ -16,7 +16,6 @@ CMD SKIP_WASM_BUILD=1 cargo +nightly tarpaulin --out Xml \
     -p pallet-dkg-metadata \
     -p pallet-dkg-proposal-handler \
     -p pallet-dkg-proposals \
-    -p pallet-parachain-staking \
     -p dkg-primitives \
     -p dkg-runtime-primitives \
     --timeout 3600

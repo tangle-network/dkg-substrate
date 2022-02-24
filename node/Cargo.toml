@@ -1,44 +1,43 @@
 [package]
-name = 'dkg-node'
-authors = ['Webb tools']
-description = 'A new Cumulus FRAME-based Substrate node, ready for hacking.'
-license = 'Unlicense'
-version = '3.0.0'
-homepage = 'https://webb.tools'
+name = "dkg-node"
+authors = ["Webb tools"]
+description = "A new Cumulus FRAME-based Substrate node, ready for hacking."
+license = "Unlicense"
+version = "3.0.0"
+homepage = "https://webb.tools"
 repository = "https://github.com/webb-tools/dkg-substrate"
-edition = '2018'
-build = 'build.rs'
+edition = "2018"
+build = "build.rs"
 
 [package.metadata.docs.rs]
-targets = ['x86_64-unknown-linux-gnu']
+targets = ["x86_64-unknown-linux-gnu"]
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 
 [[bin]]
-name = 'dkg-node'
+name = "dkg-node"
 
 [features]
 default = []
-runtime-benchmarks = ['dkg-runtime/runtime-benchmarks']
+runtime-benchmarks = ["dkg-runtime/runtime-benchmarks"]
 
 [dependencies]
-derive_more = '0.99.2'
-log = '0.4.14'
-codec = { package = 'parity-scale-codec', version = '2.0.0' }
-structopt = '0.3.8'
-serde = { version = '1.0.119', features = ['derive'] }
-hex-literal = '0.3.1'
+derive_more = "0.99.2"
+log = "0.4.14"
+codec = { package = "parity-scale-codec", version = "2.0.0" }
+structopt = "0.3.8"
+serde = { version = "1.0.119", features = ["derive"] }
+hex-literal = "0.3.1"
 
 # RPC related Dependencies
-jsonrpc-core = '18.0.0'
+jsonrpc-core = "18.0.0"
 
 # Local Dependencies
-dkg-runtime = { path = '../runtime' }
-dkg-runtime-primitives = { path = '../dkg-runtime-primitives' }
-dkg-primitives = { path = '../dkg-primitives' }
-dkg-gadget = { path = '../dkg-gadget' }
-parachain-staking = { package = 'pallet-parachain-staking', path = '../pallets/parachain-staking', default-features = false }
+dkg-runtime = { path = "../runtime" }
+dkg-runtime-primitives = { path = "../dkg-runtime-primitives" }
+dkg-primitives = { path = "../dkg-primitives" }
+dkg-gadget = { path = "../dkg-gadget" }
 
 # Substrate Dependencies
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
@@ -60,7 +59,7 @@ sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-rpc-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
-sc-service = { git = 'https://github.com/paritytech/substrate', branch = "polkadot-v0.9.16", features = ['wasmtime'] }
+sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", features = ["wasmtime"] }
 sc-telemetry = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sc-tracing = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
@@ -91,10 +90,11 @@ cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus", branc
 cumulus-primitives-parachain-inherent = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16" }
 cumulus-relay-chain-interface = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16" }
 cumulus-relay-chain-local = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16" }
+pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16" }
 
 # Polkadot dependencies
-polkadot-cli = { git = 'https://github.com/paritytech/polkadot', branch = 'release-v0.9.16'}
-polkadot-parachain = { git = 'https://github.com/paritytech/polkadot', branch = 'release-v0.9.16'}
-polkadot-primitives = { git = 'https://github.com/paritytech/polkadot', branch = 'release-v0.9.16'}
-polkadot-service = { git = 'https://github.com/paritytech/polkadot', branch = 'release-v0.9.16'}
-polkadot-test-service = { git = 'https://github.com/paritytech/polkadot', branch = 'release-v0.9.16'}
+polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.16"}
+polkadot-parachain = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.16"}
+polkadot-primitives = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.16"}
+polkadot-service = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.16"}
+polkadot-test-service = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.16"}

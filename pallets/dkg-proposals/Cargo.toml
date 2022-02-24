@@ -31,8 +31,8 @@ frame-benchmarking = { default-features = false, git = "https://github.com/parit
 
 [dev-dependencies]
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
-pallet-parachain-staking = { path = "../parachain-staking" }
 pallet-dkg-metadata = { path = "../dkg-metadata" }
+pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16" }
 pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }

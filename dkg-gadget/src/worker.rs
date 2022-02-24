@@ -550,8 +550,8 @@ where
 				// this metric is kind of 'fake'. Best DKG block should only be updated once we have
 				// a signed commitment for the block. Remove once the above TODO is done.
 				metric_set!(self, dkg_best_block, *header.number());
-				debug!(target: "dkg", "🕸️  Active validator set: {:?}", active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
-				debug!(target: "dkg", "🕸️  Queued validator set: {:?}", queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
+				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
+				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				// Setting up the DKG
 				self.handle_dkg_setup(&header, active.clone());
 				self.handle_queued_dkg_setup(&header, queued.clone());
