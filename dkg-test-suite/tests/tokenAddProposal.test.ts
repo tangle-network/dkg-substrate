@@ -6,14 +6,11 @@ import {
 	encodeFunctionSignature,
 	encodeTokenAddProposal,
 	ethAddressFromUncompressedPublicKey,
-	fetchDkgPublicKey,
 	registerResourceId,
 	sleep,
 	startStandaloneNode,
 	waitForEvent,
 	waitUntilDKGPublicKeyStoredOnChain,
-    AnchorUpdateProposal,
-    encodeUpdateAnchorProposal,
 } from '../src/utils';
 import { LocalChain } from '../src/localEvm';
 import { ChildProcess } from 'child_process';

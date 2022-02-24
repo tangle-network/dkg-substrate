@@ -210,7 +210,7 @@ describe('Token Add Proposal', () => {
 			// Want to check that token was actually added
 			expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeTrue();
 		}
-
+		await sleep(5 * BLOCK_TIME);
 		//const tokenToRemove = await MintableToken.createToken('testToken', 'TEST', wallet1);
 		const proposalPayload: TokenRemoveProposal = {
 			header: {
@@ -280,7 +280,7 @@ describe('Token Add Proposal', () => {
 		);
 		await expect(tx2.wait()).toResolve();
 		// Want to check that token was actually added
-		//expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeTrue();
+		expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeFalse();
 	});
 
 	afterAll(async () => {
