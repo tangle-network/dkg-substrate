@@ -91,6 +91,16 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 						get_collator_keys_from_seed("Alice"),
 						get_dkg_keys_from_seed("Alice"),
 					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Bob"),
+						get_collator_keys_from_seed("Bob"),
+						get_dkg_keys_from_seed("Bob"),
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
+					),
 				],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -133,6 +143,16 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
 						get_dkg_keys_from_seed("Alice"),
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Bob"),
+						get_collator_keys_from_seed("Bob"),
+						get_dkg_keys_from_seed("Bob"),
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
 					),
 				],
 				vec![
