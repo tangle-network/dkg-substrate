@@ -59,6 +59,7 @@ use frame_support::{
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
 use scale_info::TypeInfo;
+use sp_core::hashing::keccak_256;
 use sp_runtime::{
 	traits::{AccountIdConversion, Saturating},
 	RuntimeDebug,
@@ -151,7 +152,7 @@ pub mod pallet {
 	/// Tracks current proposer set
 	#[pallet::storage]
 	#[pallet::getter(fn proposers)]
-	pub type Proposers<T: Config> = StorageMap<_, Blake2_256, T::AccountId, bool, ValueQuery>;
+	pub type Proposers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
 
 	/// Number of proposers in set
 	#[pallet::storage]
@@ -514,9 +515,32 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn merkelize_proposer_set() -> Result<Vec<u8>, DispatchError> {
-		ensure!(Self::proposer_count() != 0, Error::<T>::ProposerCountIsZero);
-		Self::Proposers
+	pub fn pre_process_for_merkelize() -> Vec<[u8; 32]> {
+		let height = Self::log_proposer_count();
+		let vec_of_hashes: Vec<[u8; 32]> = Vec::new();
+		let vec_of_hashes: Vec<[u8; 32]> = vec_keys.map(|x| keccak_256(&x.encode()[..])).collect();
+		// Pad vec_of_hashes to have length 2^height
+		let two = 2;
+		while vec_of_hashes.len() != two.saturating_pow(height) {
+			vec_of_hashes.push([0u8; 32]);
+		}
+		vec_of_hashes
+	}
+
+	// TODO: Fill in this fn
+	pub fn hash_layer(layer: Vec<[u8; 32]>) -> Vec<[u8; 32]> {
+		let layer_above: Vec<[u8; 32]> = Vec::new();
+		layer_above
+	}
+
+	pub fn merkelize_proposer_set() {
+		let mut vec_of_hashes = Self::pre_process_for_merkelize();
+		let height = Self::log_proposer_count();
+		while height > 0 {
+			vec_of_hashes = Self::hash_layer(vec_of_hashes);
+			height -= 1;
+		}
+		vec_of_hashes.get(0).unwrap_or_default().to_vec()
 	}
 
 	/// Checks if who is a proposer

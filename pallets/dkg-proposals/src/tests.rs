@@ -689,7 +689,4 @@ fn test_log_proposers_count() {
 	manually_set_proposer_count(100).execute_with(|| {
 		assert_eq!(DKGProposals::log_proposer_count(), 7);
 	});
-	manually_set_proposer_count(0).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 7);
-	});
 }
