@@ -1,6 +1,5 @@
 use cumulus_primitives_core::ParaId;
 use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT, EXISTENTIAL_DEPOSIT};
-use parachain_staking::{InflationInfo, Range};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -163,27 +162,6 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 			para_id: id.into(),
 		},
 	)
-}
-
-pub fn dkg_inflation_config() -> InflationInfo<Balance> {
-	InflationInfo {
-		expect: Range {
-			min: 100_000 * MICROUNIT,
-			ideal: 200_000 * MICROUNIT,
-			max: 500_000 * MICROUNIT,
-		},
-		annual: Range {
-			min: Perbill::from_percent(4),
-			ideal: Perbill::from_percent(5),
-			max: Perbill::from_percent(5),
-		},
-		// 8766 rounds (hours) in a year
-		round: Range {
-			min: Perbill::from_parts(Perbill::from_percent(4).deconstruct() / 8766),
-			ideal: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
-			max: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
-		},
-	}
 }
 
 fn testnet_genesis(

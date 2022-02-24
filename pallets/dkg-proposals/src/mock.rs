@@ -194,16 +194,12 @@ parameter_types! {
 	pub const MaxCandidates: u32 = 1000;
 	pub const MinCandidates: u32 = 5;
 	pub const MaxInvulnerables: u32 = 100;
-	pub const ExecutiveBody: BodyId = BodyId::Executive;
 }
-
-// We allow root only to execute privileged collator selection operations.
-pub type CollatorSelectionUpdateOrigin = EnsureRoot<AccountId>;
 
 impl pallet_collator_selection::Config for Test {
 	type Event = Event;
 	type Currency = Balances;
-	type UpdateOrigin = CollatorSelectionUpdateOrigin;
+	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type PotId = PotId;
 	type MaxCandidates = MaxCandidates;
 	type MinCandidates = MinCandidates;
@@ -247,7 +243,7 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 pub(crate) fn roll_to(n: u64) {
 	while System::block_number() < n {
 		Balances::on_finalize(System::block_number());
-		ParachainStaking::on_finalize(System::block_number());
+		CollatorSelection::on_finalize(System::block_number());
 		Session::on_finalize(System::block_number());
 		Aura::on_finalize(System::block_number());
 		System::on_finalize(System::block_number());
@@ -255,7 +251,7 @@ pub(crate) fn roll_to(n: u64) {
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
 		Balances::on_initialize(System::block_number());
-		ParachainStaking::on_initialize(System::block_number());
+		CollatorSelection::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
@@ -308,17 +304,17 @@ impl ExtBuilder {
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		pallet_parachain_staking::GenesisConfig::<Test> {
-			nominations: vec![],
-			candidates: candidates
-				.iter()
-				.cloned()
-				.map(|(account, _, bond)| (account, bond))
-				.collect(),
-			inflation_config: Default::default(),
-		}
-		.assimilate_storage(&mut t)
-		.unwrap();
+		// pallet_parachain_staking::GenesisConfig::<Test> {
+		// 	nominations: vec![],
+		// 	candidates: candidates
+		// 		.iter()
+		// 		.cloned()
+		// 		.map(|(account, _, bond)| (account, bond))
+		// 		.collect(),
+		// 	inflation_config: Default::default(),
+		// }
+		// .assimilate_storage(&mut t)
+		// .unwrap();
 
 		pallet_session::GenesisConfig::<Test> {
 			keys: candidates

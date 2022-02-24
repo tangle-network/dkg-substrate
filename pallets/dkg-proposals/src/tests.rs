@@ -12,7 +12,7 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, ParachainStaking,
+	// assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, ParachainStaking,
 };
 use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
@@ -584,7 +584,7 @@ fn should_get_initial_proposers_from_dkg() {
 fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_eq!(DKGProposals::proposer_count(), 4);
-		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
+		// ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(10);
 		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
@@ -599,7 +599,7 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 #[test]
 fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
-		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
+		// ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
@@ -651,7 +651,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 			proposal.clone(),
 		));
 
-		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
+		// ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
