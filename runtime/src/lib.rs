@@ -585,7 +585,6 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
-
 type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
 
 /// Configure Merkle Mountain Range pallet.
