@@ -186,10 +186,8 @@ describe('Token Add Proposal', () => {
 				signature: HexString;
 			};
 		};
-        console.log('hi1')
 		// sanity check.
 		expect(dkgProposal.signed.data).toEqual(prop);
-        console.log('hi2')
 		// perfect! now we need to send it to the signature bridge.
 		// but first, we need to log few things to help us to debug.'
 		const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
@@ -199,15 +197,14 @@ describe('Token Add Proposal', () => {
 			dkgProposal.signed.signature
 		);
 		expect(isSignedByGovernor).toBeTrue();
-        console.log('hi3')
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.executeProposalWithSignature(
 			dkgProposal.signed.data,
 			dkgProposal.signed.signature
 		);
 		await expect(tx2.wait()).toResolve();
-        console.log('hi4')
-		// now we shall check the new merkle root on the other chain.
+		// Want to check that token was actually added
+		expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeTrue();
 	});
 
 	afterAll(async () => {
