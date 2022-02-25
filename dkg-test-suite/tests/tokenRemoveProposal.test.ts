@@ -37,7 +37,7 @@ import {
 	wallet1,
 	wallet2,
 	charlieNode,
-	localChain2
+	localChain2, executeAfter
 } from './utils/util';
 
 
@@ -195,12 +195,6 @@ describe('Token Add Proposal', () => {
 	});
 
 	afterAll(async () => {
-		await polkadotApi.disconnect();
-		aliceNode?.kill('SIGINT');
-		bobNode?.kill('SIGINT');
-		charlieNode?.kill('SIGINT');
-		await localChain?.stop();
-		await localChain2?.stop();
-		await sleep(5 * SECONDS);
+		await executeAfter();
 	});
 });

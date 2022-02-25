@@ -1,5 +1,5 @@
 import {jest} from "@jest/globals";
-import {ACC1_PK, ACC2_PK, BLOCK_TIME} from "../../src/constants";
+import {ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS} from "../../src/constants";
 import {ApiPromise} from "@polkadot/api";
 import {ChildProcess} from "child_process";
 import {LocalChain} from "../../src/localEvm";
@@ -8,7 +8,7 @@ import {Bridges} from "@webb-tools/protocol-solidity";
 import {GovernedTokenWrapper, MintableToken} from "@webb-tools/tokens";
 import {
 	ethAddressFromUncompressedPublicKey,
-	provider,
+	provider, sleep,
 	startStandaloneNode,
 	waitUntilDKGPublicKeyStoredOnChain
 } from "../../src/utils";
@@ -110,3 +110,13 @@ beforeAll(async () => {
 		expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
 	}
 });
+
+export async function executeAfter() {
+	await polkadotApi.disconnect();
+	aliceNode?.kill('SIGINT');
+	bobNode?.kill('SIGINT');
+	charlieNode?.kill('SIGINT');
+	await localChain?.stop();
+	await localChain2?.stop();
+	await sleep(5 * SECONDS);
+}
