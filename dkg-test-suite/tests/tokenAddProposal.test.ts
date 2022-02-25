@@ -1,50 +1,36 @@
-import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
 	TokenAddProposal,
 	ChainIdType,
 	encodeFunctionSignature,
 	encodeTokenAddProposal,
-	ethAddressFromUncompressedPublicKey,
 	registerResourceId,
-	sleep,
-	startStandaloneNode,
 	waitForEvent,
-	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
-import { LocalChain } from '../src/localEvm';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
-import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken, GovernedTokenWrapper, TokenWrapperHandler } from '@webb-tools/tokens';
-import { ApiPromise, Keyring } from '@polkadot/api';
-import { provider } from '../src/utils';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import { u8aToHex } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
-import { signAndSendUtil } from '../src/evm/util/utils';
+import {ethers} from 'ethers';
+import {MintableToken, GovernedTokenWrapper} from '@webb-tools/tokens';
+import {Keyring} from '@polkadot/api';
+import {u8aToHex} from '@polkadot/util';
+import {Option} from '@polkadot/types';
+import {HexString} from '@polkadot/util/types';
+import {signAndSendUtil} from '../src/evm/util/utils';
 import {
-	aliceNode,
-	bobNode,
 	localChain,
 	polkadotApi,
 	signatureBridge,
 	wallet1,
-	wallet2,
-	charlieNode,
-	localChain2, executeAfter
+	executeAfter
 } from './utils/util';
 
 describe('Token Add Proposal', () => {
 	test('should be able to sign token add proposal', async () => {
-        const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
-        const governedTokenAddress = anchor.token!;
-		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress , wallet1);
-        const resourceId = await governedToken.createResourceId();
-        // Create Mintable Token to add to GovernedTokenWrapper
-           //Create an ERC20 Token
-        const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
+		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
+		const governedTokenAddress = anchor.token!;
+		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
+		const resourceId = await governedToken.createResourceId();
+		// Create Mintable Token to add to GovernedTokenWrapper
+		//Create an ERC20 Token
+		const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
 		const proposalPayload: TokenAddProposal = {
 			header: {
 				resourceId,
@@ -52,7 +38,7 @@ describe('Token Add Proposal', () => {
 					governedToken.contract.interface.functions['add(address,uint256)'].format()
 				),
 				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
-                chainIdType: ChainIdType.EVM,
+				chainIdType: ChainIdType.EVM,
 				chainId: localChain.chainId,
 			},
 			newTokenAddress: tokenToAdd.contract.address,
@@ -61,22 +47,22 @@ describe('Token Add Proposal', () => {
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
 		const proposalBytes = encodeTokenAddProposal(proposalPayload);
 		// get alice account to send the transaction to the dkg node.
-		const keyring = new Keyring({ type: 'sr25519' });
+		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
 			EVM: localChain.chainId,
 		});
-        const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
-        const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-            Unsigned: {
-                kind: kind,
-                data: prop
-            }
-        });
-        const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
+		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+			Unsigned: {
+				kind: kind,
+				data: prop
+			}
+		});
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
 
-        await signAndSendUtil(polkadotApi, proposalCall, alice);
+		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
 		// now we need to wait until the proposal to be signed on chain.
 		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
@@ -97,7 +83,6 @@ describe('Token Add Proposal', () => {
 		// sanity check.
 		expect(dkgProposal.signed.data).toEqual(prop);
 		// perfect! now we need to send it to the signature bridge.
-		// but first, we need to log few things to help us to debug.'
 		const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(

@@ -5,7 +5,7 @@ import {ChildProcess} from "child_process";
 import {LocalChain} from "../../src/localEvm";
 import {ethers} from "ethers";
 import {Bridges} from "@webb-tools/protocol-solidity";
-import {GovernedTokenWrapper, MintableToken} from "@webb-tools/tokens";
+import {MintableToken} from "@webb-tools/tokens";
 import {
 	ethAddressFromUncompressedPublicKey,
 	provider, sleep,
@@ -28,9 +28,9 @@ export let wallet2: ethers.Wallet;
 export let signatureBridge: Bridges.SignatureBridge;
 
 beforeAll(async () => {
-	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
-	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
+	aliceNode = startStandaloneNode('alice', {tmp: true, printLogs: false});
+	bobNode = startStandaloneNode('bob', {tmp: true, printLogs: false});
+	charlieNode = startStandaloneNode('charlie', {tmp: true, printLogs: false});
 
 	localChain = new LocalChain('local', 5001, [
 		{

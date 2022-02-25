@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
 	AnchorUpdateProposal,
@@ -8,32 +7,21 @@ import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	registerResourceId,
-	sleep,
-	startStandaloneNode,
 	waitForEvent,
-	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
-import { LocalChain } from '../src/localEvm';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
-import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken } from '@webb-tools/tokens';
-import { ApiPromise, Keyring } from '@polkadot/api';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import { u8aToHex } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
-import { provider } from '../src/utils'
+import {ethers} from 'ethers';
+import {Anchors} from '@webb-tools/protocol-solidity';
+import {Keyring} from '@polkadot/api';
+import {u8aToHex} from '@polkadot/util';
+import {Option} from '@polkadot/types';
+import {HexString} from '@polkadot/util/types';
 
 import {
-	aliceNode,
-	bobNode,
 	localChain,
 	polkadotApi,
 	signatureBridge,
 	wallet1,
 	wallet2,
-	charlieNode,
 	localChain2, executeAfter
 } from './utils/util';
 
@@ -81,7 +69,7 @@ describe('Anchor Update Proposal', () => {
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
 		const proposalBytes = encodeUpdateAnchorProposal(proposalPayload);
 		// get alice account to send the transaction to the dkg node.
-		const keyring = new Keyring({ type: 'sr25519' });
+		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
@@ -94,10 +82,10 @@ describe('Anchor Update Proposal', () => {
 			prop
 		);
 		const tx = new Promise<void>(async (resolve, reject) => {
-			const unsub = await proposalCall.signAndSend(alice, ({ events, status }) => {
+			const unsub = await proposalCall.signAndSend(alice, ({events, status}) => {
 				if (status.isFinalized) {
 					unsub();
-					const success = events.find(({ event }) =>
+					const success = events.find(({event}) =>
 						polkadotApi.events.system.ExtrinsicSuccess.is(event)
 					);
 					if (success) {

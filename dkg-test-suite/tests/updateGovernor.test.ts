@@ -1,37 +1,22 @@
-import { jest } from '@jest/globals';
-import { ApiPromise } from '@polkadot/api';
-import { provider } from '../src/utils';
-import { Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken } from '@webb-tools/tokens';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
 import 'jest-extended';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import { LocalChain } from '../src/localEvm';
+import {BLOCK_TIME} from '../src/constants';
 import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
 	fetchDkgRefreshNonce,
 	sleep,
-	startStandaloneNode,
 	triggerDkgManuaIncrementNonce,
 	triggerDkgManualRefresh,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
-	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
 
 import {
-	aliceNode,
-	bobNode,
 	localChain,
 	polkadotApi,
 	signatureBridge,
-	wallet1,
-	wallet2,
-	charlieNode,
-	localChain2, executeAfter
+	executeAfter
 } from './utils/util';
 
 describe('Update SignatureBridge Governor', () => {

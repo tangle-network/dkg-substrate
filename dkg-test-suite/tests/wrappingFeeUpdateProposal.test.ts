@@ -1,42 +1,25 @@
-import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
 	WrappingFeeUpdateProposal,
 	ChainIdType,
 	encodeFunctionSignature,
 	encodeWrappingFeeUpdateProposal,
-	ethAddressFromUncompressedPublicKey,
-	fetchDkgPublicKey,
 	registerResourceId,
-	sleep,
-	startStandaloneNode,
 	waitForEvent,
-	waitUntilDKGPublicKeyStoredOnChain,
-	AnchorUpdateProposal,
-	encodeUpdateAnchorProposal,
 } from '../src/utils';
-import { LocalChain } from '../src/localEvm';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
-import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken, GovernedTokenWrapper, TokenWrapperHandler } from '@webb-tools/tokens';
-import { ApiPromise, Keyring } from '@polkadot/api';
-import { provider } from '../src/utils';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import {hexToNumber, numberToHex, u8aToHex} from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
-import { signAndSendUtil } from '../src/evm/util/utils';
+import {ethers} from 'ethers';
+import {MintableToken, GovernedTokenWrapper} from '@webb-tools/tokens';
+import {Keyring} from '@polkadot/api';
+import {hexToNumber, u8aToHex} from '@polkadot/util';
+import {Option} from '@polkadot/types';
+import {HexString} from '@polkadot/util/types';
+import {signAndSendUtil} from '../src/evm/util/utils';
 import {
-	aliceNode,
-	bobNode,
 	localChain,
 	polkadotApi,
 	signatureBridge,
 	wallet1,
-	wallet2,
-	charlieNode,
-	localChain2, executeAfter
+	executeAfter
 } from './utils/util';
 
 describe('Wrapping Fee Update Proposal', () => {
@@ -44,11 +27,10 @@ describe('Wrapping Fee Update Proposal', () => {
 	test('should be able to sign wrapping fee update proposal', async () => {
 		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
 		const governedTokenAddress = anchor.token!;
-		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress , wallet1);
+		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
 		const resourceId = await governedToken.createResourceId();
 		// Create Mintable Token to add to GovernedTokenWrapper
 		//Create an ERC20 Token
-		const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
 		const proposalPayload: WrappingFeeUpdateProposal = {
 			header: {
 				resourceId,
@@ -65,7 +47,7 @@ describe('Wrapping Fee Update Proposal', () => {
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
 		const proposalBytes = encodeWrappingFeeUpdateProposal(proposalPayload);
 		// get alice account to send the transaction to the dkg node.
-		const keyring = new Keyring({ type: 'sr25519' });
+		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
@@ -101,7 +83,6 @@ describe('Wrapping Fee Update Proposal', () => {
 		// sanity check.
 		expect(dkgProposal.signed.data).toEqual(prop);
 		// perfect! now we need to send it to the signature bridge.
-		// but first, we need to log few things to help us to debug.'
 		const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
@@ -115,9 +96,61 @@ describe('Wrapping Fee Update Proposal', () => {
 			dkgProposal.signed.signature
 		);
 		await expect(tx2.wait()).toResolve();
-		// Want to check that token was actually added
+		// Want to check that fee was updated
 		const fee = await governedToken.contract.getFee();
 		expect(hexToNumber("0x50")).toEqual(fee);
+	});
+
+	test('test that wrapping fee is not updated', async () => {
+		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
+		const governedTokenAddress = anchor.token!;
+		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
+		const resourceId = await governedToken.createResourceId();
+		// Create Mintable Token to add to GovernedTokenWrapper
+		//Create an ERC20 Token
+		const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
+		const proposalPayload: WrappingFeeUpdateProposal = {
+			header: {
+				resourceId,
+				functionSignature: encodeFunctionSignature(
+					governedToken.contract.interface.functions['setFee(uint8,uint256)'].format()
+				),
+				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
+				chainIdType: ChainIdType.EVM,
+				chainId: localChain.chainId,
+			},
+			newFee: "0x1000",
+		};
+		// register proposal resourceId.
+		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
+		const proposalBytes = encodeWrappingFeeUpdateProposal(proposalPayload);
+		// get alice account to send the transaction to the dkg node.
+		const keyring = new Keyring({type: 'sr25519'});
+		const alice = keyring.addFromUri('//Alice');
+		const prop = u8aToHex(proposalBytes);
+		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
+			EVM: localChain.chainId,
+		});
+		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
+		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+			Unsigned: {
+				kind: kind,
+				data: prop
+			}
+		});
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+
+		await signAndSendUtil(polkadotApi, proposalCall, alice);
+
+		// now we need to wait until the proposal to be signed on chain.
+		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
+		// now we need to query the proposal and its signature.
+		const key = {
+			WrappingFeeUpdateProposal: proposalPayload.header.nonce,
+		};
+		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
+		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+		expect(value.isSome).toBeFalse();
 	});
 
 	afterAll(async () => {
