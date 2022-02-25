@@ -22,15 +22,16 @@ FROM ubuntu:20.04
 COPY --from=builder /dkg/target/release/dkg-node /usr/local/bin
 
 RUN useradd -m -u 1000 -U -s /bin/sh -d /dkg dkg  && \
-  mkdir -p /data /dkg/.local/share/dkg && \
-  chown -R dkg:dkg /data && \
-  ln -s /data /dkg/.local/share/dkg
-
+  mkdir -p /dkg/data /dkg/.local/share/dkg && \
+  chown -R dkg:dkg /dkg/data && \
+  ln -s dkg/data/ /dkg/.local/share/dkg
+  
+# checks
 RUN ldd /usr/local/bin/dkg-node && \
   /usr/local/bin/dkg-node --version
 
 USER dkg
 EXPOSE 30333 9933 9944 9615
-VOLUME ["/data"]
+VOLUME ["/dkg/data"]
 
 ENTRYPOINT [ "/usr/local/bin/dkg-node" ]
