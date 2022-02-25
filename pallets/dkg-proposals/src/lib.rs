@@ -502,7 +502,7 @@ impl<T: Config> Pallet<T> {
 
 	// Gives the height of the proposer set Merkle tree
 	// Right now this takes O(log(size of proposer set)) time but can likely be reduced
-	pub fn log_proposer_count() -> u32 {
+	pub fn get_proposer_set_tree_height() -> u32 {
 		if Self::proposer_count() == 1 {
 			1
 		} else {
@@ -515,34 +515,41 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn pre_process_for_merkelize() -> Vec<[u8; 32]> {
-		let height = Self::log_proposer_count();
-		let mut vec_keys = Proposers::<T>::iter_keys();
-		let mut vec_of_hashes: Vec<[u8; 32]> =
-			vec_keys.map(|x| keccak_256(&x.encode()[..])).collect();
-		// Pad vec_of_hashes to have length 2^height
+	pub fn pre_process_for_merkelize() -> Vec<Vec<u8>> {
+		let height = Self::get_proposer_set_tree_height();
+		let proposer_keys = Proposers::<T>::iter_keys();
+		let mut base_layer: Vec<Vec<u8>> =
+			proposer_keys.map(|x| keccak_256(&x.encode()[..]).to_vec()).collect();
+		// Pad base_layer to have length 2^height
 		let two = 2;
-		while vec_of_hashes.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
-			vec_of_hashes.push([0u8; 32]);
+		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
+			base_layer.push(keccak_256(&[0u8]).to_vec());
 		}
-		vec_of_hashes
+		base_layer
 	}
 
-	// TODO: Fill in this fn
-	pub fn hash_layer(layer: Vec<[u8; 32]>) -> Vec<[u8; 32]> {
-		let layer_above: Vec<[u8; 32]> = Vec::new();
+	pub fn next_layer(curr_layer: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+		let mut layer_above: Vec<Vec<u8>> = Vec::new();
+		let mut index = 0;
+		while index < curr_layer.len() {
+			let mut input_to_hash_as_vec: Vec<u8> = curr_layer[index].clone();
+			input_to_hash_as_vec.extend_from_slice(&curr_layer[index + 1][..]);
+			let input_to_hash_as_slice = &input_to_hash_as_vec[..];
+			layer_above.push(keccak_256(input_to_hash_as_slice).to_vec());
+			index += 2;
+		}
 		layer_above
 	}
 
-	// pub fn merkelize_proposer_set() {
-	// 	let mut vec_of_hashes = Self::pre_process_for_merkelize();
-	// 	let height = Self::log_proposer_count();
-	// 	while height > 0 {
-	// 		vec_of_hashes = Self::hash_layer(vec_of_hashes);
-	// 		height -= 1;
-	// 	}
-	// 	vec_of_hashes.get(0).unwrap_or_default().to_vec()
-	// }
+	pub fn get_proposer_set_tree_root() -> Vec<u8> {
+		let mut curr_layer = Self::pre_process_for_merkelize();
+		let mut height = Self::get_proposer_set_tree_height();
+		while height > 0 {
+			curr_layer = Self::next_layer(curr_layer);
+			height -= 1;
+		}
+		curr_layer[0].clone()
+	}
 
 	/// Checks if who is a proposer
 	pub fn is_proposer(who: &T::AccountId) -> bool {

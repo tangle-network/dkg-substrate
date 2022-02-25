@@ -673,20 +673,20 @@ fn only_current_authorities_should_make_successful_proposals() {
 }
 
 #[test]
-fn test_log_proposers_count() {
+fn test__proposers_tree_height() {
 	manually_set_proposer_count(18).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 5);
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 5);
 	});
 	manually_set_proposer_count(16).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 4);
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 4);
 	});
 	manually_set_proposer_count(1).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 1);
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
 	});
 	manually_set_proposer_count(2).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 1);
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
 	});
 	manually_set_proposer_count(100).execute_with(|| {
-		assert_eq!(DKGProposals::log_proposer_count(), 7);
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 7);
 	});
 }
