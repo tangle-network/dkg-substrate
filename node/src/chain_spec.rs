@@ -1,5 +1,7 @@
 use cumulus_primitives_core::ParaId;
-use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT, EXISTENTIAL_DEPOSIT};
+use dkg_runtime::{
+	AccountId, AuraId, Balance, DKGId, Signature, EXISTENTIAL_DEPOSIT, MICROUNIT, MILLIUNIT,
+};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};

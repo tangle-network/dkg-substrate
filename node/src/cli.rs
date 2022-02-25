@@ -1,9 +1,8 @@
 use crate::chain_spec;
 use cumulus_client_cli;
-use sc_cli;
+use sc_cli::{self, KeySubcommand};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use sc_cli::KeySubcommand;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, StructOpt)]

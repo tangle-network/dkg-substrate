@@ -11,9 +11,7 @@ use super::{
 	},
 	*,
 };
-use crate::mock::{
-	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder,
-};
+use crate::mock::{assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder};
 use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
