@@ -24,8 +24,8 @@ import {
 } from './utils/util';
 import {signAndSendUtil} from "../src/evm/util/utils";
 
-describe('Max Deposit Limit Update Proposal', () => {
-	test('should be able to sign Max Deposit Limit Update Proposal', async () => {
+describe('Min Withdrawal Limit Update Proposal', () => {
+	test('should be able to sign Min Withdrawal Limit Update Proposal', async () => {
 		// get the anhor on localchain1
 		const anchor = signatureBridge.getAnchor(
 			localChain.chainId,
@@ -71,7 +71,7 @@ describe('Max Deposit Limit Update Proposal', () => {
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
 			EVM: localChain2.chainId,
 		});
-		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'MaxDepositLimitUpdate');
+		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'MinWithdrawalLimitUpdate');
 		const runtimeProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 			Unsigned: {
 				kind: kind,
@@ -84,14 +84,14 @@ describe('Max Deposit Limit Update Proposal', () => {
 		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
 		// now we need to query the proposal and its signature.
 		const key = {
-			MaxDepositLimitUpdateProposal: proposalPayload.header.nonce,
+			MinWithdrawlimitUpdateProposal: proposalPayload.header.nonce,
 		};
 		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
 		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 		expect(value.isSome).toBeTrue();
 		const dkgProposal = value.unwrap().toJSON() as {
 			signed: {
-				kind: 'MaxDepositLimitUpdate';
+				kind: 'MinWithdrawalLimitUpdate';
 				data: HexString;
 				signature: HexString;
 			};
