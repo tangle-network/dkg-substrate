@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
-import { ApiPromise, WsProvider } from '@polkadot/api';
+import { ApiPromise } from '@polkadot/api';
+import { provider } from '../src/utils';
 import { Bridges } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
 import { ChildProcess } from 'child_process';
@@ -68,7 +69,7 @@ describe('Update SignatureBridge Governor', () => {
 		const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
 
 		polkadotApi = await ApiPromise.create({
-			provider: new WsProvider('ws://127.0.0.1:9944'),
+			provider
 		});
 
 		// Update the signature bridge governor.

@@ -710,5 +710,20 @@ fn force_submit_should_work_with_valid_proposals() {
 			.is_some(),
 			true
 		);
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<72>(
+				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
+				ChainIdType::Substrate(1)
+			)
+		));
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::Substrate(1),
+				DKGPayloadKey::ResourceIdUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
 	});
 }

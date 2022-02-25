@@ -1,6 +1,7 @@
 import {
 	SubstrateProposal,
 	substratePalletResourceId,
+	ResourceIdUpdateProposal,
 } from "./utils";
 import {ApiPromise} from '@polkadot/api';
 
@@ -75,4 +76,19 @@ export const getAnchorCreateProposal = (api: ApiPromise) => {
 		call: api.tx.system.remark("execute anchor update proposal").toString(),
 	}
 	return anchorCreateProposal;
+}
+
+export const getResourceIdUpdateProposal = (api: ApiPromise) => {
+	const resourceIdUpdateProposal: ResourceIdUpdateProposal = 
+	{
+		header: {
+			resourceId: substratePalletResourceId,
+			functionSignature: '0x00000000',
+			nonce,
+		},
+		resourceIdToRegister: substratePalletResourceId,
+		methodName: 'execute_wrapping_fee_proposal',
+		
+	}
+	return resourceIdUpdateProposal;
 }
