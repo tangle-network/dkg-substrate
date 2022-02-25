@@ -3,6 +3,7 @@ use cumulus_client_cli;
 use sc_cli;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use sc_cli::KeySubcommand;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, StructOpt)]
@@ -14,6 +15,9 @@ pub enum Subcommand {
 	/// Export the genesis wasm of the parachain.
 	#[structopt(name = "export-genesis-wasm")]
 	ExportGenesisWasm(ExportGenesisWasmCommand),
+
+	/// Key management cli utilities
+	Key(KeySubcommand),
 
 	/// Build a chain specification.
 	BuildSpec(sc_cli::BuildSpecCmd),
