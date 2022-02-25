@@ -27,112 +27,24 @@ import {hexToNumber, numberToHex, u8aToHex} from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 import { signAndSendUtil } from '../src/evm/util/utils';
+import {
+	aliceNode,
+	bobNode,
+	localChain,
+	polkadotApi,
+	signatureBridge,
+	wallet1,
+	wallet2,
+	charlieNode,
+	localChain2
+} from './utils/util';
 
 describe('Wrapping Fee Update Proposal', () => {
-	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
-
-	let polkadotApi: ApiPromise;
-	let aliceNode: ChildProcess;
-	let bobNode: ChildProcess;
-	let charlieNode: ChildProcess;
-
-	let localChain: LocalChain;
-	let localChain2: LocalChain;
-	let wallet1: ethers.Wallet;
-	let wallet2: ethers.Wallet;
-
-	let signatureBridge: Bridges.SignatureBridge;
-
-	let governedToken: GovernedTokenWrapper;
-
-	beforeAll(async () => {
-		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
-		charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
-
-		localChain = new LocalChain('local', 5001, [
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC1_PK,
-			},
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC2_PK,
-			},
-		]);
-		localChain2 = new LocalChain('local2', 5002, [
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC1_PK,
-			},
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC2_PK,
-			},
-		]);
-		wallet1 = new ethers.Wallet(ACC1_PK, localChain.provider());
-		wallet2 = new ethers.Wallet(ACC2_PK, localChain2.provider());
-		// Deploy the token.
-		const localToken = await localChain.deployToken('Webb Token', 'WEBB', wallet1);
-		const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
-
-		polkadotApi = await ApiPromise.create({
-			provider,
-		});
-
-		// Update the signature bridge governor.
-		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
-		expect(dkgPublicKey).toBeString();
-		const governorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey);
-
-		let initialGovernors = {
-			[localChain.chainId]: wallet1,
-			[localChain2.chainId]: wallet2,
-		};
-
-		// Depoly the signature bridge.
-		signatureBridge = await localChain.deploySignatureBridge(
-			localChain2,
-			localToken,
-			localToken2,
-			wallet1,
-			wallet2,
-			initialGovernors
-		);
-		// get the anchor on localchain1
-		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
-		await anchor.setSigner(wallet1);
-		// approve token spending
-		const tokenAddress = signatureBridge.getWebbTokenAddress(localChain.chainId)!;
-		const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
-		await token.approveSpending(anchor.contract.address);
-		await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
-
-		// do the same but on localchain2
-		const anchor2 = signatureBridge.getAnchor(localChain2.chainId, ethers.utils.parseEther('1'))!;
-		await anchor2.setSigner(wallet2);
-		const tokenAddress2 = signatureBridge.getWebbTokenAddress(localChain2.chainId)!;
-		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
-		await token2.approveSpending(anchor2.contract.address);
-		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
-
-		// update the signature bridge governor on both chains.
-		const sides = signatureBridge.bridgeSides.values();
-		for (const signatureSide of sides) {
-			const contract = signatureSide.contract;
-			// now we transferOwnership, forcefully.
-			const tx = await contract.transferOwnership(governorAddress, 1);
-			expect(tx.wait()).toResolve();
-			// check that the new governor is the same as the one we just set.
-			const currentGovernor = await contract.governor();
-			expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
-		}
-	});
 
 	test('should be able to sign wrapping fee update proposal', async () => {
 		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
 		const governedTokenAddress = anchor.token!;
-		governedToken = GovernedTokenWrapper.connect(governedTokenAddress , wallet1);
+		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress , wallet1);
 		const resourceId = await governedToken.createResourceId();
 		// Create Mintable Token to add to GovernedTokenWrapper
 		//Create an ERC20 Token
