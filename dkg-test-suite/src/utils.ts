@@ -539,11 +539,11 @@ export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
 
 export function encodeTokenRemoveProposal(proposal: TokenRemoveProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const tokenAddProposal = new Uint8Array(40 + 20);
-	tokenAddProposal.set(header, 0); // 0 -> 40
+	const tokenRemoveProposal = new Uint8Array(40 + 20);
+	tokenRemoveProposal.set(header, 0); // 0 -> 40
 	const address = hexToU8a(proposal.removeTokenAddress).slice(0, 20);
-	tokenAddProposal.set(address, 40); // 40 -> 60
-	return tokenAddProposal;
+	tokenRemoveProposal.set(address, 40); // 40 -> 60
+	return tokenRemoveProposal;
 }
 
 export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal {

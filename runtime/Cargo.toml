@@ -22,7 +22,6 @@ hex-literal = { version = "0.3", optional = true }
 
 # Local Dependencies
 pallet-dkg-metadata = { path = '../pallets/dkg-metadata', default-features = false }
-pallet-dkg-mmr = { path = '../pallets/dkg-mmr', default-features = false }
 dkg-runtime-primitives = { path = '../dkg-runtime-primitives', default-features = false }
 pallet-dkg-proposals = { path = '../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../pallets/dkg-proposal-handler', default-features = false }
@@ -145,6 +144,5 @@ std = [
 	'dkg-runtime-primitives/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
-	'pallet-dkg-mmr/std',
 	'pallet-mmr/std'
 ]
