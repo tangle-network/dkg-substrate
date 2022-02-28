@@ -1,5 +1,5 @@
 FROM rust:buster as builder
-WORKDIR /dkg
+WORKDIR /app
 
 RUN rustup default nightly-2021-11-07 && \
 	rustup target add wasm32-unknown-unknown --toolchain nightly-2021-11-07
@@ -17,21 +17,26 @@ RUN cargo build --release -p dkg-node
 
 # =============
 
-FROM ubuntu:20.04
+FROM phusion/baseimage:bionic-1.0.0
 
-COPY --from=builder /dkg/target/release/dkg-node /usr/local/bin
+RUN useradd -m -u 1000 -U -s /bin/sh -d /dkg dkg
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /dkg dkg  && \
-  mkdir -p /dkg/data /dkg/.local/share/dkg && \
-  chown -R dkg:dkg /dkg/data && \
-  ln -s dkg/data/ /dkg/.local/share/dkg
-  
+COPY --from=builder /app/target/release/dkg-node /usr/local/bin
+
 # checks
 RUN ldd /usr/local/bin/dkg-node && \
   /usr/local/bin/dkg-node --version
 
+# Shrinking
+RUN rm -rf /usr/lib/python* && \
+	rm -rf /usr/bin /usr/sbin /usr/share/man
+
 USER dkg
 EXPOSE 30333 9933 9944 9615
+
+RUN mkdir /dkg/data
+RUN chown -R dkg:dkg /dkg/data
+
 VOLUME ["/dkg/data"]
 
 ENTRYPOINT [ "/usr/local/bin/dkg-node" ]
