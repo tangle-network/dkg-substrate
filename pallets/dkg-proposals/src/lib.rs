@@ -518,8 +518,11 @@ impl<T: Config> Pallet<T> {
 	pub fn pre_process_for_merkelize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
 		let proposer_keys = Proposers::<T>::iter_keys();
-		let mut base_layer: Vec<Vec<u8>> =
-			proposer_keys.map(|x| keccak_256(&x.encode()[..]).to_vec()).collect();
+		// Check for each key that the proposer is valid (should return true)
+		let mut base_layer: Vec<Vec<u8>> = proposer_keys
+			.filter(|v| Proposers::<T>::get(v))
+			.map(|x| keccak_256(&x.encode()[..]).to_vec())
+			.collect();
 		// Pad base_layer to have length 2^height
 		let two = 2;
 		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {

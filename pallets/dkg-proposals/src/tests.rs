@@ -673,7 +673,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 }
 
 #[test]
-fn test__proposers_tree_height() {
+fn proposers_tree_height_should_compute_correctly() {
 	manually_set_proposer_count(18).execute_with(|| {
 		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 5);
 	});
@@ -688,5 +688,27 @@ fn test__proposers_tree_height() {
 	});
 	manually_set_proposer_count(100).execute_with(|| {
 		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 7);
+	});
+}
+
+#[test]
+fn proposers_iter_keys_should_only_contain_active_proposers() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
+		let prop_keys: Vec<_> = Proposers::<Test>::iter_keys().collect();
+		assert_eq!(prop_keys.len(), 3);
+	});
+}
+
+// TODO: Test this better...right now just printing the root
+#[test]
+fn should_output_valid_root() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
+		println!("{:?}", DKGProposals::get_proposer_set_tree_root());
 	});
 }
