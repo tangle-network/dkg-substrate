@@ -91,7 +91,7 @@ echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
 
 ## Relay Chain
 
-> **NOTE**: In the following two sections, we document how to manually start a few relay chain
+> **NOTE**: In the following sections, we document how to start a few relay chain
 > nodes, start a parachain node (collator), and register the parachain with the relay chain.
 >
 > We also have the [**`polkadot-launch`**](https://www.npmjs.com/package/polkadot-launch) CLI tool
@@ -103,6 +103,47 @@ To operate a parathread or parachain, you _must_ connect to a relay chain. Typic
 on a local Rococo development network, then move to the testnet, and finally launch on the mainnet.
 **Keep in mind you need to configure the specific relay chain you will connect to in your collator
 `chain_spec.rs`**. In the following examples, we will use `rococo-local` as the relay network.
+
+### Using parachain-launch for Docker setup
+
+This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
+
+**Note:** If you make changes to the `dkg-node` that you want to see reflected in parachain-launch setup, you will need to run the script in `/scripts/docker-hub-publish-dkg-node.sh`. This will build the docker package and publish it so that it may be used in the generated docker-compose file. 
+
+```
+cd launch
+
+# install dependencies
+yarn
+
+# generate docker-compose.yml and genesis
+# e.g.: docker pull webb-tools/dkg-node:3:0:0
+yarn run start generate --config=config.yml
+
+# start relaychain and parachain
+cd output
+# NOTE: If regenerate the output directory, need to rebuild the images.
+docker-compose up -d --build
+
+# list all of the containers.
+docker ps -a
+
+# track container logs
+docker logs -f [container_id/container_name]
+
+# stop all of the containers.
+docker-compose stop
+
+# remove all of the containers.
+docker-compose rm
+
+# NOTE: If you want to clear the data and restart, you need to clear the volumes.
+# remove volume
+docker volume ls
+docker volume rm [volume_name]
+# prune all volumes
+docker volume prune
+```
 
 ### Build Relay Chain
 
