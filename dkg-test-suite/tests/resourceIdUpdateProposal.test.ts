@@ -36,13 +36,15 @@ describe('Resource Id Update Proposal', () => {
 		const handlerAddress = bridgeSide.tokenHandler.contract.address
 		const executionContextAddress = governedToken.contract.address;
 
+		const proposalFunctionSignature = encodeFunctionSignature(
+			bridgeSide.contract.interface.functions['adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'].format()
+		)
+
 		const proposalNonce = Number(await bridgeSide.contract.proposalNonce()) + 1;
 		const proposalPayload: ResourceIdUpdateProposal = {
 			header: {
 				resourceId,
-				functionSignature: encodeFunctionSignature(
-					bridgeSide.contract.interface.functions['adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'].format()
-				),
+				functionSignature: proposalFunctionSignature,
 				nonce: proposalNonce,
 				chainIdType: ChainIdType.EVM,
 				chainId: localChain.chainId,
@@ -100,7 +102,7 @@ describe('Resource Id Update Proposal', () => {
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.adminSetResourceWithSignature(
 			resourceId,
-			encodeFunctionSignature('adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'),
+			proposalFunctionSignature,
 			proposalNonce,
 			newResourceId,
 			handlerAddress,
