@@ -24,28 +24,32 @@ import {
 
 describe('Resource Id Update Proposal', () => {
 	test('should be able to sign resource id update proposal', async () => {
-		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
-		const governedTokenAddress = anchor.token!;
-		let governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
-		const resourceId = await governedToken.createResourceId();
-		// Create Mintable Token to add to GovernedTokenWrapper
-		//Create an ERC20 Token
-		const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
-		const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
-		const functionSignature = encodeFunctionSignature(
-			'adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes'
-		);
+		const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
+		const resourceId = await bridgeSide.createResourceId();
+
+		// Let's create a new GovernedTokenWrapper and set the resourceId for it via
+		// the ResourceIdUpdate Proposal
+		const dummyAddress = '0x1111111111111111111111111111111111111111';
+		const governedToken = await GovernedTokenWrapper.createGovernedTokenWrapper("token-e2e-test", 'te2e', dummyAddress, dummyAddress, '10000000000000000000000000', false, wallet1);
+
+		const newResourceId = await governedToken.createResourceId();
+		const handlerAddress = bridgeSide.tokenHandler.contract.address
+		const executionContextAddress = governedToken.contract.address;
+
+		const proposalNonce = Number(await bridgeSide.contract.proposalNonce()) + 1;
 		const proposalPayload: ResourceIdUpdateProposal = {
 			header: {
 				resourceId,
-				functionSignature: functionSignature,
-				nonce: nonce,
+				functionSignature: encodeFunctionSignature(
+					bridgeSide.contract.interface.functions['adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'].format()
+				),
+				nonce: proposalNonce,
 				chainIdType: ChainIdType.EVM,
 				chainId: localChain.chainId,
 			},
-			newResourceId: tokenToAdd.contract.address,
-			handlerAddress: wallet1.address,
-			executionAddress: wallet2.address,
+			newResourceId: newResourceId,
+			handlerAddress: handlerAddress,
+			executionAddress: executionContextAddress,
 		};
 		// register proposal resourceId.
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
@@ -58,13 +62,13 @@ describe('Resource Id Update Proposal', () => {
 			EVM: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'ResourceIdUpdate');
-		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+		const resourceIdUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 			Unsigned: {
 				kind: kind,
 				data: prop
 			}
 		});
-		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(resourceIdUpdateProposal);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -87,7 +91,6 @@ describe('Resource Id Update Proposal', () => {
 		// sanity check.
 		expect(dkgProposal.signed.data).toEqual(prop);
 		// perfect! now we need to send it to the signature bridge.
-		const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.signed.data,
@@ -97,16 +100,16 @@ describe('Resource Id Update Proposal', () => {
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.adminSetResourceWithSignature(
 			resourceId,
-			functionSignature,
-			nonce,
-			resourceId,
-			wallet1.address,
-			wallet2.address,
-			functionSignature
+			encodeFunctionSignature('adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'),
+			proposalNonce,
+			newResourceId,
+			handlerAddress,
+			executionContextAddress,
+			dkgProposal.signed.signature,
 		);
 		await expect(tx2.wait()).toResolve();
-		// Want to check that token was actually added
-		//expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).toBeTrue();
+
+		expect(await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId)).toEqual(handlerAddress);
 	});
 
 	afterAll(async () => {
