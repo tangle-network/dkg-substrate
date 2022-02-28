@@ -555,6 +555,54 @@ export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal
 	};
 }
 
+export interface ResourceIdUpdateProposal {
+	/**
+	 * The ResourceIdUpdateProposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 32 bytes Hex-encoded string.
+	 */
+	readonly newResourceId: string;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly handlerAddress: string;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly executionAddress: string;
+}
+
+export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + 20 + 20);
+	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
+	const newResourceId = hexToU8a(proposal.newResourceId).slice(0, 32);
+	const handlerAddress = hexToU8a(proposal.handlerAddress).slice(0, 20);
+	const executionAddress = hexToU8a(proposal.executionAddress).slice(0, 20);
+
+	resourceIdUpdateProposal.set(newResourceId, 40); // 40 -> 72
+	resourceIdUpdateProposal.set(handlerAddress, 72); // 72 -> 92
+	resourceIdUpdateProposal.set(executionAddress, 92); // 72 -> 112
+	return resourceIdUpdateProposal;
+}
+
+export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const newResourceId = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	const handlerAddress = u8aToHex(data.slice(72, 92)); // 72 -> 92
+	const executionAddress = u8aToHex(data.slice(92, 112)); // 92 -> 112
+	return {
+		header,
+		newResourceId,
+		handlerAddress,
+		executionAddress
+	};
+}
+
 export interface WrappingFeeUpdateProposal {
 	/**
 	 * The Wrapping Fee Update Proposal Header.
