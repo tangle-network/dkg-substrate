@@ -557,7 +557,7 @@ export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal
 
 export interface ResourceIdUpdateProposal {
 	/**
-	 * The Token Add Proposal Header.
+	 * The ResourceIdUpdateProposal Header.
 	 * This is the first 40 bytes of the proposal.
 	 * See `encodeProposalHeader` for more details.
 	 */
@@ -578,16 +578,16 @@ export interface ResourceIdUpdateProposal {
 
 export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const tokenAddProposal = new Uint8Array(40 + 32 + 20 + 20);
-	tokenAddProposal.set(header, 0); // 0 -> 40
+	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + 20 + 20);
+	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
 	const newResourceId = hexToU8a(proposal.newResourceId).slice(0, 32);
 	const handlerAddress = hexToU8a(proposal.handlerAddress).slice(0, 20);
 	const executionAddress = hexToU8a(proposal.executionAddress).slice(0, 20);
 
-	tokenAddProposal.set(newResourceId, 40); // 40 -> 72
-	tokenAddProposal.set(handlerAddress, 72); // 72 -> 92
-	tokenAddProposal.set(executionAddress, 92); // 72 -> 112
-	return tokenAddProposal;
+	resourceIdUpdateProposal.set(newResourceId, 40); // 40 -> 72
+	resourceIdUpdateProposal.set(handlerAddress, 72); // 72 -> 92
+	resourceIdUpdateProposal.set(executionAddress, 92); // 72 -> 112
+	return resourceIdUpdateProposal;
 }
 
 export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
