@@ -8,33 +8,6 @@
 
 <br />
 
-## Running the DKG
-
-Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
-`Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
-account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
-for our testnet.
-
-`Alice` is our bootnode and is started like so:
-
-```
-$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
-```
-
-`Bob` is started like so:
-
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
-```
-
-`Charlie` is started like so:
-
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
-```
-
-Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
-instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
 ## Build & Run
 
 Follow these steps to prepare a local Substrate development environment :hammer_and_wrench:
@@ -87,6 +60,46 @@ In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-dar
 
 ```bash
 echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
+```
+
+## Running the `dkg-standalone-node`
+
+Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
+`Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
+account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
+for our testnet.
+
+`Alice` is our bootnode and is started like so:
+
+```
+$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
+```
+
+`Bob` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
+```
+
+`Charlie` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
+```
+
+Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
+instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
+
+## Setting up debugging logs
+
+If you would like to run the dkg with verbose logs you may add the following arguments during initial setup. You may change the target to include `debug | error | info| trace | warn`. Further, you may also want to review [Substrate runtime debugging](https://docs.substrate.io/v3/runtime/debugging/).
+
+```
+-ldkg=debug \
+-ldkg_metadata=debug \
+-lruntime::offchain=debug \
+-ldkg_proposal_handler=debug \
+-ldkg_proposals=debug
 ```
 
 ## Relay Chain
@@ -359,13 +372,6 @@ In this current iteration the proposals are Ethereum transactions.
 ## pallet-dkg-proposal-handler
 
 This pallet implements the `ProposalHandlerTrait` accepts proposals and signs them using the DKG authority keys.
-
-## pallet-dkg-mmr
-
-This pallet serves as a leaf provider for the `pallet-mmr`, generating leaf data that contains a merke root hash for a particular authority set.
-
-It also provides a type that has an implementation for converting `ECDSA` keys to ethereum compatible keys.
-
 
 ### Note on Offchain workers
 
