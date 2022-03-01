@@ -54,13 +54,13 @@ describe('Wrapping Fee Update Proposal', () => {
 			EVM: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
-		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+		const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 			Unsigned: {
 				kind: kind,
 				data: prop
 			}
 		});
-		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(wrappingFeeUpdateProposal);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -108,7 +108,6 @@ describe('Wrapping Fee Update Proposal', () => {
 		const resourceId = await governedToken.createResourceId();
 		// Create Mintable Token to add to GovernedTokenWrapper
 		//Create an ERC20 Token
-		const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
 		const proposalPayload: WrappingFeeUpdateProposal = {
 			header: {
 				resourceId,
@@ -132,13 +131,13 @@ describe('Wrapping Fee Update Proposal', () => {
 			EVM: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
-		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
+		const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 			Unsigned: {
 				kind: kind,
 				data: prop
 			}
 		});
-		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+		const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(wrappingFeeUpdateProposal);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
