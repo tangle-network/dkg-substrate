@@ -582,7 +582,7 @@ export function encodeRescueTokensProposal(proposal: RescueTokensProposal): Uint
 	rescueTokensProposal.set(header, 0); // 0 -> 40
 	const tokenAddress = hexToU8a(proposal.tokenAddress).slice(0, 20);
 	const toAddress = hexToU8a(proposal.tokenAddress).slice(0, 20);
-	const amount = hexToU8a(proposal.amount).slice(0, 32);
+	const amount = hexToU8a(proposal.amount, 256).slice(0, 32);
 
 	rescueTokensProposal.set(tokenAddress, 40); // 40 -> 60
 	rescueTokensProposal.set(toAddress, 60); // 60 -> 80

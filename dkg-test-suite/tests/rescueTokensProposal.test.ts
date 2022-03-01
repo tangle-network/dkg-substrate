@@ -151,7 +151,7 @@ describe('Rescue Token Proposal', () => {
 				},
 				tokenAddress: mintableTokenAddress,
 				toAddress: to,
-				amount: (500).toString(16), // 500 in hex
+				amount: '0x01F4', // 500 in hex
 			};
 			const proposalBytes = encodeRescueTokensProposal(proposalPayload);
 			const prop = u8aToHex(proposalBytes);
@@ -203,9 +203,11 @@ describe('Rescue Token Proposal', () => {
 			let balTreasuryAfterRescue = await mintableToken.getBalance(treasury.contract.address);
 			let balToAfterRescue = await mintableToken.getBalance(to);
 
-			expect(balTreasuryBeforeRescue.sub(balTreasuryAfterRescue).toString()).toEqual('500');
+			const diffTreasuryBalance = parseInt(balTreasuryBeforeRescue.sub(balTreasuryAfterRescue).toString());
+			const diffToBalance = parseInt(balToAfterRescue.sub(balToBeforeRescue).toString());
 
-			expect(balToAfterRescue.sub(balToBeforeRescue).toString()).toEqual('500');
+			expect(500 == diffTreasuryBalance).toBeTrue();
+			expect(500 ==  diffToBalance).toBeTrue();
 		}
 	});
 
