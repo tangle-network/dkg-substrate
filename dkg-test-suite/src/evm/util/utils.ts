@@ -258,7 +258,7 @@ export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUp
 }
 
 
-export interface VAnchorConfigurableLimitProposal {
+export interface MinWithdrawalLimitProposal {
 	/**
 	 * The Wrapping Fee Update Proposal Header.
 	 * This is the first 40 bytes of the proposal.
@@ -268,24 +268,55 @@ export interface VAnchorConfigurableLimitProposal {
 	/**
 	 * 32 bytes Hex-encoded string.
 	 */
-	readonly min_withdrawal_limit_bytes: string;
+	readonly minWithdrawalLimitBytes: string;
 }
 
-export function encodeVAnchorConfigurableLimitProposal(proposal: VAnchorConfigurableLimitProposal): Uint8Array {
+export function encodeMinWithdrawalLimitProposal(proposal: MinWithdrawalLimitProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const vAnchorConfigurableLimitProposal = new Uint8Array(40 + 32);
-	vAnchorConfigurableLimitProposal.set(header, 0); // 0 -> 40
-	const newFee = hexToU8a(proposal.min_withdrawal_limit_bytes).slice(0, 1);
-	vAnchorConfigurableLimitProposal.set(newFee, 40); // 40 -> 41
-	return vAnchorConfigurableLimitProposal;
+	const minWithdrawalLimitProposal = new Uint8Array(40 + 32);
+	minWithdrawalLimitProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.minWithdrawalLimitBytes).slice(0, 32);
+	minWithdrawalLimitProposal.set(newFee, 40); // 40 -> 72
+	return minWithdrawalLimitProposal;
 }
 
-export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAnchorConfigurableLimitProposal {
+export function decodeMinWithDrawalLimitProposal(data: Uint8Array): MinWithdrawalLimitProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
-	const min_withdrawal_limit_bytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	const minWithdrawalLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		min_withdrawal_limit_bytes
+		minWithdrawalLimitBytes
+	};
+}
+
+export interface MaxDepositLimitProposal {
+	/**
+	 * The Wrapping Fee Update Proposal Header.
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
+	readonly header: ProposalHeader;
+	/**
+	 * 32 bytes Hex-encoded string.
+	 */
+	readonly maxDepositLimitBytes: string;
+}
+
+export function encodeMaxDepositLimitProposal(proposal: MaxDepositLimitProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const maxDepositLimitProposal = new Uint8Array(40 + 32);
+	maxDepositLimitProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.maxDepositLimitBytes).slice(0, 32);
+	maxDepositLimitProposal.set(newFee, 40); // 40 -> 72
+	return maxDepositLimitProposal;
+}
+
+export function decodeMaxDepositLimitProposal(data: Uint8Array): MaxDepositLimitProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const maxDepositLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	return {
+		header,
+		maxDepositLimitBytes
 	};
 }
 

@@ -1,20 +1,20 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeVAnchorConfigurableLimitProposal,
+	encodeMinWithdrawalLimitProposal,
 	registerResourceId, 
-	resourceId, 
+	resourceId,
 	signAndSendUtil, 
 	unsubSignedPropsUtil
 } from '../util/utils';
 import {
 	provider,
-	waitNfinalizedBlocks,
+	waitNfinalizedBlocks
 } from '../../utils';
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {vAnchorConfigurableLimitProposal} from "../util/proposals";
+import {minWithdrawalLimitProposal} from "../util/proposals";
 
 async function testMinWithdrawalLimitUpdateProposal() {
 	const api = await ApiPromise.create({provider});
@@ -29,9 +29,9 @@ async function testMinWithdrawalLimitUpdateProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
-	const propHash = keccak256(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
+	const propHash = keccak256(encodeMinWithdrawalLimitProposal(minWithdrawalLimitProposal));
 
-	const proposalType = {minwithdrawallimitupdateproposal: vAnchorConfigurableLimitProposal.header.nonce}
+	const proposalType = {minwithdrawallimitproposal: minWithdrawalLimitProposal.header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -49,7 +49,7 @@ async function sendMinWithdrawalLimitUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
+	const prop = u8aToHex(encodeMinWithdrawalLimitProposal(minWithdrawalLimitProposal));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
