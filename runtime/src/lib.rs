@@ -49,7 +49,6 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{MultiAddress, Perbill, Percent, Permill};
 
 // XCM Imports
-use dkg_runtime_primitives::mmr::MmrLeafVersion;
 use pallet_xcm::XcmPassthrough;
 use polkadot_parachain::primitives::Sibling;
 use xcm::latest::prelude::*;
@@ -585,18 +584,6 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
-type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
-
-/// Configure Merkle Mountain Range pallet.
-impl pallet_mmr::Config for Runtime {
-	const INDEXING_PREFIX: &'static [u8] = b"mmr";
-	type Hashing = Keccak256;
-	type Hash = MmrHash;
-	type OnNewRoot = ();
-	type WeightInfo = ();
-	type LeafData = ();
-}
-
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
 where
 	Call: From<LocalCall>,
@@ -685,7 +672,6 @@ construct_runtime!(
 		// DKG / offchain worker
 		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>},
 		DKGProposals: pallet_dkg_proposals,
-		MMR: pallet_mmr,
 		DKGProposalHandler: pallet_dkg_proposal_handler,
 	}
 );
