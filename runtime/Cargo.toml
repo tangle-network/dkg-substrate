@@ -60,8 +60,6 @@ pallet-transaction-payment = { git = "https://github.com/paritytech/substrate", 
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 pallet-authorship = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
-pallet-mmr = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
-
 
 # Cumulus Dependencies
 cumulus-pallet-aura-ext = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.16", default-features = false }
@@ -144,5 +142,4 @@ std = [
 	'dkg-runtime-primitives/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
-	'pallet-mmr/std'
 ]
