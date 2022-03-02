@@ -189,7 +189,7 @@ describe('Wrapping Fee Update Proposal', () => {
       );
       await expect(tx2.wait()).toResolve();
       // Want to check that fee was updated
-      const minWithdrawalLimit = await vAnchor.contract.minimumWithdrawalAmount();
+      const minWithdrawalLimit = await vAnchor.contract.minimalWithdrawalAmount();
       expect(hexToNumber("0x50").toString()).toEqual(minWithdrawalLimit.toString());
     });
 	afterAll(async () => {
