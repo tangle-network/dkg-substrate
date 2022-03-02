@@ -1,6 +1,6 @@
 {
 	"relaychain": {
-		"bin": "/Users/Damilare/Documents/self-paced/Polkadot/polkadot/target/release/polkadot",
+		"bin": "../polkadot/target/release/polkadot",
 		"chain": "rococo-local",
 		"nodes": [
 			{
