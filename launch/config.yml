@@ -36,13 +36,16 @@ parachains:
   parachain: true
   flags:
     - --rpc-methods=unsafe
+    - -ldkg=debug
+    - -ldkg_metadata=debug
+    - -lruntime::offchain=debug
+    - -ldkg_proposal_handler=debug
     - --force-authoring
     - --wasm-execution=compiled
     - --execution=wasm
   relaychainFlags:
     - --wasm-execution=compiled
     - --execution=wasm
-  RUST_LOG: ldkg=debug,ldkg_metadata=debug,lruntime::offchain=debug,ldkg_proposal_handler=debug
   volumePath: /dkg/data
   nodes:
   - flags:

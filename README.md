@@ -137,7 +137,14 @@ yarn run start generate --config=config.yml
 cd output
 # NOTE: If regenerate the output directory, need to rebuild the images.
 docker-compose up -d --build
+```
 
+**Note:** Due to usage of offchain workers you will need to add the sr25519 account keys to the node's local keystore by using the `author_insertKey` RPC on the Polkadot UI. 
+
+If you do not add a sr25519 account key to each of the parachain nodes keystore the node will fail. 
+
+### Additional docker commands
+```
 # list all of the containers.
 docker ps -a
 
