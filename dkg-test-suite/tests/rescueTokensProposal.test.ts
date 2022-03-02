@@ -1,13 +1,8 @@
 import 'jest-extended';
 import {
-	RescueTokensProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeRescueTokensProposal,
 	registerResourceId,
 	waitForEvent,
-	WrappingFeeUpdateProposal,
-	encodeWrappingFeeUpdateProposal,
 	sleep,
 } from '../src/utils';
 import { toFixedHex } from '@webb-tools/utils';
@@ -17,7 +12,14 @@ import {Keyring} from '@polkadot/api';
 import {u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
 import {HexString} from '@polkadot/util/types';
-import {signAndSendUtil} from '../src/evm/util/utils';
+import {
+	signAndSendUtil,
+	RescueTokensProposal,
+	ChainIdType,
+	encodeRescueTokensProposal,
+	WrappingFeeUpdateProposal,
+	encodeWrappingFeeUpdateProposal,
+} from '../src/evm/util/utils';
 import {
 	localChain,
 	polkadotApi,

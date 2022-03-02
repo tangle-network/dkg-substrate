@@ -1,9 +1,6 @@
 import 'jest-extended';
 import {
-	AnchorUpdateProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeUpdateAnchorProposal,
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	registerResourceId,
@@ -15,7 +12,11 @@ import {Keyring} from '@polkadot/api';
 import {u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
 import {HexString} from '@polkadot/util/types';
-
+import {
+	AnchorUpdateProposal,
+	encodeUpdateAnchorProposal,
+	ChainIdType,
+} from '../src/evm/util/utils';
 import {
 	localChain,
 	polkadotApi,

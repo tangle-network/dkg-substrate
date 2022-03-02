@@ -125,7 +125,6 @@ export class LocalChain {
 		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
 		localWallet.connect(this.provider());
 		otherWallet.connect(otherChain.provider());
-
 		let webbTokens1 = new Map<number, GovernedTokenWrapper | undefined>();
 		webbTokens1.set(this.chainId, null!);
 		webbTokens1.set(otherChain.chainId, null!);
@@ -146,10 +145,48 @@ export class LocalChain {
 			[otherChain.chainId]: otherWallet,
 		}
 
+		const smallCircuitZkComponents = await fetchComponentsFromFilePaths(
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/poseidon_vanchor_2_2.wasm'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/witness_calculator.js'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/circuit_final.zkey'
+			)
+		);
+
+		const largeCircuitZkComponents = await fetchComponentsFromFilePaths(
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/poseidon_vanchor_16_2.wasm'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/witness_calculator.js'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/circuit_final.zkey'
+			)
+		);
+
 		return VBridge.VBridge.deployVariableAnchorBridge(
 			vBridgeInput,
 			deployerConfig,
 			initialGovernors,
+			smallCircuitZkComponents,
+			largeCircuitZkComponents
 		);
 	}
 }
