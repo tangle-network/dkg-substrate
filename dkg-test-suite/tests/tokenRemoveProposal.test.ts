@@ -1,14 +1,9 @@
 import 'jest-extended';
 import {
-	TokenAddProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeTokenAddProposal,
-	encodeTokenRemoveProposal,
 	registerResourceId,
 	sleep,
 	waitForEvent,
-	TokenRemoveProposal,
 } from '../src/utils';
 
 import {ethers} from 'ethers';
@@ -18,7 +13,14 @@ import {BLOCK_TIME} from '../src/constants';
 import {u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
 import {HexString} from '@polkadot/util/types';
-import {signAndSendUtil} from '../src/evm/util/utils';
+import {
+	signAndSendUtil,
+	TokenAddProposal,
+	ChainIdType,
+	encodeTokenAddProposal,
+	encodeTokenRemoveProposal,
+	TokenRemoveProposal,
+} from '../src/evm/util/utils';
 import {
 	localChain,
 	polkadotApi,

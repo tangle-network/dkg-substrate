@@ -1,9 +1,6 @@
 import 'jest-extended';
 import {
-	ResourceIdUpdateProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeResourceIdUpdateProposal,
 	registerResourceId,
 	waitForEvent,
 } from '../src/utils';
@@ -13,7 +10,12 @@ import {Keyring} from '@polkadot/api';
 import {u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
 import {HexString} from '@polkadot/util/types';
-import {signAndSendUtil} from '../src/evm/util/utils';
+import {
+	signAndSendUtil,
+	ResourceIdUpdateProposal,
+	encodeResourceIdUpdateProposal,
+	ChainIdType,
+} from '../src/evm/util/utils';
 import {
 	localChain,
 	polkadotApi,

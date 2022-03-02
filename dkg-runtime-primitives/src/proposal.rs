@@ -152,7 +152,7 @@ pub enum DKGPayloadKey {
 	ResourceIdUpdateProposal(ProposalNonce),
 	RescueTokensProposal(ProposalNonce),
 	MaxDepositLimitUpdateProposal(ProposalNonce),
-	MinWithdrawLimitUpdateProposal(ProposalNonce),
+	MinWithdrawalLimitUpdateProposal(ProposalNonce),
 	MaxExtLimitUpdateProposal(ProposalNonce),
 	MaxFeeLimitUpdateProposal(ProposalNonce),
 	SetVerifierProposal(ProposalNonce),
@@ -175,8 +175,8 @@ impl PartialEq for DKGPayloadKey {
 			(Self::MaxDepositLimitUpdateProposal(l0), Self::MaxDepositLimitUpdateProposal(r0)) =>
 				l0 == r0,
 			(
-				Self::MinWithdrawLimitUpdateProposal(l0),
-				Self::MinWithdrawLimitUpdateProposal(r0),
+				Self::MinWithdrawalLimitUpdateProposal(l0),
+				Self::MinWithdrawalLimitUpdateProposal(r0),
 			) => l0 == r0,
 			(Self::MaxExtLimitUpdateProposal(l0), Self::MaxExtLimitUpdateProposal(r0)) => l0 == r0,
 			(Self::MaxFeeLimitUpdateProposal(l0), Self::MaxFeeLimitUpdateProposal(r0)) => l0 == r0,
@@ -259,7 +259,7 @@ impl Proposal {
 			ProposalKind::MaxDepositLimitUpdate =>
 				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
 			ProposalKind::MinWithdrawalLimitUpdate =>
-				DKGPayloadKey::MinWithdrawLimitUpdateProposal(nonce),
+				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce),
 			ProposalKind::MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
 			ProposalKind::MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
 			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce),

@@ -125,7 +125,7 @@ pub fn decode_proposal<C: ChainIdTrait>(
 		},
 		ProposalKind::MinWithdrawalLimitUpdate => match chain_id {
 			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MinWithdrawLimitUpdateProposal(p.header.nonce))
+				(p.header.chain_id, DKGPayloadKey::MinWithdrawalLimitUpdateProposal(p.header.nonce))
 			}),
 			ChainIdType::Substrate(_) => todo!(),
 			ChainIdType::RelayChain(_, _) => todo!(),

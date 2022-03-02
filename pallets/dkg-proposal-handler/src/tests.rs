@@ -548,7 +548,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
-				DKGPayloadKey::MinWithdrawLimitUpdateProposal(1)
+				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(1)
 			)
 			.is_some(),
 			true

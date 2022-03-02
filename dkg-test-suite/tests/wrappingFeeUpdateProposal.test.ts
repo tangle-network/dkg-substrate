@@ -1,9 +1,6 @@
 import 'jest-extended';
 import {
-	WrappingFeeUpdateProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeWrappingFeeUpdateProposal,
 	registerResourceId,
 	waitForEvent,
 } from '../src/utils';
@@ -13,7 +10,12 @@ import {Keyring} from '@polkadot/api';
 import {hexToNumber, u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
 import {HexString} from '@polkadot/util/types';
-import {signAndSendUtil} from '../src/evm/util/utils';
+import {
+	signAndSendUtil,
+	WrappingFeeUpdateProposal,
+	encodeWrappingFeeUpdateProposal,
+	ChainIdType,
+} from '../src/evm/util/utils';
 import {
 	localChain,
 	polkadotApi,

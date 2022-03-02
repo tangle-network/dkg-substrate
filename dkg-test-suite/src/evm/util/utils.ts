@@ -100,18 +100,24 @@ function castToChainIdType(v: number): ChainIdType {
 }
 
 /**
- * Anchor Update Proposal is the next 40 bytes (after the header) and it contains the following information:
+ * Anchor Update Proposal is the next 42 bytes (after the header) and it contains the following information:
+ * - src chain type (2 bytes) just before the src chain id.
  * - src chain id (4 bytes) encoded as the 4 bytes.
  * - last leaf index (4 bytes).
  * - merkle root (32 bytes).
  */
-export interface AnchorUpdateProposal {
+ export interface AnchorUpdateProposal {
 	/**
 	 * The Anchor Proposal Header.
 	 * This is the first 40 bytes of the proposal.
 	 * See `encodeProposalHeader` for more details.
 	 */
 	readonly header: ProposalHeader;
+	/**
+	 * 2 bytes (u16) encoded as the last 2 bytes.
+	 *
+	 **/
+	readonly chainIdType: ChainIdType;
 	/**
 	 * 4 bytes number (u32) of the `srcChainId`.
 	 */
@@ -125,26 +131,28 @@ export interface AnchorUpdateProposal {
 	 */
 	readonly merkleRoot: string;
 }
-
 export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const updateProposal = new Uint8Array(40 + 40);
+	const updateProposal = new Uint8Array(40 + 42);
 	updateProposal.set(header, 0); // 0 -> 40
 	const view = new DataView(updateProposal.buffer);
-	view.setUint32(40, proposal.srcChainId, false); // 40 -> 44
-	view.setUint32(44, proposal.lastLeafIndex, false); // 44 -> 48
+	view.setUint16(40, proposal.chainIdType, false); // 40 -> 42
+	view.setUint32(42, proposal.srcChainId, false); // 42 -> 46
+	view.setUint32(46, proposal.lastLeafIndex, false); // 46 -> 50
 	const merkleRoot = hexToU8a(proposal.merkleRoot).slice(0, 32);
-	updateProposal.set(merkleRoot, 48); // 48 -> 80
+	updateProposal.set(merkleRoot, 50); // 50 -> 82
 	return updateProposal;
 }
-
 export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
-	const srcChainId = new DataView(data.buffer).getUint32(40, false); // 40 -> 44
-	const lastLeafIndex = new DataView(data.buffer).getUint32(44, false); // 44 -> 48
-	const merkleRoot = u8aToHex(data.slice(48, 80)); // 48 -> 80
+	const chainIdTypeInt = new DataView(data.buffer).getUint16(40, false); // 40 -> 42
+	const chainIdType = castToChainIdType(chainIdTypeInt);
+	const srcChainId = new DataView(data.buffer).getUint32(42, false); // 42 -> 46
+	const lastLeafIndex = new DataView(data.buffer).getUint32(46, false); // 46 -> 50
+	const merkleRoot = u8aToHex(data.slice(50, 80)); // 50 -> 82
 	return {
 		header,
+		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
@@ -197,11 +205,11 @@ export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
 
 export function encodeTokenRemoveProposal(proposal: TokenRemoveProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const tokenAddProposal = new Uint8Array(40 + 20);
-	tokenAddProposal.set(header, 0); // 0 -> 40
+	const tokenRemoveProposal = new Uint8Array(40 + 20);
+	tokenRemoveProposal.set(header, 0); // 0 -> 40
 	const address = hexToU8a(proposal.removeTokenAddress).slice(0, 20);
-	tokenAddProposal.set(address, 40); // 40 -> 60
-	return tokenAddProposal;
+	tokenRemoveProposal.set(address, 40); // 40 -> 60
+	return tokenRemoveProposal;
 }
 
 export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal {
@@ -209,7 +217,7 @@ export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal
 	const removeTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		removeTokenAddress
+		removeTokenAddress,
 	};
 }
 
@@ -258,7 +266,7 @@ export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUp
 }
 
 
-export interface VAnchorConfigurableLimitProposal {
+export interface MinWithdrawalLimitProposal {
 	/**
 	 * The Wrapping Fee Update Proposal Header.
 	 * This is the first 40 bytes of the proposal.
@@ -268,73 +276,100 @@ export interface VAnchorConfigurableLimitProposal {
 	/**
 	 * 32 bytes Hex-encoded string.
 	 */
-	readonly min_withdrawal_limit_bytes: string;
+	readonly minWithdrawalLimitBytes: string;
 }
 
-export function encodeVAnchorConfigurableLimitProposal(proposal: VAnchorConfigurableLimitProposal): Uint8Array {
+export function encodeMinWithdrawalLimitProposal(proposal: MinWithdrawalLimitProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const vAnchorConfigurableLimitProposal = new Uint8Array(40 + 32);
-	vAnchorConfigurableLimitProposal.set(header, 0); // 0 -> 40
-	const newFee = hexToU8a(proposal.min_withdrawal_limit_bytes).slice(0, 1);
-	vAnchorConfigurableLimitProposal.set(newFee, 40); // 40 -> 41
-	return vAnchorConfigurableLimitProposal;
+	const minWithdrawalLimitProposal = new Uint8Array(40 + 32);
+	minWithdrawalLimitProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.minWithdrawalLimitBytes, 256).slice(0, 32);
+	minWithdrawalLimitProposal.set(newFee, 40); // 40 -> 72
+	return minWithdrawalLimitProposal;
 }
 
-export function decodeVAnchorConfigurableLimitProposal(data: Uint8Array): VAnchorConfigurableLimitProposal {
+export function decodeMinWithDrawalLimitProposal(data: Uint8Array): MinWithdrawalLimitProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
-	const min_withdrawal_limit_bytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	const minWithdrawalLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		min_withdrawal_limit_bytes
+		minWithdrawalLimitBytes
 	};
 }
 
-export interface ResourceIdUpdateProposal {
+export interface MaxDepositLimitProposal {
 	/**
-	 * The ResourceId Update Proposal Header.
+	 * The Wrapping Fee Update Proposal Header.
 	 * This is the first 40 bytes of the proposal.
 	 * See `encodeProposalHeader` for more details.
 	 */
 	readonly header: ProposalHeader;
 	/**
-	 * 32 bytes new resource Id
+	 * 32 bytes Hex-encoded string.
+	 */
+	readonly maxDepositLimitBytes: string;
+}
+
+export function encodeMaxDepositLimitProposal(proposal: MaxDepositLimitProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const maxDepositLimitProposal = new Uint8Array(40 + 32);
+	maxDepositLimitProposal.set(header, 0); // 0 -> 40
+	const newFee = hexToU8a(proposal.maxDepositLimitBytes, 256).slice(0, 32);
+	maxDepositLimitProposal.set(newFee, 40); // 40 -> 72
+	return maxDepositLimitProposal;
+}
+
+export function decodeMaxDepositLimitProposal(data: Uint8Array): MaxDepositLimitProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const maxDepositLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
+	return {
+		header,
+		maxDepositLimitBytes
+	};
+}
+
+export interface ResourceIdUpdateProposal {
+	/**
+	 * The ResourceIdUpdateProposal Header.
+	* This is the first 40 bytes of the proposal.
+	* See `encodeProposalHeader` for more details.
+	*/
+	readonly header: ProposalHeader;
+	/** 
+	 * 32 bytes Hex-encoded string.
 	 */
 	readonly newResourceId: string;
-
 	/**
-	 * 20 bytes associated handler address
+	 * 20 bytes Hex-encoded string.
 	 */
 	readonly handlerAddress: string;
-
 	/**
-	 * 20 bytes execution context address
+	 * 20 bytes Hex-encoded string.
 	 */
-	readonly executionContextAddress: string;
+	readonly executionAddress: string;
 }
-
 export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const newResourceId = hexToU8a(proposal.newResourceId).slice(0, 32);
-	const handlerAddress = hexToU8a(proposal.handlerAddress).slice(32, 52);
-	const executionContextAddress = hexToU8a(proposal.executionContextAddress).slice(52, 72);
 	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + 20 + 20);
 	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
+	const newResourceId = hexToU8a(proposal.newResourceId).slice(0, 32);
+	const handlerAddress = hexToU8a(proposal.handlerAddress).slice(0, 20);
+	const executionAddress = hexToU8a(proposal.executionAddress).slice(0, 20);
 	resourceIdUpdateProposal.set(newResourceId, 40); // 40 -> 72
 	resourceIdUpdateProposal.set(handlerAddress, 72); // 72 -> 92
-	resourceIdUpdateProposal.set(executionContextAddress, 92); 
+	resourceIdUpdateProposal.set(executionAddress, 92); // 72 -> 112
 	return resourceIdUpdateProposal;
 }
-
 export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newResourceId = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	const handlerAddress = u8aToHex(data.slice(72, 92)); // 72 -> 92
-	const executionContextAddress = u8aToHex(data.slice(92, 112)); // 92 -> 112
+	const executionAddress = u8aToHex(data.slice(92, 112)); // 92 -> 112
 	return {
 		header,
 		newResourceId,
 		handlerAddress,
-		executionContextAddress,
+		executionAddress
 	};
 }
 
@@ -431,6 +466,54 @@ export function decodeFeeRecipientUpdateProposal(data: Uint8Array): FeeRecipient
 	};
 }
 
+export interface RescueTokensProposal {
+	/**
+	 * The Rescue Token Proposals Header.
+	**/
+	readonly header: ProposalHeader;
+
+	/** 
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly tokenAddress: string;
+	/**
+	 * 20 bytes Hex-encoded string.
+	 */
+	readonly toAddress: string;
+	/**
+	 * 32 bytes Hex-encoded string.
+	 */
+	readonly amount: string;
+}
+
+export function encodeRescueTokensProposal(proposal: RescueTokensProposal): Uint8Array {
+	const header = encodeProposalHeader(proposal.header);
+	const rescueTokensProposal = new Uint8Array(40 + 20 + 20 + 32);
+	rescueTokensProposal.set(header, 0); // 0 -> 40
+	const tokenAddress = hexToU8a(proposal.tokenAddress).slice(0, 20);
+	const toAddress = hexToU8a(proposal.toAddress).slice(0, 20);
+	const amount = hexToU8a(proposal.amount, 256).slice(0, 32);
+
+	rescueTokensProposal.set(tokenAddress, 40); // 40 -> 60
+	rescueTokensProposal.set(toAddress, 60); // 60 -> 80
+	rescueTokensProposal.set(amount, 80); // 80 -> 112
+
+	return rescueTokensProposal;
+}
+
+export function decodeRescueTokensProposal(data: Uint8Array): RescueTokensProposal {
+	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
+	const tokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
+	const toAddress = u8aToHex(data.slice(60, 80)); // 60 -> 80
+	const amount = u8aToHex(data.slice(80, 112)); // 80 -> 112
+	return {
+		header,
+		tokenAddress,
+		toAddress,
+		amount
+	}
+}
+
 /**
  * A ResourceID is a 32 bytes hex-encoded string of the following format:
  * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
@@ -465,6 +548,7 @@ function _testEncodeDecode() {
 	const merkleRoot = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 	const updateProposal: AnchorUpdateProposal = {
 		header,
+		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
