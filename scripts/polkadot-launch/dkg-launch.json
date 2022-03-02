@@ -1,0 +1,67 @@
+{
+	"relaychain": {
+		"bin": "../polkadot/target/release/polkadot",
+		"chain": "rococo-local",
+		"nodes": [
+			{
+				"name": "alice",
+				"wsPort": 9944,
+				"basePath": "/tmp/polkadot-launch/relaychains/alice",
+				"port": 30444
+			},
+			{
+				"name": "bob",
+				"wsPort": 9955,
+				"basePath": "/tmp/polkadot-launch/relaychains/bob",
+				"port": 30555
+			},
+			{
+				"name": "charlie",
+				"wsPort": 9966,
+				"basePath": "/tmp/polkadot-launch/relaychains/charlie",
+				"port": 30666
+			}
+		]
+	},
+	"parachains": [
+		{
+			"bin": "./dkg-substrate/target/dkg-node",
+			"chain": "./resources/template-local-raw.json",
+			"nodes": [
+				{
+					"name": "alice",
+					"wsPort": 9988,
+					"basePath": "/tmp/polkadot-launch/parachains/alice",
+					"port": 31100,
+					"flags": ["--", "--execution=wasm", "-ldkg=debug",
+						"-ldkg_metadata=debug",
+						"-lruntime::offchain=debug",
+						"-ldkg_proposal_handler=debug"]
+				},
+				{
+					"name": "bob",
+					"wsPort": 9997,
+					"basePath": "/tmp/polkadot-launch/parachains/bob",
+					"port": 31200,
+					"flags": ["--", "--execution=wasm", "-ldkg=debug",
+						"-ldkg_metadata=debug",
+						"-lruntime::offchain=debug",
+						"-ldkg_proposal_handler=debug"]
+				},
+				{
+					"name": "charlie",
+					"wsPort": 9996,
+					"basePath": "/tmp/polkadot-launch/parachains/charlie",
+					"port": 31300,
+					"flags": ["--", "--execution=wasm", "-ldkg=debug",
+						"-ldkg_metadata=debug",
+						"-lruntime::offchain=debug",
+						"-ldkg_proposal_handler=debug"]
+				}
+			]
+		}
+	],
+	"types": {},
+	"finalization": false,
+	"simpleParachains": []
+}

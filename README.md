@@ -121,7 +121,7 @@ on a local Rococo development network, then move to the testnet, and finally lau
 
 This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
 
-**Note:** If you make changes to the `dkg-node` that you want to see reflected in parachain-launch setup, you will need to run the script in `/scripts/docker-hub-publish-dkg-node.sh`. This will build the docker package and publish it so that it may be used in the generated docker-compose file. 
+**Note:** If you make changes to the `dkg-node` that you want to see reflected in parachain-launch setup, you will need to run the script in `/scripts/docker-hub-publish-dkg-node.sh`. This will build the docker package and publish it so that it may be used in the generated docker-compose file.
 
 ```
 cd launch
@@ -344,6 +344,36 @@ your parachain will come online. Once this happens, you should see the collator 
 reporting _parachain_ blocks:
 
 **Note the delay here!** It may take some time for your relay chain to enter a new epoch.
+
+### Run local testnet with [polkadot-launch](https://github.com/paritytech/polkadot-launch)
+
+you can use npm to install polkadot-launch
+
+```
+npm install -g polkadot-launch
+```
+
+copy dkg-launch launch json to polkadot-launch:
+
+```bash
+# $polkadot-launch is the home of polkadot-launch
+cp scripts/polkadot-launch/dkg-launch.json $polkadot-launch/
+```
+
+build polkadot:
+
+```bash
+git clone -n https://github.com/paritytech/polkadot.git
+git checkout v0.9.16
+cargo build --release
+cp target/release/polkadot /tmp/polkadot
+```
+
+launch polkadot and parachain with json config file in polkadot-launch:
+
+```bash
+polkadot-launch dkg-launch.json
+```
 
 ### Code Coverage
 
