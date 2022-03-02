@@ -192,7 +192,7 @@ describe('Wrapping Fee Update Proposal', () => {
     const minWithdrawalLimit = await vAnchor.contract.minimalWithdrawalAmount();
     expect(hexToNumber("0x50").toString()).toEqual(minWithdrawalLimit.toString());
   });
-	afterAll(async () => {
+  afterAll(async () => {
     await polkadotApi.disconnect();
     aliceNode?.kill('SIGINT');
     bobNode?.kill('SIGINT');
