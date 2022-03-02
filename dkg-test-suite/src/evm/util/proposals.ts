@@ -3,7 +3,8 @@ import {
 	ResourceIdUpdateProposal,
 	TokenAddProposal,
 	TokenRemoveProposal,
-	VAnchorConfigurableLimitProposal,
+	MinWithdrawalLimitProposal,
+	MaxDepositLimitProposal,
 	WrappingFeeUpdateProposal,
 	resourceId,
 	newResourceId,
@@ -53,13 +54,22 @@ export const wrappingFeeUpdateProposal: WrappingFeeUpdateProposal = {
 };
 
 
-export const vAnchorConfigurableLimitProposal: VAnchorConfigurableLimitProposal = {
+export const minWithdrawalLimitProposal: MinWithdrawalLimitProposal = {
 	header: {
 		resourceId,
 		functionSignature: '0xdeadbeef',
 		nonce,
 	},
-	min_withdrawal_limit_bytes: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+	minWithdrawalLimitBytes: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
+};
+
+export const maxDepositLimitProposal: MaxDepositLimitProposal = {
+	header: {
+		resourceId,
+		functionSignature: '0xdeadbeef',
+		nonce,
+	},
+	maxDepositLimitBytes: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 };
 
 export const setTreasuryHandlerProposal: SetTreasuryHandlerProposal = {

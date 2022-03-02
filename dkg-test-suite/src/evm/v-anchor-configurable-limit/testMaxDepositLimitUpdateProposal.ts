@@ -1,7 +1,7 @@
 import {ApiPromise} from '@polkadot/api';
 import {Keyring} from '@polkadot/keyring';
 import {
-	encodeVAnchorConfigurableLimitProposal,
+	encodeMaxDepositLimitProposal,
 	registerResourceId, 
 	resourceId,
 	signAndSendUtil, 
@@ -14,7 +14,7 @@ import {
 import {keccak256} from '@ethersproject/keccak256';
 import {ECPair} from 'ecpair';
 import {assert, u8aToHex} from '@polkadot/util';
-import {vAnchorConfigurableLimitProposal} from "../util/proposals";
+import {maxDepositLimitProposal} from "../util/proposals";
 
 async function testMaxDepositLimitUpdateProposal() {
 	const api = await ApiPromise.create({provider});
@@ -29,9 +29,9 @@ async function testMaxDepositLimitUpdateProposal() {
 		{compressed: false}
 	).publicKey.toString('hex');
 	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
-	const propHash = keccak256(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
+	const propHash = keccak256(encodeMaxDepositLimitProposal(maxDepositLimitProposal));
 
-	const proposalType = {maxdepositlimitupdateproposal: vAnchorConfigurableLimitProposal.header.nonce}
+	const proposalType = {maxdepositlimitupdateproposal: maxDepositLimitProposal.header.nonce}
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
 
@@ -49,7 +49,7 @@ async function sendMaxDepositLimitUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeVAnchorConfigurableLimitProposal(vAnchorConfigurableLimitProposal));
+	const prop = u8aToHex(encodeMaxDepositLimitProposal(maxDepositLimitProposal));
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);

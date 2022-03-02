@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{mmr::MmrLeafVersion, ChainId, ChainIdType, DKGPayloadKey, Proposal};
+use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -553,18 +553,6 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
-type MmrHash = <Keccak256 as sp_runtime::traits::Hash>::Output;
-
-/// Configure Merkle Mountain Range pallet.
-impl pallet_mmr::Config for Runtime {
-	const INDEXING_PREFIX: &'static [u8] = b"mmr";
-	type Hashing = Keccak256;
-	type Hash = MmrHash;
-	type OnNewRoot = ();
-	type WeightInfo = ();
-	type LeafData = ();
-}
-
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
 where
 	Call: From<LocalCall>,
@@ -640,7 +628,6 @@ construct_runtime!(
 		Historical: pallet_session_historical,
 		DKG: pallet_dkg_metadata,
 		DKGProposals: pallet_dkg_proposals,
-		MMR: pallet_mmr,
 		DKGProposalHandler: pallet_dkg_proposal_handler
 	}
 );

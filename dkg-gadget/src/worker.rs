@@ -1138,7 +1138,7 @@ where
 				make_signed_proposal(ProposalKind::RescueTokens),
 			DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
 				make_signed_proposal(ProposalKind::MaxDepositLimitUpdate),
-			DKGPayloadKey::MinWithdrawLimitUpdateProposal(_) =>
+			DKGPayloadKey::MinWithdrawalLimitUpdateProposal(_) =>
 				make_signed_proposal(ProposalKind::MinWithdrawalLimitUpdate),
 			DKGPayloadKey::MaxExtLimitUpdateProposal(_) =>
 				make_signed_proposal(ProposalKind::MaxExtLimitUpdate),

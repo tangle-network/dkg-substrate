@@ -1,132 +1,32 @@
-import { jest } from '@jest/globals';
 import 'jest-extended';
 import {
-	AnchorUpdateProposal,
-	ChainIdType,
 	encodeFunctionSignature,
-	encodeUpdateAnchorProposal,
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	registerResourceId,
-	sleep,
-	startStandaloneNode,
 	waitForEvent,
-	waitUntilDKGPublicKeyStoredOnChain,
 } from '../src/utils';
-import { LocalChain } from '../src/localEvm';
-import { ChildProcess } from 'child_process';
-import { ethers } from 'ethers';
-import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
-import { MintableToken } from '@webb-tools/tokens';
-import { ApiPromise, Keyring } from '@polkadot/api';
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
-import { u8aToHex } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
-import { provider } from '../src/utils'
+import {ethers} from 'ethers';
+import {Anchors} from '@webb-tools/protocol-solidity';
+import {Keyring} from '@polkadot/api';
+import {u8aToHex} from '@polkadot/util';
+import {Option} from '@polkadot/types';
+import {HexString} from '@polkadot/util/types';
+import {
+	AnchorUpdateProposal,
+	encodeUpdateAnchorProposal,
+	ChainIdType,
+} from '../src/evm/util/utils';
+import {
+	localChain,
+	polkadotApi,
+	signatureBridge,
+	wallet1,
+	wallet2,
+	localChain2, executeAfter
+} from './utils/util';
 
 describe('Anchor Update Proposal', () => {
-	jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
-
-	let polkadotApi: ApiPromise;
-	let aliceNode: ChildProcess;
-	let bobNode: ChildProcess;
-	let charlieNode: ChildProcess;
-
-	let localChain: LocalChain;
-	let localChain2: LocalChain;
-	let wallet1: ethers.Wallet;
-	let wallet2: ethers.Wallet;
-
-	let signatureBridge: Bridges.SignatureBridge;
-
-	beforeAll(async () => {
-		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
-		charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
-
-		localChain = new LocalChain('local', 5001, [
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC1_PK,
-			},
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC2_PK,
-			},
-		]);
-		localChain2 = new LocalChain('local2', 5002, [
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC1_PK,
-			},
-			{
-				balance: ethers.utils.parseEther('1000').toHexString(),
-				secretKey: ACC2_PK,
-			},
-		]);
-		wallet1 = new ethers.Wallet(ACC1_PK, localChain.provider());
-		wallet2 = new ethers.Wallet(ACC2_PK, localChain2.provider());
-		// Deploy the token.
-		const localToken = await localChain.deployToken('Webb Token', 'WEBB', wallet1);
-		const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
-
-		polkadotApi = await ApiPromise.create({
-			provider
-		});
-
-		// Update the signature bridge governor.
-		const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
-		expect(dkgPublicKey).toBeString();
-		const governorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey);
-
-		let initialGovernors = {
-			[localChain.chainId]: wallet1,
-			[localChain2.chainId]: wallet2,
-		};
-
-		// Depoly the signature bridge.
-		signatureBridge = await localChain.deploySignatureBridge(
-			localChain2,
-			localToken,
-			localToken2,
-			wallet1,
-			wallet2,
-			initialGovernors
-		);
-		// get the anhor on localchain1
-		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
-		await anchor.setSigner(wallet1);
-		// approve token spending
-		const tokenAddress = signatureBridge.getWebbTokenAddress(localChain.chainId)!;
-		const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
-		await token.approveSpending(anchor.contract.address);
-		await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
-
-		// do the same but on localchain2
-		const anchor2 = signatureBridge.getAnchor(localChain2.chainId, ethers.utils.parseEther('1'))!;
-		await anchor2.setSigner(wallet2);
-		const tokenAddress2 = signatureBridge.getWebbTokenAddress(localChain2.chainId)!;
-		const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
-		await token2.approveSpending(anchor2.contract.address);
-		await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
-
-		// now we set the resourceIds Mapping.
-		const bridgeSide2 = signatureBridge.getBridgeSide(localChain2.chainId)!;
-		await bridgeSide2.setResourceWithSignature(anchor2);
-		// update the signature bridge governor on both chains.
-		const sides = signatureBridge.bridgeSides.values();
-		for (const signatureSide of sides) {
-			const contract = signatureSide.contract;
-			// now we transferOwnership, forcefully.
-			const tx = await contract.transferOwnership(governorAddress, 1);
-			expect(tx.wait()).toResolve();
-			// check that the new governor is the same as the one we just set.
-			const currentGovernor = await contract.governor();
-			expect(currentGovernor).toEqualCaseInsensitive(governorAddress);
-		}
-	});
-
 	test('should be able to sign Update Anchor Proposal', async () => {
 		// get the anhor on localchain1
 		const anchor = signatureBridge.getAnchor(
@@ -170,7 +70,7 @@ describe('Anchor Update Proposal', () => {
 		await expect(registerResourceId(polkadotApi, proposalPayload.header.resourceId)).toResolve();
 		const proposalBytes = encodeUpdateAnchorProposal(proposalPayload);
 		// get alice account to send the transaction to the dkg node.
-		const keyring = new Keyring({ type: 'sr25519' });
+		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
 		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
@@ -183,10 +83,10 @@ describe('Anchor Update Proposal', () => {
 			prop
 		);
 		const tx = new Promise<void>(async (resolve, reject) => {
-			const unsub = await proposalCall.signAndSend(alice, ({ events, status }) => {
+			const unsub = await proposalCall.signAndSend(alice, ({events, status}) => {
 				if (status.isFinalized) {
 					unsub();
-					const success = events.find(({ event }) =>
+					const success = events.find(({event}) =>
 						polkadotApi.events.system.ExtrinsicSuccess.is(event)
 					);
 					if (success) {
@@ -219,8 +119,8 @@ describe('Anchor Update Proposal', () => {
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = signatureBridge.getBridgeSide(localChain2.chainId)!;
 		// but first, we need to log few things to help us to debug.
-		wallet2 = wallet2.connect(localChain2.provider());
-		const contract = bridgeSide.contract.connect(wallet2);
+		let wallet2_ = wallet2.connect(localChain2.provider());
+		const contract = bridgeSide.contract.connect(wallet2_);
 		const currentGovernor = await contract.governor();
 		const currentDkgPublicKey = await fetchDkgPublicKey(polkadotApi);
 		const currentDkgAddress = ethAddressFromUncompressedPublicKey(currentDkgPublicKey!);
@@ -247,12 +147,6 @@ describe('Anchor Update Proposal', () => {
 	});
 
 	afterAll(async () => {
-		await polkadotApi.disconnect();
-		aliceNode?.kill('SIGINT');
-		bobNode?.kill('SIGINT');
-		charlieNode?.kill('SIGINT');
-		await localChain?.stop();
-		await localChain2?.stop();
-		await sleep(5 * SECONDS);
+		await executeAfter();
 	});
 });

@@ -43,7 +43,6 @@ sp-session = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
-pallet-mmr = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 pallet-staking-reward-curve = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 pallet-election-provider-multi-phase = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sp-npos-elections = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
@@ -103,7 +102,6 @@ std = [
 	'pallet-dkg-metadata/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
-	'pallet-mmr/std',
 	'pallet-election-provider-multi-phase/std',
 	'sp-npos-elections/std',
 	'frame-election-provider-support/std',

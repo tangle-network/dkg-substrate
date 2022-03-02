@@ -1,9 +1,10 @@
 import ganache from 'ganache';
 import { ethers } from 'ethers';
 import { Server } from 'ganache';
-import { Bridges } from '@webb-tools/protocol-solidity';
+import { Bridges, VBridge } from '@webb-tools/protocol-solidity';
+import { VBridgeInput } from '@webb-tools/vbridge';
 import { BridgeInput, DeployerConfig, GovernorConfig } from '@webb-tools/interfaces';
-import { MintableToken } from '@webb-tools/tokens';
+import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { fetchComponentsFromFilePaths } from '@webb-tools/utils';
 import path from 'path';
 import child from 'child_process';
@@ -110,6 +111,82 @@ export class LocalChain {
 			deployerConfig,
 			initialGovernors,
 			zkComponents
+		);
+	}
+
+	public async deploySignatureVBridge(
+		otherChain: LocalChain,
+		localToken: MintableToken,
+		otherToken: MintableToken,
+		localWallet: ethers.Signer,
+		otherWallet: ethers.Signer,
+		initialGovernors: GovernorConfig
+	): Promise<VBridge.VBridge> {
+		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+		localWallet.connect(this.provider());
+		otherWallet.connect(otherChain.provider());
+		let webbTokens1 = new Map<number, GovernedTokenWrapper | undefined>();
+		webbTokens1.set(this.chainId, null!);
+		webbTokens1.set(otherChain.chainId, null!);
+		// create the config for the bridge
+		const vBridgeInput = {
+		  vAnchorInputs: {
+			asset: {
+				[this.chainId]: [localToken.contract.address],
+				[otherChain.chainId]: [otherToken.contract.address],
+			}
+		  },
+		  chainIDs: [this.chainId, otherChain.chainId],
+		  webbTokens: webbTokens1
+	  }
+
+		const deployerConfig: DeployerConfig = {
+			[this.chainId]: localWallet,
+			[otherChain.chainId]: otherWallet,
+		}
+
+		const smallCircuitZkComponents = await fetchComponentsFromFilePaths(
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/poseidon_vanchor_2_2.wasm'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/witness_calculator.js'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_2/2/circuit_final.zkey'
+			)
+		);
+
+		const largeCircuitZkComponents = await fetchComponentsFromFilePaths(
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/poseidon_vanchor_16_2.wasm'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/witness_calculator.js'
+			),
+			path.resolve(
+				gitRoot,
+				'dkg-test-suite',
+				'protocol-solidity-fixtures/fixtures/vanchor_16/2/circuit_final.zkey'
+			)
+		);
+
+		return VBridge.VBridge.deployVariableAnchorBridge(
+			vBridgeInput,
+			deployerConfig,
+			initialGovernors,
+			smallCircuitZkComponents,
+			largeCircuitZkComponents
 		);
 	}
 }
