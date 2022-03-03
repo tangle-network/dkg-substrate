@@ -793,8 +793,6 @@ where
 	}
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public>) {
-		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
-
 		if let Some(rounds) = self.rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
 				let block_number = {
@@ -804,6 +802,7 @@ where
 						None
 					}
 				};
+				debug!(target: "dkg", "🕸️  Process DKG message for current rounds {}", &dkg_msg);
 				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => (),
 					Err(err) =>
@@ -818,15 +817,16 @@ where
 		}
 
 		if let Some(next_rounds) = self.next_rounds.as_mut() {
-			let block_number = {
-				if self.latest_header.is_some() {
-					Some(*self.latest_header.as_ref().unwrap().number())
-				} else {
-					None
-				}
-			};
 			if next_rounds.get_id() == dkg_msg.round_id {
-				debug!(target: "dkg", "🕸️  Received message for Queued DKGs");
+				let block_number = {
+					if self.latest_header.is_some() {
+						Some(*self.latest_header.as_ref().unwrap().number())
+					} else {
+						None
+					}
+				};
+
+				debug!(target: "dkg", "🕸️  Process DKG message for queued rounds {}", &dkg_msg);
 				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
 					Err(err) =>

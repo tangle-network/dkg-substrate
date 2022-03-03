@@ -143,6 +143,7 @@ where
 
 			match keygen.proceed() {
 				Ok(_) => {
+					debug!(target: "dkg", "🕸️  Keygen party {} proceeded", keygen.party_ind());
 					trace!(target: "dkg", "🕸️  after: {:?}", keygen);
 				},
 				Err(err) => {
