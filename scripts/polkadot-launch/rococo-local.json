@@ -3,9 +3,9 @@
   "id": "rococo_local_testnet",
   "chainType": "Local",
   "bootNodes": [
-    "/ip4/127.0.0.1/tcp/30444/p2p/12D3KooWFQfT2tHsdfrGCXesnWkD8ty5K46cxosRYGnKDW5QFwDa",
-    "/ip4/127.0.0.1/tcp/30555/p2p/12D3KooWSnKRoSo3epsdyCXgaReP9aLvaRcyiS8gC61dVixmdnhE",
-    "/ip4/127.0.0.1/tcp/30666/p2p/12D3KooWQc2ebDESTTZQSnUkg3ZQKkRb8ReJCy2zD7jm4n1F7Lfa"
+    "/ip4/127.0.0.1/tcp/30444/p2p/12D3KooWRoty2jGVxHS8EGymoBEmHfjkB3nH4Mpn7kd8CzWHwUfu",
+    "/ip4/127.0.0.1/tcp/30555/p2p/12D3KooWG8oBumrrG61hT7xGYejg1zjMebnSk36b2vTVLQgMUEN5",
+    "/ip4/127.0.0.1/tcp/30666/p2p/12D3KooWMWWiaJzQFNy7MWbg38FkNWXRyuwDspi7Cpi69SxUBj71"
   ],
   "telemetryEndpoints": null,
   "protocolId": "dot",

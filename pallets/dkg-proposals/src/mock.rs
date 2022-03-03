@@ -255,6 +255,8 @@ pub(crate) fn roll_to(n: u64) {
 		Session::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
+
+	Session::rotate_session();
 }
 
 pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
@@ -379,7 +381,8 @@ pub fn assert_events(mut expected: Vec<Event>) {
 pub fn assert_has_event(ev: Event) -> () {
 	let actual: Vec<Event> =
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
-
+	println!("{:?}\n", actual);
+	println!("{:?}", ev);
 	assert!(actual.contains(&ev))
 }
 

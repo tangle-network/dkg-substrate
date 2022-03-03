@@ -1353,11 +1353,15 @@ where
 				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						if let Ok(raw) = self.verify_signature_against_authorities(dkg_msg.clone()) {
+						let result = self.verify_signature_against_authorities(dkg_msg.clone());
+						// Handle the raw message
+						if let Ok(raw) = result {
 							debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
 							self.process_incoming_dkg_message(raw);
-						} else {
-							debug!(target: "dkg", "🕸️  Received message with invalid signature");
+						}
+						// Handle error from signature verification
+						if let Err(e) = result {
+							debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
 						}
 					} else {
 						return;
