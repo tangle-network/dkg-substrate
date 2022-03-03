@@ -148,6 +148,8 @@ where
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
 	refresh_in_progress: bool,
+	/// Msg cache for startup if authorities aren't set
+	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
@@ -216,6 +218,7 @@ where
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
 			refresh_in_progress: false,
+			msg_cache: Vec::new(),
 			aggregated_public_keys: HashMap::new(),
 			aggregated_misbehaviour_reports: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
@@ -1352,16 +1355,36 @@ where
 					}
 				},
 				dkg_msg = dkg.next().fuse() => {
+					debug!(target: "dkg", "🕸️  Current authorities {:?}", self.current_validator_set.authorities);
+					debug!(target: "dkg", "🕸️  Next authorities {:?}", self.queued_validator_set.authorities);
 					if let Some(dkg_msg) = dkg_msg {
-						let result = self.verify_signature_against_authorities(dkg_msg.clone());
-						// Handle the raw message
-						if let Ok(raw) = result {
-							debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
-							self.process_incoming_dkg_message(raw);
-						}
-						// Handle error from signature verification
-						if let Err(e) = result {
-							debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+							self.msg_cache.push(dkg_msg);
+						} else {
+							let msgs = self.msg_cache.clone();
+							for msg in msgs {
+								match self.verify_signature_against_authorities(msg) {
+									Ok(raw) => {
+										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: {:?}", raw);
+										self.process_incoming_dkg_message(raw);
+									},
+									Err(e) => {
+										debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+									}
+								}
+							}
+
+							match self.verify_signature_against_authorities(dkg_msg) {
+								Ok(raw) => {
+									debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
+									self.process_incoming_dkg_message(raw);
+								},
+								Err(e) => {
+									debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+								}
+							}
+							// Reset the cache
+							self.msg_cache = Vec::new();
 						}
 					} else {
 						return;
