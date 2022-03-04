@@ -81,7 +81,7 @@ where
 	signed_proposal
 }
 
-/// makes a proposal kind signed
+/// makes a proposal kind a signed one
 fn make_signed_proposal(kind: ProposalKind, finished_round: DKGSignedPayload) -> Option<Proposal> {
 	Some(Proposal::Signed {
 		kind,
