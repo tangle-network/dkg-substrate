@@ -515,7 +515,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn pre_process_for_merkelize() -> Vec<Vec<u8>> {
+	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
 		let proposer_keys = Proposers::<T>::iter_keys();
 		// Check for each key that the proposer is valid (should return true)
@@ -545,7 +545,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn get_proposer_set_tree_root() -> Vec<u8> {
-		let mut curr_layer = Self::pre_process_for_merkelize();
+		let mut curr_layer = Self::pre_process_for_merkleize();
 		let mut height = Self::get_proposer_set_tree_height();
 		while height > 0 {
 			curr_layer = Self::next_layer(curr_layer);

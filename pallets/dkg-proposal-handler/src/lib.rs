@@ -293,12 +293,38 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(().into())
 	}
 
+	fn handle_unsigned_proposer_set_update_proposal(
+		proposal: dkg_runtime_primitives::ProposerSetUpdateProposal,
+	) -> DispatchResult {
+		let unsigned_proposal =
+			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::ProposerSetUpdate };
+
+		UnsignedProposalQueue::<T>::insert(
+			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
+			DKGPayloadKey::ProposerSetUpdateProposal(proposal.nonce),
+			unsigned_proposal,
+		);
+
+		Ok(().into())
+	}
+
 	fn handle_signed_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
 			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
+		);
+
+		Ok(().into())
+	}
+
+	fn handle_signed_proposer_set_update_proposal(
+		proposal: dkg_runtime_primitives::ProposerSetUpdateProposal,
+	) -> DispatchResult {
+		UnsignedProposalQueue::<T>::remove(
+			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
+			DKGPayloadKey::ProposerSetUpdateProposal(proposal.nonce),
 		);
 
 		Ok(().into())

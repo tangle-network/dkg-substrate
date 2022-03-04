@@ -1122,6 +1122,8 @@ where
 
 				return None
 			},
+			DKGPayloadKey::ProposerSetUpdateProposal(_) =>
+				make_signed_proposal(ProposalKind::ProposerSetUpdate),
 			DKGPayloadKey::EVMProposal(_) => make_signed_proposal(ProposalKind::EVM),
 			DKGPayloadKey::AnchorCreateProposal(_) =>
 				make_signed_proposal(ProposalKind::AnchorCreate),
