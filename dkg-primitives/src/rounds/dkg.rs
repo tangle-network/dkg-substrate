@@ -765,7 +765,7 @@ mod tests {
 			println!("Starting keygen for party {}", party.party_index);
 			party
 				.start_keygen(0)
-				.unwrap_or_else(|| panic!("Could not start keygen for party"));
+				.unwrap_or_else(|_| panic!("Could not start keygen for party"));
 			parties.push(party);
 		}
 

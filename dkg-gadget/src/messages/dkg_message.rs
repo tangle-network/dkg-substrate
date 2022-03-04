@@ -21,6 +21,7 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 
+/// Sends outgoing dkg messages
 pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
 where
 	B: Block,
@@ -106,6 +107,8 @@ where
 	}
 }
 
+/// send actual messages
+///
 fn send_messages<B, C, BE>(
 	mut dkg_worker: &mut DKGWorker<B, C, BE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
