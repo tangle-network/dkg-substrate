@@ -63,55 +63,6 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
-pub struct ProposerSetUpdateProposal {
-	pub nonce: ProposalNonce,
-	pub merkle_root: Vec<u8>,
-}
-
-impl Decode for ProposerSetUpdateProposal {
-	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
-		let mut data = [0u8; NONCE_LEN + 32];
-		input
-			.read(&mut data)
-			.map_err(|_| codec::Error::from("input bytes are less than the expected size"))?;
-		// _NOTE_: rustc won't generate bounds check for the following slice
-		// since we know the length of the slice is at least 68 bytes already.
-		let mut nonce_bytes = [0u8; NONCE_LEN];
-		let mut merkle_root_bytes = [0u8; 32];
-		nonce_bytes.copy_from_slice(&data[0..NONCE_LEN]);
-		merkle_root_bytes.copy_from_slice(&data[NONCE_LEN..]);
-		let nonce = ProposalNonce::from_be_bytes(nonce_bytes);
-		let merkle_root = merkle_root_bytes.to_vec();
-		Ok(Self { nonce, merkle_root })
-	}
-}
-
-impl Encode for ProposerSetUpdateProposal {
-	fn encode(&self) -> Vec<u8> {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
-		let mut ret = [0u8; NONCE_LEN + 32];
-		let nonce = self.nonce.to_be_bytes();
-		ret[0..NONCE_LEN].copy_from_slice(&nonce);
-		ret[NONCE_LEN..(NONCE_LEN + 32)].copy_from_slice(&self.merkle_root);
-		ret.into()
-	}
-
-	fn encoded_size(&self) -> usize {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
-		NONCE_LEN + 32
-	}
-}
-
-#[derive(
-	Eq, PartialEq, Clone, Encode, Decode, scale_info::TypeInfo, frame_support::RuntimeDebug,
-)]
-pub struct ProposerSetUpdateProposalSigned {
-	pub nonce: ProposalNonce,
-	pub merkle_root: Vec<u8>,
-}
-
 pub trait ChainIdTrait: AtLeast32Bit + Copy + Encode + Decode + sp_std::fmt::Debug {}
 
 impl ChainIdTrait for u32 {}
@@ -343,18 +294,6 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_unsigned_proposer_set_update_proposal(
-		_proposal: ProposerSetUpdateProposal,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
-	}
-
-	fn handle_signed_proposer_set_update_proposal(
-		_proposal: ProposerSetUpdateProposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}
