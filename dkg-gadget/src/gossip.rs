@@ -60,9 +60,7 @@ where
 	B: Block,
 {
 	pub fn new() -> GossipValidator<B> {
-		GossipValidator {
-			topic: dkg_topic::<B>(),
-		}
+		GossipValidator { topic: dkg_topic::<B>() }
 	}
 }
 
