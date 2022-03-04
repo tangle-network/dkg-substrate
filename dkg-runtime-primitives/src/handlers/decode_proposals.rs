@@ -1,5 +1,5 @@
 use crate::{
-	handlers::{evm, validate_proposals::ValidationError},
+	handlers::{evm, proposer_set_update, validate_proposals::ValidationError},
 	ChainIdTrait, ChainIdType, DKGPayloadKey, Proposal, ProposalHeader, ProposalKind,
 	ProposalNonce,
 };
@@ -30,6 +30,9 @@ pub fn decode_proposal<C: ChainIdTrait>(
 		ProposalKind::EVM =>
 			return evm::evm_tx::create(&proposal.data())
 				.map(|p| (p.chain_id, DKGPayloadKey::EVMProposal(p.nonce))),
+		ProposalKind::ProposerSetUpdate =>
+			return proposer_set_update::create(&proposal.data())
+				.map(|p| (p.chain_id, DKGPayloadKey::ProposerSetUpdateProposal(p.nonce))),
 		_ => {},
 	}
 
