@@ -80,6 +80,7 @@ use crate::{
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
+	proposal::get_signed_proposal,
 	types::dkg_topic,
 	utils::{find_authorities_change, find_index, set_up_rounds, validate_threshold},
 	Client,
@@ -122,7 +123,7 @@ where
 	C: Client<B, BE>,
 {
 	pub client: Arc<C>,
-	backend: Arc<BE>,
+	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	gossip_validator: Arc<GossipValidator<B>>,
@@ -959,60 +960,7 @@ where
 			Err(err) => return None,
 		};
 
-		let make_signed_proposal = |kind: ProposalKind| Proposal::Signed {
-			kind,
-			data: finished_round.payload,
-			signature: finished_round.signature.clone(),
-		};
-
-		let signed_proposal = match payload_key {
-			DKGPayloadKey::RefreshVote(nonce) => {
-				let offchain = self.backend.offchain_storage();
-
-				if let Some(mut offchain) = offchain {
-					let refresh_proposal = RefreshProposalSigned {
-						nonce,
-						signature: finished_round.signature.clone(),
-					};
-					let encoded_proposal = refresh_proposal.encode();
-					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
-
-					trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
-				}
-
-				return None
-			},
-			DKGPayloadKey::EVMProposal(_) => make_signed_proposal(ProposalKind::EVM),
-			DKGPayloadKey::AnchorCreateProposal(_) =>
-				make_signed_proposal(ProposalKind::AnchorCreate),
-			DKGPayloadKey::AnchorUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::AnchorUpdate),
-			DKGPayloadKey::TokenAddProposal(_) => make_signed_proposal(ProposalKind::TokenAdd),
-			DKGPayloadKey::TokenRemoveProposal(_) =>
-				make_signed_proposal(ProposalKind::TokenRemove),
-			DKGPayloadKey::WrappingFeeUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::WrappingFeeUpdate),
-			DKGPayloadKey::ResourceIdUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::ResourceIdUpdate),
-			DKGPayloadKey::RescueTokensProposal(_) =>
-				make_signed_proposal(ProposalKind::RescueTokens),
-			DKGPayloadKey::MaxDepositLimitUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::MaxDepositLimitUpdate),
-			DKGPayloadKey::MinWithdrawalLimitUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::MinWithdrawalLimitUpdate),
-			DKGPayloadKey::MaxExtLimitUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::MaxExtLimitUpdate),
-			DKGPayloadKey::MaxFeeLimitUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::MaxFeeLimitUpdate),
-			DKGPayloadKey::SetVerifierProposal(_) =>
-				make_signed_proposal(ProposalKind::SetVerifier),
-			DKGPayloadKey::SetTreasuryHandlerProposal(_) =>
-				make_signed_proposal(ProposalKind::SetTreasuryHandler),
-			DKGPayloadKey::FeeRecipientUpdateProposal(_) =>
-				make_signed_proposal(ProposalKind::FeeRecipientUpdate),
-		};
-
-		Some(signed_proposal)
+		get_signed_proposal(self, finished_round.clone(), payload_key)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
