@@ -68,8 +68,12 @@ where
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
-				next_rounds_send_result =
-					send_messages(dkg_worker, &mut next_rounds, id, dkg_worker.get_latest_block_number());
+				next_rounds_send_result = send_messages(
+					dkg_worker,
+					&mut next_rounds,
+					id,
+					dkg_worker.get_latest_block_number(),
+				);
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
