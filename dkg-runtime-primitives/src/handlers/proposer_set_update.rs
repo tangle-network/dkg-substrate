@@ -7,7 +7,7 @@ use codec::alloc::string::ToString;
 pub struct ProposerSetUpdateProposal<C: ChainIdTrait> {
 	pub merkle_root: Vec<u8>,        // 32 bytes
 	pub average_session_length: u64, // 8 bytes
-	pub chain_id: ChainIdType<C>,    // 6 bytes
+	pub chain_id: ChainIdType<C>,    // 6 bytes should be dummy zeroes
 	pub nonce: ProposalNonce,        // 4 bytes
 }
 
@@ -37,6 +37,14 @@ pub fn create<C: ChainIdTrait>(
 	let mut chain_inner_id_bytes = [0u8; 4];
 	chain_type_bytes.copy_from_slice(&data[40..42]);
 	chain_inner_id_bytes.copy_from_slice(&data[42..46]);
+
+	// Check that chain type and inner id are dummy 0s
+	if u16::from_be_bytes(chain_type_bytes) != 0 || u32::from_be_bytes(chain_inner_id_bytes) != 0 {
+		return Err(ValidationError::InvalidParameter(
+			"chain id should be dummy zeroes".to_string(),
+		))?
+	}
+
 	let chain_id = ChainIdType::from_raw_parts(chain_type_bytes, chain_inner_id_bytes);
 
 	let mut nonce_bytes = [0u8; 4];

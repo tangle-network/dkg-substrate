@@ -282,6 +282,13 @@ pub trait ProposalHandlerTrait {
 		Ok(().into())
 	}
 
+	fn handle_unsigned_proposer_set_update_proposal(
+		_proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
 	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(().into())
 	}

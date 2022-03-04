@@ -49,12 +49,12 @@ pub mod types;
 pub mod utils;
 use codec::{Decode, Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, ChainIdType, ProposalHandlerTrait, ProposalNonce,
-	ResourceId,
+	traits::OnAuthoritySetChangeHandler, ChainId, ChainIdType, Proposal, ProposalHandlerTrait,
+	ProposalKind, ProposalNonce, ResourceId,
 };
 use frame_support::{
 	pallet_prelude::{ensure, DispatchError, DispatchResultWithPostInfo},
-	traits::{EnsureOrigin, Get},
+	traits::{EnsureOrigin, EstimateNextSessionRotation, Get, OneSessionHandler},
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
@@ -97,6 +97,9 @@ pub mod pallet {
 
 		/// Origin used to administer the pallet
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
+
+		/// Authority identifier type
+		type DKGId: Member + Parameter + MaybeSerializeDeserialize;
 
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
@@ -148,6 +151,11 @@ pub mod pallet {
 	#[pallet::getter(fn proposer_threshold)]
 	pub type ProposerThreshold<T: Config> =
 		StorageValue<_, u32, ValueQuery, DefaultForProposerThreshold>;
+
+	/// Proposer Set Update Proposal Nonce
+	#[pallet::storage]
+	#[pallet::getter(fn proposer_set_update_proposal_nonce)]
+	pub type ProposerSetUpdateProposalNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	/// Tracks current proposer set
 	#[pallet::storage]
@@ -792,9 +800,25 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 			Proposers::<T>::insert(authority, true);
 		}
 		ProposerCount::<T>::put(authorities.len() as u32);
-		// 1. Build merkle tree of the new proposer set
-		// 2. Create the proposer set update proposal
-		// 3. Submit the unsigned proposal for signing
 		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities });
+
+		// Merkleize the new proposer set
+		let mut proposer_set_merkle_root = Self::get_proposer_set_tree_root();
+		// Increment the nonce, we increment first because the nonce starts at 0
+		let curr_proposal_nonce = Self::proposer_set_update_proposal_nonce();
+		let new_proposal_nonce = curr_proposal_nonce + 1u32;
+		// Get average session length
+		let average_session_length: u64 = 5u64;
+		//EstimateNextSessionRotation::average_session_length();...somehow need to convert this to
+		// seconds.
+
+		proposer_set_merkle_root.extend_from_slice(&average_session_length.to_be_bytes());
+		proposer_set_merkle_root.extend_from_slice(&[0u8; 6]); // dummy zeroes chain_id
+		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());
+
+		T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(
+			proposer_set_merkle_root,
+			dkg_runtime_primitives::ProposalAction::Sign(0),
+		);
 	}
 }
