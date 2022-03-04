@@ -792,6 +792,9 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 			Proposers::<T>::insert(authority, true);
 		}
 		ProposerCount::<T>::put(authorities.len() as u32);
+		// 1. Build merkle tree of the new proposer set
+		// 2. Create the proposer set update proposal
+		// 3. Submit the unsigned proposal for signing
 		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities });
 	}
 }
