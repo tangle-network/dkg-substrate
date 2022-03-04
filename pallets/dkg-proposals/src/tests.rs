@@ -11,7 +11,10 @@ use super::{
 	},
 	*,
 };
-use crate::mock::{assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, CollatorSelection};
+use crate::mock::{
+	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, CollatorSelection,
+	ExtBuilder,
+};
 use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
@@ -591,7 +594,11 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+			proposers: vec![
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+				mock_pub_key(PROPOSER_C),
+			],
 		}));
 	})
 }
@@ -604,7 +611,11 @@ fn should_reset_proposers_if_authorities_changed() {
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+			proposers: vec![
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+				mock_pub_key(PROPOSER_C),
+			],
 		}))
 	})
 }
@@ -656,7 +667,11 @@ fn only_current_authorities_should_make_successful_proposals() {
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
 		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
-			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+			proposers: vec![
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+				mock_pub_key(PROPOSER_C),
+			],
 		}));
 
 		// Create proposal (& vote)
