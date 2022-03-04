@@ -192,7 +192,7 @@ impl pallet_session::Config for Test {
 parameter_types! {
 	pub const PotId: PalletId = PalletId(*b"PotStake");
 	pub const MaxCandidates: u32 = 1000;
-	pub const MinCandidates: u32 = 5;
+	pub const MinCandidates: u32 = 0;
 	pub const MaxInvulnerables: u32 = 100;
 }
 
@@ -264,9 +264,10 @@ pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
 }
 
 // pub const BRIDGE_ID: u64 =
-pub const PROPOSER_A: u8 = 2;
-pub const PROPOSER_B: u8 = 3;
-pub const PROPOSER_C: u8 = 4;
+pub const PROPOSER_A: u8 = 1;
+pub const PROPOSER_B: u8 = 2;
+pub const PROPOSER_C: u8 = 3;
+pub const PROPOSER_D: u8 = 4;
 pub const SMALL_BALANCE: u64 = 100_000;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
@@ -289,28 +290,31 @@ impl ExtBuilder {
 		let dkg_id = PalletId(*b"dw/dkgac").into_account();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		let candidates = vec![
-			(mock_pub_key(0), mock_dkg_id(0), 1000),
-			(mock_pub_key(1), mock_dkg_id(1), 1000),
-			(mock_pub_key(2), mock_dkg_id(2), 1000),
-			(mock_pub_key(3), mock_dkg_id(3), 1000),
+			(mock_pub_key(PROPOSER_A), mock_dkg_id(PROPOSER_A), 1000),
+			(mock_pub_key(PROPOSER_B), mock_dkg_id(PROPOSER_B), 1000),
+			(mock_pub_key(PROPOSER_C), mock_dkg_id(PROPOSER_C), 1000),
+			(mock_pub_key(PROPOSER_D), mock_dkg_id(PROPOSER_D), 1000),
 		];
 		pallet_balances::GenesisConfig::<Test> {
 			balances: vec![
 				(dkg_id, ENDOWED_BALANCE),
-				(mock_pub_key(0), ENDOWED_BALANCE),
-				(mock_pub_key(1), ENDOWED_BALANCE),
-				(mock_pub_key(2), ENDOWED_BALANCE),
-				(mock_pub_key(3), ENDOWED_BALANCE),
-				(mock_pub_key(4), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_A), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_B), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_C), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_D), ENDOWED_BALANCE),
 			],
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
 
 		pallet_collator_selection::GenesisConfig::<Test> {
-			invulnerables: candidates.iter().cloned().map(|(acc, _, _)| acc).collect(),
+			invulnerables: vec![
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+				mock_pub_key(PROPOSER_C),
+			],
 			candidacy_bond: SMALL_BALANCE,
-			..Default::default()
+			desired_candidates: 4,
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
@@ -331,7 +335,11 @@ impl ExtBuilder {
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		let ext = sp_io::TestExternalities::new(t);
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| {
+			CollatorSelection::register_as_candidate(Origin::signed(mock_pub_key(PROPOSER_D)));
+			System::set_block_number(1);
+		});
 		ext
 	}
 }
@@ -345,7 +353,7 @@ pub fn new_test_ext_initialized(
 	r_id: ResourceId,
 	resource: Vec<u8>,
 ) -> sp_io::TestExternalities {
-	let mut t = new_test_ext();
+	let mut t = ExtBuilder::build();
 	t.execute_with(|| {
 		// Set and check threshold
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
@@ -371,7 +379,6 @@ pub fn assert_events(mut expected: Vec<Event>) {
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
 
 	expected.reverse();
-
 	for evt in expected {
 		let next = actual.pop().expect("event expected");
 		assert_eq!(next, evt.into(), "Events don't match (actual,expected)");
@@ -381,8 +388,6 @@ pub fn assert_events(mut expected: Vec<Event>) {
 pub fn assert_has_event(ev: Event) -> () {
 	let actual: Vec<Event> =
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
-	println!("{:?}\n", actual);
-	println!("{:?}", ev);
 	assert!(actual.contains(&ev))
 }
 

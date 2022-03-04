@@ -7,11 +7,11 @@ use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
 		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		TEST_THRESHOLD,
+		PROPOSER_D, TEST_THRESHOLD,
 	},
 	*,
 };
-use crate::mock::{assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder};
+use crate::mock::{assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, ExtBuilder, CollatorSelection};
 use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
@@ -36,16 +36,15 @@ fn derive_ids() {
 	assert_eq!(r_id, expected);
 }
 
-pub const USER_A: u8 = 0x1;
-pub const USER_B: u8 = 0x5;
+pub const NOT_PROPOSER: u8 = 0x5;
 
 #[test]
 fn complete_proposal_approved() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
+		votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
 		votes_against: vec![mock_pub_key(PROPOSER_C)],
 		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get(),
+		expiry: ProposalLifetime::get() + 1,
 	};
 
 	prop.try_to_complete(2, 3);
@@ -55,10 +54,10 @@ fn complete_proposal_approved() {
 #[test]
 fn complete_proposal_rejected() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(USER_A)],
+		votes_for: vec![mock_pub_key(PROPOSER_A)],
 		votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get(),
+		expiry: ProposalLifetime::get() + 1,
 	};
 
 	prop.try_to_complete(2, 3);
@@ -68,10 +67,10 @@ fn complete_proposal_rejected() {
 #[test]
 fn complete_proposal_bad_threshold() {
 	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
+		votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
 		votes_against: vec![],
 		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get(),
+		expiry: ProposalLifetime::get() + 1,
 	};
 
 	prop.try_to_complete(3, 2);
@@ -79,9 +78,9 @@ fn complete_proposal_bad_threshold() {
 
 	let mut prop = ProposalVotes {
 		votes_for: vec![],
-		votes_against: vec![mock_pub_key(USER_A), mock_pub_key(PROPOSER_A)],
+		votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
 		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get(),
+		expiry: ProposalLifetime::get() + 1,
 	};
 
 	prop.try_to_complete(3, 2);
@@ -568,11 +567,108 @@ fn proposal_expires() {
 	})
 }
 
-// This test checks if the proposers are set after the DKG authorities are initialized in the
-// genesis session
 #[test]
 fn should_get_initial_proposers_from_dkg() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
+		// Initial proposer set is invulnerables even when another collator exists
+		assert_eq!(DKGProposals::proposer_count(), 3);
+		// Advance a session
+		roll_to(10);
+		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);
+	})
+}
+
+#[test]
+fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_eq!(DKGProposals::proposer_count(), 3);
+		// Leave proposer set before session change
+		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		// Advance a session
+		roll_to(10);
+		// Proposer set remains the same size
+		assert_eq!(DKGProposals::proposer_count(), 3);
+		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+		}));
+	})
+}
+
+// Whenever the collator set changes, which in turn would cause the DKG authorities to change, the
+// proposers to should also be changed.
+#[test]
+fn should_reset_proposers_if_authorities_changed() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		roll_to(10);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+		}))
+	})
+}
+
+// This tess that only accounts in the proposer set are allowed to make proposals,
+//  when the authority set changes, if an authority has been removed from the set, they should not
+// be able to make proposals anymore.
+#[test]
+fn only_current_authorities_should_make_successful_proposals() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
+
+		// Whitelist chain
+		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id.clone()));
+		// Set and check resource ID mapped to some junk data
+		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, b"System.remark".to_vec()));
+		assert_eq!(DKGProposals::resource_exists(r_id), true);
+
+		let prop_id = 1;
+		let proposal = make_proposal::<42>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![],
+		});
+
+		assert_err!(
+			DKGProposals::reject_proposal(
+				Origin::signed(mock_pub_key(NOT_PROPOSER)),
+				prop_id,
+				src_id.clone(),
+				r_id,
+				proposal.clone(),
+			),
+			crate::Error::<Test>::MustBeProposer
+		);
+
+		// Create proposal (& vote)
+		assert_ok!(DKGProposals::acknowledge_proposal(
+			Origin::signed(mock_pub_key(PROPOSER_A)),
+			prop_id,
+			src_id.clone(),
+			r_id,
+			proposal.clone(),
+		));
+
+		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		roll_to(10);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
+		}));
+
+		// Create proposal (& vote)
+		assert_err!(
+			DKGProposals::reject_proposal(
+				Origin::signed(mock_pub_key(PROPOSER_D)),
+				prop_id,
+				src_id.clone(),
+				r_id,
+				proposal.clone(),
+			),
+			crate::Error::<Test>::MustBeProposer
+		);
 	})
 }
