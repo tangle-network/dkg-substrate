@@ -108,7 +108,6 @@ where
 }
 
 /// send actual messages
-///
 fn send_messages<B, C, BE>(
 	mut dkg_worker: &mut DKGWorker<B, C, BE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
