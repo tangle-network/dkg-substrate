@@ -16,20 +16,31 @@
 // limitations under the License.
 
 //! # DKG Proposals Module
-//!
-//! Add description #TODO
+//! The pallet provides functionality for voting on what proposals should be signed by the DKG.
 //!
 //! ## Overview
+//! The dkg-proposal pallet provides functions for:
+//! - Setting proposers threshold
+//! - Registering and unregistering resources
+//! - Registering and unregistering proposers
+//! - Whitelisting chains
 //!
+//! It also provides util functionality for:
+//! - Ensuring only admins can make the call
+//! - Checking if the account making the call is a proposer
+//! - Checking if a resource exists
+//! - Checking if a chain is whitelisted
+//! - Providing an accountId
 //!
 //! ### Terminology
+//! - **Proposer**: A account that is trying to participate in the voting
 //!
 //! ### Goals
 //!
 //! The DKG proposal system is designed to make the following
 //! possible:
 //!
-//! * Define.
+//! * Allowing voting on what is going to be signed by the DKG.
 //!
 //! ## Interface
 //!
