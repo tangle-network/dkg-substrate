@@ -98,9 +98,6 @@ pub mod pallet {
 		/// Origin used to administer the pallet
 		type AdminOrigin: EnsureOrigin<Self::Origin>;
 
-		/// Authority identifier type
-		type DKGId: Member + Parameter + MaybeSerializeDeserialize;
-
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
 
@@ -807,13 +804,15 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 		// Increment the nonce, we increment first because the nonce starts at 0
 		let curr_proposal_nonce = Self::proposer_set_update_proposal_nonce();
 		let new_proposal_nonce = curr_proposal_nonce + 1u32;
+		ProposerSetUpdateProposalNonce::<T>::put(new_proposal_nonce);
 		// Get average session length
-		let average_session_length: u64 = 5u64;
+		let average_session_length: u64 = 60u64;
 		//EstimateNextSessionRotation::average_session_length();...somehow need to convert this to
 		// seconds.
 
 		proposer_set_merkle_root.extend_from_slice(&average_session_length.to_be_bytes());
-		proposer_set_merkle_root.extend_from_slice(&[0u8; 6]); // dummy zeroes chain_id
+		proposer_set_merkle_root.extend_from_slice(&[1u8, 0u8]); // valid chain type
+		proposer_set_merkle_root.extend_from_slice(&[0u8; 4]); // dummy zeroes chain inner id
 		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());
 
 		T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(

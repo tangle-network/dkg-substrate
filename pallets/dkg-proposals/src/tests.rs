@@ -5,9 +5,9 @@ use std::vec;
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		TEST_THRESHOLD,
+		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposalHandler, DKGProposals,
+		Event, Origin, ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B,
+		PROPOSER_C, TEST_THRESHOLD,
 	},
 	*,
 };
@@ -15,7 +15,7 @@ use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_pub_key, new_test_ext_initialized, roll_to,
 	ExtBuilder, ParachainStaking,
 };
-use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
+use dkg_runtime_primitives::{DKGPayloadKey, Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
@@ -668,6 +668,50 @@ fn only_current_authorities_should_make_successful_proposals() {
 				proposal.clone(),
 			),
 			crate::Error::<Test>::MustBeProposer
+		);
+	})
+}
+
+#[test]
+fn authority_set_change_should_create_proposer_set_update_proposal() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		// Change the authority set
+		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
+		roll_to(15);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
+		}));
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(1)
+			)
+			.is_some(),
+			true
+		);
+
+		println!("{:?}", DKGProposalHandler::get_unsigned_proposals().len());
+
+		// Change the authority set again
+		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(0)), 3).unwrap();
+		roll_to(30);
+		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+			proposers: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
+		}));
+
+		println!("{:?}", DKGProposalHandler::get_unsigned_proposals().len());
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(7)
+			)
+			.is_some(),
+			true
 		);
 	})
 }
