@@ -60,7 +60,7 @@ use frame_system::{self as system, ensure_root};
 pub use pallet::*;
 use pallet_timestamp;
 use scale_info::TypeInfo;
-use sp_core::hashing::keccak_256;
+use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::{AccountIdConversion, Saturating},
 	RuntimeDebug,
