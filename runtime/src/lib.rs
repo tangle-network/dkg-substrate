@@ -578,6 +578,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = ParachainStaking;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
