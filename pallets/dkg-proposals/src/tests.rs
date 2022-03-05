@@ -673,9 +673,8 @@ fn only_current_authorities_should_make_successful_proposals() {
 }
 
 #[test]
-fn authority_set_change_should_create_proposer_set_update_proposal1() {
+fn session_change_should_create_proposer_set_update_proposal() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
-		// Change the authority set
 		roll_to(40);
 
 		assert_eq!(
