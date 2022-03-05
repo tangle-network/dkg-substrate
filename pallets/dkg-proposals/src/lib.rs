@@ -58,6 +58,7 @@ use frame_support::{
 };
 use frame_system::{self as system, ensure_root};
 pub use pallet::*;
+use pallet_timestamp;
 use scale_info::TypeInfo;
 use sp_core::hashing::keccak_256;
 use sp_runtime::{
@@ -91,7 +92,7 @@ pub mod pallet {
 
 	#[pallet::config]
 	/// The module configuration trait.
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_timestamp::Config {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
@@ -100,6 +101,9 @@ pub mod pallet {
 
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
+
+		/// Estimate next session rotation
+		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
 
 		/// ChainID for anchor edges
 		type ChainId: Encode
@@ -806,11 +810,20 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 		let new_proposal_nonce = curr_proposal_nonce + 1u32;
 		ProposerSetUpdateProposalNonce::<T>::put(new_proposal_nonce);
 		// Get average session length
-		let average_session_length: u64 = 60u64;
-		//EstimateNextSessionRotation::average_session_length();...somehow need to convert this to
-		// seconds.
+		let average_session_length_in_blocks: u64 =
+			T::NextSessionRotation::average_session_length().try_into().unwrap_or_default();
 
-		proposer_set_merkle_root.extend_from_slice(&average_session_length.to_be_bytes());
+		let average_millisecs_per_block: u64 =
+			<T as pallet_timestamp::Config>::MinimumPeriod::get()
+				.saturating_mul(2u32.into())
+				.try_into()
+				.unwrap_or_default();
+
+		let average_session_length_in_millisecs =
+			average_session_length_in_blocks.saturating_mul(average_millisecs_per_block);
+
+		proposer_set_merkle_root
+			.extend_from_slice(&average_session_length_in_millisecs.to_be_bytes());
 		proposer_set_merkle_root.extend_from_slice(&[1u8, 0u8]); // valid chain type
 		proposer_set_merkle_root.extend_from_slice(&[0u8; 4]); // dummy zeroes chain inner id
 		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());

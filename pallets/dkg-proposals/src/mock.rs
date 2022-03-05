@@ -152,8 +152,11 @@ impl pallet_dkg_metadata::Config for Test {
 	type ProposalHandler = ();
 }
 
+pub const MILLISECS_PER_BLOCK: u64 = 10000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
 parameter_types! {
-	pub const MinimumPeriod: u64 = 1;
+	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 	pub const TimeToRestart: u64 = 3;
 }
@@ -242,6 +245,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = ParachainStaking;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;

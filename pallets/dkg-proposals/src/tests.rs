@@ -719,6 +719,14 @@ fn authority_set_change_should_create_proposer_set_update_proposal1() {
 			.is_some(),
 			true
 		);
+
+		println!(
+			"{:?}",
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::EVM(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(17)
+			)
+		);
 	})
 }
 
