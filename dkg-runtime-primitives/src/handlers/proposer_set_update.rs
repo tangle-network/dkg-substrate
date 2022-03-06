@@ -7,15 +7,14 @@ use codec::alloc::string::ToString;
 pub struct ProposerSetUpdateProposal {
 	pub merkle_root: Vec<u8>,        // 32 bytes
 	pub average_session_length: u64, // 8 bytes
-	pub num_of_proposers: u32,       // 8 butes
+	pub num_of_proposers: u32,       // 4 bytes
 	pub nonce: ProposalNonce,        // 4 bytes
 }
 
 /// Proposal Data: [
 ///     merkle_root: 32 bytes
 ///     average_session_length: 8 bytes
-/// 	num_of_proposers: 8 bytes
-///     chain_id: 6 bytes
+/// 	num_of_proposers: 4 bytes
 ///     nonce: 4 bytes
 /// ]
 /// Total Bytes: 32 + 8 + 4 + 4= 48 bytes
