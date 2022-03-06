@@ -7,13 +7,15 @@ use codec::alloc::string::ToString;
 pub struct ProposerSetUpdateProposal<C: ChainIdTrait> {
 	pub merkle_root: Vec<u8>,        // 32 bytes
 	pub average_session_length: u64, // 8 bytes
+	pub num_of_proposers: u32,       // 8 butes
 	pub chain_id: ChainIdType<C>,    // 6 bytes should be dummy zeroes
 	pub nonce: ProposalNonce,        // 4 bytes
 }
 
 /// Proposal Data: [
 ///     merkle_root: 32 bytes
-///     avarage_session_length: 8 bytes
+///     average_session_length: 8 bytes
+/// 	num_of_proposers: 8 bytes
 ///     chain_id: 6 bytes
 ///     nonce: 4 bytes
 /// ]
@@ -21,7 +23,7 @@ pub struct ProposerSetUpdateProposal<C: ChainIdTrait> {
 pub fn create<C: ChainIdTrait>(
 	data: &[u8],
 ) -> Result<ProposerSetUpdateProposal<C>, ValidationError> {
-	if data.len() != 50 {
+	if data.len() != 54 {
 		return Err(ValidationError::InvalidParameter("Proposal data must be 50 bytes".to_string()))?
 	}
 
@@ -33,16 +35,26 @@ pub fn create<C: ChainIdTrait>(
 	average_session_length_bytes.copy_from_slice(&data[32..40]);
 	let average_session_length = u64::from_be_bytes(average_session_length_bytes);
 
+	let mut num_of_proposers_bytes = [0u8; 4];
+	num_of_proposers_bytes.copy_from_slice(&data[40..44]);
+	let num_of_proposers = u32::from_be_bytes(num_of_proposers_bytes);
+
 	let mut chain_type_bytes = [0u8; 2];
 	let mut chain_inner_id_bytes = [0u8; 4];
-	chain_type_bytes.copy_from_slice(&data[40..42]);
-	chain_inner_id_bytes.copy_from_slice(&data[42..46]);
+	chain_type_bytes.copy_from_slice(&data[44..46]);
+	chain_inner_id_bytes.copy_from_slice(&data[46..50]);
 
 	let chain_id = ChainIdType::from_raw_parts(chain_type_bytes, chain_inner_id_bytes);
 
 	let mut nonce_bytes = [0u8; 4];
-	nonce_bytes.copy_from_slice(&data[46..50]);
+	nonce_bytes.copy_from_slice(&data[50..54]);
 	let nonce = u32::from_be_bytes(nonce_bytes);
 
-	Ok(ProposerSetUpdateProposal { merkle_root, average_session_length, chain_id, nonce })
+	Ok(ProposerSetUpdateProposal {
+		merkle_root,
+		average_session_length,
+		num_of_proposers,
+		chain_id,
+		nonce,
+	})
 }

@@ -821,8 +821,11 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 		let average_session_length_in_millisecs =
 			average_session_length_in_blocks.saturating_mul(average_millisecs_per_block);
 
+		let num_of_proposers = Self::proposer_count();
+
 		proposer_set_merkle_root
 			.extend_from_slice(&average_session_length_in_millisecs.to_be_bytes());
+		proposer_set_merkle_root.extend_from_slice(&num_of_proposers.to_be_bytes());
 		proposer_set_merkle_root.extend_from_slice(&[1u8, 0u8]); // valid chain type
 		proposer_set_merkle_root.extend_from_slice(&[0u8; 4]); // dummy zeroes chain inner id
 		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());
