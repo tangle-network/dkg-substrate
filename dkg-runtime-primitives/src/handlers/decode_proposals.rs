@@ -30,9 +30,14 @@ pub fn decode_proposal<C: ChainIdTrait>(
 		ProposalKind::EVM =>
 			return evm::evm_tx::create(&proposal.data())
 				.map(|p| (p.chain_id, DKGPayloadKey::EVMProposal(p.nonce))),
-		ProposalKind::ProposerSetUpdate =>
+		ProposalKind::ProposerSetUpdate => {
+			let dummy_chain_type = [1u8, 0u8];
+			let dummy_chain_inner_id = [0u8; 4];
+			let dummy_chain_id =
+				ChainIdType::<C>::from_raw_parts(dummy_chain_type, dummy_chain_inner_id);
 			return proposer_set_update::create(&proposal.data())
-				.map(|p| (p.chain_id, DKGPayloadKey::ProposerSetUpdateProposal(p.nonce))),
+				.map(|p| (dummy_chain_id, DKGPayloadKey::ProposerSetUpdateProposal(p.nonce)))
+		},
 		_ => {},
 	}
 

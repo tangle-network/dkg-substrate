@@ -4,11 +4,10 @@ use crate::{
 };
 use codec::alloc::string::ToString;
 
-pub struct ProposerSetUpdateProposal<C: ChainIdTrait> {
+pub struct ProposerSetUpdateProposal {
 	pub merkle_root: Vec<u8>,        // 32 bytes
 	pub average_session_length: u64, // 8 bytes
 	pub num_of_proposers: u32,       // 8 butes
-	pub chain_id: ChainIdType<C>,    // 6 bytes should be dummy zeroes
 	pub nonce: ProposalNonce,        // 4 bytes
 }
 
@@ -19,11 +18,9 @@ pub struct ProposerSetUpdateProposal<C: ChainIdTrait> {
 ///     chain_id: 6 bytes
 ///     nonce: 4 bytes
 /// ]
-/// Total Bytes: 32 + 8 + 6 + 4= 50 bytes
-pub fn create<C: ChainIdTrait>(
-	data: &[u8],
-) -> Result<ProposerSetUpdateProposal<C>, ValidationError> {
-	if data.len() != 54 {
+/// Total Bytes: 32 + 8 + 4 + 4= 48 bytes
+pub fn create(data: &[u8]) -> Result<ProposerSetUpdateProposal, ValidationError> {
+	if data.len() != 48 {
 		return Err(ValidationError::InvalidParameter("Proposal data must be 50 bytes".to_string()))?
 	}
 
@@ -39,22 +36,9 @@ pub fn create<C: ChainIdTrait>(
 	num_of_proposers_bytes.copy_from_slice(&data[40..44]);
 	let num_of_proposers = u32::from_be_bytes(num_of_proposers_bytes);
 
-	let mut chain_type_bytes = [0u8; 2];
-	let mut chain_inner_id_bytes = [0u8; 4];
-	chain_type_bytes.copy_from_slice(&data[44..46]);
-	chain_inner_id_bytes.copy_from_slice(&data[46..50]);
-
-	let chain_id = ChainIdType::from_raw_parts(chain_type_bytes, chain_inner_id_bytes);
-
 	let mut nonce_bytes = [0u8; 4];
-	nonce_bytes.copy_from_slice(&data[50..54]);
+	nonce_bytes.copy_from_slice(&data[44..48]);
 	let nonce = u32::from_be_bytes(nonce_bytes);
 
-	Ok(ProposerSetUpdateProposal {
-		merkle_root,
-		average_session_length,
-		num_of_proposers,
-		chain_id,
-		nonce,
-	})
+	Ok(ProposerSetUpdateProposal { merkle_root, average_session_length, num_of_proposers, nonce })
 }
