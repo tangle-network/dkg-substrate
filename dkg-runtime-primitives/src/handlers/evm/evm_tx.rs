@@ -1,6 +1,5 @@
 use crate::{
-	handlers::{validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, ProposalNonce,
+	handlers::validate_proposals::ValidationError, ChainIdTrait, ChainIdType, ProposalNonce,
 };
 use codec::{alloc::string::ToString, Decode};
 use ethereum::{
