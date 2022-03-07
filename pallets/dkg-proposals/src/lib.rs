@@ -45,7 +45,7 @@
 //! ## Interface
 //!
 //! ## Related Modules
-//!
+//! * [`DKG-Proposal-Handler]
 //! * [`System`](../frame_system/index.html)
 //! * [`Support`](../frame_support/index.html)
 
@@ -311,7 +311,12 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Sets the maintainer.
+		/// Sets the maintainer. After setting a maintainer, a deposit event `MaintainerSet` is
+		/// emitted.
+		///
+		/// The dispatch origin must be signed.
+		///
+		/// - new_maintainer: The account we want to set as maintainer.
 		#[pallet::weight(<T as Config>::WeightInfo::set_maintainer())]
 		pub fn set_maintainer(
 			origin: OriginFor<T>,
@@ -331,7 +336,13 @@ pub mod pallet {
 			})
 		}
 
-		// Forcefully set the maintainer.
+		/// Forcefully set the maintainer. It doesn't ensure that the parameter setter is the
+		/// maintainer but it ensures that the origin is an admin. It emits a deposit event
+		/// `MaintainerSet` after setting maintainer.
+		///
+		/// The dispatch origin must be `admin`
+		///
+		/// - new_maintainer: The account we want to set as maintainer.
 		#[pallet::weight(<T as Config>::WeightInfo::force_set_maintainer())]
 		pub fn force_set_maintainer(
 			origin: OriginFor<T>,
@@ -500,6 +511,7 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 	// *** Utility methods ***
 
+	/// Ensures the caller is an admin
 	pub fn ensure_admin(o: T::Origin) -> DispatchResultWithPostInfo {
 		T::AdminOrigin::try_origin(o).map(|_| ()).or_else(ensure_root)?;
 		Ok(().into())
@@ -714,6 +726,8 @@ pub struct EnsureBridge<T>(sp_std::marker::PhantomData<T>);
 impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	type Success = T::AccountId;
 
+	/// Checks if the origin is the `bridge_id` and returns and accountId if true or the passed
+	/// origin if false
 	fn try_origin(o: T::Origin) -> Result<Self::Success, T::Origin> {
 		let bridge_id = T::DKGAccountId::get().into_account();
 		o.into().and_then(|o| match o {
@@ -734,6 +748,7 @@ impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySetId, T::AccountId>
 	for Pallet<T>
 {
+	/// Emits a deposit event `ProposersReset` when the authority set is changed.
 	fn on_authority_set_changed(
 		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
 		authorities: Vec<T::AccountId>,
