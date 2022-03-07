@@ -256,7 +256,7 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 			[2, 2] =>
 				ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
 			[2, 128] =>
-				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
+				ChainIdType::Parachain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
 			[2, 129] =>
 				ChainIdType::Parachain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
 			[3, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
