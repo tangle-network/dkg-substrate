@@ -459,11 +459,6 @@ where
 		}
 
 		let public = fetch_public_key(self);
-
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
 		let sr25519_public = fetch_sr25519_public_key(self);
 
 		let thresh = validate_threshold(
