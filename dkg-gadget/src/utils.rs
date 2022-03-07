@@ -1,13 +1,19 @@
-use crate::worker::ENGINE_ID;
+use crate::{
+	worker::{DKGWorker, ENGINE_ID},
+	Client,
+};
 use codec::Codec;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
+	MmrRootHash,
 };
+use dkg_runtime_primitives::crypto::Public;
+use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_core::sr25519;
-use sp_runtime::generic::OpaqueDigestItemId;
+use sp_runtime::{generic::OpaqueDigestItemId, traits::Header};
 use std::{collections::HashMap, sync::Arc};
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
@@ -83,13 +89,63 @@ where
 {
 	let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
 
-	let filter = |log: ConsensusLog<AuthorityId>| match log {
+	header.digest().convert_first(|l| l.try_to(id).and_then(match_consensus_log))
+}
+
+fn match_consensus_log(
+	log: ConsensusLog<AuthorityId>,
+) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
+	match log {
 		ConsensusLog::AuthoritiesChange {
 			next_authorities: validator_set,
 			next_queued_authorities,
 		} => Some((validator_set, next_queued_authorities)),
 		_ => None,
-	};
+	}
+}
 
-	header.digest().convert_first(|l| l.try_to(id).and_then(filter))
+pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
+	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	mut next_authorities: &AuthoritySet<Public>,
+) -> bool
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if next_authorities.authorities.is_empty() {
+		return true
+	}
+
+	if dkg_worker.rounds.is_some() {
+		if dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id {
+			return true
+		}
+	}
+
+	false
+}
+
+pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
+	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	mut queued_authorities: &AuthoritySet<Public>,
+) -> bool
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if queued_authorities.authorities.is_empty() {
+		return true
+	}
+
+	if dkg_worker.next_rounds.is_some() {
+		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
+			return true
+		}
+	}
+
+	false
 }

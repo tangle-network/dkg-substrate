@@ -82,7 +82,10 @@ use crate::{
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	types::dkg_topic,
-	utils::{find_authorities_change, find_index, set_up_rounds, validate_threshold},
+	utils::{
+		find_authorities_change, find_index, is_next_authorities_or_rounds_empty,
+		is_queued_authorities_or_rounds_empty, set_up_rounds, validate_threshold,
+	},
 	Client,
 };
 
@@ -227,34 +230,42 @@ where
 		}
 	}
 
+	/// gets the current validators in the authority set
 	pub fn get_current_validators(&self) -> AuthoritySet<AuthorityId> {
 		self.current_validator_set.clone()
 	}
 
+	/// gets the queued(next) validators in the authority set
 	pub fn get_queued_validators(&self) -> AuthoritySet<AuthorityId> {
 		self.queued_validator_set.clone()
 	}
 
+	/// gets the dkg keystore(cryto keys)
 	pub fn keystore_ref(&self) -> DKGKeystore {
 		self.key_store.clone()
 	}
 
+	/// gets the gossip engine
 	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
 		self.gossip_engine.clone()
 	}
 
+	/// set the current rounds
 	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
 		self.rounds = Some(rounds);
 	}
 
+	/// sets the next rounds
 	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
 		self.next_rounds = Some(rounds);
 	}
 
+	/// gets the current rounds
 	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
 		self.rounds.take()
 	}
 
+	/// gets the next rounds
 	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
 		self.next_rounds.take()
 	}
@@ -267,6 +278,7 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
+	/// returns the index of an authority from an header
 	fn _get_authority_index(&self, header: &B::Header) -> Option<usize> {
 		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
@@ -291,6 +303,7 @@ where
 		return None
 	}
 
+	/// gets authority reputations from an header
 	pub fn get_authority_reputations(&self, header: &B::Header) -> HashMap<AuthorityId, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
@@ -306,6 +319,7 @@ where
 		reputation_map
 	}
 
+	/// get the signature threshold of a block in an header
 	pub fn get_threshold(&self, header: &B::Header) -> Option<u16> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().signature_threshold(&at).ok()
@@ -316,6 +330,7 @@ where
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
+	/// gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
 		self.latest_header.clone().unwrap().number().clone()
 	}
@@ -327,6 +342,9 @@ where
 	/// DKG on-chain state.
 	///
 	/// Such a failure is usually an indication that the DKG pallet has not been deployed (yet).
+	///
+	/// If the validators are None, we use the arbitrary validators gotten from the authority set
+	/// and queued authority set in the given header
 	pub fn validator_set(
 		&self,
 		header: &B::Header,
@@ -365,21 +383,15 @@ where
 		let missing: Vec<_> = store.difference(&active).cloned().collect();
 
 		if !missing.is_empty() {
-			debug!(target: "dkg", "🕸️  for block {:?} public key missing in validator set: {:?}", block, missing);
+			debug!(target: "dkg", "🕸️  for block {:?}, public key missing in validator set is: {:?}", block, missing);
 		}
 
 		Ok(())
 	}
 
 	fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
-		if next_authorities.authorities.is_empty() {
+		if is_next_authorities_or_rounds_empty(self, &next_authorities) {
 			return
-		}
-
-		if self.rounds.is_some() {
-			if self.rounds.as_ref().unwrap().get_id() == next_authorities.id {
-				return
-			}
 		}
 
 		let public = self
@@ -450,14 +462,8 @@ where
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
-		if queued.authorities.is_empty() {
+		if is_queued_authorities_or_rounds_empty(self, &queued) {
 			return
-		}
-
-		if self.next_rounds.is_some() {
-			if self.next_rounds.as_ref().unwrap().get_id() == queued.id {
-				return
-			}
 		}
 
 		let public = self
