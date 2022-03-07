@@ -240,7 +240,7 @@ where
 		return Err("Light client not supported!".into())
 	}
 
-	let parachain_config = prepare_node_config(parachain_config);
+	let mut parachain_config = prepare_node_config(parachain_config);
 
 	let params = new_partial::<RuntimeApi, Executor, BIQ>(&parachain_config, build_import_queue)?;
 	let (mut telemetry, telemetry_worker_handle) = params.other;
@@ -263,6 +263,9 @@ where
 	let prometheus_registry = parachain_config.prometheus_registry().cloned();
 	let transaction_pool = params.transaction_pool.clone();
 	let import_queue = cumulus_client_service::SharedImportQueue::new(params.import_queue);
+
+	parachain_config.network.extra_sets.push(dkg_gadget::dkg_peers_set_config());
+
 	let (network, system_rpc_tx, start_network) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &parachain_config,

@@ -154,6 +154,8 @@ where
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
 	refresh_in_progress: bool,
+	/// Msg cache for startup if authorities aren't set
+	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
@@ -222,6 +224,7 @@ where
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
 			refresh_in_progress: false,
+			msg_cache: Vec::new(),
 			aggregated_public_keys: HashMap::new(),
 			aggregated_misbehaviour_reports: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
@@ -421,6 +424,7 @@ where
 			self.next_rounds.take()
 		} else {
 			let is_authority = find_index(&next_authorities.authorities[..], &public).is_some();
+			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
 				Some(set_up_rounds(
 					&next_authorities,
@@ -543,7 +547,8 @@ where
 				// this metric is kind of 'fake'. Best DKG block should only be updated once we have
 				// a signed commitment for the block. Remove once the above TODO is done.
 				metric_set!(self, dkg_best_block, *header.number());
-
+				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
+				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				// Setting up the DKG
 				self.handle_dkg_setup(&header, active.clone());
 				self.handle_queued_dkg_setup(&header, queued.clone());
@@ -641,8 +646,6 @@ where
 	}
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public>) {
-		debug!(target: "dkg", "🕸️  Process DKG message {}", &dkg_msg);
-
 		if let Some(rounds) = self.rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
 				let block_number = {
@@ -652,6 +655,7 @@ where
 						None
 					}
 				};
+				debug!(target: "dkg", "🕸️  Process DKG message for current rounds {}", &dkg_msg);
 				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => (),
 					Err(err) =>
@@ -666,15 +670,16 @@ where
 		}
 
 		if let Some(next_rounds) = self.next_rounds.as_mut() {
-			let block_number = {
-				if self.latest_header.is_some() {
-					Some(*self.latest_header.as_ref().unwrap().number())
-				} else {
-					None
-				}
-			};
 			if next_rounds.get_id() == dkg_msg.round_id {
-				debug!(target: "dkg", "🕸️  Received message for Queued DKGs");
+				let block_number = {
+					if self.latest_header.is_some() {
+						Some(*self.latest_header.as_ref().unwrap().number())
+					} else {
+						None
+					}
+				};
+
+				debug!(target: "dkg", "🕸️  Process DKG message for queued rounds {}", &dkg_msg);
 				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
 					Err(err) =>
@@ -1125,8 +1130,6 @@ where
 		let mut dkg =
 			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
-					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
-
 					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
 				},
 			));
@@ -1151,11 +1154,36 @@ where
 					}
 				},
 				dkg_msg = dkg.next().fuse() => {
+					debug!(target: "dkg", "🕸️  Current authorities {:?}", self.current_validator_set.authorities);
+					debug!(target: "dkg", "🕸️  Next authorities {:?}", self.queued_validator_set.authorities);
 					if let Some(dkg_msg) = dkg_msg {
-						if let Ok(raw) = self.verify_signature_against_authorities(dkg_msg.clone()) {
-							self.process_incoming_dkg_message(raw);
+						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+							self.msg_cache.push(dkg_msg);
 						} else {
-							error!(target: "dkg", "🕸️  Received message with invalid signature");
+							let msgs = self.msg_cache.clone();
+							for msg in msgs {
+								match self.verify_signature_against_authorities(msg) {
+									Ok(raw) => {
+										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: {:?}", raw);
+										self.process_incoming_dkg_message(raw);
+									},
+									Err(e) => {
+										debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+									}
+								}
+							}
+
+							match self.verify_signature_against_authorities(dkg_msg) {
+								Ok(raw) => {
+									debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
+									self.process_incoming_dkg_message(raw);
+								},
+								Err(e) => {
+									debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+								}
+							}
+							// Reset the cache
+							self.msg_cache = Vec::new();
 						}
 					} else {
 						return;

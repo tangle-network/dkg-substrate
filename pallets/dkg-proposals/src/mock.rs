@@ -42,7 +42,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Config<T>, Event<T>},
+		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
@@ -146,7 +146,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type NextSessionRotation = ParachainStaking;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
 	type ProposalHandler = ();
@@ -165,66 +165,50 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
-parameter_types! {
-	pub const MaxAuthorities: u32 = 100_000;
-}
-
 impl pallet_aura::Config for Test {
 	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
 }
 
+parameter_types! {
+	pub const Period: u32 = 10;
+	pub const Offset: u32 = 0;
+	pub const MaxAuthorities: u32 = 100_000;
+}
+
 impl pallet_session::Config for Test {
 	type Event = Event;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
-	type ShouldEndSession = ParachainStaking;
-	type NextSessionRotation = ParachainStaking;
-	type SessionManager = ParachainStaking;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type SessionManager = CollatorSelection;
 	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = MockSessionKeys;
 	type WeightInfo = ();
 }
 
 parameter_types! {
-	pub const MinBlocksPerRound: u32 = 3;
-	pub const BlocksPerRound: u32 = 5;
-	pub const LeaveCandidatesDelay: u32 = 2;
-	pub const LeaveNominatorsDelay: u32 = 2;
-	pub const RevokeNominationDelay: u32 = 2;
-	pub const RewardPaymentDelay: u32 = 2;
-	pub const MinSelectedCandidates: u32 = 5;
-	pub const MaxNominatorsPerCollator: u32 = 4;
-	pub const MaxCollatorsPerNominator: u32 = 4;
-	pub const DefaultCollatorCommission: Perbill = Perbill::from_percent(20);
-	pub const DefaultParachainBondReservePercent: Percent = Percent::from_percent(30);
-	pub const MinCollatorStk: u64 = 10;
-	pub const MinNominatorStk: u64 = 5;
-	pub const MinNomination: u64 = 3;
-	pub const ParachainStakingPalletId: PalletId = PalletId(*b"dw/pcstk");
+	pub const PotId: PalletId = PalletId(*b"PotStake");
+	pub const MaxCandidates: u32 = 1000;
+	pub const MinCandidates: u32 = 0;
+	pub const MaxInvulnerables: u32 = 100;
 }
 
-impl pallet_parachain_staking::Config for Test {
-	type BlocksPerRound = BlocksPerRound;
-	type PalletId = ParachainStakingPalletId;
-	type Currency = Balances;
-	type DefaultCollatorCommission = DefaultCollatorCommission;
-	type DefaultParachainBondReservePercent = DefaultParachainBondReservePercent;
+impl pallet_collator_selection::Config for Test {
 	type Event = Event;
-	type LeaveCandidatesDelay = LeaveCandidatesDelay;
-	type LeaveNominatorsDelay = LeaveNominatorsDelay;
-	type MaxCollatorsPerNominator = MaxCollatorsPerNominator;
-	type MaxNominatorsPerCollator = MaxNominatorsPerCollator;
-	type MinBlocksPerRound = MinBlocksPerRound;
-	type MinCollatorCandidateStk = MinCollatorStk;
-	type MinCollatorStk = MinCollatorStk;
-	type MinNomination = MinNomination;
-	type MinNominatorStk = MinNominatorStk;
-	type MinSelectedCandidates = MinSelectedCandidates;
-	type MonetaryGovernanceOrigin = frame_system::EnsureRoot<AccountId>;
-	type RevokeNominationDelay = RevokeNominationDelay;
-	type RewardPaymentDelay = RewardPaymentDelay;
+	type Currency = Balances;
+	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
+	type PotId = PotId;
+	type MaxCandidates = MaxCandidates;
+	type MinCandidates = MinCandidates;
+	type MaxInvulnerables = MaxInvulnerables;
+	// should be a multiple of session or things will get inconsistent
+	type KickThreshold = Period;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
+	type ValidatorRegistration = Session;
 	type WeightInfo = ();
 }
 
@@ -259,7 +243,7 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 pub(crate) fn roll_to(n: u64) {
 	while System::block_number() < n {
 		Balances::on_finalize(System::block_number());
-		ParachainStaking::on_finalize(System::block_number());
+		CollatorSelection::on_finalize(System::block_number());
 		Session::on_finalize(System::block_number());
 		Aura::on_finalize(System::block_number());
 		System::on_finalize(System::block_number());
@@ -267,10 +251,12 @@ pub(crate) fn roll_to(n: u64) {
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
 		Balances::on_initialize(System::block_number());
-		ParachainStaking::on_initialize(System::block_number());
+		CollatorSelection::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
+
+	Session::rotate_session();
 }
 
 pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
@@ -278,9 +264,11 @@ pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
 }
 
 // pub const BRIDGE_ID: u64 =
-pub const PROPOSER_A: u8 = 2;
-pub const PROPOSER_B: u8 = 3;
-pub const PROPOSER_C: u8 = 4;
+pub const PROPOSER_A: u8 = 1;
+pub const PROPOSER_B: u8 = 2;
+pub const PROPOSER_C: u8 = 3;
+pub const PROPOSER_D: u8 = 4;
+pub const SMALL_BALANCE: u64 = 100_000;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
 
@@ -302,32 +290,31 @@ impl ExtBuilder {
 		let dkg_id = PalletId(*b"dw/dkgac").into_account();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		let candidates = vec![
-			(mock_pub_key(0), mock_dkg_id(0), 1000),
-			(mock_pub_key(1), mock_dkg_id(1), 1000),
-			(mock_pub_key(2), mock_dkg_id(2), 1000),
-			(mock_pub_key(3), mock_dkg_id(3), 1000),
+			(mock_pub_key(PROPOSER_A), mock_dkg_id(PROPOSER_A), 1000),
+			(mock_pub_key(PROPOSER_B), mock_dkg_id(PROPOSER_B), 1000),
+			(mock_pub_key(PROPOSER_C), mock_dkg_id(PROPOSER_C), 1000),
+			(mock_pub_key(PROPOSER_D), mock_dkg_id(PROPOSER_D), 1000),
 		];
 		pallet_balances::GenesisConfig::<Test> {
 			balances: vec![
 				(dkg_id, ENDOWED_BALANCE),
-				(mock_pub_key(0), ENDOWED_BALANCE),
-				(mock_pub_key(1), ENDOWED_BALANCE),
-				(mock_pub_key(2), ENDOWED_BALANCE),
-				(mock_pub_key(3), ENDOWED_BALANCE),
-				(mock_pub_key(4), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_A), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_B), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_C), ENDOWED_BALANCE),
+				(mock_pub_key(PROPOSER_D), ENDOWED_BALANCE),
 			],
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		pallet_parachain_staking::GenesisConfig::<Test> {
-			nominations: vec![],
-			candidates: candidates
-				.iter()
-				.cloned()
-				.map(|(account, _, bond)| (account, bond))
-				.collect(),
-			inflation_config: Default::default(),
+		pallet_collator_selection::GenesisConfig::<Test> {
+			invulnerables: vec![
+				mock_pub_key(PROPOSER_A),
+				mock_pub_key(PROPOSER_B),
+				mock_pub_key(PROPOSER_C),
+			],
+			candidacy_bond: SMALL_BALANCE,
+			desired_candidates: 4,
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
@@ -348,7 +335,11 @@ impl ExtBuilder {
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		let ext = sp_io::TestExternalities::new(t);
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| {
+			CollatorSelection::register_as_candidate(Origin::signed(mock_pub_key(PROPOSER_D)));
+			System::set_block_number(1);
+		});
 		ext
 	}
 }
@@ -362,7 +353,7 @@ pub fn new_test_ext_initialized(
 	r_id: ResourceId,
 	resource: Vec<u8>,
 ) -> sp_io::TestExternalities {
-	let mut t = new_test_ext();
+	let mut t = ExtBuilder::build();
 	t.execute_with(|| {
 		// Set and check threshold
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
@@ -388,7 +379,6 @@ pub fn assert_events(mut expected: Vec<Event>) {
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
 
 	expected.reverse();
-
 	for evt in expected {
 		let next = actual.pop().expect("event expected");
 		assert_eq!(next, evt.into(), "Events don't match (actual,expected)");
@@ -398,7 +388,6 @@ pub fn assert_events(mut expected: Vec<Event>) {
 pub fn assert_has_event(ev: Event) -> () {
 	let actual: Vec<Event> =
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
-
 	assert!(actual.contains(&ev))
 }
 
