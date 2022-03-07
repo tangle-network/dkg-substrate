@@ -2029,6 +2029,7 @@ dependencies = [
  "dkg-runtime-primitives",
  "fnv",
  "futures 0.3.19",
+ "getrandom 0.2.4",
  "hex",
  "libsecp256k1 0.3.5",
  "log",
