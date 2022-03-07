@@ -1,0 +1,37 @@
+name: Publish Docs
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  publish_docs:
+    if: github.event_name == 'push' && github.event.ref == 'refs/heads/master'
+    name: Publish Documentation
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+
+      - name: Update apt repositories
+        run: sudo apt update
+
+      - name: Build documentation
+        run: cargo doc --no-deps 
+      - name: Publish documentation
+        run: |
+          cd target/doc
+          git init
+          echo '<meta http-equiv="refresh" content="0; url=https://webb-tools.github.io/dkg-substrate/dkg_gadget/index.html">' > index.html
+          git add .
+          git -c user.name='ci' -c user.email='ci' commit -m 'Deploy documentation'
+          git push -f -q https://git:${{ secrets.github_token }}@github.com/${{ github.repository }} HEAD:gh-pages
