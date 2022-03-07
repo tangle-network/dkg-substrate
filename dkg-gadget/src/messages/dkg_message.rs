@@ -1,6 +1,6 @@
 use crate::{
 	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	worker::DKGWorker, Client,
+	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -143,35 +143,40 @@ where
 			DKGMessage { id: authority_id.clone(), payload: message, round_id: rounds.get_id() };
 		let encoded_dkg_message = dkg_message.encode();
 
-		let maybe_sr25519_public = dkg_worker
-			.key_store
-			.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default());
-		let sr25519_public = match maybe_sr25519_public {
-			Some(sr25519_public) => sr25519_public,
-			None => {
-				error!(target: "dkg", "🕸️  Could not find sr25519 key in keystore");
-				break
-			},
-		};
+		let sr25519_public = fetch_sr25519_public_key(dkg_worker);
 
-		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
-			Ok(sig) => {
-				let signed_dkg_message =
-					SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
-				let encoded_signed_dkg_message = signed_dkg_message.encode();
-				dkg_worker.gossip_engine.lock().gossip_message(
-					dkg_topic::<B>(),
-					encoded_signed_dkg_message.clone(),
-					true,
-				);
-			},
-			Err(e) => trace!(
-				target: "dkg",
-				"🕸️  Error signing DKG message: {:?}",
-				e
-			),
-		}
-		trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
+		sign_and_send_message(dkg_worker, sr25519_public, dkg_message, encoded_dkg_message);
 	}
 	results
+}
+
+fn sign_and_send_message<B, C, BE>(
+	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	mut sr25519_public: sp_core::sr25519::Public,
+	mut dkg_message: DKGMessage<AuthorityId>,
+	mut encoded_dkg_message: Vec<u8>,
+) where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+		Ok(sig) => {
+			let signed_dkg_message =
+				SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
+			let encoded_signed_dkg_message = signed_dkg_message.encode();
+			dkg_worker.gossip_engine.lock().gossip_message(
+				dkg_topic::<B>(),
+				encoded_signed_dkg_message.clone(),
+				true,
+			);
+		},
+		Err(e) => trace!(
+			target: "dkg",
+			"🕸️  Error signing DKG message: {:?}",
+			e
+		),
+	};
+	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
 }
