@@ -3,7 +3,6 @@ use crate::{
 	ChainIdTrait, ChainIdType, DKGPayloadKey, ProposalHeader, Vec,
 };
 use codec::alloc::string::ToString;
-use ethereum_types::Address;
 
 pub struct ResourceIdProposal<C: ChainIdTrait> {
 	pub header: ProposalHeader<C>,

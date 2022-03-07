@@ -22,7 +22,7 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	create_runtime_str,
-	traits::{AtLeast32Bit, IdentifyAccount, Verify},
+	traits::{IdentifyAccount, Verify},
 	MultiSignature, RuntimeString,
 };
 use sp_std::{prelude::*, vec::Vec};
@@ -89,7 +89,6 @@ impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
-	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
 	/// Identity of a DKG authority using ECDSA as its crypto.
