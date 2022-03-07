@@ -679,7 +679,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
+				ChainIdType::Null(0),
 				DKGPayloadKey::ProposerSetUpdateProposal(9)
 			)
 			.is_some(),
@@ -690,7 +690,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
+				ChainIdType::Null(0),
 				DKGPayloadKey::ProposerSetUpdateProposal(10)
 			)
 			.is_some(),
@@ -701,7 +701,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
+				ChainIdType::Null(0),
 				DKGPayloadKey::ProposerSetUpdateProposal(10)
 			)
 			.is_some(),
@@ -712,7 +712,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
+				ChainIdType::Null(0),
 				DKGPayloadKey::ProposerSetUpdateProposal(17)
 			)
 			.is_some(),
@@ -722,7 +722,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		println!(
 			"{:?}",
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
+				ChainIdType::Null(0),
 				DKGPayloadKey::ProposerSetUpdateProposal(17)
 			)
 		);
