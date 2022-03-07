@@ -24,16 +24,11 @@
 //! - Registering and unregistering resources
 //! - Registering and unregistering proposers
 //! - Whitelisting chains
-//!
-//! It also provides util functionality for:
-//! - Ensuring only admins can make the call
-//! - Checking if the account making the call is a proposer
-//! - Checking if a resource exists
-//! - Checking if a chain is whitelisted
-//! - Providing an accountId
+//! - Voting and getting proposal vote state
 //!
 //! ### Terminology
 //! - **Proposer**: A account that is trying to participate in the voting
+//! - **Threshold**: The number of votes needed for a proposal to pass.
 //!
 //! ### Goals
 //!
@@ -726,7 +721,7 @@ pub struct EnsureBridge<T>(sp_std::marker::PhantomData<T>);
 impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
 	type Success = T::AccountId;
 
-	/// Checks if the origin is the `bridge_id` and returns and accountId if true or the passed
+	/// Checks if the origin is the `bridge_id` and returns an accountId if true or the passed
 	/// origin if false
 	fn try_origin(o: T::Origin) -> Result<Self::Success, T::Origin> {
 		let bridge_id = T::DKGAccountId::get().into_account();

@@ -25,15 +25,9 @@
 //! - Registering and unregistering proposers
 //! - Whitelisting chains
 //!
-//! It also provides util functionality for:
-//! - Ensuring only admins can make the call
-//! - Checking if the account making the call is a proposer
-//! - Checking if a resource exists
-//! - Checking if a chain is whitelisted
-//! - Providing an accountId
-//!
 //! ### Terminology
 //! - **Proposer**: A account that is trying to participate in the voting
+//! - **Threshold**: The number of votes needed for a proposal to pass.
 //!
 //! ### Goals
 //!
