@@ -14,7 +14,7 @@ use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_core::sr25519;
 use sp_runtime::{generic::OpaqueDigestItemId, traits::Header};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -176,4 +176,8 @@ where
 		.key_store
 		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
+}
+
+pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
+	Some(base_path.as_ref().unwrap().join(path_str))
 }

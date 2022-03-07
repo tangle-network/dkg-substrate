@@ -84,8 +84,8 @@ use crate::{
 	types::dkg_topic,
 	utils::{
 		fetch_public_key, fetch_sr25519_public_key, find_authorities_change, find_index,
-		is_next_authorities_or_rounds_empty, is_queued_authorities_or_rounds_empty, set_up_rounds,
-		validate_threshold,
+		get_key_path, is_next_authorities_or_rounds_empty, is_queued_authorities_or_rounds_empty,
+		set_up_rounds, validate_threshold,
 	},
 	Client,
 };
@@ -403,13 +403,53 @@ where
 		let mut local_key_path = None;
 		let mut queued_local_key_path = None;
 
-		if let Some(base_path) = &self.base_path {
-			local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
-			queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
+		if self.base_path.is_some() {
+			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
+			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
+
 		let latest_block_num = self.get_latest_block_number();
 
+		self.handle_setting_of_rounds(
+			&next_authorities,
+			public,
+			sr25519_public,
+			local_key_path,
+			queued_local_key_path,
+			header,
+			thresh,
+		);
+
+		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
+			self.dkg_state.listening_for_active_pub_key = true;
+
+			match self.rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+				Ok(()) => {
+					info!(target: "dkg", "Keygen started for genesis authority set successfully");
+					self.active_keygen_in_progress = true;
+				},
+				Err(err) => {
+					error!("Error starting keygen {:?}", &err);
+					self.handle_dkg_error(err);
+				},
+			}
+		}
+	}
+
+	/// sets the current rounds if there is next rounds in the Dkg worker instance
+	///
+	/// else it creates new rounds to set
+	fn handle_setting_of_rounds(
+		&mut self,
+		next_authorities: &AuthoritySet<Public>,
+		public: Public,
+		sr25519_public: sp_application_crypto::sr25519::Public,
+		local_key_path: Option<PathBuf>,
+		queued_local_key_path: Option<PathBuf>,
+		header: &B::Header,
+		thresh: u16,
+	) {
 		self.rounds = if self.next_rounds.is_some() {
 			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
 				if let Err(err) = std::fs::copy(queued_path, path) {
@@ -436,21 +476,6 @@ where
 				None
 			}
 		};
-
-		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
-			self.dkg_state.listening_for_active_pub_key = true;
-
-			match self.rounds.as_mut().unwrap().start_keygen(latest_block_num) {
-				Ok(()) => {
-					info!(target: "dkg", "Keygen started for genesis authority set successfully");
-					self.active_keygen_in_progress = true;
-				},
-				Err(err) => {
-					error!("Error starting keygen {:?}", &err);
-					self.handle_dkg_error(err);
-				},
-			}
-		}
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
@@ -469,7 +494,7 @@ where
 		let mut local_key_path = None;
 
 		if self.base_path.is_some() {
-			local_key_path = Some(self.base_path.as_ref().unwrap().join(QUEUED_DKG_LOCAL_KEY_FILE));
+			local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 		let latest_block_num = self.get_latest_block_number();
@@ -514,6 +539,16 @@ where
 		self.listen_and_clear_offchain_storage(header);
 		try_resume_dkg(self, header);
 
+		self.enact_new_authorities(header);
+
+		try_restart_dkg(self, header);
+		send_outgoing_dkg_messages(self);
+		self.create_offline_stages(header);
+		self.process_unsigned_proposals(header);
+		self.untrack_unsigned_proposals(header);
+	}
+
+	fn enact_new_authorities(&mut self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Authority set change or genesis set id triggers new voting rounds
 			//
@@ -568,12 +603,6 @@ where
 				send_outgoing_dkg_messages(self);
 			}
 		}
-
-		try_restart_dkg(self, header);
-		send_outgoing_dkg_messages(self);
-		self.create_offline_stages(header);
-		self.process_unsigned_proposals(header);
-		self.untrack_unsigned_proposals(header);
 	}
 
 	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
@@ -1063,11 +1092,6 @@ where
 		}
 
 		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
-
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
 
 		let public = fetch_public_key(self);
 
