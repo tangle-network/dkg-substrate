@@ -34,6 +34,9 @@ sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polka
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
 
 [features]
 default = ["std"]
