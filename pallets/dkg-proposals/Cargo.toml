@@ -28,7 +28,7 @@ pallet-balances = { default-features = false, git = "https://github.com/parityte
 
 frame-system-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.16', optional = true }
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = 'polkadot-v0.9.16', optional = true }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16", default-features = false }
 
 [dev-dependencies]
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
