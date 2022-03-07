@@ -8,33 +8,6 @@
 
 <br />
 
-## Running the DKG
-
-Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
-`Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
-account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
-for our testnet.
-
-`Alice` is our bootnode and is started like so:
-
-```
-$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
-```
-
-`Bob` is started like so:
-
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
-```
-
-`Charlie` is started like so:
-
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
-```
-
-Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
-instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
 ## Build & Run
 
 Follow these steps to prepare a local Substrate development environment :hammer_and_wrench:
@@ -89,9 +62,49 @@ In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-dar
 echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
 ```
 
+## Running the `dkg-standalone-node`
+
+Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
+`Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
+account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
+for our testnet.
+
+`Alice` is our bootnode and is started like so:
+
+```
+$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
+```
+
+`Bob` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
+```
+
+`Charlie` is started like so:
+
+```
+RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
+```
+
+Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
+instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
+
+## Setting up debugging logs
+
+If you would like to run the dkg with verbose logs you may add the following arguments during initial setup. You may change the target to include `debug | error | info| trace | warn`. Further, you may also want to review [Substrate runtime debugging](https://docs.substrate.io/v3/runtime/debugging/).
+
+```
+-ldkg=debug \
+-ldkg_metadata=debug \
+-lruntime::offchain=debug \
+-ldkg_proposal_handler=debug \
+-ldkg_proposals=debug
+```
+
 ## Relay Chain
 
-> **NOTE**: In the following two sections, we document how to manually start a few relay chain
+> **NOTE**: In the following sections, we document how to start a few relay chain
 > nodes, start a parachain node (collator), and register the parachain with the relay chain.
 >
 > We also have the [**`polkadot-launch`**](https://www.npmjs.com/package/polkadot-launch) CLI tool
@@ -103,6 +116,54 @@ To operate a parathread or parachain, you _must_ connect to a relay chain. Typic
 on a local Rococo development network, then move to the testnet, and finally launch on the mainnet.
 **Keep in mind you need to configure the specific relay chain you will connect to in your collator
 `chain_spec.rs`**. In the following examples, we will use `rococo-local` as the relay network.
+
+### Using parachain-launch for Docker setup
+
+This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
+
+**Note:** If you make changes to the `dkg-node` that you want to see reflected in parachain-launch setup, you will need to run the script in `/scripts/docker-hub-publish-dkg-node.sh`. This will build the docker package and publish it so that it may be used in the generated docker-compose file.
+
+```
+cd launch
+
+# install dependencies
+yarn
+
+# generate docker-compose.yml and genesis
+# e.g.: docker pull webb-tools/dkg-node:3:0:0
+yarn run start generate --config=config.yml
+
+# start relaychain and parachain
+cd output
+# NOTE: If regenerate the output directory, need to rebuild the images.
+docker-compose up -d --build
+```
+
+**Note:** Due to usage of offchain workers you will need to add the sr25519 account keys to the node's local keystore by using the `author_insertKey` RPC on the Polkadot UI. 
+
+If you do not add a sr25519 account key to each of the parachain nodes keystore the node will fail. 
+
+### Additional docker commands
+```
+# list all of the containers.
+docker ps -a
+
+# track container logs
+docker logs -f [container_id/container_name]
+
+# stop all of the containers.
+docker-compose stop
+
+# remove all of the containers.
+docker-compose rm
+
+# NOTE: If you want to clear the data and restart, you need to clear the volumes.
+# remove volume
+docker volume ls
+docker volume rm [volume_name]
+# prune all volumes
+docker volume prune
+```
 
 ### Build Relay Chain
 
@@ -284,6 +345,36 @@ reporting _parachain_ blocks:
 
 **Note the delay here!** It may take some time for your relay chain to enter a new epoch.
 
+### Run local testnet with [polkadot-launch](https://github.com/paritytech/polkadot-launch)
+
+you can use npm to install polkadot-launch
+
+```
+npm install -g polkadot-launch
+```
+
+copy dkg-launch launch json to polkadot-launch:
+
+```bash
+# $polkadot-launch is the home of polkadot-launch
+cp scripts/polkadot-launch/dkg-launch.json $polkadot-launch/
+```
+
+build polkadot:
+
+```bash
+git clone -n https://github.com/paritytech/polkadot.git
+git checkout v0.9.16
+cargo build --release
+cp target/release/polkadot /tmp/polkadot
+```
+
+launch polkadot and parachain with json config file in polkadot-launch:
+
+```bash
+polkadot-launch dkg-launch.json
+```
+
 ### Code Coverage
 
 You need to have docker installed to generate code coverage.
@@ -304,15 +395,6 @@ The DKG runtime is uses the following pallets which are central to how the proto
 This pallet essentially tracks the information about the current and next authority sets, including the set Ids.
 It does this by implementing the `OneSessionHandler` trait which allows it to receieve both new and queued authority sets when the session changes.
 
-## pallet-parachain-staking
-
-This is a custom staking pallet that handles collator selection, This pallet helps the protocol select new collators based on amount staked.
-It also allows for nominators, who back collators by staking their assets, both collators and nominators are rewarded after every session comes to an end.
-Reward for collators and their nominators is dependent on how many points accrued by the collator during the session,
-these points are gained by successfully authoring blocks.
-
-This pallet implements the `SessionManager` trait and that way is able to provide the the selected collators as validators to the session pallet.
-
 ## pallet-dkg-proposals
 
 This pallet handles maintaining valid proposers and also voting on proposals.
@@ -327,13 +409,6 @@ In this current iteration the proposals are Ethereum transactions.
 ## pallet-dkg-proposal-handler
 
 This pallet implements the `ProposalHandlerTrait` accepts proposals and signs them using the DKG authority keys.
-
-## pallet-dkg-mmr
-
-This pallet serves as a leaf provider for the `pallet-mmr`, generating leaf data that contains a merke root hash for a particular authority set.
-
-It also provides a type that has an implementation for converting `ECDSA` keys to ethereum compatible keys.
-
 
 ### Note on Offchain workers
 

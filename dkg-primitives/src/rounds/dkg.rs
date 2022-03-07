@@ -148,7 +148,8 @@ where
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
-			if let Err(DKGError::KeygenTimeout { bad_actors: _ }) = &keygen_proceed_res {
+			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
+				error!(target: "dkg", "🕸️  Keygen timeout: {:?}", bad_actors);
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));

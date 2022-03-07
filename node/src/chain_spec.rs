@@ -1,6 +1,7 @@
 use cumulus_primitives_core::ParaId;
-use dkg_runtime::{AccountId, AuraId, Balance, DKGId, Signature, MICROUNIT, MILLIUNIT};
-use parachain_staking::{InflationInfo, Range};
+use dkg_runtime::{
+	AccountId, AuraId, Balance, DKGId, Signature, EXISTENTIAL_DEPOSIT, MICROUNIT, MILLIUNIT,
+};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -74,7 +75,7 @@ where
 pub fn development_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
-	properties.insert("tokenSymbol".into(), "UNIT".into());
+	properties.insert("tokenSymbol".into(), "tEGG".into());
 	properties.insert("tokenDecimals".into(), 12u32.into());
 
 	ChainSpec::from_genesis(
@@ -91,17 +92,18 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
 						get_dkg_keys_from_seed("Alice"),
-						10 * MICROUNIT,
 					),
 					(
 						get_account_id_from_seed::<sr25519::Public>("Bob"),
 						get_collator_keys_from_seed("Bob"),
 						get_dkg_keys_from_seed("Bob"),
-						10 * MICROUNIT,
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
 					),
 				],
-				// Nominations
-				vec![],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -126,7 +128,7 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
-	properties.insert("tokenSymbol".into(), "UNIT".into());
+	properties.insert("tokenSymbol".into(), "tEGG".into());
 	properties.insert("tokenDecimals".into(), 12u32.into());
 
 	ChainSpec::from_genesis(
@@ -143,17 +145,18 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 						get_account_id_from_seed::<sr25519::Public>("Alice"),
 						get_collator_keys_from_seed("Alice"),
 						get_dkg_keys_from_seed("Alice"),
-						10 * MICROUNIT,
 					),
 					(
 						get_account_id_from_seed::<sr25519::Public>("Bob"),
 						get_collator_keys_from_seed("Bob"),
 						get_dkg_keys_from_seed("Bob"),
-						10 * MICROUNIT,
+					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
 					),
 				],
-				// Nominations
-				vec![],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
@@ -183,31 +186,9 @@ pub fn local_testnet_config(id: ParaId) -> ChainSpec {
 	)
 }
 
-pub fn dkg_inflation_config() -> InflationInfo<Balance> {
-	InflationInfo {
-		expect: Range {
-			min: 100_000 * MICROUNIT,
-			ideal: 200_000 * MICROUNIT,
-			max: 500_000 * MICROUNIT,
-		},
-		annual: Range {
-			min: Perbill::from_percent(4),
-			ideal: Perbill::from_percent(5),
-			max: Perbill::from_percent(5),
-		},
-		// 8766 rounds (hours) in a year
-		round: Range {
-			min: Perbill::from_parts(Perbill::from_percent(4).deconstruct() / 8766),
-			ideal: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
-			max: Perbill::from_parts(Perbill::from_percent(5).deconstruct() / 8766),
-		},
-	}
-}
-
 fn testnet_genesis(
 	root_key: AccountId,
-	candidates: Vec<(AccountId, AuraId, DKGId, Balance)>,
-	nominations: Vec<(AccountId, AccountId, Balance)>,
+	invulnerables: Vec<(AccountId, AuraId, DKGId)>,
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
 ) -> dkg_runtime::GenesisConfig {
@@ -222,20 +203,16 @@ fn testnet_genesis(
 			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
 		},
 		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
-		parachain_staking: dkg_runtime::ParachainStakingConfig {
-			candidates: candidates
-				.iter()
-				.cloned()
-				.map(|(account, _, _, bond)| (account, bond))
-				.collect(),
-			nominations,
-			inflation_config: dkg_inflation_config(),
+		collator_selection: dkg_runtime::CollatorSelectionConfig {
+			invulnerables: invulnerables.iter().cloned().map(|(acc, _, _)| acc).collect(),
+			candidacy_bond: EXISTENTIAL_DEPOSIT * 16,
+			..Default::default()
 		},
 		session: dkg_runtime::SessionConfig {
-			keys: candidates
+			keys: invulnerables
 				.iter()
 				.cloned()
-				.map(|(acc, aura, dkg, _)| {
+				.map(|(acc, aura, dkg)| {
 					(
 						acc.clone(),                 // account id
 						acc.clone(),                 // validator id
@@ -248,9 +225,9 @@ fn testnet_genesis(
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
 		dkg: dkg_runtime::DKGConfig {
-			authorities: candidates.iter().map(|x| x.2.clone()).collect::<_>(),
+			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
 			threshold: Default::default(),
-			authority_ids: candidates.iter().map(|x| x.0.clone()).collect::<_>(),
+			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
 		},
 		dkg_proposals: Default::default(),
 	}

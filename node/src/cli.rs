@@ -1,6 +1,6 @@
 use crate::chain_spec;
 use cumulus_client_cli;
-use sc_cli;
+use sc_cli::{self, KeySubcommand};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -14,6 +14,9 @@ pub enum Subcommand {
 	/// Export the genesis wasm of the parachain.
 	#[structopt(name = "export-genesis-wasm")]
 	ExportGenesisWasm(ExportGenesisWasmCommand),
+
+	/// Key management cli utilities
+	Key(KeySubcommand),
 
 	/// Build a chain specification.
 	BuildSpec(sc_cli::BuildSpecCmd),
