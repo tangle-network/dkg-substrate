@@ -44,6 +44,12 @@ Follow these steps to prepare a local Substrate development environment :hammer_
 If necessary, refer to the setup instructions at the
 [Substrate Developer Hub](https://substrate.dev/docs/en/knowledgebase/getting-started/#manual-installation).
 
+#### Macos dependency 
+Install gmp dependency  
+```
+brew install gmp
+```
+
 ### Build
 
 Once the development environment is set up, build the DKG. This command will
