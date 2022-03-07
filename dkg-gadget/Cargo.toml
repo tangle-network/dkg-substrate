@@ -16,7 +16,6 @@ libsecp256k1 = "0.3.5"
 sha3 = "0.9"
 hex = "0.4"
 rand = "0.8.4"
-getrandom = { version = "0.2.4", features = ["js"] }
 strum = { version = "0.21", features = ["derive"] }
 
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
