@@ -2146,7 +2146,7 @@ dependencies = [
  "jsonrpc-core",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
- "rand 0.7.3",
+ "rand 0.8.4",
  "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
