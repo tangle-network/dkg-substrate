@@ -106,9 +106,9 @@ fn handle_anchor_update_proposal_success() {
 #[test]
 fn should_handle_proposer_set_update_proposal_success() {
 	execute_test_with(|| {
-		let proposal_raw: [u8; 50] = [
+		let proposal_raw: [u8; 48] = [
 			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8,
-			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 0, 0, 0, 0, 0, 7, 8, 9, 10,
+			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 0, 0, 0, 1,
 		];
 
 		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
