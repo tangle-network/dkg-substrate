@@ -149,3 +149,31 @@ where
 
 	false
 }
+
+pub(crate) fn fetch_public_key<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	dkg_worker
+		.key_store
+		.authority_id(&dkg_worker.key_store.public_keys().unwrap())
+		.unwrap_or_else(|| panic!("Halp"))
+}
+
+pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
+	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+) -> sp_core::sr25519::Public
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	dkg_worker
+		.key_store
+		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
+}

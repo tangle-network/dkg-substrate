@@ -83,8 +83,9 @@ use crate::{
 	proposal::get_signed_proposal,
 	types::dkg_topic,
 	utils::{
-		find_authorities_change, find_index, is_next_authorities_or_rounds_empty,
-		is_queued_authorities_or_rounds_empty, set_up_rounds, validate_threshold,
+		fetch_public_key, fetch_sr25519_public_key, find_authorities_change, find_index,
+		is_next_authorities_or_rounds_empty, is_queued_authorities_or_rounds_empty, set_up_rounds,
+		validate_threshold,
 	},
 	Client,
 };
@@ -279,7 +280,7 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// returns the index of an authority from an header
-	fn _get_authority_index(&self, header: &B::Header) -> Option<usize> {
+	fn _get_authority_index(&mut self, header: &B::Header) -> Option<usize> {
 		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
 			Some(new)
 		} else {
@@ -290,10 +291,7 @@ where
 		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		let set = new.unwrap_or_else(|| panic!("Help"));
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
+		let public = fetch_public_key(self);
 		for i in 0..set.authorities.len() {
 			if set.authorities[i] == public {
 				return Some(i)
@@ -394,14 +392,8 @@ where
 			return
 		}
 
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
-		let sr25519_public = self
-			.key_store
-			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+		let public = fetch_public_key(self);
+		let sr25519_public = fetch_sr25519_public_key(self);
 
 		let thresh = validate_threshold(
 			next_authorities.authorities.len() as u16,
@@ -466,14 +458,13 @@ where
 			return
 		}
 
+		let public = fetch_public_key(self);
+
 		let public = self
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
-		let sr25519_public = self
-			.key_store
-			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+		let sr25519_public = fetch_sr25519_public_key(self);
 
 		let thresh = validate_threshold(
 			queued.authorities.len() as u16,
@@ -1082,6 +1073,8 @@ where
 			.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"));
+
+		let public = fetch_public_key(self);
 
 		if find_index::<AuthorityId>(&self.current_validator_set.authorities[..], &public).is_none()
 		{
