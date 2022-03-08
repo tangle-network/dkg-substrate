@@ -50,7 +50,7 @@ fn is_function_signature_valid(data: &[u8]) -> bool {
 	function_sig_bytes.copy_from_slice(&data[32..36]);
 	let function_sig = u32::from_be_bytes(function_sig_bytes);
 
-	if function_sig < 0 {
+	if function_sig <= 0 {
 		return false
 	}
 
