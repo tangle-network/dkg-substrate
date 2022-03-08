@@ -73,7 +73,6 @@ use dkg_runtime_primitives::{
 
 use crate::{
 	error::{self},
-	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
 	types::dkg_topic,
@@ -102,8 +101,6 @@ where
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: GossipEngine<B>,
-	pub gossip_validator: Arc<GossipValidator<B>>,
-	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
@@ -121,9 +118,6 @@ where
 	backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-	pub gossip_validator: Arc<GossipValidator<B>>,
-	/// Min delta in block numbers between two blocks, DKG should vote on
-	pub min_block_delta: u32,
 	metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
@@ -185,8 +179,6 @@ where
 			backend,
 			key_store,
 			gossip_engine,
-			gossip_validator,
-			min_block_delta,
 			metrics,
 			dkg_state,
 			base_path,
@@ -198,8 +190,6 @@ where
 			backend,
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
-			gossip_validator,
-			min_block_delta,
 			metrics,
 			rounds: None,
 			next_rounds: None,
@@ -1087,6 +1077,11 @@ where
 				proposals.push(proposal.unwrap())
 			}
 		}
+		metric_set!(
+			self,
+			dkg_round_concluded,
+			self.rounds.as_mut().unwrap().get_finished_rounds().len()
+		);
 
 		self.process_signed_proposals(proposals);
 	}
@@ -1206,6 +1201,7 @@ where
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
 		let _at: BlockId<B> = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
+		metric_set!(self, dkg_votes_sent, &keys.len());
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
@@ -1233,6 +1229,7 @@ where
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 		let rounds = self.rounds.as_mut().unwrap();
+		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
 		for (key, proposal) in unsigned_proposals {
 			if !rounds.is_ready_to_vote(key.encode()) {

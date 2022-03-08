@@ -101,8 +101,7 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: N,
-	/// Minimal delta between blocks, DKG should vote for
-	pub min_block_delta: u32,
+
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Path to the persistent keystore directory for DKG data
@@ -127,7 +126,6 @@ where
 		backend,
 		key_store,
 		network,
-		min_block_delta,
 		prometheus_registry,
 		base_path,
 		local_keystore,
@@ -157,8 +155,6 @@ where
 		backend,
 		key_store: key_store.into(),
 		gossip_engine,
-		gossip_validator,
-		min_block_delta,
 		metrics,
 		base_path,
 		local_keystore,
