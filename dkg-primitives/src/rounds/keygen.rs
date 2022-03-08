@@ -216,7 +216,7 @@ where
 
 	/// Handle incoming messages
 
-	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, _at: C) -> Result<(), DKGError> {
 		if data.round_id != self.params.round_id {
 			return Err(DKGError::GenericError { reason: "Round ids do not match".to_string() })
 		}

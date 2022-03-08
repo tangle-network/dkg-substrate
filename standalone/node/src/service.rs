@@ -1,10 +1,7 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
-
-use dkg_gadget::DKG_PROTOCOL_NAME;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::{BlockBackend, ExecutorProvider};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
-use sc_consensus_manual_seal::consensus::timestamp::SlotTimestampProvider;
 use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
@@ -256,7 +253,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			backend: backend.clone(),
 			key_store: Some(keystore_container.sync_keystore()),
 			network: network.clone(),
-			min_block_delta: 4,
 			prometheus_registry: prometheus_registry.clone(),
 			base_path,
 			local_keystore: keystore_container.local_keystore(),

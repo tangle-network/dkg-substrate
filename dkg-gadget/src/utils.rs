@@ -2,10 +2,8 @@ use crate::{
 	worker::{DKGWorker, ENGINE_ID},
 	Client,
 };
-use codec::Codec;
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
-	MmrRootHash,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -37,11 +35,14 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
-	sr25519_public: &sr25519::Public,
+	// TODO: remove param
+	_sr25519_public: &sr25519::Public,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	created_at: N,
-	local_keystore: Option<Arc<LocalKeystore>>,
+	// TODO: remove param
+	_created_at: N,
+	// TODO: remove param
+	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
@@ -63,20 +64,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.build();
 
 	rounds
-}
-
-/// Extract the MMR root hash from a digest in the given header, if it exists.
-pub fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
-where
-	B: Block,
-	Id: Codec,
-{
-	header.digest().logs().iter().find_map(|log| {
-		match log.try_to::<ConsensusLog<Id>>(OpaqueDigestItemId::Consensus(&ENGINE_ID)) {
-			Some(ConsensusLog::MmrRoot(root)) => Some(root),
-			_ => None,
-		}
-	})
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
@@ -105,8 +92,8 @@ fn match_consensus_log(
 }
 
 pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
-	mut next_authorities: &AuthoritySet<Public>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	next_authorities: &AuthoritySet<Public>,
 ) -> bool
 where
 	B: Block,
@@ -128,8 +115,8 @@ where
 }
 
 pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
-	mut queued_authorities: &AuthoritySet<Public>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	queued_authorities: &AuthoritySet<Public>,
 ) -> bool
 where
 	B: Block,
@@ -150,7 +137,7 @@ where
 	false
 }
 
-pub(crate) fn fetch_public_key<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
+pub(crate) fn fetch_public_key<B, C, BE>(dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
 where
 	B: Block,
 	BE: Backend<B>,
@@ -164,7 +151,7 @@ where
 }
 
 pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 ) -> sp_core::sr25519::Public
 where
 	B: Block,

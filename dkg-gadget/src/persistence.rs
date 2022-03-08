@@ -215,7 +215,7 @@ where
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(mut signers_set) = signers_set {
+					if let Ok(signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_rounds(rounds)
@@ -255,7 +255,7 @@ where
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(mut signers_set) = signers_set {
+					if let Ok(signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
@@ -279,7 +279,7 @@ where
 {
 	let rounds = worker.take_rounds();
 	let next_rounds = worker.take_next_rounds();
-	let time_to_restart = worker.get_time_to_restart(header);
+	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if rounds.is_none() {

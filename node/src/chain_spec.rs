@@ -1,15 +1,10 @@
 use cumulus_primitives_core::ParaId;
-use dkg_runtime::{
-	AccountId, AuraId, Balance, DKGId, Signature, EXISTENTIAL_DEPOSIT, MICROUNIT, MILLIUNIT,
-};
+use dkg_runtime::{AccountId, AuraId, DKGId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
-use sp_runtime::{
-	traits::{IdentifyAccount, Verify},
-	Perbill,
-};
+use sp_runtime::traits::{IdentifyAccount, Verify};
 
 /// Specialized `ChainSpec` for the normal parachain runtime.
 pub type ChainSpec = sc_service::GenericChainSpec<dkg_runtime::GenesisConfig, Extensions>;

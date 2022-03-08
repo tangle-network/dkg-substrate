@@ -6,15 +6,14 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal, ProposalNonce};
+use codec::Encode;
+use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
-		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256,
-		StaticLookup, Verify,
+		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, StaticLookup, Verify,
 	},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,

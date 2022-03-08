@@ -17,7 +17,6 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -42,26 +41,24 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor, One},
+	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 
 use crate::messages::{
 	dkg_message::send_outgoing_dkg_messages,
 	misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
-	public_key_gossip::{gossip_public_key, handle_public_key_broadcast},
+	public_key_gossip::handle_public_key_broadcast,
 };
 
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId,
-	},
-	ChainId, DKGReport, Proposal, ProposalKind,
+	types::{DKGError, RoundId},
+	ChainId, DKGReport, Proposal,
 };
 
 use dkg_runtime_primitives::{
@@ -72,12 +69,11 @@ use dkg_runtime_primitives::{
 	},
 	utils::{sr25519, to_slice_32},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
-	RefreshProposal, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
 	error::{self},
-	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
@@ -111,8 +107,6 @@ where
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: GossipEngine<B>,
-	pub gossip_validator: Arc<GossipValidator<B>>,
-	pub min_block_delta: u32,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
@@ -130,9 +124,6 @@ where
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-	gossip_validator: Arc<GossipValidator<B>>,
-	/// Min delta in block numbers between two blocks, DKG should vote on
-	min_block_delta: u32,
 	metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
@@ -194,8 +185,6 @@ where
 			backend,
 			key_store,
 			gossip_engine,
-			gossip_validator,
-			min_block_delta,
 			metrics,
 			dkg_state,
 			base_path,
@@ -207,8 +196,6 @@ where
 			backend,
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
-			gossip_validator,
-			min_block_delta,
 			metrics,
 			rounds: None,
 			next_rounds: None,
@@ -247,11 +234,6 @@ where
 	/// gets the dkg keystore(cryto keys)
 	pub fn keystore_ref(&self) -> DKGKeystore {
 		self.key_store.clone()
-	}
-
-	/// gets the gossip engine
-	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
-		self.gossip_engine.clone()
 	}
 
 	/// set the current rounds
@@ -973,6 +955,11 @@ where
 				proposals.push(proposal.unwrap())
 			}
 		}
+		metric_set!(
+			self,
+			dkg_round_concluded,
+			self.rounds.as_mut().unwrap().get_finished_rounds().len()
+		);
 
 		self.process_signed_proposals(proposals);
 	}
@@ -982,8 +969,8 @@ where
 		let decoded_key =
 			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
-			Ok((chain_id, key)) => key,
-			Err(err) => return None,
+			Ok((_chain_id, key)) => key,
+			Err(_err) => return None,
 		};
 
 		get_signed_proposal(self, finished_round.clone(), payload_key)
@@ -1037,8 +1024,9 @@ where
 	/// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
-		let at: BlockId<B> = BlockId::hash(header.hash());
+		let _at: BlockId<B> = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
+		metric_set!(self, dkg_votes_sent, &keys.len());
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
@@ -1066,16 +1054,17 @@ where
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 		let rounds = self.rounds.as_mut().unwrap();
+		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
 		for (key, proposal) in unsigned_proposals {
 			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
 
-			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
+			let (_chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
-			if let Proposal::Unsigned { kind, data } = proposal {
+			if let Proposal::Unsigned { kind: _, data } = proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());

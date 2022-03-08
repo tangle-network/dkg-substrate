@@ -217,7 +217,6 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 				},
 			ChainIdType::CosmosSDK(_) => [3, 0],
 			ChainIdType::Solana(_) => [4, 0],
-			_ => panic!("Invalid chain id type"),
 		}
 	}
 

@@ -14,31 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::BTreeMap, time::Duration};
-
 use sc_network::PeerId;
 use sc_network_gossip::{ValidationResult, Validator, ValidatorContext};
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::Block;
 
 use codec::Decode;
 use log::{debug, error, trace};
-use parking_lot::{Mutex, RwLock};
-use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
-use dkg_primitives::types::{DKGMessage, DKGPayloadKey, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, ChainId, MmrRootHash};
-
-// Limit DKG gossip by keeping only a bound number of voting rounds alive.
-const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
-
-// Timeout for rebroadcasting messages.
-const REBROADCAST_AFTER: Duration = Duration::from_secs(60 * 5);
-
-/// A type that represents hash of the message.
-pub type MessageHash = [u8; 8];
-
-type KnownVotes<B> = BTreeMap<NumberFor<B>, fnv::FnvHashSet<MessageHash>>;
+use dkg_primitives::types::SignedDKGMessage;
+use dkg_runtime_primitives::crypto::Public;
 
 /// DKG gossip validator
 ///
@@ -52,7 +37,7 @@ pub(crate) struct GossipValidator<B>
 where
 	B: Block,
 {
-	topic: B::Hash,
+	_phantom: std::marker::PhantomData<B>,
 }
 
 impl<B> GossipValidator<B>
@@ -60,7 +45,7 @@ where
 	B: Block,
 {
 	pub fn new() -> GossipValidator<B> {
-		GossipValidator { topic: dkg_topic::<B>() }
+		GossipValidator { _phantom: Default::default() }
 	}
 }
 

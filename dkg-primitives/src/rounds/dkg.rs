@@ -563,7 +563,7 @@ where
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
-		let (_, threshold, parties) = self.dkg_params();
+		let (_, threshold, _parties) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
 		// Get the parties with non-negative reputation
 		let good_parties: Vec<u16> = self
@@ -582,7 +582,7 @@ where
 				.authorities
 				.iter()
 				.enumerate()
-				.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
+				.filter(|(_index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
 				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
 				.map(|(index, rep)| ((index + 1) as u16, rep))
 				.collect::<Vec<(u16, i64)>>();

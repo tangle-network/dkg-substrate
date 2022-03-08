@@ -1,8 +1,8 @@
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, AuraConfig, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig,
-	GrandpaConfig, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig,
-	SudoConfig, SystemConfig, MAX_NOMINATIONS, WASM_BINARY,
+	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, Perbill,
+	ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig, SystemConfig,
+	MAX_NOMINATIONS, WASM_BINARY,
 };
 use hex_literal::hex;
 
