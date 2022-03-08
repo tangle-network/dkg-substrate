@@ -2,7 +2,7 @@
 
 use super::*;
 
-use crate::{self as pallet_dkg_proposals, Config};
+use crate::{self as pallet_dkg_proposals};
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
@@ -18,7 +18,7 @@ use sp_runtime::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Perbill, Percent, Permill,
+	Permill,
 };
 
 use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
@@ -337,7 +337,8 @@ impl ExtBuilder {
 
 		let mut ext = sp_io::TestExternalities::new(t);
 		ext.execute_with(|| {
-			CollatorSelection::register_as_candidate(Origin::signed(mock_pub_key(PROPOSER_D)));
+			let _ =
+				CollatorSelection::register_as_candidate(Origin::signed(mock_pub_key(PROPOSER_D)));
 			System::set_block_number(1);
 		});
 		ext
