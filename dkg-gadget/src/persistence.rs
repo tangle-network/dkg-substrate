@@ -59,9 +59,10 @@ pub fn store_localkey(
 		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
-	let key_pair = local_keystore
-		.as_ref()
-		.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
+	let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
+		&Public::try_from(&sr25519_public.0[..])
+			.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
+	);
 
 	if let Ok(Some(key_pair)) = key_pair {
 		let secret_key = key_pair.to_raw_vec();

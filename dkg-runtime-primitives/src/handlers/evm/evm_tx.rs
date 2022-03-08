@@ -1,12 +1,10 @@
 use crate::{
-	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, ProposalHeader, ProposalNonce,
+	handlers::validate_proposals::ValidationError, ChainIdTrait, ChainIdType, ProposalNonce,
 };
 use codec::{alloc::string::ToString, Decode};
 use ethereum::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, TransactionV2,
 };
-use ethereum_types::Address;
 
 pub struct EvmTxProposal<C: ChainIdTrait> {
 	pub chain_id: ChainIdType<C>,

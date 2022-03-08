@@ -1,6 +1,5 @@
 use frame_support::RuntimeDebug;
-use scale_info::TypeInfo;
-use sp_runtime::{create_runtime_str, traits::AtLeast32Bit};
+use sp_runtime::traits::AtLeast32Bit;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};

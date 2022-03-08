@@ -43,7 +43,9 @@ impl Keyring {
 
 	/// Return key pair.
 	pub fn pair(self) -> crypto::Pair {
-		ecdsa::Pair::from_string(self.to_seed().as_str(), None).unwrap().into()
+		ecdsa::Pair::from_string(self.to_seed().as_str(), None)
+			.unwrap_or_else(|_| panic!("Could not find pair"))
+			.into()
 	}
 
 	/// Return public key.
