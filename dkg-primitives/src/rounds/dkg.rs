@@ -272,8 +272,11 @@ where
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
 		return match data {
-			DKGMsgPayload::Keygen(msg) =>
-				self.keygen.handle_incoming(msg, at.or(Some(0u32.into())).unwrap()),
+			DKGMsgPayload::Keygen(msg) => self.keygen.handle_incoming(
+				msg,
+				at.or(Some(0u32.into()))
+					.unwrap_or_else(|| panic!("There are no incoming messages for key gen")),
+			),
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
@@ -282,7 +285,11 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
-				let res = offline.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
+				let res = offline.handle_incoming(
+					msg,
+					at.or(Some(0u32.into()))
+						.unwrap_or_else(|| panic!("There are no incoming messages for offline")),
+				);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.offlines.remove(&key);
 				}
@@ -296,7 +303,11 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
-				let res = vote.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
+				let res = vote.handle_incoming(
+					msg,
+					at.or(Some(0u32.into()))
+						.unwrap_or_else(|| panic!("There are no incoming messages for voting")),
+				);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.votes.remove(&key);
 				}
@@ -753,7 +764,9 @@ mod tests {
 				.parties(n)
 				.build();
 			println!("Starting keygen for party {}", party.party_index);
-			party.start_keygen(0).unwrap();
+			party
+				.start_keygen(0)
+				.unwrap_or_else(|_| panic!("Could not start keygen for party"));
 			parties.push(party);
 		}
 

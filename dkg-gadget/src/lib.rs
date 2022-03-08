@@ -38,6 +38,7 @@ mod keystore;
 pub mod messages;
 mod metrics;
 mod persistence;
+mod proposal;
 mod types;
 mod utils;
 mod worker;
