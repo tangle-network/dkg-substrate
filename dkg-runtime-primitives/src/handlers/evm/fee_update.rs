@@ -3,7 +3,6 @@ use crate::{
 	ChainIdTrait, ProposalHeader,
 };
 use codec::alloc::string::ToString;
-use ethereum_types::Address;
 
 pub struct FeeUpdateProposal<C: ChainIdTrait> {
 	pub header: ProposalHeader<C>,
