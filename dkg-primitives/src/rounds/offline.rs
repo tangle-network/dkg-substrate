@@ -220,7 +220,7 @@ where
 
 	/// Handle incoming messages
 
-	fn handle_incoming(&mut self, data: DKGOfflineMessage, at: C) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGOfflineMessage, _at: C) -> Result<(), DKGError> {
 		if data.signer_set_id != self.params.signer_set_id {
 			return Err(DKGError::GenericError {
 				reason: format!(
