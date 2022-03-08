@@ -1,7 +1,6 @@
 use crate::worker::ENGINE_ID;
-use codec::Codec;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog,
 };
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
@@ -57,20 +56,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.build();
 
 	rounds
-}
-
-/// Extract the MMR root hash from a digest in the given header, if it exists.
-pub fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
-where
-	B: Block,
-	Id: Codec,
-{
-	header.digest().logs().iter().find_map(|log| {
-		match log.try_to::<ConsensusLog<Id>>(OpaqueDigestItemId::Consensus(&ENGINE_ID)) {
-			Some(ConsensusLog::MmrRoot(root)) => Some(root),
-			_ => None,
-		}
-	})
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new

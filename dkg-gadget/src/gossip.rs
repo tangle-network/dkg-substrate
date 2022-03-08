@@ -14,11 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::BTreeMap, time::Duration};
-
 use sc_network::PeerId;
 use sc_network_gossip::{ValidationResult, Validator, ValidatorContext};
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::Block;
 
 use codec::Decode;
 use log::{debug, error, trace};
@@ -39,7 +37,7 @@ pub(crate) struct GossipValidator<B>
 where
 	B: Block,
 {
-	topic: B::Hash,
+	_phantom: std::marker::PhantomData<B>,
 }
 
 impl<B> GossipValidator<B>
@@ -47,7 +45,7 @@ where
 	B: Block,
 {
 	pub fn new() -> GossipValidator<B> {
-		GossipValidator { topic: dkg_topic::<B>() }
+		GossipValidator { _phantom: Default::default() }
 	}
 }
 

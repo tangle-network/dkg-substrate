@@ -1,8 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal, proposal, traits::OnDKGPublicKeyChangeHandler,
-};
+use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://substrate.dev/docs/en/knowledgebase/runtime/frame>
@@ -15,8 +13,7 @@ mod mock;
 mod tests;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
+	ChainIdTrait, ChainIdType, DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction,
 	ProposalHandlerTrait, ProposalKind,
 };
 use frame_support::pallet_prelude::*;
@@ -31,7 +28,7 @@ use sp_runtime::{
 	},
 	traits::Zero,
 };
-use sp_std::{convert::TryFrom, vec::Vec};
+use sp_std::vec::Vec;
 
 pub mod weights;
 use weights::WeightInfo;
@@ -196,7 +193,7 @@ pub mod pallet {
 						Ok(_) => {
 							// Do nothing, it is all good.
 						},
-						Err(e) => {
+						Err(_e) => {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
@@ -251,7 +248,7 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			// We ensure that only certain proposals are valid this way
-			if let Proposal::Unsigned { kind, data } = &prop {
+			if let Proposal::Unsigned { kind: _, data: _ } = &prop {
 				match decode_proposal(&prop) {
 					Ok((chain_id, key)) => {
 						UnsignedProposalQueue::<T>::insert(chain_id, key, prop.clone());
@@ -307,7 +304,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
 		// Extract chain id and DKG key
 		let (chain_id, payload_key) =
-			decode_proposal(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
+			decode_proposal(&prop).map_err(|_e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
@@ -359,7 +356,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn is_existing_proposal(prop: &Proposal) -> bool {
-		if let Proposal::Signed { kind, ref data, .. } = prop {
+		if let Proposal::Signed { kind: _, data: _, .. } = prop {
 			match dkg_runtime_primitives::handlers::decode_proposals::decode_proposal(prop) {
 				Ok((chain_id, key)) => return !SignedProposals::<T>::contains_key(chain_id, key),
 				Err(_) => return false,

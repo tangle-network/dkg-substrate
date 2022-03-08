@@ -121,9 +121,9 @@ where
 	backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-	gossip_validator: Arc<GossipValidator<B>>,
+	pub gossip_validator: Arc<GossipValidator<B>>,
 	/// Min delta in block numbers between two blocks, DKG should vote on
-	min_block_delta: u32,
+	pub min_block_delta: u32,
 	metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
@@ -235,10 +235,6 @@ where
 
 	pub fn keystore_ref(&self) -> DKGKeystore {
 		self.key_store.clone()
-	}
-
-	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
-		self.gossip_engine.clone()
 	}
 
 	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
@@ -1246,7 +1242,7 @@ where
 			let (_chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
-			if let Proposal::Unsigned { kind, data } = proposal {
+			if let Proposal::Unsigned { kind: _, data } = proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
