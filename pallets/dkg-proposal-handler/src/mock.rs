@@ -21,8 +21,6 @@ use sp_runtime::RuntimeAppPublic;
 
 use dkg_runtime_primitives::{keccak_256, ChainIdType, TransactionV2};
 
-use frame_support::traits::{OnFinalize, OnInitialize};
-
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
 	U256,
@@ -163,7 +161,7 @@ pub struct MockSessionManager;
 impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 	fn end_session(_: sp_staking::SessionIndex) {}
 	fn start_session(_: sp_staking::SessionIndex) {}
-	fn new_session(idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
+	fn new_session(_idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
 		None
 	}
 }
@@ -256,14 +254,6 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	})
 }
 
-pub fn run_to_block(n: u64) {
-	while System::block_number() < n {
-		System::on_finalize(System::block_number());
-		System::set_block_number(System::block_number() + 1);
-		System::on_initialize(System::block_number());
-	}
-}
-
 pub fn mock_eth_tx_eip2930(nonce: u8) -> EIP2930Transaction {
 	EIP2930Transaction {
 		chain_id: 0,
@@ -284,7 +274,7 @@ pub fn mock_sign_msg(
 	msg: &[u8; 32],
 ) -> Result<std::option::Option<sp_core::ecdsa::Signature>, sp_keystore::Error> {
 	let keystore = KeyStore::new();
-	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
+	let (_pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
 	SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
