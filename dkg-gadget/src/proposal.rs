@@ -1,28 +1,19 @@
-use crate::{types::dkg_topic, worker::DKGWorker, Client};
+use crate::{worker::DKGWorker, Client};
 use codec::Encode;
-use dkg_primitives::{
-	crypto::Public,
-	types::{
-		DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGSignedPayload, RoundId,
-		SignedDKGMessage,
-	},
-};
+use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, AggregatedPublicKeys,
-	DKGApi, DKGPayloadKey, Proposal, ProposalKind, RefreshProposalSigned,
+	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
+	Proposal, ProposalKind, RefreshProposalSigned,
 };
-use log::{debug, error, trace};
+use log::trace;
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header},
-};
+use sp_runtime::traits::{Block, Header};
 
 /// Get signed proposal
 pub(crate) fn get_signed_proposal<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
 ) -> Option<Proposal>

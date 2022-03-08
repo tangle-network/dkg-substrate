@@ -47,18 +47,18 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 
 use crate::messages::{
 	dkg_message::send_outgoing_dkg_messages,
 	misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
-	public_key_gossip::{gossip_public_key, handle_public_key_broadcast},
+	public_key_gossip::handle_public_key_broadcast,
 };
 
 use dkg_primitives::{
-	types::{DKGError, DKGResult, RoundId},
-	ChainId, DKGReport, Proposal, ProposalKind,
+	types::{DKGError, RoundId},
+	ChainId, DKGReport, Proposal,
 };
 
 use dkg_runtime_primitives::{
@@ -69,7 +69,7 @@ use dkg_runtime_primitives::{
 	},
 	utils::{sr25519, to_slice_32},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
-	RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -234,11 +234,6 @@ where
 	/// gets the dkg keystore(cryto keys)
 	pub fn keystore_ref(&self) -> DKGKeystore {
 		self.key_store.clone()
-	}
-
-	/// gets the gossip engine
-	pub fn gossip_engine_ref(&self) -> Arc<Mutex<GossipEngine<B>>> {
-		self.gossip_engine.clone()
 	}
 
 	/// set the current rounds

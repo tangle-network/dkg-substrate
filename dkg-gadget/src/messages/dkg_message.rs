@@ -6,20 +6,12 @@ use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{
-		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage,
-		DKGResult, RoundId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
-use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, AggregatedPublicKeys, DKGApi,
-};
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header, NumberFor},
-};
+use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
 pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
@@ -109,7 +101,7 @@ where
 
 /// send actual messages
 fn send_messages<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 	authority_id: Public,
 	at: NumberFor<B>,
@@ -151,10 +143,10 @@ where
 }
 
 fn sign_and_send_message<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
-	mut sr25519_public: sp_core::sr25519::Public,
-	mut dkg_message: DKGMessage<AuthorityId>,
-	mut encoded_dkg_message: Vec<u8>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	sr25519_public: sp_core::sr25519::Public,
+	dkg_message: DKGMessage<AuthorityId>,
+	encoded_dkg_message: Vec<u8>,
 ) where
 	B: Block,
 	BE: Backend<B>,

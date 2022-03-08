@@ -1,10 +1,9 @@
-use crate::worker::{
+use crate::{
 	worker::{DKGWorker, ENGINE_ID},
 	Client,
 };
-use codec::Codec;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -93,8 +92,8 @@ fn match_consensus_log(
 }
 
 pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
-	mut next_authorities: &AuthoritySet<Public>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	next_authorities: &AuthoritySet<Public>,
 ) -> bool
 where
 	B: Block,
@@ -116,8 +115,8 @@ where
 }
 
 pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
-	mut queued_authorities: &AuthoritySet<Public>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	queued_authorities: &AuthoritySet<Public>,
 ) -> bool
 where
 	B: Block,
@@ -138,7 +137,7 @@ where
 	false
 }
 
-pub(crate) fn fetch_public_key<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
+pub(crate) fn fetch_public_key<B, C, BE>(dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
 where
 	B: Block,
 	BE: Backend<B>,
@@ -152,7 +151,7 @@ where
 }
 
 pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 ) -> sp_core::sr25519::Public
 where
 	B: Block,
