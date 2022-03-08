@@ -45,6 +45,8 @@ pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<AnchorUpdateProposal<C>, V
 	Ok(AnchorUpdateProposal { header, src_chain_id, latest_leaf_index, merkle_root })
 }
 
+/// helper function to validate that the function signature contained in proposal data is not less
+/// than or equal to zero
 fn is_function_signature_valid(data: &[u8]) -> bool {
 	let mut function_sig_bytes = [0u8; 4];
 	function_sig_bytes.copy_from_slice(&data[32..36]);
