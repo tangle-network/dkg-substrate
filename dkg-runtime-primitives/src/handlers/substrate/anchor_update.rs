@@ -1,6 +1,6 @@
 use crate::{
 	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, ProposalHeader, Vec,
+	ChainIdTrait, ProposalHeader, Vec,
 };
 use codec::alloc::string::ToString;
 
