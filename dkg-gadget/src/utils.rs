@@ -30,10 +30,13 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
+	// TODO: remove param
 	_sr25519_public: &sr25519::Public,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
+	// TODO: remove param
 	_created_at: N,
+	// TODO: remove param
 	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {

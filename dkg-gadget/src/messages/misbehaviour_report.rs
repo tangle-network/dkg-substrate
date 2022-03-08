@@ -23,7 +23,6 @@ where
 {
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let _current_block_number = header.number().clone();
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {
