@@ -35,7 +35,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Perbill, Permill,
+	Permill,
 };
 
 use crate as pallet_dkg_metadata;

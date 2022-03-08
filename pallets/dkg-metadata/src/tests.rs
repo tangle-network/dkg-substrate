@@ -16,12 +16,6 @@
 
 use std::vec;
 
-use codec::Encode;
-use dkg_runtime_primitives::AuthoritySet;
-
-use sp_core::H256;
-use sp_runtime::DigestItem;
-
 use frame_support::traits::OnInitialize;
 
 use crate::mock::*;
@@ -29,10 +23,6 @@ use crate::mock::*;
 fn init_block(block: u64) {
 	System::set_block_number(block);
 	Session::on_initialize(block);
-}
-
-pub fn dkg_log(log: ConsensusLog<DKGId>) -> DigestItem {
-	DigestItem::Consensus(DKG_ENGINE_ID, log.encode())
 }
 
 #[test]
