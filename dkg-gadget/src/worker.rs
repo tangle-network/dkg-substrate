@@ -17,7 +17,6 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -42,7 +41,7 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor, One},
+	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
@@ -57,9 +56,7 @@ use crate::messages::{
 };
 
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId,
-	},
+	types::{DKGError, DKGResult, RoundId},
 	ChainId, DKGReport, Proposal, ProposalKind,
 };
 
@@ -71,7 +68,7 @@ use dkg_runtime_primitives::{
 	},
 	utils::{sr25519, to_slice_32},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
-	RefreshProposal, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
+	RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -1103,8 +1100,8 @@ where
 		let decoded_key =
 			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
-			Ok((chain_id, key)) => key,
-			Err(err) => return None,
+			Ok((_chain_id, key)) => key,
+			Err(_err) => return None,
 		};
 
 		let make_signed_proposal = |kind: ProposalKind| Proposal::Signed {
@@ -1211,7 +1208,7 @@ where
 	/// have been signed and moved to the signed proposals queue already.
 	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
-		let at: BlockId<B> = BlockId::hash(header.hash());
+		let _at: BlockId<B> = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
@@ -1246,7 +1243,7 @@ where
 				continue
 			}
 
-			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
+			let (_chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
 			if let Proposal::Unsigned { kind, data } = proposal {

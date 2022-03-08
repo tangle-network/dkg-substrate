@@ -31,11 +31,11 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
-	sr25519_public: &sr25519::Public,
+	_sr25519_public: &sr25519::Public,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	created_at: N,
-	local_keystore: Option<Arc<LocalKeystore>>,
+	_created_at: N,
+	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;

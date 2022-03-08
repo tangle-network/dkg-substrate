@@ -22,23 +22,10 @@ use sp_runtime::traits::{Block, NumberFor};
 
 use codec::Decode;
 use log::{debug, error, trace};
-use parking_lot::{Mutex, RwLock};
-use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
-use dkg_primitives::types::{DKGMessage, DKGPayloadKey, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, ChainId, MmrRootHash};
-
-// Limit DKG gossip by keeping only a bound number of voting rounds alive.
-const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
-
-// Timeout for rebroadcasting messages.
-const REBROADCAST_AFTER: Duration = Duration::from_secs(60 * 5);
-
-/// A type that represents hash of the message.
-pub type MessageHash = [u8; 8];
-
-type KnownVotes<B> = BTreeMap<NumberFor<B>, fnv::FnvHashSet<MessageHash>>;
+use dkg_primitives::types::SignedDKGMessage;
+use dkg_runtime_primitives::crypto::Public;
 
 /// DKG gossip validator
 ///
