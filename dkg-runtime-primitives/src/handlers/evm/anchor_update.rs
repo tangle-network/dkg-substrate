@@ -27,6 +27,10 @@ pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<AnchorUpdateProposal<C>, V
 	}
 	let header: ProposalHeader<C> = decode_proposal_header(data)?;
 
+	if !is_function_signature_valid(data) {
+		return Err(ValidationError::InvalidParameter("Function sig cannot be zero".to_string()))
+	}
+
 	let mut src_chain_id_bytes = [0u8; 8];
 	src_chain_id_bytes[2..8].copy_from_slice(&data[40..46]);
 	let src_chain_id = u64::from_be_bytes(src_chain_id_bytes);
@@ -37,6 +41,20 @@ pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<AnchorUpdateProposal<C>, V
 
 	let mut merkle_root = [0u8; 32];
 	merkle_root.copy_from_slice(&data[50..82]);
-	// TODO: Ensure function sig is non-zero
+
 	Ok(AnchorUpdateProposal { header, src_chain_id, latest_leaf_index, merkle_root })
+}
+
+/// helper function to validate that the function signature contained in proposal data is not less
+/// than or equal to zero
+fn is_function_signature_valid(data: &[u8]) -> bool {
+	let mut function_sig_bytes = [0u8; 4];
+	function_sig_bytes.copy_from_slice(&data[32..36]);
+	let function_sig = u32::from_be_bytes(function_sig_bytes);
+
+	if function_sig <= 0 {
+		return false
+	}
+
+	return true
 }
