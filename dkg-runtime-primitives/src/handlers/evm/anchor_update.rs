@@ -41,7 +41,7 @@ pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<AnchorUpdateProposal<C>, V
 
 	let mut merkle_root = [0u8; 32];
 	merkle_root.copy_from_slice(&data[50..82]);
-	// TODO: Ensure function sig is non-zero
+
 	Ok(AnchorUpdateProposal { header, src_chain_id, latest_leaf_index, merkle_root })
 }
 
