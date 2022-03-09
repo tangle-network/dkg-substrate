@@ -790,11 +790,13 @@ impl<T: Config> Pallet<T> {
 			}
 
 			match public_key_type {
-				AggregatedPublicKeyType::AggregatedPublicKeysAtGenesis =>
+				AggregatedPublicKeyType::AggregatedPublicKeysAtGenesis => {
 					if !Self::dkg_public_key().1.is_empty() {
 						agg_key_ref.clear();
 						return Ok(())
-					},
+					}
+				},
+
 				AggregatedPublicKeyType::AggregatedPublicKeys => {
 					if Self::next_dkg_public_key().is_some() {
 						agg_key_ref.clear();
