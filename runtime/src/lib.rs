@@ -7,10 +7,9 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod xcm_config;
-use xcm_config::{XcmConfig, XcmOriginToTransactDispatchOrigin};
-use smallvec::smallvec;
 use codec::Encode;
 use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
+use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
@@ -21,15 +20,16 @@ use sp_runtime::{
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
 };
+use xcm_config::{XcmConfig, XcmOriginToTransactDispatchOrigin};
 
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use frame_support::weights::WeightToFeeCoefficients;
-use frame_support::weights::WeightToFeePolynomial;
-use frame_support::weights::WeightToFeeCoefficient;
+use frame_support::weights::{
+	WeightToFeeCoefficient, WeightToFeeCoefficients, WeightToFeePolynomial,
+};
 
 // A few exports that help ease life for downstream crates.
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;

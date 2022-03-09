@@ -1,8 +1,8 @@
 use crate::chain_spec;
+use clap::Parser;
 use cumulus_client_cli;
 use sc_cli::{self, KeySubcommand};
 use std::path::PathBuf;
-use clap::Parser;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Parser)]
