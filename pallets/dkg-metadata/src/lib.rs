@@ -838,8 +838,13 @@ impl<T: Config> Pallet<T> {
 
 	/// submits public key onchain
 	///
-	/// takes in the block number, aggregated key, and when to submit keys
-	fn submit_public_key_onchain(block_number: T::BlockNumber, lock_key: &[u8], agg_key: &[u8], submit_keys_at: &[u8],) -> Result<(), &'static str> {
+	/// takes in the block number, the storage lock key, aggregated key, and when to submit keys
+	fn submit_public_key_onchain(
+		block_number: T::BlockNumber,
+		lock_key: &[u8],
+		agg_key: &[u8],
+		submit_keys_at: &[u8],
+	) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(lock_key);
 		{
 			let _guard = lock.lock();
