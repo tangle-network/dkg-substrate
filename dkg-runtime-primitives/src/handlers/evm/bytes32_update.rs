@@ -1,9 +1,8 @@
 use crate::{
 	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, ProposalHeader,
+	ChainIdTrait, ProposalHeader,
 };
 use codec::alloc::string::ToString;
-use ethereum_types::Address;
 
 pub struct Bytes32UpdateProposal<C: ChainIdTrait> {
 	pub header: ProposalHeader<C>,

@@ -138,11 +138,12 @@ where
 		let keygen = &mut self.keygen;
 
 		if keygen.wants_to_proceed() {
-			info!(target: "dkg", "🕸️  Keygen party {} wants to proceed", keygen.party_ind());
+			debug!(target: "dkg", "🕸️  Keygen party {} wants to proceed", keygen.party_ind());
 			trace!(target: "dkg", "🕸️  before: {:?}", keygen);
 
 			match keygen.proceed() {
 				Ok(_) => {
+					debug!(target: "dkg", "🕸️  Keygen party {} proceeded", keygen.party_ind());
 					trace!(target: "dkg", "🕸️  after: {:?}", keygen);
 				},
 				Err(err) => {
@@ -215,7 +216,7 @@ where
 
 	/// Handle incoming messages
 
-	fn handle_incoming(&mut self, data: DKGKeygenMessage, at: C) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGKeygenMessage, _at: C) -> Result<(), DKGError> {
 		if data.round_id != self.params.round_id {
 			return Err(DKGError::GenericError { reason: "Round ids do not match".to_string() })
 		}

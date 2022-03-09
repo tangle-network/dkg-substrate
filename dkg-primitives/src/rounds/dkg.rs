@@ -140,7 +140,7 @@ where
 	/// state to `KeygenState::Finished`. We decide on the signing set
 	/// when the `local_key` is extracted.
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
-		debug!(target: "dkg", 
+		debug!(target: "dkg",
 			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
 			&self.round_id, &self.signers);
 
@@ -148,7 +148,8 @@ where
 
 		let keygen_proceed_res = self.keygen.proceed(at);
 		if keygen_proceed_res.is_err() {
-			if let Err(DKGError::KeygenTimeout { bad_actors: _ }) = &keygen_proceed_res {
+			if let Err(DKGError::KeygenTimeout { bad_actors }) = &keygen_proceed_res {
+				error!(target: "dkg", "🕸️  Keygen timeout: {:?}", bad_actors);
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));
@@ -271,8 +272,11 @@ where
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
 		return match data {
-			DKGMsgPayload::Keygen(msg) =>
-				self.keygen.handle_incoming(msg, at.or(Some(0u32.into())).unwrap()),
+			DKGMsgPayload::Keygen(msg) => self.keygen.handle_incoming(
+				msg,
+				at.or(Some(0u32.into()))
+					.unwrap_or_else(|| panic!("There are no incoming messages for key gen")),
+			),
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
@@ -281,7 +285,11 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
-				let res = offline.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
+				let res = offline.handle_incoming(
+					msg,
+					at.or(Some(0u32.into()))
+						.unwrap_or_else(|| panic!("There are no incoming messages for offline")),
+				);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.offlines.remove(&key);
 				}
@@ -295,7 +303,11 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
-				let res = vote.handle_incoming(msg, at.or(Some(0u32.into())).unwrap());
+				let res = vote.handle_incoming(
+					msg,
+					at.or(Some(0u32.into()))
+						.unwrap_or_else(|| panic!("There are no incoming messages for voting")),
+				);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.votes.remove(&key);
 				}
@@ -551,7 +563,7 @@ where
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
-		let (_, threshold, parties) = self.dkg_params();
+		let (_, threshold, _parties) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
 		// Get the parties with non-negative reputation
 		let good_parties: Vec<u16> = self
@@ -570,7 +582,7 @@ where
 				.authorities
 				.iter()
 				.enumerate()
-				.filter(|(index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
+				.filter(|(_index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
 				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
 				.map(|(index, rep)| ((index + 1) as u16, rep))
 				.collect::<Vec<(u16, i64)>>();
@@ -752,7 +764,9 @@ mod tests {
 				.parties(n)
 				.build();
 			println!("Starting keygen for party {}", party.party_index);
-			party.start_keygen(0).unwrap();
+			party
+				.start_keygen(0)
+				.unwrap_or_else(|_| panic!("Could not start keygen for party"));
 			parties.push(party);
 		}
 

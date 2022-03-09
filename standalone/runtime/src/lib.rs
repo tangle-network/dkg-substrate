@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -49,9 +50,9 @@ pub use frame_support::{
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
+use sp_runtime::generic::Era;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-use sp_runtime::{generic::Era, traits::Keccak256};
 pub use sp_runtime::{Perbill, Permill};
 
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;

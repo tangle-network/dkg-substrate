@@ -7,10 +7,10 @@ use sp_std::vec::Vec;
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ChainId, ChainIdType, DKGPayloadKey,
-	EIP2930Transaction, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
-	ProposalHeader, ProposalKind, TransactionAction, TransactionV2, U256,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
+	ProposalKind, TransactionV2,
 };
-use sp_core::{sr25519, H256};
+use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
 
 // *** Utility ***
@@ -309,19 +309,6 @@ fn submit_signed_proposal_already_exists() {
 #[test]
 fn submit_signed_proposal_fail_invalid_sig() {
 	execute_test_with(|| {
-		let tx_eip2930 = EIP2930Transaction {
-			chain_id: 0,
-			nonce: U256::from(0u8),
-			gas_price: U256::from(0u8),
-			gas_limit: U256::from(0u8),
-			action: TransactionAction::Create,
-			value: U256::from(99u8),
-			input: Vec::<u8>::new(),
-			access_list: Vec::new(),
-			odd_y_parity: false,
-			r: H256::from([0u8; 32]),
-			s: H256::from([0u8; 32]),
-		};
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
@@ -376,7 +363,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 pub fn make_header(chain_type: ChainIdType<ChainId>) -> ProposalHeader<u32> {
 	match chain_type {
 		ChainIdType::EVM(_) => {
-			let mut header = ProposalHeader::<u32> {
+			let header = ProposalHeader::<u32> {
 				resource_id: [
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					1, 0, 0, 0, 0, 1,
@@ -388,7 +375,7 @@ pub fn make_header(chain_type: ChainIdType<ChainId>) -> ProposalHeader<u32> {
 			header
 		},
 		ChainIdType::Substrate(_) => {
-			let mut header = ProposalHeader::<u32> {
+			let header = ProposalHeader::<u32> {
 				resource_id: [
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					2, 0, 0, 0, 0, 1,
@@ -401,7 +388,7 @@ pub fn make_header(chain_type: ChainIdType<ChainId>) -> ProposalHeader<u32> {
 		},
 		_ => {
 			// Dummy Header
-			let mut header = ProposalHeader::<u32> {
+			let header = ProposalHeader::<u32> {
 				resource_id: [
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					0, 0, 0, 0, 0, 1,
@@ -417,7 +404,7 @@ pub fn make_header(chain_type: ChainIdType<ChainId>) -> ProposalHeader<u32> {
 
 pub fn make_proposal<const N: usize>(prop: Proposal, chain_type: ChainIdType<ChainId>) -> Proposal {
 	// Create the proposal Header
-	let mut header = make_header(chain_type);
+	let header = make_header(chain_type);
 	let mut buf = vec![];
 	header.encode_to(&mut buf);
 	// N bytes parameter

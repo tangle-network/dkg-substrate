@@ -188,7 +188,7 @@ where
 
 	/// Handle incoming messages
 
-	fn handle_incoming(&mut self, data: DKGVoteMessage, at: C) -> Result<(), DKGError> {
+	fn handle_incoming(&mut self, data: DKGVoteMessage, _at: C) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle vote message");
 
 		if data.party_ind == self.params.party_index {

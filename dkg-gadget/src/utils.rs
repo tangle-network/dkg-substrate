@@ -1,14 +1,18 @@
-use crate::worker::ENGINE_ID;
-use codec::Codec;
-use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, MmrRootHash,
+use crate::{
+	worker::{DKGWorker, ENGINE_ID},
+	Client,
 };
+use dkg_primitives::{
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
+};
+use dkg_runtime_primitives::crypto::Public;
+use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_core::sr25519;
-use sp_runtime::generic::OpaqueDigestItemId;
-use std::{collections::HashMap, sync::Arc};
+use sp_runtime::{generic::OpaqueDigestItemId, traits::Header};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -31,11 +35,14 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
-	sr25519_public: &sr25519::Public,
+	// TODO: remove param
+	_sr25519_public: &sr25519::Public,
 	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	created_at: N,
-	local_keystore: Option<Arc<LocalKeystore>>,
+	// TODO: remove param
+	_created_at: N,
+	// TODO: remove param
+	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
@@ -59,20 +66,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	rounds
 }
 
-/// Extract the MMR root hash from a digest in the given header, if it exists.
-pub fn find_mmr_root_digest<B, Id>(header: &B::Header) -> Option<MmrRootHash>
-where
-	B: Block,
-	Id: Codec,
-{
-	header.digest().logs().iter().find_map(|log| {
-		match log.try_to::<ConsensusLog<Id>>(OpaqueDigestItemId::Consensus(&ENGINE_ID)) {
-			Some(ConsensusLog::MmrRoot(root)) => Some(root),
-			_ => None,
-		}
-	})
-}
-
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
 /// validator set or `None` in case no validator set change has been signaled.
 pub fn find_authorities_change<B>(
@@ -83,13 +76,95 @@ where
 {
 	let id = OpaqueDigestItemId::Consensus(&ENGINE_ID);
 
-	let filter = |log: ConsensusLog<AuthorityId>| match log {
+	header.digest().convert_first(|l| l.try_to(id).and_then(match_consensus_log))
+}
+
+fn match_consensus_log(
+	log: ConsensusLog<AuthorityId>,
+) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
+	match log {
 		ConsensusLog::AuthoritiesChange {
 			next_authorities: validator_set,
 			next_queued_authorities,
 		} => Some((validator_set, next_queued_authorities)),
 		_ => None,
-	};
+	}
+}
 
-	header.digest().convert_first(|l| l.try_to(id).and_then(filter))
+pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	next_authorities: &AuthoritySet<Public>,
+) -> bool
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if next_authorities.authorities.is_empty() {
+		return true
+	}
+
+	if dkg_worker.rounds.is_some() {
+		if dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id {
+			return true
+		}
+	}
+
+	false
+}
+
+pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	queued_authorities: &AuthoritySet<Public>,
+) -> bool
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if queued_authorities.authorities.is_empty() {
+		return true
+	}
+
+	if dkg_worker.next_rounds.is_some() {
+		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
+			return true
+		}
+	}
+
+	false
+}
+
+pub(crate) fn fetch_public_key<B, C, BE>(dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	dkg_worker
+		.key_store
+		.authority_id(&dkg_worker.key_store.public_keys().unwrap())
+		.unwrap_or_else(|| panic!("Halp"))
+}
+
+pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+) -> sp_core::sr25519::Public
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	dkg_worker
+		.key_store
+		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
+}
+
+pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
+	Some(base_path.as_ref().unwrap().join(path_str))
 }

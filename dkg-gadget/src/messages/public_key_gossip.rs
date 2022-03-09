@@ -14,7 +14,7 @@ use sp_runtime::{
 };
 
 pub(crate) fn handle_public_key_broadcast<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
@@ -93,7 +93,7 @@ where
 }
 
 pub(crate) fn gossip_public_key<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	public_key: Vec<u8>,
 	round_id: RoundId,
 ) where

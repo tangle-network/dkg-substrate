@@ -1,10 +1,7 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
-
-use dkg_gadget::DKG_PROTOCOL_NAME;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::{BlockBackend, ExecutorProvider};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
-use sc_consensus_manual_seal::consensus::timestamp::SlotTimestampProvider;
 use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
@@ -250,21 +247,12 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			&config,
 			Some(keystore_container.sync_keystore()),
 		);
-	}
 
-	// if the node isn't actively participating in consensus then it doesn't
-	// need a keystore, regardless of which protocol we use below.
-	let keystore =
-		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
-
-	let rpc_client = client.clone();
-	let command_sink = if role.is_authority() {
 		let dkg_params = dkg_gadget::DKGParams {
 			client: client.clone(),
 			backend: backend.clone(),
-			key_store: keystore.clone(),
+			key_store: Some(keystore_container.sync_keystore()),
 			network: network.clone(),
-			min_block_delta: 4,
 			prometheus_registry: prometheus_registry.clone(),
 			base_path,
 			local_keystore: keystore_container.local_keystore(),
@@ -277,7 +265,15 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			None,
 			dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
 		);
+	}
 
+	// if the node isn't actively participating in consensus then it doesn't
+	// need a keystore, regardless of which protocol we use below.
+	let keystore =
+		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
+
+	let rpc_client = client.clone();
+	let command_sink = if role.is_authority() {
 		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
 			task_manager.spawn_handle(),
 			client.clone(),

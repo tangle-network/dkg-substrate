@@ -1,15 +1,9 @@
 use crate::{types::dkg_topic, worker::DKGWorker, Client};
 use codec::Encode;
-use dkg_primitives::{
-	crypto::Public,
-	types::{
-		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId,
-		SignedDKGMessage,
-	},
+use dkg_primitives::types::{
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,
 };
-use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, AggregatedPublicKeys, DKGApi,
-};
+use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -18,7 +12,7 @@ use sp_runtime::{
 };
 
 pub(crate) fn handle_misbehaviour_report<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -29,7 +23,6 @@ where
 {
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let current_block_number = header.number().clone();
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {
@@ -96,7 +89,7 @@ where
 }
 
 pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	offender: dkg_runtime_primitives::crypto::AuthorityId,
 	round_id: RoundId,
 ) where
