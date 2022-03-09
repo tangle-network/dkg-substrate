@@ -58,6 +58,7 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+use crate::types::AggregatedPublicKeyType;
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -113,8 +114,22 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_genesis_public_key_onchain(block_number);
-			let _res = Self::submit_next_public_key_onchain(block_number);
+			// Submits the public keys at genesis on chain
+			let _res = Self::submit_public_key_onchain(
+				block_number,
+				AggregatedPublicKeyType::AggregatedPublicKeysAtGenesis,
+				AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK,
+				AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+				SUBMIT_GENESIS_KEYS_AT,
+			);
+			// Submits the next public keys on chain
+			let _res = Self::submit_public_key_onchain(
+				block_number,
+				AggregatedPublicKeyType::AggregatedPublicKeys,
+				AGGREGATED_PUBLIC_KEYS_LOCK,
+				AGGREGATED_PUBLIC_KEYS,
+				SUBMIT_KEYS_AT,
+			);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
 			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
@@ -743,104 +758,13 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(0, authority_account_ids.to_vec());
 	}
 
-	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK);
-		{
-			let _guard = lock.lock();
-			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
-			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_GENESIS_KEYS_AT);
-			const RECENTLY_SENT: &str = "Already submitted a key in this session";
-			let submit_at = submit_at_ref.get::<T::BlockNumber>();
-
-			if let Ok(Some(submit_at)) = submit_at {
-				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
-					return Ok(())
-				} else {
-					submit_at_ref.clear();
-				}
-			} else {
-				return Err(RECENTLY_SENT)
-			}
-
-			if !Self::dkg_public_key().1.is_empty() {
-				agg_key_ref.clear();
-				return Ok(())
-			}
-
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
-
-			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
-					keys_and_signatures: agg_keys.clone(),
-				});
-
-				agg_key_ref.clear();
-			}
-
-			Ok(())
-		}
-	}
-
-	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
-		{
-			let _guard = lock.lock();
-
-			let mut agg_key_ref = StorageValueRef::persistent(AGGREGATED_PUBLIC_KEYS);
-			let mut submit_at_ref = StorageValueRef::persistent(SUBMIT_KEYS_AT);
-			const RECENTLY_SENT: &str = "Already submitted a key in this session";
-			let submit_at = submit_at_ref.get::<T::BlockNumber>();
-
-			if let Ok(Some(submit_at)) = submit_at {
-				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
-					return Ok(())
-				} else {
-					submit_at_ref.clear();
-				}
-			} else {
-				return Err(RECENTLY_SENT)
-			}
-
-			if Self::next_dkg_public_key().is_some() {
-				agg_key_ref.clear();
-				return Ok(())
-			}
-
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
-
-			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| {
-					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
-				});
-
-				agg_key_ref.clear();
-			}
-
-			Ok(())
-		}
-	}
-
 	/// submits public key onchain
 	///
-	/// takes in the block number, the storage lock key, aggregated key, and when to submit keys
+	/// takes in the block number, the public key type, the storage lock key, aggregated key, and
+	/// when to submit keys
 	fn submit_public_key_onchain(
 		block_number: T::BlockNumber,
+		public_key_type: AggregatedPublicKeyType,
 		lock_key: &[u8],
 		agg_key: &[u8],
 		submit_keys_at: &[u8],
@@ -863,6 +787,50 @@ impl<T: Config> Pallet<T> {
 				}
 			} else {
 				return Err(RECENTLY_SENT)
+			}
+
+			match public_key_type {
+				AggregatedPublicKeyType::AggregatedPublicKeysAtGenesis =>
+					if !Self::dkg_public_key().1.is_empty() {
+						agg_key_ref.clear();
+						return Ok(())
+					},
+				AggregatedPublicKeyType::AggregatedPublicKeys => {
+					if Self::next_dkg_public_key().is_some() {
+						agg_key_ref.clear();
+						return Ok(())
+					}
+				},
+			}
+
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			if !signer.can_sign() {
+				return Err(
+					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+				)
+			}
+
+			match public_key_type {
+				AggregatedPublicKeyType::AggregatedPublicKeysAtGenesis => {
+					if let Ok(Some(agg_keys)) = agg_keys {
+						let _res = signer.send_signed_transaction(|_account| {
+							Call::submit_public_key { keys_and_signatures: agg_keys.clone() }
+						});
+
+						agg_key_ref.clear();
+					}
+				},
+				AggregatedPublicKeyType::AggregatedPublicKeys => {
+					if let Ok(Some(agg_keys)) = agg_keys {
+						let _res = signer.send_signed_transaction(|_account| {
+							Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
+						});
+
+						agg_key_ref.clear();
+					}
+				},
 			}
 
 			Ok(())
