@@ -13,7 +13,7 @@ use super::{
 };
 use crate::mock::{
 	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, CollatorSelection,
-	ExtBuilder,
+	ExtBuilder, manually_set_proposer_count, DKGProposalHandler, mock_ecdsa_key,
 };
 use dkg_runtime_primitives::{DKGPayloadKey, Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
