@@ -815,6 +815,36 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
+			Ok(())
+		}
+	}
+
+	fn submit_public_key_onchain(block_number: T::BlockNumber, agg_key: &[u8], submit_keys_at: &[u8],) -> Result<(), &'static str> {
+		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
+		{
+			let _guard = lock.lock();
+
+			let mut agg_key_ref = StorageValueRef::persistent(agg_key);
+			let mut submit_at_ref = StorageValueRef::persistent(submit_keys_at);
+			const RECENTLY_SENT: &str = "Already submitted a key in this session";
+			let submit_at = submit_at_ref.get::<T::BlockNumber>();
+
+			if let Ok(Some(submit_at)) = submit_at {
+				if block_number < submit_at {
+					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					return Ok(())
+				} else {
+					submit_at_ref.clear();
+				}
+			} else {
+				return Err(RECENTLY_SENT)
+			}
+
+			if Self::next_dkg_public_key().is_some() {
+				agg_key_ref.clear();
+				return Ok(())
+			}
+
 			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
@@ -835,6 +865,8 @@ impl<T: Config> Pallet<T> {
 			Ok(())
 		}
 	}
+
+
 
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
