@@ -543,7 +543,8 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;

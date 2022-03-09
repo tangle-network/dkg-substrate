@@ -3,7 +3,6 @@
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
 pub mod handlers;
-pub mod mmr;
 pub mod offchain;
 pub mod proposal;
 pub mod traits;
@@ -36,9 +35,6 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	keccak.finalize(&mut output);
 	output
 }
-
-/// The type used to represent an MMR root hash.
-pub type MmrRootHash = H256;
 
 pub type ChainId = u32;
 
@@ -147,9 +143,6 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
-	/// MMR root hash.
-	#[codec(index = 3)]
-	MmrRoot(MmrRootHash),
 	/// The DKG keys have changed
 	#[codec(index = 4)]
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
@@ -222,7 +215,6 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 				},
 			ChainIdType::CosmosSDK(_) => [3, 0],
 			ChainIdType::Solana(_) => [4, 0],
-			_ => panic!("Invalid chain id type"),
 		}
 	}
 

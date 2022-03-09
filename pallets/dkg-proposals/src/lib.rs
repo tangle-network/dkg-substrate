@@ -57,12 +57,11 @@ use frame_support::{
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get, OneSessionHandler},
 };
 use frame_system::{self as system, ensure_root};
-pub use pallet::*;
 use scale_info::TypeInfo;
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::{AccountIdConversion, Saturating},
-	RuntimeDebug,
+	traits::{AccountIdConversion, Convert, Saturating},
+	RuntimeAppPublic, RuntimeDebug,
 };
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
@@ -71,6 +70,8 @@ use types::{ProposalStatus, ProposalVotes};
 mod benchmarking;
 mod weights;
 pub use weights::WebbWeight;
+
+pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -113,6 +114,16 @@ pub mod pallet {
 			+ Default
 			+ Copy;
 
+		/// Authority identifier type
+		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
+		/// Convert DKG AuthorityId to a form that would end up in the Merkle Tree.
+		///
+		/// For instance for ECDSA (secp256k1) we want to store uncompressed public keys (65 bytes)
+		/// and later to Ethereum Addresses (160 bits) to simplify using them on Ethereum chain,
+		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
+		/// efficiency reasons.
+		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
+
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a
 		/// set of bridged chains.
@@ -121,9 +132,6 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type ProposalLifetime: Get<Self::BlockNumber>;
-
-		#[pallet::constant]
-		type DKGAccountId: Get<PalletId>;
 
 		type ProposalHandler: ProposalHandlerTrait;
 
@@ -161,6 +169,24 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn proposers)]
 	pub type Proposers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
+
+	/// Tracks current proposer set external accounts
+	/// Currently meant to store Ethereum compatible ECDSA 20-byte addresses
+	#[pallet::storage]
+	#[pallet::getter(fn external_proposer_accounts)]
+	pub type ExternalProposerAccounts<T: Config> =
+		StorageMap<_, Blake2_128Concat, Vec<u8>, bool, ValueQuery>;
+
+	/// Tracks current proposer set accounts
+	#[pallet::storage]
+	#[pallet::getter(fn authority_proposers)]
+	pub type AuthorityProposers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+
+	/// Tracks current proposer set external accounts
+	#[pallet::storage]
+	#[pallet::getter(fn external_authority_proposer_accounts)]
+	pub type ExternalAuthorityProposerAccounts<T: Config> =
+		StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
 
 	/// Number of proposers in set
 	#[pallet::storage]
@@ -230,7 +256,7 @@ pub mod pallet {
 		/// Execution of call failed
 		ProposalFailed { chain_id: ChainIdType<T::ChainId>, proposal_nonce: ProposalNonce },
 		/// Proposers have been reset
-		ProposersReset { proposers: Vec<T::AccountId> },
+		AuthorityProposersReset { proposers: Vec<T::AccountId> },
 	}
 
 	// Errors inform users that something went wrong.
@@ -413,9 +439,13 @@ pub mod pallet {
 		/// - O(1) lookup and insert
 		/// # </weight>
 		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
-		pub fn add_proposer(origin: OriginFor<T>, v: T::AccountId) -> DispatchResultWithPostInfo {
+		pub fn add_proposer(
+			origin: OriginFor<T>,
+			native_account: T::AccountId,
+			external_account: Vec<u8>,
+		) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
-			Self::register_proposer(v)
+			Self::register_proposer(native_account, external_account)
 		}
 
 		/// Removes an existing proposer from the set.
@@ -523,54 +553,9 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
-		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = Proposers::<T>::iter_keys();
-		// Check for each key that the proposer is valid (should return true)
-		let mut base_layer: Vec<Vec<u8>> = proposer_keys
-			.filter(|v| Proposers::<T>::get(v))
-			.map(|x| keccak_256(&x.encode()[..]).to_vec())
-			.collect();
-		// Pad base_layer to have length 2^height
-		let two = 2;
-		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
-			base_layer.push(keccak_256(&[0u8]).to_vec());
-		}
-		base_layer
-	}
-
-	pub fn next_layer(curr_layer: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-		let mut layer_above: Vec<Vec<u8>> = Vec::new();
-		let mut index = 0;
-		while index < curr_layer.len() {
-			let mut input_to_hash_as_vec: Vec<u8> = curr_layer[index].clone();
-			input_to_hash_as_vec.extend_from_slice(&curr_layer[index + 1][..]);
-			let input_to_hash_as_slice = &input_to_hash_as_vec[..];
-			layer_above.push(keccak_256(input_to_hash_as_slice).to_vec());
-			index += 2;
-		}
-		layer_above
-	}
-
-	pub fn get_proposer_set_tree_root() -> Vec<u8> {
-		let mut curr_layer = Self::pre_process_for_merkleize();
-		let mut height = Self::get_proposer_set_tree_height();
-		while height > 0 {
-			curr_layer = Self::next_layer(curr_layer);
-			height -= 1;
-		}
-		curr_layer[0].clone()
-	}
-
 	/// Checks if who is a proposer
 	pub fn is_proposer(who: &T::AccountId) -> bool {
 		Self::proposers(who)
-	}
-
-	/// Provides an AccountId for the pallet.
-	/// This is used both as an origin check and deposit/withdrawal account.
-	pub fn account_id() -> T::AccountId {
-		T::DKGAccountId::get().into_account()
 	}
 
 	/// Asserts if a resource is registered
@@ -617,7 +602,10 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Adds a new proposer to the set
-	pub fn register_proposer(proposer: T::AccountId) -> DispatchResultWithPostInfo {
+	pub fn register_proposer(
+		proposer: T::AccountId,
+		external_account: Vec<u8>,
+	) -> DispatchResultWithPostInfo {
 		ensure!(!Self::is_proposer(&proposer), Error::<T>::ProposerAlreadyExists);
 		Proposers::<T>::insert(&proposer, true);
 		ProposerCount::<T>::mutate(|i| *i += 1);
@@ -763,50 +751,13 @@ impl<T: Config> Pallet<T> {
 		});
 		Ok(().into())
 	}
-}
 
-/// Simple ensure origin for the bridge account
-#[derive(Encode, Decode, Clone, Eq, PartialEq, TypeInfo, RuntimeDebug)]
-pub struct EnsureBridge<T>(sp_std::marker::PhantomData<T>);
-impl<T: Config> EnsureOrigin<T::Origin> for EnsureBridge<T> {
-	type Success = T::AccountId;
-
-	fn try_origin(o: T::Origin) -> Result<Self::Success, T::Origin> {
-		let bridge_id = T::DKGAccountId::get().into_account();
-		o.into().and_then(|o| match o {
-			system::RawOrigin::Signed(who) if who == bridge_id => Ok(bridge_id),
-			r => Err(T::Origin::from(r)),
-		})
-	}
-
-	/// Returns an outer origin capable of passing `try_origin` check.
-	///
-	/// ** Should be used for benchmarking only!!! **
-	#[cfg(feature = "runtime-benchmarks")]
-	fn successful_origin() -> T::Origin {
-		T::Origin::from(frame_system::RawOrigin::Signed(T::DKGAccountId::get().into_account()))
-	}
-}
-
-impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySetId, T::AccountId>
-	for Pallet<T>
-{
-	fn on_authority_set_changed(
-		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
-		authorities: Vec<T::AccountId>,
-	) -> () {
-		Proposers::<T>::remove_all(Some(Self::proposer_count()));
-		for authority in &authorities {
-			Proposers::<T>::insert(authority, true);
-		}
-		ProposerCount::<T>::put(authorities.len() as u32);
-		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities });
-
+	fn create_proposer_set_update() {
 		// Merkleize the new proposer set
 		let mut proposer_set_merkle_root = Self::get_proposer_set_tree_root();
 		// Increment the nonce, we increment first because the nonce starts at 0
 		let curr_proposal_nonce = Self::proposer_set_update_proposal_nonce();
-		let new_proposal_nonce = curr_proposal_nonce + 1u32;
+		let new_proposal_nonce = curr_proposal_nonce.saturating_add(1u32);
 		ProposerSetUpdateProposalNonce::<T>::put(new_proposal_nonce);
 		// Get average session length
 		let average_session_length_in_blocks: u64 =
@@ -828,9 +779,119 @@ impl<T: Config> OnAuthoritySetChangeHandler<dkg_runtime_primitives::AuthoritySet
 		proposer_set_merkle_root.extend_from_slice(&num_of_proposers.to_be_bytes());
 		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());
 
-		T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(
+		match T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(
 			proposer_set_merkle_root,
 			dkg_runtime_primitives::ProposalAction::Sign(0),
-		);
+		) {
+			Ok(()) => {},
+			Err(e) => {
+				log::error!(
+					target: "runtime::dkg_proposals",
+					"Error creating proposer set update: {:?}", e
+				);
+			},
+		}
+	}
+
+	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
+		let height = Self::get_proposer_set_tree_height();
+		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
+		// Check for each key that the proposer is valid (should return true)
+		let mut base_layer: Vec<Vec<u8>> = proposer_keys
+			.filter(|v| ExternalProposerAccounts::<T>::get(v))
+			.map(|x| keccak_256(&x.encode()[..]).to_vec())
+			.collect();
+		// Pad base_layer to have length 2^height
+		let two = 2;
+		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
+			base_layer.push(keccak_256(&[0u8]).to_vec());
+		}
+		base_layer
+	}
+
+	pub fn next_layer(curr_layer: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+		let mut layer_above: Vec<Vec<u8>> = Vec::new();
+		let mut index = 0;
+		while index < curr_layer.len() {
+			let mut input_to_hash_as_vec: Vec<u8> = curr_layer[index].clone();
+			input_to_hash_as_vec.extend_from_slice(&curr_layer[index + 1][..]);
+			let input_to_hash_as_slice = &input_to_hash_as_vec[..];
+			layer_above.push(keccak_256(input_to_hash_as_slice).to_vec());
+			index += 2;
+		}
+		layer_above
+	}
+
+	pub fn get_proposer_set_tree_root() -> Vec<u8> {
+		let mut curr_layer = Self::pre_process_for_merkleize();
+		let mut height = Self::get_proposer_set_tree_height();
+		while height > 0 {
+			curr_layer = Self::next_layer(curr_layer);
+			height -= 1;
+		}
+		curr_layer[0].clone()
+	}
+}
+
+impl<T: Config>
+	OnAuthoritySetChangeHandler<T::AccountId, dkg_runtime_primitives::AuthoritySetId, T::DKGId>
+	for Pallet<T>
+{
+	fn on_authority_set_changed(
+		authorities: Vec<T::AccountId>,
+		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
+		authority_ids: Vec<T::DKGId>,
+	) -> () {
+		// Get the new external accounts for the new authorities by converting
+		// their DKGIds to data meant for merkle tree insertion (i.e. EThereum addresses)
+		let new_external_accounts = authority_ids
+			.iter()
+			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
+			.collect::<Vec<_>>();
+		// TODO: Get difference in list and optimise storage reads/writes
+		// Remove old authorities and their external accounts from the list
+		let old_authority_proposers = Self::authority_proposers();
+		let old_external_authority_proposer_accounts = Self::external_authority_proposer_accounts();
+		for (old_authority_account, old_external_account) in old_authority_proposers
+			.iter()
+			.zip(old_external_authority_proposer_accounts.iter())
+		{
+			ProposerCount::<T>::put(Self::proposer_count().saturating_sub(1));
+			Proposers::<T>::remove(old_authority_account);
+			ExternalProposerAccounts::<T>::remove(old_external_account.to_vec());
+		}
+		// Add new authorities and their external accounts to the list
+		for (authority_account, external_account) in
+			authorities.iter().zip(new_external_accounts.iter())
+		{
+			ProposerCount::<T>::put(Self::proposer_count().saturating_add(1));
+			Proposers::<T>::insert(authority_account, true);
+			ExternalProposerAccounts::<T>::insert(external_account, true);
+		}
+		// Update the external accounts of the new authorities
+		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
+		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
+		Self::create_proposer_set_update();
+	}
+}
+
+/// Convert BEEFY secp256k1 public keys into Ethereum addresses
+pub struct DKGEcdsaToEthereum;
+impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
+	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
+		use k256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey};
+		use sp_core::crypto::ByteArray;
+
+		PublicKey::from_sec1_bytes(a.as_slice())
+			.map(|pub_key| {
+				// uncompress the key
+				let uncompressed = pub_key.to_encoded_point(false);
+				// convert to ETH address
+				sp_io::hashing::keccak_256(&uncompressed.as_bytes()[1..])[12..].to_vec()
+			})
+			.map_err(|_| {
+				log::error!(target: "runtime::beefy", "Invalid BEEFY PublicKey format!");
+			})
+			.unwrap_or_default()
 	}
 }

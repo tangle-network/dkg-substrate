@@ -2,6 +2,7 @@ use crate as pallet_dkg_proposal_handler;
 use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519, sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
@@ -159,7 +160,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;

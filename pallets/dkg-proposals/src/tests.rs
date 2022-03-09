@@ -13,7 +13,7 @@ use super::{
 };
 use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_dkg_id, mock_pub_key,
-	new_test_ext_initialized, roll_to, DKGMetadata, ExtBuilder, ParachainStaking,
+	new_test_ext_initialized, roll_to, DKGMetadata, ExtBuilder, ParachainStaking, mock_ecdsa_key,
 };
 use dkg_runtime_primitives::{DKGPayloadKey, Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
@@ -154,14 +154,14 @@ fn add_remove_relayer() {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
 		assert_eq!(DKGProposals::proposer_count(), 0);
 
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A), mock_ecdsa_key(PROPOSER_A)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B), mock_ecdsa_key(PROPOSER_B)));
+		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C), mock_ecdsa_key(PROPOSER_C)));
 		assert_eq!(DKGProposals::proposer_count(), 3);
 
 		// Already exists
 		assert_noop!(
-			DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)),
+			DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A), mock_ecdsa_key(PROPOSER_A)),
 			Error::<Test>::ProposerAlreadyExists
 		);
 
@@ -376,8 +376,6 @@ fn create_unsucessful_proposal() {
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
-		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
-
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id.clone(),
@@ -454,8 +452,6 @@ fn execute_after_threshold_change() {
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
-		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
-
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id.clone(),
@@ -588,7 +584,7 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(10);
 		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}));
 		assert_eq!(DKGProposals::proposer_count(), 3);
@@ -602,7 +598,7 @@ fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}))
 	})
@@ -654,7 +650,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		ParachainStaking::leave_candidates(Origin::signed(mock_pub_key(USER_A)), 4).unwrap();
 		roll_to(15);
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![mock_pub_key(0), mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
 		}));
 
