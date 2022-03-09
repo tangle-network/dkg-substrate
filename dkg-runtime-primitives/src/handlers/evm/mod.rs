@@ -17,6 +17,10 @@ pub mod set_treasury_handler;
 // Rescue tokens
 pub mod rescue_tokens;
 
+// fees & limits
+pub mod max_deposit_limit_update;
+pub mod min_withdrawal_limit_update;
+
 // Generic proposals
 pub mod bytes32_update;
 

@@ -17,7 +17,6 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::{CheckedAdd, Saturating};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -42,7 +41,7 @@ use sp_api::{
 	BlockId,
 };
 use sp_runtime::{
-	traits::{Block, Header, NumberFor, One},
+	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
@@ -57,10 +56,8 @@ use crate::messages::{
 };
 
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, RoundId,
-	},
-	ChainId, DKGReport, Proposal, ProposalKind,
+	types::{DKGError, DKGResult, RoundId},
+	DKGReport, Proposal, ProposalKind,
 };
 
 use dkg_runtime_primitives::{
@@ -70,12 +67,12 @@ use dkg_runtime_primitives::{
 		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 	},
 	utils::{sr25519, to_slice_32},
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
-	RefreshProposal, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainId, ChainType,
+	OffchainSignedProposals, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
-	error::{self},
+	error,
 	gossip::GossipValidator,
 	metric_inc, metric_set,
 	metrics::Metrics,
@@ -286,7 +283,7 @@ where
 			}
 		}
 
-		return None
+		None
 	}
 
 	pub fn get_authority_reputations(&self, header: &B::Header) -> HashMap<AuthorityId, i64> {
@@ -315,7 +312,7 @@ where
 	}
 
 	fn get_latest_block_number(&self) -> NumberFor<B> {
-		self.latest_header.clone().unwrap().number().clone()
+		*self.latest_header.clone().unwrap().number()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -551,8 +548,8 @@ where
 				metric_set!(self, dkg_best_block, *header.number());
 
 				// Setting up the DKG
-				self.handle_dkg_setup(&header, active.clone());
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_dkg_setup(header, active);
+				self.handle_queued_dkg_setup(header, queued.clone());
 
 				if !self.current_validator_set.authorities.is_empty() {
 					self.send_outgoing_dkg_messages();
@@ -570,7 +567,7 @@ where
 			{
 				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
 				self.queued_validator_set = queued.clone();
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_queued_dkg_setup(header, queued);
 				self.send_outgoing_dkg_messages();
 			}
 		}
@@ -672,7 +669,7 @@ where
 			if let Some(id) =
 				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
 			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 				rounds_send_result = send_messages(&mut rounds, id, self.get_latest_block_number());
 			} else {
 				error!(
@@ -1015,7 +1012,7 @@ where
 			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
 
 			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
+				self.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
 			if let Some(submit_at) = submit_at {
 				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
 			}
@@ -1082,8 +1079,8 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if proposal.is_some() {
-				proposals.push(proposal.unwrap())
+			if let Some(prop) = proposal {
+				proposals.push(prop);
 			}
 		}
 
@@ -1093,10 +1090,13 @@ where
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key =
-			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+			<(ChainType, ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
-			Ok((chain_id, key)) => key,
-			Err(err) => return None,
+			Ok((_, _, key)) => key,
+			Err(e) => {
+				error!(target: "dkg", "Failed to decode DKG payload key: {:?}", e);
+				return None
+			},
 		};
 
 		let make_signed_proposal = |kind: ProposalKind| Proposal::Signed {
@@ -1171,12 +1171,18 @@ where
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for (key, ..) in &unsigned_proposals {
-				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
+			for unsigned_proposal in &unsigned_proposals {
+				let key = (
+					unsigned_proposal.chain_type,
+					unsigned_proposal.chain_id,
+					unsigned_proposal.key,
+				)
+					.encode();
+				if self.dkg_state.created_offlinestage_at.contains_key(&key) {
 					continue
 				}
 
-				if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
+				if let Err(e) = rounds.create_offline_stage(key.clone(), *header.number()) {
 					error!(target: "dkg", "Failed to create offline stage: {:?}", e);
 					errors.push(e);
 				} else {
@@ -1184,7 +1190,7 @@ where
 					// to prevent overwriting running offline stages when next this function is
 					// called this function is called on every block import and the proposal
 					// might still be in the the unsigned proposals queue.
-					self.dkg_state.created_offlinestage_at.insert(key.encode(), *header.number());
+					self.dkg_state.created_offlinestage_at.insert(key.clone(), *header.number());
 				}
 			}
 		}
@@ -1233,17 +1239,19 @@ where
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
-		for (key, proposal) in unsigned_proposals {
-			if !rounds.is_ready_to_vote(key.encode()) {
+		for unsigned_proposal in unsigned_proposals {
+			let key =
+				(unsigned_proposal.chain_type, unsigned_proposal.chain_id, unsigned_proposal.key)
+					.encode();
+			if !rounds.is_ready_to_vote(key.clone()) {
 				continue
 			}
 
-			let (chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
-			if let Proposal::Unsigned { kind, data } = proposal {
-				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
-				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+			if let Proposal::Unsigned { kind, data } = unsigned_proposal.proposal {
+				debug!(target: "dkg", "Got unsigned proposal of {:?} with data = {:?} with key = {:?}", kind, &data, key);
+				if let Err(e) = rounds.vote(key, data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 					errors.push(e);
 				};
@@ -1281,7 +1289,7 @@ where
 
 		let current_block_number = {
 			let header = self.latest_header.as_ref().unwrap();
-			header.number().clone()
+			*header.number()
 		};
 
 		if let Some(mut offchain) = self.backend.offchain_storage() {

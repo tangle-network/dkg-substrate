@@ -1,16 +1,15 @@
 use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, Proposal, ProposalHeader, ProposalKind,
-	ProposalNonce,
+	DKGPayloadKey, Proposal, ProposalKind,
 };
 use codec::{alloc::string::ToString, Decode};
 
 use super::substrate;
 
-pub fn decode_proposal_header<C: ChainIdTrait>(
+pub fn decode_proposal_header(
 	data: &[u8],
-) -> Result<ProposalHeader<C>, ValidationError> {
-	let header = ProposalHeader::<C>::decode(&mut &data[..]).map_err(|_| {
+) -> Result<webb_proposals::ProposalHeader, ValidationError> {
+	let header = webb_proposals::ProposalHeader::decode(&mut &*data).map_err(|_| {
 		ValidationError::InvalidParameter("Failed to decode proposal header".to_string())
 	})?;
 	frame_support::log::debug!(
@@ -22,166 +21,153 @@ pub fn decode_proposal_header<C: ChainIdTrait>(
 	Ok(header)
 }
 
-pub fn decode_proposal<C: ChainIdTrait>(
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ProposalIdentifier {
+	pub key: DKGPayloadKey,
+	pub chain_type: webb_proposals::ChainType,
+	pub chain_id: webb_proposals::ChainId,
+}
+
+pub fn decode_proposal_identifier(
 	proposal: &Proposal,
-) -> Result<(ChainIdType<C>, DKGPayloadKey), ValidationError> {
+) -> Result<ProposalIdentifier, ValidationError> {
 	// First parse if EVM tx proposal
-	match proposal.kind() {
-		ProposalKind::EVM =>
-			return evm::evm_tx::create(&proposal.data())
-				.map(|p| (p.chain_id, DKGPayloadKey::EVMProposal(p.nonce))),
-		_ => {},
+	if let ProposalKind::EVM = proposal.kind() {
+		return evm::evm_tx::create(proposal.data()).map(|p| ProposalIdentifier {
+			key: DKGPayloadKey::EVMProposal(p.nonce),
+			chain_type: webb_proposals::ChainType::Evm,
+			chain_id: p.chain_id,
+		})
 	}
 
 	// Otherwise, begin parsing DKG proposal header
-	let (chain_id, _): (ChainIdType<C>, ProposalNonce) =
-		decode_proposal_header(proposal.data()).map(Into::into)?;
+	let header = decode_proposal_header(proposal.data())?;
+	let mut identifier = ProposalIdentifier {
+		key: DKGPayloadKey::EVMProposal(header.nonce()), // placeholder
+		chain_type: header.resource_id().chain_type(),
+		chain_id: header.resource_id().chain_id(),
+	};
 
-	match proposal.kind() {
-		ProposalKind::AnchorCreate => match chain_id {
-			ChainIdType::EVM(_) => panic!("should not exist"),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) => substrate::anchor_create::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorCreateProposal(p.header.nonce))),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::AnchorUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::anchor_update::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorUpdateProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) => substrate::anchor_update::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::AnchorUpdateProposal(p.header.nonce))),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::TokenAdd => match chain_id {
-			ChainIdType::EVM(_) => evm::add_token_to_set::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenAddProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) => substrate::add_token_to_pool_share::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenAddProposal(p.header.nonce))),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::TokenRemove => match chain_id {
-			ChainIdType::EVM(_) => evm::remove_token_from_set::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::TokenRemoveProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) =>
-				substrate::remove_token_from_pool_share::create(&proposal.data()).map(|p| {
-					(p.header.chain_id, DKGPayloadKey::TokenRemoveProposal(p.header.nonce))
-				}),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::WrappingFeeUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::fee_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) => substrate::fee_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::ResourceIdUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::resource_id_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) =>
-				substrate::resource_id_update::create(&proposal.data()).map(|p| {
-					(p.header.chain_id, DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce))
-				}),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::RescueTokens => match chain_id {
-			ChainIdType::EVM(_) => evm::rescue_tokens::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::RescueTokensProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::MaxDepositLimitUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MaxDepositLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::MinWithdrawalLimitUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MinWithdrawalLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::MaxExtLimitUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::MaxFeeLimitUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::SetTreasuryHandler => match chain_id {
-			ChainIdType::EVM(_) => evm::set_treasury_handler::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::SetTreasuryHandlerProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::SetVerifier => match chain_id {
-			ChainIdType::EVM(_) => evm::set_verifier::create(&proposal.data())
-				.map(|p| (p.header.chain_id, DKGPayloadKey::SetVerifierProposal(p.header.nonce))),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::FeeRecipientUpdate => match chain_id {
-			ChainIdType::EVM(_) => evm::fee_recipient_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::FeeRecipientUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		_ => Err(ValidationError::UnimplementedProposalKind),
-	}
+	// we then create a lazy identifier.
+	let maybe_anchor_create = substrate::anchor_create::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::AnchorCreateProposal(p.header.nonce());
+		identifier
+	});
+
+	let maybe_substrate_anchor_update =
+		substrate::anchor_update::create(proposal.data()).map(|p| {
+			identifier.key = DKGPayloadKey::AnchorUpdateProposal(p.header.nonce());
+			identifier
+		});
+
+	let maybe_evm_anchor_update = evm::anchor_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::AnchorUpdateProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_evm_token_add = evm::add_token_to_set::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::TokenAddProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_substrate_token_add = substrate::add_token_to_pool_share::create(proposal.data())
+		.map(|p| {
+			identifier.key = DKGPayloadKey::TokenAddProposal(p.header.nonce());
+			identifier
+		});
+
+	let maybe_evm_token_remove = evm::remove_token_from_set::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::TokenRemoveProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_substrate_token_remove =
+		substrate::remove_token_from_pool_share::create(proposal.data()).map(|p| {
+			identifier.key = DKGPayloadKey::TokenRemoveProposal(p.header.nonce());
+			identifier
+		});
+
+	let maybe_evm_fee_update = evm::fee_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::WrappingFeeUpdateProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_substrate_fee_update = substrate::fee_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce());
+		identifier
+	});
+
+	let maybe_evm_resoruce_id_update = evm::resource_id_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::ResourceIdUpdateProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_substrate_resource_id_update = substrate::resource_id_update::create(proposal.data())
+		.map(|p| {
+			identifier.key = DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce());
+			identifier
+		});
+
+	let maybe_evm_rescue_tokens = evm::rescue_tokens::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::RescueTokensProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_max_deposit_limit_update = evm::max_deposit_limit_update::create(proposal.data())
+		.map(|p| {
+			identifier.key = DKGPayloadKey::MaxDepositLimitUpdateProposal(p.header().nonce());
+			identifier
+		});
+
+	let maybe_min_withdrawal_limit_update =
+		evm::min_withdrawal_limit_update::create(proposal.data()).map(|p| {
+			identifier.key = DKGPayloadKey::MinWithdrawalLimitUpdateProposal(p.header().nonce());
+			identifier
+		});
+
+	let maybe_max_ext_limit_update = evm::bytes32_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::MaxExtLimitUpdateProposal(p.header.nonce());
+		identifier
+	});
+
+	let maybe_max_fee_limit_update = evm::bytes32_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::MaxFeeLimitUpdateProposal(p.header.nonce());
+		identifier
+	});
+
+	let maybe_set_treasury_handler = evm::set_treasury_handler::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::SetTreasuryHandlerProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_set_verifier = evm::set_verifier::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::SetVerifierProposal(p.header().nonce());
+		identifier
+	});
+
+	let maybe_fee_recipient_update = evm::fee_recipient_update::create(proposal.data()).map(|p| {
+		identifier.key = DKGPayloadKey::FeeRecipientUpdateProposal(p.header().nonce());
+		identifier
+	});
+
+	maybe_evm_anchor_update
+		.or(maybe_substrate_anchor_update)
+		.or(maybe_evm_token_add)
+		.or(maybe_substrate_token_add)
+		.or(maybe_evm_token_remove)
+		.or(maybe_substrate_token_remove)
+		.or(maybe_evm_fee_update)
+		.or(maybe_substrate_fee_update)
+		.or(maybe_evm_resoruce_id_update)
+		.or(maybe_substrate_resource_id_update)
+		.or(maybe_evm_rescue_tokens)
+		.or(maybe_max_deposit_limit_update)
+		.or(maybe_min_withdrawal_limit_update)
+		.or(maybe_max_ext_limit_update)
+		.or(maybe_max_fee_limit_update)
+		.or(maybe_set_treasury_handler)
+		.or(maybe_set_verifier)
+		.or(maybe_fee_recipient_update)
+		.or(maybe_anchor_create)
+		.map_err(|_| ValidationError::UnimplementedProposalKind)
 }

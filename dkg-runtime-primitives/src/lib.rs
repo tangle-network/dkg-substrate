@@ -21,9 +21,8 @@ use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
-	create_runtime_str,
-	traits::{AtLeast32Bit, IdentifyAccount, Verify},
-	MultiSignature, RuntimeString,
+	traits::{IdentifyAccount, Verify},
+	MultiSignature,
 };
 use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
@@ -39,8 +38,6 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
-
-pub type ChainId = u32;
 
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
@@ -89,7 +86,6 @@ impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
 
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
-	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
 
 	/// Identity of a DKG authority using ECDSA as its crypto.
@@ -155,113 +151,15 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
 }
 
-#[derive(Encode, Decode, PartialEq, Eq, Clone, RuntimeDebug, scale_info::TypeInfo)]
-pub enum ChainIdType<ChainId> {
-	// EVM(chain_identifier)
-	EVM(ChainId),
-	// Substrate(chain_identifier)
-	Substrate(ChainId),
-	// Relay chain(relay_chain_identifier, chain_identifier)
-	RelayChain(RuntimeString, ChainId),
-	// Parachain(relay_chain_identifier, para_id)
-	Parachain(RuntimeString, ChainId),
-	// Cosmos
-	CosmosSDK(ChainId),
-	// Solana
-	Solana(ChainId),
-}
-
-impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
-	pub fn inner_id(&self) -> ChainId {
-		match self {
-			ChainIdType::EVM(id) => id.clone(),
-			ChainIdType::Substrate(id) => id.clone(),
-			ChainIdType::RelayChain(_, id) => id.clone(),
-			ChainIdType::Parachain(_, id) => id.clone(),
-			ChainIdType::CosmosSDK(id) => id.clone(),
-			ChainIdType::Solana(id) => id.clone(),
-		}
-	}
-
-	pub fn to_type(&self) -> u16 {
-		match self {
-			ChainIdType::EVM(_) => 1,
-			ChainIdType::Substrate(_) |
-			ChainIdType::RelayChain(_, _) |
-			ChainIdType::Parachain(_, _) => 2,
-			ChainIdType::CosmosSDK(_) => 3,
-			ChainIdType::Solana(_) => 4,
-		}
-	}
-
-	pub fn get_type_bytes(&self) -> [u8; 2] {
-		let polkadot_str = create_runtime_str!("polkadot");
-		let kusama_str = create_runtime_str!("kusama");
-		match self {
-			ChainIdType::EVM(_) => [1, 0],
-			ChainIdType::Substrate(_) => [2, 0],
-			ChainIdType::RelayChain(relay, _) =>
-				if relay == &polkadot_str {
-					[2, 1]
-				} else if relay == &kusama_str {
-					[2, 2]
-				} else {
-					panic!("Unknown relay chain id: {:?}", relay);
-				},
-			ChainIdType::Parachain(relay, _) =>
-				if relay == &polkadot_str {
-					[2, 128]
-				} else if relay == &kusama_str {
-					[2, 129]
-				} else {
-					panic!("Unknown relay chain id: {:?}", relay);
-				},
-			ChainIdType::CosmosSDK(_) => [3, 0],
-			ChainIdType::Solana(_) => [4, 0],
-			_ => panic!("Invalid chain id type"),
-		}
-	}
-
-	pub fn from_raw(bytes: &[u8]) -> Self {
-		let mut chain_type_bytes = [0u8; 2];
-		let mut chain_id_bytes = [0u8; 4];
-		if bytes.len() == 6 {
-			chain_type_bytes.copy_from_slice(&bytes[0..2]);
-			chain_id_bytes.copy_from_slice(&bytes[2..6]);
-		}
-
-		if bytes.len() == 8 {
-			chain_type_bytes.copy_from_slice(&bytes[2..4]);
-			chain_id_bytes.copy_from_slice(&bytes[4..8]);
-		}
-
-		Self::from_raw_parts(chain_type_bytes, chain_id_bytes)
-	}
-
-	pub fn from_raw_parts(chain_type_bytes: [u8; 2], chain_id_bytes: [u8; 4]) -> Self {
-		Self::get_full_repr(chain_type_bytes, ChainId::from(u32::from_be_bytes(chain_id_bytes)))
-	}
-
-	pub fn get_full_repr(chain_type: [u8; 2], chain_id: ChainId) -> Self {
-		match chain_type {
-			[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
-			[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
-			[2, 1] =>
-				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
-			[2, 2] =>
-				ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
-			[2, 128] =>
-				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
-			[2, 129] =>
-				ChainIdType::Parachain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
-			[3, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),
-			[4, 0] => ChainIdType::Solana(ChainId::from(chain_id)),
-			_ => panic!("Invalid chain id type"),
-		}
-	}
-}
-
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug)]
+pub struct UnsignedProposal {
+	pub chain_id: webb_proposals::ChainId,
+	pub chain_type: webb_proposals::ChainType,
+	pub key: DKGPayloadKey,
+	pub proposal: Proposal,
+}
 
 sp_api::decl_runtime_apis! {
 
@@ -282,9 +180,9 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> Option<Vec<u8>>;
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), Proposal)>;
+		fn get_unsigned_proposals() -> Vec<UnsignedProposal>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
-		fn get_max_extrinsic_delay(_block_number: N) -> N;
+		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities

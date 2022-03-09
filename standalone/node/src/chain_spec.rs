@@ -96,8 +96,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				// Initial Chain Ids
 				vec![
-					5001, // Hermis
-					5002, // Athena
+					hex_literal::hex!("010000001389"), // Hermis (Evm, 5001)
+					hex_literal::hex!("01000000138a"), // Athena (Evm, 5002)
 				],
 				// Initial resource Ids
 				vec![
@@ -177,8 +177,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				],
 				// Initial Chain Ids
 				vec![
-					5001, // Hermis
-					5002, // Athena
+					hex_literal::hex!("010000001389"), // Hermis (Evm, 5001)
+					hex_literal::hex!("01000000138a"), // Athena (Evm, 5002)
 				],
 				// Initial resource Ids
 				vec![
@@ -277,7 +277,7 @@ fn testnet_genesis(
 	initial_nominators: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	initial_chain_ids: Vec<u32>,
+	initial_chain_ids: Vec<[u8; 6]>,
 	initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
 	initial_proposers: Vec<AccountId>,
 	_enable_println: bool,

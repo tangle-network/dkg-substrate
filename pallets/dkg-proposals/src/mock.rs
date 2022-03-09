@@ -106,7 +106,7 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
+	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::Substrate, ChainId::new(5));
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
@@ -230,7 +230,6 @@ impl pallet_parachain_staking::Config for Test {
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
-	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = ();
@@ -239,7 +238,6 @@ impl pallet_dkg_proposal_handler::Config for Test {
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
@@ -358,7 +356,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub fn new_test_ext_initialized(
-	src_id: ChainIdType<<Test as pallet::Config>::ChainId>,
+	src_chain_type: ChainType,
+	src_chain_id: ChainId,
 	r_id: ResourceId,
 	resource: Vec<u8>,
 ) -> sp_io::TestExternalities {
@@ -372,7 +371,7 @@ pub fn new_test_ext_initialized(
 		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
 		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
 		// Whitelist chain
-		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
+		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_chain_type, src_chain_id));
 		// Set and check resource ID mapped to some junk data
 		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, resource));
 		assert_eq!(DKGProposals::resource_exists(r_id), true);

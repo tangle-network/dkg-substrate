@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
+use dkg_runtime_primitives::{ChainId, ChainType, DKGPayloadKey, Proposal, UnsignedProposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -526,7 +526,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
+	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::Substrate, ChainId::new(5));
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(50);
@@ -535,7 +535,6 @@ parameter_types! {
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
-	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
@@ -544,7 +543,6 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
@@ -817,7 +815,7 @@ impl_runtime_apis! {
 			return None
 		}
 
-		fn get_unsigned_proposals() -> Vec<((ChainIdType<ChainId>, DKGPayloadKey), Proposal)> {
+		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 

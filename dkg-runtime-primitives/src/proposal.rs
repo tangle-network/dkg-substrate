@@ -1,18 +1,17 @@
 use frame_support::RuntimeDebug;
-use scale_info::TypeInfo;
-use sp_runtime::{create_runtime_str, traits::AtLeast32Bit};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
 
-use crate::ChainIdType;
-
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
-pub type ResourceId = [u8; 32];
-// Proposal Nonces (4 bytes)
-pub type ProposalNonce = u32;
+pub type ChainId = webb_proposals::ChainId;
+pub type ChainType = webb_proposals::ChainType;
+pub type ResourceId = webb_proposals::ResourceId;
+pub type ProposalNonce = webb_proposals::Nonce;
+pub type ProposalHeader = webb_proposals::ProposalHeader;
+pub type FunctionSignature = webb_proposals::FunctionSignature;
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
 pub struct RefreshProposal {
@@ -22,7 +21,7 @@ pub struct RefreshProposal {
 
 impl Decode for RefreshProposal {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		const NONCE_LEN: usize = ProposalNonce::LENGTH;
 		let mut data = [0u8; NONCE_LEN + 64];
 		input.read(&mut data).map_err(|_| {
 			codec::Error::from("input bytes are less than the expected size (68 bytes)")
@@ -33,7 +32,7 @@ impl Decode for RefreshProposal {
 		let mut pub_key_bytes = [0u8; 64];
 		nonce_bytes.copy_from_slice(&data[0..NONCE_LEN]);
 		pub_key_bytes.copy_from_slice(&data[NONCE_LEN..]);
-		let nonce = ProposalNonce::from_be_bytes(nonce_bytes);
+		let nonce = ProposalNonce::from(nonce_bytes);
 		let pub_key = pub_key_bytes.to_vec();
 		Ok(Self { nonce, pub_key })
 	}
@@ -41,16 +40,16 @@ impl Decode for RefreshProposal {
 
 impl Encode for RefreshProposal {
 	fn encode(&self) -> Vec<u8> {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		const NONCE_LEN: usize = ProposalNonce::LENGTH;
 		let mut ret = [0u8; NONCE_LEN + 64];
-		let nonce = self.nonce.to_be_bytes();
+		let nonce = self.nonce.to_bytes();
 		ret[0..NONCE_LEN].copy_from_slice(&nonce);
 		ret[NONCE_LEN..(NONCE_LEN + 64)].copy_from_slice(&self.pub_key);
 		ret.into()
 	}
 
 	fn encoded_size(&self) -> usize {
-		const NONCE_LEN: usize = core::mem::size_of::<ProposalNonce>();
+		const NONCE_LEN: usize = ProposalNonce::LENGTH;
 		NONCE_LEN + 64
 	}
 }
@@ -61,83 +60,6 @@ impl Encode for RefreshProposal {
 pub struct RefreshProposalSigned {
 	pub nonce: ProposalNonce,
 	pub signature: Vec<u8>,
-}
-
-pub trait ChainIdTrait: AtLeast32Bit + Copy + Encode + Decode + sp_std::fmt::Debug {}
-
-impl ChainIdTrait for u32 {}
-impl ChainIdTrait for u64 {}
-impl ChainIdTrait for u128 {}
-
-#[derive(Debug, Clone, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct ProposalHeader<C: ChainIdTrait> {
-	pub resource_id: ResourceId,
-	pub chain_id: ChainIdType<C>,
-	pub function_sig: [u8; 4],
-	pub nonce: ProposalNonce,
-}
-
-impl<C: ChainIdTrait> Encode for ProposalHeader<C> {
-	fn encode(&self) -> Vec<u8> {
-		let mut buf = Vec::new();
-		// resource_id contains the chain id already.
-		buf.extend_from_slice(&self.resource_id); // 32 bytes
-		buf.extend_from_slice(&self.function_sig); // 4 bytes
-		buf.extend_from_slice(&self.nonce.to_be_bytes()); // 4 bytes
-		buf
-	}
-
-	fn encoded_size(&self) -> usize {
-		40 // Bytes
-	}
-}
-
-impl<C: ChainIdTrait> Decode for ProposalHeader<C> {
-	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-		let mut data = [0u8; 40];
-		input.read(&mut data).map_err(|_| {
-			codec::Error::from("input bytes are less than the header size (40 bytes)")
-		})?;
-		// _NOTE_: rustc won't generate bounds check for the following slice
-		// since we know the length of the slice is at least 40 bytes already.
-
-		// decode the resourceId is the first 32 bytes
-		let mut resource_id = [0u8; 32];
-		resource_id.copy_from_slice(&data[0..32]);
-		// The chain type is the 5th and 6th last byte of the **resourceId**
-		let mut chain_type_bytes = [0u8; 2];
-		chain_type_bytes.copy_from_slice(&data[26..28]);
-		// The chain id is the last 4 bytes of the **resourceId**
-		let mut chain_id_bytes = [0u8; 4];
-		chain_id_bytes.copy_from_slice(&resource_id[28..32]);
-		// The function signature is the next first 4 bytes after the resourceId.
-		let mut function_sig = [0u8; 4];
-		function_sig.copy_from_slice(&data[32..36]);
-		// The nonce is the last 4 bytes of the header (also considered as the first arg).
-		let mut nonce_bytes = [0u8; 4];
-		nonce_bytes.copy_from_slice(&data[36..40]);
-		let nonce = u32::from_be_bytes(nonce_bytes);
-		// Create the header
-		let header = ProposalHeader::<C> {
-			resource_id,
-			chain_id: ChainIdType::from_raw_parts(chain_type_bytes, chain_id_bytes),
-			function_sig,
-			nonce: ProposalNonce::from(nonce),
-		};
-		Ok(header)
-	}
-}
-
-impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ChainIdType<C>, ProposalNonce) {
-	fn from(header: ProposalHeader<C>) -> Self {
-		(header.chain_id, header.nonce)
-	}
-}
-
-impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ResourceId, ChainIdType<C>, ProposalNonce) {
-	fn from(header: ProposalHeader<C>) -> Self {
-		(header.resource_id, header.chain_id, header.nonce)
-	}
 }
 
 #[derive(Debug, Clone, Decode, Encode, Copy, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
@@ -233,10 +155,10 @@ impl Proposal {
 		}
 	}
 
-	pub fn signature(&self) -> Vec<u8> {
+	pub fn signature(&self) -> Option<Vec<u8>> {
 		match self {
-			Proposal::Signed { signature, .. } => signature.clone(),
-			Proposal::Unsigned { .. } => Vec::new(),
+			Proposal::Signed { signature, .. } => Some(signature.clone()),
+			Proposal::Unsigned { .. } => None,
 		}
 	}
 
@@ -244,6 +166,14 @@ impl Proposal {
 		match self {
 			Proposal::Signed { kind, .. } | Proposal::Unsigned { kind, .. } => kind.clone(),
 		}
+	}
+
+	pub fn is_signed(&self) -> bool {
+		matches!(self, Proposal::Signed { .. })
+	}
+
+	pub fn is_unsigned(&self) -> bool {
+		matches!(self, Proposal::Unsigned { .. })
 	}
 
 	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
@@ -275,60 +205,24 @@ pub trait ProposalHandlerTrait {
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_unsigned_refresh_proposal(
 		_proposal: RefreshProposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
+		Ok(())
 	}
 }
 
 impl ProposalHandlerTrait for () {}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn proposal_encode_decode() {
-		let mut proposal_data = Vec::with_capacity(80);
-		let chain_id = ChainIdType::EVM(5002u32);
-		let nonce = 0xffu32;
-		let resource_id = {
-			let mut r = [0u8; 32];
-			r[26..28].copy_from_slice(&chain_id.to_type().to_le_bytes());
-			r[28..32].copy_from_slice(&chain_id.inner_id().to_be_bytes());
-			r
-		};
-		let function_sig = [0xaa, 0xbb, 0xcc, 0xdd];
-		let proposal_header = ProposalHeader { chain_id, function_sig, nonce, resource_id };
-		let src_id = 5001u32;
-		let last_leaf_index = nonce as u32;
-		let merkle_root = [0xeeu8; 32];
-		proposal_header.encode_to(&mut proposal_data);
-		proposal_data.extend_from_slice(&src_id.to_be_bytes());
-		proposal_data.extend_from_slice(&last_leaf_index.to_be_bytes());
-		proposal_data.extend_from_slice(&merkle_root);
-		assert_eq!(proposal_data.len(), 80);
-		let hex = hex::encode(&proposal_data);
-		println!("nonce: {}", nonce);
-		println!("src_id: {}", src_id);
-		println!("r_id: 0x{}", hex::encode(&resource_id));
-		println!("Proposal: 0x{}", hex);
-
-		let decoded_head = ProposalHeader::decode(&mut &proposal_data[..]).unwrap();
-		assert_eq!(decoded_head, proposal_header);
-	}
-}

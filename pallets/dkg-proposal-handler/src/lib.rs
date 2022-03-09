@@ -1,8 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal, proposal, traits::OnDKGPublicKeyChangeHandler,
-};
+use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://substrate.dev/docs/en/knowledgebase/runtime/frame>
@@ -15,8 +13,7 @@ mod mock;
 mod tests;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
+	ChainId, ChainType, DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction,
 	ProposalHandlerTrait, ProposalKind,
 };
 use frame_support::pallet_prelude::*;
@@ -24,14 +21,11 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::{
-	offchain::{
-		storage::StorageValueRef,
-		storage_lock::{StorageLock, Time},
-	},
-	traits::Zero,
+use sp_runtime::offchain::{
+	storage::StorageValueRef,
+	storage_lock::{StorageLock, Time},
 };
-use sp_std::{convert::TryFrom, vec::Vec};
+use sp_std::vec::Vec;
 
 pub mod weights;
 use weights::WeightInfo;
@@ -43,12 +37,10 @@ mod benchmarking;
 pub mod pallet {
 	use super::*;
 	use dkg_runtime_primitives::{
-		handlers::decode_proposals::decode_proposal, utils::ensure_signed_by_dkg, DKGPayloadKey,
-		Proposal, ProposalKind,
+		utils::ensure_signed_by_dkg, DKGPayloadKey, Proposal, ProposalKind,
 	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
-	use sp_runtime::traits::AtLeast32BitUnsigned;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -57,14 +49,6 @@ pub mod pallet {
 	{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-		/// ChainID for anchor edges
-		type ChainId: Encode
-			+ Decode
-			+ Parameter
-			+ AtLeast32BitUnsigned
-			+ Default
-			+ Copy
-			+ ChainIdTrait;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 		/// Max number of signed proposal submissions per batch;
@@ -85,7 +69,7 @@ pub mod pallet {
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		ChainIdType<T::ChainId>,
+		(ChainType, ChainId),
 		Blake2_128Concat,
 		DKGPayloadKey,
 		Proposal,
@@ -97,7 +81,7 @@ pub mod pallet {
 	pub type SignedProposals<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		ChainIdType<T::ChainId>,
+		(ChainType, ChainId),
 		Blake2_128Concat,
 		DKGPayloadKey,
 		Proposal,
@@ -120,8 +104,10 @@ pub mod pallet {
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
-			/// The Target EVM chain ID.
-			chain_id: ChainIdType<T::ChainId>,
+			/// The Target Chain Type.
+			chain_type: ChainType,
+			/// The Target chain ID.
+			chain_id: ChainId,
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
 			/// The Proposal Data.
@@ -252,9 +238,13 @@ pub mod pallet {
 
 			// We ensure that only certain proposals are valid this way
 			if let Proposal::Unsigned { kind, data } = &prop {
-				match decode_proposal(&prop) {
-					Ok((chain_id, key)) => {
-						UnsignedProposalQueue::<T>::insert(chain_id, key, prop.clone());
+				match decode_proposal_identifier(&prop) {
+					Ok(v) => {
+						UnsignedProposalQueue::<T>::insert(
+							(v.chain_type, v.chain_id),
+							v.key,
+							prop.clone(),
+						);
 						return Ok(().into())
 					},
 					Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
@@ -269,8 +259,8 @@ pub mod pallet {
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
-		if let Ok((chain_id, key)) = decode_proposal(&proposal).map(Into::into) {
-			UnsignedProposalQueue::<T>::insert(chain_id, key, proposal);
+		if let Ok(v) = decode_proposal_identifier(&proposal) {
+			UnsignedProposalQueue::<T>::insert((v.chain_type, v.chain_id), v.key, proposal);
 
 			return Ok(())
 		}
@@ -285,7 +275,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
 		UnsignedProposalQueue::<T>::insert(
-			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
+			(ChainType::Evm, ChainId::from(0)),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
 		);
@@ -297,7 +287,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
-			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
+			(ChainType::Evm, ChainId::from(0)),
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
@@ -305,19 +295,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
-		// Extract chain id and DKG key
-		let (chain_id, payload_key) =
-			decode_proposal(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
+		let id =
+			decode_proposal_identifier(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
-			"submit_signed_proposal: chain_id: {:?}, payload_key: {:?}",
-			chain_id,
-			payload_key,
+			"submit_signed_proposal: chain_type: {:?},  chain_id: {:?}, payload_key: {:?}",
+			id.chain_type,
+			id.chain_id,
+			id.key,
 		);
 
 		ensure!(
-			UnsignedProposalQueue::<T>::contains_key(chain_id.clone(), payload_key),
+			UnsignedProposalQueue::<T>::contains_key((id.chain_type, id.chain_id), id.key),
 			Error::<T>::ProposalDoesNotExists
 		);
 		// Log that proposal exist in the unsigned queue
@@ -325,8 +315,12 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			target: "dkg_proposal_handler",
 			"submit_signed_proposal: proposal exist in the unsigned queue"
 		);
+		let (data, sig) = match prop.signature() {
+			Some(sig) => (prop.data().clone(), sig),
+			None => return Err(Error::<T>::ProposalSignatureInvalid)?,
+		};
 		ensure!(
-			Self::validate_proposal_signature(&prop.data(), &prop.signature()),
+			Self::validate_proposal_signature(&data, &sig),
 			Error::<T>::ProposalSignatureInvalid
 		);
 		// Log that the signature is valid
@@ -335,14 +329,15 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			"submit_signed_proposal: signature is valid"
 		);
 		// Update storage
-		SignedProposals::<T>::insert(chain_id.clone(), payload_key, prop.clone());
-		UnsignedProposalQueue::<T>::remove(chain_id.clone(), payload_key);
+		SignedProposals::<T>::insert((id.chain_type, id.chain_id), id.key, prop);
+		UnsignedProposalQueue::<T>::remove((id.chain_type, id.chain_id), id.key);
 		// Emit event so frontend can react to it.
 		Self::deposit_event(Event::<T>::ProposalSigned {
-			chain_id,
-			key: payload_key,
-			data: prop.data().to_vec(),
-			signature: prop.signature(),
+			chain_id: id.chain_id,
+			chain_type: id.chain_type,
+			key: id.key,
+			data,
+			signature: sig,
 		});
 
 		Ok(())
@@ -352,21 +347,23 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<((ChainIdType<T::ChainId>, DKGPayloadKey), Proposal)> {
+	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
 		return UnsignedProposalQueue::<T>::iter()
-			.map(|entry| ((entry.0, entry.1), entry.2.clone()))
+			.map(|((chain_type, chain_id), key, proposal)| {
+				dkg_runtime_primitives::UnsignedProposal { chain_type, chain_id, key, proposal }
+			})
 			.collect()
 	}
 
 	pub fn is_existing_proposal(prop: &Proposal) -> bool {
-		if let Proposal::Signed { kind, ref data, .. } = prop {
-			match dkg_runtime_primitives::handlers::decode_proposals::decode_proposal(prop) {
-				Ok((chain_id, key)) => return !SignedProposals::<T>::contains_key(chain_id, key),
-				Err(_) => return false,
+		if prop.is_signed() {
+			match decode_proposal_identifier(prop) {
+				Ok(v) => !SignedProposals::<T>::contains_key((v.chain_type, v.chain_id), v.key),
+				Err(_) => false,
 			}
+		} else {
+			false
 		}
-
-		false
 	}
 
 	// *** Offchain worker methods ***
