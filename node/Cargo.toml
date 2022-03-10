@@ -21,6 +21,9 @@ name = "dkg-node"
 [features]
 default = []
 runtime-benchmarks = ["dkg-runtime/runtime-benchmarks"]
+rococo-native = [
+	"polkadot-cli/rococo-native"
+]
 
 [dependencies]
 derive_more = "0.99.2"
