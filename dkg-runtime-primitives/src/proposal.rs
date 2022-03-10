@@ -178,24 +178,29 @@ impl Proposal {
 
 	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
 		match self.kind() {
-			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
-			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce),
-			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
-			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
-			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
-			ProposalKind::WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
+			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce.into()),
+			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce.into()),
+			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce.into()),
+			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce.into()),
+			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce.into()),
+			ProposalKind::WrappingFeeUpdate =>
+				DKGPayloadKey::WrappingFeeUpdateProposal(nonce.into()),
+			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce.into()),
+			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce.into()),
 			ProposalKind::MaxDepositLimitUpdate =>
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce.into()),
 			ProposalKind::MinWithdrawalLimitUpdate =>
-				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce),
-			ProposalKind::MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
-			ProposalKind::MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
-			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce),
-			ProposalKind::SetTreasuryHandler => DKGPayloadKey::SetTreasuryHandlerProposal(nonce),
-			ProposalKind::FeeRecipientUpdate => DKGPayloadKey::FeeRecipientUpdateProposal(nonce),
-			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
+				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce.into()),
+			ProposalKind::MaxExtLimitUpdate =>
+				DKGPayloadKey::MaxExtLimitUpdateProposal(nonce.into()),
+			ProposalKind::MaxFeeLimitUpdate =>
+				DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce.into()),
+			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce.into()),
+			ProposalKind::SetTreasuryHandler =>
+				DKGPayloadKey::SetTreasuryHandlerProposal(nonce.into()),
+			ProposalKind::FeeRecipientUpdate =>
+				DKGPayloadKey::FeeRecipientUpdateProposal(nonce.into()),
+			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce.into()),
 		}
 	}
 }

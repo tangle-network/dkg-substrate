@@ -19,7 +19,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, ChainIdType, TransactionV2};
+use dkg_runtime_primitives::{keccak_256, ChainId, ChainType, ProposalHeader, TransactionV2};
 
 use frame_support::traits::{OnFinalize, OnInitialize};
 
@@ -60,7 +60,7 @@ parameter_types! {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
+	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::Substrate, ChainId::new(5));
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
@@ -140,7 +140,6 @@ where
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
-	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = ();
@@ -149,7 +148,6 @@ impl pallet_dkg_proposal_handler::Config for Test {
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAccountId = DKGAccountId;
-	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;

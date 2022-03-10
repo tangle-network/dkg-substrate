@@ -237,21 +237,17 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			// We ensure that only certain proposals are valid this way
-			if let Proposal::Unsigned { kind, data } = &prop {
+			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
-						UnsignedProposalQueue::<T>::insert(
-							(v.chain_type, v.chain_id),
-							v.key,
-							prop.clone(),
-						);
-						return Ok(().into())
+						UnsignedProposalQueue::<T>::insert((v.chain_type, v.chain_id), v.key, prop);
+						Ok(().into())
 					},
-					Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
+					Err(_) => Err(Error::<T>::ProposalFormatInvalid)?,
 				}
+			} else {
+				Err(Error::<T>::ProposalFormatInvalid)?
 			}
-
-			Err(Error::<T>::ProposalFormatInvalid)?
 		}
 	}
 }
@@ -276,7 +272,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 		UnsignedProposalQueue::<T>::insert(
 			(ChainType::Evm, ChainId::from(0)),
-			DKGPayloadKey::RefreshVote(proposal.nonce),
+			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
 			unsigned_proposal,
 		);
 
@@ -288,7 +284,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
 			(ChainType::Evm, ChainId::from(0)),
-			DKGPayloadKey::RefreshVote(proposal.nonce),
+			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
 		);
 
 		Ok(().into())

@@ -20,11 +20,14 @@ pub struct ResourceIdProposal {
 /// ]
 /// Total Bytes: 32 + 4 + 4 + 32 + (size of method name) = 72 + (size of method name)
 pub fn create(data: &[u8]) -> Result<ResourceIdProposal, ValidationError> {
+	if data.len() < 72 {
+		return Err(ValidationError::InvalidProposalBytesLength)
+	}
 	let header = decode_proposal_header(data)?;
 	let zeroes = header.function_signature().to_bytes();
 	// Check that zeroes is actually zero
 	if u32::from_be_bytes(zeroes) != 0 {
-		return Err(ValidationError::InvalidParameter("Function Sig should be zero".to_string()))?
+		return Err(ValidationError::InvalidParameter("Function Sig should be zero".to_string()))
 	}
 
 	let mut r_id_to_register = [0u8; 32];

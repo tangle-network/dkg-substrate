@@ -12102,9 +12102,9 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f95e63bbcf56d91a5925c84370c009fc6c0771ef67444b963e616c86214a32f6"
+checksum = "8d43bf684ba3d2640d5d4cb8fd0048392ff90934e9eb31a9c302f60309bdfd4b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
