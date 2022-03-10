@@ -370,7 +370,7 @@ build polkadot:
 
 ```bash
 git clone -n https://github.com/paritytech/polkadot.git
-git checkout v0.9.16
+git checkout v0.9.17
 cargo build --release
 cp target/release/polkadot /tmp/polkadot
 ```

@@ -293,6 +293,7 @@ parameter_types! {
 	pub const SlashDeferDuration: u32 = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
 	pub const MaxNominatorRewardedPerValidator: u32 = 256;
+	pub const MaxNominations: u32 = MAX_NOMINATIONS;
 	pub OffchainRepeat: BlockNumber = 5;
 	pub const StakingUnsignedPriority: TransactionPriority = TransactionPriority::max_value() / 2;
 }
@@ -331,8 +332,7 @@ impl pallet_staking::Config for Runtime {
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
-
-	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+	type MaxNominations = MaxNominations;
 }
 
 parameter_types! {
@@ -377,19 +377,18 @@ sp_npos_elections::generate_solution_type!(
 
 pub const MAX_NOMINATIONS: u32 = <NposSolution16 as sp_npos_elections::NposSolution>::LIMIT as u32;
 
-/// The numbers configured here could always be more than the the maximum limits
-/// of staking pallet to ensure election snapshot will not run out of memory.
-/// For now, we set them to smaller values since the staking is bounded and the
-/// weight pipeline takes hours for this single pallet.
-pub struct BenchmarkConfig;
-impl pallet_election_provider_multi_phase::BenchmarkingConfig for BenchmarkConfig {
+/// The numbers configured here could always be more than the the maximum limits of staking pallet
+/// to ensure election snapshot will not run out of memory. For now, we set them to smaller values
+/// since the staking is bounded and the weight pipeline takes hours for this single pallet.
+pub struct ElectionProviderBenchmarkConfig;
+impl pallet_election_provider_multi_phase::BenchmarkingConfig for ElectionProviderBenchmarkConfig {
+	const VOTERS: [u32; 2] = [1000, 2000];
+	const TARGETS: [u32; 2] = [500, 1000];
 	const ACTIVE_VOTERS: [u32; 2] = [500, 800];
 	const DESIRED_TARGETS: [u32; 2] = [200, 400];
-	const MAXIMUM_TARGETS: u32 = 300;
-	const MINER_MAXIMUM_VOTERS: u32 = 1000;
 	const SNAPSHOT_MAXIMUM_VOTERS: u32 = 1000;
-	const TARGETS: [u32; 2] = [500, 1000];
-	const VOTERS: [u32; 2] = [1000, 2000];
+	const MINER_MAXIMUM_VOTERS: u32 = 1000;
+	const MAXIMUM_TARGETS: u32 = 300;
 }
 
 /// Maximum number of iterations for balancing that will be executed in the
@@ -443,38 +442,41 @@ impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallb
 }
 
 impl pallet_election_provider_multi_phase::Config for Runtime {
-	type BenchmarkingConfig = BenchmarkConfig;
-	type Currency = Balances;
-	// nothing to do upon rewards
-	type DataProvider = Staking;
-	type EstimateCallFee = TransactionPayment;
 	type Event = Event;
-	type Fallback = Fallback<Self>;
-	type ForceOrigin = EnsureRoot<AccountId>;
-	type MinerMaxLength = MinerMaxLength;
-	type MinerMaxWeight = MinerMaxWeight;
-	type MinerTxPriority = MultiPhaseUnsignedPriority;
+	type Currency = Balances;
+	type EstimateCallFee = TransactionPayment;
+	type SignedPhase = SignedPhase;
+	type UnsignedPhase = UnsignedPhase;
+	type SolutionImprovementThreshold = SolutionImprovementThreshold;
 	type OffchainRepeat = OffchainRepeat;
-	// burn slashes
-	type RewardHandler = ();
+	type MinerMaxWeight = MinerMaxWeight;
+	type MinerMaxLength = MinerMaxLength;
+	type MinerTxPriority = MultiPhaseUnsignedPriority;
+	type SignedMaxSubmissions = ConstU32<10>;
+	type SignedRewardBase = SignedRewardBase;
 	type SignedDepositBase = SignedDepositBase;
 	type SignedDepositByte = SignedDepositByte;
 	type SignedDepositWeight = ();
-	type SignedMaxSubmissions = SignedMaxSubmissions;
 	type SignedMaxWeight = MinerMaxWeight;
-	type SignedPhase = SignedPhase;
-	type SignedRewardBase = SignedRewardBase;
-	type SlashHandler = ();
+	type SlashHandler = (); // burn slashes
+	type RewardHandler = (); // nothing to do upon rewards
+	type DataProvider = Staking;
 	type Solution = NposSolution16;
-	type SolutionImprovementThreshold = SolutionImprovementThreshold;
+	type Fallback = pallet_election_provider_multi_phase::NoFallback<Self>;
+	type GovernanceFallback =
+		frame_election_provider_support::onchain::OnChainSequentialPhragmen<Self>;
 	type Solver = frame_election_provider_support::SequentialPhragmen<
 		AccountId,
 		pallet_election_provider_multi_phase::SolutionAccuracyOf<Self>,
 		OffchainRandomBalancing,
 	>;
-	type UnsignedPhase = UnsignedPhase;
-	type VoterSnapshotPerBlock = VoterSnapshotPerBlock;
 	type WeightInfo = pallet_election_provider_multi_phase::weights::SubstrateWeight<Self>;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type BenchmarkingConfig = ElectionProviderBenchmarkConfig;
+	// BagsList allows a practically unbounded count of nominators to participate in NPoS elections.
+	// To ensure we respect memory limits when using the BagsList this must be set to a number of
+	// voters we know can fit into a single vec allocation.
+	type VoterSnapshotPerBlock = ConstU32<10_000>;
 }
 
 parameter_types! {

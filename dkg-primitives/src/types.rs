@@ -14,7 +14,7 @@ pub type SignerSetId = u64;
 
 pub use dkg_runtime_primitives::DKGPayloadKey;
 
-/// DKG (distributed key generation) message.
+/// Gossip message struct for all DKG + Webb Protocol messages.
 ///
 /// A message wrapper intended to be passed between the nodes
 #[derive(Debug, Clone, Decode, Encode)]
