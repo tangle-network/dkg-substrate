@@ -559,7 +559,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::KusamaRelayChain, ChainId::new(5));
+	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::KusamaParachain, ChainId::new(5));
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
