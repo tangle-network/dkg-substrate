@@ -1,6 +1,6 @@
 use crate::{
 	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	utils::{fetch_sr25519_public_key}, worker::DKGWorker, Client,
+	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -28,17 +28,12 @@ where
 	let mut next_rounds_send_result = vec![];
 
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
-		if let Some(id) = dkg_worker
-			.key_store
-			.authority_id(&dkg_worker.current_validator_set.authorities)
+		if let Some(id) =
+			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-			rounds_send_result = send_messages(
-				dkg_worker,
-				&mut rounds,
-				id,
-				dkg_worker.get_latest_block_number()
-			);
+			rounds_send_result =
+				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -120,17 +115,7 @@ where
 
 	for result in &results {
 		if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-			if let Some(local_keystore) = dkg_worker.local_keystore.clone() {
-				if let Some(local_key_path) = rounds.get_local_key_path() {
-					let _ = store_localkey(
-						local_key,
-						round_id,
-						local_key_path,
-						dkg_worker.key_store.clone(),
-						local_keystore,
-					);
-				}
-			}
+			let _ = store_localkey(local_key, round_id, rounds.get_local_key_path(), dkg_worker);
 		}
 	}
 
