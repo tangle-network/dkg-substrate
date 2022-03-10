@@ -1,5 +1,4 @@
 use crate::{
-	keystore::DKGKeystore,
 	utils::{fetch_public_key, fetch_sr25519_public_key, set_up_rounds, validate_threshold},
 	worker::DKGWorker,
 	Client,
@@ -26,11 +25,9 @@ use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
-	sync::Arc,
 };
 
 use curv::elliptic::curves::Secp256k1;
-use sc_keystore::LocalKeystore;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,

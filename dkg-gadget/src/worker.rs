@@ -846,63 +846,6 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
-	pub fn store_aggregated_public_keys(
-		&mut self,
-		is_gensis_round: bool,
-		round_id: RoundId,
-		keys: &AggregatedPublicKeys,
-		current_block_number: NumberFor<B>,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		if is_gensis_round {
-			self.dkg_state.listening_for_active_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored genesis public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-		} else {
-			self.dkg_state.listening_for_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
-
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-
-			let _ = self.aggregated_public_keys.remove(&round_id);
-		}
-
-		Ok(())
-	}
-
 	pub fn store_aggregated_misbehaviour_reports(
 		&mut self,
 		reports: &AggregatedMisbehaviourReports,
@@ -931,7 +874,7 @@ where
 
 	/// Generate a random delay to wait before taking an action.
 	/// The delay is generated from a random number between 0 and `max_delay`.
-	fn generate_delayed_submit_at(
+	pub fn generate_delayed_submit_at(
 		&self,
 		start: NumberFor<B>,
 		max_delay: u32,

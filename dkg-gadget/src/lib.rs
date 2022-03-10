@@ -39,6 +39,7 @@ pub mod messages;
 mod metrics;
 mod persistence;
 mod proposal;
+pub mod storage;
 mod types;
 mod utils;
 mod worker;

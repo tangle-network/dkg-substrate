@@ -1,5 +1,7 @@
 // Handles non-dkg messages
-use crate::{types::dkg_topic, worker::DKGWorker, Client};
+use crate::{
+	storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client,
+};
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
@@ -78,7 +80,8 @@ where
 			// to submit the next DKG public key.
 			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
 			if aggregated_public_keys.keys_and_signatures.len() >= threshold {
-				dkg_worker.store_aggregated_public_keys(
+				store_aggregated_public_keys(
+					dkg_worker,
 					is_main_round,
 					round_id,
 					&aggregated_public_keys,
