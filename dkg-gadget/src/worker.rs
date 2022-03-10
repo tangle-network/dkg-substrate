@@ -846,32 +846,6 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
-	pub fn store_aggregated_misbehaviour_reports(
-		&mut self,
-		reports: &AggregatedMisbehaviourReports,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
-		trace!(
-			target: "dkg",
-			"Stored aggregated misbehaviour reports {:?}",
-			reports.encode()
-		);
-
-		let _ = self
-			.aggregated_misbehaviour_reports
-			.remove(&(reports.round_id, reports.offender.clone()));
-
-		Ok(())
-	}
-
 	/// Generate a random delay to wait before taking an action.
 	/// The delay is generated from a random number between 0 and `max_delay`.
 	pub fn generate_delayed_submit_at(
