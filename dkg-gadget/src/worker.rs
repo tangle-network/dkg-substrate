@@ -846,9 +846,10 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
+	/// stores genesis or next aggregated public keys offchain
 	pub fn store_aggregated_public_keys(
 		&mut self,
-		is_gensis_round: bool,
+		is_genesis_round: bool,
 		round_id: RoundId,
 		keys: &AggregatedPublicKeys,
 		current_block_number: NumberFor<B>,
@@ -860,47 +861,60 @@ where
 			})
 		}
 
-		let mut offchain = maybe_offchain.unwrap();
-		if is_gensis_round {
+		let offchain = maybe_offchain.unwrap();
+		if is_genesis_round {
 			self.dkg_state.listening_for_active_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored genesis public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
+			Self::perform_storing_of_aggregated_public_keys(
+				self,
+				offchain,
+				keys,
+				current_block_number,
+				AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
+				SUBMIT_GENESIS_KEYS_AT,
+				"genesis",
 			);
 		} else {
 			self.dkg_state.listening_for_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
-
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
+			Self::perform_storing_of_aggregated_public_keys(
+				self,
+				offchain,
+				keys,
+				current_block_number,
+				AGGREGATED_PUBLIC_KEYS,
+				SUBMIT_KEYS_AT,
+				"aggregated",
 			);
-
 			let _ = self.aggregated_public_keys.remove(&round_id);
 		}
 
 		Ok(())
+	}
+
+	/// stores the aggregated public keys
+	fn perform_storing_of_aggregated_public_keys(
+		&mut self,
+		mut offchain: <BE as Backend<B>>::OffchainStorage,
+		keys: &AggregatedPublicKeys,
+		current_block_number: NumberFor<B>,
+		aggregated_keys: &[u8],
+		submit_keys: &[u8],
+		log_indicator: &str,
+	) {
+		offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
+		let submit_at =
+			self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
+		if let Some(submit_at) = submit_at {
+			offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
+		}
+
+		trace!(
+			target: "dkg",
+			"Stored {:?} public keys {:?}, delay: {:?}, public keys: {:?}",
+			log_indicator,
+			keys.encode(),
+			submit_at,
+			self.key_store.sr25519_public_keys()
+		);
 	}
 
 	pub fn store_aggregated_misbehaviour_reports(
