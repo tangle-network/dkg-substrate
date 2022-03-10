@@ -1,6 +1,6 @@
 use crate::{
 	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
+	utils::{fetch_sr25519_public_key}, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -30,11 +30,15 @@ where
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
 		if let Some(id) = dkg_worker
 			.key_store
-			.authority_id(dkg_worker.current_validator_set.authorities.as_slice())
+			.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
+			rounds_send_result = send_messages(
+				dkg_worker,
+				&mut rounds,
+				id,
+				dkg_worker.get_latest_block_number()
+			);
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -133,34 +137,30 @@ where
 	for message in rounds.get_outgoing_messages() {
 		let dkg_message =
 			DKGMessage { id: authority_id.clone(), payload: message, round_id: rounds.get_id() };
-		let encoded_dkg_message = dkg_message.encode();
 
-		let sr25519_public = fetch_sr25519_public_key(dkg_worker);
-
-		sign_and_send_message(dkg_worker, sr25519_public, dkg_message, encoded_dkg_message);
+		sign_and_send_message(dkg_worker, &dkg_message);
 	}
 	results
 }
 
 fn sign_and_send_message<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	sr25519_public: sp_core::sr25519::Public,
-	dkg_message: DKGMessage<AuthorityId>,
-	encoded_dkg_message: Vec<u8>,
+	dkg_message: &DKGMessage<AuthorityId>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
+	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 		Ok(sig) => {
 			let signed_dkg_message =
-				SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
+				SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
 			let encoded_signed_dkg_message = signed_dkg_message.encode();
 			dkg_worker.gossip_engine.lock().gossip_message(
 				dkg_topic::<B>(),
-				encoded_signed_dkg_message.clone(),
+				encoded_signed_dkg_message,
 				true,
 			);
 		},
@@ -170,5 +170,5 @@ fn sign_and_send_message<B, C, BE>(
 			e
 		),
 	};
-	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
+	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
 }
