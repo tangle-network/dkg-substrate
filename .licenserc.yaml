@@ -31,7 +31,7 @@ header:
     - '**/*.lock'
     - '**/*.toml'
     - '**/*.yaml'
-    - '.husky/*'
+    - 'dkg-test-suite/.husky/pre-commit'
     - 'dkg-test-suite/protocol-solidity-fixtures/*'
     - '.nvmrc'
     - 'jest.config.js'
