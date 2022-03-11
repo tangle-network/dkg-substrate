@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Debug;
-
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen;
 //! DKG gadget specific errors
 //!
 //! Used for DKG gadget interal error handling only
+
+use std::fmt::Debug;
+
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen;
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum Error {
 	#[error("Keystore error: {0}")]
