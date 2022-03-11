@@ -1,18 +1,19 @@
-// Copyright (C) 2020-2021 Parity Technologies (UK) Ltd.
-// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+// This file is part of Webb.
 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// Copyright (C) 2021 Webb Technologies Inc.
+// SPDX-License-Identifier: Apache-2.0
 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #![allow(clippy::collapsible_match)]
 
@@ -36,10 +37,7 @@ use sc_client_api::{
 use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
-use sp_api::{
-	offchain::{OffchainStorage, STORAGE_PREFIX},
-	BlockId,
-};
+use sp_api::{offchain::STORAGE_PREFIX, BlockId};
 use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 	AccountId32,
@@ -56,6 +54,10 @@ use crate::messages::{
 	public_key_gossip::handle_public_key_broadcast,
 };
 
+use crate::storage::{
+	clear::listen_and_clear_offchain_storage, proposals::save_signed_proposals_in_storage,
+};
+
 use dkg_primitives::{
 	types::{DKGError, RoundId},
 	ChainId, DKGReport, Proposal,
@@ -63,13 +65,8 @@ use dkg_primitives::{
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	offchain::storage_keys::{
-		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
-		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
-	},
 	utils::{sr25519, to_slice_32},
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, OffchainSignedProposals,
-	GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -144,7 +141,7 @@ where
 	/// keep rustc happy
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
-	refresh_in_progress: bool,
+	pub refresh_in_progress: bool,
 	/// Msg cache for startup if authorities aren't set
 	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
@@ -522,7 +519,7 @@ where
 		}
 
 		self.latest_header = Some(header.clone());
-		self.listen_and_clear_offchain_storage(header);
+		listen_and_clear_offchain_storage(self, header);
 		try_resume_dkg(self, header);
 
 		self.enact_new_authorities(header);
@@ -772,44 +769,6 @@ where
 		}
 	}
 
-	/// Offchain features
-	fn listen_and_clear_offchain_storage(&mut self, header: &B::Header) {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		let next_dkg_public_key = self.client.runtime_api().next_dkg_pub_key(&at);
-		let dkg_public_key = self.client.runtime_api().dkg_pub_key(&at);
-		let public_key_sig = self.client.runtime_api().next_pub_key_sig(&at);
-
-		let offchain = self.backend.offchain_storage();
-
-		if let Some(mut offchain) = offchain {
-			if let Ok(Some(_key)) = next_dkg_public_key {
-				if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS).is_some() {
-					debug!(target: "dkg", "cleaned offchain storage, next_public_key: {:?}", _key);
-					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS);
-
-					offchain.remove(STORAGE_PREFIX, SUBMIT_KEYS_AT);
-				}
-			}
-
-			if let Ok(Some(_key)) = dkg_public_key {
-				if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS).is_some() {
-					debug!(target: "dkg", "cleaned offchain storage, genesis_pub_key: {:?}", _key);
-					offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
-
-					offchain.remove(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT);
-				}
-			}
-
-			if let Ok(Some(_sig)) = public_key_sig {
-				self.refresh_in_progress = false;
-				if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
-					debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _sig);
-					offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);
-				}
-			}
-		}
-	}
-
 	pub fn authenticate_msg_origin(
 		&self,
 		is_main_round: bool,
@@ -846,92 +805,9 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
-	pub fn store_aggregated_public_keys(
-		&mut self,
-		is_gensis_round: bool,
-		round_id: RoundId,
-		keys: &AggregatedPublicKeys,
-		current_block_number: NumberFor<B>,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		if is_gensis_round {
-			self.dkg_state.listening_for_active_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored genesis public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-		} else {
-			self.dkg_state.listening_for_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
-
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-
-			let _ = self.aggregated_public_keys.remove(&round_id);
-		}
-
-		Ok(())
-	}
-
-	pub fn store_aggregated_misbehaviour_reports(
-		&mut self,
-		reports: &AggregatedMisbehaviourReports,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
-		trace!(
-			target: "dkg",
-			"Stored aggregated misbehaviour reports {:?}",
-			reports.encode()
-		);
-
-		let _ = self
-			.aggregated_misbehaviour_reports
-			.remove(&(reports.round_id, reports.offender.clone()));
-
-		Ok(())
-	}
-
 	/// Generate a random delay to wait before taking an action.
 	/// The delay is generated from a random number between 0 and `max_delay`.
-	fn generate_delayed_submit_at(
+	pub fn generate_delayed_submit_at(
 		&self,
 		start: NumberFor<B>,
 		max_delay: u32,
@@ -961,7 +837,7 @@ where
 			self.rounds.as_mut().unwrap().get_finished_rounds().len()
 		);
 
-		self.process_signed_proposals(proposals);
+		save_signed_proposals_in_storage(self, proposals);
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
@@ -1078,63 +954,6 @@ where
 		}
 		// Send messages to all peers
 		send_outgoing_dkg_messages(self);
-	}
-
-	fn process_signed_proposals(&mut self, signed_proposals: Vec<Proposal>) {
-		if signed_proposals.is_empty() {
-			return
-		}
-
-		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
-
-		let public = fetch_public_key(self);
-
-		if find_index::<AuthorityId>(&self.current_validator_set.authorities[..], &public).is_none()
-		{
-			return
-		}
-
-		// If the header is none, it means no block has been imported yet, so we can exit
-		if self.latest_header.is_none() {
-			return
-		}
-
-		let current_block_number = {
-			let header = self.latest_header.as_ref().unwrap();
-			header.number().clone()
-		};
-
-		if let Some(mut offchain) = self.backend.offchain_storage() {
-			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
-
-			let mut prop_wrapper = match old_val.clone() {
-				Some(ser_props) =>
-					OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
-				None => Default::default(),
-			};
-
-			// The signed proposals are submitted in batches, since we want to try and limit
-			// duplicate submissions as much as we can, we add a random submission delay to each
-			// batch stored in offchain storage
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
-
-			if let Some(submit_at) = submit_at {
-				prop_wrapper.proposals.push((signed_proposals, submit_at))
-			};
-
-			for _i in 1..STORAGE_SET_RETRY_NUM {
-				if offchain.compare_and_set(
-					STORAGE_PREFIX,
-					OFFCHAIN_SIGNED_PROPOSALS,
-					old_val.as_deref(),
-					&prop_wrapper.encode(),
-				) {
-					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
-					break
-				}
-			}
-		}
 	}
 
 	// *** Main run loop ***
