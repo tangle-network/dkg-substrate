@@ -14,10 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{
-	worker::{DKGWorker},
-	Client,
-};
+use crate::{worker::DKGWorker, Client};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
 	offchain::storage_keys::{
