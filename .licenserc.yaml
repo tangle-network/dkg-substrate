@@ -1,0 +1,20 @@
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: Webb Technologies Inc.
+
+  paths-ignore:
+    - 'licenses'
+    - '**/*.md'
+    - 'LICENSE'
+    - 'NOTICE'
+    - '.gitignore'
+    - '.dockerignore'
+    - '.editorconfig'
+    - '.gitmodules'
+    - '**/*.yml'
+    - '**/*.json'
+    - '**/*.lock'
+    - '**/*.toml'
+    
+  comment: on-failure
