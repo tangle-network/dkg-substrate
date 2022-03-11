@@ -93,7 +93,7 @@ where
 			// to submit the next DKG public key.
 			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
 			if reports.reporters.len() >= threshold {
-				dkg_worker.store_aggregated_misbehaviour_reports(&reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 			}
 		},
 		_ => {},
