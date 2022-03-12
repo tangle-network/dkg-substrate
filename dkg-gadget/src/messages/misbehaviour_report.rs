@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{types::dkg_topic, worker::DKGWorker, Client};
+use crate::{
+	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, types::dkg_topic,
+	worker::DKGWorker, Client,
+};
 use codec::Encode;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,

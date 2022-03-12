@@ -13,7 +13,9 @@
 // limitations under the License.
 //
 // Handles non-dkg messages
-use crate::{types::dkg_topic, worker::DKGWorker, Client};
+use crate::{
+	storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client,
+};
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,

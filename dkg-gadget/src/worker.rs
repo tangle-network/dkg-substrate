@@ -34,7 +34,7 @@ use sc_client_api::{
 use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
-use sp_api::{offchain::STORAGE_PREFIX, BlockId};
+use sp_api::BlockId;
 use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 	AccountId32,

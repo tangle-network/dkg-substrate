@@ -21,7 +21,7 @@ use dkg_runtime_primitives::{
 		AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, OFFCHAIN_PUBLIC_KEY_SIG,
 		SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 	},
-	DKGApi, Proposal,
+	DKGApi,
 };
 use log::debug;
 use sc_client_api::Backend;
