@@ -26,10 +26,10 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, CollatorSelection,
-	ExtBuilder,
+	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
+	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
 };
-use dkg_runtime_primitives::{Proposal, ProposalHeader, ProposalKind};
+use dkg_runtime_primitives::{DKGPayloadKey, Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
 
 use crate::{self as pallet_dkg_proposals};
@@ -167,14 +167,30 @@ fn add_remove_relayer() {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
 		assert_eq!(DKGProposals::proposer_count(), 0);
 
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_A),
+			mock_ecdsa_key(PROPOSER_A)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_B),
+			mock_ecdsa_key(PROPOSER_B)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_C),
+			mock_ecdsa_key(PROPOSER_C)
+		));
 		assert_eq!(DKGProposals::proposer_count(), 3);
 
 		// Already exists
 		assert_noop!(
-			DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)),
+			DKGProposals::add_proposer(
+				Origin::root(),
+				mock_pub_key(PROPOSER_A),
+				mock_ecdsa_key(PROPOSER_A)
+			),
 			Error::<Test>::ProposerAlreadyExists
 		);
 
@@ -389,8 +405,6 @@ fn create_unsucessful_proposal() {
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
-		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
-
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id.clone(),
@@ -467,8 +481,6 @@ fn execute_after_threshold_change() {
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
-		assert_eq!(Balances::free_balance(DKGProposals::account_id()), ENDOWED_BALANCE);
-
 		assert_events(vec![
 			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: src_id.clone(),
@@ -590,7 +602,7 @@ fn should_get_initial_proposers_from_dkg() {
 		// Initial proposer set is invulnerables even when another collator exists
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		// Advance a session
-		roll_to(10);
+		roll_to(20);
 		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);
 	})
@@ -607,7 +619,7 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		// Proposer set remains the same size
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -624,7 +636,7 @@ fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -680,7 +692,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
-		assert_has_event(Event::DKGProposals(crate::Event::ProposersReset {
+		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -700,4 +712,93 @@ fn only_current_authorities_should_make_successful_proposals() {
 			crate::Error::<Test>::MustBeProposer
 		);
 	})
+}
+
+#[test]
+fn session_change_should_create_proposer_set_update_proposal() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		roll_to(40);
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::Null(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(5)
+			)
+			.is_some(),
+			true
+		);
+
+		roll_to(41);
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::Null(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(6)
+			)
+			.is_some(),
+			false
+		);
+
+		roll_to(45);
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::Null(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(5)
+			)
+			.is_some(),
+			true
+		);
+
+		roll_to(80);
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(
+				ChainIdType::Null(0),
+				DKGPayloadKey::ProposerSetUpdateProposal(9)
+			)
+			.is_some(),
+			true
+		);
+	})
+}
+
+#[test]
+fn proposers_tree_height_should_compute_correctly() {
+	manually_set_proposer_count(18).execute_with(|| {
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 5);
+	});
+	manually_set_proposer_count(16).execute_with(|| {
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 4);
+	});
+	manually_set_proposer_count(1).execute_with(|| {
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
+	});
+	manually_set_proposer_count(2).execute_with(|| {
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
+	});
+	manually_set_proposer_count(100).execute_with(|| {
+		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 7);
+	});
+}
+
+#[test]
+fn proposers_iter_keys_should_only_contain_active_proposers() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
+		let prop_keys: Vec<_> = Proposers::<Test>::iter_keys().collect();
+		assert_eq!(prop_keys.len(), 3);
+	});
+}
+
+// TODO: Test this better...right now just printing the root
+#[test]
+fn should_output_valid_root() {
+	let src_id = ChainIdType::EVM(1u32);
+	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+
+	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
+		println!("{:?}", DKGProposals::get_proposer_set_tree_root());
+	});
 }

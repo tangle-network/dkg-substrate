@@ -157,6 +157,7 @@ impl<C: ChainIdTrait> From<ProposalHeader<C>> for (ResourceId, ChainIdType<C>, P
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
+	ProposerSetUpdateProposal(ProposalNonce),
 	AnchorCreateProposal(ProposalNonce),
 	AnchorUpdateProposal(ProposalNonce),
 	TokenAddProposal(ProposalNonce),
@@ -178,6 +179,7 @@ impl PartialEq for DKGPayloadKey {
 		match (self, other) {
 			(Self::EVMProposal(l0), Self::EVMProposal(r0)) => l0 == r0,
 			(Self::RefreshVote(l0), Self::RefreshVote(r0)) => l0 == r0,
+			(Self::ProposerSetUpdateProposal(l0), Self::ProposerSetUpdateProposal(r0)) => l0 == r0,
 			(Self::AnchorCreateProposal(l0), Self::AnchorCreateProposal(r0)) => l0 == r0,
 			(Self::AnchorUpdateProposal(l0), Self::AnchorUpdateProposal(r0)) => l0 == r0,
 			(Self::TokenAddProposal(l0), Self::TokenAddProposal(r0)) => l0 == r0,
@@ -222,6 +224,7 @@ pub enum Proposal {
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
 pub enum ProposalKind {
 	Refresh,
+	ProposerSetUpdate,
 	EVM,
 	AnchorCreate,
 	AnchorUpdate,
@@ -279,12 +282,20 @@ impl Proposal {
 			ProposalKind::SetTreasuryHandler => DKGPayloadKey::SetTreasuryHandlerProposal(nonce),
 			ProposalKind::FeeRecipientUpdate => DKGPayloadKey::FeeRecipientUpdateProposal(nonce),
 			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
+			ProposalKind::ProposerSetUpdate => DKGPayloadKey::ProposerSetUpdateProposal(nonce),
 		}
 	}
 }
 
 pub trait ProposalHandlerTrait {
 	fn handle_unsigned_proposal(
+		_proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
+	}
+
+	fn handle_unsigned_proposer_set_update_proposal(
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult {

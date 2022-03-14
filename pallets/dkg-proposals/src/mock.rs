@@ -24,7 +24,7 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::{sr25519::Signature, H256};
+use sp_core::{ecdsa, sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
 	testing::{Header, TestXt},
@@ -166,8 +166,11 @@ impl pallet_dkg_metadata::Config for Test {
 	type ProposalHandler = ();
 }
 
+pub const MILLISECS_PER_BLOCK: u64 = 10000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
 parameter_types! {
-	pub const MinimumPeriod: u64 = 1;
+	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 	pub const TimeToRestart: u64 = 3;
 }
@@ -236,10 +239,12 @@ impl pallet_dkg_proposal_handler::Config for Test {
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
@@ -254,6 +259,10 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 	sr25519::Public::from_raw([id; 32])
 }
 
+pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
+	DKGEcdsaToEthereum::convert(ecdsa::Public::from_raw([id; 33]).into())
+}
+
 pub(crate) fn roll_to(n: u64) {
 	while System::block_number() < n {
 		Balances::on_finalize(System::block_number());
@@ -265,12 +274,10 @@ pub(crate) fn roll_to(n: u64) {
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
 		Balances::on_initialize(System::block_number());
-		CollatorSelection::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
+		CollatorSelection::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
-
-	Session::rotate_session();
 }
 
 pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
@@ -301,7 +308,6 @@ impl ExtBuilder {
 	}
 
 	pub fn with_genesis_collators() -> sp_io::TestExternalities {
-		let dkg_id = PalletId(*b"dw/dkgac").into_account();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		let candidates = vec![
 			(mock_pub_key(PROPOSER_A), mock_dkg_id(PROPOSER_A), 1000),
@@ -311,11 +317,11 @@ impl ExtBuilder {
 		];
 		pallet_balances::GenesisConfig::<Test> {
 			balances: vec![
-				(dkg_id, ENDOWED_BALANCE),
-				(mock_pub_key(PROPOSER_A), ENDOWED_BALANCE),
-				(mock_pub_key(PROPOSER_B), ENDOWED_BALANCE),
-				(mock_pub_key(PROPOSER_C), ENDOWED_BALANCE),
-				(mock_pub_key(PROPOSER_D), ENDOWED_BALANCE),
+				(mock_pub_key(0), ENDOWED_BALANCE),
+				(mock_pub_key(1), ENDOWED_BALANCE),
+				(mock_pub_key(2), ENDOWED_BALANCE),
+				(mock_pub_key(3), ENDOWED_BALANCE),
+				(mock_pub_key(4), ENDOWED_BALANCE),
 			],
 		}
 		.assimilate_storage(&mut t)
@@ -374,14 +380,34 @@ pub fn new_test_ext_initialized(
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
 		// Add proposers
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C)));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_A),
+			mock_ecdsa_key(PROPOSER_A)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_B),
+			mock_ecdsa_key(PROPOSER_B)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_C),
+			mock_ecdsa_key(PROPOSER_C)
+		));
 		// Whitelist chain
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
 		// Set and check resource ID mapped to some junk data
 		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, resource));
 		assert_eq!(DKGProposals::resource_exists(r_id), true);
+	});
+	t
+}
+
+pub fn manually_set_proposer_count(count: u32) -> sp_io::TestExternalities {
+	let mut t = new_test_ext();
+	t.execute_with(|| {
+		ProposerCount::<Test>::put(count);
 	});
 	t
 }

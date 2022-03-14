@@ -289,6 +289,20 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Err(Error::<T>::ProposalFormatInvalid)?
 	}
 
+	fn handle_unsigned_proposer_set_update_proposal(
+		proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> DispatchResult {
+		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
+		if let Ok((chain_id, key)) = decode_proposal(&proposal).map(Into::into) {
+			UnsignedProposalQueue::<T>::insert(chain_id, key, proposal);
+
+			return Ok(())
+		}
+
+		Err(Error::<T>::ProposalFormatInvalid)?
+	}
+
 	fn handle_unsigned_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {

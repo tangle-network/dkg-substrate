@@ -17,7 +17,6 @@
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
 pub mod handlers;
-pub mod mmr;
 pub mod offchain;
 pub mod proposal;
 pub mod traits;
@@ -50,9 +49,6 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	keccak.finalize(&mut output);
 	output
 }
-
-/// The type used to represent an MMR root hash.
-pub type MmrRootHash = H256;
 
 pub type ChainId = u32;
 
@@ -160,9 +156,6 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
-	/// MMR root hash.
-	#[codec(index = 3)]
-	MmrRoot(MmrRootHash),
 	/// The DKG keys have changed
 	#[codec(index = 4)]
 	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
@@ -170,6 +163,7 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 
 #[derive(Encode, Decode, PartialEq, Eq, Clone, RuntimeDebug, scale_info::TypeInfo)]
 pub enum ChainIdType<ChainId> {
+	Null(ChainId),
 	// EVM(chain_identifier)
 	EVM(ChainId),
 	// Substrate(chain_identifier)
@@ -187,6 +181,7 @@ pub enum ChainIdType<ChainId> {
 impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 	pub fn inner_id(&self) -> ChainId {
 		match self {
+			ChainIdType::Null(id) => id.clone(),
 			ChainIdType::EVM(id) => id.clone(),
 			ChainIdType::Substrate(id) => id.clone(),
 			ChainIdType::RelayChain(_, id) => id.clone(),
@@ -198,6 +193,7 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 
 	pub fn to_type(&self) -> u16 {
 		match self {
+			ChainIdType::Null(_) => 0,
 			ChainIdType::EVM(_) => 1,
 			ChainIdType::Substrate(_) |
 			ChainIdType::RelayChain(_, _) |
@@ -211,6 +207,7 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 		let polkadot_str = create_runtime_str!("polkadot");
 		let kusama_str = create_runtime_str!("kusama");
 		match self {
+			ChainIdType::Null(_) => [0, 0],
 			ChainIdType::EVM(_) => [1, 0],
 			ChainIdType::Substrate(_) => [2, 0],
 			ChainIdType::RelayChain(relay, _) =>
@@ -256,6 +253,7 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 
 	pub fn get_full_repr(chain_type: [u8; 2], chain_id: ChainId) -> Self {
 		match chain_type {
+			[0, 0] => ChainIdType::Null(ChainId::from(chain_id)),
 			[1, 0] => ChainIdType::EVM(ChainId::from(chain_id)),
 			[2, 0] => ChainIdType::Substrate(ChainId::from(chain_id)),
 			[2, 1] =>
@@ -263,7 +261,7 @@ impl<ChainId: ChainIdTrait> ChainIdType<ChainId> {
 			[2, 2] =>
 				ChainIdType::RelayChain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
 			[2, 128] =>
-				ChainIdType::RelayChain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
+				ChainIdType::Parachain(create_runtime_str!("polkadot"), ChainId::from(chain_id)),
 			[2, 129] =>
 				ChainIdType::Parachain(create_runtime_str!("kusama"), ChainId::from(chain_id)),
 			[3, 0] => ChainIdType::CosmosSDK(ChainId::from(chain_id)),

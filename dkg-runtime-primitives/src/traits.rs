@@ -15,17 +15,21 @@
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use sp_std::vec::Vec;
 
-pub trait OnAuthoritySetChangeHandler<AuthoritySetId, AuthorityId> {
+pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 	fn on_authority_set_changed(
+		authority_accounts: Vec<AccountId>,
 		authority_set_id: AuthoritySetId,
-		authorities: Vec<AuthorityId>,
+		authority_ids: Vec<AuthorityId>,
 	) -> ();
 }
 
-impl<AuthoritySetId, AuthorityId> OnAuthoritySetChangeHandler<AuthoritySetId, AuthorityId> for () {
+impl<AccountId, AuthoritySetId, AuthorityId>
+	OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for ()
+{
 	fn on_authority_set_changed(
+		_authority_accounts: Vec<AccountId>,
 		_authority_set_id: AuthoritySetId,
-		_authorities: Vec<AuthorityId>,
+		_authority_ids: Vec<AuthorityId>,
 	) -> () {
 	}
 }
