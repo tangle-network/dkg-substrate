@@ -689,7 +689,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Change the current DKG authority set by rotating in the `new_authority_ids` set.
-	/// 
+	///
 	/// This function is meant to be called on a new session when the next authorities
 	/// become the current or `new` authorities. We track the accounts for these
 	/// authorities as well.
@@ -711,7 +711,7 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(
 			new_authorities_accounts.clone(),
 			next_id,
-			new_authority_ids.clone()
+			new_authority_ids.clone(),
 		);
 
 		AuthoritySetId::<T>::put(next_id);
@@ -721,7 +721,7 @@ impl<T: Config> Pallet<T> {
 			ConsensusLog::AuthoritiesChange {
 				next_authorities: AuthoritySet {
 					authorities: new_authority_ids.clone(),
-					id: next_id
+					id: next_id,
 				},
 				next_queued_authorities: AuthoritySet {
 					authorities: next_authority_ids.clone(),
@@ -755,11 +755,7 @@ impl<T: Config> Pallet<T> {
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(
-			authority_account_ids.to_vec(),
-			0,
-			authorities.to_vec()
-		);
+		>>::on_authority_set_changed(authority_account_ids.to_vec(), 0, authorities.to_vec());
 	}
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {

@@ -9,7 +9,9 @@ pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 	) -> ();
 }
 
-impl<AccountId, AuthoritySetId, AuthorityId> OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for () {
+impl<AccountId, AuthoritySetId, AuthorityId>
+	OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for ()
+{
 	fn on_authority_set_changed(
 		_authority_accounts: Vec<AccountId>,
 		_authority_set_id: AuthoritySetId,
