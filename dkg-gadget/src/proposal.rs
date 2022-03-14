@@ -55,6 +55,8 @@ where
 
 			return None
 		},
+		DKGPayloadKey::ProposerSetUpdateProposal(_) =>
+			make_signed_proposal(ProposalKind::ProposerSetUpdate, finished_round),
 		DKGPayloadKey::EVMProposal(_) => make_signed_proposal(ProposalKind::EVM, finished_round),
 		DKGPayloadKey::AnchorCreateProposal(_) =>
 			make_signed_proposal(ProposalKind::AnchorCreate, finished_round),

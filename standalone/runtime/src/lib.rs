@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -545,10 +546,12 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;

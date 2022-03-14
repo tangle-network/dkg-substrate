@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 pub mod xcm_config;
 use codec::Encode;
 use dkg_runtime_primitives::{ChainId, ChainIdType, DKGPayloadKey, Proposal};
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -452,10 +453,12 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;

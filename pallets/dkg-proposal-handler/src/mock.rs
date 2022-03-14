@@ -2,6 +2,7 @@ use crate as pallet_dkg_proposal_handler;
 use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519, sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
@@ -49,8 +50,19 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
+
+parameter_types! {
+	pub const MaxAuthorities: u32 = 100_000;
+}
+
+impl pallet_aura::Config for Test {
+	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
+	type DisabledValidators = ();
+	type MaxAuthorities = MaxAuthorities;
+}
 
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
@@ -146,16 +158,31 @@ impl pallet_dkg_proposal_handler::Config for Test {
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
 	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type WeightInfo = ();
 }
 
+pub const MILLISECS_PER_BLOCK: u64 = 10000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+parameter_types! {
+	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
+}
+
+impl pallet_timestamp::Config for Test {
+	type MinimumPeriod = MinimumPeriod;
+	type Moment = u64;
+	type OnTimestampSet = Aura;
+	type WeightInfo = ();
+}
 pub struct MockSessionManager;
 
 impl pallet_session::SessionManager<AccountId> for MockSessionManager {
