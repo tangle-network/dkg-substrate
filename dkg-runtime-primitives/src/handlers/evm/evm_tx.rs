@@ -5,7 +5,7 @@ use ethereum::{
 };
 
 pub struct EvmTxProposal {
-	pub chain_id: webb_proposals::ChainId,
+	pub chain_id: u32,
 	pub nonce: ProposalNonce,
 	pub tx: TransactionV2,
 }
@@ -33,7 +33,7 @@ pub fn create(data: &[u8]) -> Result<EvmTxProposal, ValidationError> {
 
 fn decode_evm_transaction(
 	eth_transaction: &TransactionV2,
-) -> Result<(webb_proposals::ChainId, ProposalNonce), ValidationError> {
+) -> Result<(u32, ProposalNonce), ValidationError> {
 	let (chain_id, nonce) = match eth_transaction {
 		TransactionV2::Legacy(tx) => {
 			let chain_id: u32 = 0;

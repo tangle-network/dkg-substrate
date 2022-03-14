@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{ChainId, ChainType, DKGPayloadKey, Proposal, UnsignedProposal};
+use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -526,7 +526,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::Substrate, ChainId::new(5));
+	pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(50);

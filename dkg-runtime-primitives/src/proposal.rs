@@ -6,12 +6,9 @@ use sp_std::vec::Vec;
 
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
-pub type ChainId = webb_proposals::ChainId;
-pub type ChainType = webb_proposals::ChainType;
-pub type ResourceId = webb_proposals::ResourceId;
-pub type ProposalNonce = webb_proposals::Nonce;
-pub type ProposalHeader = webb_proposals::ProposalHeader;
-pub type FunctionSignature = webb_proposals::FunctionSignature;
+pub use webb_proposals::{
+	FunctionSignature, Nonce as ProposalNonce, ProposalHeader, ResourceId, TypedChainId,
+};
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
 pub struct RefreshProposal {

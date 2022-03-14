@@ -19,7 +19,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, ChainId, ChainType, ProposalHeader, TransactionV2};
+use dkg_runtime_primitives::{keccak_256, ProposalHeader, TransactionV2, TypedChainId};
 
 use frame_support::traits::{OnFinalize, OnInitialize};
 
@@ -60,7 +60,7 @@ parameter_types! {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::Substrate, ChainId::new(5));
+	pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }

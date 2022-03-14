@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
-	ChainId, ChainType, DKGPayloadKey, Proposal, ProposalNonce, UnsignedProposal,
+	DKGPayloadKey, Proposal, ProposalNonce, TypedChainId, UnsignedProposal,
 };
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -559,7 +559,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: (ChainType, ChainId) = (ChainType::KusamaParachain, ChainId::new(5));
+	pub const ChainIdentifier: TypedChainId = TypedChainId::KusamaParachain(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);

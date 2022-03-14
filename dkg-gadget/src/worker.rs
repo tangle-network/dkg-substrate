@@ -67,8 +67,8 @@ use dkg_runtime_primitives::{
 		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 	},
 	utils::{sr25519, to_slice_32},
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainId, ChainType,
-	OffchainSignedProposals, RefreshProposalSigned, GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, OffchainSignedProposals,
+	RefreshProposalSigned, TypedChainId, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -1089,10 +1089,9 @@ where
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key =
-			<(ChainType, ChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let decoded_key = <(TypedChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
-			Ok((_, _, key)) => key,
+			Ok((_, key)) => key,
 			Err(e) => {
 				error!(target: "dkg", "Failed to decode DKG payload key: {:?}", e);
 				return None
@@ -1172,12 +1171,7 @@ where
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
 			for unsigned_proposal in &unsigned_proposals {
-				let key = (
-					unsigned_proposal.chain_type,
-					unsigned_proposal.chain_id,
-					unsigned_proposal.key,
-				)
-					.encode();
+				let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key).encode();
 				if self.dkg_state.created_offlinestage_at.contains_key(&key) {
 					continue
 				}
@@ -1240,9 +1234,7 @@ where
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		for unsigned_proposal in unsigned_proposals {
-			let key =
-				(unsigned_proposal.chain_type, unsigned_proposal.chain_id, unsigned_proposal.key)
-					.encode();
+			let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key).encode();
 			if !rounds.is_ready_to_vote(key.clone()) {
 				continue
 			}

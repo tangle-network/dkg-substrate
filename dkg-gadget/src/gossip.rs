@@ -27,7 +27,7 @@ use wasm_timer::Instant;
 
 use crate::types::dkg_topic;
 use dkg_primitives::types::{DKGMessage, DKGPayloadKey};
-use dkg_runtime_primitives::{crypto::Public, ChainId, MmrRootHash};
+use dkg_runtime_primitives::crypto::Public;
 
 // Limit DKG gossip by keeping only a bound number of voting rounds alive.
 const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;

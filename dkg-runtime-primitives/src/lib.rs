@@ -155,8 +155,7 @@ type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::Accoun
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug)]
 pub struct UnsignedProposal {
-	pub chain_id: webb_proposals::ChainId,
-	pub chain_type: webb_proposals::ChainType,
+	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
 	pub proposal: Proposal,
 }

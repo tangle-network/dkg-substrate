@@ -1,17 +1,11 @@
 import 'jest-extended';
-import {
-	encodeFunctionSignature,
-	registerResourceId,
-	waitForEvent,
-	sleep,
-} from '../src/utils';
-import { toFixedHex } from '@webb-tools/utils';
-import {ethers, BigNumber} from 'ethers';
-import {TreasuryHandler, Treasury, GovernedTokenWrapper, MintableToken} from '@webb-tools/tokens';
-import {Keyring} from '@polkadot/api';
-import {u8aToHex} from '@polkadot/util';
-import {Option} from '@polkadot/types';
-import {HexString} from '@polkadot/util/types';
+import { encodeFunctionSignature, registerResourceId, waitForEvent, sleep } from '../src/utils';
+import { ethers, BigNumber } from 'ethers';
+import { TreasuryHandler, Treasury, GovernedTokenWrapper, MintableToken } from '@webb-tools/tokens';
+import { Keyring } from '@polkadot/api';
+import { u8aToHex } from '@polkadot/util';
+import { Option } from '@polkadot/types';
+import { HexString } from '@polkadot/util/types';
 import {
 	signAndSendUtil,
 	RescueTokensProposal,
@@ -25,27 +19,30 @@ import {
 	polkadotApi,
 	signatureBridge,
 	wallet1,
-	executeAfter, localChain2, wallet2
+	executeAfter,
+	localChain2,
+	wallet2,
 } from './utils/util';
-import {SignatureBridgeSide} from "@webb-tools/bridges";
-import {DeployerConfig} from "@webb-tools/interfaces";
+import { SignatureBridgeSide } from '@webb-tools/bridges';
+import { DeployerConfig } from '@webb-tools/interfaces';
 import { BLOCK_TIME } from '../src/constants';
 import { Anchors } from '@webb-tools/protocol-solidity';
 
 describe('Rescue Token Proposal', () => {
 	test('should be able to sign and execute rescue token proposal', async () => {
-		const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))! as Anchors.Anchor;
+		const anchor = signatureBridge.getAnchor(
+			localChain.chainId,
+			ethers.utils.parseEther('1')
+		)! as Anchors.Anchor;
 		const governedTokenAddress = anchor.token!;
 		const governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
 		const mintableTokenAddress = (await governedToken.contract.getTokens())[0];
 		const mintableToken = await MintableToken.tokenFromAddress(mintableTokenAddress, wallet1);
 		const treasuryAddress = await governedToken.getFeeRecipientAddress();
-		const treasury = await Treasury.connect(treasuryAddress, wallet1);
-		const keyring = new Keyring({type: 'sr25519'});
+		const treasury = Treasury.connect(treasuryAddress, wallet1);
+		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
-		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-			EVM: localChain.chainId,
-		});
+		const chainType = polkadotApi.createType('WebbProposalsHeaderChainType', 'Evm');
 		// First, we will execute the update wrapping fee proposal to change the fee to be greater than 0
 		// This will allow tokens to accumulate to the treasury
 		{
@@ -62,19 +59,23 @@ describe('Rescue Token Proposal', () => {
 					chainIdType: ChainIdType.EVM,
 					chainId: localChain.chainId,
 				},
-				newFee: "0x0A", // wrapping fee of 10 percent
+				newFee: '0x0A', // wrapping fee of 10 percent
 			};
 
 			const proposalBytes = encodeWrappingFeeUpdateProposal(proposalPayload);
 			const prop = u8aToHex(proposalBytes);
-			const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
+			const kind = polkadotApi.createType(
+				'DkgRuntimePrimitivesProposalProposalKind',
+				'WrappingFeeUpdate'
+			);
 			const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 				Unsigned: {
 					kind: kind,
-					data: prop
-				}
+					data: prop,
+				},
 			});
-			const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(wrappingFeeUpdateProposal);
+			const proposalCall =
+				polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(wrappingFeeUpdateProposal);
 
 			await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -84,7 +85,10 @@ describe('Rescue Token Proposal', () => {
 			const key = {
 				WrappingFeeUpdateProposal: proposalPayload.header.nonce,
 			};
-			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
+			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+				[chainType, localChain.chainId],
+				key
+			);
 			const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 			expect(value.isSome).toBeTrue();
 			const dkgProposal = value.unwrap().toJSON() as {
@@ -97,7 +101,7 @@ describe('Rescue Token Proposal', () => {
 			// sanity check.
 			expect(dkgProposal.signed.data).toEqual(prop);
 			// perfect! now we need to send it to the signature bridge.
-			const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
+			const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
 			const contract = bridgeSide.contract;
 			const isSignedByGovernor = await contract.isSignatureFromGovernor(
 				dkgProposal.signed.data,
@@ -116,21 +120,30 @@ describe('Rescue Token Proposal', () => {
 		}
 		await sleep(5 * BLOCK_TIME); // wait for a few blocks
 		{
-			// Now we wrap and deposit, the wrapping fee should accumulate to the treasury 
+			// Now we wrap and deposit, the wrapping fee should accumulate to the treasury
 			const wrappingFee = await governedToken.contract.getFee();
 			await governedToken.grantMinterRole(anchor.contract.address);
 			await mintableToken.approveSpending(anchor.contract.address);
-			await mintableToken.approveSpending(governedToken.contract.address)
+			await mintableToken.approveSpending(governedToken.contract.address);
 			await mintableToken.mintTokens(wallet1.address, '100000000000000000000000');
 			await anchor.wrapAndDeposit(mintableToken.contract.address, wrappingFee);
 
 			// Anchor Denomination amount should go to TokenWrapper
-			expect((await mintableToken.getBalance(governedToken.contract.address)).toString()).toEqual(anchor.denomination!);
+			expect((await mintableToken.getBalance(governedToken.contract.address)).toString()).toEqual(
+				anchor.denomination!
+			);
 
 			// The wrapping fee should be transferred to the treasury
-			expect((await mintableToken.getBalance(treasury.contract.address)).toString()).toEqual(BigNumber.from(anchor.denomination!).mul(wrappingFee).div(100 - wrappingFee).toString());
+			expect((await mintableToken.getBalance(treasury.contract.address)).toString()).toEqual(
+				BigNumber.from(anchor.denomination!)
+					.mul(wrappingFee)
+					.div(100 - wrappingFee)
+					.toString()
+			);
 
-			expect((await governedToken.contract.balanceOf(anchor.contract.address)).toString()).toEqual(anchor.denomination!);
+			expect((await governedToken.contract.balanceOf(anchor.contract.address)).toString()).toEqual(
+				anchor.denomination!
+			);
 		}
 
 		await sleep(5 * BLOCK_TIME); // wait for a few blocks
@@ -145,7 +158,9 @@ describe('Rescue Token Proposal', () => {
 				header: {
 					resourceId: treasuryResourceId,
 					functionSignature: encodeFunctionSignature(
-						treasury.contract.interface.functions['rescueTokens(address,address,uint256,uint256)'].format()
+						treasury.contract.interface.functions[
+							'rescueTokens(address,address,uint256,uint256)'
+						].format()
 					),
 					nonce: Number(await treasury.contract.proposalNonce()) + 1,
 					chainIdType: ChainIdType.EVM,
@@ -157,14 +172,18 @@ describe('Rescue Token Proposal', () => {
 			};
 			const proposalBytes = encodeRescueTokensProposal(proposalPayload);
 			const prop = u8aToHex(proposalBytes);
-			const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'RescueTokens');
+			const kind = polkadotApi.createType(
+				'DkgRuntimePrimitivesProposalProposalKind',
+				'RescueTokens'
+			);
 			const rescueTokensProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
 				Unsigned: {
 					kind: kind,
-					data: prop
-				}
+					data: prop,
+				},
 			});
-			const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(rescueTokensProposal);
+			const proposalCall =
+				polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(rescueTokensProposal);
 
 			await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -174,7 +193,10 @@ describe('Rescue Token Proposal', () => {
 			const key = {
 				RescueTokensProposal: proposalPayload.header.nonce,
 			};
-			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
+			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+				[chainType, localChain.chainId],
+				key
+			);
 			const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 			expect(value.isSome).toBeTrue();
 			const dkgProposal = value.unwrap().toJSON() as {
@@ -205,11 +227,13 @@ describe('Rescue Token Proposal', () => {
 			let balTreasuryAfterRescue = await mintableToken.getBalance(treasury.contract.address);
 			let balToAfterRescue = await mintableToken.getBalance(to);
 
-			const diffTreasuryBalance = parseInt(balTreasuryBeforeRescue.sub(balTreasuryAfterRescue).toString());
+			const diffTreasuryBalance = parseInt(
+				balTreasuryBeforeRescue.sub(balTreasuryAfterRescue).toString()
+			);
 			const diffToBalance = parseInt(balToAfterRescue.sub(balToBeforeRescue).toString());
 
 			expect(500 == diffTreasuryBalance).toBeTrue();
-			expect(500 ==  diffToBalance).toBeTrue();
+			expect(500 == diffToBalance).toBeTrue();
 		}
 	});
 

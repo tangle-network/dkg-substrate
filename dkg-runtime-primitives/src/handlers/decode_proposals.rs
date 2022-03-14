@@ -24,8 +24,7 @@ pub fn decode_proposal_header(
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ProposalIdentifier {
 	pub key: DKGPayloadKey,
-	pub chain_type: webb_proposals::ChainType,
-	pub chain_id: webb_proposals::ChainId,
+	pub typed_chain_id: webb_proposals::TypedChainId,
 }
 
 pub fn decode_proposal_identifier(
@@ -35,8 +34,7 @@ pub fn decode_proposal_identifier(
 	if let ProposalKind::EVM = proposal.kind() {
 		return evm::evm_tx::create(proposal.data()).map(|p| ProposalIdentifier {
 			key: DKGPayloadKey::EVMProposal(p.nonce),
-			chain_type: webb_proposals::ChainType::Evm,
-			chain_id: p.chain_id,
+			typed_chain_id: webb_proposals::TypedChainId::Evm(p.chain_id),
 		})
 	}
 
@@ -56,8 +54,7 @@ pub fn decode_proposal_identifier(
 	let header = decode_proposal_header(proposal.data())?;
 	let mut identifier = ProposalIdentifier {
 		key: DKGPayloadKey::EVMProposal(header.nonce()), // placeholder
-		chain_type: header.resource_id().chain_type(),
-		chain_id: header.resource_id().chain_id(),
+		typed_chain_id: header.resource_id().typed_chain_id(),
 	};
 
 	// we then create a lazy identifier.
