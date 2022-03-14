@@ -10,7 +10,7 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::{sr25519::Signature, H256, ecdsa};
+use sp_core::{ecdsa, sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
 	testing::{Header, TestXt},
@@ -260,12 +260,10 @@ pub(crate) fn roll_to(n: u64) {
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
 		Balances::on_initialize(System::block_number());
-		CollatorSelection::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
+		CollatorSelection::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
 	}
-
-	Session::rotate_session();
 }
 
 pub fn dkg_session_keys(dkg_keys: DKGId) -> MockSessionKeys {
@@ -368,9 +366,21 @@ pub fn new_test_ext_initialized(
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
 		// Add proposers
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A), mock_ecdsa_key(PROPOSER_A)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B), mock_ecdsa_key(PROPOSER_B)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C), mock_ecdsa_key(PROPOSER_C)));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_A),
+			mock_ecdsa_key(PROPOSER_A)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_B),
+			mock_ecdsa_key(PROPOSER_B)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_C),
+			mock_ecdsa_key(PROPOSER_C)
+		));
 		// Whitelist chain
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_id));
 		// Set and check resource ID mapped to some junk data

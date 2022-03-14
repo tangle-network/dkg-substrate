@@ -869,6 +869,7 @@ impl<T: Config>
 			ExternalProposerAccounts::<T>::insert(external_account, true);
 		}
 		// Update the external accounts of the new authorities
+		AuthorityProposers::<T>::put(authorities.clone());
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
 		Self::create_proposer_set_update();

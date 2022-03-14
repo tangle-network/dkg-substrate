@@ -12,8 +12,8 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, mock_pub_key, new_test_ext_initialized, roll_to, CollatorSelection,
-	ExtBuilder, manually_set_proposer_count, DKGProposalHandler, mock_ecdsa_key,
+	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
+	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
 };
 use dkg_runtime_primitives::{DKGPayloadKey, Proposal, ProposalHeader, ProposalKind};
 use frame_support::{assert_err, assert_noop, assert_ok};
@@ -153,14 +153,30 @@ fn add_remove_relayer() {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
 		assert_eq!(DKGProposals::proposer_count(), 0);
 
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A), mock_ecdsa_key(PROPOSER_A)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_B), mock_ecdsa_key(PROPOSER_B)));
-		assert_ok!(DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_C), mock_ecdsa_key(PROPOSER_C)));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_A),
+			mock_ecdsa_key(PROPOSER_A)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_B),
+			mock_ecdsa_key(PROPOSER_B)
+		));
+		assert_ok!(DKGProposals::add_proposer(
+			Origin::root(),
+			mock_pub_key(PROPOSER_C),
+			mock_ecdsa_key(PROPOSER_C)
+		));
 		assert_eq!(DKGProposals::proposer_count(), 3);
 
 		// Already exists
 		assert_noop!(
-			DKGProposals::add_proposer(Origin::root(), mock_pub_key(PROPOSER_A), mock_ecdsa_key(PROPOSER_A)),
+			DKGProposals::add_proposer(
+				Origin::root(),
+				mock_pub_key(PROPOSER_A),
+				mock_ecdsa_key(PROPOSER_A)
+			),
 			Error::<Test>::ProposerAlreadyExists
 		);
 
@@ -692,7 +708,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(9)
+				DKGPayloadKey::ProposerSetUpdateProposal(5)
 			)
 			.is_some(),
 			true
@@ -703,7 +719,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(10)
+				DKGPayloadKey::ProposerSetUpdateProposal(6)
 			)
 			.is_some(),
 			false
@@ -714,29 +730,20 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(10)
+				DKGPayloadKey::ProposerSetUpdateProposal(5)
 			)
 			.is_some(),
 			true
 		);
 
 		roll_to(80);
-
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(17)
+				DKGPayloadKey::ProposerSetUpdateProposal(9)
 			)
 			.is_some(),
 			true
-		);
-
-		println!(
-			"{:?}",
-			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(17)
-			)
 		);
 	})
 }
