@@ -31,7 +31,7 @@ hex-literal = { version = "0.3", optional = true }
 pallet-dkg-proposals = { path = "../dkg-proposals" }
 serde = { version = "1.0.119" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
-pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.16" }
+pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
