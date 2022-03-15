@@ -699,6 +699,12 @@ impl<T: Config> Pallet<T> {
 		new_authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
+		let threshold = Self::signature_threshold();
+
+		if next_authority_ids.len() <= threshold.into() {
+			SignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+		}
+
 		Authorities::<T>::put(&new_authority_ids);
 		CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
 
@@ -1091,6 +1097,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 				k
 			})
 			.collect::<Vec<_>>();
+
 
 		Self::change_authorities(
 			next_authorities.clone(),
