@@ -11,25 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-FROM rust:1
-WORKDIR /webb
 
-# Install Required Packages
-RUN apt-get update && \
-    apt-get install -y git pkg-config clang curl libssl-dev llvm libudev-dev libgmp3-dev && \
-    rm -rf /var/lib/apt/lists/*
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: Webb Technologies Inc.
 
-COPY . .
+  paths-ignore:
+    - 'licenses'
+    - '**/*.md'
+    - 'LICENSE'
+    - 'NOTICE'
+    - '.gitignore'
+    - '.dockerignore'
+    - '.editorconfig'
+    - '.gitmodules'
+    - '**/*.yml'
+    - '**/*.json'
+    - '**/*.lock'
+    - '**/*.toml'
+    - '**/*.yaml'
+    - 'dkg-test-suite/.husky/pre-commit'
+    - 'dkg-test-suite/protocol-solidity-fixtures/*'
+    - '.nvmrc'
+    - 'jest.config.js'
+    - '**/*.sh'
+    - 'target/*'
+    - 'node_modules/*'
 
-RUN rustup default nightly
-
-RUN cargo install cargo-tarpaulin
-
-CMD SKIP_WASM_BUILD=1 cargo +nightly tarpaulin --out Xml \
-    -p pallet-dkg-metadata \
-    -p pallet-dkg-proposal-handler \
-    -p pallet-dkg-proposals \
-    -p dkg-primitives \
-    -p dkg-runtime-primitives \
-    --timeout 3600
+  comment: on-failure

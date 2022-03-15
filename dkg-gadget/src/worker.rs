@@ -1,13 +1,10 @@
-// This file is part of Webb.
-
-// Copyright (C) 2021 Webb Technologies Inc.
-// SPDX-License-Identifier: Apache-2.0
-
+// Copyright 2022 Webb Technologies Inc.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,7 +34,7 @@ use sc_client_api::{
 use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
-use sp_api::{offchain::STORAGE_PREFIX, BlockId};
+use sp_api::BlockId;
 use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 	AccountId32,
