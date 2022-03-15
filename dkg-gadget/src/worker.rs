@@ -407,7 +407,7 @@ where
 			self.dkg_state.listening_for_active_pub_key = true;
 
 			if let Some(rounds) = self.rounds.as_mut() {
-				match self.rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+				match self.rounds.start_keygen(latest_block_num) {
 					Ok(()) => {
 						info!(target: "dkg", "Keygen started for genesis authority set successfully");
 						self.active_keygen_in_progress = true;
