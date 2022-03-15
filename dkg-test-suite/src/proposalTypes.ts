@@ -18,10 +18,6 @@ export const apiProposalTypes = function () {
 					'MaxDepositLimitUpdateSigned',
 					'MinWithdrawalLimitUpdate',
 					'MinWithdrawalLimitUpdateSigned',
-					'MaxExtLimitUpdate',
-					'MaxExtLimitUpdateSigned',
-					'MaxFeeLimitUpdate',
-					'MaxFeeLimitUpdateSigned',
 				],
 			},
 			EVMUnsigned: {
@@ -63,20 +59,6 @@ export const apiProposalTypes = function () {
 				data: 'Vec<u8>',
 			},
 			MinWithdrawalLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MaxExtLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MaxExtLimitUpdateSigned: {
-				data: 'Vec<u8>',
-				signature: 'Vec<u8>',
-			},
-			MaxFeeLimitUpdate: {
-				data: 'Vec<u8>',
-			},
-			MaxFeeLimitUpdateSigned: {
 				data: 'Vec<u8>',
 				signature: 'Vec<u8>',
 			},

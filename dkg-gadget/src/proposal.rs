@@ -76,10 +76,6 @@ where
 			make_signed_proposal(ProposalKind::MaxDepositLimitUpdate, finished_round),
 		DKGPayloadKey::MinWithdrawalLimitUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::MinWithdrawalLimitUpdate, finished_round),
-		DKGPayloadKey::MaxExtLimitUpdateProposal(_) =>
-			make_signed_proposal(ProposalKind::MaxExtLimitUpdate, finished_round),
-		DKGPayloadKey::MaxFeeLimitUpdateProposal(_) =>
-			make_signed_proposal(ProposalKind::MaxFeeLimitUpdate, finished_round),
 		DKGPayloadKey::SetVerifierProposal(_) =>
 			make_signed_proposal(ProposalKind::SetVerifier, finished_round),
 		DKGPayloadKey::SetTreasuryHandlerProposal(_) =>

@@ -588,6 +588,8 @@ fn should_get_initial_proposers_from_dkg() {
 		// Initial proposer set is invulnerables even when another collator exists
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		// Advance a session
+		roll_to(10);
+		// Advance a session
 		roll_to(20);
 		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);

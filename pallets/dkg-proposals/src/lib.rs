@@ -17,26 +17,73 @@
 
 //! # DKG Proposals Module
 //!
-//! Add description #TODO
+//! A pallet to manage proposals that are submitted for signing by the DKG.
 //!
 //! ## Overview
 //!
+//! The DKG proposals pallet manages a governance system derived from
+//! ChainSafe's ChainBridge Substrate pallet. It is designed as the first
+//! layer in Webb's DKG governance system and is responsible for managing
+//! proposal submission and voting for messages that are intended to be signed
+//! by the DKG threshold signing protocol.
+//! 
+//! The pallet implements a simple threshold voting system wherein proposers
+//! propose messages to be signed. Once a threshold of votes over the same
+//! proposal is met, the message is handled by a generic proposal handler.
+//! This pallet is intended to be used in conjunction with [`pallet-dkg-proposal-handler`].
 //!
 //! ### Terminology
+//! 
+//! - Proposer: A valid account that can submit and vote on proposals.
+//! - Proposal: A message that is submitted, voted on, and eventually handled or rejected.
+//! - ProposerSet: The merkle root of the smallest merkle tree containing the ordered proposers.
 //!
-//! ### Goals
+//! ### Implementation
 //!
-//! The DKG proposal system is designed to make the following
-//! possible:
+//! The DKG proposal system combines a set of proposers, a generic proposal message,
+//! and a threshold-voting system to build a simple governance system for "handling"
+//! proposals. By "handling", we intend for successful proposals to be sent to
+//! a secondary system that acts upon proposal data.
+//! 
+//! In the Webb Protocol, the handler submits successful proposals to the DKG for signing.
+//! 
+//! The proposers of the pallet are derived from the active authorities of the underlying
+//! chain as well as any account added to the set using the `add_proposer` call. The
+//! intention is for the set of proposers to grow larger than simply the authority set
+//! of the chain without growing the signing set of the underlying DKG.
+//! 
+//! Proposers are required to submit 2 types of keys: AccountId keys and ECDSA keys. The former
+//! keys are used to propose and interact with the Substrate based chain integrating this pallet.
+//! The latter are used to interoperate with EVM systems who utilize the proposers for auxiliary
+//! protocols described below. This aligns non-authority proposers with authority proposers as well
+//! since we expect authorities to have both types of keys registered for consensus and DKG activities.
+//! 
+//! The proposals of the system are generic and left to be handled by a proposal handler.
+//! Currently, upon inspection of the `pallet-dkg-proposal-handler` module, the only valid
+//! proposal that can be proposed and handled successfully is the Anchor Update proposal:
+//! the proposal responsible for bridging different anchors together in the Webb Protocol.
 //!
-//! * Define.
+//! The system can be seen as a 2-stage oracle-like system wherein proposers vote on
+//! events/messages they believe to be valid and, if successful, the DKG will sign such events.
+//! 
+//! The system also supports accumulating proposers for off-chain auxiliary protocols that utilize
+//! proposers for new activities. In the Webb Protocol, we use the proposers to backstop the system
+//! against critical failures and provide an emergency fallback mechanism when the DKG fails to sign
+//! messages. We create a merkle tree of active proposers are submit the merkle root and session length
+//! to the DKG for signing so as to maintain the list of active proposers across the protocol's execution.
+//! If at any point in the future the DKG fails to sign messages and stops working, we can utilize this
+//! merkle root to allow proposers to vote to restart and transition any external system relying on the DKG
+//! to a new state.
 //!
-//! ## Interface
+//! ### Rewards
+//! 
+//! Currently, there are no extra rewards integrated for proposers. This is a future feature.
 //!
 //! ## Related Modules
 //!
-//! * [`System`](../frame_system/index.html)
-//! * [`Support`](../frame_support/index.html)
+//! * [`System`](https://github.com/paritytech/substrate/tree/master/frame/system)
+//! * [`Support`](https://github.com/paritytech/substrate/tree/master/frame/support)
+//! * [`DKG Proposal Handler`](../../pallet-dkg-proposal-handler)
 
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -138,11 +185,6 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 	}
 
-	/// The parameter maintainer who can change the parameters
-	#[pallet::storage]
-	#[pallet::getter(fn maintainer)]
-	pub type Maintainer<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
-
 	/// All whitelisted chains and their respective transaction counts
 	#[pallet::storage]
 	#[pallet::getter(fn chains)]
@@ -171,13 +213,14 @@ pub mod pallet {
 	pub type Proposers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
 
 	/// Tracks current proposer set external accounts
-	/// Currently meant to store Ethereum compatible ECDSA 20-byte addresses
+	/// Currently meant to store Ethereum compatible 64-bytes ECDSA public keys
 	#[pallet::storage]
 	#[pallet::getter(fn external_proposer_accounts)]
 	pub type ExternalProposerAccounts<T: Config> =
-		StorageMap<_, Blake2_128Concat, Vec<u8>, bool, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, T::AccountId, Vec<u8>, ValueQuery>;
 
-	/// Tracks current proposer set accounts
+	/// Tracks the authorities that are proposers so we can properly update the proposer set
+	/// across sessions and authority changes.
 	#[pallet::storage]
 	#[pallet::getter(fn authority_proposers)]
 	pub type AuthorityProposers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
@@ -212,21 +255,9 @@ pub mod pallet {
 	#[pallet::getter(fn resources)]
 	pub type Resources<T: Config> = StorageMap<_, Blake2_256, ResourceId, Vec<u8>>;
 
-	#[pallet::storage]
-	#[pallet::getter(fn approve_pending_proposals)]
-	pub type ApprovedPendingProposals<T: Config> = StorageMap<
-		_,
-		Blake2_256,
-		u8, // some priority over proposals in the queue: 0 is highest priority
-		Vec<T::Proposal>,
-	>;
-
-	// Pallets use events to inform users when important changes are made.
 	#[pallet::event]
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Maintainer is set
-		MaintainerSet { old_maintainer: Option<T::AccountId>, new_maintainer: T::AccountId },
 		/// Vote threshold has changed (new_threshold)
 		ProposerThresholdChanged { new_threshold: u32 },
 		/// Chain now available for transfers (chain_id)
@@ -340,42 +371,6 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Sets the maintainer.
-		#[pallet::weight(<T as Config>::WeightInfo::set_maintainer())]
-		pub fn set_maintainer(
-			origin: OriginFor<T>,
-			new_maintainer: T::AccountId,
-		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
-			// ensure parameter setter is the maintainer
-			ensure!(Some(origin.clone()) == Self::maintainer(), Error::<T>::InvalidPermissions);
-			// set the new maintainer
-			Maintainer::<T>::try_mutate(|maintainer| {
-				*maintainer = Some(new_maintainer.clone());
-				Self::deposit_event(Event::MaintainerSet {
-					old_maintainer: Some(origin),
-					new_maintainer,
-				});
-				Ok(().into())
-			})
-		}
-
-		// Forcefully set the maintainer.
-		#[pallet::weight(<T as Config>::WeightInfo::force_set_maintainer())]
-		pub fn force_set_maintainer(
-			origin: OriginFor<T>,
-			new_maintainer: T::AccountId,
-		) -> DispatchResultWithPostInfo {
-			Self::ensure_admin(origin)?;
-			// set the new maintainer
-			Maintainer::<T>::try_mutate(|maintainer| {
-				let old_maintainer = maintainer.clone();
-				*maintainer = Some(new_maintainer.clone());
-				Self::deposit_event(Event::MaintainerSet { old_maintainer, new_maintainer });
-				Ok(().into())
-			})
-		}
-
 		/// Sets the vote threshold for proposals.
 		///
 		/// This threshold is used to determine how many votes are required
@@ -538,21 +533,6 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	// Gives the height of the proposer set Merkle tree
-	// Right now this takes O(log(size of proposer set)) time but can likely be reduced
-	pub fn get_proposer_set_tree_height() -> u32 {
-		if Self::proposer_count() == 1 {
-			1
-		} else {
-			let two: u32 = 2;
-			let mut h = 0;
-			while two.saturating_pow(h) < Self::proposer_count() {
-				h += 1;
-			}
-			h
-		}
-	}
-
 	/// Checks if who is a proposer
 	pub fn is_proposer(who: &T::AccountId) -> bool {
 		Self::proposers(who)
@@ -601,13 +581,16 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
-	/// Adds a new proposer to the set
+	/// Adds a new proposer to the set. Requires both an account ID and an ECDSA public key.
 	pub fn register_proposer(
 		proposer: T::AccountId,
 		external_account: Vec<u8>,
 	) -> DispatchResultWithPostInfo {
 		ensure!(!Self::is_proposer(&proposer), Error::<T>::ProposerAlreadyExists);
+		// Add the proposer to the set
 		Proposers::<T>::insert(&proposer, true);
+		// Add the proposer's public key to the set
+		ExternalProposerAccounts::<T>::insert(&proposer, external_account);
 		ProposerCount::<T>::mutate(|i| *i += 1);
 
 		Self::deposit_event(Event::ProposerAdded { proposer_id: proposer });
@@ -617,7 +600,11 @@ impl<T: Config> Pallet<T> {
 	/// Removes a proposer from the set
 	pub fn unregister_proposer(proposer: T::AccountId) -> DispatchResultWithPostInfo {
 		ensure!(Self::is_proposer(&proposer), Error::<T>::ProposerInvalid);
+		// Remove the proposer
 		Proposers::<T>::remove(&proposer);
+		// Remove the proposer's external account
+		ExternalProposerAccounts::<T>::remove(&proposer);
+		// Decrement the proposer count
 		ProposerCount::<T>::mutate(|i| *i -= 1);
 		Self::deposit_event(Event::ProposerRemoved { proposer_id: proposer });
 		Ok(().into())
@@ -752,6 +739,22 @@ impl<T: Config> Pallet<T> {
 		Ok(().into())
 	}
 
+	/// Creates the proposer set merkle tree and update proposal and submits the proposer for handling.
+	/// 
+	/// The proposer's external accounts (ECDSA keys) are used to create the proposer set. We
+	/// hash the public keys into Ethereum compatible 20-byte addresses using the `keccak256` hash
+	/// and insert these addresses into a minimally-sized merkle tree. This allows us to use the
+	/// Ethereum origins (`msg.sender`) on EVMs to prove membership in the proposer set.
+	/// 
+	/// The proposal set update proposal is a message containing:
+	/// - The merkle root of the ordered proposer set's Ethereum addresses.
+	/// - The session length in milliseconds
+	/// - The # of proposers accumulated in the merkle root
+	/// - The nonce of the update proposal
+	/// 
+	/// The signed proposer set update is intended to be used to update the proposer set on
+	/// other blockchains that need a fallback mechanism when the DKG is not available or needs
+	/// to be fixed or changed.
 	fn create_proposer_set_update() {
 		// Merkleize the new proposer set
 		let mut proposer_set_merkle_root = Self::get_proposer_set_tree_root();
@@ -793,13 +796,18 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Returns the leaves of the proposer set merkle tree.
+	/// 
+	/// It is expected that the size of the returned vector is a power of 2.
 	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
+		let proposer_keys = Proposers::<T>::iter_keys();
 		// Check for each key that the proposer is valid (should return true)
 		let mut base_layer: Vec<Vec<u8>> = proposer_keys
-			.filter(|v| ExternalProposerAccounts::<T>::get(v))
-			.map(|x| keccak_256(&x.encode()[..]).to_vec())
+			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))
+			.map(|x| {
+				keccak_256(&ExternalProposerAccounts::<T>::get(x).encode()[..]).to_vec()
+			})
 			.collect();
 		// Pad base_layer to have length 2^height
 		let two = 2;
@@ -809,6 +817,7 @@ impl<T: Config> Pallet<T> {
 		base_layer
 	}
 
+	/// Computes the next layer of the merkle tree by hashing the previous layer.
 	pub fn next_layer(curr_layer: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
 		let mut layer_above: Vec<Vec<u8>> = Vec::new();
 		let mut index = 0;
@@ -822,6 +831,22 @@ impl<T: Config> Pallet<T> {
 		layer_above
 	}
 
+	// Returns the minimal height of the proposer set Merkle tree
+	// Right now this takes O(log(size of proposer set)) time but can likely be reduced
+	pub fn get_proposer_set_tree_height() -> u32 {
+		if Self::proposer_count() == 1 {
+			1
+		} else {
+			let two: u32 = 2;
+			let mut h = 0;
+			while two.saturating_pow(h) < Self::proposer_count() {
+				h += 1;
+			}
+			h
+		}
+	}
+
+	/// Computes the merkle root of the proposer set tree
 	pub fn get_proposer_set_tree_root() -> Vec<u8> {
 		let mut curr_layer = Self::pre_process_for_merkleize();
 		let mut height = Self::get_proposer_set_tree_height();
@@ -837,13 +862,20 @@ impl<T: Config>
 	OnAuthoritySetChangeHandler<T::AccountId, dkg_runtime_primitives::AuthoritySetId, T::DKGId>
 	for Pallet<T>
 {
+	/// Called when the authority set has changed.
+	/// 
+	/// On new authority sets, we need to:
+	/// - Remove the old authorities from the proposer set and their ECDSA keys from the external proposer accounts
+	/// - Add the new authorities to the proposer set and their ECDSA keys to the external proposer accounts
+	/// - Create a new proposer set update proposal by merkleizing the new proposer set
+	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
 	fn on_authority_set_changed(
 		authorities: Vec<T::AccountId>,
 		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
 		authority_ids: Vec<T::DKGId>,
 	) -> () {
 		// Get the new external accounts for the new authorities by converting
-		// their DKGIds to data meant for merkle tree insertion (i.e. EThereum addresses)
+		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids
 			.iter()
 			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
@@ -851,14 +883,11 @@ impl<T: Config>
 		// TODO: Get difference in list and optimise storage reads/writes
 		// Remove old authorities and their external accounts from the list
 		let old_authority_proposers = Self::authority_proposers();
-		let old_external_authority_proposer_accounts = Self::external_authority_proposer_accounts();
-		for (old_authority_account, old_external_account) in old_authority_proposers
-			.iter()
-			.zip(old_external_authority_proposer_accounts.iter())
+		for old_authority_account in old_authority_proposers
 		{
 			ProposerCount::<T>::put(Self::proposer_count().saturating_sub(1));
-			Proposers::<T>::remove(old_authority_account);
-			ExternalProposerAccounts::<T>::remove(old_external_account.to_vec());
+			Proposers::<T>::remove(&old_authority_account);
+			ExternalProposerAccounts::<T>::remove(&old_authority_account);
 		}
 		// Add new authorities and their external accounts to the list
 		for (authority_account, external_account) in
@@ -866,17 +895,19 @@ impl<T: Config>
 		{
 			ProposerCount::<T>::put(Self::proposer_count().saturating_add(1));
 			Proposers::<T>::insert(authority_account, true);
-			ExternalProposerAccounts::<T>::insert(external_account, true);
+			ExternalProposerAccounts::<T>::insert(authority_account, external_account);
 		}
-		// Update the external accounts of the new authorities
+		// Update the new authorities that are also proposers
 		AuthorityProposers::<T>::put(authorities.clone());
+		// Update the external accounts of the new authorities
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
+		// Create the new proposer set merkle tree and update proposal
 		Self::create_proposer_set_update();
 	}
 }
 
-/// Convert BEEFY secp256k1 public keys into Ethereum addresses
+/// Convert DKG secp256k1 public keys into Ethereum addresses
 pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {

@@ -197,6 +197,7 @@ parameter_types! {
 	pub const MaxCandidates: u32 = 1000;
 	pub const MinCandidates: u32 = 0;
 	pub const MaxInvulnerables: u32 = 100;
+	pub const KickThreshold: u32 = Period::get() * 10;
 }
 
 impl pallet_collator_selection::Config for Test {
@@ -208,7 +209,7 @@ impl pallet_collator_selection::Config for Test {
 	type MinCandidates = MinCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
 	// should be a multiple of session or things will get inconsistent
-	type KickThreshold = Period;
+	type KickThreshold = KickThreshold;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
 	type ValidatorRegistration = Session;
