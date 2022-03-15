@@ -42,7 +42,9 @@ describe('Rescue Token Proposal', () => {
 		const treasury = Treasury.connect(treasuryAddress, wallet1);
 		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
-		const chainType = polkadotApi.createType('WebbProposalsHeaderChainType', 'Evm');
+		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+			Evm: localChain.chainId,
+		});
 		// First, we will execute the update wrapping fee proposal to change the fee to be greater than 0
 		// This will allow tokens to accumulate to the treasury
 		{
@@ -85,10 +87,7 @@ describe('Rescue Token Proposal', () => {
 			const key = {
 				WrappingFeeUpdateProposal: proposalPayload.header.nonce,
 			};
-			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-				[chainType, localChain.chainId],
-				key
-			);
+			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
 			const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 			expect(value.isSome).toBeTrue();
 			const dkgProposal = value.unwrap().toJSON() as {
@@ -101,7 +100,7 @@ describe('Rescue Token Proposal', () => {
 			// sanity check.
 			expect(dkgProposal.signed.data).toEqual(prop);
 			// perfect! now we need to send it to the signature bridge.
-			const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
+			const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
 			const contract = bridgeSide.contract;
 			const isSignedByGovernor = await contract.isSignatureFromGovernor(
 				dkgProposal.signed.data,
@@ -193,10 +192,7 @@ describe('Rescue Token Proposal', () => {
 			const key = {
 				RescueTokensProposal: proposalPayload.header.nonce,
 			};
-			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-				[chainType, localChain.chainId],
-				key
-			);
+			const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
 			const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
 			expect(value.isSome).toBeTrue();
 			const dkgProposal = value.unwrap().toJSON() as {

@@ -52,8 +52,8 @@ describe('Wrapping Fee Update Proposal', () => {
 		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-			EVM: localChain.chainId,
+		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+			Evm: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
 		const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
@@ -129,8 +129,8 @@ describe('Wrapping Fee Update Proposal', () => {
 		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-			EVM: localChain.chainId,
+		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+			Evm: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
 		const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {

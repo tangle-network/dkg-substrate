@@ -30,7 +30,7 @@ async function testTokenRemoveProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{compressed: false}
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {SUBSTRATE: 5002});
 	const proposalType = {tokenremoveproposal: getTokenRemoveProposal(api).header.nonce};
 	const propHash = keccak256(encodeSubstrateProposal(getTokenRemoveProposal(api), 3000));
 
@@ -55,7 +55,7 @@ async function sendTokenRemoveProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenRemove');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
