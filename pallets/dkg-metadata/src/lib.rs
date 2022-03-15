@@ -14,7 +14,7 @@
 
 //! # DKG Metadata Module
 //!
-//! A pallet to manage metadata about the DKG and DKG proposal system
+//! A pallet to manage metadata about the DKG and DKG proposal system.
 //!
 //! ## Overview
 //!
