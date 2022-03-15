@@ -60,19 +60,19 @@ benchmarks! {
 		let n in 0..(T::MaxSubmissionsPerBatch::get()).into();
 		let dkg_pub_key = ecdsa_generate(KEY_TYPE, None);
 		DKGPallet::<T>::set_dkg_public_key(dkg_pub_key.encode());
-
+		let caller: T::AccountId = whitelisted_caller();
 		let mut signed_proposals = Vec::new();
 		for i in 0..n as usize {
 			let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(i as u8));
-			let proposal = <Pallet<T> as ProposalHandlerTrait>::force_submit_unsigned_proposal(Proposal::Unsigned {
+			let proposal = Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Signed(caller.clone()).into(),Proposal::Unsigned {
 				kind: ProposalKind::EVM,
-				data: eth_tx_ser.clone()
+				data: tx.encode().clone()
 			});
 			let signed_prop = mock_signed_proposal(tx, &dkg_pub_key);
 			signed_proposals.push(signed_prop)
 		}
 
-		let caller: T::AccountId = whitelisted_caller();
+
 		assert!(Pallet::<T>::get_unsigned_proposals().len() == n as usize);
 	}: _(RawOrigin::Signed(caller), signed_proposals)
 	verify {

@@ -38,11 +38,12 @@ pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "p
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking", 
-	"hex-literal", 
+	"frame-benchmarking",
+	"hex-literal",
 	"frame-system/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
+	"pallet-dkg-proposals/runtime-benchmarks"
 ]
 std = [
 	"codec/std",
