@@ -236,7 +236,6 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
 	// How often we trigger a new session.

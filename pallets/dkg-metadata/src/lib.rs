@@ -1098,7 +1098,6 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 			})
 			.collect::<Vec<_>>();
 
-
 		Self::change_authorities(
 			next_authorities.clone(),
 			next_queued_authorities,
