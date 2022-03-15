@@ -1,12 +1,36 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use sp_std::vec::Vec;
 
-pub trait OnAuthoritySetChangeHandler<AuthoritySetId, AuthorityId> {
-	fn on_authority_set_changed(authority_set_id: AuthoritySetId, authorities: Vec<AuthorityId>);
+pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
+	fn on_authority_set_changed(
+		authority_accounts: Vec<AccountId>,
+		authority_set_id: AuthoritySetId,
+		authority_ids: Vec<AuthorityId>,
+	) -> ();
 }
 
-impl<AuthoritySetId, AuthorityId> OnAuthoritySetChangeHandler<AuthoritySetId, AuthorityId> for () {
-	fn on_authority_set_changed(_authority_set_id: AuthoritySetId, _authorities: Vec<AuthorityId>) {
+impl<AccountId, AuthoritySetId, AuthorityId>
+	OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for ()
+{
+	fn on_authority_set_changed(
+		_authority_accounts: Vec<AccountId>,
+		_authority_set_id: AuthoritySetId,
+		_authority_ids: Vec<AuthorityId>,
+	) -> () {
 	}
 }
 

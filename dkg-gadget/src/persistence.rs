@@ -1,6 +1,19 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use crate::{
-	keystore::DKGKeystore,
-	utils::{set_up_rounds, validate_threshold},
+	utils::{fetch_public_key, fetch_sr25519_public_key, set_up_rounds, validate_threshold},
 	worker::DKGWorker,
 	Client,
 };
@@ -26,11 +39,9 @@ use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
-	sync::Arc,
 };
 
 use curv::elliptic::curves::Secp256k1;
-use sc_keystore::LocalKeystore;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -46,38 +57,50 @@ impl DKGPersistenceState {
 	}
 }
 
-pub fn store_localkey(
+pub(crate) fn store_localkey<B, C, BE>(
 	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
-	path: PathBuf,
-	key_store: DKGKeystore,
-	local_keystore: Arc<LocalKeystore>,
-) -> std::io::Result<()> {
-	debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
+	path: Option<PathBuf>,
+	worker: &mut DKGWorker<B, C, BE>,
+) -> std::io::Result<()>
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	if let Some(path) = path {
+		if let Some(local_keystore) = worker.local_keystore.clone() {
+			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
+			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
+				&Public::try_from(&fetch_sr25519_public_key(worker).0[..])
+					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
+			);
 
-	let sr25519_public = key_store
-		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+			if let Ok(Some(key_pair)) = key_pair {
+				let secret_key = key_pair.to_raw_vec();
 
-	let key_pair = local_keystore
-		.as_ref()
-		.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
+				let stored_local_key = StoredLocalKey { round_id, local_key: key };
+				let serialized_data = serde_json::to_string(&stored_local_key)
+					.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 
-	if let Ok(Some(key_pair)) = key_pair {
-		let secret_key = key_pair.to_raw_vec();
+				let encrypted_data = encrypt_data(serialized_data.into_bytes(), secret_key)
+					.map_err(|e| Error::new(ErrorKind::Other, e))?;
+				fs::write(path.clone(), &encrypted_data[..])?;
 
-		let stored_local_key = StoredLocalKey { round_id, local_key: key };
-		let serialized_data = serde_json::to_string(&stored_local_key)
-			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
-
-		let encrypted_data = encrypt_data(serialized_data.into_bytes(), secret_key)
-			.map_err(|e| Error::new(ErrorKind::Other, e))?;
-		fs::write(path.clone(), &encrypted_data[..])?;
-
-		debug!(target: "dkg_persistence", "Successfully stored local key for {:?}", &path);
-		Ok(())
+				debug!(target: "dkg_persistence", "Successfully stored local key for {:?}", &path);
+				Ok(())
+			} else {
+				Err(Error::new(
+					ErrorKind::Other,
+					"Local key pair doesn't exist for sr25519 key".to_string(),
+				))
+			}
+		} else {
+			Err(Error::new(ErrorKind::Other, "Local keystore doesn't exist".to_string()))
+		}
 	} else {
-		Err(Error::new(ErrorKind::Other, "".to_string()))
+		Err(Error::new(ErrorKind::Other, "Path not defined".to_string()))
 	}
 }
 
@@ -98,14 +121,8 @@ where
 
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
 	if let Some((active, queued)) = worker.validator_set(header) {
-		let public = worker
-			.keystore_ref()
-			.authority_id(&worker.keystore_ref().public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
-		let sr25519_public = worker
-			.keystore_ref()
-			.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+		let public = fetch_public_key(worker);
+		let sr25519_public = fetch_sr25519_public_key(worker);
 
 		let mut local_key = None;
 		let mut queued_local_key = None;
@@ -214,7 +231,7 @@ where
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(mut signers_set) = signers_set {
+					if let Ok(signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_rounds(rounds)
@@ -254,7 +271,7 @@ where
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
 					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(mut signers_set) = signers_set {
+					if let Ok(signers_set) = signers_set {
 						rounds.set_signers(signers_set);
 					}
 					worker.set_next_rounds(rounds)
@@ -278,7 +295,7 @@ where
 {
 	let rounds = worker.take_rounds();
 	let next_rounds = worker.take_next_rounds();
-	let time_to_restart = worker.get_time_to_restart(header);
+	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if rounds.is_none() {

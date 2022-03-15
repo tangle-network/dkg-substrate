@@ -12,8 +12,11 @@
 # The cache for chain data in container
 .local
 tmp
+*.log
 
 local-test
 
 # NodeJS
 **/node_modules/
+para-2074-genesis
+para-2074-wasm

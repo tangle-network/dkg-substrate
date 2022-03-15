@@ -1,18 +1,16 @@
-// Copyright (C) 2020-2021 Parity Technologies (UK) Ltd.
-// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
-
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
@@ -23,14 +21,12 @@ use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
-use scale_info::Path;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
-use sc_service::BasePath;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
@@ -40,6 +36,8 @@ mod keystore;
 pub mod messages;
 mod metrics;
 mod persistence;
+mod proposal;
+pub mod storage;
 mod types;
 mod utils;
 mod worker;
@@ -103,8 +101,7 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: N,
-	/// Minimal delta between blocks, DKG should vote for
-	pub min_block_delta: u32,
+
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Path to the persistent keystore directory for DKG data
@@ -129,7 +126,6 @@ where
 		backend,
 		key_store,
 		network,
-		min_block_delta,
 		prometheus_registry,
 		base_path,
 		local_keystore,
@@ -159,8 +155,6 @@ where
 		backend,
 		key_store: key_store.into(),
 		gossip_engine,
-		gossip_validator,
-		min_block_delta,
 		metrics,
 		base_path,
 		local_keystore,

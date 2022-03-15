@@ -1,3 +1,17 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #![cfg_attr(not(feature = "std"), no_std)]
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
@@ -9,6 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -49,9 +64,9 @@ pub use frame_support::{
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
+use sp_runtime::generic::Era;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-use sp_runtime::{generic::Era, traits::Keccak256};
 pub use sp_runtime::{Perbill, Permill};
 
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
@@ -292,6 +307,7 @@ parameter_types! {
 	pub const SlashDeferDuration: u32 = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
 	pub const MaxNominatorRewardedPerValidator: u32 = 256;
+	pub const MaxNominations: u32 = MAX_NOMINATIONS;
 	pub OffchainRepeat: BlockNumber = 5;
 	pub const StakingUnsignedPriority: TransactionPriority = TransactionPriority::max_value() / 2;
 }
@@ -330,8 +346,7 @@ impl pallet_staking::Config for Runtime {
 	type UnixTime = Timestamp;
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 	type BenchmarkingConfig = StakingBenchmarkingConfig;
-
-	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+	type MaxNominations = MaxNominations;
 }
 
 parameter_types! {
@@ -376,19 +391,18 @@ sp_npos_elections::generate_solution_type!(
 
 pub const MAX_NOMINATIONS: u32 = <NposSolution16 as sp_npos_elections::NposSolution>::LIMIT as u32;
 
-/// The numbers configured here could always be more than the the maximum limits
-/// of staking pallet to ensure election snapshot will not run out of memory.
-/// For now, we set them to smaller values since the staking is bounded and the
-/// weight pipeline takes hours for this single pallet.
-pub struct BenchmarkConfig;
-impl pallet_election_provider_multi_phase::BenchmarkingConfig for BenchmarkConfig {
+/// The numbers configured here could always be more than the the maximum limits of staking pallet
+/// to ensure election snapshot will not run out of memory. For now, we set them to smaller values
+/// since the staking is bounded and the weight pipeline takes hours for this single pallet.
+pub struct ElectionProviderBenchmarkConfig;
+impl pallet_election_provider_multi_phase::BenchmarkingConfig for ElectionProviderBenchmarkConfig {
+	const VOTERS: [u32; 2] = [1000, 2000];
+	const TARGETS: [u32; 2] = [500, 1000];
 	const ACTIVE_VOTERS: [u32; 2] = [500, 800];
 	const DESIRED_TARGETS: [u32; 2] = [200, 400];
-	const MAXIMUM_TARGETS: u32 = 300;
-	const MINER_MAXIMUM_VOTERS: u32 = 1000;
 	const SNAPSHOT_MAXIMUM_VOTERS: u32 = 1000;
-	const TARGETS: [u32; 2] = [500, 1000];
-	const VOTERS: [u32; 2] = [1000, 2000];
+	const MINER_MAXIMUM_VOTERS: u32 = 1000;
+	const MAXIMUM_TARGETS: u32 = 300;
 }
 
 /// Maximum number of iterations for balancing that will be executed in the
@@ -442,38 +456,41 @@ impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallb
 }
 
 impl pallet_election_provider_multi_phase::Config for Runtime {
-	type BenchmarkingConfig = BenchmarkConfig;
-	type Currency = Balances;
-	// nothing to do upon rewards
-	type DataProvider = Staking;
-	type EstimateCallFee = TransactionPayment;
 	type Event = Event;
-	type Fallback = Fallback<Self>;
-	type ForceOrigin = EnsureRoot<AccountId>;
-	type MinerMaxLength = MinerMaxLength;
-	type MinerMaxWeight = MinerMaxWeight;
-	type MinerTxPriority = MultiPhaseUnsignedPriority;
+	type Currency = Balances;
+	type EstimateCallFee = TransactionPayment;
+	type SignedPhase = SignedPhase;
+	type UnsignedPhase = UnsignedPhase;
+	type SolutionImprovementThreshold = SolutionImprovementThreshold;
 	type OffchainRepeat = OffchainRepeat;
-	// burn slashes
-	type RewardHandler = ();
+	type MinerMaxWeight = MinerMaxWeight;
+	type MinerMaxLength = MinerMaxLength;
+	type MinerTxPriority = MultiPhaseUnsignedPriority;
+	type SignedMaxSubmissions = ConstU32<10>;
+	type SignedRewardBase = SignedRewardBase;
 	type SignedDepositBase = SignedDepositBase;
 	type SignedDepositByte = SignedDepositByte;
 	type SignedDepositWeight = ();
-	type SignedMaxSubmissions = SignedMaxSubmissions;
 	type SignedMaxWeight = MinerMaxWeight;
-	type SignedPhase = SignedPhase;
-	type SignedRewardBase = SignedRewardBase;
-	type SlashHandler = ();
+	type SlashHandler = (); // burn slashes
+	type RewardHandler = (); // nothing to do upon rewards
+	type DataProvider = Staking;
 	type Solution = NposSolution16;
-	type SolutionImprovementThreshold = SolutionImprovementThreshold;
+	type Fallback = pallet_election_provider_multi_phase::NoFallback<Self>;
+	type GovernanceFallback =
+		frame_election_provider_support::onchain::OnChainSequentialPhragmen<Self>;
 	type Solver = frame_election_provider_support::SequentialPhragmen<
 		AccountId,
 		pallet_election_provider_multi_phase::SolutionAccuracyOf<Self>,
 		OffchainRandomBalancing,
 	>;
-	type UnsignedPhase = UnsignedPhase;
-	type VoterSnapshotPerBlock = VoterSnapshotPerBlock;
 	type WeightInfo = pallet_election_provider_multi_phase::weights::SubstrateWeight<Self>;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type BenchmarkingConfig = ElectionProviderBenchmarkConfig;
+	// BagsList allows a practically unbounded count of nominators to participate in NPoS elections.
+	// To ensure we respect memory limits when using the BagsList this must be set to a number of
+	// voters we know can fit into a single vec allocation.
+	type VoterSnapshotPerBlock = ConstU32<10_000>;
 }
 
 parameter_types! {
@@ -542,9 +559,12 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
+	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;

@@ -1,3 +1,17 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
@@ -180,7 +194,7 @@ pub mod pallet {
 						Ok(_) => {
 							// Do nothing, it is all good.
 						},
-						Err(e) => {
+						Err(_e) => {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
@@ -255,6 +269,20 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
 			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
+			return Ok(())
+		}
+
+		Err(Error::<T>::ProposalFormatInvalid)?
+	}
+
+	fn handle_unsigned_proposer_set_update_proposal(
+		proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> DispatchResult {
+		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
+		if let Ok((chain_id, key)) = decode_proposal(&proposal).map(Into::into) {
+			UnsignedProposalQueue::<T>::insert(chain_id, key, proposal);
+
 			return Ok(())
 		}
 

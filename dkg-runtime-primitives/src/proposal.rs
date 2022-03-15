@@ -1,4 +1,19 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use frame_support::RuntimeDebug;
+use sp_runtime::traits::AtLeast32Bit;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -63,6 +78,7 @@ pub struct RefreshProposalSigned {
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
+	ProposerSetUpdateProposal(ProposalNonce),
 	AnchorCreateProposal(ProposalNonce),
 	AnchorUpdateProposal(ProposalNonce),
 	TokenAddProposal(ProposalNonce),
@@ -84,6 +100,7 @@ impl PartialEq for DKGPayloadKey {
 		match (self, other) {
 			(Self::EVMProposal(l0), Self::EVMProposal(r0)) => l0 == r0,
 			(Self::RefreshVote(l0), Self::RefreshVote(r0)) => l0 == r0,
+			(Self::ProposerSetUpdateProposal(l0), Self::ProposerSetUpdateProposal(r0)) => l0 == r0,
 			(Self::AnchorCreateProposal(l0), Self::AnchorCreateProposal(r0)) => l0 == r0,
 			(Self::AnchorUpdateProposal(l0), Self::AnchorUpdateProposal(r0)) => l0 == r0,
 			(Self::TokenAddProposal(l0), Self::TokenAddProposal(r0)) => l0 == r0,
@@ -128,6 +145,7 @@ pub enum Proposal {
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
 pub enum ProposalKind {
 	Refresh,
+	ProposerSetUpdate,
 	EVM,
 	AnchorCreate,
 	AnchorUpdate,
@@ -187,17 +205,14 @@ impl Proposal {
 			ProposalKind::MaxDepositLimitUpdate =>
 				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce.into()),
 			ProposalKind::MinWithdrawalLimitUpdate =>
-				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce.into()),
-			ProposalKind::MaxExtLimitUpdate =>
-				DKGPayloadKey::MaxExtLimitUpdateProposal(nonce.into()),
-			ProposalKind::MaxFeeLimitUpdate =>
-				DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce.into()),
-			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce.into()),
-			ProposalKind::SetTreasuryHandler =>
-				DKGPayloadKey::SetTreasuryHandlerProposal(nonce.into()),
-			ProposalKind::FeeRecipientUpdate =>
-				DKGPayloadKey::FeeRecipientUpdateProposal(nonce.into()),
-			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce.into()),
+				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce),
+			ProposalKind::MaxExtLimitUpdate => DKGPayloadKey::MaxExtLimitUpdateProposal(nonce),
+			ProposalKind::MaxFeeLimitUpdate => DKGPayloadKey::MaxFeeLimitUpdateProposal(nonce),
+			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce),
+			ProposalKind::SetTreasuryHandler => DKGPayloadKey::SetTreasuryHandlerProposal(nonce),
+			ProposalKind::FeeRecipientUpdate => DKGPayloadKey::FeeRecipientUpdateProposal(nonce),
+			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
+			ProposalKind::ProposerSetUpdate => DKGPayloadKey::ProposerSetUpdateProposal(nonce),
 		}
 	}
 }
@@ -208,6 +223,13 @@ pub trait ProposalHandlerTrait {
 		_action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
+	}
+
+	fn handle_unsigned_proposer_set_update_proposal(
+		_proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> frame_support::pallet_prelude::DispatchResult {
+		Ok(().into())
 	}
 
 	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {

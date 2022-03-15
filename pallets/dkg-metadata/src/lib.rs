@@ -1,18 +1,16 @@
-// Copyright (C) 2020-2021 Parity Technologies (UK) Ltd.
-// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
-
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -84,8 +82,9 @@ pub mod pallet {
 
 		/// Listener for authority set changes
 		type OnAuthoritySetChangeHandler: OnAuthoritySetChangeHandler<
-			dkg_runtime_primitives::AuthoritySetId,
 			Self::AccountId,
+			dkg_runtime_primitives::AuthoritySetId,
+			Self::DKGId,
 		>;
 
 		type OnDKGPublicKeyChangeHandler: OnDKGPublicKeyChangeHandler<
@@ -155,7 +154,8 @@ pub mod pallet {
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					RefreshInProgress::<T>::put(true);
-					let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
+					let uncompressed_pub_key =
+						Self::decompress_public_key(pub_key.1).unwrap_or_default();
 					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
 						nonce: next_nonce.into(),
@@ -686,30 +686,43 @@ impl<T: Config> Pallet<T> {
 		valid_reporters
 	}
 
+	/// Change the current DKG authority set by rotating in the `new_authority_ids` set.
+	///
+	/// This function is meant to be called on a new session when the next authorities
+	/// become the current or `new` authorities. We track the accounts for these
+	/// authorities as well.
 	fn change_authorities(
-		new: Vec<T::DKGId>,
-		queued: Vec<T::DKGId>,
-		authorities_accounts: Vec<T::AccountId>,
+		new_authority_ids: Vec<T::DKGId>,
+		next_authority_ids: Vec<T::DKGId>,
+		new_authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
-		<Authorities<T>>::put(&new);
-		CurrentAuthoritiesAccounts::<T>::put(&authorities_accounts);
+		Authorities::<T>::put(&new_authority_ids);
+		CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
 
 		let next_id = Self::authority_set_id() + 1u64;
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-			dkg_runtime_primitives::AuthoritySetId,
 			T::AccountId,
-		>>::on_authority_set_changed(next_id, authorities_accounts);
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		>>::on_authority_set_changed(
+			new_authorities_accounts.clone(),
+			next_id,
+			new_authority_ids.clone(),
+		);
 
-		<AuthoritySetId<T>>::put(next_id);
+		AuthoritySetId::<T>::put(next_id);
 
 		let log: DigestItem = DigestItem::Consensus(
 			DKG_ENGINE_ID,
 			ConsensusLog::AuthoritiesChange {
-				next_authorities: AuthoritySet { authorities: new, id: next_id },
+				next_authorities: AuthoritySet {
+					authorities: new_authority_ids.clone(),
+					id: next_id,
+				},
 				next_queued_authorities: AuthoritySet {
-					authorities: queued.clone(),
+					authorities: next_authority_ids.clone(),
 					id: next_id + 1u64,
 				},
 			}
@@ -718,7 +731,7 @@ impl<T: Config> Pallet<T> {
 		<frame_system::Pallet<T>>::deposit_log(log);
 		Self::refresh_keys();
 
-		<NextAuthorities<T>>::put(&queued);
+		NextAuthorities::<T>::put(&next_authority_ids);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 	}
 
@@ -727,19 +740,20 @@ impl<T: Config> Pallet<T> {
 			return
 		}
 
-		assert!(<Authorities<T>>::get().is_empty(), "Authorities are already initialized!");
+		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 
-		<Authorities<T>>::put(authorities);
-		<AuthoritySetId<T>>::put(0);
+		Authorities::<T>::put(authorities);
+		AuthoritySetId::<T>::put(0);
 		// Like `pallet_session`, initialize the next validator set as well.
-		<NextAuthorities<T>>::put(authorities);
+		NextAuthorities::<T>::put(authorities);
 		CurrentAuthoritiesAccounts::<T>::put(authority_account_ids);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-			dkg_runtime_primitives::AuthoritySetId,
 			T::AccountId,
-		>>::on_authority_set_changed(0, authority_account_ids.to_vec());
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		>>::on_authority_set_changed(authority_account_ids.to_vec(), 0, authorities.to_vec());
 	}
 
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {

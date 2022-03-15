@@ -1,3 +1,17 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use crate::mock::*;
 use codec::Encode;
 use frame_support::{assert_err, assert_ok};
@@ -10,7 +24,7 @@ use dkg_runtime_primitives::{
 	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
 	ProposalKind, ProposalNonce, TransactionAction, TransactionV2, TypedChainId, U256,
 };
-use sp_core::{sr25519, H256};
+use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
 
 // *** Utility ***
@@ -95,6 +109,23 @@ fn handle_anchor_update_proposal_success() {
 		];
 
 		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
+			proposal_raw.to_vec(),
+			ProposalAction::Sign(0)
+		));
+
+		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
+	})
+}
+
+#[test]
+fn should_handle_proposer_set_update_proposal_success() {
+	execute_test_with(|| {
+		let proposal_raw: [u8; 48] = [
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8,
+			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 0, 0, 0, 1,
+		];
+
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
 			proposal_raw.to_vec(),
 			ProposalAction::Sign(0)
 		));
@@ -292,19 +323,6 @@ fn submit_signed_proposal_already_exists() {
 #[test]
 fn submit_signed_proposal_fail_invalid_sig() {
 	execute_test_with(|| {
-		let tx_eip2930 = EIP2930Transaction {
-			chain_id: 0,
-			nonce: U256::from(0u8),
-			gas_price: U256::from(0u8),
-			gas_limit: U256::from(0u8),
-			action: TransactionAction::Create,
-			value: U256::from(99u8),
-			input: Vec::<u8>::new(),
-			access_list: Vec::new(),
-			odd_y_parity: false,
-			r: H256::from([0u8; 32]),
-			s: H256::from([0u8; 32]),
-		};
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(

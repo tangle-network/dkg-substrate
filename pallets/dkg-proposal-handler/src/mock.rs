@@ -1,7 +1,22 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use crate as pallet_dkg_proposal_handler;
 use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
+use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519, sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
@@ -20,8 +35,6 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::RuntimeAppPublic;
 
 use dkg_runtime_primitives::{keccak_256, ProposalHeader, TransactionV2, TypedChainId};
-
-use frame_support::traits::{OnFinalize, OnInitialize};
 
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
@@ -51,8 +64,19 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
+
+parameter_types! {
+	pub const MaxAuthorities: u32 = 100_000;
+}
+
+impl pallet_aura::Config for Test {
+	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
+	type DisabledValidators = ();
+	type MaxAuthorities = MaxAuthorities;
+}
 
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
@@ -147,21 +171,37 @@ impl pallet_dkg_proposal_handler::Config for Test {
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAccountId = DKGAccountId;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGId = DKGId;
+	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type WeightInfo = ();
 }
 
+pub const MILLISECS_PER_BLOCK: u64 = 10000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+parameter_types! {
+	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
+}
+
+impl pallet_timestamp::Config for Test {
+	type MinimumPeriod = MinimumPeriod;
+	type Moment = u64;
+	type OnTimestampSet = Aura;
+	type WeightInfo = ();
+}
 pub struct MockSessionManager;
 
 impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 	fn end_session(_: sp_staking::SessionIndex) {}
 	fn start_session(_: sp_staking::SessionIndex) {}
-	fn new_session(idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
+	fn new_session(_idx: sp_staking::SessionIndex) -> Option<Vec<AccountId>> {
 		None
 	}
 }
@@ -254,14 +294,6 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	})
 }
 
-pub fn run_to_block(n: u64) {
-	while System::block_number() < n {
-		System::on_finalize(System::block_number());
-		System::set_block_number(System::block_number() + 1);
-		System::on_initialize(System::block_number());
-	}
-}
-
 pub fn mock_eth_tx_eip2930(nonce: u8) -> EIP2930Transaction {
 	EIP2930Transaction {
 		chain_id: 0,
@@ -282,7 +314,7 @@ pub fn mock_sign_msg(
 	msg: &[u8; 32],
 ) -> Result<std::option::Option<sp_core::ecdsa::Signature>, sp_keystore::Error> {
 	let keystore = KeyStore::new();
-	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
+	let (_pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
 	SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
