@@ -166,28 +166,6 @@ pub fn decode_proposal<C: ChainIdTrait>(
 			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
 			ChainIdType::Solana(_) => panic!("Unimplemented"),
 		},
-		ProposalKind::MaxExtLimitUpdate => match chain_id {
-			ChainIdType::Null(_) => panic!("should not be null chain type"),
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MaxExtLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
-		ProposalKind::MaxFeeLimitUpdate => match chain_id {
-			ChainIdType::Null(_) => panic!("should not be null chain type"),
-			ChainIdType::EVM(_) => evm::bytes32_update::create(&proposal.data()).map(|p| {
-				(p.header.chain_id, DKGPayloadKey::MaxFeeLimitUpdateProposal(p.header.nonce))
-			}),
-			ChainIdType::Substrate(_) => todo!(),
-			ChainIdType::RelayChain(_, _) => todo!(),
-			ChainIdType::Parachain(_, _) => todo!(),
-			ChainIdType::CosmosSDK(_) => panic!("Unimplemented"),
-			ChainIdType::Solana(_) => panic!("Unimplemented"),
-		},
 		ProposalKind::SetTreasuryHandler => match chain_id {
 			ChainIdType::Null(_) => panic!("should not be null chain type"),
 			ChainIdType::EVM(_) => evm::set_treasury_handler::create(&proposal.data()).map(|p| {

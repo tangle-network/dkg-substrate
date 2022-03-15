@@ -435,8 +435,6 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain_type: ChainIdType<Cha
 			ProposalKind::RescueTokens => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetTreasuryHandler => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::FeeRecipientUpdate => Proposal::Unsigned { kind, data: buf },
@@ -567,38 +565,6 @@ fn force_submit_should_work_with_valid_proposals() {
 			DKGProposalHandler::unsigned_proposals(
 				ChainIdType::EVM(1),
 				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(1)
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxExtLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MaxExtLimitUpdateProposal(1)
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxFeeLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MaxFeeLimitUpdateProposal(1)
 			)
 			.is_some(),
 			true
