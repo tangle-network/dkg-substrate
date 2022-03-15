@@ -112,7 +112,7 @@ const __NODE_STATE: {
 	charlie: { isRunning: false, process: null },
 };
 export function startStandaloneNode(
-	authority: 'alice' | 'bob' | 'charlie',
+	authority: 'alice' | 'bob' | 'charlie' | 'dave',
 	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
 ): child.ChildProcess {
 	if (__NODE_STATE[authority].isRunning) {
@@ -124,6 +124,7 @@ export function startStandaloneNode(
 		alice: { ws: 9944, http: 9933, p2p: 30333 },
 		bob: { ws: 9945, http: 9934, p2p: 30334 },
 		charlie: { ws: 9946, http: 9935, p2p: 30335 },
+		dave: { ws: 9947, http: 9936, p2p: 30336 },
 	};
 	const proc = child.spawn(
 		nodePath,
@@ -140,7 +141,7 @@ export function startStandaloneNode(
 						`/ip4/127.0.0.1/tcp/${ports['alice'].p2p}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp`,
 				  ]),
 			// only print logs from the alice node
-			...(authority === 'alice' && options.printLogs
+			...(authority === 'dave' && options.printLogs
 				? [
 						'-ldkg=debug',
 						'-ldkg_metadata=debug',

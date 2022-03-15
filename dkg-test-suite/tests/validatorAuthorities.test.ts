@@ -24,13 +24,6 @@ let bobNode: ChildProcess;
 let charlieNode: ChildProcess;
 let daveNode: ChildProcess;
 
-let localChain: LocalChain;
-let localChain2: LocalChain;
-let localChain3: LocalChain;
-let wallet1: ethers.Wallet;
-let wallet2: ethers.Wallet;
-let wallet3: ethers.Wallet;
-
 export let signatureBridge: Bridges.SignatureBridge;
 
 
