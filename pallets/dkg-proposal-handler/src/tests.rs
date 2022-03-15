@@ -435,8 +435,6 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Pro
 			ProposalKind::RescueTokens => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetTreasuryHandler => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::FeeRecipientUpdate => Proposal::Unsigned { kind, data: buf },
