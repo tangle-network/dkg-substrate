@@ -86,7 +86,9 @@ describe('Validator Node Test', () => {
 			1000000,
 			'Stash'
 		);
-		await callStake.signAndSend(daveStash);
+		await callStake.signAndSend(daveStash, {
+			tip: 100000
+		});
 
 		console.log(`Make Dave a validator`);
 		// become validator
@@ -94,7 +96,9 @@ describe('Validator Node Test', () => {
 			commission: 0,
 			blocked: false
 		});
-		await call.signAndSend(daveStash);
+		await call.signAndSend(daveStash, {
+			tip: 20000000
+		});
 
 		await waitNfinalizedBlocks(polkadotApi, 10, 120);
 
@@ -107,12 +111,12 @@ describe('Validator Node Test', () => {
 
 		let callChill = polkadotApi.tx.staking.chill();
 		await callChill.signAndSend(daveStash);
-		let forceNewEraAgain = polkadotApi.tx.staking.forceNewEraAlways();
+		/*let forceNewEraAgain = polkadotApi.tx.staking.forceNewEraAlways();
 		const forceNewEraAlwaysAgainCall = polkadotApi.tx.sudo.sudo({
 			callIndex: forceNewEraAgain.callIndex,
 			args: forceNewEraAgain.args,
 		});
-		await forceNewEraAlwaysAgainCall.signAndSend(alice);
+		await forceNewEraAlwaysAgainCall.signAndSend(alice);*/
 		await waitNfinalizedBlocks(polkadotApi, 10, 120);
 
 		const nextAuthoritiesAfterRemovingDave = await polkadotApi.query.dkg.nextAuthorities();
