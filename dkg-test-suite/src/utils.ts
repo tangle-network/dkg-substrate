@@ -110,6 +110,7 @@ const __NODE_STATE: {
 	alice: { isRunning: false, process: null },
 	bob: { isRunning: false, process: null },
 	charlie: { isRunning: false, process: null },
+	dave: { isRunning: false, process: null },
 };
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie' | 'dave',
