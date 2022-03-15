@@ -36,19 +36,19 @@ use sc_network_gossip::GossipEngine;
 use rand::Rng;
 use sp_api::BlockId;
 use sp_runtime::{
+	offchain::{OffchainStorage, STORAGE_PREFIX},
 	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
-};
-
-use crate::messages::{
-	dkg_message::send_outgoing_dkg_messages,
-	misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
-	public_key_gossip::handle_public_key_broadcast,
+	messages::{
+		dkg_message::send_outgoing_dkg_messages,
+		misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
+		public_key_gossip::{gossip_public_key, handle_public_key_broadcast},
+	},
+	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
 };
 
 use crate::storage::{
@@ -60,6 +60,7 @@ use dkg_primitives::{
 	DKGReport, Proposal, ProposalKind,
 };
 
+use dkg_primitives::offchain::storage_keys::*;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},

@@ -104,15 +104,6 @@ pub mod pallet {
 		/// Estimate next session rotation
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
 
-		/// ChainID for anchor edges
-		type ChainId: Encode
-			+ Decode
-			+ Parameter
-			+ AtLeast32Bit
-			+ MaybeSerializeDeserialize
-			+ Default
-			+ Copy;
-
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
 		/// Convert DKG AuthorityId to a form that would end up in the Merkle Tree.

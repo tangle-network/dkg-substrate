@@ -14,7 +14,7 @@
 
 use crate::{
 	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, ProposalHeader, ProposalNonce, Vec,
+	DKGPayloadKey, ProposalHeader, ProposalNonce, Vec,
 };
 use codec::alloc::string::ToString;
 
@@ -51,7 +51,7 @@ pub fn create(data: &[u8]) -> Result<ProposerSetUpdateProposal, ValidationError>
 
 	let mut nonce_bytes = [0u8; 4];
 	nonce_bytes.copy_from_slice(&data[44..48]);
-	let nonce = u32::from_be_bytes(nonce_bytes);
+	let nonce = u32::from_be_bytes(nonce_bytes).into();
 
 	Ok(ProposerSetUpdateProposal { merkle_root, average_session_length, num_of_proposers, nonce })
 }

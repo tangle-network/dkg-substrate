@@ -280,8 +280,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		_action: ProposalAction,
 	) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
-		if let Ok((chain_id, key)) = decode_proposal(&proposal).map(Into::into) {
-			UnsignedProposalQueue::<T>::insert(chain_id, key, proposal);
+		if let Ok(v) = decode_proposal_identifier(&proposal) {
+			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
 
 			return Ok(())
 		}
