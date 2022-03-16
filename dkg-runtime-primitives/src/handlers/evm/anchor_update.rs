@@ -21,4 +21,3 @@ pub fn create(data: &[u8]) -> Result<AnchorUpdateProposal, ValidationError> {
 		data.try_into().map_err(|_| ValidationError::InvalidProposalBytesLength)?;
 	Ok(AnchorUpdateProposal::from(bytes))
 }
-

@@ -21,4 +21,3 @@ pub fn create(data: &[u8]) -> Result<TokenAddProposal, ValidationError> {
 		data.try_into().map_err(|_| ValidationError::InvalidProposalBytesLength)?;
 	Ok(TokenAddProposal::from(bytes))
 }
-
