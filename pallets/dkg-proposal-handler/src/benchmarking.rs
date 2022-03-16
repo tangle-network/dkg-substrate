@@ -64,7 +64,7 @@ benchmarks! {
 		let mut signed_proposals = Vec::new();
 		for i in 0..n as usize {
 			let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(i as u8));
-			let proposal = Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Signed(caller.clone()).into(),Proposal::Unsigned {
+			let proposal = Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Root.into(),Proposal::Unsigned {
 				kind: ProposalKind::EVM,
 				data: tx.encode().clone()
 			});
