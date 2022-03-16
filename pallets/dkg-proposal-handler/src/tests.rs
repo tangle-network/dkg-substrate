@@ -572,38 +572,6 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxExtLimitUpdate, data: vec![] },
-				TypedChainId::Evm(0)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::MaxExtLimitUpdateProposal(1.into())
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxFeeLimitUpdate, data: vec![] },
-				TypedChainId::Evm(0)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::MaxFeeLimitUpdateProposal(1.into())
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::SetTreasuryHandler, data: vec![] },
 				TypedChainId::Evm(0)

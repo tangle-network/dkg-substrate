@@ -16,16 +16,18 @@ use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
 	DKGPayloadKey, Proposal, ProposalKind,
 };
-use codec::{alloc::string::ToString, Decode};
 
 use super::substrate;
 
 pub fn decode_proposal_header(
 	data: &[u8],
 ) -> Result<webb_proposals::ProposalHeader, ValidationError> {
-	let header = webb_proposals::ProposalHeader::decode(&mut &*data).map_err(|_| {
-		ValidationError::InvalidParameter("Failed to decode proposal header".to_string())
-	})?;
+	if data.len() < webb_proposals::ProposalHeader::LENGTH {
+		return Err(ValidationError::InvalidProposalBytesLength)
+	}
+	let mut bytes = [0u8; webb_proposals::ProposalHeader::LENGTH];
+	bytes.copy_from_slice(data[..webb_proposals::ProposalHeader::LENGTH].as_ref());
+	let header = webb_proposals::ProposalHeader::from(bytes);
 	frame_support::log::debug!(
 		target: "dkg_proposal_handler",
 		"🕸️ Decoded Proposal Header: {:?} ({} bytes)",
@@ -65,6 +67,7 @@ pub fn decode_proposal_identifier(
 			}
 		}
 	}
+
 	let header = decode_proposal_header(proposal.data())?;
 	let mut identifier = ProposalIdentifier {
 		key: DKGPayloadKey::EVMProposal(header.nonce()), // placeholder
@@ -194,6 +197,12 @@ pub fn decode_proposal_identifier(
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::FeeRecipientUpdate));
 
+	let maybe_proposer_set_update = super::proposer_set_update::create(proposal.data())
+		.map(|p| {
+			identifier.key = DKGPayloadKey::ProposerSetUpdateProposal(p.nonce);
+			identifier
+		})
+		.and_then(matches_kind(proposal.kind(), ProposalKind::ProposerSetUpdate));
 	maybe_evm_anchor_update
 		.or(maybe_substrate_anchor_update)
 		.or(maybe_evm_token_add)
@@ -211,5 +220,6 @@ pub fn decode_proposal_identifier(
 		.or(maybe_set_verifier)
 		.or(maybe_fee_recipient_update)
 		.or(maybe_anchor_create)
+		.or(maybe_proposer_set_update)
 		.map_err(|_| ValidationError::UnimplementedProposalKind)
 }

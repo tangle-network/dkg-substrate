@@ -36,19 +36,19 @@ use sc_network_gossip::GossipEngine;
 use rand::Rng;
 use sp_api::BlockId;
 use sp_runtime::{
-	offchain::{OffchainStorage, STORAGE_PREFIX},
 	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
 
 use crate::{
 	keystore::DKGKeystore,
-	messages::{
-		dkg_message::send_outgoing_dkg_messages,
-		misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
-		public_key_gossip::{gossip_public_key, handle_public_key_broadcast},
-	},
-	persistence::{store_localkey, try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+};
+
+use crate::messages::{
+	dkg_message::send_outgoing_dkg_messages,
+	misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
+	public_key_gossip::handle_public_key_broadcast,
 };
 
 use crate::storage::{
@@ -56,22 +56,18 @@ use crate::storage::{
 };
 
 use dkg_primitives::{
-	types::{DKGError, DKGResult, RoundId},
-	DKGReport, Proposal, ProposalKind,
+	types::{DKGError, RoundId},
+	DKGReport, Proposal,
 };
 
-use dkg_primitives::offchain::storage_keys::*;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, OffchainSignedProposals,
-	RefreshProposalSigned, TypedChainId, GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
-	error,
-	gossip::GossipValidator,
-	metric_inc, metric_set,
+	error, metric_inc, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	types::dkg_topic,
@@ -280,7 +276,7 @@ where
 			}
 		}
 
-		None
+		return None
 	}
 
 	/// gets authority reputations from an header
@@ -310,8 +306,9 @@ where
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
-	fn get_latest_block_number(&self) -> NumberFor<B> {
-		*self.latest_header.clone().unwrap().number()
+	/// gets latest block number from latest block header
+	pub fn get_latest_block_number(&self) -> NumberFor<B> {
+		self.latest_header.clone().unwrap().number().clone()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -563,8 +560,8 @@ where
 				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				// Setting up the DKG
-				self.handle_dkg_setup(header, active);
-				self.handle_queued_dkg_setup(header, queued.clone());
+				self.handle_dkg_setup(&header, active.clone());
+				self.handle_queued_dkg_setup(&header, queued.clone());
 
 				if !self.current_validator_set.authorities.is_empty() {
 					send_outgoing_dkg_messages(self);
@@ -582,8 +579,8 @@ where
 			{
 				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
 				self.queued_validator_set = queued.clone();
-				self.handle_queued_dkg_setup(header, queued);
-				self.send_outgoing_dkg_messages();
+				self.handle_queued_dkg_setup(&header, queued.clone());
+				send_outgoing_dkg_messages(self);
 			}
 		}
 	}
@@ -600,147 +597,6 @@ where
 		self.best_grandpa_block = *notification.header.number();
 
 		self.process_block_notification(&notification.header);
-	}
-
-	// *** DKG rounds ***
-
-	fn send_outgoing_dkg_messages(&mut self) {
-		debug!(target: "dkg", "🕸️  Try sending DKG messages");
-
-		let send_messages = |rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
-		                     authority_id: Public,
-		                     at: NumberFor<B>|
-		 -> Vec<Result<DKGResult, DKGError>> {
-			let results = rounds.proceed(at);
-
-			for result in &results {
-				if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-					if let Some(local_keystore) = self.local_keystore.clone() {
-						if let Some(local_key_path) = rounds.get_local_key_path() {
-							let _ = store_localkey(
-								local_key,
-								round_id,
-								local_key_path,
-								self.key_store.clone(),
-								local_keystore,
-							);
-						}
-					}
-				}
-			}
-
-			for message in rounds.get_outgoing_messages() {
-				let dkg_message = DKGMessage {
-					id: authority_id.clone(),
-					payload: message,
-					round_id: rounds.get_id(),
-				};
-				let encoded_dkg_message = dkg_message.encode();
-
-				let maybe_sr25519_public = self.key_store.sr25519_authority_id(
-					&self.key_store.sr25519_public_keys().unwrap_or_default(),
-				);
-				let sr25519_public = match maybe_sr25519_public {
-					Some(sr25519_public) => sr25519_public,
-					None => {
-						error!(target: "dkg", "🕸️  Could not find sr25519 key in keystore");
-						break
-					},
-				};
-
-				match self.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
-					Ok(sig) => {
-						let signed_dkg_message =
-							SignedDKGMessage { msg: dkg_message, signature: Some(sig.encode()) };
-						let encoded_signed_dkg_message = signed_dkg_message.encode();
-						self.gossip_engine.lock().gossip_message(
-							dkg_topic::<B>(),
-							encoded_signed_dkg_message.clone(),
-							true,
-						);
-					},
-					Err(e) => trace!(
-						target: "dkg",
-						"🕸️  Error signing DKG message: {:?}",
-						e
-					),
-				}
-				trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", encoded_dkg_message.len());
-			}
-			results
-		};
-
-		let mut keys_to_gossip = Vec::new();
-		let mut rounds_send_result = vec![];
-		let mut next_rounds_send_result = vec![];
-
-		if let Some(mut rounds) = self.rounds.take() {
-			if let Some(id) =
-				self.key_store.authority_id(self.current_validator_set.authorities.as_slice())
-			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
-				rounds_send_result = send_messages(&mut rounds, id, self.get_latest_block_number());
-			} else {
-				error!(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC."
-				);
-			}
-
-			if self.active_keygen_in_progress {
-				let is_keygen_finished = rounds.is_keygen_finished();
-				if is_keygen_finished {
-					debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
-					self.active_keygen_in_progress = false;
-					let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
-					let round_id = rounds.get_id();
-					keys_to_gossip.push((round_id, pub_key));
-				}
-			}
-
-			self.rounds = Some(rounds);
-		}
-
-		// Check if a there's a key gen process running for the queued authority set
-		if self.queued_keygen_in_progress {
-			if let Some(id) =
-				self.key_store.authority_id(self.queued_validator_set.authorities.as_slice())
-			{
-				debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-				if let Some(mut next_rounds) = self.next_rounds.take() {
-					next_rounds_send_result =
-						send_messages(&mut next_rounds, id, self.get_latest_block_number());
-
-					let is_keygen_finished = next_rounds.is_keygen_finished();
-					if is_keygen_finished {
-						debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
-						self.queued_keygen_in_progress = false;
-						let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
-						keys_to_gossip.push((next_rounds.get_id(), pub_key));
-					}
-					self.next_rounds = Some(next_rounds);
-				}
-			} else {
-				error!(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC."
-				);
-			}
-		}
-
-		for (round_id, pub_key) in &keys_to_gossip {
-			gossip_public_key(self, pub_key.clone(), *round_id);
-		}
-
-		for res in &rounds_send_result {
-			if let Err(err) = res {
-				self.handle_dkg_error(err.clone());
-			}
-		}
-
-		for res in &next_rounds_send_result {
-			if let Err(err) = res {
-				self.handle_dkg_error(err.clone());
-			}
-		}
 	}
 
 	fn verify_signature_against_authorities(
@@ -945,89 +801,6 @@ where
 		Ok(maybe_signer.unwrap())
 	}
 
-	pub fn store_aggregated_public_keys(
-		&mut self,
-		is_gensis_round: bool,
-		round_id: RoundId,
-		keys: &AggregatedPublicKeys,
-		current_block_number: NumberFor<B>,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		if is_gensis_round {
-			self.dkg_state.listening_for_active_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, &keys.encode());
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number.clone(), MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_GENESIS_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored genesis public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-		} else {
-			self.dkg_state.listening_for_pub_key = false;
-
-			offchain.set(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS, &keys.encode());
-
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
-			if let Some(submit_at) = submit_at {
-				offchain.set(STORAGE_PREFIX, SUBMIT_KEYS_AT, &submit_at.encode());
-			}
-
-			trace!(
-				target: "dkg",
-				"Stored aggregated public keys {:?}, delay: {:?}, public keys: {:?}",
-				keys.encode(),
-				submit_at,
-				self.key_store.sr25519_public_keys()
-			);
-
-			let _ = self.aggregated_public_keys.remove(&round_id);
-		}
-
-		Ok(())
-	}
-
-	pub fn store_aggregated_misbehaviour_reports(
-		&mut self,
-		reports: &AggregatedMisbehaviourReports,
-	) -> Result<(), DKGError> {
-		let maybe_offchain = self.backend.offchain_storage();
-		if maybe_offchain.is_none() {
-			return Err(DKGError::GenericError {
-				reason: "No offchain storage available".to_string(),
-			})
-		}
-
-		let mut offchain = maybe_offchain.unwrap();
-		offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
-		trace!(
-			target: "dkg",
-			"Stored aggregated misbehaviour reports {:?}",
-			reports.encode()
-		);
-
-		let _ = self
-			.aggregated_misbehaviour_reports
-			.remove(&(reports.round_id, reports.offender.clone()));
-
-		Ok(())
-	}
-
 	/// Generate a random delay to wait before taking an action.
 	/// The delay is generated from a random number between 0 and `max_delay`.
 	pub fn generate_delayed_submit_at(
@@ -1050,8 +823,8 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if let Some(prop) = proposal {
-				proposals.push(prop);
+			if proposal.is_some() {
+				proposals.push(proposal.unwrap())
 			}
 		}
 		metric_set!(
@@ -1067,11 +840,8 @@ where
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key = <(TypedChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
-			Ok((_, key)) => key,
-			Err(e) => {
-				error!(target: "dkg", "Failed to decode DKG payload key: {:?}", e);
-				return None
-			},
+			Ok((_chain_id, key)) => key,
+			Err(_err) => return None,
 		};
 
 		get_signed_proposal(self, finished_round.clone(), payload_key)
@@ -1093,13 +863,13 @@ where
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for unsigned_proposal in &unsigned_proposals {
-				let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key).encode();
-				if self.dkg_state.created_offlinestage_at.contains_key(&key) {
+			for unsinged_proposal in &unsigned_proposals {
+				let key = (unsinged_proposal.typed_chain_id, unsinged_proposal.key);
+				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}
 
-				if let Err(e) = rounds.create_offline_stage(key.clone(), *header.number()) {
+				if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
 					error!(target: "dkg", "Failed to create offline stage: {:?}", e);
 					errors.push(e);
 				} else {
@@ -1107,7 +877,7 @@ where
 					// to prevent overwriting running offline stages when next this function is
 					// called this function is called on every block import and the proposal
 					// might still be in the the unsigned proposals queue.
-					self.dkg_state.created_offlinestage_at.insert(key.clone(), *header.number());
+					self.dkg_state.created_offlinestage_at.insert(key.encode(), *header.number());
 				}
 			}
 		}
@@ -1159,16 +929,16 @@ where
 		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
 		for unsigned_proposal in unsigned_proposals {
-			let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key).encode();
-			if !rounds.is_ready_to_vote(key.clone()) {
+			let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
+			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
 
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
-			if let Proposal::Unsigned { kind, data } = unsigned_proposal.proposal {
-				debug!(target: "dkg", "Got unsigned proposal of {:?} with data = {:?} with key = {:?}", kind, &data, key);
-				if let Err(e) = rounds.vote(key, data, latest_block_num) {
+			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
+				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
+				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 					errors.push(e);
 				};
@@ -1179,67 +949,7 @@ where
 			self.handle_dkg_error(e);
 		}
 		// Send messages to all peers
-		self.send_outgoing_dkg_messages();
-	}
-
-	fn process_signed_proposals(&mut self, signed_proposals: Vec<Proposal>) {
-		if signed_proposals.is_empty() {
-			return
-		}
-
-		debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
-
-		let public = self
-			.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"));
-
-		if find_index::<AuthorityId>(&self.current_validator_set.authorities[..], &public).is_none()
-		{
-			return
-		}
-
-		// If the header is none, it means no block has been imported yet, so we can exit
-		if self.latest_header.is_none() {
-			return
-		}
-
-		let current_block_number = {
-			let header = self.latest_header.as_ref().unwrap();
-			*header.number()
-		};
-
-		if let Some(mut offchain) = self.backend.offchain_storage() {
-			let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
-
-			let mut prop_wrapper = match old_val.clone() {
-				Some(ser_props) =>
-					OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
-				None => Default::default(),
-			};
-
-			// The signed proposals are submitted in batches, since we want to try and limit
-			// duplicate submissions as much as we can, we add a random submission delay to each
-			// batch stored in offchain storage
-			let submit_at =
-				self.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
-
-			if let Some(submit_at) = submit_at {
-				prop_wrapper.proposals.push((signed_proposals, submit_at))
-			};
-
-			for _i in 1..STORAGE_SET_RETRY_NUM {
-				if offchain.compare_and_set(
-					STORAGE_PREFIX,
-					OFFCHAIN_SIGNED_PROPOSALS,
-					old_val.as_deref(),
-					&prop_wrapper.encode(),
-				) {
-					debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
-					break
-				}
-			}
-		}
+		send_outgoing_dkg_messages(self);
 	}
 
 	// *** Main run loop ***

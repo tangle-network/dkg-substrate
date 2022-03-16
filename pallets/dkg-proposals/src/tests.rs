@@ -30,7 +30,8 @@ use crate::mock::{
 	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
 };
 use dkg_runtime_primitives::{
-	FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce, TypedChainId,
+	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,
+	TypedChainId,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
 
@@ -724,8 +725,8 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(5)
+				TypedChainId::None,
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
 			true
@@ -735,8 +736,8 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(6)
+				TypedChainId::None,
+				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
 			)
 			.is_some(),
 			false
@@ -746,8 +747,8 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(5)
+				TypedChainId::None,
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
 			true
@@ -756,8 +757,8 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		roll_to(80);
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Null(0),
-				DKGPayloadKey::ProposerSetUpdateProposal(9)
+				TypedChainId::None,
+				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
 			)
 			.is_some(),
 			true
@@ -786,8 +787,8 @@ fn proposers_tree_height_should_compute_correctly() {
 
 #[test]
 fn proposers_iter_keys_should_only_contain_active_proposers() {
-	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+	let src_id = TypedChainId::Evm(1);
+	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_keys: Vec<_> = Proposers::<Test>::iter_keys().collect();
@@ -798,8 +799,8 @@ fn proposers_iter_keys_should_only_contain_active_proposers() {
 // TODO: Test this better...right now just printing the root
 #[test]
 fn should_output_valid_root() {
-	let src_id = ChainIdType::EVM(1u32);
-	let r_id = derive_resource_id(src_id.inner_id(), src_id.to_type(), b"remark");
+	let src_id = TypedChainId::Evm(1);
+	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		println!("{:?}", DKGProposals::get_proposer_set_tree_root());
