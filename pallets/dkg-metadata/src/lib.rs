@@ -59,8 +59,10 @@
 //! DKG and signing protocol.
 //!
 //! The pallet exposes a variety of extrinsics for updating metadata:
-//! - `set_threshold`: Allows a root-origin to update the DKG signature threshold used in the
-//!   threshold signing protocol.
+//! - `set_signature_threshold`: Allows a root-origin to update the DKG signature threshold used in
+//!   the threshold signing protocol.
+//! - `set_keygen_threshold`: Allows a root-origin to update the DKG key generation threshold used
+//!   in the multi-party key generation protocol.
 //! - `set_refresh_delay`: Allows a root-origin to update the delay before the key refresh process
 //!   is initiated.
 //! - `submit_misbehaviour_reports`: Allows authorities to submit misbehaviour reports. Once the
@@ -259,7 +261,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
-		pub fn set_threshold(
+		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
@@ -268,8 +270,25 @@ pub mod pallet {
 				usize::from(new_threshold) < Authorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
 			);
-			// set the new maintainer
+			// set the new threshold
 			SignatureThreshold::<T>::try_mutate(|threshold| {
+				*threshold = new_threshold;
+				Ok(().into())
+			})
+		}
+
+		#[pallet::weight(0)]
+		pub fn set_keygen_threshold(
+			origin: OriginFor<T>,
+			new_threshold: u16,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(
+				usize::from(new_threshold) <= Authorities::<T>::get().len(),
+				Error::<T>::InvalidThreshold
+			);
+			// set the new threshold
+			KeygenThreshold::<T>::try_mutate(|threshold| {
 				*threshold = new_threshold;
 				Ok(().into())
 			})
@@ -301,7 +320,8 @@ pub mod pallet {
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-			let threshold = Self::signature_threshold();
+			// Get the signature threshold and use it for the voting threshold
+			let threshold = Self::thresholds().0;
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
@@ -337,7 +357,8 @@ pub mod pallet {
 			let next_authorities = Self::next_authorities_accounts();
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
-			let threshold = Self::signature_threshold();
+			// Get the signature threshold and use it for the voting threshold
+			let threshold = Self::thresholds().0;
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
@@ -405,7 +426,8 @@ pub mod pallet {
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let offender = reports.offender.clone();
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
-			let threshold = Self::signature_threshold();
+			// Get the signature threshold and use it for the voting threshold
+			let threshold = Self::thresholds().0;
 
 			if valid_reporters.len() >= threshold as usize {
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
@@ -559,6 +581,11 @@ pub mod pallet {
 	#[pallet::getter(fn signature_threshold)]
 	pub(super) type SignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
 
+	/// The current key generation threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn keygen_threshold)]
+	pub(super) type KeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
 	/// The current authorities set
 	#[pallet::storage]
 	#[pallet::getter(fn authorities)]
@@ -673,6 +700,7 @@ pub mod pallet {
 		fn build(&self) {
 			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
 			SignatureThreshold::<T>::put(sig_threshold);
+			KeygenThreshold::<T>::put(u16::try_from(self.authorities.len()).unwrap());
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
 			TimeToRestart::<T>::put(T::TimeToRestart::get());
@@ -686,9 +714,9 @@ impl<T: Config> Pallet<T> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
 	}
 
-	/// Return the current signing threshold for DKG keygen/signing.
-	pub fn sig_threshold() -> u16 {
-		Self::signature_threshold()
+	/// Return the current signing and keygen thresholds for DKG keygen/signing.
+	pub fn thresholds() -> (u16, u16) {
+		(Self::signature_threshold(), Self::keygen_threshold())
 	}
 
 	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {

@@ -41,13 +41,13 @@ where
 	let mut rounds_send_result = vec![];
 	let mut next_rounds_send_result = vec![];
 
-	if let Some(mut rounds) = dkg_worker.rounds.take() {
+	if let Some(mut rounds) = dkg_worker.dkg_state.curr_rounds.take() {
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
+				send_messages(dkg_worker, &mut rounds, id, dkg_worker.latest_block);
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -63,7 +63,7 @@ where
 			}
 		}
 
-		dkg_worker.rounds = Some(rounds);
+		dkg_worker.dkg_state.curr_rounds = Some(rounds);
 	}
 
 	// Check if a there's a key gen process running for the queued authority set
@@ -73,13 +73,9 @@ where
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
-			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
-				next_rounds_send_result = send_messages(
-					dkg_worker,
-					&mut next_rounds,
-					id,
-					dkg_worker.get_latest_block_number(),
-				);
+			if let Some(mut next_rounds) = dkg_worker.dkg_state.next_rounds.take() {
+				next_rounds_send_result =
+					send_messages(dkg_worker, &mut next_rounds, id, dkg_worker.latest_block);
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
@@ -88,7 +84,7 @@ where
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
 				}
-				dkg_worker.next_rounds = Some(next_rounds);
+				dkg_worker.dkg_state.next_rounds = Some(next_rounds);
 			}
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");

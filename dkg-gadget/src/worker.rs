@@ -119,28 +119,18 @@ where
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	metrics: Option<Metrics>,
-	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
-	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
-	/// Best block we received a GRANDPA notification for
-	best_grandpa_block: NumberFor<B>,
-	/// Best block a DKG voting round has been concluded for
-	best_dkg_block: Option<NumberFor<B>>,
-	/// Latest block header
-	pub latest_header: Option<B::Header>,
+	/// Latest block number
+	pub latest_block: NumberFor<B>,
 	/// Current validator set
 	pub current_validator_set: AuthoritySet<Public>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// Validator set id for the last signed commitment
-	last_signed_id: u64,
-	/// keep rustc happy
-	_backend: PhantomData<BE>,
 	/// public key refresh in progress
 	pub refresh_in_progress: bool,
 	/// Msg cache for startup if authorities aren't set
-	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
+	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
@@ -158,6 +148,8 @@ where
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
+	/// keep rustc happy
+	_backend: PhantomData<BE>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -191,16 +183,11 @@ where
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
 			metrics,
-			rounds: None,
-			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
 			block_import_notification: client.import_notification_stream(),
-			best_grandpa_block: client.info().finalized_number,
-			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			queued_validator_set: AuthoritySet::empty(),
-			latest_header: None,
-			last_signed_id: 0,
+			latest_block: NumberFor::<B>::from(0u32),
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
@@ -213,41 +200,6 @@ where
 			local_keystore,
 			_backend: PhantomData,
 		}
-	}
-
-	/// gets the current validators in the authority set
-	pub fn get_current_validators(&self) -> AuthoritySet<AuthorityId> {
-		self.current_validator_set.clone()
-	}
-
-	/// gets the queued(next) validators in the authority set
-	pub fn get_queued_validators(&self) -> AuthoritySet<AuthorityId> {
-		self.queued_validator_set.clone()
-	}
-
-	/// gets the dkg keystore(cryto keys)
-	pub fn keystore_ref(&self) -> DKGKeystore {
-		self.key_store.clone()
-	}
-
-	/// set the current rounds
-	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
-		self.rounds = Some(rounds);
-	}
-
-	/// sets the next rounds
-	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
-		self.next_rounds = Some(rounds);
-	}
-
-	/// gets the current rounds
-	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
-		self.rounds.take()
-	}
-
-	/// gets the next rounds
-	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
-		self.next_rounds.take()
 	}
 }
 
@@ -296,20 +248,15 @@ where
 		reputation_map
 	}
 
-	/// get the signature threshold of a block in an header
-	pub fn get_threshold(&self, header: &B::Header) -> Option<u16> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).ok()
+	/// get the signature and keygen threshold of a block in an header
+	pub fn get_thresholds(&self, number: &NumberFor<B>) -> Option<(u16, u16)> {
+		let at: BlockId<B> = BlockId::number(number.clone());
+		return self.client.runtime_api().thresholds(&at).ok()
 	}
 
-	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
+	pub fn get_time_to_restart(&self, number: &NumberFor<B>) -> Option<NumberFor<B>> {
+		let at: BlockId<B> = BlockId::number(number.clone());
 		return self.client.runtime_api().time_to_restart(&at).ok()
-	}
-
-	/// gets latest block number from latest block header
-	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		self.latest_header.clone().unwrap().number().clone()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -325,20 +272,17 @@ where
 	pub fn validator_set(
 		&self,
 		header: &B::Header,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
-		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
-			Some((new, queued))
+	) -> (AuthoritySet<Public>, AuthoritySet<Public>) {
+		if let Some((new, queued)) = find_authorities_change::<B>(header) {
+			(new, queued)
 		} else {
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			Some((
-				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default(),
-				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default(),
-			))
-		};
-
-		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
-
-		new
+			let current_authorities =
+				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default();
+			let queued_authorities =
+				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default();
+			(current_authorities, queued_authorities)
+		}
 	}
 
 	/// Verify `active` validator set for `block` against the key store
@@ -374,10 +318,8 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		let thresh = validate_threshold(
-			next_authorities.authorities.len() as u16,
-			self.get_threshold(header).unwrap(),
-		);
+		let (sig_t, keygen_t) = self.get_thresholds(header.number()).unwrap_or_default();
+		let thresh = validate_threshold(keygen_t, sig_t);
 
 		let mut local_key_path = None;
 		let mut queued_local_key_path = None;
@@ -387,8 +329,6 @@ where
 			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
-
-		let latest_block_num = self.get_latest_block_number();
 
 		self.handle_setting_of_rounds(
 			&next_authorities,
@@ -403,7 +343,7 @@ where
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
 			self.dkg_state.listening_for_active_pub_key = true;
 
-			match self.rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+			match self.dkg_state.curr_rounds.as_mut().unwrap().start_keygen(self.latest_block) {
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for genesis authority set successfully");
 					self.active_keygen_in_progress = true;
@@ -429,15 +369,15 @@ where
 		header: &B::Header,
 		thresh: u16,
 	) {
-		self.rounds = if self.next_rounds.is_some() {
+		self.dkg_state.curr_rounds = if self.dkg_state.next_rounds.is_some() {
 			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
 				if let Err(err) = std::fs::copy(queued_path, path) {
-					error!("Error copying queued key {:?}", &err);
+					error!(target: "dkg", "Error copying queued key {:?}", &err);
 				} else {
-					debug!("Successfully copied queued key to current key");
+					debug!(target: "dkg", "Successfully copied queued key to current key");
 				}
 			}
-			self.next_rounds.take()
+			self.dkg_state.next_rounds.take()
 		} else {
 			let is_authority = find_index(&next_authorities.authorities[..], &public).is_some();
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
@@ -466,10 +406,8 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		let thresh = validate_threshold(
-			queued.authorities.len() as u16,
-			self.get_threshold(header).unwrap_or_default(),
-		);
+		let (sig_t, keygen_t) = self.get_thresholds(header.number()).unwrap_or_default();
+		let thresh = validate_threshold(keygen_t, sig_t);
 
 		let mut local_key_path = None;
 
@@ -477,13 +415,12 @@ where
 			local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
-		let latest_block_num = self.get_latest_block_number();
 
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.next_rounds = Some(set_up_rounds(
+			self.dkg_state.next_rounds = Some(set_up_rounds(
 				&queued,
 				&public,
 				&sr25519_public,
@@ -494,7 +431,7 @@ where
 				&self.get_authority_reputations(header),
 			));
 			self.dkg_state.listening_for_pub_key = true;
-			match self.next_rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+			match self.dkg_state.next_rounds.as_mut().unwrap().start_keygen(self.latest_block) {
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for queued authority set successfully");
 					self.queued_keygen_in_progress = true;
@@ -509,13 +446,11 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
-		if let Some(latest_header) = &self.latest_header {
-			if latest_header.number() >= header.number() {
-				return
-			}
+		if self.latest_block >= header.number().clone() {
+			return
 		}
 
-		self.latest_header = Some(header.clone());
+		self.latest_block = header.number().clone();
 		listen_and_clear_offchain_storage(self, header);
 		try_resume_dkg(self, header);
 
@@ -529,60 +464,26 @@ where
 	}
 
 	fn enact_new_authorities(&mut self, header: &B::Header) {
-		if let Some((active, queued)) = self.validator_set(header) {
-			// Authority set change or genesis set id triggers new voting rounds
-			//
-			// TODO: Enacting a new authority set will also implicitly 'conclude'
-			//		 the currently active DKG voting round by starting a new one.
-			if active.id != self.current_validator_set.id ||
-				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
-			{
-				debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active);
-				metric_set!(self, dkg_validator_set_id, active.id);
+		let (active, queued) = self.validator_set(header);
 
-				// DKG should produce a signed commitment for each session
-				if active.id != self.last_signed_id + 1 && active.id != GENESIS_AUTHORITY_SET_ID {
-					metric_inc!(self, dkg_skipped_sessions);
-				}
+		// Authority set change or genesis set id triggers new DKG keygen rounds
+		if active.id != self.current_validator_set.id || active.id == GENESIS_AUTHORITY_SET_ID {
+			debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active.id);
+			debug!(target: "dkg", "🕸️  New queued validator set id: {:?}", queued.id);
 
-				// verify the new validator set
-				let _ = self.verify_validator_set(header.number(), active.clone());
-				// Setting new validator set id as curent
-				self.current_validator_set = active.clone();
-				self.queued_validator_set = queued.clone();
+			// verify the new validator set
+			let _ = self.verify_validator_set(header.number(), active.clone());
+			// Setting new validator set id as curent
+			self.current_validator_set = active.clone();
 
-				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
+			// Setting up the DKG
+			self.handle_dkg_setup(&header, active.clone());
+		}
 
-				self.best_dkg_block = Some(*header.number());
-
-				// this metric is kind of 'fake'. Best DKG block should only be updated once we have
-				// a signed commitment for the block. Remove once the above TODO is done.
-				metric_set!(self, dkg_best_block, *header.number());
-				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
-				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
-				// Setting up the DKG
-				self.handle_dkg_setup(&header, active.clone());
-				self.handle_queued_dkg_setup(&header, queued.clone());
-
-				if !self.current_validator_set.authorities.is_empty() {
-					send_outgoing_dkg_messages(self);
-				}
-				self.dkg_state.epoch_is_over = !self.dkg_state.epoch_is_over;
-			} else {
-				// if the DKG has not been prepared / terminated, continue preparing it
-				if !self.dkg_state.accepted || self.queued_keygen_in_progress {
-					send_outgoing_dkg_messages(self);
-				}
-			}
-
-			if self.queued_validator_set.authorities != queued.authorities &&
-				!self.queued_keygen_in_progress
-			{
-				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
-				self.queued_validator_set = queued.clone();
-				self.handle_queued_dkg_setup(&header, queued.clone());
-				send_outgoing_dkg_messages(self);
-			}
+		if queued.id != self.queued_validator_set.id && !self.queued_keygen_in_progress {
+			debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
+			self.queued_validator_set = queued.clone();
+			self.handle_queued_dkg_setup(&header, queued.clone());
 		}
 	}
 
@@ -593,10 +494,6 @@ where
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
 		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
-
-		// update best GRANDPA finalized block we have seen
-		self.best_grandpa_block = *notification.header.number();
-
 		self.process_block_notification(&notification.header);
 	}
 
@@ -610,13 +507,11 @@ where
 		// Get authority accounts
 		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
 
-		if let Some(header) = self.latest_header.as_ref() {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+		let at: BlockId<B> = BlockId::number(self.latest_block);
+		let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
 
-			if accounts.is_some() {
-				authority_accounts = accounts;
-			}
+		if accounts.is_some() {
+			authority_accounts = accounts;
 		}
 
 		if authority_accounts.is_none() {
@@ -651,17 +546,10 @@ where
 	}
 
 	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public>) {
-		if let Some(rounds) = self.rounds.as_mut() {
+		if let Some(rounds) = self.dkg_state.curr_rounds.as_mut() {
 			if dkg_msg.round_id == rounds.get_id() {
-				let block_number = {
-					if self.latest_header.is_some() {
-						Some(*self.latest_header.as_ref().unwrap().number())
-					} else {
-						None
-					}
-				};
-				debug!(target: "dkg", "🕸️  Process DKG message for current rounds {}", &dkg_msg);
-				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
+				debug!(target: "dkg", "🕸️  Process DKG message for rounds {}", &dkg_msg);
+				match rounds.handle_incoming(dkg_msg.payload.clone(), self.latest_block) {
 					Ok(()) => (),
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
@@ -674,18 +562,10 @@ where
 			}
 		}
 
-		if let Some(next_rounds) = self.next_rounds.as_mut() {
+		if let Some(next_rounds) = self.dkg_state.next_rounds.as_mut() {
 			if next_rounds.get_id() == dkg_msg.round_id {
-				let block_number = {
-					if self.latest_header.is_some() {
-						Some(*self.latest_header.as_ref().unwrap().number())
-					} else {
-						None
-					}
-				};
-
 				debug!(target: "dkg", "🕸️  Process DKG message for queued rounds {}", &dkg_msg);
-				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
+				match next_rounds.handle_incoming(dkg_msg.payload.clone(), self.latest_block) {
 					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
@@ -750,7 +630,8 @@ where
 	}
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
-		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { 0 };
+		let round_id =
+			if let Some(rounds) = &self.dkg_state.curr_rounds { rounds.get_id() } else { 0 };
 
 		match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
@@ -817,12 +698,12 @@ where
 	/// Rounds handling
 
 	fn process_finished_rounds(&mut self) {
-		if self.rounds.is_none() {
+		if self.dkg_state.curr_rounds.is_none() {
 			return
 		}
 
 		let mut proposals = Vec::new();
-		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
+		for finished_round in self.dkg_state.curr_rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
 			if proposal.is_some() {
 				proposals.push(proposal.unwrap())
@@ -831,7 +712,7 @@ where
 		metric_set!(
 			self,
 			dkg_round_concluded,
-			self.rounds.as_mut().unwrap().get_finished_rounds().len()
+			self.dkg_state.curr_rounds.as_mut().unwrap().get_finished_rounds().len()
 		);
 
 		save_signed_proposals_in_storage(self, proposals);
@@ -852,7 +733,7 @@ where
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
 	/// DKGPayloadKey) as the round key
 	fn create_offline_stages(&mut self, header: &B::Header) {
-		if self.rounds.is_none() {
+		if self.dkg_state.curr_rounds.is_none() {
 			return
 		}
 
@@ -862,7 +743,7 @@ where
 			Err(_) => return,
 		};
 
-		let rounds = self.rounds.as_mut().unwrap();
+		let rounds = self.dkg_state.curr_rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
 			for (key, ..) in &unsigned_proposals {
@@ -914,11 +795,10 @@ where
 	}
 
 	fn process_unsigned_proposals(&mut self, header: &B::Header) {
-		if self.rounds.is_none() {
+		if self.dkg_state.curr_rounds.is_none() {
 			return
 		}
 
-		let latest_block_num = self.get_latest_block_number();
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
@@ -926,7 +806,7 @@ where
 		};
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
-		let rounds = self.rounds.as_mut().unwrap();
+		let rounds = self.dkg_state.curr_rounds.as_mut().unwrap();
 		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
 		for (key, proposal) in unsigned_proposals {
@@ -939,7 +819,7 @@ where
 
 			if let Proposal::Unsigned { kind: _, data } = proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
-				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
+				if let Err(e) = rounds.vote(key.encode(), data, self.latest_block) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 					errors.push(e);
 				};
@@ -989,7 +869,9 @@ where
 						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
 						} else {
-							let msgs = self.msg_cache.clone();
+							let msgs = self.msg_cache.drain(..)
+								.chain(vec![dkg_msg])
+								.collect::<Vec<_>>();
 							for msg in msgs {
 								match self.verify_signature_against_authorities(msg) {
 									Ok(raw) => {
@@ -1001,18 +883,6 @@ where
 									}
 								}
 							}
-
-							match self.verify_signature_against_authorities(dkg_msg) {
-								Ok(raw) => {
-									debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
-									self.process_incoming_dkg_message(raw);
-								},
-								Err(e) => {
-									debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
-								}
-							}
-							// Reset the cache
-							self.msg_cache = Vec::new();
 						}
 					} else {
 						return;

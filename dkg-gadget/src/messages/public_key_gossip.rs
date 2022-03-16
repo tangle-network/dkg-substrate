@@ -48,9 +48,7 @@ where
 	}
 
 	// Get authority accounts
-	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let current_block_number = header.number().clone();
-	let at: BlockId<B> = BlockId::hash(header.hash());
+	let at: BlockId<B> = BlockId::number(dkg_worker.latest_block);
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
@@ -61,8 +59,8 @@ where
 			debug!(target: "dkg", "Received public key broadcast");
 
 			let is_main_round = {
-				if dkg_worker.rounds.is_some() {
-					msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
+				if dkg_worker.dkg_state.curr_rounds.is_some() {
+					msg.round_id == dkg_worker.dkg_state.curr_rounds.as_ref().unwrap().get_id()
 				} else {
 					false
 				}
@@ -92,14 +90,15 @@ where
 			// Fetch the current threshold for the DKG. We will use the
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
-			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-			if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+			let (sig_t, _) =
+				dkg_worker.get_thresholds(&dkg_worker.latest_block).unwrap_or_default();
+			if aggregated_public_keys.keys_and_signatures.len() >= sig_t.into() {
 				store_aggregated_public_keys(
 					dkg_worker,
 					is_main_round,
 					round_id,
 					&aggregated_public_keys,
-					current_block_number,
+					dkg_worker.latest_block,
 				)?;
 			}
 		},

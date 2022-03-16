@@ -40,11 +40,10 @@ where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	pub accepted: bool,
-	pub epoch_is_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
+	pub curr_rounds: Option<MultiPartyECDSARounds<C>>,
+	pub next_rounds: Option<MultiPartyECDSARounds<C>>,
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
@@ -282,15 +281,11 @@ where
 	/// If no OfflineState or SignState with the key in the payload is present in the corresponding
 	/// map, a new entry with initial state is created (OfflineState::NotStarted or
 	/// SignState::NotStarted)
-	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: Option<C>) -> Result<(), DKGError> {
+	pub fn handle_incoming(&mut self, data: DKGMsgPayload, at: C) -> Result<(), DKGError> {
 		trace!(target: "dkg", "🕸️  Handle incoming");
 
 		return match data {
-			DKGMsgPayload::Keygen(msg) => self.keygen.handle_incoming(
-				msg,
-				at.or(Some(0u32.into()))
-					.unwrap_or_else(|| panic!("There are no incoming messages for key gen")),
-			),
+			DKGMsgPayload::Keygen(msg) => self.keygen.handle_incoming(msg, at),
 			DKGMsgPayload::Offline(msg) => {
 				let key = msg.key.clone();
 
@@ -299,11 +294,7 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| OfflineState::NotStarted(PreOfflineRounds::new()));
 
-				let res = offline.handle_incoming(
-					msg,
-					at.or(Some(0u32.into()))
-						.unwrap_or_else(|| panic!("There are no incoming messages for offline")),
-				);
+				let res = offline.handle_incoming(msg, at);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.offlines.remove(&key);
 				}
@@ -317,11 +308,7 @@ where
 					.entry(key.clone())
 					.or_insert_with(|| SignState::NotStarted(PreSignRounds::new()));
 
-				let res = vote.handle_incoming(
-					msg,
-					at.or(Some(0u32.into()))
-						.unwrap_or_else(|| panic!("There are no incoming messages for voting")),
-				);
+				let res = vote.handle_incoming(msg, at);
 				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
 					self.votes.remove(&key);
 				}
@@ -739,7 +726,7 @@ mod tests {
 
 			for party in &mut parties.into_iter() {
 				for msg_frozen in msgs_pull_frozen.iter() {
-					match party.handle_incoming(msg_frozen.clone(), None) {
+					match party.handle_incoming(msg_frozen.clone(), 0) {
 						Ok(()) => (),
 						Err(err) => panic!("{:?}", err),
 					}

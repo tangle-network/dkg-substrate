@@ -636,8 +636,8 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn signature_threshold() -> u16 {
-			DKG::signature_threshold()
+		fn thresholds() -> (u16, u16) {
+			DKG::thresholds()
 		}
 
 		fn should_refresh(block_number: BlockNumber) -> bool {

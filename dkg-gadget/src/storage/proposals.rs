@@ -14,6 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 use crate::{
 	utils::{fetch_public_key, find_index},
 	worker::{DKGWorker, MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
@@ -53,16 +54,6 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		return
 	}
 
-	// If the header is none, it means no block has been imported yet, so we can exit
-	if dkg_worker.latest_header.is_none() {
-		return
-	}
-
-	let current_block_number = {
-		let header = dkg_worker.latest_header.as_ref().unwrap();
-		header.number().clone()
-	};
-
 	if let Some(mut offchain) = dkg_worker.backend.offchain_storage() {
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
@@ -76,7 +67,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		// duplicate submissions as much as we can, we add a random submission delay to each
 		// batch stored in offchain storage
 		let submit_at =
-			dkg_worker.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
+			dkg_worker.generate_delayed_submit_at(dkg_worker.latest_block, MAX_SUBMISSION_DELAY);
 
 		if let Some(submit_at) = submit_at {
 			prop_wrapper.proposals.push((signed_proposals, submit_at))

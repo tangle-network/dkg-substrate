@@ -281,8 +281,8 @@ sp_api::decl_runtime_apis! {
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
-		/// Return the current signature threshold for the DKG
-		fn signature_threshold() -> u16;
+		/// Return the current signature and keygen threshold for the DKG
+		fn thresholds() -> (u16, u16);
 		/// Return the next authorities active authority set
 		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
 		/// Check if refresh process should start

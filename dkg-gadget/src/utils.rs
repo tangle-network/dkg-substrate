@@ -119,8 +119,8 @@ where
 		return true
 	}
 
-	if dkg_worker.rounds.is_some() {
-		if dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id {
+	if dkg_worker.dkg_state.curr_rounds.is_some() {
+		if dkg_worker.dkg_state.curr_rounds.as_ref().unwrap().get_id() == next_authorities.id {
 			return true
 		}
 	}
@@ -142,8 +142,8 @@ where
 		return true
 	}
 
-	if dkg_worker.next_rounds.is_some() {
-		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
+	if dkg_worker.dkg_state.next_rounds.is_some() {
+		if dkg_worker.dkg_state.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
 			return true
 		}
 	}

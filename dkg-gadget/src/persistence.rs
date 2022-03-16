@@ -117,165 +117,164 @@ where
 		return
 	}
 
+	let (active, queued) = worker.validator_set(header);
+	if active.authorities.is_empty() || queued.authorities.is_empty() {
+		return
+	}
+
 	worker.dkg_persistence.start();
 
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
-	if let Some((active, queued)) = worker.validator_set(header) {
-		let public = fetch_public_key(worker);
-		let sr25519_public = fetch_sr25519_public_key(worker);
 
-		let mut local_key = None;
-		let mut queued_local_key = None;
+	let public = fetch_public_key(worker);
+	let sr25519_public = fetch_sr25519_public_key(worker);
 
-		if worker.base_path.is_some() {
-			let base_path = worker.base_path.as_ref().unwrap();
-			let local_key_path = base_path.join(DKG_LOCAL_KEY_FILE);
-			let queued_local_key_path = base_path.join(QUEUED_DKG_LOCAL_KEY_FILE);
+	let mut local_key = None;
+	let mut queued_local_key = None;
 
-			let local_key_serialized = fs::read(local_key_path.clone());
-			let queued_local_key_serialized = fs::read(queued_local_key_path.clone());
+	if worker.base_path.is_some() {
+		let base_path = worker.base_path.as_ref().unwrap();
+		let local_key_path = base_path.join(DKG_LOCAL_KEY_FILE);
+		let queued_local_key_path = base_path.join(QUEUED_DKG_LOCAL_KEY_FILE);
 
-			let round_id = active.id;
-			let queued_round_id = queued.id;
+		let local_key_serialized = fs::read(local_key_path.clone());
+		let queued_local_key_serialized = fs::read(queued_local_key_path.clone());
 
-			if worker.local_keystore.is_none() {
-				debug!(target: "dkg_persistence", "Exiting no local key store found");
-				return
-			}
+		let round_id = active.id;
+		let queued_round_id = queued.id;
 
-			if let Ok(local_key_serialized) = local_key_serialized {
-				let key_pair = worker
-					.local_keystore
-					.as_ref()
-					.unwrap()
-					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
-				if let Ok(Some(key_pair)) = key_pair {
-					let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
-					if let Ok(decrypted_data) = decrypted_data {
-						debug!(target: "dkg", "Decrypted local key successfully");
-						let localkey_deserialized =
-							serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
+		if worker.local_keystore.is_none() {
+			debug!(target: "dkg_persistence", "Exiting no local key store found");
+			return
+		}
 
-						match localkey_deserialized {
-							Ok(localkey_deserialized) => {
-								debug!(target: "dkg", "Recovered local key");
-								// If the current round_id is not the same as the one found in the
-								// stored file then the stored data is invalid
-								if round_id == localkey_deserialized.round_id {
-									local_key = Some(localkey_deserialized)
-								}
-							},
-							Err(e) => {
-								debug!(target: "dkg", "Deserialization failed for local key {:?}", e);
-							},
-						}
-					} else {
-						debug!(target: "dkg", "Failed to decrypt local key");
-					}
-				}
-			} else {
-				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
-			}
+		if let Ok(local_key_serialized) = local_key_serialized {
+			let key_pair = worker
+				.local_keystore
+				.as_ref()
+				.unwrap()
+				.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
+			if let Ok(Some(key_pair)) = key_pair {
+				let decrypted_data = decrypt_data(local_key_serialized, key_pair.to_raw_vec());
+				if let Ok(decrypted_data) = decrypted_data {
+					debug!(target: "dkg", "Decrypted local key successfully");
+					let localkey_deserialized =
+						serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
 
-			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
-				let key_pair = worker
-					.local_keystore
-					.as_ref()
-					.unwrap()
-					.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
-				if let Ok(Some(key_pair)) = key_pair {
-					let decrypted_data =
-						decrypt_data(queued_local_key_serialized, key_pair.as_ref().to_raw_vec());
-
-					if let Ok(decrypted_data) = decrypted_data {
-						let queued_localkey_deserialized =
-							serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
-
-						if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
-							if queued_round_id == queued_localkey_deserialized.round_id {
-								queued_local_key = Some(queued_localkey_deserialized)
+					match localkey_deserialized {
+						Ok(localkey_deserialized) => {
+							debug!(target: "dkg", "Recovered local key");
+							// If the current round_id is not the same as the one found in the
+							// stored file then the stored data is invalid
+							if round_id == localkey_deserialized.round_id {
+								local_key = Some(localkey_deserialized)
 							}
+						},
+						Err(e) => {
+							debug!(target: "dkg", "Deserialization failed for local key {:?}", e);
+						},
+					}
+				} else {
+					debug!(target: "dkg", "Failed to decrypt local key");
+				}
+			}
+		} else {
+			debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
+		}
+
+		if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
+			let key_pair = worker
+				.local_keystore
+				.as_ref()
+				.unwrap()
+				.key_pair::<AppPair>(&Public::try_from(&sr25519_public.0[..]).unwrap());
+			if let Ok(Some(key_pair)) = key_pair {
+				let decrypted_data =
+					decrypt_data(queued_local_key_serialized, key_pair.as_ref().to_raw_vec());
+
+				if let Ok(decrypted_data) = decrypted_data {
+					let queued_localkey_deserialized =
+						serde_json::from_slice::<StoredLocalKey>(&decrypted_data[..]);
+
+					if let Ok(queued_localkey_deserialized) = queued_localkey_deserialized {
+						if queued_round_id == queued_localkey_deserialized.round_id {
+							queued_local_key = Some(queued_localkey_deserialized)
 						}
 					}
 				}
 			}
+		}
 
-			if active.authorities.contains(&public) {
-				let threshold = validate_threshold(
-					active.authorities.len() as u16,
-					worker.get_threshold(header).unwrap(),
-				);
+		if active.authorities.contains(&public) {
+			let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
+			let threshold = validate_threshold(keygen_t, sig_t);
 
-				let mut rounds = set_up_rounds(
-					&active,
-					&public,
-					&sr25519_public,
-					threshold,
-					Some(local_key_path),
-					*header.number(),
-					worker.local_keystore.clone(),
-					&worker.get_authority_reputations(header),
-				);
+			let mut rounds = set_up_rounds(
+				&active,
+				&public,
+				&sr25519_public,
+				threshold,
+				Some(local_key_path),
+				*header.number(),
+				worker.local_keystore.clone(),
+				&worker.get_authority_reputations(header),
+			);
 
-				if local_key.is_some() {
-					debug!(target: "dkg_persistence", "Local key set");
-					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					// We create a deterministic signer set using the public key as a seed to the
-					// random number generator We need a 32 byte seed, the compressed public key is
-					// 33 bytes
-					let seed =
-						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
-							[1..];
+			if local_key.is_some() {
+				debug!(target: "dkg_persistence", "Local key set");
+				rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
+				// We create a deterministic signer set using the public key as a seed to the
+				// random number generator We need a 32 byte seed, the compressed public key is
+				// 33 bytes
+				let seed =
+					&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
-					}
-					worker.set_rounds(rounds)
+				// Signers are chosen from ids used in Keygen phase starting from 1 to n
+				// inclusive
+				let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+				let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+				if let Ok(signers_set) = signers_set {
+					rounds.set_signers(signers_set);
 				}
+				worker.dkg_state.curr_rounds = Some(rounds);
 			}
+		}
 
-			if queued.authorities.contains(&public) {
-				let threshold = validate_threshold(
-					queued.authorities.len() as u16,
-					worker.get_threshold(header).unwrap(),
-				);
+		if queued.authorities.contains(&public) {
+			let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
+			let threshold = validate_threshold(keygen_t, sig_t);
 
-				let mut rounds = set_up_rounds(
-					&queued,
-					&public,
-					&sr25519_public,
-					threshold,
-					Some(queued_local_key_path),
-					*header.number(),
-					worker.local_keystore.clone(),
-					&worker.get_authority_reputations(header),
-				);
+			let mut rounds = set_up_rounds(
+				&queued,
+				&public,
+				&sr25519_public,
+				threshold,
+				Some(queued_local_key_path),
+				*header.number(),
+				worker.local_keystore.clone(),
+				&worker.get_authority_reputations(header),
+			);
 
-				if queued_local_key.is_some() {
-					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					// We set the signer set using the public key as a seed to select signers at
-					// random We need a 32byte seed, the compressed public key is 32 bytes
-					let seed = &queued_local_key
-						.as_ref()
-						.unwrap()
-						.local_key
-						.clone()
-						.public_key()
-						.to_bytes(true)[1..];
+			if queued_local_key.is_some() {
+				rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
+				// We set the signer set using the public key as a seed to select signers at
+				// random We need a 32byte seed, the compressed public key is 32 bytes
+				let seed = &queued_local_key
+					.as_ref()
+					.unwrap()
+					.local_key
+					.clone()
+					.public_key()
+					.to_bytes(true)[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
-					}
-					worker.set_next_rounds(rounds)
+				// Signers are chosen from ids used in Keygen phase starting from 1 to n
+				// inclusive
+				let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+				let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+				if let Ok(signers_set) = signers_set {
+					rounds.set_signers(signers_set);
 				}
+				worker.dkg_state.next_rounds = Some(rounds);
 			}
 		}
 	}
@@ -293,16 +292,16 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let rounds = worker.take_rounds();
-	let next_rounds = worker.take_next_rounds();
-	worker.get_time_to_restart(header);
+	let rounds = worker.dkg_state.curr_rounds.take();
+	let next_rounds = worker.dkg_state.next_rounds.take();
+	worker.get_time_to_restart(header.number());
 
 	let should_restart_rounds = {
 		if rounds.is_none() {
 			true
 		} else {
 			let stalled = rounds.as_ref().unwrap().has_stalled();
-			worker.set_rounds(rounds.unwrap());
+			worker.dkg_state.curr_rounds = rounds;
 			stalled
 		}
 	};
@@ -312,7 +311,7 @@ where
 			true
 		} else {
 			let stalled = next_rounds.as_ref().unwrap().has_stalled();
-			worker.set_next_rounds(next_rounds.unwrap());
+			worker.dkg_state.next_rounds = next_rounds;
 			stalled
 		}
 	};
@@ -338,26 +337,18 @@ where
 		local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
 		queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
 	}
-	let public = worker
-		.keystore_ref()
-		.authority_id(&worker.keystore_ref().public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"));
-	let sr25519_public = worker
-		.keystore_ref()
-		.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	let public = fetch_public_key(worker);
+	let sr25519_public = fetch_sr25519_public_key(worker);
 
-	let authority_set = worker.get_current_validators();
-	let queued_authority_set = worker.get_queued_validators();
+	let authority_set = worker.current_validator_set.clone();
+	let queued_authority_set = worker.queued_validator_set.clone();
 
 	let latest_block_num = *header.number();
 	if restart_rounds && authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
 
-		let threshold = validate_threshold(
-			authority_set.authorities.len() as u16,
-			worker.get_threshold(header).unwrap(),
-		);
+		let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
+		let threshold = validate_threshold(keygen_t, sig_t);
 
 		let mut rounds = set_up_rounds(
 			&authority_set,
@@ -373,15 +364,13 @@ where
 		let _ = rounds.start_keygen(latest_block_num);
 		worker.active_keygen_in_progress = true;
 		worker.dkg_state.listening_for_active_pub_key = true;
-		worker.set_rounds(rounds);
+		worker.dkg_state.curr_rounds = Some(rounds);
 	}
 
 	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
-		let threshold = validate_threshold(
-			queued_authority_set.authorities.len() as u16,
-			worker.get_threshold(header).unwrap(),
-		);
+		let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
+		let threshold = validate_threshold(keygen_t, sig_t);
 
 		let mut rounds = set_up_rounds(
 			&queued_authority_set,
@@ -397,6 +386,6 @@ where
 		let _ = rounds.start_keygen(latest_block_num);
 		worker.queued_keygen_in_progress = true;
 		worker.dkg_state.listening_for_pub_key = true;
-		worker.set_next_rounds(rounds);
+		worker.dkg_state.next_rounds = Some(rounds);
 	}
 }
