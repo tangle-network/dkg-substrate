@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use webb_proposals::ResourceIdUpdateProposal;
+use webb_proposals::MaxDepositLimitProposal;
 
 use crate::handlers::validate_proposals::ValidationError;
 
-pub fn create(data: &[u8]) -> Result<ResourceIdUpdateProposal, ValidationError> {
-	let bytes: [u8; ResourceIdUpdateProposal::LENGTH] =
+pub fn create(data: &[u8]) -> Result<MaxDepositLimitProposal, ValidationError> {
+	let bytes: [u8; MaxDepositLimitProposal::LENGTH] =
 		data.try_into().map_err(|_| ValidationError::InvalidProposalBytesLength)?;
-	Ok(ResourceIdUpdateProposal::from(bytes))
+	Ok(MaxDepositLimitProposal::from(bytes))
 }

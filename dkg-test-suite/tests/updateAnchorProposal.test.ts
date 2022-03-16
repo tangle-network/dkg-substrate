@@ -89,8 +89,8 @@ describe('Anchor Update Proposal', () => {
 		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-			EVM: localChain2.chainId,
+		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+			Evm: localChain2.chainId,
 		});
 		const proposalCall = polkadotApi.tx.dKGProposals.acknowledgeProposal(
 			proposalPayload.header.nonce,

@@ -14,12 +14,12 @@
 //
 use crate::{
 	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	ChainIdTrait, ProposalHeader, Vec,
+	Vec,
 };
 use codec::alloc::string::ToString;
 
-pub struct FeeUpdateProposal<C: ChainIdTrait> {
-	pub header: ProposalHeader<C>,
+pub struct FeeUpdateProposal {
+	pub header: webb_proposals::ProposalHeader,
 	pub encoded_call: Vec<u8>,
 }
 
@@ -31,9 +31,9 @@ pub struct FeeUpdateProposal<C: ChainIdTrait> {
 ///     call                -          [40..]
 /// ]
 /// Total Bytes: 32 + 4 + 4 + (size of call) = 40 + (size of call)
-pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<FeeUpdateProposal<C>, ValidationError> {
-	let header: ProposalHeader<C> = decode_proposal_header(data)?;
-	let zeroes = header.function_sig;
+pub fn create(data: &[u8]) -> Result<FeeUpdateProposal, ValidationError> {
+	let header = decode_proposal_header(data)?;
+	let zeroes = header.function_signature().to_bytes();
 	// Check that zeroes is actually zero
 	if u32::from_be_bytes(zeroes) != 0 {
 		return Err(ValidationError::InvalidParameter("Function Sig should be zero".to_string()))?

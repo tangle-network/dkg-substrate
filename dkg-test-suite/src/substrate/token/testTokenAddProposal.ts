@@ -47,7 +47,7 @@ async function testTokenAddProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{compressed: false}
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5002});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {SUBSTRATE: 5002});
 	const propHash = keccak256(encodeSubstrateProposal(getTokenAddProposal(api), 3000));
 
 	const proposalType = {tokenaddproposal: getTokenAddProposal(api).header.nonce}
@@ -73,7 +73,7 @@ async function sendTokenAddProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {SUBSTRATE: 5001});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {SUBSTRATE: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {

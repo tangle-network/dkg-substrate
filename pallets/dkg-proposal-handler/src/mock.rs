@@ -34,7 +34,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, ChainIdType, TransactionV2};
+use dkg_runtime_primitives::{keccak_256, ProposalHeader, TransactionV2, TypedChainId};
 
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
@@ -84,7 +84,7 @@ parameter_types! {
 }
 
 parameter_types! {
-	pub const ChainIdentifier: ChainIdType<u32> = ChainIdType::Substrate(5);
+	pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
@@ -164,7 +164,6 @@ where
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
-	type ChainId = u32;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type WeightInfo = ();
@@ -174,7 +173,6 @@ impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
-	type ChainId = u32;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
 	type Proposal = Vec<u8>;

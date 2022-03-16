@@ -44,7 +44,7 @@ async function testResourceIdUpdateProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{compressed: false}
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5002});
 	const propHash = keccak256(encodeResourceIdUpdateProposal(resourceIdUpdateProposal));
 
 	const proposalType = {resourceidupdateproposal: resourceIdUpdateProposal.header.nonce}
@@ -70,7 +70,7 @@ async function sendResourceIdUpdateProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5001});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'ResourceIdUpdate');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
