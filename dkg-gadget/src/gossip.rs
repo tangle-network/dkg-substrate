@@ -20,19 +20,6 @@ use codec::Decode;
 use log::{debug, error, trace};
 
 use crate::types::dkg_topic;
-use dkg_primitives::types::{DKGMessage, DKGPayloadKey};
-use dkg_runtime_primitives::crypto::Public;
-
-// Limit DKG gossip by keeping only a bound number of voting rounds alive.
-const MAX_LIVE_GOSSIP_ROUNDS: usize = 3;
-
-// Timeout for rebroadcasting messages.
-const REBROADCAST_AFTER: Duration = Duration::from_secs(60 * 5);
-
-/// A type that represents hash of the message.
-pub type MessageHash = [u8; 8];
-
-type KnownVotes<B> = BTreeMap<NumberFor<B>, fnv::FnvHashSet<MessageHash>>;
 use dkg_primitives::types::SignedDKGMessage;
 use dkg_runtime_primitives::crypto::Public;
 
@@ -85,3 +72,4 @@ where
 		ValidationResult::Discard
 	}
 }
+

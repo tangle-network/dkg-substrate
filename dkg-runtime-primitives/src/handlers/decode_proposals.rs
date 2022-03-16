@@ -173,20 +173,6 @@ pub fn decode_proposal_identifier(
 			})
 			.and_then(matches_kind(proposal.kind(), ProposalKind::MinWithdrawalLimitUpdate));
 
-	let maybe_max_ext_limit_update = evm::bytes32_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::MaxExtLimitUpdateProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::MaxExtLimitUpdate));
-
-	let maybe_max_fee_limit_update = evm::bytes32_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::MaxFeeLimitUpdateProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::MaxFeeLimitUpdate));
-
 	let maybe_set_treasury_handler = evm::set_treasury_handler::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::SetTreasuryHandlerProposal(p.header().nonce());
@@ -221,8 +207,6 @@ pub fn decode_proposal_identifier(
 		.or(maybe_evm_rescue_tokens)
 		.or(maybe_max_deposit_limit_update)
 		.or(maybe_min_withdrawal_limit_update)
-		.or(maybe_max_ext_limit_update)
-		.or(maybe_max_fee_limit_update)
 		.or(maybe_set_treasury_handler)
 		.or(maybe_set_verifier)
 		.or(maybe_fee_recipient_update)
