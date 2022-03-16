@@ -66,12 +66,6 @@ describe('Validator Node Test', () => {
 		// @ts-ignore
 		//expect(nextAuthorities.length).toBe(3);
 
-		// chill(remove) charlie as validator
-		let call = polkadotApi.tx.staking.chill();
-		await call.signAndSend(charlieStash);
-		const event = await waitForEvent(polkadotApi, 'staking', 'Chilled');
-		console.log(`event is ${event}`);
-
 		let forceNewEra = polkadotApi.tx.staking.forceNewEraAlways();
 		const forceNewEraAlwayCall = polkadotApi.tx.sudo.sudo({
 			callIndex: forceNewEra.callIndex,
@@ -79,8 +73,14 @@ describe('Validator Node Test', () => {
 		});
 		await forceNewEraAlwayCall.signAndSend(alice);
 
+		// chill(remove) charlie as validator
+		/*let call = polkadotApi.tx.staking.chill();
+		await call.signAndSend(charlieStash);
+		const event = await waitForEvent(polkadotApi, 'staking', 'Chilled');
+		console.log(`event is ${event}`);*/
+
 		// wait for the next 3 sessions
-		for  (let i = 0; i < 3; i++) {
+		for  (let i = 0; i < 2; i++) {
 			console.log(`waiting for session`)
 			const sessh = await waitForTheNextSession(polkadotApi);
 			console.log(`session waited: ${sessh}`)
