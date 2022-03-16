@@ -124,7 +124,6 @@ export function startStandaloneNode(
 		alice: { ws: 9944, http: 9933, p2p: 30333 },
 		bob: { ws: 9945, http: 9934, p2p: 30334 },
 		charlie: { ws: 9946, http: 9935, p2p: 30335 },
-		dave: { ws: 9947, http: 9936, p2p: 30336 },
 	};
 	const proc = child.spawn(
 		nodePath,
