@@ -31,7 +31,7 @@ use sp_runtime::{
 	traits::{Block, Header},
 };
 
-/// cleans offchain storage at interval
+/// Cleans offchain storage at interval
 pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	header: &B::Header,
@@ -42,13 +42,14 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let at: BlockId<B> = BlockId::hash(header.hash());
+	// Query the key data from the chain
 	let next_dkg_public_key = dkg_worker.client.runtime_api().next_dkg_pub_key(&at);
 	let dkg_public_key = dkg_worker.client.runtime_api().dkg_pub_key(&at);
 	let public_key_sig = dkg_worker.client.runtime_api().next_pub_key_sig(&at);
 
 	let offchain = dkg_worker.backend.offchain_storage();
-
 	if let Some(mut offchain) = offchain {
+		// If the next DKG public key is on-chain, then we can remove it from our offchain storage
 		if let Ok(Some(_key)) = next_dkg_public_key {
 			if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS).is_some() {
 				debug!(target: "dkg", "cleaned offchain storage, next_public_key: {:?}", _key);
@@ -58,6 +59,7 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 			}
 		}
 
+		// If the active DKG public key is on-chain, then we can remove it from our offchain storage
 		if let Ok(Some(_key)) = dkg_public_key {
 			if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS).is_some() {
 				debug!(target: "dkg", "cleaned offchain storage, genesis_pub_key: {:?}", _key);
@@ -67,6 +69,7 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 			}
 		}
 
+		// If the signature of the next DKG public key is on-chain, then we can remove it from our offchain storage
 		if let Ok(Some(_sig)) = public_key_sig {
 			dkg_worker.refresh_in_progress = false;
 			if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {

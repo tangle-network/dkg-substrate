@@ -321,7 +321,7 @@ pub mod pallet {
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			// Get the signature threshold and use it for the voting threshold
-			let threshold = Self::thresholds().0;
+			let threshold = Self::thresholds().signature;
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
@@ -358,7 +358,7 @@ pub mod pallet {
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			// Get the signature threshold and use it for the voting threshold
-			let threshold = Self::thresholds().0;
+			let threshold = Self::thresholds().signature;
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
@@ -427,7 +427,7 @@ pub mod pallet {
 			let offender = reports.offender.clone();
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			// Get the signature threshold and use it for the voting threshold
-			let threshold = Self::thresholds().0;
+			let threshold = Self::thresholds().signature;
 
 			if valid_reporters.len() >= threshold as usize {
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
@@ -715,8 +715,11 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Return the current signing and keygen thresholds for DKG keygen/signing.
-	pub fn thresholds() -> (u16, u16) {
-		(Self::signature_threshold(), Self::keygen_threshold())
+	pub fn thresholds() -> dkg_runtime_primitives::DKGThresholds {
+		dkg_runtime_primitives::DKGThresholds {
+			signature: Self::signature_threshold(),
+			keygen: Self::keygen_threshold(),
+		}
 	}
 
 	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {

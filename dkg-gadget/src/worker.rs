@@ -63,6 +63,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::{sr25519, to_slice_32},
+	DKGThresholds,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, GENESIS_AUTHORITY_SET_ID,
 };
 
@@ -233,12 +234,12 @@ where
 	}
 
 	/// gets authority reputations from an header
-	pub fn get_authority_reputations(&self, header: &B::Header) -> HashMap<AuthorityId, i64> {
+	pub fn get_authority_reputations(&self, header: &B::Header, authorities: Vec<AuthorityId>) -> HashMap<AuthorityId, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
 			.runtime_api()
-			.get_reputations(&at, self.current_validator_set.authorities.clone())
+			.get_reputations(&at, authorities)
 			.expect("get reputations is always available");
 		let mut reputation_map: HashMap<AuthorityId, i64> = HashMap::new();
 		for (id, rep) in reputations {
@@ -249,7 +250,7 @@ where
 	}
 
 	/// get the signature and keygen threshold of a block in an header
-	pub fn get_thresholds(&self, number: &NumberFor<B>) -> Option<(u16, u16)> {
+	pub fn get_thresholds(&self, number: &NumberFor<B>) -> Option<DKGThresholds> {
 		let at: BlockId<B> = BlockId::number(number.clone());
 		return self.client.runtime_api().thresholds(&at).ok()
 	}
@@ -318,7 +319,7 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		let (sig_t, keygen_t) = self.get_thresholds(header.number()).unwrap_or_default();
+		let DKGThresholds { signature: sig_t, keygen: keygen_t } = self.get_thresholds(header.number()).unwrap_or_default();
 		let thresh = validate_threshold(keygen_t, sig_t);
 
 		let mut local_key_path = None;
@@ -369,6 +370,7 @@ where
 		header: &B::Header,
 		thresh: u16,
 	) {
+		// Swap the next rounds with the current rounds
 		self.dkg_state.curr_rounds = if self.dkg_state.next_rounds.is_some() {
 			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
 				if let Err(err) = std::fs::copy(queued_path, path) {
@@ -379,18 +381,17 @@ where
 			}
 			self.dkg_state.next_rounds.take()
 		} else {
+			// Set up the genesis instantiation of rounds for an authority
 			let is_authority = find_index(&next_authorities.authorities[..], &public).is_some();
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
+			let thresholds = self.get_thresholds(header.number()).unwrap_or_default();
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
 				Some(set_up_rounds(
 					&next_authorities,
 					&public,
-					&sr25519_public,
-					thresh,
 					local_key_path,
-					*header.number(),
-					self.local_keystore.clone(),
-					&self.get_authority_reputations(header),
+					&self.get_authority_reputations(header, next_authorities.authorities.clone()),
+					thresholds,
 				))
 			} else {
 				None
@@ -406,8 +407,7 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		let (sig_t, keygen_t) = self.get_thresholds(header.number()).unwrap_or_default();
-		let thresh = validate_threshold(keygen_t, sig_t);
+		let thresholds = self.get_thresholds(header.number()).unwrap_or_default();
 
 		let mut local_key_path = None;
 
@@ -416,21 +416,18 @@ where
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
 
-		// If current node is part of the queued authorities
-		// start the multiparty keygen process
+		// If current node is part of the queued authorities start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
 			self.dkg_state.next_rounds = Some(set_up_rounds(
 				&queued,
 				&public,
-				&sr25519_public,
-				thresh,
 				local_key_path,
-				*header.number(),
-				self.local_keystore.clone(),
-				&self.get_authority_reputations(header),
+				&self.get_authority_reputations(header, queued.authorities.clone()),
+				thresholds,
 			));
 			self.dkg_state.listening_for_pub_key = true;
+			// Start the keygen for the queued authorities
 			match self.dkg_state.next_rounds.as_mut().unwrap().start_keygen(self.latest_block) {
 				Ok(()) => {
 					info!(target: "dkg", "Keygen started for queued authority set successfully");
@@ -446,6 +443,7 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
+		// Process new block notifications only
 		if self.latest_block >= header.number().clone() {
 			return
 		}
@@ -469,7 +467,6 @@ where
 		// Authority set change or genesis set id triggers new DKG keygen rounds
 		if active.id != self.current_validator_set.id || active.id == GENESIS_AUTHORITY_SET_ID {
 			debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active.id);
-			debug!(target: "dkg", "🕸️  New queued validator set id: {:?}", queued.id);
 
 			// verify the new validator set
 			let _ = self.verify_validator_set(header.number(), active.clone());
@@ -481,8 +478,11 @@ where
 		}
 
 		if queued.id != self.queued_validator_set.id && !self.queued_keygen_in_progress {
-			debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
+			debug!(target: "dkg", "🕸️  New queued validator set id: {:?}", queued.id);
 			self.queued_validator_set = queued.clone();
+			// TODO: Identify what's needed to execute FS-DKR
+			// TODO: New parties to the set need to broadcast their JoinMessage
+			// TODO: Existing parties need to re-generat their key shares
 			self.handle_queued_dkg_setup(&header, queued.clone());
 		}
 	}

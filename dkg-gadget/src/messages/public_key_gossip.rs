@@ -21,7 +21,10 @@ use dkg_primitives::{
 	crypto::Public,
 	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId, SignedDKGMessage},
 };
-use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
+use dkg_runtime_primitives::{
+	DKGThresholds,
+	crypto::AuthorityId,
+	AggregatedPublicKeys, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -90,8 +93,7 @@ where
 			// Fetch the current threshold for the DKG. We will use the
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
-			let (sig_t, _) =
-				dkg_worker.get_thresholds(&dkg_worker.latest_block).unwrap_or_default();
+			let DKGThresholds { signature: sig_t, keygen: _ } = dkg_worker.get_thresholds(&dkg_worker.latest_block).unwrap_or_default();
 			if aggregated_public_keys.keys_and_signatures.len() >= sig_t.into() {
 				store_aggregated_public_keys(
 					dkg_worker,

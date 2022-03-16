@@ -17,7 +17,7 @@ use crate::{
 	Client,
 };
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi, DKGThresholds,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -49,15 +49,9 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
-	// TODO: remove param
-	_sr25519_public: &sr25519::Public,
-	thresh: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	// TODO: remove param
-	_created_at: N,
-	// TODO: remove param
-	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
+	thresholds: DKGThresholds,
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
 	// Compute the reputations of only the currently selected authorities for these rounds
@@ -65,13 +59,12 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set.authorities.iter().for_each(|id| {
 		authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
 	});
-	let n = authority_set.authorities.len();
 	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()
 		.round_id(authority_set.id.clone())
 		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(thresh)
-		.parties(u16::try_from(n).unwrap())
+		.threshold(thresholds.signature)
+		.parties(u16::try_from(thresholds.keygen).unwrap())
 		.local_key_path(local_key_path)
 		.reputations(authority_set_reputations)
 		.authorities(authority_set.authorities.clone())

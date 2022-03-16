@@ -20,7 +20,10 @@ use codec::Encode;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,
 };
-use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi};
+use dkg_runtime_primitives::{
+	DKGThresholds,
+	crypto::AuthorityId,
+	AggregatedMisbehaviourReports, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -93,8 +96,7 @@ where
 			// Fetch the current threshold for the DKG. We will use the
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
-			let (sig_t, _) =
-				dkg_worker.get_thresholds(&dkg_worker.latest_block).unwrap_or_default();
+			let DKGThresholds { signature: sig_t, keygen: _ } = dkg_worker.get_thresholds(&dkg_worker.latest_block).unwrap_or_default();
 			if reports.reporters.len() >= sig_t.into() {
 				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 			}

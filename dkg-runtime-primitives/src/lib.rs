@@ -136,6 +136,12 @@ pub enum DKGReport {
 	SigningMisbehaviour { offender: AuthorityId },
 }
 
+#[derive(Default, Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
+pub struct DKGThresholds {
+	pub signature: u16,
+	pub keygen: u16,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
 pub struct Commitment<TBlockNumber, TPayload> {
 	pub payload: TPayload,
@@ -282,7 +288,7 @@ sp_api::decl_runtime_apis! {
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
 		/// Return the current signature and keygen threshold for the DKG
-		fn thresholds() -> (u16, u16);
+		fn thresholds() -> DKGThresholds;
 		/// Return the next authorities active authority set
 		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
 		/// Check if refresh process should start

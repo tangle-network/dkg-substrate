@@ -28,6 +28,7 @@ use dkg_primitives::{
 	},
 };
 use dkg_runtime_primitives::{
+	DKGThresholds,
 	offchain::crypto::{Pair as AppPair, Public},
 	DKGApi,
 };
@@ -206,18 +207,14 @@ where
 		}
 
 		if active.authorities.contains(&public) {
-			let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
-			let threshold = validate_threshold(keygen_t, sig_t);
+			let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 
 			let mut rounds = set_up_rounds(
 				&active,
 				&public,
-				&sr25519_public,
-				threshold,
 				Some(local_key_path),
-				*header.number(),
-				worker.local_keystore.clone(),
-				&worker.get_authority_reputations(header),
+				&worker.get_authority_reputations(header, active.authorities.clone()),
+				thresholds,
 			);
 
 			if local_key.is_some() {
@@ -241,18 +238,14 @@ where
 		}
 
 		if queued.authorities.contains(&public) {
-			let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
-			let threshold = validate_threshold(keygen_t, sig_t);
+			let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 
 			let mut rounds = set_up_rounds(
 				&queued,
 				&public,
-				&sr25519_public,
-				threshold,
 				Some(queued_local_key_path),
-				*header.number(),
-				worker.local_keystore.clone(),
-				&worker.get_authority_reputations(header),
+				&worker.get_authority_reputations(header, queued.authorities.clone()),
+				thresholds,
 			);
 
 			if queued_local_key.is_some() {
@@ -347,18 +340,14 @@ where
 	if restart_rounds && authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
 
-		let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
-		let threshold = validate_threshold(keygen_t, sig_t);
+		let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 
 		let mut rounds = set_up_rounds(
 			&authority_set,
 			&public,
-			&sr25519_public,
-			threshold,
 			local_key_path,
-			*header.number(),
-			worker.local_keystore.clone(),
-			&worker.get_authority_reputations(header),
+			&worker.get_authority_reputations(header, authority_set.authorities.clone()),
+			thresholds,
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);
@@ -369,18 +358,13 @@ where
 
 	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
-		let (sig_t, keygen_t) = worker.get_thresholds(header.number()).unwrap_or_default();
-		let threshold = validate_threshold(keygen_t, sig_t);
-
+		let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 		let mut rounds = set_up_rounds(
 			&queued_authority_set,
 			&public,
-			&sr25519_public,
-			threshold,
 			queued_local_key_path,
-			*header.number(),
-			worker.local_keystore.clone(),
-			&worker.get_authority_reputations(header),
+			&worker.get_authority_reputations(header, queued_authority_set.authorities.clone()),
+			thresholds,
 		);
 
 		let _ = rounds.start_keygen(latest_block_num);

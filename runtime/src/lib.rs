@@ -636,7 +636,7 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn thresholds() -> (u16, u16) {
+		fn thresholds() -> dkg_runtime_primitives::DKGThresholds {
 			DKG::thresholds()
 		}
 
