@@ -147,7 +147,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().await.gossip_message(
+				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message.clone(),
 					true,
@@ -160,7 +160,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let mut reports = dkg_worker.aggregated_misbehaviour_reports.entry((round_id, offender.clone())).or_insert(AggregatedMisbehaviourReports {
+		let reports = dkg_worker.aggregated_misbehaviour_reports.entry((round_id, offender.clone())).or_insert(AggregatedMisbehaviourReports {
 			round_id,
 			offender: offender.clone(),
 			reporters: Vec::new(),

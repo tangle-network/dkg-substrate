@@ -23,7 +23,7 @@ use std::{
 };
 
 use codec::{Codec, Decode, Encode};
-use futures::{future, FutureExt, StreamExt};
+use futures::{future, FutureExt, pin_mut, StreamExt, TryStreamExt};
 use log::{debug, error, info, trace};
 use parking_lot::Mutex;
 
@@ -957,15 +957,26 @@ where
 	// *** Main run loop ***
 
 	pub(crate) async fn run(mut self) {
-		let mut dkg =
-			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
-				|notification| async move {
-					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
-				},
-			));
+		let engine = self.gossip_engine.clone();
+		let engine_dkg_messages = self.gossip_engine.clone();
+
+		// `dkg_message_retriever` gets messages in the queue and passes them to the mpsc channel
+		let (dkg_message_tx, ref mut dkg_message_rx) = futures::channel::mpsc::unbounded();
+		let dkg_message_retriever = async move {
+			loop {
+				let mut messages = engine_dkg_messages.lock().messages_for(dkg_topic::<B>());
+				while let Some(notification) = messages.next().await {
+					let dkg_msg = SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+					dkg_message_tx.unbounded_send(dkg_msg).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+				}
+			}
+
+			Ok(()) as Result<(), DKGError>
+		};
+
+		let ref mut dkg_message_retriever = Box::pin(dkg_message_retriever);
 
 		loop {
-			let engine = self.gossip_engine.clone();
 			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
 
 			futures::select! {
@@ -983,40 +994,59 @@ where
 						return;
 					}
 				},
-				dkg_msg = dkg.next().fuse() => {
-					debug!(target: "dkg", "🕸️  Current authorities {:?}", self.current_validator_set.authorities);
-					debug!(target: "dkg", "🕸️  Next authorities {:?}", self.queued_validator_set.authorities);
-					if let Some(dkg_msg) = dkg_msg {
-						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
-							self.msg_cache.push(dkg_msg);
-						} else {
-							let msgs = self.msg_cache.clone();
-							for msg in msgs {
-								match self.verify_signature_against_authorities(msg) {
+
+				dkg_msg = dkg_message_rx.next() => {
+					match dkg_msg {
+						Some(dkg_msg) => {
+							debug!(target: "dkg", "🕸️  Current authorities {:?}", self.current_validator_set.authorities);
+							debug!(target: "dkg", "🕸️  Next authorities {:?}", self.queued_validator_set.authorities);
+
+							if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+								self.msg_cache.push(dkg_msg);
+							} else {
+								let msgs = self.msg_cache.clone();
+								for msg in msgs {
+									match self.verify_signature_against_authorities(msg) {
+										Ok(raw) => {
+											debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: {:?}", raw);
+											self.process_incoming_dkg_message(raw);
+										},
+										Err(e) => {
+											debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+										}
+									}
+								}
+
+								match self.verify_signature_against_authorities(dkg_msg) {
 									Ok(raw) => {
-										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: {:?}", raw);
+										debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
 										self.process_incoming_dkg_message(raw);
 									},
 									Err(e) => {
 										debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
 									}
 								}
+								// Reset the cache
+								self.msg_cache = Vec::new();
 							}
-
-							match self.verify_signature_against_authorities(dkg_msg) {
-								Ok(raw) => {
-									debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
-									self.process_incoming_dkg_message(raw);
-								},
-								Err(e) => {
-									debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
-								}
-							}
-							// Reset the cache
-							self.msg_cache = Vec::new();
 						}
-					} else {
-						return;
+
+						_ => {
+							debug!(target: "dkg", "🕸️  DKG stream ended");
+						}
+					}
+				}
+
+				dkg_msg_retriever_result = dkg_message_retriever.fuse() => {
+					match dkg_msg_retriever_result {
+						Err(e) => {
+							debug!(target: "dkg", "🕸️  Received dkg decode error {:?}", e);
+							return
+						}
+
+						_ => {
+							unreachable!("infinite loop cannot return Ok")
+						}
 					}
 				},
 				_ = gossip_engine.fuse() => {
