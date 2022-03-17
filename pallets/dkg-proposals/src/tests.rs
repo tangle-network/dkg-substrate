@@ -795,36 +795,41 @@ fn proposers_iter_keys_should_only_contain_active_proposers() {
 	});
 }
 
-// TODO: Test this better...right now just printing the root
-#[test]
-fn should_output_valid_root() {
-	let src_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
-
-	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
-		println!("{:?}", DKGProposals::get_proposer_set_tree_root());
-	});
-}
-use sp_runtime::app_crypto::ecdsa;
-// Tests whether proposer root is correct
+use sp_io::hashing::keccak_256;
+//Tests whether proposer root is correct
 #[test]
 fn should_calculate_corrrect_proposer_set_root() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		// Initial proposer set is invulnerables even when another collator exists
 		assert_eq!(DKGProposals::proposer_count(), 3);
-		// Get the three invulnerable proposers
-		println!("{:?}", ecdsa::Public::from_raw([3; 33]));
-		println!("{:?}", mock_ecdsa_key(3));
+		// Get the three invulnerable proposers' ECDSA keys
+		let proposer_A_address = mock_ecdsa_key(3);
+		let proposer_B_address = mock_ecdsa_key(1);
+		let proposer_C_address = mock_ecdsa_key(2);
+		println!("{:?}", ExternalProposerAccounts::<Test>::iter().collect::<Vec<_>>());
+		let leaf0 = keccak_256(&proposer_A_address[..]);
+		let leaf1 = keccak_256(&proposer_B_address[..]);
+		let leaf2 = keccak_256(&proposer_C_address[..]);
+		let leaf3 = keccak_256(&[0u8]);
+
+		let mut node01_vec = leaf0.to_vec();
+		node01_vec.extend_from_slice(&leaf1);
+		let node01 = keccak_256(&node01_vec[..]);
+		
+
+		let mut node23_vec = leaf2.to_vec();
+		node23_vec.extend_from_slice(&leaf3);
+		let node23 = keccak_256(&node23_vec[..]);
+
+		let mut root = node01.to_vec();
+		root.extend_from_slice(&node23);
+		
 		// Advance a two sessions
 		roll_to(20);
+		println!("{:?}", ExternalProposerAccounts::<Test>::iter().collect::<Vec<_>>());
 		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);
 	})
 }
 
-#[test]
-fn shouljd_calculate_corrrect_proposer_set_root() {
-	println!("{:?}", ecdsa::Public::from_raw([3; 33]));
-	let x = mock_ecdsa_key(3);
-	println!("{:?}", x);
-}
+

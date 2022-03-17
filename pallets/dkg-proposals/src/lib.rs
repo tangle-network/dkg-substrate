@@ -787,7 +787,7 @@ impl<T: Config> Pallet<T> {
 	/// It is expected that the size of the returned vector is a power of 2.
 	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = Proposers::<T>::iter_keys();
+		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
 		// Check for each key that the proposer is valid (should return true)
 		let mut base_layer: Vec<Vec<u8>> = proposer_keys
 			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))

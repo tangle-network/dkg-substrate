@@ -259,7 +259,20 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 }
 
 pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
-	DKGEcdsaToEthereum::convert(Public::from_raw([id; 33]).into())
+	let mut input = "0";
+	if id == 1 {
+		input = "039bb8e80670371f45508b5f8f59946a7c4dea4b3a23a036cf24c1f40993f4a1da";
+	} else if id == 2 {
+		input = "0350863ad64a87ae8a2fe83c1af1a8403cb53f53e486d8511dad8a04887e5b2352"
+	} else if id == 3 {
+		input = "03085ab8fbc19db189ced3410650737671cb8cad159bfa9f2c1d96ce1330f0978d"
+	} else if id == 4 {
+		input = "03d395ee0b30fa7d34f49ef9cb2868c8364e9d618a7f437101a979fb3c47f21de2"
+	}
+	
+	let mut decoded_input = [0u8; 33];
+	hex::decode_to_slice(input, &mut decoded_input).expect("hi");
+	DKGEcdsaToEthereum::convert(Public::from_raw(decoded_input).into())
 }
 
 pub(crate) fn roll_to(n: u64) {
