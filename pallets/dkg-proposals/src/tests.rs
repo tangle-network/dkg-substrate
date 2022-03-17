@@ -14,9 +14,6 @@
 //
 #![cfg(test)]
 
-use core::panic;
-use std::vec;
-
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
@@ -29,11 +26,13 @@ use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
 	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
 };
+use core::panic;
 use dkg_runtime_primitives::{
 	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,
 	TypedChainId,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
+use std::vec;
 
 use crate as pallet_dkg_proposals;
 
@@ -805,4 +804,27 @@ fn should_output_valid_root() {
 	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
 		println!("{:?}", DKGProposals::get_proposer_set_tree_root());
 	});
+}
+use sp_runtime::app_crypto::ecdsa;
+// Tests whether proposer root is correct
+#[test]
+fn should_calculate_corrrect_proposer_set_root() {
+	ExtBuilder::with_genesis_collators().execute_with(|| {
+		// Initial proposer set is invulnerables even when another collator exists
+		assert_eq!(DKGProposals::proposer_count(), 3);
+		// Get the three invulnerable proposers
+		println!("{:?}", ecdsa::Public::from_raw([3; 33]));
+		println!("{:?}", mock_ecdsa_key(3));
+		// Advance a two sessions
+		roll_to(20);
+		// The fourth collator is now in the proposer set as well
+		assert_eq!(DKGProposals::proposer_count(), 4);
+	})
+}
+
+#[test]
+fn shouljd_calculate_corrrect_proposer_set_root() {
+	println!("{:?}", ecdsa::Public::from_raw([3; 33]));
+	let x = mock_ecdsa_key(3);
+	println!("{:?}", x);
 }

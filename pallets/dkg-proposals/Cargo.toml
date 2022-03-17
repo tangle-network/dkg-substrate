@@ -15,7 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 # primitives
 codec = { package = "parity-scale-codec", version = "2.3.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
-k256 = { version = "0.10.2", default-features = false, features = ["arithmetic"] }
+k256 = { version = "0.10.2", default-features = false, features = ["arithmetic", "ecdsa"] }
 log = { version = "0.4.13", default-features = false }
 
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }

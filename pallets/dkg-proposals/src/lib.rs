@@ -896,10 +896,12 @@ impl<T: Config>
 pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
-		use k256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey};
+		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		use sp_core::crypto::ByteArray;
-
-		PublicKey::from_sec1_bytes(a.as_slice())
+		let x = VerifyingKey::from_sec1_bytes(
+			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a.0),
+		);
+		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
 			.map(|pub_key| {
 				// uncompress the key
 				let uncompressed = pub_key.to_encoded_point(false);
