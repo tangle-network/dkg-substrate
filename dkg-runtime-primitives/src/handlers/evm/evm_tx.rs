@@ -30,13 +30,13 @@ pub struct EvmTxProposal {
 ///     variable [0..]
 /// ]
 pub fn create(data: &[u8]) -> Result<EvmTxProposal, ValidationError> {
-	let eth_transaction = TransactionV2::decode(&mut &data[..])
+	let eth_transaction = TransactionV2::decode(&mut &*data)
 		.map_err(|_| ValidationError::InvalidParameter("Invalid transaction".to_string()))?;
 
 	if !validate_ethereum_tx(&eth_transaction) {
 		return Err(ValidationError::InvalidParameter(
 			"Ethereum transaction is invalid".to_string(),
-		))?
+		))
 	}
 
 	let (chain_id, nonce) = decode_evm_transaction(&eth_transaction)?;
@@ -74,11 +74,11 @@ fn decode_evm_transaction(
 		},
 	};
 
-	return Ok((chain_id.into(), nonce.into()))
+	Ok((chain_id, nonce.into()))
 }
 
 fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> bool {
-	return match eth_transaction {
+	match eth_transaction {
 		TransactionV2::Legacy(_tx) => true,
 		TransactionV2::EIP2930(_tx) => true,
 		TransactionV2::EIP1559(_tx) => true,
@@ -89,22 +89,22 @@ fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> bool {
 fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
 	let (sig_r, sig_s, sig_v, msg_hash) = match eth_transaction {
 		TransactionV2::Legacy(tx) => {
-			let r = tx.signature.r().clone();
-			let s = tx.signature.s().clone();
+			let r = *tx.signature.r();
+			let s = *tx.signature.s();
 			let v = tx.signature.standard_v();
 			let hash = LegacyTransactionMessage::from(tx.clone()).hash();
 			(r, s, v, hash)
 		},
 		TransactionV2::EIP2930(tx) => {
-			let r = tx.r.clone();
-			let s = tx.s.clone();
+			let r = tx.r;
+			let s = tx.s;
 			let v = if tx.odd_y_parity { 1 } else { 0 };
 			let hash = EIP2930TransactionMessage::from(tx.clone()).hash();
 			(r, s, v, hash)
 		},
 		TransactionV2::EIP1559(tx) => {
-			let r = tx.r.clone();
-			let s = tx.s.clone();
+			let r = tx.r;
+			let s = tx.s;
 			let v = if tx.odd_y_parity { 1 } else { 0 };
 			let hash = EIP1559TransactionMessage::from(tx.clone()).hash();
 			(r, s, v, hash)
@@ -118,5 +118,5 @@ fn validate_ethereum_tx_signature(eth_transaction: &TransactionV2) -> bool {
 	let mut msg = [0u8; 32];
 	msg.copy_from_slice(&msg_hash[..]);
 
-	return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg).is_ok()
+	sp_io::crypto::secp256k1_ecdsa_recover(&sig, &msg).is_ok()
 }

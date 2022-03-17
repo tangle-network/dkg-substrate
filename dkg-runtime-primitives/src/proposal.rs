@@ -13,7 +13,6 @@
 // limitations under the License.
 //
 use frame_support::RuntimeDebug;
-use sp_runtime::traits::AtLeast32Bit;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -187,17 +186,17 @@ impl Proposal {
 
 	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
 		match self.kind() {
-			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce.into()),
-			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce.into()),
-			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce.into()),
-			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce.into()),
-			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce.into()),
+			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
+			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce),
+			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
+			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
+			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
 			ProposalKind::WrappingFeeUpdate =>
-				DKGPayloadKey::WrappingFeeUpdateProposal(nonce.into()),
-			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce.into()),
-			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce.into()),
+				DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
+			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
 			ProposalKind::MaxDepositLimitUpdate =>
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce.into()),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
 			ProposalKind::MinWithdrawalLimitUpdate =>
 				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce),
 			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce),
@@ -221,7 +220,7 @@ pub trait ProposalHandlerTrait {
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {

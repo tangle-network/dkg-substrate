@@ -26,22 +26,22 @@ const KEY_LENGTH: usize = 32;
 pub fn validate_ecdsa_signature(data: &[u8], signature: &[u8]) -> bool {
 	if signature.len() == SIGNATURE_LENGTH {
 		let mut sig = [0u8; SIGNATURE_LENGTH];
-		sig[..SIGNATURE_LENGTH].copy_from_slice(&signature);
+		sig[..SIGNATURE_LENGTH].copy_from_slice(signature);
 
-		let hash = keccak_256(&data);
+		let hash = keccak_256(data);
 
-		return sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash).is_ok()
+		sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash).is_ok()
 	} else {
-		return false
+		false
 	}
 }
 
 pub fn recover_ecdsa_pub_key(data: &[u8], signature: &[u8]) -> Result<Vec<u8>, EcdsaVerifyError> {
 	if signature.len() == SIGNATURE_LENGTH {
 		let mut sig = [0u8; SIGNATURE_LENGTH];
-		sig[..SIGNATURE_LENGTH].copy_from_slice(&signature);
+		sig[..SIGNATURE_LENGTH].copy_from_slice(signature);
 
-		let hash = keccak_256(&data);
+		let hash = keccak_256(data);
 
 		let pub_key = sp_io::crypto::secp256k1_ecdsa_recover(&sig, &hash)?;
 		return Ok(pub_key.to_vec())
@@ -56,7 +56,7 @@ pub fn verify_signer_from_set_ecdsa(
 ) -> (Option<ecdsa::Public>, bool) {
 	let mut signer = None;
 	let res = maybe_signers.iter().any(|x| {
-		let res = if let Ok(data) = recover_ecdsa_pub_key(&msg[..], &signature) {
+		let res = if let Ok(data) = recover_ecdsa_pub_key(msg, signature) {
 			if x.0.to_vec() == data {
 				signer = Some(x.clone());
 				true
@@ -80,10 +80,10 @@ pub fn verify_signer_from_set(
 ) -> (Option<sr25519::Public>, bool) {
 	let mut signer = None;
 	let res = maybe_signers.iter().any(|x| {
-		let decoded_signature = sr25519::Signature::from_slice(&signature[..]);
-		let res = sp_io::crypto::sr25519_verify(&decoded_signature, &msg[..], x);
+		let decoded_signature = sr25519::Signature::from_slice(signature);
+		let res = sp_io::crypto::sr25519_verify(&decoded_signature, msg, x);
 		if res {
-			signer = Some(x.clone());
+			signer = Some(*x);
 		}
 
 		res
@@ -94,7 +94,7 @@ pub fn verify_signer_from_set(
 pub fn to_slice_32(val: &[u8]) -> Option<[u8; 32]> {
 	if val.len() == KEY_LENGTH {
 		let mut key = [0u8; KEY_LENGTH];
-		key[..KEY_LENGTH].copy_from_slice(&val);
+		key[..KEY_LENGTH].copy_from_slice(val);
 
 		return Some(key)
 	}

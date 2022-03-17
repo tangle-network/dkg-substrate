@@ -57,7 +57,7 @@ impl<A: PartialEq, B: PartialOrd + Default> ProposalVotes<A, B> {
 
 	/// Returns true if `who` has voted for or against the proposal
 	pub fn has_voted(&self, who: &A) -> bool {
-		self.votes_for.contains(&who) || self.votes_against.contains(&who)
+		self.votes_for.contains(who) || self.votes_against.contains(who)
 	}
 
 	/// Return true if the expiry time has been reached

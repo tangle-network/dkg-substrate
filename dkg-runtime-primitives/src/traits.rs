@@ -20,7 +20,7 @@ pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 		authority_accounts: Vec<AccountId>,
 		authority_set_id: AuthoritySetId,
 		authority_ids: Vec<AuthorityId>,
-	) -> ();
+	);
 }
 
 impl<AccountId, AuthoritySetId, AuthorityId>
@@ -30,7 +30,7 @@ impl<AccountId, AuthoritySetId, AuthorityId>
 		_authority_accounts: Vec<AccountId>,
 		_authority_set_id: AuthoritySetId,
 		_authority_ids: Vec<AuthorityId>,
-	) -> () {
+	) {
 	}
 }
 
