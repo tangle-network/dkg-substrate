@@ -29,6 +29,7 @@ use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use parking_lot::Mutex;
+use futures::lock::Mutex as AsyncMutex;
 
 use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
@@ -123,7 +124,7 @@ where
 	pub client: Arc<C>,
 	backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub gossip_engine: Arc<AsyncMutex<GossipEngine<B>>>,
 	gossip_validator: Arc<GossipValidator<B>>,
 	/// Min delta in block numbers between two blocks, DKG should vote on
 	min_block_delta: u32,
@@ -144,7 +145,7 @@ where
 	queued_validator_set: AuthoritySet<Public>,
 	/// Validator set id for the last signed commitment
 	last_signed_id: u64,
-	/// keep rustc happy
+	/// preserve data of type BE
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
 	refresh_in_progress: bool,
@@ -1324,15 +1325,20 @@ where
 			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
 				|notification| async move {
 					// debug!(target: "dkg", "🕸️  Got message: {:?}", notification);
-
 					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
 				},
 			));
 
-		loop {
-			let engine = self.gossip_engine.clone();
-			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
+		let ref engine = self.gossip_engine.clone();
+		let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
 
+		let finality_handler = async move {
+			while let Some(finality_notification) = self.finality_notifications.next().await {
+				self.handle_finality_notification()
+			}
+		};
+
+		loop {
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {

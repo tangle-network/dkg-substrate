@@ -137,7 +137,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().gossip_message(
+				dkg_worker.gossip_engine.lock().await.gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message.clone(),
 					true,
@@ -150,21 +150,15 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let mut reports =
-			match dkg_worker.aggregated_misbehaviour_reports.get(&(round_id, offender.clone())) {
-				Some(reports) => reports.clone(),
-				None => AggregatedMisbehaviourReports {
-					round_id,
-					offender: offender.clone(),
-					reporters: Vec::new(),
-					signatures: Vec::new(),
-				},
-			};
+		let mut reports = dkg_worker.aggregated_misbehaviour_reports.entry((round_id, offender.clone())).or_insert(AggregatedMisbehaviourReports {
+			round_id,
+			offender: offender.clone(),
+			reporters: Vec::new(),
+			signatures: Vec::new(),
+		});
 
 		reports.reporters.push(sr25519_public);
 		reports.signatures.push(encoded_signature);
-
-		dkg_worker.aggregated_misbehaviour_reports.insert((round_id, offender), reports);
 
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature")
 	} else {
