@@ -57,19 +57,17 @@ use crate::storage::{
 
 use dkg_primitives::{
 	types::{DKGError, RoundId},
-	ChainId, DKGReport, Proposal,
+	DKGReport, Proposal,
 };
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	utils::{sr25519, to_slice_32},
-	DKGThresholds,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, ChainIdType, GENESIS_AUTHORITY_SET_ID,
+	utils::{sr25519, to_slice_32}, DKGThresholds,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
-	error::{self},
-	metric_inc, metric_set,
+	error, metric_inc, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	types::dkg_topic,
@@ -720,8 +718,7 @@ where
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key =
-			<(ChainIdType<ChainId>, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
+		let decoded_key = <(TypedChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
 		let payload_key = match decoded_key {
 			Ok((_chain_id, key)) => key,
 			Err(_err) => return None,
@@ -746,7 +743,8 @@ where
 		let rounds = self.dkg_state.curr_rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for (key, ..) in &unsigned_proposals {
+			for unsinged_proposal in &unsigned_proposals {
+				let key = (unsinged_proposal.typed_chain_id, unsinged_proposal.key);
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}
@@ -809,15 +807,15 @@ where
 		let rounds = self.dkg_state.curr_rounds.as_mut().unwrap();
 		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
-		for (key, proposal) in unsigned_proposals {
+		for unsigned_proposal in unsigned_proposals {
+			let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
 			if !rounds.is_ready_to_vote(key.encode()) {
 				continue
 			}
 
-			let (_chain_id_type, ..): (ChainIdType<ChainId>, DKGPayloadKey) = key.clone();
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 
-			if let Proposal::Unsigned { kind: _, data } = proposal {
+			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, self.latest_block) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());

@@ -76,8 +76,8 @@ describe('Token Remove Proposal', () => {
 			const keyring = new Keyring({type: 'sr25519'});
 			const alice = keyring.addFromUri('//Alice');
 			const prop = u8aToHex(proposalBytes);
-			const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-				EVM: localChain.chainId,
+			const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+				Evm: localChain.chainId,
 			});
 			const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
 			const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
@@ -145,8 +145,8 @@ describe('Token Remove Proposal', () => {
 		const keyring = new Keyring({type: 'sr25519'});
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType('DkgRuntimePrimitivesChainIdType', {
-			EVM: localChain.chainId,
+		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
+			Evm: localChain.chainId,
 		});
 		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenRemove');
 		const tokenRemoveProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {

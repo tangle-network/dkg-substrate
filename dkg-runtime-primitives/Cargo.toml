@@ -5,11 +5,22 @@ edition = "2021"
 
 [dependencies]
 impl-trait-for-tuples = { version = "0.2.2", default-features = false }
-codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
-scale-info = { version = "1.0", default-features = false, features = ["derive"] }
-tiny-keccak = { version = "2.0.1", default-features = false, features = ["keccak"] }
-ethereum = { version = "0.9.0", default-features = false, features = ["with-codec"] }
+codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = [
+	"derive",
+] }
+scale-info = { version = "1.0", default-features = false, features = [
+	"derive",
+] }
+tiny-keccak = { version = "2.0.1", default-features = false, features = [
+	"keccak",
+] }
+ethereum = { version = "0.9.0", default-features = false, features = [
+	"with-codec",
+] }
 ethereum-types = { version = "0.12", default-features = false }
+webb-proposals = { version = "0.2.0", default-features = false, features = [
+	"scale",
+] }
 
 sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
@@ -28,6 +39,7 @@ default = ["std"]
 std = [
 	"codec/std",
 	"scale-info/std",
+	"webb-proposals/std",
 	"sp-io/std",
 	"sp-api/std",
 	"sp-runtime/std",

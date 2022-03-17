@@ -44,7 +44,7 @@ async function testWrappingFeeUpdateProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{compressed: false}
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5002});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5002});
 	const propHash = keccak256(encodeWrappingFeeUpdateProposal(wrappingFeeUpdateProposal));
 
 	const proposalType = {wrappingfeeupdateproposal: wrappingFeeUpdateProposal.header.nonce}
@@ -70,7 +70,7 @@ async function sendWrappingFeeUpdateProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('DkgRuntimePrimitivesChainIdType', {EVM: 5001});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5001});
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'WrappingFeeUpdate');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {

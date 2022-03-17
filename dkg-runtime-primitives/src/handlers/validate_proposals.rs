@@ -18,4 +18,5 @@ use scale_info::prelude::string::String;
 pub enum ValidationError {
 	InvalidParameter(String),
 	UnimplementedProposalKind,
+	InvalidProposalBytesLength,
 }

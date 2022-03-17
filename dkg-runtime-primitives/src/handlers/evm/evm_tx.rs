@@ -11,26 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-use crate::{
-	handlers::validate_proposals::ValidationError, ChainIdTrait, ChainIdType, ProposalNonce,
-};
+
+use crate::{handlers::validate_proposals::ValidationError, ProposalNonce};
 use codec::{alloc::string::ToString, Decode};
 use ethereum::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, TransactionV2,
 };
 
-pub struct EvmTxProposal<C: ChainIdTrait> {
-	pub chain_id: ChainIdType<C>,
+pub struct EvmTxProposal {
+	pub chain_id: u32,
 	pub nonce: ProposalNonce,
 	pub tx: TransactionV2,
 }
 
 /// https://github.com/webb-tools/protocol-solidity/issues/83
 /// Proposal Data: [
-///     bytes        		- variable [0..]
+///     bytes,
+///     variable [0..]
 /// ]
-pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<EvmTxProposal<C>, ValidationError> {
+pub fn create(data: &[u8]) -> Result<EvmTxProposal, ValidationError> {
 	let eth_transaction = TransactionV2::decode(&mut &data[..])
 		.map_err(|_| ValidationError::InvalidParameter("Invalid transaction".to_string()))?;
 
@@ -46,33 +45,36 @@ pub fn create<C: ChainIdTrait>(data: &[u8]) -> Result<EvmTxProposal<C>, Validati
 	Ok(EvmTxProposal { chain_id, nonce, tx: eth_transaction })
 }
 
-fn decode_evm_transaction<C: ChainIdTrait>(
+fn decode_evm_transaction(
 	eth_transaction: &TransactionV2,
-) -> core::result::Result<(ChainIdType<C>, ProposalNonce), ValidationError> {
+) -> Result<(u32, ProposalNonce), ValidationError> {
 	let (chain_id, nonce) = match eth_transaction {
 		TransactionV2::Legacy(tx) => {
-			let chain_id: u64 = 0;
+			let chain_id: u32 = 0;
 			let nonce = tx.nonce.as_u32();
 			(chain_id, nonce)
 		},
 		TransactionV2::EIP2930(tx) => {
-			let chain_id: u64 = tx.chain_id;
+			let chain_id: u32 = tx.chain_id.try_into().map_err(|_| {
+				ValidationError::InvalidParameter(
+					"Invalid chain id (could not fit into u32)".to_string(),
+				)
+			})?;
 			let nonce = tx.nonce.as_u32();
 			(chain_id, nonce)
 		},
 		TransactionV2::EIP1559(tx) => {
-			let chain_id: u64 = tx.chain_id;
+			let chain_id: u32 = tx.chain_id.try_into().map_err(|_| {
+				ValidationError::InvalidParameter(
+					"Invalid chain id (could not fit into u32)".to_string(),
+				)
+			})?;
 			let nonce = tx.nonce.as_u32();
 			(chain_id, nonce)
 		},
 	};
 
-	let chain_id = match C::try_from(chain_id) {
-		Ok(v) => v,
-		Err(_) => return Err(ValidationError::InvalidParameter("Invalid chain id".to_string()))?,
-	};
-
-	return Ok((ChainIdType::EVM(chain_id), nonce))
+	return Ok((chain_id.into(), nonce.into()))
 }
 
 fn validate_ethereum_tx(eth_transaction: &TransactionV2) -> bool {

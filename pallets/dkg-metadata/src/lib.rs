@@ -239,7 +239,7 @@ pub mod pallet {
 						Self::decompress_public_key(pub_key.1).unwrap_or_default();
 					let next_nonce = Self::refresh_nonce() + 1u32;
 					let data = dkg_runtime_primitives::RefreshProposal {
-						nonce: next_nonce,
+						nonce: next_nonce.into(),
 						pub_key: uncompressed_pub_key,
 					};
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
@@ -397,7 +397,7 @@ pub mod pallet {
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 
 			ensure!(
-				signature_proposal.nonce == Self::refresh_nonce(),
+				signature_proposal.nonce == Self::refresh_nonce().into(),
 				Error::<T>::InvalidSignature
 			);
 
@@ -484,7 +484,7 @@ pub mod pallet {
 				let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
 				let next_nonce = Self::refresh_nonce() + 1u32;
 				let data = dkg_runtime_primitives::RefreshProposal {
-					nonce: next_nonce,
+					nonce: next_nonce.into(),
 					pub_key: uncompressed_pub_key,
 				};
 
@@ -1054,7 +1054,8 @@ impl<T: Config> Pallet<T> {
 		let refresh_nonce = Self::refresh_nonce();
 		if let Some(pub_key) = Self::next_dkg_public_key() {
 			let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-			let data = RefreshProposal { nonce: refresh_nonce, pub_key: uncompressed_pub_key };
+			let data =
+				RefreshProposal { nonce: refresh_nonce.into(), pub_key: uncompressed_pub_key };
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(signature, &data.encode())
 				.map_err(|_| {
 					frame_support::log::error!(
@@ -1201,7 +1202,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 			.collect::<Vec<_>>();
 
 		Self::change_authorities(
-			next_authorities.clone(),
+			next_authorities,
 			next_queued_authorities,
 			authority_account_ids,
 			queued_authority_account_ids,
