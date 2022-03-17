@@ -22,7 +22,7 @@ use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::{types::*, utils::select_random_set};
+use crate::{types::*, utils::{select_random_set, get_best_authorities}};
 use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
@@ -330,15 +330,11 @@ where
 		);
 
 		let keygen_params = self.keygen_params();
+		let keygen_set = get_best_authorities(self.parties.into(), &self.authorities, &self.reputations);
 
-		// TODO: Detect if I'm in the keygen set
-		// TODO: Ensure this is deterministic on the same underlying authority set
-		let keygen_set = self.get_best_authorities(self.parties.into());
 		let is_participating = keygen_set.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>().contains(&self.party_index);
 		if !is_participating {
-			return Err(DKGError::GenericError {
-				reason: "I'm not participating in the keygen set".to_string(),
-			});
+			return Ok(());
 		}
 
 		self.keygen = match mem::replace(&mut self.keygen, KeygenState::Empty) {
@@ -570,20 +566,6 @@ where
 		None
 	}
 
-	fn get_best_authorities(&mut self, count: usize) -> Vec<(u16, AuthorityId)> {
-		let mut reputations_of_authorities = self.authorities.iter()
-			.enumerate()
-			.map(|(party_inx, id)| (party_inx + 1, self.reputations.get(id).unwrap_or(&0), id))
-			.collect::<Vec<(_,_,_)>>();
-
-		reputations_of_authorities.sort_by(|a, b| b.1.cmp(a.1));
-
-		return reputations_of_authorities.iter()
-			.map(|x| (x.0 as u16, x.2.clone()))
-			.take(count)
-			.collect()
-	}
-
 	/// Generates the signer set by randomly selecting t+1 signers
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
@@ -591,7 +573,7 @@ where
 		let (_, threshold, _) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
 		// Get the parties with non-negative reputation
-		let best_parties = self.get_best_authorities((threshold + 1) as usize)
+		let best_parties = get_best_authorities((threshold + 1) as usize, &self.authorities, &self.reputations)
 			.iter()
 			.map(|(party_inx, _)| *party_inx)
 			.collect();
@@ -627,6 +609,8 @@ where
 #[cfg(test)]
 mod tests {
 	use super::{KeygenState, MultiPartyECDSARounds};
+	use crate::utils::get_best_authorities;
+	use std::collections::HashMap;
 	use codec::Encode;
 
 	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
@@ -747,15 +731,25 @@ mod tests {
 		panic!("Not all parties finished");
 	}
 
+	use sp_runtime::app_crypto::ecdsa;
+	pub fn mock_dkg_id(id: u8) -> dkg_runtime_primitives::crypto::AuthorityId {
+		dkg_runtime_primitives::crypto::AuthorityId::from(ecdsa::Public::from_raw([id; 33]))
+	}
+
 	fn simulate_multi_party(t: u16, n: u16) {
 		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
 		let round_key = 1u32.encode();
+		let mut authorities = vec![];
+		for i in 1..=n {
+			authorities.push(mock_dkg_id(i.try_into().unwrap()));
+		}
 		for i in 1..=n {
 			let mut party = MultiPartyECDSARounds::builder()
 				.round_id(0)
 				.party_index(i)
 				.threshold(t)
 				.parties(n)
+				.authorities(authorities.clone())
 				.build();
 			println!("Starting keygen for party {}", party.party_index);
 			party
@@ -805,5 +799,25 @@ mod tests {
 	#[test]
 	fn simulate_multi_party_t3_n5() {
 		simulate_multi_party(3, 5);
+	}
+
+	#[test]
+	fn deterministic_selection_of_authorities_should_work() {
+		let n = 9;
+		let sign_t = 3;
+		let keygen_t = 4;
+		let mut parties: Vec<MultiPartyECDSARounds<u32>> = vec![];
+		let round_key = 1u32.encode();
+		let mut authorities = vec![];
+		for i in 1..=n {
+			authorities.push(mock_dkg_id(i.try_into().unwrap()));
+		}
+		
+		let best = get_best_authorities(keygen_t, &authorities, &HashMap::new());
+		assert_eq!(best.len(), keygen_t);
+		for i in 0..10 {
+			let temp_best = get_best_authorities(keygen_t, &authorities, &HashMap::new());
+			assert_eq!(best, temp_best);
+		}
 	}
 }

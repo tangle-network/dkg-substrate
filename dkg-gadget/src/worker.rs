@@ -384,13 +384,13 @@ where
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			let thresholds = self.get_thresholds(header.number()).unwrap_or_default();
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
-				Some(set_up_rounds(
+				set_up_rounds(
 					&next_authorities,
 					&public,
 					local_key_path,
 					&self.get_authority_reputations(header, next_authorities.authorities.clone()),
 					thresholds,
-				))
+				)
 			} else {
 				None
 			}
@@ -417,13 +417,18 @@ where
 		// If current node is part of the queued authorities start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.dkg_state.next_rounds = Some(set_up_rounds(
+			self.dkg_state.next_rounds = set_up_rounds(
 				&queued,
 				&public,
 				local_key_path,
 				&self.get_authority_reputations(header, queued.authorities.clone()),
 				thresholds,
-			));
+			);
+
+			if self.dkg_state.next_rounds.is_none() {
+				return;
+			}
+
 			self.dkg_state.listening_for_pub_key = true;
 			// Start the keygen for the queued authorities
 			match self.dkg_state.next_rounds.as_mut().unwrap().start_keygen(self.latest_block) {
@@ -470,6 +475,12 @@ where
 			let _ = self.verify_validator_set(header.number(), active.clone());
 			// Setting new validator set id as curent
 			self.current_validator_set = active.clone();
+			// // Setting new authority set after applying thresholds
+			// self.current_keygen_authorities = get_best_authorities(
+			// 	&self.current_validator_set,
+			// 	&self.get_authority_reputations(header, self.current_validator_set.authorities.clone()),
+			// 	self.get_thresholds(header.number()).unwrap_or_default(),
+			// );
 
 			// Setting up the DKG
 			self.handle_dkg_setup(&header, active.clone());
@@ -743,8 +754,8 @@ where
 		let rounds = self.dkg_state.curr_rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for unsinged_proposal in &unsigned_proposals {
-				let key = (unsinged_proposal.typed_chain_id, unsinged_proposal.key);
+			for unsigned_proposal in &unsigned_proposals {
+				let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}

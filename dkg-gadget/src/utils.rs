@@ -18,6 +18,7 @@ use crate::{
 };
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi, DKGThresholds,
+	utils::get_best_authorities,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -52,25 +53,34 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	local_key_path: Option<std::path::PathBuf>,
 	reputations: &HashMap<AuthorityId, i64>,
 	thresholds: DKGThresholds,
-) -> MultiPartyECDSARounds<N> {
-	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
-	// Compute the reputations of only the currently selected authorities for these rounds
-	let mut authority_set_reputations = HashMap::new();
-	authority_set.authorities.iter().for_each(|id| {
-		authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
-	});
-	// Generate the rounds object
-	let rounds = MultiPartyECDSARounds::builder()
-		.round_id(authority_set.id.clone())
-		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(thresholds.signature)
-		.parties(u16::try_from(thresholds.keygen).unwrap())
-		.local_key_path(local_key_path)
-		.reputations(authority_set_reputations)
-		.authorities(authority_set.authorities.clone())
-		.build();
+) -> Option<MultiPartyECDSARounds<N>> {
+	// Get reduced authority set from reputations
+	let best_authorities: Vec<AuthorityId> = get_best_authorities(thresholds.keygen.into(), &authority_set.authorities, &reputations)
+		.iter()
+		.map(|(_, id)| id.clone())
+		.collect();
+	
+	if let Some(party_inx) = find_index::<AuthorityId>(&best_authorities[..], public) {
+		// Compute the reputations of only the currently selected authorities for these rounds
+		let mut authority_set_reputations = HashMap::new();
+		authority_set.authorities.iter().for_each(|id| {
+			authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
+		});
+		// Generate the rounds object
+		let rounds = MultiPartyECDSARounds::builder()
+			.round_id(authority_set.id.clone())
+			.party_index(u16::try_from(party_inx).unwrap())
+			.threshold(thresholds.signature)
+			.parties(u16::try_from(thresholds.keygen).unwrap())
+			.local_key_path(local_key_path)
+			.reputations(authority_set_reputations)
+			.authorities(authority_set.authorities.clone())
+			.build();
+	
+		return Some(rounds);
+	}
 
-	rounds
+	None
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
