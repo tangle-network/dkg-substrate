@@ -1,3 +1,17 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 use crate::mock::*;
 use codec::Encode;
 use frame_support::{assert_err, assert_ok};
@@ -6,11 +20,11 @@ use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ChainId, ChainIdType, DKGPayloadKey,
-	EIP2930Transaction, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
-	ProposalHeader, ProposalKind, TransactionAction, TransactionV2, U256,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, EIP2930Transaction,
+	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
+	ProposalKind, ProposalNonce, TransactionAction, TransactionV2, TypedChainId, U256,
 };
-use sp_core::{sr25519, H256};
+use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
 
 // *** Utility ***
@@ -75,8 +89,8 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -104,6 +118,23 @@ fn handle_anchor_update_proposal_success() {
 }
 
 #[test]
+fn should_handle_proposer_set_update_proposal_success() {
+	execute_test_with(|| {
+		let proposal_raw: [u8; 48] = [
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8,
+			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 0, 0, 0, 1,
+		];
+
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
+			proposal_raw.to_vec(),
+			ProposalAction::Sign(0)
+		));
+
+		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
+	})
+}
+
+#[test]
 fn store_signed_proposal_offchain() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
@@ -115,8 +146,8 @@ fn store_signed_proposal_offchain() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -142,8 +173,8 @@ fn submit_signed_proposal_onchain_success() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -171,8 +202,8 @@ fn submit_signed_proposal_success() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -187,8 +218,8 @@ fn submit_signed_proposal_success() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_none(),
 			true
@@ -196,8 +227,8 @@ fn submit_signed_proposal_success() {
 
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -218,8 +249,8 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -234,8 +265,8 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_none(),
 			true
@@ -243,8 +274,8 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -258,8 +289,8 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -272,16 +303,16 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_none(),
 			true
 		);
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -292,19 +323,6 @@ fn submit_signed_proposal_already_exists() {
 #[test]
 fn submit_signed_proposal_fail_invalid_sig() {
 	execute_test_with(|| {
-		let tx_eip2930 = EIP2930Transaction {
-			chain_id: 0,
-			nonce: U256::from(0u8),
-			gas_price: U256::from(0u8),
-			gas_limit: U256::from(0u8),
-			action: TransactionAction::Create,
-			value: U256::from(99u8),
-			input: Vec::<u8>::new(),
-			access_list: Vec::new(),
-			odd_y_parity: false,
-			r: H256::from([0u8; 32]),
-			s: H256::from([0u8; 32]),
-		};
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
@@ -314,8 +332,8 @@ fn submit_signed_proposal_fail_invalid_sig() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
@@ -339,16 +357,16 @@ fn submit_signed_proposal_fail_invalid_sig() {
 
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_some(),
 			true
 		);
 		assert_eq!(
 			DKGProposalHandler::signed_proposals(
-				ChainIdType::EVM(0),
-				DKGPayloadKey::EVMProposal(0)
+				TypedChainId::Evm(0),
+				DKGPayloadKey::EVMProposal(0.into())
 			)
 			.is_none(),
 			true
@@ -356,51 +374,51 @@ fn submit_signed_proposal_fail_invalid_sig() {
 	});
 }
 
-pub fn make_header(chain_type: ChainIdType<ChainId>) -> ProposalHeader<u32> {
-	match chain_type {
-		ChainIdType::EVM(_) => {
-			let mut header = ProposalHeader::<u32> {
-				resource_id: [
+pub fn make_header(chain: TypedChainId) -> ProposalHeader {
+	match chain {
+		TypedChainId::Evm(_) => {
+			let mut header = ProposalHeader::new(
+				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					1, 0, 0, 0, 0, 1,
-				],
-				chain_id: ChainIdType::EVM(1),
-				function_sig: [0x26, 0x57, 0x88, 0x01],
-				nonce: 1,
-			};
+				]
+				.into(),
+				[0x26, 0x57, 0x88, 0x01].into(),
+				1.into(),
+			);
 			header
 		},
-		ChainIdType::Substrate(_) => {
-			let mut header = ProposalHeader::<u32> {
-				resource_id: [
+		TypedChainId::Substrate(_) => {
+			let mut header = ProposalHeader::new(
+				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					2, 0, 0, 0, 0, 1,
-				],
-				chain_id: ChainIdType::Substrate(1),
-				function_sig: [0x0, 0x0, 0x0, 0x0],
-				nonce: 1,
-			};
+				]
+				.into(),
+				[0x0, 0x0, 0x0, 0x0].into(),
+				1.into(),
+			);
 			header
 		},
 		_ => {
 			// Dummy Header
-			let mut header = ProposalHeader::<u32> {
-				resource_id: [
+			let mut header = ProposalHeader::new(
+				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					0, 0, 0, 0, 0, 1,
-				],
-				chain_id: ChainIdType::CosmosSDK(1),
-				function_sig: [0x0, 0x0, 0x0, 0x0],
-				nonce: 1,
-			};
+				]
+				.into(),
+				[0x0, 0x0, 0x0, 0x0].into(),
+				1.into(),
+			);
 			header
 		},
 	}
 }
 
-pub fn make_proposal<const N: usize>(prop: Proposal, chain_type: ChainIdType<ChainId>) -> Proposal {
+pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Proposal {
 	// Create the proposal Header
-	let mut header = make_header(chain_type);
+	let mut header = make_header(chain);
 	let mut buf = vec![];
 	header.encode_to(&mut buf);
 	// N bytes parameter
@@ -417,8 +435,6 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain_type: ChainIdType<Cha
 			ProposalKind::RescueTokens => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxExtLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxFeeLimitUpdate => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetTreasuryHandler => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::FeeRecipientUpdate => Proposal::Unsigned { kind, data: buf },
@@ -450,13 +466,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::TokenAddProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::TokenAddProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -465,13 +481,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::TokenRemoveProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::TokenRemoveProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -480,13 +496,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<1>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::WrappingFeeUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -495,13 +511,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<72>(
 				Proposal::Unsigned { kind: ProposalKind::RescueTokens, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::RescueTokensProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::RescueTokensProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -510,13 +526,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<72>(
 				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::ResourceIdUpdateProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::ResourceIdUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -526,13 +542,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<32>(
 				Proposal::Unsigned { kind: ProposalKind::MaxDepositLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::MaxDepositLimitUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -542,45 +558,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<32>(
 				Proposal::Unsigned { kind: ProposalKind::MinWithdrawalLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(1)
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxExtLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MaxExtLimitUpdateProposal(1)
-			)
-			.is_some(),
-			true
-		);
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
-			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxFeeLimitUpdate, data: vec![] },
-				ChainIdType::EVM(1)
-			)
-		));
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::MaxFeeLimitUpdateProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -590,13 +574,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::SetTreasuryHandler, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::SetTreasuryHandlerProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::SetTreasuryHandlerProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -606,13 +590,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::SetVerifier, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::SetVerifierProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::SetVerifierProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -622,13 +606,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::FeeRecipientUpdate, data: vec![] },
-				ChainIdType::EVM(1)
+				TypedChainId::Evm(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::EVM(1),
-				DKGPayloadKey::FeeRecipientUpdateProposal(1)
+				TypedChainId::Evm(1),
+				DKGPayloadKey::FeeRecipientUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -639,13 +623,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::TokenAddProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::TokenAddProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -654,13 +638,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::TokenRemoveProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::TokenRemoveProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -669,13 +653,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<1>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::WrappingFeeUpdateProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::WrappingFeeUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -684,13 +668,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::AnchorCreateProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::AnchorCreateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -699,13 +683,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::AnchorUpdateProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::AnchorUpdateProposal(1.into())
 			)
 			.is_some(),
 			true
@@ -714,13 +698,13 @@ fn force_submit_should_work_with_valid_proposals() {
 			Origin::root(),
 			make_proposal::<72>(
 				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
-				ChainIdType::Substrate(1)
+				TypedChainId::Substrate(0)
 			)
 		));
 		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
-				ChainIdType::Substrate(1),
-				DKGPayloadKey::ResourceIdUpdateProposal(1)
+				TypedChainId::Substrate(1),
+				DKGPayloadKey::ResourceIdUpdateProposal(1.into())
 			)
 			.is_some(),
 			true

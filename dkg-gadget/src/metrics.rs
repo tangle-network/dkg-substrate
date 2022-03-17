@@ -1,21 +1,18 @@
-// Copyright (C) 2020-2021 Parity Technologies (UK) Ltd.
-// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
-
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 //! DKG Prometheus metrics definition
-
 use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 
 /// DKG metrics exposed through Prometheus
@@ -23,7 +20,7 @@ pub(crate) struct Metrics {
 	/// Current active validator set id
 	pub dkg_validator_set_id: Gauge<U64>,
 	/// Total number of votes sent by this node
-	pub dkg_votes_sent: Counter<U64>,
+	pub dkg_votes_sent: Gauge<U64>,
 	/// Most recent concluded voting round
 	pub dkg_round_concluded: Gauge<U64>,
 	/// Best block finalized by DKG
@@ -42,7 +39,7 @@ impl Metrics {
 				registry,
 			)?,
 			dkg_votes_sent: register(
-				Counter::new("dkg_votes_sent", "Number of votes sent by this node")?,
+				Gauge::new("dkg_votes_sent", "Number of votes sent by this node")?,
 				registry,
 			)?,
 			dkg_round_concluded: register(

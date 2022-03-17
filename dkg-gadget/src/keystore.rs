@@ -1,20 +1,21 @@
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
-use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
+use sp_application_crypto::{key_types::AURA, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -69,7 +70,7 @@ impl DKGKeystore {
 		// we do check for multiple private keys as a key store sanity check.
 		let public: Vec<sr25519::Public> = keys
 			.iter()
-			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), ACCOUNT)]))
+			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), AURA)]))
 			.cloned()
 			.collect();
 
@@ -122,7 +123,7 @@ impl DKGKeystore {
 	pub fn sr25519_public_keys(&self) -> Result<Vec<sr25519::Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT)
+		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, AURA)
 			.iter()
 			.map(|k| sr25519::Public::from(k.clone()))
 			.collect();
@@ -145,7 +146,7 @@ impl DKGKeystore {
 
 		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
 
-		let sig = SyncCryptoStore::sign_with(&*store, ACCOUNT, &crypto_pair, message)
+		let sig = SyncCryptoStore::sign_with(&*store, AURA, &crypto_pair, message)
 			.map_err(|e| error::Error::Keystore(e.to_string()))?
 			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
 

@@ -1,3 +1,19 @@
+/*
+ * Copyright 2022 Webb Technologies Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
 import { hexToBytes, listenOneBlock, waitNfinalizedBlocks } from './utils';
@@ -98,7 +114,7 @@ async function sendSudoProposal(api: ApiPromise) {
 		});
 
 	const callMinWithdrawalLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		MaxDepositLimitUpdate: {
+		MinWithdrawalLimitUpdate: {
 			data: `0x${raw_data}`,
 		},
 	});
@@ -115,48 +131,6 @@ async function sendSudoProposal(api: ApiPromise) {
 				});
 
 				unsubMinWithdrawalLimit();
-			}
-		});
-
-	const callMaxExtLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		MaxDepositLimitUpdate: {
-			data: `0x${raw_data}`,
-		},
-	});
-	const unsubMaxExtLimit = await api.tx.sudo
-		.sudo(callMaxExtLimit)
-		.signAndSend(alice, ({ events = [], status }) => {
-			console.log(`Current status is: ${status.type}`);
-
-			if (status.isFinalized) {
-				console.log(`Transaction included at blockHash ${status.asFinalized}`);
-
-				events.forEach(({ phase, event: { data, method, section } }) => {
-					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-				});
-
-				unsubMaxExtLimit();
-			}
-		});
-
-	const callMaxFeeLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		MaxDepositLimitUpdate: {
-			data: `0x${raw_data}`,
-		},
-	});
-	const unsubMaxFeeLimit = await api.tx.sudo
-		.sudo(callMaxFeeLimit)
-		.signAndSend(alice, ({ events = [], status }) => {
-			console.log(`Current status is: ${status.type}`);
-
-			if (status.isFinalized) {
-				console.log(`Transaction included at blockHash ${status.asFinalized}`);
-
-				events.forEach(({ phase, event: { data, method, section } }) => {
-					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-				});
-
-				unsubMaxFeeLimit();
 			}
 		});
 }

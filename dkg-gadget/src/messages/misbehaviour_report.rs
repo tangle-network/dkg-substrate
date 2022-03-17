@@ -1,15 +1,26 @@
-use crate::{types::dkg_topic, worker::DKGWorker, Client};
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+use crate::{
+	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, types::dkg_topic,
+	worker::DKGWorker, Client,
+};
 use codec::Encode;
-use dkg_primitives::{
-	crypto::Public,
-	types::{
-		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId,
-		SignedDKGMessage,
-	},
+use dkg_primitives::types::{
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,
 };
-use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, AggregatedPublicKeys, DKGApi,
-};
+use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -18,7 +29,7 @@ use sp_runtime::{
 };
 
 pub(crate) fn handle_misbehaviour_report<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -29,7 +40,6 @@ where
 {
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let current_block_number = header.number().clone();
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {
@@ -86,7 +96,7 @@ where
 			// to submit the next DKG public key.
 			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
 			if reports.reporters.len() >= threshold {
-				dkg_worker.store_aggregated_misbehaviour_reports(&reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 			}
 		},
 		_ => {},
@@ -96,7 +106,7 @@ where
 }
 
 pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	dkg_worker: &mut DKGWorker<B, C, BE>,
 	offender: dkg_runtime_primitives::crypto::AuthorityId,
 	round_id: RoundId,
 ) where

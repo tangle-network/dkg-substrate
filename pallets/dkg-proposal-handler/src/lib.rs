@@ -1,8 +1,111 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! # DKG Proposal Handler Module
+//!
+//! A pallet to handle unsigned and signed proposals that are submitted for signing by the DKG.
+//!
+//! ## Overview
+//!
+//! The DKG Proposal Handler pallet is the pallet that directly handles the unsigned and
+//! signed DKG proposals. It is responsible for maintaining the `UnsignedProposalQueue` that the
+//! DKG authorities poll from for initiating threshold-signing. It is also responsible for the
+//! submission of signed proposals back on-chain, which allows for external relayers to listen and
+//! relay the signed proposals to their destinations.
+//!
+//! The pallet is meant to be used in conjunction with any governance system that processes
+//! unsigned proposals either directly or indirectly such as the `pallet-dkg-proposals` pallet,
+//! which delegates successfully voted upon proposals to the DKG Proposal Handler for processing.
+//! This pallet also contains root-level functions that allow for the submission of unsigned
+//! proposals that are useful for Webb Protocol applications. The intention being that tokenholders
+//! of the Webb Protocol chain can vote through the `pallet-democracy` or a similar governance
+//! system to submit unsigned proposals relevant for protocols built on the Webb Protocol's
+//! interoperable private application platform.
+//!
+//! The signed proposals are submitted on-chain through an offchain worker and storage mechanism
+//! that is maintained locally by each DKG authority. The DKG authorities engage in an offchain
+//! multi-party ECDSA threshold signing protocol to sign the unsigned proposals. Once the DKG
+//! authorities have signed proposals, they submit the signed proposals on-chain, where the
+//! signatures are verified against the active DKG's public key.
+//!
+//! ### Terminology
+//!
+//! - Unsigned Proposal: A Proposal that is unsigned and is ready to be signed by the DKG
+//!   authorities.
+//! - Signed Proposal: A Proposals that is signed and contains a signature from the active DKG in
+//!   the respective round.
+//! - Unsigned Proposal Queue: A queue of unsigned proposals that are ready for signing.
+//! - Anchor Update Proposal: A proposal for updating the merkle root state of an anchor on some
+//!   compatible blockchain.
+//! - Refresh Proposal: The proposal which rotates a soon-to-be outdated active DKG key to the
+//!   soon-to-be active next DKG key.
+//! - Proposer Set Update Proposal: The proposal which updates the latest proposer set from
+//!   `pallet-dkg-proposals`.
+//!
+//! ### Implementation
+//!
+//! The DKG Proposal Handler pallet is implemented with the primary purpose of handling unsigned
+//! proposals from the `pallet-dkg-proposals`, i.e. Anchor Update Proposals, handling forcefully
+//! submitting unsigned proposals from the integrating chain's tokenholders, and handling the
+//! submission of signed proposals back on-chain for data provenance and further processing.
+//!
+//! There are two main methods for submitting unsigned proposals currently implemented:
+//! 1. `handle_unsigned_proposal` - A generic handler which expects raw Anchor Update Proposals.
+//! 2. `force_submit_unsigned_proposal` - A root-level extrinsic that allows for the submission of
+//! all other valid unsigned proposals
+//!
+//! Handled unsigned proposals are added to the `UnsignedProposalQueue` and are processed by the DKG
+//! authorities offchain. The queue is polled using a runtime API and the multi-party ECDSA
+//! threshold signing protocol is initiated for each proposal. Once the DKG authorities have signed
+//! the unsigned proposal, the proposal is submitted on-chain and an event is emitted.
+//! Signed proposals are stored in the offchain storage system and polled each block by the offchain
+//! worker system.
+//!
+//! The types of proposals available for submission is defined in the `ProposalType` enum as well as
+//! the `DKGPayloadKey` enum. The list of currently supported proposals is as follows:
+//! - Refresh: A proposal to refresh the DKG key across authority changes.
+//! - ProposerSetUpdate: A proposal to update the proposer set from `pallet-dkg-proposals`.
+//! - EVM: A generic EVM transaction proposal.
+//! - AnchorCreate: A proposal to create an anchor on a compatible blockchain.
+//! - AnchorUpdate: A proposal to update an anchor state on a compatible blockchain.
+//! - TokenAdd: A proposal to add a token to system supporting a many-to-one token wrapper.
+//! - TokenRemove: A proposal to remove a token from system supporting a many-to-one token wrapper.
+//! - WrappingFeeUpdate: A proposal to update the wrapping fee for a many-to-one token wrapper.
+//! - ResourceIdUpdate: A proposal to update or add a new resource ID to a system for registering
+//!   resources.
+//! - RescueTokens: A proposal to rescue tokens from a treasury based system.
+//! - MaxDepositLimitUpdate: A proposal to update the maximum deposit limit for an escrow system.
+//! - MinWithdrawalLimitUpdate: A proposal to update the minimal withdrawal limit for an escrow
+//!   system.
+//! - SetVerifier: A proposal to update the verifier for a zkSNARK based system.
+//! - SetTreasuryHandler: A proposal to update the treasury handler for a treasury based system.
+//! - FeeRecipientUpdate: A proposal to update the fee recipient for an escrow system.
+//!
+//! ### Rewards
+//!
+//! Currently, there are no extra rewards integrated for successfully signing proposals. This is a
+//! future feature.
+//!
+//! ## Related Modules
+//!
+//! * [`System`](https://github.com/paritytech/substrate/tree/master/frame/system)
+//! * [`Support`](https://github.com/paritytech/substrate/tree/master/frame/support)
+//! * [`DKG Proposals`](../../pallet-dkg-proposals)
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal, proposal, traits::OnDKGPublicKeyChangeHandler,
-};
+use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://substrate.dev/docs/en/knowledgebase/runtime/frame>
@@ -15,23 +118,19 @@ mod mock;
 mod tests;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	ChainIdTrait, ChainIdType, DKGPayloadKey, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	LegacyTransactionMessage, OffchainSignedProposals, Proposal, ProposalAction,
-	ProposalHandlerTrait, ProposalKind,
+	DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
+	ProposalKind, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::{
-	offchain::{
-		storage::StorageValueRef,
-		storage_lock::{StorageLock, Time},
-	},
-	traits::Zero,
+use sp_runtime::offchain::{
+	storage::StorageValueRef,
+	storage_lock::{StorageLock, Time},
 };
-use sp_std::{convert::TryFrom, vec::Vec};
+use sp_std::vec::Vec;
 
 pub mod weights;
 use weights::WeightInfo;
@@ -43,12 +142,10 @@ mod benchmarking;
 pub mod pallet {
 	use super::*;
 	use dkg_runtime_primitives::{
-		handlers::decode_proposals::decode_proposal, utils::ensure_signed_by_dkg, DKGPayloadKey,
-		Proposal, ProposalKind,
+		utils::ensure_signed_by_dkg, DKGPayloadKey, Proposal, ProposalKind,
 	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
-	use sp_runtime::traits::AtLeast32BitUnsigned;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -57,14 +154,6 @@ pub mod pallet {
 	{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-		/// ChainID for anchor edges
-		type ChainId: Encode
-			+ Decode
-			+ Parameter
-			+ AtLeast32BitUnsigned
-			+ Default
-			+ Copy
-			+ ChainIdTrait;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 		/// Max number of signed proposal submissions per batch;
@@ -85,7 +174,7 @@ pub mod pallet {
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		ChainIdType<T::ChainId>,
+		TypedChainId,
 		Blake2_128Concat,
 		DKGPayloadKey,
 		Proposal,
@@ -97,7 +186,7 @@ pub mod pallet {
 	pub type SignedProposals<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		ChainIdType<T::ChainId>,
+		TypedChainId,
 		Blake2_128Concat,
 		DKGPayloadKey,
 		Proposal,
@@ -106,9 +195,6 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		ProposalAdded(T::AccountId, Proposal),
 		/// Event Emitted when we encounter a Proposal with invalid Signature.
 		InvalidProposalSignature {
 			/// The Type of the Proposal.
@@ -120,10 +206,10 @@ pub mod pallet {
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
-			/// The Target EVM chain ID.
-			chain_id: ChainIdType<T::ChainId>,
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
+			/// The Target Chain.
+			target_chain: TypedChainId,
 			/// The Proposal Data.
 			data: Vec<u8>,
 			/// Signature of the hash of the proposal data.
@@ -196,7 +282,7 @@ pub mod pallet {
 						Ok(_) => {
 							// Do nothing, it is all good.
 						},
-						Err(e) => {
+						Err(_e) => {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
@@ -251,17 +337,17 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			// We ensure that only certain proposals are valid this way
-			if let Proposal::Unsigned { kind, data } = &prop {
-				match decode_proposal(&prop) {
-					Ok((chain_id, key)) => {
-						UnsignedProposalQueue::<T>::insert(chain_id, key, prop.clone());
-						return Ok(().into())
+			if prop.is_unsigned() {
+				match decode_proposal_identifier(&prop) {
+					Ok(v) => {
+						UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, prop);
+						Ok(().into())
 					},
-					Err(_) => return Err(Error::<T>::ProposalFormatInvalid)?,
+					Err(_) => Err(Error::<T>::ProposalFormatInvalid)?,
 				}
+			} else {
+				Err(Error::<T>::ProposalFormatInvalid)?
 			}
-
-			Err(Error::<T>::ProposalFormatInvalid)?
 		}
 	}
 }
@@ -269,8 +355,21 @@ pub mod pallet {
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
-		if let Ok((chain_id, key)) = decode_proposal(&proposal).map(Into::into) {
-			UnsignedProposalQueue::<T>::insert(chain_id, key, proposal);
+		if let Ok(v) = decode_proposal_identifier(&proposal) {
+			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
+			return Ok(())
+		}
+
+		Err(Error::<T>::ProposalFormatInvalid)?
+	}
+
+	fn handle_unsigned_proposer_set_update_proposal(
+		proposal: Vec<u8>,
+		_action: ProposalAction,
+	) -> DispatchResult {
+		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
+		if let Ok(v) = decode_proposal_identifier(&proposal) {
+			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
 
 			return Ok(())
 		}
@@ -285,8 +384,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
 		UnsignedProposalQueue::<T>::insert(
-			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
-			DKGPayloadKey::RefreshVote(proposal.nonce),
+			TypedChainId::Evm(0),
+			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
 			unsigned_proposal,
 		);
 
@@ -297,27 +396,26 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
-			ChainIdType::<T::ChainId>::EVM(T::ChainId::zero()),
-			DKGPayloadKey::RefreshVote(proposal.nonce),
+			TypedChainId::Evm(0),
+			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
 		);
 
 		Ok(().into())
 	}
 
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
-		// Extract chain id and DKG key
-		let (chain_id, payload_key) =
-			decode_proposal(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
+		let id =
+			decode_proposal_identifier(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
-			"submit_signed_proposal: chain_id: {:?}, payload_key: {:?}",
-			chain_id,
-			payload_key,
+			"submit_signed_proposal: chain: {:?}, payload_key: {:?}",
+			id.typed_chain_id,
+			id.key,
 		);
 
 		ensure!(
-			UnsignedProposalQueue::<T>::contains_key(chain_id.clone(), payload_key),
+			UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, id.key),
 			Error::<T>::ProposalDoesNotExists
 		);
 		// Log that proposal exist in the unsigned queue
@@ -325,8 +423,12 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			target: "dkg_proposal_handler",
 			"submit_signed_proposal: proposal exist in the unsigned queue"
 		);
+		let (data, sig) = match prop.signature() {
+			Some(sig) => (prop.data().clone(), sig),
+			None => return Err(Error::<T>::ProposalSignatureInvalid)?,
+		};
 		ensure!(
-			Self::validate_proposal_signature(&prop.data(), &prop.signature()),
+			Self::validate_proposal_signature(&data, &sig),
 			Error::<T>::ProposalSignatureInvalid
 		);
 		// Log that the signature is valid
@@ -335,14 +437,14 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			"submit_signed_proposal: signature is valid"
 		);
 		// Update storage
-		SignedProposals::<T>::insert(chain_id.clone(), payload_key, prop.clone());
-		UnsignedProposalQueue::<T>::remove(chain_id.clone(), payload_key);
+		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop);
+		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
 		// Emit event so frontend can react to it.
 		Self::deposit_event(Event::<T>::ProposalSigned {
-			chain_id,
-			key: payload_key,
-			data: prop.data().to_vec(),
-			signature: prop.signature(),
+			key: id.key,
+			target_chain: id.typed_chain_id,
+			data,
+			signature: sig,
 		});
 
 		Ok(())
@@ -352,25 +454,36 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<((ChainIdType<T::ChainId>, DKGPayloadKey), Proposal)> {
+	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
 		return UnsignedProposalQueue::<T>::iter()
-			.map(|entry| ((entry.0, entry.1), entry.2.clone()))
+			.map(|(typed_chain_id, key, proposal)| dkg_runtime_primitives::UnsignedProposal {
+				typed_chain_id,
+				key,
+				proposal,
+			})
 			.collect()
 	}
 
+	/// Checks whether a signed proposal exists in the `SignedProposals` storage
 	pub fn is_existing_proposal(prop: &Proposal) -> bool {
-		if let Proposal::Signed { kind, ref data, .. } = prop {
-			match dkg_runtime_primitives::handlers::decode_proposals::decode_proposal(prop) {
-				Ok((chain_id, key)) => return !SignedProposals::<T>::contains_key(chain_id, key),
-				Err(_) => return false,
+		if prop.is_signed() {
+			match decode_proposal_identifier(prop) {
+				Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
+				Err(_) => false,
 			}
+		} else {
+			false
 		}
-
-		false
 	}
 
 	// *** Offchain worker methods ***
 
+	/// Offchain worker function that submits signed proposals from the offchain storage on-chain
+	///
+	/// The function submits batches of signed proposals on-chain in batches of
+	/// `T::MaxSubmissionsPerBatch`. Proposals are stored offchain and target specific block numbers
+	/// for submission. This function polls all relevant proposals ready for submission at the
+	/// current block number
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK);
 		{
@@ -433,6 +546,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Returns the list of signed proposals ready for on-chain submission at the given
+	/// `block_number`
 	fn get_next_offchain_signed_proposal(
 		block_number: T::BlockNumber,
 	) -> Result<Vec<Proposal>, &'static str> {
@@ -454,7 +569,6 @@ impl<T: Config> Pallet<T> {
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()
 					);
-
 					// We get all batches whose submission delay has been satisfied
 					all_proposals = prop_wrapper
 						.proposals
