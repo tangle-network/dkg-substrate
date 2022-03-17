@@ -15,7 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { package = "parity-scale-codec", version = "2.0.0", features = ["derive"], default-features = false }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
-pallet-dkg-proposals = { path = "../dkg-proposals", default-features = false, optional = true}
+pallet-dkg-proposals = { path = "../dkg-proposals" , default-features = false, optional = true}
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false, optional = true }
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
@@ -28,7 +28,7 @@ pallet-dkg-metadata = { path = "../dkg-metadata", default-features = false }
 hex-literal = { version = "0.3", optional = true }
 
 [dev-dependencies]
-
+pallet-dkg-proposals = { path = "../dkg-proposals" }
 serde = { version = "1.0.119" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
