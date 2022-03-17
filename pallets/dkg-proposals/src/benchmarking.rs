@@ -4,7 +4,7 @@ use super::*;
 #[allow(unused)]
 use crate::Pallet;
 use codec::Decode;
-use dkg_runtime_primitives::{ResourceId,ChainIdType};
+use dkg_runtime_primitives::{ChainIdType, ResourceId};
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
 use sp_std::prelude::*;
