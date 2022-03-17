@@ -348,8 +348,8 @@ where
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
 			self.dkg_state.listening_for_active_pub_key = true;
 
-			if let Some(rounds) = self.rounds.as_mut() {
-				match rounds.start_keygen(latest_block_num) {
+			if let Some(rounds) = self.dkg_state.curr_rounds.as_mut() {
+				match rounds.start_keygen(self.latest_block) {
 					Ok(()) => {
 						info!(target: "dkg", "Keygen started for genesis authority set successfully");
 						self.active_keygen_in_progress = true;
