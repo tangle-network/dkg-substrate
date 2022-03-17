@@ -250,7 +250,7 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-#[cfg(feature = "integration-tests")]
+#[cfg(not(feature = "integration-tests"))]
 parameter_types! {
 	// How often we trigger a new session.
 	// during integration tests, we use manual sessions.
@@ -258,7 +258,7 @@ parameter_types! {
 	pub const Offset: BlockNumber = 0;
 }
 
-#[cfg(not(feature = "integration-tests"))]
+#[cfg(feature = "integration-tests")]
 parameter_types! {
 	// How often we trigger a new session.
 	pub const Period: BlockNumber = 3 * MINUTES;
@@ -443,6 +443,7 @@ impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallb
 	type DataProvider = T::DataProvider;
 	type Error = &'static str;
 
+	#[cfg(feature = "integration-tests")]
 	fn elect() -> Result<Supports<Self::AccountId>, Self::Error> {
 		let targets = <Self::DataProvider as ElectionDataProvider>::targets(None);
 		match targets {
@@ -452,6 +453,11 @@ impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallb
 				.collect::<Supports<Self::AccountId>>()),
 			Err(_) => Err("No fallback"),
 		}
+	}
+
+	#[cfg(not(feature = "integration-tests"))]
+	fn elect() -> Result<Supports<Self::AccountId>, Self::Error> {
+		Err("No fallback")
 	}
 }
 
@@ -476,7 +482,7 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type RewardHandler = (); // nothing to do upon rewards
 	type DataProvider = Staking;
 	type Solution = NposSolution16;
-	type Fallback = pallet_election_provider_multi_phase::NoFallback<Self>;
+	type Fallback = Fallback<Self>;
 	type GovernanceFallback =
 		frame_election_provider_support::onchain::OnChainSequentialPhragmen<Self>;
 	type Solver = frame_election_provider_support::SequentialPhragmen<
