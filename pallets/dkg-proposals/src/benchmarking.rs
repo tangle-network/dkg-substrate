@@ -7,9 +7,8 @@ use codec::Decode;
 use dkg_runtime_primitives::{ChainIdType, ResourceId};
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
-use sp_std::prelude::*;
+use sp_std::{prelude::*, vec};
 use types::ProposalStatus;
-
 const SEED: u32 = 0;
 const CHAIN_IDENTIFIER: u32 = 10;
 
