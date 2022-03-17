@@ -413,8 +413,6 @@ From terminal 2:
 1. Run `yarn dkg-refresh` for DKG refresh tests immediately the node starts
 ```
 
-
-
 ### Code Coverage
 
 You need to have docker installed to generate code coverage.
