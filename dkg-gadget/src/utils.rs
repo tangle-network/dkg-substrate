@@ -53,7 +53,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	local_key_path: Option<std::path::PathBuf>,
 	reputations: &HashMap<AuthorityId, i64>,
 	thresholds: DKGThresholds,
-) -> Option<MultiPartyECDSARounds<N>> {
+) -> MultiPartyECDSARounds<N> {
 	// Get reduced authority set from reputations
 	let best_authorities: Vec<AuthorityId> =
 		get_best_authorities(thresholds.keygen.into(), &authority_set.authorities, &reputations)
@@ -78,10 +78,10 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 			.authorities(authority_set.authorities.clone())
 			.build();
 
-		return Some(rounds)
+		return rounds;
+	} else {
+		panic!("Could not find public key in authority set");
 	}
-
-	None
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new

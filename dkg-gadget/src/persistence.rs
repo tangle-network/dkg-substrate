@@ -208,7 +208,7 @@ where
 		if active.authorities.contains(&public) {
 			let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 
-			let mut maybe_rounds = set_up_rounds(
+			let mut rounds = set_up_rounds(
 				&active,
 				&public,
 				Some(local_key_path),
@@ -216,33 +216,31 @@ where
 				thresholds,
 			);
 
-			if let Some(mut rounds) = maybe_rounds {
-				if local_key.is_some() {
-					debug!(target: "dkg_persistence", "Local key set");
-					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					// We create a deterministic signer set using the public key as a seed to the
-					// random number generator We need a 32 byte seed, the compressed public key is
-					// 33 bytes
-					let seed =
-						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
-							[1..];
+			if local_key.is_some() {
+				debug!(target: "dkg_persistence", "Local key set");
+				rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
+				// We create a deterministic signer set using the public key as a seed to the
+				// random number generator We need a 32 byte seed, the compressed public key is
+				// 33 bytes
+				let seed =
+					&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
+						[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
-					}
-					worker.dkg_state.curr_rounds = Some(rounds);
+				// Signers are chosen from ids used in Keygen phase starting from 1 to n
+				// inclusive
+				let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+				let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+				if let Ok(signers_set) = signers_set {
+					rounds.set_signers(signers_set);
 				}
+				worker.dkg_state.curr_rounds = Some(rounds);
 			}
 		}
 
 		if queued.authorities.contains(&public) {
 			let thresholds = worker.get_thresholds(header.number()).unwrap_or_default();
 
-			let mut maybe_rounds = set_up_rounds(
+			let mut rounds = set_up_rounds(
 				&queued,
 				&public,
 				Some(queued_local_key_path),
@@ -250,28 +248,26 @@ where
 				thresholds,
 			);
 
-			if let Some(mut rounds) = maybe_rounds {
-				if queued_local_key.is_some() {
-					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					// We set the signer set using the public key as a seed to select signers at
-					// random We need a 32byte seed, the compressed public key is 32 bytes
-					let seed = &queued_local_key
-						.as_ref()
-						.unwrap()
-						.local_key
-						.clone()
-						.public_key()
-						.to_bytes(true)[1..];
+			if queued_local_key.is_some() {
+				rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
+				// We set the signer set using the public key as a seed to select signers at
+				// random We need a 32byte seed, the compressed public key is 32 bytes
+				let seed = &queued_local_key
+					.as_ref()
+					.unwrap()
+					.local_key
+					.clone()
+					.public_key()
+					.to_bytes(true)[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
-					}
-					worker.dkg_state.next_rounds = Some(rounds);
+				// Signers are chosen from ids used in Keygen phase starting from 1 to n
+				// inclusive
+				let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+				let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+				if let Ok(signers_set) = signers_set {
+					rounds.set_signers(signers_set);
 				}
+				worker.dkg_state.next_rounds = Some(rounds);
 			}
 		}
 	}
@@ -359,7 +355,7 @@ where
 
 		worker.active_keygen_in_progress = true;
 		worker.dkg_state.listening_for_active_pub_key = true;
-		worker.dkg_state.curr_rounds = rounds;
+		worker.dkg_state.curr_rounds = Some(rounds);
 
 		if worker.dkg_state.curr_rounds.is_some() {
 			let _ = worker.dkg_state.curr_rounds.as_mut().unwrap().start_keygen(latest_block_num);
@@ -380,7 +376,7 @@ where
 
 		worker.queued_keygen_in_progress = true;
 		worker.dkg_state.listening_for_pub_key = true;
-		worker.dkg_state.next_rounds = rounds;
+		worker.dkg_state.next_rounds = Some(rounds);
 
 		if worker.dkg_state.next_rounds.is_some() {
 			let _ = worker.dkg_state.next_rounds.as_mut().unwrap().start_keygen(latest_block_num);

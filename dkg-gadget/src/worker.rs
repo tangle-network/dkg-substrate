@@ -392,13 +392,14 @@ where
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			let thresholds = self.get_thresholds(header.number()).unwrap_or_default();
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
-				set_up_rounds(
+				let mut rounds = set_up_rounds(
 					&next_authorities,
 					&public,
 					local_key_path,
 					&self.get_authority_reputations(header, next_authorities.authorities.clone()),
 					thresholds,
-				)
+				);
+				Some(rounds)
 			} else {
 				None
 			}
@@ -425,18 +426,14 @@ where
 		// If current node is part of the queued authorities start the multiparty keygen process
 		if queued.authorities.contains(&public) {
 			// Setting up DKG for queued authorities
-			self.dkg_state.next_rounds = set_up_rounds(
+			let mut rounds = set_up_rounds(
 				&queued,
 				&public,
 				local_key_path,
 				&self.get_authority_reputations(header, queued.authorities.clone()),
 				thresholds,
 			);
-
-			if self.dkg_state.next_rounds.is_none() {
-				return
-			}
-
+			self.dkg_state.next_rounds = Some(rounds);
 			self.dkg_state.listening_for_pub_key = true;
 			// Start the keygen for the queued authorities
 			match self.dkg_state.next_rounds.as_mut().unwrap().start_keygen(self.latest_block) {
