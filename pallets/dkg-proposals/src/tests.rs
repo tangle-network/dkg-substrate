@@ -803,32 +803,50 @@ fn should_calculate_corrrect_proposer_set_root() {
 		// Initial proposer set is invulnerables even when another collator exists
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		// Get the three invulnerable proposers' ECDSA keys
-		let proposer_A_address = mock_ecdsa_key(3);
-		let proposer_B_address = mock_ecdsa_key(1);
-		let proposer_C_address = mock_ecdsa_key(2);
-		println!("{:?}", ExternalProposerAccounts::<Test>::iter().collect::<Vec<_>>());
-		let leaf0 = keccak_256(&proposer_A_address[..]);
-		let leaf1 = keccak_256(&proposer_B_address[..]);
-		let leaf2 = keccak_256(&proposer_C_address[..]);
+		let proposer_a_address = mock_ecdsa_key(3);
+		let proposer_b_address = mock_ecdsa_key(1);
+		let proposer_c_address = mock_ecdsa_key(2);
+		
+		let leaf0 = keccak_256(&proposer_a_address[..]);
+		let leaf1 = keccak_256(&proposer_b_address[..]);
+		let leaf2 = keccak_256(&proposer_c_address[..]);
 		let leaf3 = keccak_256(&[0u8]);
-
+		
 		let mut node01_vec = leaf0.to_vec();
 		node01_vec.extend_from_slice(&leaf1);
 		let node01 = keccak_256(&node01_vec[..]);
 		
-
 		let mut node23_vec = leaf2.to_vec();
 		node23_vec.extend_from_slice(&leaf3);
 		let node23 = keccak_256(&node23_vec[..]);
 
 		let mut root = node01.to_vec();
 		root.extend_from_slice(&node23);
-		
+		assert_eq!(DKGProposals::get_proposer_set_tree_root(), keccak_256(&root));
 		// Advance a two sessions
 		roll_to(20);
-		println!("{:?}", ExternalProposerAccounts::<Test>::iter().collect::<Vec<_>>());
 		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);
+		let proposer_a_address = mock_ecdsa_key(3);
+		let proposer_b_address = mock_ecdsa_key(4);
+		let proposer_c_address = mock_ecdsa_key(1);
+		let proposer_d_address = mock_ecdsa_key(2);
+		let leaf0 = keccak_256(&proposer_a_address[..]);
+		let leaf1 = keccak_256(&proposer_b_address[..]);
+		let leaf2 = keccak_256(&proposer_c_address[..]);
+		let leaf3 = keccak_256(&proposer_d_address[..]);
+		
+		let mut node01_vec = leaf0.to_vec();
+		node01_vec.extend_from_slice(&leaf1);
+		let node01 = keccak_256(&node01_vec[..]);
+		
+		let mut node23_vec = leaf2.to_vec();
+		node23_vec.extend_from_slice(&leaf3);
+		let node23 = keccak_256(&node23_vec[..]);
+
+		let mut root = node01.to_vec();
+		root.extend_from_slice(&node23);
+		assert_eq!(DKGProposals::get_proposer_set_tree_root(), keccak_256(&root));
 	})
 }
 

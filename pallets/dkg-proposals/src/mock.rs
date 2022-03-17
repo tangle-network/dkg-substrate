@@ -251,14 +251,6 @@ impl pallet_dkg_proposals::Config for Test {
 }
 
 pub fn mock_dkg_id(id: u8) -> DKGId {
-	DKGId::from(Public::from_raw([id; 33]))
-}
-
-pub fn mock_pub_key(id: u8) -> AccountId {
-	sr25519::Public::from_raw([id; 32])
-}
-
-pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
 	let mut input = "0";
 	if id == 1 {
 		input = "039bb8e80670371f45508b5f8f59946a7c4dea4b3a23a036cf24c1f40993f4a1da";
@@ -269,10 +261,17 @@ pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
 	} else if id == 4 {
 		input = "03d395ee0b30fa7d34f49ef9cb2868c8364e9d618a7f437101a979fb3c47f21de2"
 	}
-	
 	let mut decoded_input = [0u8; 33];
-	hex::decode_to_slice(input, &mut decoded_input).expect("hi");
-	DKGEcdsaToEthereum::convert(Public::from_raw(decoded_input).into())
+	hex::decode_to_slice(input, &mut decoded_input).expect("decoding failed");
+	DKGId::from(Public::from_raw(decoded_input))
+}
+
+pub fn mock_pub_key(id: u8) -> AccountId {
+	sr25519::Public::from_raw([id; 32])
+}
+
+pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
+	DKGEcdsaToEthereum::convert(mock_dkg_id(id).into())
 }
 
 pub(crate) fn roll_to(n: u64) {

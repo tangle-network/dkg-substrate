@@ -791,7 +791,7 @@ impl<T: Config> Pallet<T> {
 		// Check for each key that the proposer is valid (should return true)
 		let mut base_layer: Vec<Vec<u8>> = proposer_keys
 			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))
-			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x).encode()[..]).to_vec())
+			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x)[..]).to_vec())
 			.collect();
 		// Pad base_layer to have length 2^height
 		let two = 2;
