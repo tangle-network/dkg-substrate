@@ -1,4 +1,18 @@
-
+/*
+ * Copyright 2022 Webb Technologies Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import 'jest-extended';
 import {ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS} from '../src/constants';
 import {
@@ -55,7 +69,7 @@ describe('Validator Node Test', () => {
 		let thresholdCount = await polkadotApi.query.dkg.signatureThreshold();
 
 		console.log(`threshold count is ${thresholdCount}`);
-		//expect(thresholdCount).toBe(2);
+		expect(thresholdCount.toString()).toBe("2");
 
 		let nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
 
@@ -64,7 +78,7 @@ describe('Validator Node Test', () => {
 		// @ts-ignore
 		console.log(`authority count is ${nextAuthorities.length}`);
 		// @ts-ignore
-		//expect(nextAuthorities.length).toBe(3);
+		expect(nextAuthorities.length.toString()).toBe("3");
 
 		let forceNewEra = polkadotApi.tx.staking.forceNewEraAlways();
 		const forceNewEraAlwayCall = polkadotApi.tx.sudo.sudo({
@@ -74,10 +88,10 @@ describe('Validator Node Test', () => {
 		await forceNewEraAlwayCall.signAndSend(alice);
 
 		// chill(remove) charlie as validator
-		/*let call = polkadotApi.tx.staking.chill();
+		let call = polkadotApi.tx.staking.chill();
 		await call.signAndSend(charlieStash);
 		const event = await waitForEvent(polkadotApi, 'staking', 'Chilled');
-		console.log(`event is ${event}`);*/
+		console.log(`event is ${event}`);
 
 		// wait for the next 3 sessions
 		for  (let i = 0; i < 2; i++) {
@@ -94,9 +108,9 @@ describe('Validator Node Test', () => {
 
 		console.log(`new authorities are ${nextAuthorities}`);
 		// @ts-ignore
-		//expect(nextAuthorities.length).toBe(2);
+		expect(nextAuthorities.length.toString()).toBe("2");
 
-		//expect(thresholdCount).toBe(1);
+		expect(thresholdCount.toString()).toBe("1");
 
 
 	});

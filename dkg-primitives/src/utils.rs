@@ -28,6 +28,8 @@ pub fn insert_controller_account_keys_into_keystore(
 	let chain_type = config.chain_spec.chain_type();
 	let seed = &config.network.node_name[..];
 
+	dbg!("seed is: {:?}", seed);
+
 	match seed {
 		// When running the chain in dev or local test net, we insert the sr25519 account keys for
 		// collator accounts or validator accounts into the keystore Only if the node running is one
