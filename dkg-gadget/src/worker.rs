@@ -377,9 +377,6 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		dbg!("dkg setup {:?}", public.clone());
-		dbg!("dkg setup {:?}", sr25519_public.clone());
-
 		let thresh = validate_threshold(
 			next_authorities.authorities.len() as u16,
 			self.get_threshold(header).unwrap(),
@@ -473,9 +470,6 @@ where
 
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
-
-		dbg!("dkg queued setup {:?}", public.clone());
-		dbg!("dkg queued setup {:?}", sr25519_public.clone());
 
 		let thresh = validate_threshold(
 			queued.authorities.len() as u16,

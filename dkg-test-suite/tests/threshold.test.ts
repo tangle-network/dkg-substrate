@@ -14,29 +14,23 @@
  * limitations under the License.
  */
 import 'jest-extended';
-import {ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS} from '../src/constants';
+import {BLOCK_TIME, SECONDS} from '../src/constants';
 import {
-	ethAddressFromUncompressedPublicKey,
 	provider,
-	sleep, startStandaloneNode, waitForEvent, waitForTheNextSession, waitNfinalizedBlocks,
-	waitUntilDKGPublicKeyStoredOnChain,
+	sleep, startStandaloneNode, waitForEvent, waitForTheNextSession
 } from '../src/utils';
 
 import {jest} from "@jest/globals";
 import {ApiPromise, Keyring} from "@polkadot/api";
 import {ChildProcess} from "child_process";
-import {LocalChain} from "../src/localEvm";
-import {ethers} from "ethers";
 import {Bridges} from "@webb-tools/protocol-solidity";
-import {MintableToken} from "@webb-tools/tokens";
 
-jest.setTimeout(10000 * BLOCK_TIME); // 100 blocks
+jest.setTimeout(10000 * BLOCK_TIME);
 
 let polkadotApi: ApiPromise;
 let aliceNode: ChildProcess;
 let bobNode: ChildProcess;
 let charlieNode: ChildProcess;
-//let daveNode: ChildProcess;
 
 export let signatureBridge: Bridges.SignatureBridge;
 
@@ -46,7 +40,6 @@ async function executeAfter() {
 	aliceNode?.kill('SIGINT');
 	bobNode?.kill('SIGINT');
 	charlieNode?.kill('SIGINT');
-	//daveNode?.kill('SIGINT');
 	await sleep(20 * SECONDS);
 }
 
@@ -54,7 +47,7 @@ async function executeAfter() {
 describe('Validator Node Test', () => {
 	test('should be able to  remove validator node and check threshold', async () => {
 		aliceNode = startStandaloneNode('alice', {tmp: true, printLogs: false});
-		bobNode = startStandaloneNode('bob', {tmp: true, printLogs: true});
+		bobNode = startStandaloneNode('bob', {tmp: true, printLogs: false});
 		charlieNode = startStandaloneNode('charlie', {tmp: true, printLogs: false});
 
 		polkadotApi = await ApiPromise.create({
@@ -63,23 +56,18 @@ describe('Validator Node Test', () => {
 
 		const keyring = new Keyring({ type: 'sr25519' });
 		const charlieStash = keyring.addFromUri('//Charlie//stash');
-		const charlie = keyring.addFromUri('//Charlie');
 		const alice = keyring.addFromUri('//Alice');
 
+		// check and expect threshold count to be 2
 		let thresholdCount = await polkadotApi.query.dkg.signatureThreshold();
-
-		console.log(`threshold count is ${thresholdCount}`);
 		expect(thresholdCount.toString()).toBe("2");
 
+		// check and expect next authorities count to be 3
 		let nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
-
-		console.log(`authorities are ${nextAuthorities}`);
-
-		// @ts-ignore
-		console.log(`authority count is ${nextAuthorities.length}`);
 		// @ts-ignore
 		expect(nextAuthorities.length.toString()).toBe("3");
 
+		// force new era for staking elections
 		let forceNewEra = polkadotApi.tx.staking.forceNewEraAlways();
 		const forceNewEraAlwayCall = polkadotApi.tx.sudo.sudo({
 			callIndex: forceNewEra.callIndex,
@@ -90,29 +78,19 @@ describe('Validator Node Test', () => {
 		// chill(remove) charlie as validator
 		let call = polkadotApi.tx.staking.chill();
 		await call.signAndSend(charlieStash);
-		const event = await waitForEvent(polkadotApi, 'staking', 'Chilled');
-		console.log(`event is ${event}`);
+		await waitForEvent(polkadotApi, 'staking', 'Chilled');
 
-		// wait for the next 3 sessions
-		for  (let i = 0; i < 2; i++) {
-			console.log(`waiting for session`)
-			const sessh = await waitForTheNextSession(polkadotApi);
-			console.log(`session waited: ${sessh}`)
-		}
+		// wait for the next session
+		await waitForTheNextSession(polkadotApi);
 
-		// get the new signature threshold and authorities
+		// check and expect threshold count to be 1
 		thresholdCount = await polkadotApi.query.dkg.signatureThreshold();
-		console.log(`new threshold count is ${thresholdCount}`);
-
-		nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
-
-		console.log(`new authorities are ${nextAuthorities}`);
-		// @ts-ignore
-		expect(nextAuthorities.length.toString()).toBe("2");
-
 		expect(thresholdCount.toString()).toBe("1");
 
-
+		// check and expect next authorities count to be 2
+		nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
+		// @ts-ignore
+		expect(nextAuthorities.length.toString()).toBe("2");
 	});
 
 	afterAll(async () => {
