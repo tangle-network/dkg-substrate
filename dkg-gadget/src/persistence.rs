@@ -28,9 +28,8 @@ use dkg_primitives::{
 	},
 };
 use dkg_runtime_primitives::{
-	DKGThresholds,
 	offchain::crypto::{Pair as AppPair, Public},
-	DKGApi,
+	DKGApi, DKGThresholds,
 };
 use log::debug;
 use sc_client_api::Backend;
@@ -225,8 +224,9 @@ where
 					// random number generator We need a 32 byte seed, the compressed public key is
 					// 33 bytes
 					let seed =
-						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)[1..];
-	
+						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
+							[1..];
+
 					// Signers are chosen from ids used in Keygen phase starting from 1 to n
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
@@ -262,7 +262,7 @@ where
 						.clone()
 						.public_key()
 						.to_bytes(true)[1..];
-	
+
 					// Signers are chosen from ids used in Keygen phase starting from 1 to n
 					// inclusive
 					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
@@ -350,7 +350,10 @@ where
 			&worker.current_validator_set,
 			&public,
 			local_key_path,
-			&worker.get_authority_reputations(header, worker.current_validator_set.authorities.clone()),
+			&worker.get_authority_reputations(
+				header,
+				worker.current_validator_set.authorities.clone(),
+			),
 			thresholds,
 		);
 
@@ -370,14 +373,15 @@ where
 			&worker.queued_validator_set,
 			&public,
 			queued_local_key_path,
-			&worker.get_authority_reputations(header, worker.queued_validator_set.authorities.clone()),
+			&worker
+				.get_authority_reputations(header, worker.queued_validator_set.authorities.clone()),
 			thresholds,
 		);
 
 		worker.queued_keygen_in_progress = true;
 		worker.dkg_state.listening_for_pub_key = true;
 		worker.dkg_state.next_rounds = rounds;
-		
+
 		if worker.dkg_state.next_rounds.is_some() {
 			let _ = worker.dkg_state.next_rounds.as_mut().unwrap().start_keygen(latest_block_num);
 		}

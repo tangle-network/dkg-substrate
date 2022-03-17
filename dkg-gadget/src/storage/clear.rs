@@ -69,7 +69,8 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 			}
 		}
 
-		// If the signature of the next DKG public key is on-chain, then we can remove it from our offchain storage
+		// If the signature of the next DKG public key is on-chain, then we can remove it from our
+		// offchain storage
 		if let Ok(Some(_sig)) = public_key_sig {
 			dkg_worker.refresh_in_progress = false;
 			if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {

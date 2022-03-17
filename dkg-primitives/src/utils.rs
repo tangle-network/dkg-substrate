@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::{fs, path::PathBuf, collections::HashMap, hash::Hash};
+use std::{collections::HashMap, fs, hash::Hash, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
@@ -124,17 +124,23 @@ pub fn select_random_set(
 	Ok(random_set)
 }
 
-pub fn get_best_authorities<B>(count: usize, authorities: &[B], reputations: &HashMap<B, i64>) -> Vec<(u16, B)>
+pub fn get_best_authorities<B>(
+	count: usize,
+	authorities: &[B],
+	reputations: &HashMap<B, i64>,
+) -> Vec<(u16, B)>
 where
 	B: Eq + Hash + Clone,
 {
-	let mut reputations_of_authorities = authorities.iter()
+	let mut reputations_of_authorities = authorities
+		.iter()
 		.enumerate()
 		.map(|(party_inx, id)| (party_inx + 1, reputations.get(id).unwrap_or(&0), id))
-		.collect::<Vec<(_,_,_)>>();
+		.collect::<Vec<(_, _, _)>>();
 	reputations_of_authorities.sort_by(|a, b| b.1.cmp(a.1));
 
-	return reputations_of_authorities.iter()
+	return reputations_of_authorities
+		.iter()
 		.map(|x| (x.0 as u16, x.2.clone()))
 		.take(count)
 		.collect()

@@ -62,8 +62,9 @@ use dkg_primitives::{
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	utils::{sr25519, to_slice_32}, DKGThresholds,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID,
+	utils::{sr25519, to_slice_32},
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, DKGThresholds, TypedChainId,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -232,7 +233,11 @@ where
 	}
 
 	/// gets authority reputations from an header
-	pub fn get_authority_reputations(&self, header: &B::Header, authorities: Vec<AuthorityId>) -> HashMap<AuthorityId, i64> {
+	pub fn get_authority_reputations(
+		&self,
+		header: &B::Header,
+		authorities: Vec<AuthorityId>,
+	) -> HashMap<AuthorityId, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
@@ -317,7 +322,8 @@ where
 		let public = fetch_public_key(self);
 		let sr25519_public = fetch_sr25519_public_key(self);
 
-		let DKGThresholds { signature: sig_t, keygen: keygen_t } = self.get_thresholds(header.number()).unwrap_or_default();
+		let DKGThresholds { signature: sig_t, keygen: keygen_t } =
+			self.get_thresholds(header.number()).unwrap_or_default();
 		let thresh = validate_threshold(keygen_t, sig_t);
 
 		let mut local_key_path = None;
@@ -426,7 +432,7 @@ where
 			);
 
 			if self.dkg_state.next_rounds.is_none() {
-				return;
+				return
 			}
 
 			self.dkg_state.listening_for_pub_key = true;
@@ -478,9 +484,9 @@ where
 			// // Setting new authority set after applying thresholds
 			// self.current_keygen_authorities = get_best_authorities(
 			// 	&self.current_validator_set,
-			// 	&self.get_authority_reputations(header, self.current_validator_set.authorities.clone()),
-			// 	self.get_thresholds(header.number()).unwrap_or_default(),
-			// );
+			// 	&self.get_authority_reputations(header,
+			// self.current_validator_set.authorities.clone()), 	self.get_thresholds(header.
+			// number()).unwrap_or_default(), );
 
 			// Setting up the DKG
 			self.handle_dkg_setup(&header, active.clone());

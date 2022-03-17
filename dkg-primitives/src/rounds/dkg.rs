@@ -22,7 +22,10 @@ use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::{types::*, utils::{select_random_set, get_best_authorities}};
+use crate::{
+	types::*,
+	utils::{get_best_authorities, select_random_set},
+};
 use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
@@ -330,11 +333,16 @@ where
 		);
 
 		let keygen_params = self.keygen_params();
-		let keygen_set = get_best_authorities(self.parties.into(), &self.authorities, &self.reputations);
+		let keygen_set =
+			get_best_authorities(self.parties.into(), &self.authorities, &self.reputations);
 
-		let is_participating = keygen_set.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>().contains(&self.party_index);
+		let is_participating = keygen_set
+			.iter()
+			.map(|(k, _)| k.clone())
+			.collect::<Vec<_>>()
+			.contains(&self.party_index);
 		if !is_participating {
-			return Ok(());
+			return Ok(())
 		}
 
 		self.keygen = match mem::replace(&mut self.keygen, KeygenState::Empty) {
@@ -573,10 +581,11 @@ where
 		let (_, threshold, _) = self.dkg_params();
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
 		// Get the parties with non-negative reputation
-		let best_parties = get_best_authorities((threshold + 1) as usize, &self.authorities, &self.reputations)
-			.iter()
-			.map(|(party_inx, _)| *party_inx)
-			.collect();
+		let best_parties =
+			get_best_authorities((threshold + 1) as usize, &self.authorities, &self.reputations)
+				.iter()
+				.map(|(party_inx, _)| *party_inx)
+				.collect();
 		let signers_set = select_random_set(seed, best_parties, threshold + 1);
 		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);
@@ -610,8 +619,8 @@ where
 mod tests {
 	use super::{KeygenState, MultiPartyECDSARounds};
 	use crate::utils::get_best_authorities;
-	use std::collections::HashMap;
 	use codec::Encode;
+	use std::collections::HashMap;
 
 	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
 		for party in parties.iter() {
@@ -812,7 +821,7 @@ mod tests {
 		for i in 1..=n {
 			authorities.push(mock_dkg_id(i.try_into().unwrap()));
 		}
-		
+
 		let best = get_best_authorities(keygen_t, &authorities, &HashMap::new());
 		assert_eq!(best.len(), keygen_t);
 		for i in 0..10 {

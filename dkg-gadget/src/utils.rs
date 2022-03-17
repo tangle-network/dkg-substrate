@@ -17,8 +17,8 @@ use crate::{
 	Client,
 };
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi, DKGThresholds,
-	utils::get_best_authorities,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, utils::get_best_authorities, AuthoritySet,
+	ConsensusLog, DKGApi, DKGThresholds,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -55,11 +55,12 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	thresholds: DKGThresholds,
 ) -> Option<MultiPartyECDSARounds<N>> {
 	// Get reduced authority set from reputations
-	let best_authorities: Vec<AuthorityId> = get_best_authorities(thresholds.keygen.into(), &authority_set.authorities, &reputations)
-		.iter()
-		.map(|(_, id)| id.clone())
-		.collect();
-	
+	let best_authorities: Vec<AuthorityId> =
+		get_best_authorities(thresholds.keygen.into(), &authority_set.authorities, &reputations)
+			.iter()
+			.map(|(_, id)| id.clone())
+			.collect();
+
 	if let Some(party_inx) = find_index::<AuthorityId>(&best_authorities[..], public) {
 		// Compute the reputations of only the currently selected authorities for these rounds
 		let mut authority_set_reputations = HashMap::new();
@@ -76,8 +77,8 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 			.reputations(authority_set_reputations)
 			.authorities(authority_set.authorities.clone())
 			.build();
-	
-		return Some(rounds);
+
+		return Some(rounds)
 	}
 
 	None
