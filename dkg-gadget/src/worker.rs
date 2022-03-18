@@ -962,7 +962,7 @@ where
 		// `dkg_message_retriever` gets messages in the queue and passes them to the mpsc channel
 		let (ref dkg_message_tx, ref mut dkg_message_rx) = futures::channel::mpsc::unbounded();
 
-		let dkg_engine_handler = || async move {
+		let dkg_engine_handler = async move {
 
 			println!("executing DKGWorker::run::dkg_engine");
 			let ref mut gossip_engine = Box::pin(async move {
@@ -974,6 +974,7 @@ where
 
 			'engine_loop: loop {
 				let mut lock = engine.lock().await;
+				// this function MUST be called iteratively since the rx channel may have been replaced
 				let mut messages = lock.messages_for(dkg_topic::<B>());
 
 				let ref mut messages_exhauster = Box::pin(async move {
@@ -1014,9 +1015,9 @@ where
 			}
 		};
 
-		loop {
-			let ref mut dkg_engine_executor = Box::pin(dkg_engine_handler());
+		let ref mut dkg_engine_executor = Box::pin(dkg_engine_handler);
 
+		loop {
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
