@@ -399,24 +399,28 @@ cargo test
 4. Run `yarn install`
 5. To run all tests: `yarn test`
 
-**Note:** You may also run individual E2E tests. Please review test script commands in `dkg-test-suite/package.json` for verbose list of test cases.
+**Note:** You may also run individual E2E tests. Please review test script commands in `dkg-test-suite/package.json` for verbose list of test cases. See below examples.
 
 ### Anchor Proposal tests:
 
-From terminal 1:
+**From terminal 1:**
 
 1. Run `./scripts/run-standalone.sh`
 2. Wait until Keygen completes
 
-From terminal 2: 5. Run `yarn anchor-proposals` for anchor proposal tests
+**From terminal 2:**
+
+3. Run `yarn anchor-proposals` for anchor proposal tests
 
 ### DKG Refresh tests:
 
+**From terminal 1:**
+
 1. Run `./scripts/run-standalone.sh`
 
-From terminal 2:
+**From terminal 2:**
 
-1. Run `yarn dkg-refresh` for DKG refresh tests immediately the node starts
+2. Run `yarn dkg-refresh` for DKG refresh tests immediately the node starts
 
 ### Code Coverage
 
