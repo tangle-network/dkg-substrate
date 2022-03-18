@@ -638,6 +638,18 @@ impl_runtime_apis! {
 			DKG::signature_threshold()
 		}
 
+		fn keygen_threshold() -> u16 {
+			DKG::keygen_threshold()
+		}
+
+		fn next_signature_threshold() -> u16 {
+			DKG::next_signature_threshold()
+		}
+
+		fn next_keygen_threshold() -> u16 {
+			DKG::next_keygen_threshold()
+		}
+
 		fn should_refresh(block_number: BlockNumber) -> bool {
 			DKG::should_refresh(block_number)
 		}

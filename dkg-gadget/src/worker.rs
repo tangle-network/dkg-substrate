@@ -57,6 +57,7 @@ use crate::storage::{
 
 use dkg_primitives::{
 	types::{DKGError, RoundId},
+	utils::get_best_authorities,
 	DKGReport, Proposal,
 };
 
@@ -72,9 +73,8 @@ use crate::{
 	proposal::get_signed_proposal,
 	types::dkg_topic,
 	utils::{
-		fetch_public_key, fetch_sr25519_public_key, find_authorities_change, find_index,
-		get_key_path, is_next_authorities_or_rounds_empty, is_queued_authorities_or_rounds_empty,
-		set_up_rounds, validate_threshold,
+		find_authorities_change, find_index, get_key_path, is_next_authorities_or_rounds_empty,
+		is_queued_authorities_or_rounds_empty, set_up_rounds,
 	},
 	Client,
 };
@@ -269,7 +269,7 @@ where
 		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
 
 		let set = new.unwrap_or_else(|| panic!("Help"));
-		let public = fetch_public_key(self);
+		let public = self.get_authority_public_key();
 		for i in 0..set.authorities.len() {
 			if set.authorities[i] == public {
 				return Some(i)
@@ -295,10 +295,28 @@ where
 		reputation_map
 	}
 
-	/// get the signature threshold of a block in an header
-	pub fn get_threshold(&self, header: &B::Header) -> Option<u16> {
+	/// Get the signature threshold at a specific block
+	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).ok()
+		return self.client.runtime_api().signature_threshold(&at).unwrap()
+	}
+
+	/// Get the keygen threshold at a specific block
+	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().keygen_threshold(&at).unwrap()
+	}
+
+	/// Get the next signature threshold at a specific block
+	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().next_signature_threshold(&at).unwrap()
+	}
+
+	/// Get the next keygen threshold at a specific block
+	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().next_keygen_threshold(&at).unwrap()
 	}
 
 	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
@@ -309,6 +327,18 @@ where
 	/// gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
 		self.latest_header.clone().unwrap().number().clone()
+	}
+
+	pub fn get_authority_public_key(&mut self) -> Public {
+		self.key_store
+			.authority_id(&self.key_store.public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"))
+	}
+
+	pub fn get_sr25519_public_key(&mut self) -> sp_core::sr25519::Public {
+		self.key_store
+			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -366,18 +396,17 @@ where
 	}
 
 	fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
-		if is_next_authorities_or_rounds_empty(self, &next_authorities) {
+		if next_authorities.authorities.is_empty() {
 			return
 		}
 
-		let public = fetch_public_key(self);
-		let sr25519_public = fetch_sr25519_public_key(self);
+		if self.rounds.is_some() {
+			if self.rounds.as_ref().unwrap().get_id() == next_authorities.id {
+				return
+			}
+		}
 
-		let thresh = validate_threshold(
-			next_authorities.authorities.len() as u16,
-			self.get_threshold(header).unwrap(),
-		);
-
+		let public = self.get_authority_public_key();
 		let mut local_key_path = None;
 		let mut queued_local_key_path = None;
 
@@ -389,14 +418,26 @@ where
 
 		let latest_block_num = self.get_latest_block_number();
 
+		let best_authorities: Vec<AuthorityId> = get_best_authorities(
+			self.get_keygen_threshold(header).into(),
+			&next_authorities.authorities,
+			&self.get_authority_reputations(header),
+		)
+		.iter()
+		.map(|(_, key)| key.clone())
+		.collect();
+
+		// If the authority is not selected in the keygen set return
+		if find_index::<AuthorityId>(&best_authorities[..], &public).is_none() {
+			return
+		}
+
 		self.handle_setting_of_rounds(
 			&next_authorities,
 			public,
-			sr25519_public,
 			local_key_path,
 			queued_local_key_path,
 			header,
-			thresh,
 		);
 
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
@@ -424,11 +465,9 @@ where
 		&mut self,
 		next_authorities: &AuthoritySet<Public>,
 		public: Public,
-		sr25519_public: sp_application_crypto::sr25519::Public,
 		local_key_path: Option<PathBuf>,
 		queued_local_key_path: Option<PathBuf>,
 		header: &B::Header,
-		thresh: u16,
 	) {
 		self.rounds = if self.next_rounds.is_some() {
 			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
@@ -446,11 +485,9 @@ where
 				Some(set_up_rounds(
 					&next_authorities,
 					&public,
-					&sr25519_public,
-					thresh,
+					self.get_signature_threshold(header),
+					self.get_keygen_threshold(header),
 					local_key_path,
-					*header.number(),
-					self.local_keystore.clone(),
 					&self.get_authority_reputations(header),
 				))
 			} else {
@@ -464,13 +501,7 @@ where
 			return
 		}
 
-		let public = fetch_public_key(self);
-		let sr25519_public = fetch_sr25519_public_key(self);
-
-		let thresh = validate_threshold(
-			queued.authorities.len() as u16,
-			self.get_threshold(header).unwrap_or_default(),
-		);
+		let public = self.get_authority_public_key();
 
 		let mut local_key_path = None;
 
@@ -483,15 +514,28 @@ where
 		// If current node is part of the queued authorities
 		// start the multiparty keygen process
 		if queued.authorities.contains(&public) {
+			// Get the best next authorities using the keygen threshold
+			let best_authorities: Vec<AuthorityId> = get_best_authorities(
+				self.get_next_keygen_threshold(header).into(),
+				&queued.authorities,
+				&self.get_authority_reputations(header),
+			)
+			.iter()
+			.map(|(_, key)| key.clone())
+			.collect();
+
+			// If the next authority is not selected in the keygen set return
+			if find_index::<AuthorityId>(&best_authorities[..], &public).is_none() {
+				return
+			}
+
 			// Setting up DKG for queued authorities
 			self.next_rounds = Some(set_up_rounds(
 				&queued,
 				&public,
-				&sr25519_public,
-				thresh,
+				self.get_next_signature_threshold(header),
+				self.get_next_keygen_threshold(header),
 				local_key_path,
-				*header.number(),
-				self.local_keystore.clone(),
 				&self.get_authority_reputations(header),
 			));
 			self.dkg_state.listening_for_pub_key = true;
@@ -539,28 +583,17 @@ where
 				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
 			{
 				debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active);
-				metric_set!(self, dkg_validator_set_id, active.id);
-
-				// DKG should produce a signed commitment for each session
-				if active.id != self.last_signed_id + 1 && active.id != GENESIS_AUTHORITY_SET_ID {
-					metric_inc!(self, dkg_skipped_sessions);
-				}
-
-				// verify the new validator set
-				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Setting new validator set id as curent
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
+
+				// verify the new validator set
+				let _ = self.verify_validator_set(header.number(), active.clone());
 
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
 
 				self.best_dkg_block = Some(*header.number());
 
-				// this metric is kind of 'fake'. Best DKG block should only be updated once we have
-				// a signed commitment for the block. Remove once the above TODO is done.
-				metric_set!(self, dkg_best_block, *header.number());
-				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
-				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				// Setting up the DKG
 				self.handle_dkg_setup(&header, active.clone());
 				self.handle_queued_dkg_setup(&header, queued.clone());

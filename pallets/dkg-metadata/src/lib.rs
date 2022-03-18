@@ -258,18 +258,45 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Set the pending signature threshold for the session following the next session.
+		///
+		/// We cannot assume that the next DKG has not already completed keygen.
+		/// After all, if we are in a new session the next DKG may have already completed.
+		/// Therefore, when we update the thresholds we are updating a threshold
+		/// that will become the next threshold after the next session update.
 		#[pallet::weight(0)]
-		pub fn set_threshold(
+		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			ensure!(
-				usize::from(new_threshold) < Authorities::<T>::get().len(),
+				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
 			);
-			// set the new maintainer
-			SignatureThreshold::<T>::try_mutate(|threshold| {
+			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
+				*threshold = new_threshold;
+				Ok(().into())
+			})
+		}
+
+		/// Set the pending keygen threshold for the session following the next session.
+		///
+		/// We cannot assume that the next DKG has not already completed keygen.
+		/// After all, if we are in a new session the next DKG may have already completed.
+		/// Therefore, when we update the thresholds we are updating a threshold
+		/// that will become the next threshold after the next session update.
+		#[pallet::weight(0)]
+		pub fn set_keygen_threshold(
+			origin: OriginFor<T>,
+			new_threshold: u16,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(
+				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
+				Error::<T>::InvalidThreshold
+			);
+			PendingKeygenThreshold::<T>::try_mutate(|threshold| {
 				*threshold = new_threshold;
 				Ok(().into())
 			})
@@ -559,6 +586,31 @@ pub mod pallet {
 	#[pallet::getter(fn signature_threshold)]
 	pub(super) type SignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
 
+	/// The current signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn keygen_threshold)]
+	pub(super) type KeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current signature threshold (i.e. the `t` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn next_signature_threshold)]
+	pub(super) type NextSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn next_keygen_threshold)]
+	pub(super) type NextKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The pending signature threshold (i.e. the `t` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn pending_signature_threshold)]
+	pub(super) type PendingSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The pending signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn pending_keygen_threshold)]
+	pub(super) type PendingKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
 	/// The current authorities set
 	#[pallet::storage]
 	#[pallet::getter(fn authorities)]
@@ -671,8 +723,21 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let sig_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
-			SignatureThreshold::<T>::put(sig_threshold);
+			let mut signature_threshold = u16::try_from(self.authorities.len() / 2).unwrap();
+			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap() - 1;
+
+			if keygen_threshold <= signature_threshold {
+				signature_threshold = keygen_threshold - 1;
+			}
+
+			// Set thresholds to be the same
+			SignatureThreshold::<T>::put(signature_threshold);
+			KeygenThreshold::<T>::put(keygen_threshold);
+			NextSignatureThreshold::<T>::put(signature_threshold);
+			NextKeygenThreshold::<T>::put(keygen_threshold);
+			PendingSignatureThreshold::<T>::put(signature_threshold);
+			PendingKeygenThreshold::<T>::put(keygen_threshold);
+			// Set refresh parameters
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
 			TimeToRestart::<T>::put(T::TimeToRestart::get());
@@ -684,11 +749,6 @@ impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
 	pub fn authority_set() -> AuthoritySet<T::DKGId> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
-	}
-
-	/// Return the current signing threshold for DKG keygen/signing.
-	pub fn sig_threshold() -> u16 {
-		Self::signature_threshold()
 	}
 
 	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {
@@ -1062,6 +1122,13 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn refresh_keys() {
+		// Update the active thresholds for the next session
+		SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
+		KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
+		// Update the next thresholds for the next session
+		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
+		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
+		// Update the keys for the next authorities
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
 		let dkg_pub_key = Self::dkg_public_key();

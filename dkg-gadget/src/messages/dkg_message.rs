@@ -14,7 +14,7 @@
 //
 use crate::{
 	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
+	worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -151,7 +151,7 @@ fn sign_and_send_message<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
+	let sr25519_public = dkg_worker.get_sr25519_public_key();
 	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 		Ok(sig) => {
 			let signed_dkg_message =

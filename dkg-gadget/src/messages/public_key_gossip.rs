@@ -92,7 +92,7 @@ where
 			// Fetch the current threshold for the DKG. We will use the
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
-			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
+			let threshold = dkg_worker.get_signature_threshold(header) as usize;
 			if aggregated_public_keys.keys_and_signatures.len() >= threshold {
 				store_aggregated_public_keys(
 					dkg_worker,

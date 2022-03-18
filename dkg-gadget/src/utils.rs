@@ -17,7 +17,8 @@ use crate::{
 	Client,
 };
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, utils::get_best_authorities, AuthoritySet,
+	ConsensusLog, DKGApi,
 };
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
@@ -49,32 +50,31 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
-	// TODO: remove param
-	_sr25519_public: &sr25519::Public,
-	thresh: u16,
+	signature_threshold: u16,
+	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	// TODO: remove param
-	_created_at: N,
-	// TODO: remove param
-	_local_keystore: Option<Arc<LocalKeystore>>,
 	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
-	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
+	let best_authorities: Vec<AuthorityId> =
+		get_best_authorities(keygen_threshold.into(), &authority_set.authorities, &reputations)
+			.iter()
+			.map(|(_, key)| key.clone())
+			.collect();
+	let party_inx = find_index::<AuthorityId>(&best_authorities[..], public).unwrap() + 1;
 	// Compute the reputations of only the currently selected authorities for these rounds
-	let mut authority_set_reputations = HashMap::new();
-	authority_set.authorities.iter().for_each(|id| {
-		authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
+	let mut best_reputations = HashMap::new();
+	best_authorities.iter().for_each(|id| {
+		best_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
 	});
-	let n = authority_set.authorities.len();
 	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()
 		.round_id(authority_set.id.clone())
 		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(thresh)
-		.parties(u16::try_from(n).unwrap())
+		.threshold(signature_threshold)
+		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
-		.reputations(authority_set_reputations)
-		.authorities(authority_set.authorities.clone())
+		.reputations(best_reputations)
+		.authorities(best_authorities)
 		.build();
 
 	rounds
@@ -149,34 +149,6 @@ where
 	}
 
 	false
-}
-
-pub(crate) fn fetch_public_key<B, C, BE>(dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	dkg_worker
-		.key_store
-		.authority_id(&dkg_worker.key_store.public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"))
-}
-
-pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-) -> sp_core::sr25519::Public
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	dkg_worker
-		.key_store
-		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 }
 
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
