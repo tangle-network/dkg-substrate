@@ -343,10 +343,10 @@ pub mod pallet {
 						UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, prop);
 						Ok(().into())
 					},
-					Err(_) => return Err(Error::<T>::ProposalFormatInvalid.into()),
+					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
 				}
 			} else {
-				return Err(Error::<T>::ProposalFormatInvalid.into())
+				Err(Error::<T>::ProposalFormatInvalid.into())
 			}
 		}
 	}
@@ -360,7 +360,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			return Ok(())
 		}
 
-		return Err(Error::<T>::ProposalFormatInvalid.into())
+		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_proposer_set_update_proposal(
@@ -374,7 +374,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			return Ok(())
 		}
 
-		return Err(Error::<T>::ProposalFormatInvalid.into())
+		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_refresh_proposal(

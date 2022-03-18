@@ -137,7 +137,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	fn eval_vote_state(_c: u32, ) -> Weight {
 		(53_677_000_u64)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
-			.saturating_add(T::DbWeight::get().writes(1_u64 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 
 }

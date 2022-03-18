@@ -98,6 +98,12 @@ impl PreOfflineRounds {
 	}
 }
 
+impl Default for PreOfflineRounds {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<C> DKGRoundsSM<DKGOfflineMessage, Vec<DKGOfflineMessage>, C> for PreOfflineRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -214,7 +220,7 @@ where
 
 			let signer_set_id = self.params.signer_set_id;
 
-			for m in offline_stage.message_queue().into_iter() {
+			for m in offline_stage.message_queue() {
 				trace!(target: "dkg", "🕸️  MPC protocol message {:?}", *m);
 				let serialized = serde_json::to_string(&m).unwrap();
 				let msg = DKGOfflineMessage {
@@ -275,7 +281,7 @@ where
 			msg.body,
 		);
 		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
-		match offline_stage.handle_incoming(msg.clone()) {
+		match offline_stage.handle_incoming(msg) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {
 				error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);

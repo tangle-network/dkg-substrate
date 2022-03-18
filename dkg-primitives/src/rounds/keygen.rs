@@ -102,6 +102,12 @@ impl<C> PreKeygenRounds<C> {
 	}
 }
 
+impl<C> Default for PreKeygenRounds<C> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<C> DKGRoundsSM<DKGKeygenMessage, Vec<DKGKeygenMessage>, C> for PreKeygenRounds<C>
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -213,16 +219,16 @@ where
 
 			let enc_messages = keygen
 				.message_queue()
-				.into_iter()
+				.iter_mut()
 				.map(|m| {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
 					let serialized = serde_json::to_string(&m).unwrap();
-					return DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
+					DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
 				})
 				.collect::<Vec<DKGKeygenMessage>>();
 
 			keygen.message_queue().clear();
-			return enc_messages
+			enc_messages
 		} else {
 			Vec::new()
 		}
@@ -267,7 +273,7 @@ where
 			msg.body,
 		);
 		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
-		match keygen.handle_incoming(msg.clone()) {
+		match keygen.handle_incoming(msg) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {
 				error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);

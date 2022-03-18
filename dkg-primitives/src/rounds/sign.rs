@@ -100,6 +100,12 @@ impl PreSignRounds {
 	}
 }
 
+impl Default for PreSignRounds {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<C> DKGRoundsSM<DKGVoteMessage, Vec<DKGVoteMessage>, C> for PreSignRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -237,7 +243,7 @@ where
 
 		if let Err(err) = sig {
 			println!("{:?}", err);
-			return Err(err)
+			Err(err)
 		} else if let (Some(payload), Ok(sig)) = (payload, sig) {
 			match convert_signature(&sig) {
 				Some(signature) => {

@@ -75,7 +75,7 @@ pub fn recover_pub_key_raw(message: &BigInt, v: u8, r: FE, s: FE) -> Result<GE, 
 		}
 	};
 
-	let g = GE::generator().clone(); // G
+	let g = GE::generator(); // G
 	let z = FE::from(message); // z
 
 	let rn = r.invert().unwrap(); // r^-1
@@ -85,7 +85,7 @@ pub fn recover_pub_key_raw(message: &BigInt, v: u8, r: FE, s: FE) -> Result<GE, 
 
 	let pub_key = rsrn - gzrn;
 
-	return Ok(pub_key)
+	Ok(pub_key)
 }
 
 pub fn convert_to_checksum_eth_address(addr: &str) -> Result<String, String> {
@@ -115,7 +115,7 @@ pub fn convert_to_checksum_eth_address(addr: &str) -> Result<String, String> {
 		}
 	}
 
-	return Ok(checksum_addr)
+	Ok(checksum_addr)
 }
 
 pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
@@ -128,7 +128,7 @@ pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
 		None => return Err("Y coordinate is absent".to_string()),
 	};
 
-	let mut serialized_pub_key = x.to_hex().to_owned();
+	let mut serialized_pub_key = x.to_hex();
 	serialized_pub_key.push_str(&y.to_hex());
 
 	let mut hasher = Keccak256::new();
@@ -141,7 +141,7 @@ pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
 	let serialized_pub_key_hash = hex::encode(&pub_key_hash);
 	let eth_address = &serialized_pub_key_hash[24..serialized_pub_key_hash.len()];
 
-	return convert_to_checksum_eth_address(eth_address)
+	convert_to_checksum_eth_address(eth_address)
 }
 
 #[cfg(test)]
