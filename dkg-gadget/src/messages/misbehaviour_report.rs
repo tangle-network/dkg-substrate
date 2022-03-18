@@ -105,7 +105,7 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
+pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	offender: dkg_runtime_primitives::crypto::AuthorityId,
 	round_id: RoundId,
@@ -147,7 +147,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().gossip_message(
+				dkg_worker.gossip_engine.lock().await.gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message.clone(),
 					true,

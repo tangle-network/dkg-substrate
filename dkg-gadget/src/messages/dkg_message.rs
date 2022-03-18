@@ -28,7 +28,7 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
-pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
+pub(crate) async fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
 where
 	B: Block,
 	BE: Backend<B>,
@@ -47,7 +47,7 @@ where
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
+				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number()).await;
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -79,7 +79,7 @@ where
 					&mut next_rounds,
 					id,
 					dkg_worker.get_latest_block_number(),
-				);
+				).await;
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
@@ -96,24 +96,24 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id);
+		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id).await;
 	}
 
 	for res in &rounds_send_result {
 		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone());
+			dkg_worker.handle_dkg_error(err.clone()).await;
 		}
 	}
 
 	for res in &next_rounds_send_result {
 		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone());
+			dkg_worker.handle_dkg_error(err.clone()).await;
 		}
 	}
 }
 
 /// send actual messages
-fn send_messages<B, C, BE>(
+async fn send_messages<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 	authority_id: Public,
@@ -133,18 +133,20 @@ where
 		}
 	}
 
-	for message in rounds.get_outgoing_messages() {
-		let dkg_message =
-			DKGMessage { id: authority_id.clone(), payload: message, round_id: rounds.get_id() };
+	let id = rounds.get_id();
+	let messages = rounds.get_outgoing_messages()
+		.into_iter()
+		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
+		.collect::<Vec<DKGMessage<_>>>();
 
-		sign_and_send_message(dkg_worker, &dkg_message);
-	}
+	sign_and_send_messages(dkg_worker, messages).await;
+
 	results
 }
 
-fn sign_and_send_message<B, C, BE>(
+async fn sign_and_send_messages<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	dkg_message: &DKGMessage<AuthorityId>,
+	dkg_messages: Vec<DKGMessage<AuthorityId>>,
 ) where
 	B: Block,
 	BE: Backend<B>,
@@ -152,22 +154,27 @@ fn sign_and_send_message<B, C, BE>(
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
-	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
-		Ok(sig) => {
-			let signed_dkg_message =
-				SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
-			let encoded_signed_dkg_message = signed_dkg_message.encode();
-			dkg_worker.gossip_engine.lock().gossip_message(
-				dkg_topic::<B>(),
-				encoded_signed_dkg_message,
-				true,
-			);
-		},
-		Err(e) => trace!(
-			target: "dkg",
-			"🕸️  Error signing DKG message: {:?}",
-			e
-		),
-	};
-	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
+	let mut engine_lock = dkg_worker.gossip_engine.lock().await;
+
+	for dkg_message in dkg_messages {
+		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
+			Ok(sig) => {
+				let signed_dkg_message =
+					SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
+				let encoded_signed_dkg_message = signed_dkg_message.encode();
+				engine_lock.gossip_message(
+					dkg_topic::<B>(),
+					encoded_signed_dkg_message,
+					true,
+				);
+			},
+			Err(e) => trace!(
+				target: "dkg",
+				"🕸️  Error signing DKG message: {:?}",
+				e
+			),
+		};
+
+		trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
+	}
 }

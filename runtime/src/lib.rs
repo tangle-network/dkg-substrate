@@ -22,7 +22,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod xcm_config;
 use codec::Encode;
-use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
+use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;

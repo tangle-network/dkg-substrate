@@ -95,21 +95,21 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::{Decode, Encode, EncodeAppend, EncodeLike};
+use codec::{Encode, EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
 };
 use frame_support::{
-	pallet_prelude::{ensure, DispatchError, DispatchResultWithPostInfo},
-	traits::{EnsureOrigin, EstimateNextSessionRotation, Get, OneSessionHandler},
+	pallet_prelude::{ensure, DispatchResultWithPostInfo},
+	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 };
-use frame_system::{self as system, ensure_root};
-use scale_info::TypeInfo;
+use frame_system::{ensure_root};
+
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::{AccountIdConversion, Convert, Saturating},
-	RuntimeAppPublic, RuntimeDebug,
+	traits::{Convert, Saturating},
+	RuntimeAppPublic,
 };
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
@@ -129,7 +129,7 @@ pub mod pallet {
 		weights::WeightInfo,
 	};
 	use dkg_runtime_primitives::ProposalNonce;
-	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, PalletId};
+	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]

@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use crate::{
-	handlers::{decode_proposals::decode_proposal_header, validate_proposals::ValidationError},
-	DKGPayloadKey, ProposalHeader, ProposalNonce, Vec,
+	handlers::{validate_proposals::ValidationError}, ProposalNonce, Vec,
 };
 use codec::alloc::string::ToString;
 

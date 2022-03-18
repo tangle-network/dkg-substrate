@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use frame_support::RuntimeDebug;
-use sp_runtime::traits::AtLeast32Bit;
+
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};

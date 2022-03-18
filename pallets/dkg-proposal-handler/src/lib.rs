@@ -405,7 +405,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
 		let id =
-			decode_proposal_identifier(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
+			decode_proposal_identifier(&prop).map_err(|_e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
