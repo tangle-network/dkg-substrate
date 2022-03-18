@@ -986,7 +986,7 @@ where
 				// drop the lock
 				std::mem::drop(lock);
 				// with the lock now dropped, we can poll both the gossip engine
-				// AND future that attempts to exhaust the message stream without
+				// AND the future that attempts to exhaust the message stream without
 				// blocking one or the other
 				futures::select! {
 					_res0 = gossip_engine.fuse() => {
