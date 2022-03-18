@@ -20,5 +20,4 @@ local-test
 **/node_modules/
 para-2074-genesis
 para-2074-wasm
-.idea/vcs.xml
-.idea/workspace.xml
+**/.idea/
