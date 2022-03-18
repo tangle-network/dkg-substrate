@@ -955,7 +955,6 @@ where
 	}
 
 	// *** Main run loop ***
-
 	pub(crate) async fn run(mut self) {
 		let engine = self.gossip_engine.clone();
 		let engine_dkg_messages = self.gossip_engine.clone();
