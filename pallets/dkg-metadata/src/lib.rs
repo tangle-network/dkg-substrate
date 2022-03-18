@@ -791,21 +791,14 @@ impl<T: Config> Pallet<T> {
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(
-			new_authorities_accounts,
-			next_id,
-			new_authority_ids.clone(),
-		);
+		>>::on_authority_set_changed(new_authorities_accounts, next_id, new_authority_ids.clone());
 
 		AuthoritySetId::<T>::put(next_id);
 
 		let log: DigestItem = DigestItem::Consensus(
 			DKG_ENGINE_ID,
 			ConsensusLog::AuthoritiesChange {
-				next_authorities: AuthoritySet {
-					authorities: new_authority_ids,
-					id: next_id,
-				},
+				next_authorities: AuthoritySet { authorities: new_authority_ids, id: next_id },
 				next_queued_authorities: AuthoritySet {
 					authorities: next_authority_ids.clone(),
 					id: next_id + 1u64,

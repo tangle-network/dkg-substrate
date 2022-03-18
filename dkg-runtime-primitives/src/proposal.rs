@@ -191,8 +191,7 @@ impl Proposal {
 			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
 			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
 			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
-			ProposalKind::WrappingFeeUpdate =>
-				DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
+			ProposalKind::WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
 			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
 			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
 			ProposalKind::MaxDepositLimitUpdate =>

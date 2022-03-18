@@ -34,9 +34,7 @@ pub fn create(data: &[u8]) -> Result<EvmTxProposal, ValidationError> {
 		.map_err(|_| ValidationError::InvalidParameter("Invalid transaction".to_string()))?;
 
 	if !validate_ethereum_tx(&eth_transaction) {
-		return Err(ValidationError::InvalidParameter(
-			"Ethereum transaction is invalid".to_string(),
-		))
+		return Err(ValidationError::InvalidParameter("Ethereum transaction is invalid".to_string()))
 	}
 
 	let (chain_id, nonce) = decode_evm_transaction(&eth_transaction)?;
