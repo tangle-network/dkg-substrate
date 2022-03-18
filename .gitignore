@@ -21,3 +21,5 @@ local-test
 para-2074-genesis
 para-2074-wasm
 **/.idea/
+/.idea/
+/dkg-gadget/.idea/
