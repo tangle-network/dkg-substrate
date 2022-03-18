@@ -385,33 +385,38 @@ polkadot-launch dkg-launch.json
 
 The following instructions outlines how to run dkg-substrate's base test suite and E2E test suite.
 
+### To run base tests
+
 ```
-# To run base tests
-
 cargo test 
+```
 
-# To run E2E tests
+### To run E2E tests
 
-1. Run cd dkg-test-suite
-2. Run `yarn install`
+1. Run `cargo build --release -p dkg-standalone-node --features integration-tests`
+2. Run `cd dkg-test-suite && git submodule update --init --recursive`
+3. Run `cd dkg-test-suite`
+4. Run `yarn install`
+5. To run all tests: `yarn test`
 
-# Anchor Proposal tests:
+**Note:** You may also run individual E2E tests. Please review test script commands in `dkg-test-suite/package.json` for verbose list of test cases.
+
+### Anchor Proposal tests:
 
 From terminal 1:
 
-1. Run ./scripts/run-standalone.sh
+1. Run `./scripts/run-standalone.sh`
 2. Wait until Keygen completes
 
 From terminal 2: 5. Run `yarn anchor-proposals` for anchor proposal tests
 
-# DKG Refresh tests:
+### DKG Refresh tests:
 
-1. Run ./scripts/run-standalone.sh
+1. Run `./scripts/run-standalone.sh`
 
 From terminal 2:
 
 1. Run `yarn dkg-refresh` for DKG refresh tests immediately the node starts
-```
 
 ### Code Coverage
 
