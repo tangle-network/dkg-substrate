@@ -148,7 +148,7 @@ where
 		partial_sig: PartialSignature,
 		sign_manual: SignManual,
 	) -> Self {
-		let mut sign_tracker = DKGRoundTracker::<std::vec::Vec<u8>, C> {
+		let sign_tracker = DKGRoundTracker::<std::vec::Vec<u8>, C> {
 			sign_manual: Some(sign_manual),
 			payload: Some(payload),
 			started_at,
@@ -305,7 +305,7 @@ where
 	}
 
 	fn get_signed_parties(&self) -> Vec<u16> {
-		self.votes.keys().map(|v| *v).collect()
+		self.votes.keys().copied().collect()
 	}
 
 	fn is_done(&self, threshold: u16) -> bool {

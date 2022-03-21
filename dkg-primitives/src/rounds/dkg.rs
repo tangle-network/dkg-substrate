@@ -496,11 +496,7 @@ where
 	}
 
 	pub fn is_ready_to_vote(&self, round_key: Vec<u8>) -> bool {
-		if let Some(offline) = self.offlines.get(&round_key) {
-			matches!(offline, OfflineState::Finished(Ok(_)))
-		} else {
-			false
-		}
+		matches!(self.offlines.get(&round_key), Some(OfflineState::Finished(Ok(_))))
 	}
 
 	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {

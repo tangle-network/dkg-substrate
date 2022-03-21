@@ -298,7 +298,7 @@ where
 	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
-		if rounds.is_none() {
+		if let Some(_rounds) = rounds {
 			true
 		} else {
 			let stalled = rounds.as_ref().unwrap().has_stalled();
@@ -308,7 +308,7 @@ where
 	};
 
 	let should_restart_next_rounds = {
-		if next_rounds.is_none() {
+		if let Some(..) = next_rounds {
 			true
 		} else {
 			let stalled = next_rounds.as_ref().unwrap().has_stalled();

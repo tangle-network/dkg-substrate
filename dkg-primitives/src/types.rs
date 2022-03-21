@@ -220,8 +220,8 @@ impl DKGError {
 			DKGError::CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
 			DKGError::CriticalError { reason } => format!("Critical error: {}", reason),
 			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
-			DKGError::SMNotFinished => format!("SM not finished"),
-			_ => format!("Unknown error"),
+			DKGError::SMNotFinished => "SM not finished".to_string(),
+			_ => "Unknown error".to_string(),
 		}
 	}
 }

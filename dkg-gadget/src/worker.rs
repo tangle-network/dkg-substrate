@@ -581,7 +581,7 @@ where
 			{
 				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
 				self.queued_validator_set = queued.clone();
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_queued_dkg_setup(header, queued);
 				send_outgoing_dkg_messages(self);
 			}
 		}
@@ -640,7 +640,7 @@ where
 		};
 
 		if check_signers(authority_accounts.clone().unwrap().0) ||
-			check_signers(authority_accounts.clone().unwrap().1)
+			check_signers(authority_accounts.unwrap().1)
 		{
 			Ok(dkg_msg)
 		} else {
@@ -825,9 +825,9 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if proposal.is_some() {
-				proposals.push(proposal.unwrap())
-			}
+			if let Some(prop) = proposal {
+				proposals.push(prop)
+			};
 		}
 		metric_set!(
 			self,

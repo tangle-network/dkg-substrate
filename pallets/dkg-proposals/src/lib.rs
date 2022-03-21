@@ -608,10 +608,12 @@ impl<T: Config> Pallet<T> {
 		let now = <frame_system::Pallet<T>>::block_number();
 		let mut votes = match Votes::<T>::get(src_chain_id, (nonce, prop.clone())) {
 			Some(v) => v,
-			None => {
-				let mut v = ProposalVotes::default();
-				v.expiry = now + T::ProposalLifetime::get();
-				v
+			None => ProposalVotes::<
+				<T as frame_system::Config>::AccountId,
+				<T as frame_system::Config>::BlockNumber,
+			> {
+				expiry: now + T::ProposalLifetime::get(),
+				..Default::default()
 			},
 		};
 
