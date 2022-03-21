@@ -148,10 +148,12 @@ where
 		partial_sig: PartialSignature,
 		sign_manual: SignManual,
 	) -> Self {
-		let mut sign_tracker = DKGRoundTracker::default();
-		sign_tracker.sign_manual = Some(sign_manual);
-		sign_tracker.payload = Some(payload);
-		sign_tracker.started_at = started_at;
+		let mut sign_tracker = DKGRoundTracker::<std::vec::Vec<u8>, C> {
+			sign_manual: Some(sign_manual),
+			payload: Some(payload),
+			started_at,
+			..Default::default()
+		};
 
 		let mut sign_outgoing_msgs: Vec<DKGVoteMessage> = Vec::new();
 		let serialized = serde_json::to_string(&partial_sig).unwrap();
@@ -187,7 +189,7 @@ where
 				.signers
 				.iter()
 				.filter(|v| !signed_by.contains(*v))
-				.map(|v| *v)
+				.copied()
 				.collect();
 
 			let mut bad_actors: Vec<u16> = Vec::new();

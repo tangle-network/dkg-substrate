@@ -56,7 +56,7 @@ pub fn verify_signer_from_set_ecdsa(
 ) -> (Option<ecdsa::Public>, bool) {
 	let mut signer = None;
 	let res = maybe_signers.iter().any(|x| {
-		let res = if let Ok(data) = recover_ecdsa_pub_key(msg, signature) {
+		if let Ok(data) = recover_ecdsa_pub_key(msg, signature) {
 			if x.0.to_vec() == data {
 				signer = Some(x.clone());
 				true
@@ -65,9 +65,7 @@ pub fn verify_signer_from_set_ecdsa(
 			}
 		} else {
 			false
-		};
-
-		res
+		}
 	});
 
 	(signer, res)

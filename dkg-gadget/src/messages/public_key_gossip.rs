@@ -56,54 +56,50 @@ where
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
-	match dkg_msg.payload {
-		DKGMsgPayload::PublicKeyBroadcast(msg) => {
-			debug!(target: "dkg", "Received public key broadcast");
+	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
+		debug!(target: "dkg", "Received public key broadcast");
 
-			let is_main_round = {
-				if dkg_worker.rounds.is_some() {
-					msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
-				} else {
-					false
-				}
-			};
+		let is_main_round = {
+			if dkg_worker.rounds.is_some() {
+				msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
+			} else {
+				false
+			}
+		};
 
-			dkg_worker.authenticate_msg_origin(
+		dkg_worker.authenticate_msg_origin(
+			is_main_round,
+			authority_accounts.unwrap(),
+			&msg.pub_key,
+			&msg.signature,
+		)?;
+
+		let key_and_sig = (msg.pub_key, msg.signature);
+		let round_id = msg.round_id;
+		let mut aggregated_public_keys = match dkg_worker.aggregated_public_keys.get(&round_id) {
+			Some(keys) => keys.clone(),
+			None => AggregatedPublicKeys::default(),
+		};
+
+		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
+			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
+			dkg_worker
+				.aggregated_public_keys
+				.insert(round_id, aggregated_public_keys.clone());
+		}
+		// Fetch the current threshold for the DKG. We will use the
+		// current threshold to determine if we have enough signatures
+		// to submit the next DKG public key.
+		let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
+		if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+			store_aggregated_public_keys(
+				dkg_worker,
 				is_main_round,
-				authority_accounts.unwrap(),
-				&msg.pub_key,
-				&msg.signature,
+				round_id,
+				&aggregated_public_keys,
+				current_block_number,
 			)?;
-
-			let key_and_sig = (msg.pub_key, msg.signature);
-			let round_id = msg.round_id;
-			let mut aggregated_public_keys = match dkg_worker.aggregated_public_keys.get(&round_id)
-			{
-				Some(keys) => keys.clone(),
-				None => AggregatedPublicKeys::default(),
-			};
-
-			if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
-				aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-				dkg_worker
-					.aggregated_public_keys
-					.insert(round_id, aggregated_public_keys.clone());
-			}
-			// Fetch the current threshold for the DKG. We will use the
-			// current threshold to determine if we have enough signatures
-			// to submit the next DKG public key.
-			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-			if aggregated_public_keys.keys_and_signatures.len() >= threshold {
-				store_aggregated_public_keys(
-					dkg_worker,
-					is_main_round,
-					round_id,
-					&aggregated_public_keys,
-					current_block_number,
-				)?;
-			}
-		},
-		_ => {},
+		}
 	}
 
 	Ok(())

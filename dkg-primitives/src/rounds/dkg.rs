@@ -588,7 +588,7 @@ where
 				.collect::<Vec<u16>>();
 			// Join the good and bad parties to get the final signers set
 			let good_and_bad_authorities: Vec<u16> =
-				good_parties.iter().chain(needed_bad_parties.iter()).map(|i| *i).collect();
+				good_parties.iter().chain(needed_bad_parties.iter()).copied().collect();
 			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
 		} else {
 			signers_set = select_random_set(seed, good_parties, threshold + 1);

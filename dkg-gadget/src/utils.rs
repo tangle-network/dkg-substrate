@@ -141,10 +141,10 @@ where
 		return true
 	}
 
-	if dkg_worker.next_rounds.is_some() {
-		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
-			return true
-		}
+	if dkg_worker.next_rounds.is_some() &&
+		dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id
+	{
+		return true
 	}
 
 	false
