@@ -209,7 +209,11 @@ fn testnet_genesis(
 		},
 		sudo: dkg_runtime::SudoConfig { key: Some(root_key) },
 		balances: dkg_runtime::BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, MILLIUNIT * 4096_000)).collect(),
+			balances: endowed_accounts
+				.iter()
+				.cloned()
+				.map(|k| (k, MILLIUNIT * 4_096_000))
+				.collect(),
 		},
 		parachain_info: dkg_runtime::ParachainInfoConfig { parachain_id: id },
 		collator_selection: dkg_runtime::CollatorSelectionConfig {
@@ -224,7 +228,7 @@ fn testnet_genesis(
 				.map(|(acc, aura, dkg)| {
 					(
 						acc.clone(),                 // account id
-						acc.clone(),                 // validator id
+						acc,                         // validator id
 						dkg_session_keys(aura, dkg), // session keys
 					)
 				})

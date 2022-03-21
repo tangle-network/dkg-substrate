@@ -21,7 +21,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
+use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_grandpa::{

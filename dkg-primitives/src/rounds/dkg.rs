@@ -497,10 +497,7 @@ where
 
 	pub fn is_ready_to_vote(&self, round_key: Vec<u8>) -> bool {
 		if let Some(offline) = self.offlines.get(&round_key) {
-			match offline {
-				OfflineState::Finished(Ok(_)) => true,
-				_ => false,
-			}
+			matches!(offline, OfflineState::Finished(Ok(_)))
 		} else {
 			false
 		}

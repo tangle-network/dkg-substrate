@@ -174,7 +174,7 @@ where
 					}
 				}
 			} else {
-				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
+				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path);
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {

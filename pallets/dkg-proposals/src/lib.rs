@@ -662,7 +662,7 @@ impl<T: Config> Pallet<T> {
 				_ => Ok(().into()),
 			}
 		} else {
-			return Err(Error::<T>::ProposalDoesNotExist.into())
+			Err(Error::<T>::ProposalDoesNotExist.into())
 		}
 	}
 

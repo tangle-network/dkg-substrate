@@ -49,7 +49,7 @@ where
 
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let current_block_number = header.number().clone();
+	let current_block_number = *header.number();
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {
@@ -148,7 +148,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
-					encoded_signed_dkg_message.clone(),
+					encoded_signed_dkg_message,
 					true,
 				);
 			},

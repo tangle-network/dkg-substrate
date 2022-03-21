@@ -69,7 +69,7 @@ where
 				&msg.signature,
 			)?;
 			// Add new report to the aggregated reports
-			let round_id = msg.round_id.clone();
+			let round_id = msg.round_id;
 			let mut reports = match dkg_worker
 				.aggregated_misbehaviour_reports
 				.get(&(round_id, msg.offender.clone()))
@@ -138,7 +138,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			signature: encoded_signature.clone(),
 		});
 
-		let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
+		let message = DKGMessage::<AuthorityId> { id: public, round_id, payload };
 		let encoded_dkg_message = message.encode();
 
 		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -149,7 +149,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
-					encoded_signed_dkg_message.clone(),
+					encoded_signed_dkg_message,
 					true,
 				);
 			},

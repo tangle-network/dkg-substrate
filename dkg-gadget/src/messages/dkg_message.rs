@@ -45,7 +45,7 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -72,7 +72,7 @@ where
 			.key_store
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
 				next_rounds_send_result = send_messages(
 					dkg_worker,
@@ -96,7 +96,7 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id);
+		gossip_public_key(dkg_worker, pub_key.clone(), *round_id);
 	}
 
 	for res in &rounds_send_result {
