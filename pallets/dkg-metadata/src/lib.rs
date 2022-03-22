@@ -286,6 +286,7 @@ pub mod pallet {
 		/// After all, if we are in a new session the next DKG may have already completed.
 		/// Therefore, when we update the thresholds we are updating a threshold
 		/// that will become the next threshold after the next session update.
+		#[transactional]
 		#[pallet::weight(0)]
 		pub fn set_keygen_threshold(
 			origin: OriginFor<T>,
@@ -296,10 +297,12 @@ pub mod pallet {
 				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
 			);
-			PendingKeygenThreshold::<T>::try_mutate(|threshold| {
-				*threshold = new_threshold;
-				Ok(().into())
-			})
+
+			if new_threshold <= PendingSignatureThreshold::<T>::get() {
+				Self::update_signature_threshold(new_threshold.saturating_sub(1))?;
+			}
+			
+			Self::update_keygen_threshold(new_threshold)
 		}
 
 		#[pallet::weight(0)]
@@ -749,6 +752,20 @@ impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
 	pub fn authority_set() -> AuthoritySet<T::DKGId> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
+	}
+
+	pub fn update_signature_threshold(new_threshold: u16) -> DispatchResultWithPostInfo {
+		PendingSignatureThreshold::<T>::try_mutate(|threshold| {
+			*threshold = new_threshold;
+			Ok(().into())
+		})
+	}
+
+	pub fn update_keygen_threshold(new_threshold: u16) -> DispatchResultWithPostInfo {
+		PendingKeygenThreshold::<T>::try_mutate(|threshold| {
+			*threshold = new_threshold;
+			Ok(().into())
+		})
 	}
 
 	pub fn decompress_public_key(compressed: Vec<u8>) -> Result<Vec<u8>, DispatchError> {

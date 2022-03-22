@@ -257,37 +257,41 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	/// returns the index of an authority from an header
-	fn _get_authority_index(&mut self, header: &B::Header) -> Option<usize> {
-		let new = if let Some((new, ..)) = find_authorities_change::<B>(header) {
-			Some(new)
-		} else {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			self.client.runtime_api().authority_set(&at).ok()
-		};
+	/// Rotates the contents of the DKG local key files from the queued file to the active file.
+	/// 
+	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
+	/// a new queued DKG local key for the new queued authority set. The previously queued set
+	/// is now the active set and so we transition their local key data into the active file path.
+	/// 
+	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
+	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
+	fn rotate_local_key_files(&mut self) {
+		let mut local_key_path = None;
+		let mut queued_local_key_path = None;
 
-		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
-
-		let set = new.unwrap_or_else(|| panic!("Help"));
-		let public = self.get_authority_public_key();
-		for i in 0..set.authorities.len() {
-			if set.authorities[i] == public {
-				return Some(i)
-			}
+		if self.base_path.is_some() {
+			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
+			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 		}
 
-		return None
+		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
+			if let Err(err) = std::fs::copy(queued_path, path) {
+				error!("Error copying queued key {:?}", &err);
+			} else {
+				debug!("Successfully copied queued key to current key");
+			}
+		}
 	}
 
 	/// gets authority reputations from an header
-	pub fn get_authority_reputations(&self, header: &B::Header) -> HashMap<AuthorityId, i64> {
+	pub fn get_authority_reputations(&self, header: &B::Header, authority_set: AuthoritySet<Public>) -> HashMap<Public, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
 			.runtime_api()
-			.get_reputations(&at, self.current_validator_set.authorities.clone())
+			.get_reputations(&at, authority_set.authorities.clone())
 			.expect("get reputations is always available");
-		let mut reputation_map: HashMap<AuthorityId, i64> = HashMap::new();
+		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
 		for (id, rep) in reputations {
 			reputation_map.insert(id, rep);
 		}
@@ -324,17 +328,23 @@ where
 		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
-	/// gets latest block number from latest block header
+	/// Gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		self.latest_header.clone().unwrap().number().clone()
+		if self.latest_header.is_some() {
+			self.latest_header.clone().unwrap().number().clone()
+		} else {
+			NumberFor::<B>::from(0u32)
+		}
 	}
 
+	/// Gets the active DKG authority key
 	pub fn get_authority_public_key(&mut self) -> Public {
 		self.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"))
 	}
 
+	/// Gets the active Sr25519 authority key
 	pub fn get_sr25519_public_key(&mut self) -> sp_core::sr25519::Public {
 		self.key_store
 			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
@@ -395,154 +405,69 @@ where
 		Ok(())
 	}
 
-	fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
-		if next_authorities.authorities.is_empty() {
-			return
-		}
-
-		if self.rounds.is_some() {
-			if self.rounds.as_ref().unwrap().get_id() == next_authorities.id {
-				return
-			}
-		}
-
-		let public = self.get_authority_public_key();
-		let mut local_key_path = None;
-		let mut queued_local_key_path = None;
-
-		if self.base_path.is_some() {
-			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
-			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
-			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
-		}
-
-		let latest_block_num = self.get_latest_block_number();
-
-		let best_authorities: Vec<AuthorityId> = get_best_authorities(
-			self.get_keygen_threshold(header).into(),
-			&next_authorities.authorities,
-			&self.get_authority_reputations(header),
+	/// Gets the best authorities by authority keys using on-chain reputations
+	fn get_best_authority_keys(&self, header: &B::Header, authority_set: AuthoritySet<Public>, active: bool) -> Vec<Public> {
+		// Get active threshold or get the next threshold
+		let threshold = if active {
+			self.get_keygen_threshold(header)
+		} else {
+			self.get_next_keygen_threshold(header)
+		};
+		// Best authorities are taken from the on-chain reputations
+		let best_authorities: Vec<Public> = get_best_authorities(
+			threshold,
+			&authority_set.authorities,
+			&self.get_authority_reputations(header, authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
 		.collect();
 
-		// If the authority is not selected in the keygen set return
-		if find_index::<AuthorityId>(&best_authorities[..], &public).is_none() {
-			return
-		}
-
-		self.handle_setting_of_rounds(
-			&next_authorities,
-			public,
-			local_key_path,
-			queued_local_key_path,
-			header,
-		);
-
-		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
-			self.dkg_state.listening_for_active_pub_key = true;
-
-			if let Some(rounds) = self.rounds.as_mut() {
-				match rounds.start_keygen(latest_block_num) {
-					Ok(()) => {
-						info!(target: "dkg", "Keygen started for genesis authority set successfully");
-						self.active_keygen_in_progress = true;
-					},
-					Err(err) => {
-						error!("Error starting keygen {:?}", &err);
-						self.handle_dkg_error(err);
-					},
-				}
-			}
-		}
+		best_authorities		
 	}
 
-	/// sets the current rounds if there is next rounds in the Dkg worker instance
-	///
-	/// else it creates new rounds to set
-	fn handle_setting_of_rounds(
-		&mut self,
-		next_authorities: &AuthoritySet<Public>,
-		public: Public,
-		local_key_path: Option<PathBuf>,
-		queued_local_key_path: Option<PathBuf>,
-		header: &B::Header,
-	) {
-		self.rounds = if self.next_rounds.is_some() {
-			if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
-				if let Err(err) = std::fs::copy(queued_path, path) {
-					error!("Error copying queued key {:?}", &err);
-				} else {
-					debug!("Successfully copied queued key to current key");
-				}
-			}
-			self.next_rounds.take()
-		} else {
-			let is_authority = find_index(&next_authorities.authorities[..], &public).is_some();
-			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
-			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
-				Some(set_up_rounds(
-					&next_authorities,
-					&public,
-					self.get_signature_threshold(header),
-					self.get_keygen_threshold(header),
-					local_key_path,
-					&self.get_authority_reputations(header),
-				))
-			} else {
-				None
-			}
-		};
-	}
-
-	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
-		if is_queued_authorities_or_rounds_empty(self, &queued) {
-			return
+	fn handle_genesis_dkg_setup(&mut self, header: &B::Header, genesis_authority_set: AuthoritySet<Public>) {
+		// Check if the authority set is empty or if this authority set isn't actually the genesis set
+		if genesis_authority_set.authorities.is_empty() || genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
+			return;
 		}
 
-		let public = self.get_authority_public_key();
+		// Check if we've already set up the DKG for this authority set
+		if self.rounds.is_some() {
+			return;
+		}
 
 		let mut local_key_path = None;
-
 		if self.base_path.is_some() {
-			local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
+			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
 		}
+
 		let latest_block_num = self.get_latest_block_number();
 
-		// If current node is part of the queued authorities
-		// start the multiparty keygen process
-		if queued.authorities.contains(&public) {
-			// Get the best next authorities using the keygen threshold
-			let best_authorities: Vec<AuthorityId> = get_best_authorities(
-				self.get_next_keygen_threshold(header).into(),
-				&queued.authorities,
-				&self.get_authority_reputations(header),
-			)
-			.iter()
-			.map(|(_, key)| key.clone())
-			.collect();
+		// DKG keygen authorities are always taken from the best set of authorities
+		let ACTIVE = true;
+		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, genesis_authority_set, ACTIVE);
 
-			// If the next authority is not selected in the keygen set return
-			if find_index::<AuthorityId>(&best_authorities[..], &public).is_none() {
-				return
-			}
+		// Check whether the worker is in the best set or return
+		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			return
+		}
 
-			// Setting up DKG for queued authorities
-			self.next_rounds = Some(set_up_rounds(
-				&queued,
-				&public,
-				self.get_next_signature_threshold(header),
-				self.get_next_keygen_threshold(header),
-				local_key_path,
-				&self.get_authority_reputations(header),
-			));
-			self.dkg_state.listening_for_pub_key = true;
-			match self.next_rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+		self.rounds = Some(set_up_rounds(
+			&genesis_authority_set,
+			&self.get_authority_public_key(),
+			self.get_signature_threshold(header),
+			self.get_keygen_threshold(header),
+			local_key_path,
+		));
+
+		self.dkg_state.listening_for_active_pub_key = true;
+		if let Some(rounds) = self.rounds.as_mut() {
+			match rounds.start_keygen(latest_block_num) {
 				Ok(()) => {
-					info!(target: "dkg", "Keygen started for queued authority set successfully");
-					self.queued_keygen_in_progress = true;
+					info!(target: "dkg", "Keygen started for genesis authority set successfully");
+					self.active_keygen_in_progress = true;
 				},
 				Err(err) => {
 					error!("Error starting keygen {:?}", &err);
@@ -552,19 +477,68 @@ where
 		}
 	}
 
+	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
+		if is_queued_authorities_or_rounds_empty(self, &queued) {
+			return;
+		}
+
+		let mut local_key_path = None;
+		let mut queued_local_key_path = None;
+
+		if self.base_path.is_some() {
+			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
+			let _ = cleanup(queued_local_key_path.as_ref().unwrap().clone());
+		}
+		let latest_block_num = self.get_latest_block_number();
+
+		// Get the best next authorities using the keygen threshold
+		let ACTIVE = false;
+		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, queued, ACTIVE);
+
+		// Check whether the worker is in the best next set or return
+		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			return;
+		}
+
+		// Setting up DKG for queued authorities
+		self.next_rounds = Some(set_up_rounds(
+			&queued,
+			&self.get_authority_public_key(),
+			self.get_next_signature_threshold(header),
+			self.get_next_keygen_threshold(header),
+			queued_local_key_path,
+		));
+
+		self.dkg_state.listening_for_pub_key = true;
+		match self.next_rounds.as_mut().unwrap().start_keygen(latest_block_num) {
+			Ok(()) => {
+				info!(target: "dkg", "Keygen started for queued authority set successfully");
+				self.queued_keygen_in_progress = true;
+			},
+			Err(err) => {
+				error!("Error starting keygen {:?}", &err);
+				self.handle_dkg_error(err);
+			},
+		}
+	}
+
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some(latest_header) = &self.latest_header {
 			if latest_header.number() >= header.number() {
-				return
+				return;
 			}
 		}
-
 		self.latest_header = Some(header.clone());
 		listen_and_clear_offchain_storage(self, header);
 		try_resume_dkg(self, header);
 
-		self.enact_new_authorities(header);
+		if header.number() <= &NumberFor::<B>::from(1u32) {
+			self.enact_genesis_authorities(header);
+		} else {
+			self.enact_new_authorities(header);
+		}
+
 
 		try_restart_dkg(self, header);
 		send_outgoing_dkg_messages(self);
@@ -573,48 +547,46 @@ where
 		self.untrack_unsigned_proposals(header);
 	}
 
-	fn enact_new_authorities(&mut self, header: &B::Header) {
+	fn enact_genesis_authorities(&mut self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
-			// Authority set change or genesis set id triggers new voting rounds
-			//
-			// TODO: Enacting a new authority set will also implicitly 'conclude'
-			//		 the currently active DKG voting round by starting a new one.
-			if active.id != self.current_validator_set.id ||
-				(active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none())
-			{
-				debug!(target: "dkg", "🕸️  New active validator set id: {:?}", active);
-				// Setting new validator set id as curent
+			if active.id != self.current_validator_set.id && self.best_dkg_block.is_none() {
+				debug!(target: "dkg", "🕸️  Genesis validator set id: {:?}", active);
+				// Setting new validator set id as current
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-
+	
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-
+	
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
-
+	
 				self.best_dkg_block = Some(*header.number());
-
+	
 				// Setting up the DKG
-				self.handle_dkg_setup(&header, active.clone());
+				self.handle_genesis_dkg_setup(&header, active.clone());
+				// Setting up the queued DKG at genesis
 				self.handle_queued_dkg_setup(&header, queued.clone());
-
-				if !self.current_validator_set.authorities.is_empty() {
-					send_outgoing_dkg_messages(self);
-				}
-				self.dkg_state.epoch_is_over = !self.dkg_state.epoch_is_over;
-			} else {
-				// if the DKG has not been prepared / terminated, continue preparing it
-				if !self.dkg_state.accepted || self.queued_keygen_in_progress {
-					send_outgoing_dkg_messages(self);
-				}
 			}
+		}
+	}
 
-			if self.queued_validator_set.authorities != queued.authorities &&
-				!self.queued_keygen_in_progress
-			{
+	fn enact_new_authorities(&mut self, header: &B::Header) {
+		// Get the active and queued validators to check for updates
+		if let Some((active, queued)) = self.validator_set(header) {
+			// If the cached queued set id is not equal to the new queued set then update
+			// if no queued keygen is currently in progress.
+			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
+				// Rotate the queued key file contents into the local key file
+				self.rotate_local_key_files();
+				// Rotate the rounds since the authority set has changed
+				self.rounds = self.next_rounds.take();
+				// Update the validator sets
+				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
+				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(&header, queued.clone());
+				// Send outgoing messages after processing the queued DKG setup
 				send_outgoing_dkg_messages(self);
 			}
 		}
@@ -1027,7 +999,7 @@ where
 							for msg in msgs {
 								match self.verify_signature_against_authorities(msg) {
 									Ok(raw) => {
-										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: {:?}", raw);
+										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw);
 										self.process_incoming_dkg_message(raw);
 									},
 									Err(e) => {
@@ -1038,7 +1010,7 @@ where
 
 							match self.verify_signature_against_authorities(dkg_msg) {
 								Ok(raw) => {
-									debug!(target: "dkg", "🕸️  Got message from gossip engine: {:?}", raw);
+									debug!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw);
 									self.process_incoming_dkg_message(raw);
 								},
 								Err(e) => {

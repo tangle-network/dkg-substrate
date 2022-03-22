@@ -22,7 +22,7 @@ use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::{types::*, utils::select_random_set};
+use crate::{types::*, utils::{select_random_set, get_best_authorities}};
 use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
@@ -40,11 +40,8 @@ where
 	C: AtLeast32BitUnsigned + Copy,
 {
 	pub accepted: bool,
-	pub epoch_is_over: bool,
 	pub listening_for_pub_key: bool,
 	pub listening_for_active_pub_key: bool,
-	pub curr_dkg: Option<MultiPartyECDSARounds<C>>,
-	pub past_dkg: Option<MultiPartyECDSARounds<C>>,
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 
@@ -91,10 +88,6 @@ where
 	// File system storage and encryption
 	#[builder(default)]
 	local_key_path: Option<PathBuf>,
-
-	// Reputations
-	#[builder(default)]
-	reputations: HashMap<AuthorityId, i64>,
 
 	// Authorities
 	#[builder(default)]
@@ -444,6 +437,15 @@ where
 		data: Vec<u8>,
 		started_at: C,
 	) -> Result<(), DKGError> {
+		// Check if we are in the signer set
+		match self.get_offline_stage_index() {
+			Some(i) => {},
+			None => {
+				trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+				return Ok(())
+			},
+		};
+
 		if let Some(OfflineState::Finished(Ok(completed_offline))) =
 			self.offlines.remove(&round_key)
 		{
@@ -577,44 +579,12 @@ where
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
 	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
-		let (_, threshold, _parties) = self.dkg_params();
+		let (_, threshold, parties) = self.dkg_params();
+		info!(target: "dkg", "🕸️  Generating threshold signer set with threshold {}-out-of-{}", threshold, parties);
+
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		// Get the parties with non-negative reputation
-		let good_parties: Vec<u16> = self
-			.authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, a)| self.reputations.get(a).unwrap_or(&0i64) >= &0i64)
-			.map(|(index, _)| (index + 1) as u16)
-			.collect();
-		// If there aren't enough good authorities
-		let signers_set: Result<Vec<u16>, &str>;
-		if good_parties.len() <= threshold as usize {
-			// Get bad party indices and their reputations. Bad parties are those with negative
-			// reputation.
-			let mut bad_parties_and_reps: Vec<(u16, i64)> = self
-				.authorities
-				.iter()
-				.enumerate()
-				.filter(|(_index, a)| self.reputations.get(a).unwrap_or(&0i64) < &0i64)
-				.map(|(index, a)| (index + 1, *self.reputations.get(a).unwrap()))
-				.map(|(index, rep)| ((index + 1) as u16, rep))
-				.collect::<Vec<(u16, i64)>>();
-			// Sort them in descending order
-			bad_parties_and_reps.sort_by(|a, b| b.1.cmp(&a.1));
-			// Get the best bad parties to fill `threshold + 1` slots
-			let needed_bad_parties = bad_parties_and_reps
-				.iter()
-				.take((threshold as usize) + 1 - good_parties.len())
-				.map(|k| k.0)
-				.collect::<Vec<u16>>();
-			// Join the good and bad parties to get the final signers set
-			let good_and_bad_authorities: Vec<u16> =
-				good_parties.iter().chain(needed_bad_parties.iter()).map(|i| *i).collect();
-			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
-		} else {
-			signers_set = select_random_set(seed, good_parties, threshold + 1);
-		}
+		let set = (1..=self.authorities.len()).map(|x| u16::try_from(x).unwrap()).collect::<Vec<u16>>();
+		let signers_set = select_random_set(seed, set, threshold + 1);
 
 		if let Ok(signers_set) = signers_set {
 			self.set_signers(signers_set);

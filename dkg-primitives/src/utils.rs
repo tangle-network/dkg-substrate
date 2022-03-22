@@ -135,7 +135,7 @@ where
 	let mut reputations_of_authorities = authorities
 		.iter()
 		.enumerate()
-		.map(|(party_inx, id)| (party_inx + 1, reputations.get(id).unwrap_or(&0), id))
+		.map(|(index, id)| (index + 1, reputations.get(id).unwrap_or(&0), id))
 		.collect::<Vec<(_, _, _)>>();
 	reputations_of_authorities.sort_by(|a, b| b.1.cmp(a.1));
 

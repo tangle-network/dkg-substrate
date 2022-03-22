@@ -51,10 +51,6 @@ impl DKGPersistenceState {
 	pub fn new() -> Self {
 		Self { initial_check: false }
 	}
-
-	pub fn start(&mut self) {
-		self.initial_check = true;
-	}
 }
 
 pub(crate) fn store_localkey<B, C, BE>(
@@ -113,13 +109,24 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
+	// We only try to resume the dkg once even if there is no data to recover
 	if worker.dkg_persistence.initial_check {
+		return
+	} else {
+		worker.dkg_persistence.initial_check = true;
+	}
+
+	// If there is no local keystore then there is no DKG to resume.
+	// We return in this case.
+	if worker.local_keystore.is_none() {
 		return
 	}
 
-	worker.dkg_persistence.start();
-
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
+	if let Some(base_path) = worker.base_path {
+
+	}
+
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = worker.get_authority_public_key();
 		let sr25519_public = worker.get_sr25519_public_key();
@@ -204,7 +211,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_keygen_threshold(header).into(),
 					&active.authorities,
-					&worker.get_authority_reputations(header),
+					&worker.get_authority_reputations(header, active),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -218,7 +225,6 @@ where
 						worker.get_signature_threshold(header),
 						worker.get_keygen_threshold(header),
 						Some(local_key_path),
-						&worker.get_authority_reputations(header),
 					);
 
 					if local_key.is_some() {
@@ -251,7 +257,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_next_keygen_threshold(header).into(),
 					&queued.authorities,
-					&worker.get_authority_reputations(header),
+					&worker.get_authority_reputations(header, queued),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -265,7 +271,6 @@ where
 						worker.get_next_signature_threshold(header),
 						worker.get_next_keygen_threshold(header),
 						Some(queued_local_key_path),
-						&worker.get_authority_reputations(header),
 					);
 
 					if queued_local_key.is_some() {
@@ -371,7 +376,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_keygen_threshold(header).into(),
 			&authority_set.authorities,
-			&worker.get_authority_reputations(header),
+			&worker.get_authority_reputations(header, authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -385,7 +390,6 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				local_key_path,
-				&worker.get_authority_reputations(header),
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);
@@ -399,7 +403,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_next_keygen_threshold(header).into(),
 			&queued_authority_set.authorities,
-			&worker.get_authority_reputations(header),
+			&worker.get_authority_reputations(header, queued_authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -414,7 +418,6 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				queued_local_key_path,
-				&worker.get_authority_reputations(header),
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);

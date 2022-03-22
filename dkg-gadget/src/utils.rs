@@ -53,7 +53,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	signature_threshold: u16,
 	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
 	let best_authorities: Vec<AuthorityId> =
 		get_best_authorities(keygen_threshold.into(), &authority_set.authorities, &reputations)
@@ -61,11 +60,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 			.map(|(_, key)| key.clone())
 			.collect();
 	let party_inx = find_index::<AuthorityId>(&best_authorities[..], public).unwrap() + 1;
-	// Compute the reputations of only the currently selected authorities for these rounds
-	let mut best_reputations = HashMap::new();
-	best_authorities.iter().for_each(|id| {
-		best_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
-	});
 	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()
 		.round_id(authority_set.id.clone())
@@ -73,7 +67,6 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.threshold(signature_threshold)
 		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
-		.reputations(best_reputations)
 		.authorities(best_authorities)
 		.build();
 
