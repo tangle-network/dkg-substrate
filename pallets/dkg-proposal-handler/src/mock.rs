@@ -34,7 +34,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, ProposalHeader, TransactionV2, TypedChainId};
+use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
 
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
