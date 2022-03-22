@@ -17,6 +17,8 @@ codec = { package = "parity-scale-codec", version = "2.3.0", default-features = 
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 k256 = { version = "0.10.2", default-features = false, features = ["arithmetic"] }
 log = { version = "0.4.13", default-features = false }
+libsecp256k1 = "0.7.0"
+hex-literal = "0.3.4"
 
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
