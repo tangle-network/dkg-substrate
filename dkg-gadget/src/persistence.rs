@@ -204,10 +204,11 @@ where
 			}
 
 			if active.authorities.contains(&public) {
+				let round_id = active.id;
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_keygen_threshold(header).into(),
 					&active.authorities,
-					&worker.get_authority_reputations(header, active),
+					&worker.get_authority_reputations(header, &active),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -216,7 +217,8 @@ where
 				// If the authority is not selected in the keygen set return
 				if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
 					let mut rounds = set_up_rounds(
-						&active,
+						&best_authorities,
+						round_id,
 						&public,
 						worker.get_signature_threshold(header),
 						worker.get_keygen_threshold(header),
@@ -250,10 +252,11 @@ where
 			}
 
 			if queued.authorities.contains(&public) {
+				let round_id = queued.id;
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_next_keygen_threshold(header).into(),
 					&queued.authorities,
-					&worker.get_authority_reputations(header, queued),
+					&worker.get_authority_reputations(header, &queued),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -262,7 +265,8 @@ where
 				// If the authority is not selected in the keygen set return
 				if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
 					let mut rounds = set_up_rounds(
-						&queued,
+						&best_authorities,
+						round_id,
 						&public,
 						worker.get_next_signature_threshold(header),
 						worker.get_next_keygen_threshold(header),
@@ -345,8 +349,8 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker, header);
-	let mut local_key_path = None;
-	let mut queued_local_key_path = None;
+	let mut local_key_path: Option<PathBuf> = None;
+	let mut queued_local_key_path: Option<PathBuf> = None;
 
 	if worker.base_path.is_some() {
 		let base_path = worker.base_path.as_ref().unwrap();
@@ -368,11 +372,11 @@ where
 	let latest_block_num = *header.number();
 	if restart_rounds && authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
-
+		let round_id = authority_set.id;
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_keygen_threshold(header).into(),
 			&authority_set.authorities,
-			&worker.get_authority_reputations(header, authority_set),
+			&worker.get_authority_reputations(header, &authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -381,7 +385,8 @@ where
 		// If the authority is not selected in the keygen set return
 		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
 			let mut rounds = set_up_rounds(
-				&authority_set,
+				&best_authorities,
+				round_id,
 				&public,
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
@@ -396,10 +401,11 @@ where
 	}
 
 	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
+		let round_id = queued_authority_set.id;
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_next_keygen_threshold(header).into(),
 			&queued_authority_set.authorities,
-			&worker.get_authority_reputations(header, queued_authority_set),
+			&worker.get_authority_reputations(header, &queued_authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -409,7 +415,8 @@ where
 		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
 			debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
 			let mut rounds = set_up_rounds(
-				&queued_authority_set,
+				&best_authorities,
+				round_id,
 				&public,
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),

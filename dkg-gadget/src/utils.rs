@@ -20,6 +20,7 @@ use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, utils::get_best_authorities, AuthoritySet,
 	ConsensusLog, DKGApi,
 };
+use dkg_primitives::types::RoundId;
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
@@ -48,26 +49,22 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 }
 
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
-	authority_set: &AuthoritySet<AuthorityId>,
+	best_authorities: &[AuthorityId],
+	authority_set_id: RoundId,
 	public: &AuthorityId,
 	signature_threshold: u16,
 	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
 ) -> MultiPartyECDSARounds<N> {
-	let best_authorities: Vec<AuthorityId> =
-		get_best_authorities(keygen_threshold.into(), &authority_set.authorities, &reputations)
-			.iter()
-			.map(|(_, key)| key.clone())
-			.collect();
-	let party_inx = find_index::<AuthorityId>(&best_authorities[..], public).unwrap() + 1;
+	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
 	// Generate the rounds object
 	let rounds = MultiPartyECDSARounds::builder()
-		.round_id(authority_set.id.clone())
+		.round_id(authority_set_id)
 		.party_index(u16::try_from(party_inx).unwrap())
 		.threshold(signature_threshold)
 		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
-		.authorities(best_authorities)
+		.authorities(best_authorities.to_vec())
 		.build();
 
 	rounds

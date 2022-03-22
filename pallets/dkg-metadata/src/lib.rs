@@ -335,7 +335,7 @@ pub mod pallet {
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
-				if accounts.len() >= threshold as usize {
+				if accounts.len() >= (threshold + 1) as usize {
 					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
 					Self::deposit_event(Event::PublicKeySubmitted {
 						compressed_pub_key: key.clone(),
@@ -371,7 +371,7 @@ pub mod pallet {
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
-				if accounts.len() >= threshold as usize {
+				if accounts.len() >= (threshold + 1) as usize {
 					NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
 					Self::deposit_event(Event::NextPublicKeySubmitted {
 						compressed_pub_key: key.clone(),
@@ -437,13 +437,13 @@ pub mod pallet {
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			let threshold = Self::signature_threshold();
 
-			if valid_reporters.len() >= threshold as usize {
-				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
-					reporters: valid_reporters,
-				});
+			if valid_reporters.len() >= (threshold + 1) as usize {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				AuthorityReputations::<T>::insert(&offender, reputation - 1);
+				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
+					reporters: valid_reporters,
+				});
 				return Ok(().into())
 			}
 

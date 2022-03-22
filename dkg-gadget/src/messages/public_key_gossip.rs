@@ -93,7 +93,7 @@ where
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
 			let threshold = dkg_worker.get_signature_threshold(header) as usize;
-			if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+			if aggregated_public_keys.keys_and_signatures.len() >= (threshold + 1) {
 				store_aggregated_public_keys(
 					dkg_worker,
 					is_main_round,

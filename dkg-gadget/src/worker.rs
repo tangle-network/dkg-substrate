@@ -266,8 +266,8 @@ where
 	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
 	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
 	fn rotate_local_key_files(&mut self) {
-		let mut local_key_path = None;
-		let mut queued_local_key_path = None;
+		let mut local_key_path: Option<PathBuf> = None;
+		let mut queued_local_key_path: Option<PathBuf> = None;
 
 		if self.base_path.is_some() {
 			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
@@ -284,7 +284,7 @@ where
 	}
 
 	/// gets authority reputations from an header
-	pub fn get_authority_reputations(&self, header: &B::Header, authority_set: AuthoritySet<Public>) -> HashMap<Public, i64> {
+	pub fn get_authority_reputations(&self, header: &B::Header, authority_set: &AuthoritySet<Public>) -> HashMap<Public, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
@@ -415,9 +415,9 @@ where
 		};
 		// Best authorities are taken from the on-chain reputations
 		let best_authorities: Vec<Public> = get_best_authorities(
-			threshold,
+			threshold.into(),
 			&authority_set.authorities,
-			&self.get_authority_reputations(header, authority_set),
+			&self.get_authority_reputations(header, &authority_set),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -437,7 +437,7 @@ where
 			return;
 		}
 
-		let mut local_key_path = None;
+		let mut local_key_path: Option<PathBuf> = None;
 		if self.base_path.is_some() {
 			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
@@ -447,6 +447,7 @@ where
 
 		// DKG keygen authorities are always taken from the best set of authorities
 		let ACTIVE = true;
+		let round_id = genesis_authority_set.id;
 		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, genesis_authority_set, ACTIVE);
 
 		// Check whether the worker is in the best set or return
@@ -456,7 +457,8 @@ where
 		}
 
 		self.rounds = Some(set_up_rounds(
-			&genesis_authority_set,
+			&best_authorities,
+			round_id,
 			&self.get_authority_public_key(),
 			self.get_signature_threshold(header),
 			self.get_keygen_threshold(header),
@@ -483,8 +485,8 @@ where
 			return;
 		}
 
-		let mut local_key_path = None;
-		let mut queued_local_key_path = None;
+		let mut local_key_path: Option<PathBuf> = None;
+		let mut queued_local_key_path: Option<PathBuf> = None;
 
 		if self.base_path.is_some() {
 			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
@@ -494,6 +496,7 @@ where
 
 		// Get the best next authorities using the keygen threshold
 		let ACTIVE = false;
+		let round_id = queued.id;
 		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, queued, ACTIVE);
 
 		// Check whether the worker is in the best next set or return
@@ -504,7 +507,8 @@ where
 
 		// Setting up DKG for queued authorities
 		self.next_rounds = Some(set_up_rounds(
-			&queued,
+			&best_authorities,
+			round_id,
 			&self.get_authority_public_key(),
 			self.get_next_signature_threshold(header),
 			self.get_next_keygen_threshold(header),

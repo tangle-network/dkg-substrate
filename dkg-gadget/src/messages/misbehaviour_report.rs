@@ -95,7 +95,7 @@ where
 			// current threshold to determine if we have enough signatures
 			// to submit the next DKG public key.
 			let threshold = dkg_worker.get_signature_threshold(header) as usize;
-			if reports.reporters.len() >= threshold {
+			if reports.reporters.len() >= (threshold + 1) {
 				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 			}
 		},
