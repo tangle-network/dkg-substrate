@@ -129,7 +129,7 @@ where
 
 	for result in &results {
 		if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-			let _ = store_localkey(local_key, round_id, rounds.get_local_key_path(), dkg_worker);
+			let _ = store_localkey(*local_key, round_id, rounds.get_local_key_path(), dkg_worker);
 		}
 	}
 

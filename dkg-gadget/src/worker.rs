@@ -420,6 +420,7 @@ where
 	/// sets the current rounds if there is next rounds in the Dkg worker instance
 	///
 	/// else it creates new rounds to set
+	#[allow(clippy::too_many_arguments)]
 	fn handle_setting_of_rounds(
 		&mut self,
 		next_authorities: &AuthoritySet<Public>,
@@ -941,7 +942,7 @@ where
 			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+					error!(target: "dkg", "🕸️  error creating new vote: {}", e);
 					errors.push(e);
 				};
 			}

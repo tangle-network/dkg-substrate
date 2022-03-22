@@ -179,7 +179,7 @@ where
 
 						results.push(Ok(DKGResult::KeygenFinished {
 							round_id: self.round_id,
-							local_key: local_key.clone(),
+							local_key: Box::new(local_key.clone()),
 						}));
 					}
 					KeygenState::Finished(finish_result)

@@ -55,6 +55,7 @@ type Extra = (
 #[cfg(feature = "manual-seal")]
 type Extra = Option<Telemetry>;
 
+#[allow(clippy::type_complexity)]
 pub fn new_partial(
 	config: &Configuration,
 ) -> Result<

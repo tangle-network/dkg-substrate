@@ -29,6 +29,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// Wrapper state-machine for Offline rounds
+#[allow(clippy::large_enum_variant)]
 pub enum OfflineState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,

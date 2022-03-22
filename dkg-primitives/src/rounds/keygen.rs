@@ -31,6 +31,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// Wrapper state-machine for Keygen rounds
+#[allow(clippy::all)]
 pub enum KeygenState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,

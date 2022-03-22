@@ -46,6 +46,7 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 	max_thresh
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,

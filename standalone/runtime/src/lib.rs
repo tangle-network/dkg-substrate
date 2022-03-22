@@ -434,8 +434,13 @@ impl frame_support::pallet_prelude::Get<Option<(usize, sp_npos_elections::Extend
 
 pub struct Fallback<T>(sp_std::marker::PhantomData<T>);
 
-use frame_election_provider_support::{ElectionDataProvider, ElectionProvider};
-use sp_npos_elections::{Support, Supports};
+#[cfg(feature = "integration-tests")]
+use frame_election_provider_support::ElectionDataProvider;
+#[cfg(feature = "integration-tests")]
+use sp_npos_elections::Support;
+
+use frame_election_provider_support::ElectionProvider;
+use sp_npos_elections::Supports;
 
 impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallback<T> {
 	type AccountId = T::AccountId;

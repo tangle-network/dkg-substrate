@@ -374,14 +374,5 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 	let mut dkg_sig_arr: [u8; 65] = [0; 65];
 	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
 
-	return match Signature(dkg_sig_arr).try_into() {
-		Ok(sig) => {
-			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
-			Some(sig)
-		},
-		Err(err) => {
-			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
-			None
-		},
-	}
+	Some(Signature(dkg_sig_arr))
 }

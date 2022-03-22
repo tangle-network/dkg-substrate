@@ -178,7 +178,7 @@ pub struct SignParams {
 #[derive(Debug, Clone)]
 pub enum DKGResult {
 	Empty,
-	KeygenFinished { round_id: RoundId, local_key: LocalKey<Secp256k1> },
+	KeygenFinished { round_id: RoundId, local_key: Box<LocalKey<Secp256k1>> },
 }
 
 #[derive(Debug, Clone)]
@@ -200,9 +200,9 @@ pub enum DKGError {
 	NoHeader,
 }
 
-impl DKGError {
-	pub fn to_string(&self) -> String {
-		match self {
+impl fmt::Display for DKGError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let label = match self {
 			DKGError::KeygenMisbehaviour { bad_actors } =>
 				format!("Keygen misbehaviour: bad actors: {:?}", bad_actors),
 			DKGError::KeygenTimeout { bad_actors } =>
@@ -222,6 +222,7 @@ impl DKGError {
 			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
 			DKGError::SMNotFinished => "SM not finished".to_string(),
 			_ => "Unknown error".to_string(),
-		}
+		};
+		write!(f, "DKGError of type {}", label)
 	}
 }
