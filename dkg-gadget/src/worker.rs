@@ -451,6 +451,7 @@ where
 
 		// Check whether the worker is in the best set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			self.rounds = None;
 			return
 		}
 
@@ -497,6 +498,7 @@ where
 
 		// Check whether the worker is in the best next set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			self.next_rounds = None;
 			return;
 		}
 
@@ -531,18 +533,21 @@ where
 		}
 		self.latest_header = Some(header.clone());
 		listen_and_clear_offchain_storage(self, header);
+		// Attempt to resume when the worker has shut down somehow
 		try_resume_dkg(self, header);
-
+		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
 			self.enact_genesis_authorities(header);
 		} else {
 			self.enact_new_authorities(header);
 		}
-
-
+		// Identify if the worker is stalling and restart the DKG if necessary
 		try_restart_dkg(self, header);
+		// Send all outgoing messages created from any reactions from resuming, enacting, or restarting
 		send_outgoing_dkg_messages(self);
+		// Get all unsigned proposals and create offline stages for them
 		self.create_offline_stages(header);
+		// Get all unsigned proposals and check if they are ready to be signed.
 		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
 	}
@@ -566,6 +571,8 @@ where
 				self.handle_genesis_dkg_setup(&header, active.clone());
 				// Setting up the queued DKG at genesis
 				self.handle_queued_dkg_setup(&header, queued.clone());
+				// Send outgoing messages after processing the queued DKG setup
+				send_outgoing_dkg_messages(self);
 			}
 		}
 	}
