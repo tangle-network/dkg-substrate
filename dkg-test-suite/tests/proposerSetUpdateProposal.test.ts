@@ -45,7 +45,8 @@ jest.setTimeout(10000 * BLOCK_TIME);
 
 describe('Validator Node Test', () => {
 	test('should be able to  remove validator node and check threshold', async () => {
-        const provider = ganache.provider();
+        const provider = localChain.provider();
+        
         const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
 			None: 0,
 		});
@@ -124,11 +125,10 @@ describe('Validator Node Test', () => {
         let root = ethers.utils.keccak256(hash01.concat(hash23.slice(2)));
 
         console.log('root', root);
-    
-        await provider.request({ method: "evm_setTime", params:[(await contract.lastGovernorUpdateTime()).add(600000).toHexString()]});
-
-        await sleep(5000);
         
+        await provider.send('evm_increaseTime', [500]);
+        await provider.send("evm_mine") 
+
         const voteProposer0 = 
         {
           leafIndex: 0, 
@@ -136,7 +136,7 @@ describe('Validator Node Test', () => {
           proposedGovernor: '0x1111111111111111111111111111111111111111'
         };
     
-        await contract.connect(accounts[0]).voteInFavorForceSetGovernor(voteProposer0);
+        await contract.voteInFavorForceSetGovernor(voteProposer0, {from: accounts[0]});
 
         const voteProposer1 = 
         {
@@ -145,7 +145,7 @@ describe('Validator Node Test', () => {
           proposedGovernor: '0x1111111111111111111111111111111111111111'
         };
 
-        await contract.connect(accounts[1]).voteInFavorForceSetGovernor(voteProposer1);
+        await contract.voteInFavorForceSetGovernor(voteProposer1, {from: accounts[1]});
 
         const voteProposer2 = 
         {
@@ -154,7 +154,7 @@ describe('Validator Node Test', () => {
         proposedGovernor: '0x1111111111111111111111111111111111111111'
         };
 
-        await contract.connect(accounts[2]).voteInFavorForceSetGovernor(voteProposer2);
+        await contract.voteInFavorForceSetGovernor(voteProposer1, {from: accounts[2]});
 
         console.log(await contract.governor());
 	});
