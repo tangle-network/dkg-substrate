@@ -20,14 +20,14 @@ use std::vec;
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		PROPOSER_D, TEST_THRESHOLD,
+		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		TEST_THRESHOLD,
 	},
 	*,
 };
 use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
-	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
+	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder,
 };
 use dkg_runtime_primitives::{
 	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,

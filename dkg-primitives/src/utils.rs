@@ -50,7 +50,7 @@ pub fn insert_controller_account_keys_into_keystore(
 		// of the predefined nodes Alice, Bob, Charlie, Dave, Eve or Ferdie
 		"Alice" | "Bob" | "Charlie" | "Dave" | "Eve" | "Ferdie" => {
 			if chain_type == ChainType::Development || chain_type == ChainType::Local {
-				let pub_key = get_from_seed::<sr25519::Public>(&seed).encode();
+				let pub_key = get_from_seed::<sr25519::Public>(seed).encode();
 				if let Some(keystore) = key_store {
 					let _ = SyncCryptoStore::insert_unknown(
 						&*keystore,

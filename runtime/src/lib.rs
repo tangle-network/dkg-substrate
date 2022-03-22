@@ -22,7 +22,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod xcm_config;
 use codec::Encode;
-use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
+use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
@@ -293,12 +293,12 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-pub const EXISTENTIAL_DEPOSIT: u128 = 1 * MILLIUNIT;
+pub const EXISTENTIAL_DEPOSIT: u128 = MILLIUNIT;
 parameter_types! {
 	pub const ExistentialDeposit: u128 = EXISTENTIAL_DEPOSIT;
-	pub const TransferFee: u128 = 1 * MILLIUNIT;
-	pub const CreationFee: u128 = 1 * MILLIUNIT;
-	pub const TransactionByteFee: u128 = 1 * MICROUNIT;
+	pub const TransferFee: u128 = MILLIUNIT;
+	pub const CreationFee: u128 = MILLIUNIT;
+	pub const TransactionByteFee: u128 = MICROUNIT;
 	pub const MaxLocks: u32 = 50;
 	pub const MaxReserves: u32 = 50;
 	pub const OperationalFeeMultiplier: u8 = 5;
@@ -514,7 +514,7 @@ where
 		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
 		let address = AccountIdLookup::<AccountId, Index>::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (address, signature.into(), extra)))
+		Some((call, (address, signature, extra)))
 	}
 }
 
@@ -646,7 +646,7 @@ impl_runtime_apis! {
 			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
 				return Some(pub_key)
 			}
-			return None
+			None
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
@@ -658,7 +658,7 @@ impl_runtime_apis! {
 			if !dkg_pub_key.1.is_empty() {
 				return Some(dkg_pub_key.1)
 			}
-			return None
+			None
 		}
 
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {

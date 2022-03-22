@@ -55,6 +55,7 @@ type Extra = (
 #[cfg(feature = "manual-seal")]
 type Extra = Option<Telemetry>;
 
+#[allow(clippy::type_complexity)]
 pub fn new_partial(
 	config: &Configuration,
 ) -> Result<
@@ -69,7 +70,7 @@ pub fn new_partial(
 	ServiceError,
 > {
 	if config.keystore_remote.is_some() {
-		return Err(ServiceError::Other(format!("Remote Keystores are not supported.")))
+		return Err(ServiceError::Other("Remote Keystores are not supported.".to_string()))
 	}
 
 	let telemetry = config
@@ -172,7 +173,7 @@ pub fn new_partial(
 	})
 }
 
-fn remote_keystore(_url: &String) -> Result<Arc<LocalKeystore>, &'static str> {
+fn remote_keystore(_url: &str) -> Result<Arc<LocalKeystore>, &'static str> {
 	// FIXME: here would the concrete keystore be built,
 	//        must return a concrete type (NOT `LocalKeystore`) that
 	//        implements `CryptoStore` and `SyncCryptoStore`

@@ -127,7 +127,7 @@ where
 
 	pub fn get_public_key(&self) -> Option<GE> {
 		match &self.keygen {
-			KeygenState::Finished(Ok(local_key)) => Some(local_key.public_key().clone()),
+			KeygenState::Finished(Ok(local_key)) => Some(local_key.public_key()),
 			_ => None,
 		}
 	}
@@ -167,27 +167,25 @@ where
 				self.has_stalled = true;
 			}
 			results.push(keygen_proceed_res.map(|_| DKGResult::Empty));
-		} else {
-			if self.keygen.is_finished() {
-				let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
-				self.keygen = match prev_state {
-					KeygenState::Started(rounds) => {
-						let finish_result = rounds.try_finish();
-						if let Ok(local_key) = &finish_result {
-							// TODO: Understand setting signers more deeply
-							self.generate_and_set_signers(local_key);
-							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
+		} else if self.keygen.is_finished() {
+			let prev_state = mem::replace(&mut self.keygen, KeygenState::Empty);
+			self.keygen = match prev_state {
+				KeygenState::Started(rounds) => {
+					let finish_result = rounds.try_finish();
+					if let Ok(local_key) = &finish_result {
+						// TODO: Understand setting signers more deeply
+						self.generate_and_set_signers(local_key);
+						debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 
-							results.push(Ok(DKGResult::KeygenFinished {
-								round_id: self.round_id,
-								local_key: local_key.clone(),
-							}));
-						}
-						KeygenState::Finished(finish_result)
-					},
-					_ => prev_state,
-				};
-			}
+						results.push(Ok(DKGResult::KeygenFinished {
+							round_id: self.round_id,
+							local_key: Box::new(local_key.clone()),
+						}));
+					}
+					KeygenState::Finished(finish_result)
+				},
+				_ => prev_state,
+			};
 		}
 
 		let offline_keys = self.offlines.keys().cloned().collect::<Vec<_>>();
@@ -237,12 +235,8 @@ where
 	pub fn get_outgoing_messages(&mut self) -> Vec<DKGMsgPayload> {
 		trace!(target: "dkg", "🕸️  Get outgoing messages");
 
-		let mut all_messages: Vec<DKGMsgPayload> = self
-			.keygen
-			.get_outgoing()
-			.into_iter()
-			.map(|msg| DKGMsgPayload::Keygen(msg))
-			.collect();
+		let mut all_messages: Vec<DKGMsgPayload> =
+			self.keygen.get_outgoing().into_iter().map(DKGMsgPayload::Keygen).collect();
 
 		let offline_messages = self
 			.offlines
@@ -253,7 +247,7 @@ where
 				acc
 			})
 			.into_iter()
-			.map(|msg| DKGMsgPayload::Offline(msg))
+			.map(DKGMsgPayload::Offline)
 			.collect::<Vec<_>>();
 
 		let vote_messages = self
@@ -265,7 +259,7 @@ where
 				acc
 			})
 			.into_iter()
-			.map(|msg| DKGMsgPayload::Vote(msg))
+			.map(DKGMsgPayload::Vote)
 			.collect::<Vec<_>>();
 
 		all_messages.extend_from_slice(&offline_messages[..]);
@@ -288,7 +282,7 @@ where
 		return match data {
 			DKGMsgPayload::Keygen(msg) => self.keygen.handle_incoming(
 				msg,
-				at.or(Some(0u32.into()))
+				at.or_else(|| Some(0u32.into()))
 					.unwrap_or_else(|| panic!("There are no incoming messages for key gen")),
 			),
 			DKGMsgPayload::Offline(msg) => {
@@ -301,10 +295,10 @@ where
 
 				let res = offline.handle_incoming(
 					msg,
-					at.or(Some(0u32.into()))
+					at.or_else(|| Some(0u32.into()))
 						.unwrap_or_else(|| panic!("There are no incoming messages for offline")),
 				);
-				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
+				if let Err(DKGError::CriticalError { reason: _ }) = res {
 					self.offlines.remove(&key);
 				}
 				res
@@ -319,10 +313,10 @@ where
 
 				let res = vote.handle_incoming(
 					msg,
-					at.or(Some(0u32.into()))
+					at.or_else(|| Some(0u32.into()))
 						.unwrap_or_else(|| panic!("There are no incoming messages for voting")),
 				);
-				if let Err(DKGError::CriticalError { reason: _ }) = res.clone() {
+				if let Err(DKGError::CriticalError { reason: _ }) = res {
 					self.votes.remove(&key);
 				}
 				res
@@ -416,7 +410,7 @@ where
 								}
 								trace!(target: "dkg", "🕸️  Handled pending offline messages for {:?}", key);
 
-								self.offlines.insert(key.clone(), new_offline);
+								self.offlines.insert(key, new_offline);
 
 								Ok(())
 							},
@@ -451,7 +445,7 @@ where
 
 			let sign_params = self.sign_params();
 
-			match SignManual::new(hash, completed_offline.clone()) {
+			match SignManual::new(hash, completed_offline) {
 				Ok((sign_manual, sig)) => {
 					debug!(target: "dkg", "🕸️  Creating vote w/ key {:?}", &round_key);
 
@@ -494,43 +488,23 @@ where
 	}
 
 	pub fn is_keygen_in_progress(&self) -> bool {
-		match self.keygen {
-			KeygenState::Finished(_) => false,
-			_ => true,
-		}
+		!matches!(self.keygen, KeygenState::Finished(_))
 	}
 
 	pub fn is_keygen_finished(&self) -> bool {
-		match self.keygen {
-			KeygenState::Finished(_) => true,
-			_ => false,
-		}
+		matches!(self.keygen, KeygenState::Finished(_))
 	}
 
 	pub fn is_ready_to_vote(&self, round_key: Vec<u8>) -> bool {
-		if let Some(offline) = self.offlines.get(&round_key) {
-			match offline {
-				OfflineState::Finished(Ok(_)) => true,
-				_ => false,
-			}
-		} else {
-			false
-		}
+		matches!(self.offlines.get(&round_key), Some(OfflineState::Finished(Ok(_))))
 	}
 
 	pub fn has_vote_in_process(&self, round_key: Vec<u8>) -> bool {
-		return self.votes.contains_key(&round_key)
+		self.votes.contains_key(&round_key)
 	}
 
 	pub fn has_finished_rounds(&self) -> bool {
-		let finished = self
-			.votes
-			.values()
-			.filter(|v| match v {
-				SignState::Finished(_) => true,
-				_ => false,
-			})
-			.count();
+		let finished = self.votes.values().filter(|v| matches!(v, SignState::Finished(_))).count();
 
 		finished > 0
 	}
@@ -610,7 +584,7 @@ where
 				.collect::<Vec<u16>>();
 			// Join the good and bad parties to get the final signers set
 			let good_and_bad_authorities: Vec<u16> =
-				good_parties.iter().chain(needed_bad_parties.iter()).map(|i| *i).collect();
+				good_parties.iter().chain(needed_bad_parties.iter()).copied().collect();
 			signers_set = select_random_set(seed, good_and_bad_authorities, threshold + 1);
 		} else {
 			signers_set = select_random_set(seed, good_parties, threshold + 1);

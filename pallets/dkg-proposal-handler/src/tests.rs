@@ -20,9 +20,9 @@ use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, EIP2930Transaction,
-	OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader,
-	ProposalKind, ProposalNonce, TransactionAction, TransactionV2, TypedChainId, U256,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, OffchainSignedProposals,
+	Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader, ProposalKind, TransactionV2,
+	TypedChainId,
 };
 use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
@@ -377,7 +377,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 	match chain {
 		TypedChainId::Evm(_) => {
-			let mut header = ProposalHeader::new(
+			let header = ProposalHeader::new(
 				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					1, 0, 0, 0, 0, 1,
@@ -389,7 +389,7 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 			header
 		},
 		TypedChainId::Substrate(_) => {
-			let mut header = ProposalHeader::new(
+			let header = ProposalHeader::new(
 				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					2, 0, 0, 0, 0, 1,
@@ -402,7 +402,7 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 		},
 		_ => {
 			// Dummy Header
-			let mut header = ProposalHeader::new(
+			let header = ProposalHeader::new(
 				[
 					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 					0, 0, 0, 0, 0, 1,
@@ -418,7 +418,7 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 
 pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Proposal {
 	// Create the proposal Header
-	let mut header = make_header(chain);
+	let header = make_header(chain);
 	let mut buf = vec![];
 	header.encode_to(&mut buf);
 	// N bytes parameter

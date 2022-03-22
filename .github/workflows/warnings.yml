@@ -1,0 +1,38 @@
+name: Warnings
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  cargo-check:
+    name: Check for warnings
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v2
+      - uses: hecrj/setup-rust-action@v1
+      - run: cargo check --workspace --all-targets --verbose --no-default-features
+      - run: cargo check --workspace --all-targets --verbose --all-features
+
+  clippy:
+    name: Lint with Clippy
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
+    steps:
+        - uses: actions/checkout@v2
+        - uses: hecrj/setup-rust-action@v1
+          with:
+            components: clippy
+        - run: cargo clippy --workspace --all-targets --verbose --no-default-features
+        - run: cargo clippy --workspace --all-targets --verbose --all-features

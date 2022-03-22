@@ -100,6 +100,12 @@ impl PreSignRounds {
 	}
 }
 
+impl Default for PreSignRounds {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<C> DKGRoundsSM<DKGVoteMessage, Vec<DKGVoteMessage>, C> for PreSignRounds
 where
 	C: AtLeast32BitUnsigned + Copy,
@@ -142,10 +148,12 @@ where
 		partial_sig: PartialSignature,
 		sign_manual: SignManual,
 	) -> Self {
-		let mut sign_tracker = DKGRoundTracker::default();
-		sign_tracker.sign_manual = Some(sign_manual);
-		sign_tracker.payload = Some(payload);
-		sign_tracker.started_at = started_at;
+		let sign_tracker = DKGRoundTracker::<std::vec::Vec<u8>, C> {
+			sign_manual: Some(sign_manual),
+			payload: Some(payload),
+			started_at,
+			..Default::default()
+		};
 
 		let mut sign_outgoing_msgs: Vec<DKGVoteMessage> = Vec::new();
 		let serialized = serde_json::to_string(&partial_sig).unwrap();
@@ -181,7 +189,7 @@ where
 				.signers
 				.iter()
 				.filter(|v| !signed_by.contains(*v))
-				.map(|v| *v)
+				.copied()
 				.collect();
 
 			let mut bad_actors: Vec<u16> = Vec::new();
@@ -237,7 +245,7 @@ where
 
 		if let Err(err) = sig {
 			println!("{:?}", err);
-			return Err(err)
+			Err(err)
 		} else if let (Some(payload), Ok(sig)) = (payload, sig) {
 			match convert_signature(&sig) {
 				Some(signature) => {
@@ -297,7 +305,7 @@ where
 	}
 
 	fn get_signed_parties(&self) -> Vec<u16> {
-		self.votes.keys().map(|v| *v).collect()
+		self.votes.keys().copied().collect()
 	}
 
 	fn is_done(&self, threshold: u16) -> bool {
@@ -366,14 +374,5 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 	let mut dkg_sig_arr: [u8; 65] = [0; 65];
 	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
 
-	return match Signature(dkg_sig_arr).try_into() {
-		Ok(sig) => {
-			debug!(target: "dkg", "🕸️  Converted signature {:?}", &sig);
-			Some(sig)
-		},
-		Err(err) => {
-			warn!(target: "dkg", "🕸️  Error converting signature {:?}", err);
-			None
-		},
-	}
+	Some(Signature(dkg_sig_arr))
 }
