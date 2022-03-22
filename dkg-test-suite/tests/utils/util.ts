@@ -57,6 +57,18 @@ beforeAll(async () => {
 			balance: ethers.utils.parseEther('1000').toHexString(),
 			secretKey: ACC2_PK,
 		},
+		{
+			balance: ethers.utils.parseEther('1000').toHexString(),
+			secretKey: '0x79c3b7fc0b7697b9414cb87adcb37317d1cab32818ae18c0e97ad76395d1fdcf',
+		},
+		{
+			balance: ethers.utils.parseEther('1000').toHexString(),
+			secretKey: '0xf8d74108dbe199c4a6e4ef457046db37c325ba3f709b14cabfa1885663e4c589',
+		},
+		{
+			balance: ethers.utils.parseEther('1000').toHexString(),
+			secretKey: '0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854',
+		},
 	]);
 	localChain2 = new LocalChain('local2', 5002, [
 		{

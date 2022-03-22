@@ -17,6 +17,7 @@
 import 'jest-extended';
 import {BLOCK_TIME, SECONDS} from '../src/constants';
 import {
+    ethAddressFromUncompressedPublicKey,
 	provider,
 	sleep, startStandaloneNode, waitForEvent, waitForTheNextSession
 } from '../src/utils';
@@ -76,12 +77,6 @@ describe('Validator Node Test', () => {
         const averageSessionLength = BigNumber.from(`0x${proposalData.slice(64, 80)}`);
         const numOfProposers = BigNumber.from(`0x${proposalData.slice(80, 88)}`);
         const proposalNonce = BigNumber.from(`0x${proposalData.slice(88, 96)}`);
-        
-        console.log(proposalData);
-        console.log(proposerSetRoot);
-        console.log(averageSessionLength);
-        console.log(numOfProposers);
-        console.log(proposalNonce);
 
         const tx = await contract.updateProposerSetData(
             proposerSetRoot,
@@ -92,17 +87,17 @@ describe('Validator Node Test', () => {
         );
         await expect(tx.wait()).toResolve();
 
-        // const contractProposerSetRoot = await bridgeSide.contract.proposerSetRoot();
-		// expect(proposerSetRoot).toEqual(contractProposerSetRoot);
+        const contractProposerSetRoot = await bridgeSide.contract.proposerSetRoot();
+		expect(proposerSetRoot).toEqual(contractProposerSetRoot);
 
-        // const contractAverageSessionLength = await bridgeSide.contract.averageSessionLengthInMillisecs();
-		// expect(averageSessionLength).toEqual(BigNumber.from(contractAverageSessionLength));
+        const contractAverageSessionLength = await bridgeSide.contract.averageSessionLengthInMillisecs();
+		expect(averageSessionLength).toEqual(BigNumber.from(contractAverageSessionLength));
 
-        // const contractNumOfProposers = await bridgeSide.contract.numOfProposers();
-		// expect(numOfProposers).toEqual(BigNumber.from(contractNumOfProposers));
+        const contractNumOfProposers = await bridgeSide.contract.numOfProposers();
+		expect(numOfProposers).toEqual(BigNumber.from(contractNumOfProposers));
 
-        // const contractProposalNonce = await bridgeSide.contract.proposalNonce();
-		// expect(proposalNonce).toEqual(BigNumber.from(contractProposalNonce));
+        const contractProposalNonce = await bridgeSide.contract.proposerSetUpdateNonce();
+		expect(proposalNonce).toEqual(BigNumber.from(contractProposalNonce));
 
         // // Now the proposer set root on the contract has been updated
 
@@ -113,8 +108,6 @@ describe('Validator Node Test', () => {
             accounts.push(account.toHuman());
         }
 
-        console.log(accounts);
-
         let hash0 = ethers.utils.keccak256(accounts[0]);
         let hash1 = ethers.utils.keccak256(accounts[1]);
         let hash2 = ethers.utils.keccak256(accounts[2]);
@@ -123,11 +116,15 @@ describe('Validator Node Test', () => {
         let hash01 = ethers.utils.keccak256(hash0.concat(hash1.slice(2)));
         let hash23 = ethers.utils.keccak256(hash2.concat(hash3.slice(2)));
         let root = ethers.utils.keccak256(hash01.concat(hash23.slice(2)));
-
-        console.log('root', root);
         
-        await provider.send('evm_increaseTime', [500]);
-        await provider.send("evm_mine") 
+        await provider.send('evm_increaseTime', [600]);
+        await provider.send("evm_mine");
+
+        const signer0 = new ethers.Wallet('0x79c3b7fc0b7697b9414cb87adcb37317d1cab32818ae18c0e97ad76395d1fdcf');
+
+        const signer1 = new ethers.Wallet('0xf8d74108dbe199c4a6e4ef457046db37c325ba3f709b14cabfa1885663e4c589');
+
+        const signer2 = new ethers.Wallet('0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854');
 
         const voteProposer0 = 
         {
@@ -136,7 +133,7 @@ describe('Validator Node Test', () => {
           proposedGovernor: '0x1111111111111111111111111111111111111111'
         };
     
-        await contract.voteInFavorForceSetGovernor(voteProposer0, {from: accounts[0]});
+        await contract.connect(provider.getSigner(signer0.address)).voteInFavorForceSetGovernor(voteProposer0);
 
         const voteProposer1 = 
         {
@@ -145,18 +142,9 @@ describe('Validator Node Test', () => {
           proposedGovernor: '0x1111111111111111111111111111111111111111'
         };
 
-        await contract.voteInFavorForceSetGovernor(voteProposer1, {from: accounts[1]});
+        await contract.connect(provider.getSigner(signer1.address)).voteInFavorForceSetGovernor(voteProposer1);
 
-        const voteProposer2 = 
-        {
-        leafIndex: 2, 
-        siblingPathNodes:[hash3, hash01], 
-        proposedGovernor: '0x1111111111111111111111111111111111111111'
-        };
-
-        await contract.voteInFavorForceSetGovernor(voteProposer1, {from: accounts[2]});
-
-        console.log(await contract.governor());
+        expect('0x1111111111111111111111111111111111111111').toEqual(await contract.governor());
 	});
 
     

@@ -806,16 +806,16 @@ fn should_calculate_corrrect_proposer_set_root() {
 		let proposer_a_address = mock_ecdsa_key(3);
 		let proposer_b_address = mock_ecdsa_key(1);
 		let proposer_c_address = mock_ecdsa_key(2);
-		
+
 		let leaf0 = keccak_256(&proposer_a_address[..]);
 		let leaf1 = keccak_256(&proposer_b_address[..]);
 		let leaf2 = keccak_256(&proposer_c_address[..]);
 		let leaf3 = keccak_256(&[0u8]);
-		
+
 		let mut node01_vec = leaf0.to_vec();
 		node01_vec.extend_from_slice(&leaf1);
 		let node01 = keccak_256(&node01_vec[..]);
-		
+
 		let mut node23_vec = leaf2.to_vec();
 		node23_vec.extend_from_slice(&leaf3);
 		let node23 = keccak_256(&node23_vec[..]);
@@ -835,11 +835,11 @@ fn should_calculate_corrrect_proposer_set_root() {
 		let leaf1 = keccak_256(&proposer_b_address[..]);
 		let leaf2 = keccak_256(&proposer_c_address[..]);
 		let leaf3 = keccak_256(&proposer_d_address[..]);
-		
+
 		let mut node01_vec = leaf0.to_vec();
 		node01_vec.extend_from_slice(&leaf1);
 		let node01 = keccak_256(&node01_vec[..]);
-		
+
 		let mut node23_vec = leaf2.to_vec();
 		node23_vec.extend_from_slice(&leaf3);
 		let node23 = keccak_256(&node23_vec[..]);
@@ -849,5 +849,3 @@ fn should_calculate_corrrect_proposer_set_root() {
 		assert_eq!(DKGProposals::get_proposer_set_tree_root(), keccak_256(&root));
 	})
 }
-
-
