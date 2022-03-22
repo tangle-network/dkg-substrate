@@ -912,7 +912,6 @@ where
 		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
 		let _at: BlockId<B> = BlockId::hash(header.hash());
 		let current_block_number = *header.number();
-		metric_set!(self, dkg_votes_sent, &keys.len());
 		for key in keys {
 			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
 			let diff = current_block_number - *voted_at;
