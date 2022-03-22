@@ -622,7 +622,7 @@ where
 mod tests {
 	use super::{KeygenState, MultiPartyECDSARounds};
 	use codec::Encode;
-
+	#[allow(clippy::ptr_arg)]
 	fn check_all_parties_have_public_key(parties: &Vec<MultiPartyECDSARounds<u32>>) {
 		for party in parties.iter() {
 			if party.get_public_key().is_none() {
@@ -631,6 +631,7 @@ mod tests {
 		}
 	}
 
+	#[allow(clippy::ptr_arg)]
 	fn check_all_reached_offline_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
 			match &party.keygen {
@@ -641,6 +642,7 @@ mod tests {
 		true
 	}
 
+	#[allow(clippy::ptr_arg)]
 	fn check_all_reached_manual_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		let round_key = 1u32.encode();
 		for party in parties.iter() {
@@ -651,6 +653,7 @@ mod tests {
 		true
 	}
 
+	#[allow(clippy::ptr_arg)]
 	fn check_all_signatures_ready(parties: &Vec<MultiPartyECDSARounds<u32>>) -> bool {
 		for party in parties.iter() {
 			if party.is_signer() && !party.has_finished_rounds() {
@@ -661,7 +664,7 @@ mod tests {
 	}
 
 	fn check_all_signatures_correct(parties: &mut Vec<MultiPartyECDSARounds<u32>>) {
-		for party in &mut parties.into_iter() {
+		for party in &mut parties.iter_mut() {
 			if party.is_signer() {
 				let mut finished_rounds = party.get_finished_rounds();
 
@@ -697,7 +700,7 @@ mod tests {
 
 		let mut msgs_pull = vec![];
 
-		for party in &mut parties.into_iter() {
+		for party in &mut parties.iter_mut() {
 			let proceed_res = party.proceed(0);
 			for res in proceed_res {
 				if let Err(err) = res {
@@ -711,7 +714,7 @@ mod tests {
 		for _i in 1..100 {
 			let msgs_pull_frozen = msgs_pull.split_off(0);
 
-			for party in &mut parties.into_iter() {
+			for party in &mut parties.iter_mut() {
 				for msg_frozen in msgs_pull_frozen.iter() {
 					match party.handle_incoming(msg_frozen.clone(), None) {
 						Ok(()) => (),
@@ -721,7 +724,7 @@ mod tests {
 				msgs_pull.append(&mut party.get_outgoing_messages());
 			}
 
-			for party in &mut parties.into_iter() {
+			for party in &mut parties.iter_mut() {
 				let proceed_res = party.proceed(0);
 				for res in proceed_res {
 					if let Err(err) = res {
@@ -761,12 +764,12 @@ mod tests {
 		// Running Keygen stage
 		println!("Running Keygen");
 		run_simulation(&mut parties, check_all_reached_offline_ready);
-		check_all_parties_have_public_key(&mut &parties);
+		check_all_parties_have_public_key(&parties);
 
 		// Running Offline stage
 		println!("Running Offline");
 		let parties_refs = &mut parties;
-		for party in parties_refs.into_iter() {
+		for party in parties_refs.iter_mut() {
 			println!("Creating offline stage");
 			match party.create_offline_stage(round_key.clone(), 0) {
 				Ok(()) => (),
@@ -778,7 +781,7 @@ mod tests {
 		// Running Sign stage
 		println!("Running Sign");
 		let parties_refs = &mut parties;
-		for party in &mut parties_refs.into_iter() {
+		for party in &mut parties_refs.iter_mut() {
 			println!("Vote for party {}", party.party_index);
 			match party.vote(round_key.clone(), "Webb".encode(), 0) {
 				Ok(()) => (),

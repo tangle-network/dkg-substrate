@@ -340,9 +340,5 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.clone(),
-		signature: sig_vec,
-	}
+	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
 }

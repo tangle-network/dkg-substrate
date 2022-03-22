@@ -196,7 +196,7 @@ mod tests {
 	#[test]
 	fn test_convert_to_checksum_eth_address() {
 		let test = |addr: &str| {
-			assert_eq!(addr, &convert_to_checksum_eth_address(&addr).unwrap());
+			assert_eq!(addr, &convert_to_checksum_eth_address(addr).unwrap());
 		};
 
 		test("5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");

@@ -176,7 +176,7 @@ mod tests {
 		let mut random_set = Vec::new();
 		for _ in 0..100 {
 			let new_set = select_random_set(&seed, set.clone(), 10).unwrap();
-			if random_set.len() > 0 {
+			if !random_set.is_empty() {
 				assert!(random_set == new_set);
 			}
 			random_set = new_set;
