@@ -97,11 +97,9 @@ pub struct ExportGenesisWasmCommand {
 }
 
 #[derive(Debug, clap::Parser)]
-#[clap(settings = &[
-	clap::AppSettings::GlobalVersion,
-	clap::AppSettings::ArgsNegateSubcommands,
-	clap::AppSettings::SubcommandsNegateReqs,
-])]
+#[clap(propagate_version = true)]
+#[clap(subcommand_negates_reqs = true)]
+#[clap(args_conflicts_with_subcommands = true)]
 pub struct Cli {
 	#[clap(subcommand)]
 	pub subcommand: Option<Subcommand>,
