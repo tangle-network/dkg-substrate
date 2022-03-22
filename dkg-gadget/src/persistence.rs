@@ -123,10 +123,6 @@ where
 	}
 
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
-	if let Some(base_path) = worker.base_path {
-
-	}
-
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = worker.get_authority_public_key();
 		let sr25519_public = worker.get_sr25519_public_key();
