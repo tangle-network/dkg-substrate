@@ -367,7 +367,7 @@ pub mod pallet {
 			let next_authorities = Self::next_authorities_accounts();
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
-			let threshold = Self::signature_threshold();
+			let threshold = Self::next_signature_threshold();
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
