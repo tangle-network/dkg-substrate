@@ -274,7 +274,7 @@ where
 			msg.receiver.is_none(),
 			msg.body,
 		);
-		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
+		trace!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
 		match offline_stage.handle_incoming(msg.clone()) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {

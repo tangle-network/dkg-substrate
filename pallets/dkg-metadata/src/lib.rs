@@ -331,7 +331,7 @@ pub mod pallet {
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-			let threshold = Self::signature_threshold();
+			let threshold = Self::next_signature_threshold();
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {

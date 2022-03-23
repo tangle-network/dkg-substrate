@@ -266,7 +266,7 @@ where
 			msg.receiver.is_none(),
 			msg.body,
 		);
-		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
+		trace!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
 		match keygen.handle_incoming(msg.clone()) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {

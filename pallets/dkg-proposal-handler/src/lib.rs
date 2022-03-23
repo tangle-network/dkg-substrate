@@ -555,13 +555,13 @@ impl<T: Config> Pallet<T> {
 			match res {
 				Ok(Some(mut prop_wrapper)) => {
 					// log the proposals
-					frame_support::log::debug!(
+					frame_support::log::trace!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals: {:?}",
 						prop_wrapper.proposals
 					);
 					// log how many proposal batches are left
-					frame_support::log::debug!(
+					frame_support::log::trace!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()

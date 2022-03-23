@@ -122,8 +122,6 @@ where
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
-	/// Best block we received a GRANDPA notification for
-	best_grandpa_block: NumberFor<B>,
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
@@ -194,7 +192,6 @@ where
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
 			block_import_notification: client.import_notification_stream(),
-			best_grandpa_block: client.info().finalized_number,
 			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			queued_validator_set: AuthoritySet::empty(),
@@ -294,7 +291,9 @@ where
 			.client
 			.runtime_api()
 			.get_reputations(&at, authority_set.authorities.clone())
-			.expect("get reputations is always available");
+			.unwrap_or_else(|_| {
+				authority_set.authorities.iter().map(|id| (id.clone(), 0)).collect()
+			});
 		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
 		for (id, rep) in reputations {
 			reputation_map.insert(id, rep);
@@ -462,10 +461,9 @@ where
 		let latest_block_num = self.get_latest_block_number();
 
 		// DKG keygen authorities are always taken from the best set of authorities
-		let ACTIVE = true;
 		let round_id = genesis_authority_set.id;
 		let best_authorities: Vec<Public> =
-			self.get_best_authority_keys(header, genesis_authority_set, ACTIVE);
+			self.get_best_authority_keys(header, genesis_authority_set, true);
 
 		// Check whether the worker is in the best set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
@@ -502,7 +500,6 @@ where
 			return
 		}
 
-		let mut local_key_path: Option<PathBuf> = None;
 		let mut queued_local_key_path: Option<PathBuf> = None;
 
 		if self.base_path.is_some() {
@@ -512,14 +509,15 @@ where
 		let latest_block_num = self.get_latest_block_number();
 
 		// Get the best next authorities using the keygen threshold
-		let ACTIVE = false;
 		let round_id = queued.id;
-		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, queued, ACTIVE);
-
+		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, queued, false);
 		// Check whether the worker is in the best next set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 			self.next_rounds = None;
 			return
+		} else {
+			info!(target: "dkg", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 		}
 
 		// Setting up DKG for queued authorities
@@ -533,15 +531,17 @@ where
 		));
 
 		self.dkg_state.listening_for_pub_key = true;
-		match self.next_rounds.as_mut().unwrap().start_keygen(latest_block_num) {
-			Ok(()) => {
-				info!(target: "dkg", "Keygen started for queued authority set successfully");
-				self.queued_keygen_in_progress = true;
-			},
-			Err(err) => {
-				error!("Error starting keygen {:?}", &err);
-				self.handle_dkg_error(err);
-			},
+		if let Some(rounds) = self.next_rounds.as_mut() {
+			match rounds.start_keygen(latest_block_num) {
+				Ok(()) => {
+					info!(target: "dkg", "Keygen started for queued authority set successfully");
+					self.queued_keygen_in_progress = true;
+				},
+				Err(err) => {
+					error!("Error starting keygen {:?}", &err);
+					self.handle_dkg_error(err);
+				},
+			}
 		}
 	}
 
@@ -577,19 +577,24 @@ where
 
 	fn enact_genesis_authorities(&mut self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
-			if active.id == GENESIS_AUTHORITY_SET_ID {
-				debug!(target: "dkg", "🕸️  Genesis validator set id: {:?}", active);
+			let best_authorities: Vec<Public> =
+				self.get_best_authority_keys(header, queued.clone(), false);
+			// Check whether the worker is in the best next set or return
+			if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key())
+				.is_none()
+			{
+				self.next_rounds = None;
+				return
+			}
+
+			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
+				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				// Setting new validator set id as current
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-
-				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
-
 				self.best_dkg_block = Some(*header.number());
-
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(&header, active.clone());
 				// Setting up the queued DKG at genesis
@@ -606,7 +611,7 @@ where
 			// If the cached queued set id is not equal to the new queued set then update
 			// if no queued keygen is currently in progress.
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
-				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
+				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				// Rotate the queued key file contents into the local key file
 				self.rotate_local_key_files();
 				// Rotate the rounds since the authority set has changed
@@ -629,10 +634,6 @@ where
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
 		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
-
-		// update best GRANDPA finalized block we have seen
-		self.best_grandpa_block = *notification.header.number();
-
 		self.process_block_notification(&notification.header);
 	}
 
@@ -784,11 +785,7 @@ where
 	}
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
-		let round_id = if let Some(rounds) = &self.rounds {
-			rounds.get_id()
-		} else {
-			return
-		};
+		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { return };
 
 		match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
