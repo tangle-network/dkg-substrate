@@ -124,7 +124,7 @@ use sp_runtime::{
 	traits::{IsMember, Member},
 	DispatchError, Permill, RuntimeAppPublic,
 };
-use sp_std::{borrow::ToOwned, collections::btree_map::BTreeMap, convert::TryFrom, prelude::*};
+use sp_std::{borrow::ToOwned, collections::btree_map::BTreeMap, prelude::*};
 
 pub mod types;
 use types::RoundMetadata;

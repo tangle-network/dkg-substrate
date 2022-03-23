@@ -723,13 +723,12 @@ fn session_change_should_create_proposer_set_update_proposal() {
 
 		roll_to(41);
 
-		assert!(
+		assert_eq!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
 				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
 			)
 			.is_some(),
-			"{}",
 			false
 		);
 
