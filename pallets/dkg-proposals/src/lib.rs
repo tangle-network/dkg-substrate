@@ -788,11 +788,11 @@ impl<T: Config> Pallet<T> {
 	/// It is expected that the size of the returned vector is a power of 2.
 	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = Proposers::<T>::iter_keys();
+		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
 		// Check for each key that the proposer is valid (should return true)
 		let mut base_layer: Vec<Vec<u8>> = proposer_keys
 			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))
-			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x).encode()[..]).to_vec())
+			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x)[..]).to_vec())
 			.collect();
 		// Pad base_layer to have length 2^height
 		let two = 2;
@@ -897,10 +897,12 @@ impl<T: Config>
 pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
-		use k256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey};
+		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		use sp_core::crypto::ByteArray;
-
-		PublicKey::from_sec1_bytes(a.as_slice())
+		let x = VerifyingKey::from_sec1_bytes(
+			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a),
+		);
+		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
 			.map(|pub_key| {
 				// uncompress the key
 				let uncompressed = pub_key.to_encoded_point(false);
