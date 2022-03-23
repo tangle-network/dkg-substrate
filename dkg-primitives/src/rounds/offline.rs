@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 
 use sp_runtime::traits::AtLeast32BitUnsigned;
@@ -287,7 +287,7 @@ where
 				error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
 			},
 		}
-		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
+		trace!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
 
 		Ok(())
 	}

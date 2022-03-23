@@ -56,7 +56,7 @@ where
 
 	match dkg_msg.payload {
 		DKGMsgPayload::PublicKeyBroadcast(msg) => {
-			debug!(target: "dkg", "Received public key broadcast");
+			debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
 
 			let is_main_round = {
 				if dkg_worker.rounds.is_some() {

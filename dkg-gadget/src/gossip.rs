@@ -58,7 +58,6 @@ where
 		data: &[u8],
 	) -> ValidationResult<B::Hash> {
 		let mut data_copy = data;
-		debug!(target: "dkg", "🕸️  Got a signed message ({:?} bytes) from: {:?}", data_copy.len(), sender);
 		match SignedDKGMessage::<Public>::decode(&mut data_copy) {
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got a signed dkg message: {:?}, from: {:?}", msg, sender);

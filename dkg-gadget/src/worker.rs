@@ -1023,7 +1023,7 @@ where
 							for msg in msgs {
 								match self.verify_signature_against_authorities(msg) {
 									Ok(raw) => {
-										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw.encoded_size());
+										trace!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw.encoded_size());
 										self.process_incoming_dkg_message(raw);
 									},
 									Err(e) => {
@@ -1034,7 +1034,7 @@ where
 
 							match self.verify_signature_against_authorities(dkg_msg) {
 								Ok(raw) => {
-									debug!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw.encoded_size());
+									trace!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw.encoded_size());
 									self.process_incoming_dkg_message(raw);
 								},
 								Err(e) => {
