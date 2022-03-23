@@ -14,12 +14,16 @@
 //
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
-use sc_client_api::BlockBackend;
+use sc_client_api::{BlockBackend, ExecutorProvider};
+use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 use sc_executor::NativeElseWasmExecutor;
+use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
 use sc_service::{error::Error as ServiceError, BasePath, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
-use std::sync::Arc;
+use sp_consensus::SlotData;
+use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
+use std::{sync::Arc, time::Duration};
 
 /// Native executor instance.
 pub struct RuntimeExecutor;
@@ -238,10 +242,10 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	}
 
 	let role = config.role.clone();
-	let _force_authoring = config.force_authoring;
-	let _backoff_authoring_blocks: Option<()> = None;
-	let _name = config.network.node_name.clone();
-	let _enable_grandpa = !config.disable_grandpa;
+	let force_authoring = config.force_authoring;
+	let backoff_authoring_blocks: Option<()> = None;
+	let name = config.network.node_name.clone();
+	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
 
 	let base_path = if config.base_path.is_some() {
@@ -280,7 +284,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 
 	// if the node isn't actively participating in consensus then it doesn't
 	// need a keystore, regardless of which protocol we use below.
-	let _keystore =
+	let keystore =
 		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
 
 	let rpc_client = client.clone();
@@ -401,7 +405,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	};
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-		network,
+		network: network.clone(),
 		client: rpc_client,
 		keystore: keystore_container.sync_keystore(),
 		task_manager: &mut task_manager,
