@@ -46,7 +46,7 @@ benchmarks! {
 		let bytes = vec![0u8; c as usize];
 	}: _<T::Origin>(admin, resource_id, bytes)
 	verify {
-		assert!(Pallet::<T>::resource_exists(resource_id) == true);
+		assert!(Pallet::<T>::resource_exists(resource_id));
 	}
 
 	remove_resource {
@@ -56,16 +56,16 @@ benchmarks! {
 		Pallet::<T>::register_resource(resource_id, bytes).unwrap();
 	}: _<T::Origin>(admin, resource_id)
 	verify {
-		assert!(Pallet::<T>::resource_exists(resource_id) == false);
+		assert!(!Pallet::<T>::resource_exists(resource_id));
 	}
 
 	whitelist_chain {
 		let admin = T::AdminOrigin::successful_origin();
-		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER.into());
+		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		// let chain_id = ChainIdType::Substrate(CHAIN_IDENTIFIER);
-	}: _<T::Origin>(admin, chain_id.clone())
+	}: _<T::Origin>(admin, chain_id)
 	verify {
-		assert_last_event::<T>(Event::ChainWhitelisted{ chain_id: chain_id.clone()}.into());
+		assert_last_event::<T>(Event::ChainWhitelisted{ chain_id}.into());
 	}
 
 	add_proposer {
@@ -97,20 +97,20 @@ benchmarks! {
 		let bytes = vec![0u8; 12];
 		Pallet::<T>::register_resource(resource_id, bytes).unwrap();
 		let nonce = 1;
-		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER.into());
+		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
 		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
 		Proposers::<T>::insert(caller.clone(), true);
-		Pallet::<T>::whitelist(chain_id.clone()).unwrap();
+		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id.clone(), &proposal_bytes, true).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, true).unwrap();
 		}
-	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id.clone(),  resource_id, proposal_bytes)
+	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal_bytes)
 	verify {
-		assert_last_event::<T>(Event::VoteFor{ chain_id: chain_id.clone(), proposal_nonce: nonce.into(), who: caller}.into());
+		assert_last_event::<T>(Event::VoteFor{ chain_id, proposal_nonce: nonce.into(), who: caller}.into());
 	}
 
 	reject_proposal {
@@ -120,21 +120,21 @@ benchmarks! {
 		let bytes = vec![0u8; 12];
 		Pallet::<T>::register_resource(resource_id, bytes).unwrap();
 		let nonce = 1;
-		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER.into());
+		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
 		let bytes = vec![0u8; 12];
 		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
 		Proposers::<T>::insert(caller.clone(), true);
-		Pallet::<T>::whitelist(chain_id.clone()).unwrap();
+		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id.clone(), &proposal_bytes, false).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, false).unwrap();
 		}
-	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id.clone(),  resource_id, proposal_bytes)
+	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal_bytes)
 	verify {
-		assert_last_event::<T>(Event::VoteAgainst{ chain_id: chain_id.clone(), proposal_nonce: nonce.into(), who: caller}.into());
+		assert_last_event::<T>(Event::VoteAgainst{ chain_id, proposal_nonce: nonce.into(), who: caller}.into());
 	}
 
 	eval_vote_state {
@@ -142,22 +142,22 @@ benchmarks! {
 		let caller: T::AccountId = whitelisted_caller();
 		let bytes = vec![0u8; 12];
 		let nonce: ProposalNonce = 1.into();
-		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER.into());
+		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
 		let bytes = vec![0u8; 12];
 		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
 		Proposers::<T>::insert(caller.clone(), true);
-		Pallet::<T>::whitelist(chain_id.clone()).unwrap();
+		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id.clone(), &proposal_bytes, false).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, false).unwrap();
 		}
 
-		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id.clone(), &proposal_bytes, true).unwrap();
-	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id.clone(),  proposal_bytes.clone())
+		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id, &proposal_bytes, true).unwrap();
+	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes.clone())
 	verify {
-		assert!(Votes::<T>::get(chain_id.clone(), (nonce, proposal_bytes)) != None);
+		assert!(Votes::<T>::get(chain_id, (nonce, proposal_bytes)) != None);
 	}
 }

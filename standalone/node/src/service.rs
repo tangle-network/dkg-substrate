@@ -401,7 +401,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	};
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-		network: network.clone(),
+		network,
 		client: rpc_client,
 		keystore: keystore_container.sync_keystore(),
 		task_manager: &mut task_manager,

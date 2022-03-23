@@ -58,11 +58,7 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> P
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.clone(),
-		signature: sig_vec,
-	}
+	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
 }
 
 benchmarks! {
@@ -86,7 +82,7 @@ benchmarks! {
 		assert!(Pallet::<T>::get_unsigned_proposals().len() == n as usize);
 	}: _(RawOrigin::Signed(caller), signed_proposals)
 	verify {
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == 0);
+		assert!(Pallet::<T>::get_unsigned_proposals().is_empty());
 		assert!(Pallet::<T>::signed_proposals_len() == n as usize);
 	}
 

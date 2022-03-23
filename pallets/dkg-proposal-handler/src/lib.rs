@@ -619,6 +619,6 @@ impl<T: Config> Pallet<T> {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	pub fn signed_proposals_len() -> usize {
-		SignedProposals::<T>::iter_keys().collect::<Vec<_>>().len()
+		SignedProposals::<T>::iter_keys().count()
 	}
 }
