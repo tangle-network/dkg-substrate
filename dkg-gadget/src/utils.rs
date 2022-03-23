@@ -17,10 +17,9 @@ use crate::{
 	Client,
 };
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, utils::get_best_authorities, AuthoritySet,
-	ConsensusLog, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId,
+	utils::get_best_authorities, AuthoritySet, ConsensusLog, DKGApi,
 };
-use dkg_primitives::types::RoundId;
 use dkg_runtime_primitives::crypto::Public;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;

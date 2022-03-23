@@ -301,7 +301,7 @@ pub mod pallet {
 			if new_threshold <= PendingSignatureThreshold::<T>::get() {
 				Self::update_signature_threshold(new_threshold.saturating_sub(1))?;
 			}
-			
+
 			Self::update_keygen_threshold(new_threshold)
 		}
 

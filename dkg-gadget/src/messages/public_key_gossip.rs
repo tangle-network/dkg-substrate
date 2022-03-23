@@ -42,9 +42,7 @@ where
 	if !dkg_worker.dkg_state.listening_for_pub_key &&
 		!dkg_worker.dkg_state.listening_for_active_pub_key
 	{
-		return Err(DKGError::GenericError {
-			reason: "Not listening for public key broadcast".to_string(),
-		})
+		return Ok(())
 	}
 
 	// Get authority accounts

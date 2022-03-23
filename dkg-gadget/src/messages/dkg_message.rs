@@ -23,7 +23,7 @@ use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
@@ -45,7 +45,6 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -55,7 +54,7 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 				let round_id = rounds.get_id();
@@ -72,7 +71,6 @@ where
 			.key_store
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
 				next_rounds_send_result = send_messages(
 					dkg_worker,
@@ -83,7 +81,7 @@ where
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
@@ -169,5 +167,4 @@ fn sign_and_send_message<B, C, BE>(
 			e
 		),
 	};
-	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
 }

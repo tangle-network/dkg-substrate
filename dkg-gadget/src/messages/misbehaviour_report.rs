@@ -175,7 +175,6 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 		reports.signatures.push(encoded_signature);
 
 		dkg_worker.aggregated_misbehaviour_reports.insert((round_id, offender), reports);
-
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature")
 	} else {
 		error!(target: "dkg", "Could not sign public key");

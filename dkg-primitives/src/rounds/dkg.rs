@@ -22,7 +22,10 @@ use super::{keygen::*, offline::*, sign::*};
 use std::mem;
 use typed_builder::TypedBuilder;
 
-use crate::{types::*, utils::{select_random_set, get_best_authorities}};
+use crate::{
+	types::*,
+	utils::{get_best_authorities, select_random_set},
+};
 use dkg_runtime_primitives::{crypto::AuthorityId, keccak_256};
 
 pub use gg_2020::{
@@ -583,7 +586,9 @@ where
 		info!(target: "dkg", "🕸️  Generating threshold signer set with threshold {}-out-of-{}", threshold, parties);
 
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		let set = (1..=self.authorities.len()).map(|x| u16::try_from(x).unwrap()).collect::<Vec<u16>>();
+		let set = (1..=self.authorities.len())
+			.map(|x| u16::try_from(x).unwrap())
+			.collect::<Vec<u16>>();
 		let signers_set = select_random_set(seed, set, threshold + 1);
 
 		if let Ok(signers_set) = signers_set {

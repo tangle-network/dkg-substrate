@@ -258,11 +258,11 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
-	/// 
+	///
 	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
 	/// a new queued DKG local key for the new queued authority set. The previously queued set
 	/// is now the active set and so we transition their local key data into the active file path.
-	/// 
+	///
 	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
 	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
 	fn rotate_local_key_files(&mut self) {
@@ -284,7 +284,11 @@ where
 	}
 
 	/// gets authority reputations from an header
-	pub fn get_authority_reputations(&self, header: &B::Header, authority_set: &AuthoritySet<Public>) -> HashMap<Public, i64> {
+	pub fn get_authority_reputations(
+		&self,
+		header: &B::Header,
+		authority_set: &AuthoritySet<Public>,
+	) -> HashMap<Public, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
@@ -406,7 +410,12 @@ where
 	}
 
 	/// Gets the best authorities by authority keys using on-chain reputations
-	fn get_best_authority_keys(&self, header: &B::Header, authority_set: AuthoritySet<Public>, active: bool) -> Vec<Public> {
+	fn get_best_authority_keys(
+		&self,
+		header: &B::Header,
+		authority_set: AuthoritySet<Public>,
+		active: bool,
+	) -> Vec<Public> {
 		// Get active threshold or get the next threshold
 		let threshold = if active {
 			self.get_keygen_threshold(header)
@@ -423,18 +432,25 @@ where
 		.map(|(_, key)| key.clone())
 		.collect();
 
-		best_authorities		
+		best_authorities
 	}
 
-	fn handle_genesis_dkg_setup(&mut self, header: &B::Header, genesis_authority_set: AuthoritySet<Public>) {
-		// Check if the authority set is empty or if this authority set isn't actually the genesis set
-		if genesis_authority_set.authorities.is_empty() || genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
-			return;
+	fn handle_genesis_dkg_setup(
+		&mut self,
+		header: &B::Header,
+		genesis_authority_set: AuthoritySet<Public>,
+	) {
+		// Check if the authority set is empty or if this authority set isn't actually the genesis
+		// set
+		if genesis_authority_set.authorities.is_empty() ||
+			genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID
+		{
+			return
 		}
 
 		// Check if we've already set up the DKG for this authority set
 		if self.rounds.is_some() {
-			return;
+			return
 		}
 
 		let mut local_key_path: Option<PathBuf> = None;
@@ -448,7 +464,8 @@ where
 		// DKG keygen authorities are always taken from the best set of authorities
 		let ACTIVE = true;
 		let round_id = genesis_authority_set.id;
-		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, genesis_authority_set, ACTIVE);
+		let best_authorities: Vec<Public> =
+			self.get_best_authority_keys(header, genesis_authority_set, ACTIVE);
 
 		// Check whether the worker is in the best set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
@@ -482,7 +499,7 @@ where
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
 		if is_queued_authorities_or_rounds_empty(self, &queued) {
-			return;
+			return
 		}
 
 		let mut local_key_path: Option<PathBuf> = None;
@@ -502,7 +519,7 @@ where
 		// Check whether the worker is in the best next set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
 			self.next_rounds = None;
-			return;
+			return
 		}
 
 		// Setting up DKG for queued authorities
@@ -532,22 +549,24 @@ where
 	fn process_block_notification(&mut self, header: &B::Header) {
 		if let Some(latest_header) = &self.latest_header {
 			if latest_header.number() >= header.number() {
-				return;
+				return
 			}
 		}
 		self.latest_header = Some(header.clone());
 		listen_and_clear_offchain_storage(self, header);
-		// Attempt to resume when the worker has shut down somehow
-		try_resume_dkg(self, header);
+		// // Attempt to resume when the worker has shut down somehow
+		// try_resume_dkg(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
+			debug!(target: "dkg", "Starting genesis DKG setup");
 			self.enact_genesis_authorities(header);
 		} else {
 			self.enact_new_authorities(header);
 		}
-		// Identify if the worker is stalling and restart the DKG if necessary
-		try_restart_dkg(self, header);
-		// Send all outgoing messages created from any reactions from resuming, enacting, or restarting
+		// // Identify if the worker is stalling and restart the DKG if necessary
+		// try_restart_dkg(self, header);
+		// Send all outgoing messages created from any reactions from resuming, enacting, or
+		// restarting
 		send_outgoing_dkg_messages(self);
 		// Get all unsigned proposals and create offline stages for them
 		self.create_offline_stages(header);
@@ -558,19 +577,19 @@ where
 
 	fn enact_genesis_authorities(&mut self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
-			if active.id != self.current_validator_set.id && self.best_dkg_block.is_none() {
+			if active.id == GENESIS_AUTHORITY_SET_ID {
 				debug!(target: "dkg", "🕸️  Genesis validator set id: {:?}", active);
 				// Setting new validator set id as current
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
-	
+
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-	
+
 				debug!(target: "dkg", "🕸️  New Rounds for id: {:?}", active.id);
-	
+
 				self.best_dkg_block = Some(*header.number());
-	
+
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(&header, active.clone());
 				// Setting up the queued DKG at genesis
@@ -677,7 +696,6 @@ where
 						None
 					}
 				};
-				debug!(target: "dkg", "🕸️  Process DKG message for current rounds {}", &dkg_msg);
 				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
 					Ok(()) => (),
 					Err(err) =>
@@ -701,9 +719,8 @@ where
 					}
 				};
 
-				debug!(target: "dkg", "🕸️  Process DKG message for queued rounds {}", &dkg_msg);
 				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
-					Ok(()) => debug!(target: "dkg", "🕸️  Handled incoming messages"),
+					Ok(()) => {},
 					Err(err) =>
 						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 				}
@@ -712,12 +729,12 @@ where
 
 		match handle_public_key_broadcast(self, dkg_msg.clone()) {
 			Ok(()) => (),
-			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
 
 		match handle_misbehaviour_report(self, dkg_msg.clone()) {
 			Ok(()) => (),
-			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
 
 		send_outgoing_dkg_messages(self);
@@ -767,17 +784,21 @@ where
 	}
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
-		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { 0 };
+		let round_id = if let Some(rounds) = &self.rounds {
+			rounds.get_id()
+		} else {
+			return
+		};
 
 		match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
-				debug!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
+				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
 				gossip_misbehaviour_report(self, offender, round_id);
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
-				debug!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
+				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
 				gossip_misbehaviour_report(self, offender, round_id);
 			},
 		}
@@ -952,9 +973,7 @@ where
 			}
 
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
-
 			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
-				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
 					errors.push(e);
@@ -999,8 +1018,6 @@ where
 					}
 				},
 				dkg_msg = dkg.next().fuse() => {
-					debug!(target: "dkg", "🕸️  Current authorities {:?}", self.current_validator_set.authorities);
-					debug!(target: "dkg", "🕸️  Next authorities {:?}", self.queued_validator_set.authorities);
 					if let Some(dkg_msg) = dkg_msg {
 						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
@@ -1009,22 +1026,22 @@ where
 							for msg in msgs {
 								match self.verify_signature_against_authorities(msg) {
 									Ok(raw) => {
-										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw);
+										debug!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw.encoded_size());
 										self.process_incoming_dkg_message(raw);
 									},
 									Err(e) => {
-										debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+										error!(target: "dkg", "🕸️  Received signature error {:?}", e);
 									}
 								}
 							}
 
 							match self.verify_signature_against_authorities(dkg_msg) {
 								Ok(raw) => {
-									debug!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw);
+									debug!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw.encoded_size());
 									self.process_incoming_dkg_message(raw);
 								},
 								Err(e) => {
-									debug!(target: "dkg", "🕸️  Received signature error {:?}", e);
+									error!(target: "dkg", "🕸️  Received signature error {:?}", e);
 								}
 							}
 							// Reset the cache
