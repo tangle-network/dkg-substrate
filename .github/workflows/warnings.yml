@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
       - run: cargo check --workspace --all-targets --verbose --no-default-features
-      - run: cargo check --workspace --all-targets --verbose --all-features
+
 
   clippy:
     name: Lint with Clippy
@@ -35,4 +35,3 @@ jobs:
           with:
             components: clippy
         - run: cargo clippy --workspace --all-targets --verbose --no-default-features
-        - run: cargo clippy --workspace --all-targets --verbose --all-features
