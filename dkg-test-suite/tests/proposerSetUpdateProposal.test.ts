@@ -18,16 +18,16 @@ import 'jest-extended';
 import {BLOCK_TIME, SECONDS} from '../src/constants';
 import {
   ethAddressFromUncompressedPublicKey,
-	provider,
-	sleep, startStandaloneNode, waitForEvent, waitForTheNextSession
+  provider,
+  sleep, startStandaloneNode, waitForEvent, waitForTheNextSession
 } from '../src/utils';
 import {
-	localChain,
-	wallet1,
+  localChain,
+  wallet1,
   polkadotApi,
-	executeAfter,
-	localChain2,
-	wallet2,
+  executeAfter,
+  localChain2,
+  wallet2,
   signatureBridge,
 } from './utils/util';
 import {jest} from "@jest/globals";
@@ -149,8 +149,6 @@ describe('Validator Node Test', () => {
 
     expect('0x1111111111111111111111111111111111111111').toEqual(await contract.governor());
 	});
-
-    
 
 	afterAll(async () => {
 		await executeAfter();
