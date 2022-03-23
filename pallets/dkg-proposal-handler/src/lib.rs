@@ -381,7 +381,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
 		UnsignedProposalQueue::<T>::insert(
-			TypedChainId::Evm(0),
+			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
 			unsigned_proposal,
 		);

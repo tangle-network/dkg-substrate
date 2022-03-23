@@ -704,7 +704,7 @@ where
 				}
 
 				if rounds.is_keygen_finished() {
-					debug!(target: "dkg", "🕸️  DKG is ready to sign");
+					trace!(target: "dkg", "🕸️  DKG is ready to sign");
 					self.dkg_state.accepted = true;
 				}
 			}
