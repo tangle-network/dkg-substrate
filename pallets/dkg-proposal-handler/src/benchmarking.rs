@@ -17,13 +17,9 @@ use super::*;
 #[allow(unused)]
 use crate::Pallet;
 use codec::Encode;
-use dkg_runtime_primitives::{
-	proposal::{ProposalAction, ProposalHandlerTrait},
-	KEY_TYPE,
-};
+use dkg_runtime_primitives::KEY_TYPE;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
-use hex_literal::hex;
 use pallet_dkg_metadata::Pallet as DKGPallet;
 use sp_core::{ecdsa, H256, U256};
 use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
@@ -62,11 +58,7 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> P
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.clone(),
-		signature: sig_vec,
-	}
+	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
 }
 
 benchmarks! {
@@ -74,31 +66,33 @@ benchmarks! {
 		let n in 0..(T::MaxSubmissionsPerBatch::get()).into();
 		let dkg_pub_key = ecdsa_generate(KEY_TYPE, None);
 		DKGPallet::<T>::set_dkg_public_key(dkg_pub_key.encode());
-
+		let caller: T::AccountId = whitelisted_caller();
 		let mut signed_proposals = Vec::new();
 		for i in 0..n as usize {
 			let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(i as u8));
-			let proposal = <Pallet<T> as ProposalHandlerTrait>::force_submit_unsigned_proposal(Proposal::Unsigned {
+			let proposal = Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Root.into(),Proposal::Unsigned {
 				kind: ProposalKind::EVM,
-				data: eth_tx_ser.clone()
+				data: tx.encode().clone()
 			});
 			let signed_prop = mock_signed_proposal(tx, &dkg_pub_key);
 			signed_proposals.push(signed_prop)
 		}
 
-		let caller: T::AccountId = whitelisted_caller();
+
 		assert!(Pallet::<T>::get_unsigned_proposals().len() == n as usize);
 	}: _(RawOrigin::Signed(caller), signed_proposals)
 	verify {
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == 0);
+		assert!(Pallet::<T>::get_unsigned_proposals().is_empty());
 		assert!(Pallet::<T>::signed_proposals_len() == n as usize);
 	}
 
 	force_submit_unsigned_proposal {
+
+		let buf = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 38, 87, 136, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].to_vec();
+
 		let proposal = Proposal::Unsigned {
 			kind: ProposalKind::TokenAdd,
-			data: hex!("00000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001").to_vec()
-		};
+			data: buf};
 
 	}: _(RawOrigin::Root, proposal)
 

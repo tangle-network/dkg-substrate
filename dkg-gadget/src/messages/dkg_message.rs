@@ -45,7 +45,7 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number())
 					.await;
@@ -73,7 +73,7 @@ where
 			.key_store
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
+			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
 				next_rounds_send_result = send_messages(
 					dkg_worker,
@@ -131,7 +131,7 @@ where
 
 	for result in &results {
 		if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-			let _ = store_localkey(local_key, round_id, rounds.get_local_key_path(), dkg_worker);
+			let _ = store_localkey(*local_key, round_id, rounds.get_local_key_path(), dkg_worker);
 		}
 	}
 

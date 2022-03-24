@@ -174,7 +174,7 @@ where
 					}
 				}
 			} else {
-				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
+				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path);
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
@@ -298,22 +298,22 @@ where
 	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
-		if rounds.is_none() {
-			true
-		} else {
-			let stalled = rounds.as_ref().unwrap().has_stalled();
-			worker.set_rounds(rounds.unwrap());
+		if let Some(rounds) = rounds {
+			let stalled = rounds.has_stalled();
+			worker.set_rounds(rounds);
 			stalled
+		} else {
+			true
 		}
 	};
 
 	let should_restart_next_rounds = {
-		if next_rounds.is_none() {
-			true
-		} else {
-			let stalled = next_rounds.as_ref().unwrap().has_stalled();
-			worker.set_next_rounds(next_rounds.unwrap());
+		if let Some(next_round) = next_rounds {
+			let stalled = next_round.has_stalled();
+			worker.set_next_rounds(next_round);
 			stalled
+		} else {
+			true
 		}
 	};
 

@@ -70,7 +70,7 @@ where
 
 	io.extend_with(SystemApi::to_delegate(FullSystem::new(client.clone(), pool, deny_unsafe)));
 
-	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client.clone())));
+	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client)));
 
 	if let Some(command_sink) = command_sink {
 		io.extend_with(

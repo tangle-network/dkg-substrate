@@ -105,7 +105,6 @@ use frame_support::{
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 };
 use frame_system::ensure_root;
-
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::{Convert, Saturating},
@@ -525,12 +524,12 @@ impl<T: Config> Pallet<T> {
 
 	/// Asserts if a resource is registered
 	pub fn resource_exists(id: ResourceId) -> bool {
-		return Resources::<T>::contains_key(id)
+		Resources::<T>::contains_key(id)
 	}
 
 	/// Checks if a chain exists as a whitelisted destination
 	pub fn chain_whitelisted(chain_id: TypedChainId) -> bool {
-		return ChainNonces::<T>::contains_key(chain_id)
+		ChainNonces::<T>::contains_key(chain_id)
 	}
 
 	// *** Admin methods ***
@@ -609,10 +608,12 @@ impl<T: Config> Pallet<T> {
 		let now = <frame_system::Pallet<T>>::block_number();
 		let mut votes = match Votes::<T>::get(src_chain_id, (nonce, prop.clone())) {
 			Some(v) => v,
-			None => {
-				let mut v = ProposalVotes::default();
-				v.expiry = now + T::ProposalLifetime::get();
-				v
+			None => ProposalVotes::<
+				<T as frame_system::Config>::AccountId,
+				<T as frame_system::Config>::BlockNumber,
+			> {
+				expiry: now + T::ProposalLifetime::get(),
+				..Default::default()
 			},
 		};
 
@@ -626,14 +627,14 @@ impl<T: Config> Pallet<T> {
 			Self::deposit_event(Event::VoteFor {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
-				who: who.clone(),
+				who,
 			});
 		} else {
 			votes.votes_against.push(who.clone());
 			Self::deposit_event(Event::VoteAgainst {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
-				who: who.clone(),
+				who,
 			});
 		}
 
@@ -663,7 +664,7 @@ impl<T: Config> Pallet<T> {
 				_ => Ok(().into()),
 			}
 		} else {
-			Err(Error::<T>::ProposalDoesNotExist)?
+			Err(Error::<T>::ProposalDoesNotExist.into())
 		}
 	}
 
@@ -787,11 +788,11 @@ impl<T: Config> Pallet<T> {
 	/// It is expected that the size of the returned vector is a power of 2.
 	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
 		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = Proposers::<T>::iter_keys();
+		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
 		// Check for each key that the proposer is valid (should return true)
 		let mut base_layer: Vec<Vec<u8>> = proposer_keys
 			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))
-			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x).encode()[..]).to_vec())
+			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x)[..]).to_vec())
 			.collect();
 		// Pad base_layer to have length 2^height
 		let two = 2;
@@ -859,7 +860,7 @@ impl<T: Config>
 		authorities: Vec<T::AccountId>,
 		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
 		authority_ids: Vec<T::DKGId>,
-	) -> () {
+	) {
 		// Get the new external accounts for the new authorities by converting
 		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids
@@ -896,10 +897,12 @@ impl<T: Config>
 pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
-		use k256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey};
+		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		use sp_core::crypto::ByteArray;
-
-		PublicKey::from_sec1_bytes(a.as_slice())
+		let _x = VerifyingKey::from_sec1_bytes(
+			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a),
+		);
+		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
 			.map(|pub_key| {
 				// uncompress the key
 				let uncompressed = pub_key.to_encoded_point(false);
