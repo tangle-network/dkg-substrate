@@ -90,6 +90,6 @@ fn make_signed_proposal(kind: ProposalKind, finished_round: DKGSignedPayload) ->
 	Some(Proposal::Signed {
 		kind,
 		data: finished_round.payload,
-		signature: finished_round.signature.clone(),
+		signature: finished_round.signature,
 	})
 }

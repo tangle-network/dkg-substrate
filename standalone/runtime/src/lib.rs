@@ -21,7 +21,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{DKGPayloadKey, Proposal, TypedChainId, UnsignedProposal};
+use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
 use frame_support::traits::{ConstU32, Everything, U128CurrencyToVote};
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_grandpa::{
@@ -356,9 +356,9 @@ parameter_types! {
 
 	// signed config
 	pub const SignedMaxSubmissions: u32 = 10;
-	pub const SignedRewardBase: Balance = 1 * DOLLARS;
-	pub const SignedDepositBase: Balance = 1 * DOLLARS;
-	pub const SignedDepositByte: Balance = 1 * CENTS;
+	pub const SignedRewardBase: Balance = DOLLARS;
+	pub const SignedDepositBase: Balance = DOLLARS;
+	pub const SignedDepositByte: Balance = CENTS;
 
 	pub SolutionImprovementThreshold: Perbill = Perbill::from_rational(1u32, 10_000);
 
@@ -434,8 +434,13 @@ impl frame_support::pallet_prelude::Get<Option<(usize, sp_npos_elections::Extend
 
 pub struct Fallback<T>(sp_std::marker::PhantomData<T>);
 
-use frame_election_provider_support::{ElectionDataProvider, ElectionProvider};
-use sp_npos_elections::{Support, Supports};
+#[cfg(feature = "integration-tests")]
+use frame_election_provider_support::ElectionDataProvider;
+#[cfg(feature = "integration-tests")]
+use sp_npos_elections::Support;
+
+use frame_election_provider_support::ElectionProvider;
+use sp_npos_elections::Supports;
 
 impl<T: pallet_election_provider_multi_phase::Config> ElectionProvider for Fallback<T> {
 	type AccountId = T::AccountId;
@@ -613,7 +618,7 @@ where
 		let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
 		let address = AccountIdLookup::<AccountId, Index>::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (address, signature.into(), extra)))
+		Some((call, (address, signature, extra)))
 	}
 }
 
@@ -837,7 +842,7 @@ impl_runtime_apis! {
 			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
 				return Some(pub_key)
 			}
-			return None
+			None
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
@@ -849,7 +854,7 @@ impl_runtime_apis! {
 			if !dkg_pub_key.1.is_empty() {
 				return Some(dkg_pub_key.1)
 			}
-			return None
+			None
 		}
 
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
@@ -904,11 +909,10 @@ impl_runtime_apis! {
 			Vec<frame_benchmarking::BenchmarkList>,
 			Vec<frame_support::traits::StorageInfo>,
 		) {
-			use frame_benchmarking::{list_benchmark, baseline, Benchmarking, BenchmarkList};
+			use frame_benchmarking::{list_benchmark, Benchmarking, BenchmarkList};
 			use frame_support::traits::StorageInfoTrait;
 
 			use frame_system_benchmarking::Pallet as SystemBench;
-			use baseline::Pallet as BaselineBench;
 
 			let mut list = Vec::<BenchmarkList>::new();
 
@@ -921,7 +925,7 @@ impl_runtime_apis! {
 
 			let storage_info = AllPalletsWithSystem::storage_info();
 
-			return (list, storage_info)
+			(list, storage_info)
 		}
 
 		fn dispatch_benchmark(
@@ -946,7 +950,7 @@ impl_runtime_apis! {
 				hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7").to_vec().into(),
 			];
 
-			let storage_info = AllPalletsWithSystem::storage_info();
+			let _storage_info = AllPalletsWithSystem::storage_info();
 
 			let mut batches = Vec::<BenchmarkBatch>::new();
 			let params = (&config, &whitelist);

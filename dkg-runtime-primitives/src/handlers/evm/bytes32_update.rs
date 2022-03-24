@@ -32,7 +32,7 @@ pub struct Bytes32UpdateProposal {
 /// Total Bytes: 32 + 4 + 4 + 32 = 72
 pub fn create(data: &[u8]) -> Result<Bytes32UpdateProposal, ValidationError> {
 	if data.len() != 72 {
-		return Err(ValidationError::InvalidParameter("Proposal data must be 72 bytes".to_string()))?
+		return Err(ValidationError::InvalidParameter("Proposal data must be 72 bytes".to_string()))
 	}
 	let header = decode_proposal_header(data)?;
 

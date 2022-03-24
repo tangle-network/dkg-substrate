@@ -68,14 +68,11 @@ use dkg_runtime_primitives::{
 };
 
 use crate::{
-	error, metric_inc, metric_set,
+	error, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	types::dkg_topic,
-	utils::{
-		find_authorities_change, find_index, get_key_path, is_next_authorities_or_rounds_empty,
-		is_queued_authorities_or_rounds_empty, set_up_rounds,
-	},
+	utils::{find_authorities_change, find_index, get_key_path, set_up_rounds},
 	Client,
 };
 
@@ -130,8 +127,6 @@ where
 	pub current_validator_set: AuthoritySet<Public>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// Validator set id for the last signed commitment
-	last_signed_id: u64,
 	/// keep rustc happy
 	_backend: PhantomData<BE>,
 	/// public key refresh in progress
@@ -196,7 +191,6 @@ where
 			current_validator_set: AuthoritySet::empty(),
 			queued_validator_set: AuthoritySet::empty(),
 			latest_header: None,
-			last_signed_id: 0,
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
@@ -209,41 +203,6 @@ where
 			local_keystore,
 			_backend: PhantomData,
 		}
-	}
-
-	/// gets the current validators in the authority set
-	pub fn get_current_validators(&self) -> AuthoritySet<AuthorityId> {
-		self.current_validator_set.clone()
-	}
-
-	/// gets the queued(next) validators in the authority set
-	pub fn get_queued_validators(&self) -> AuthoritySet<AuthorityId> {
-		self.queued_validator_set.clone()
-	}
-
-	/// gets the dkg keystore(cryto keys)
-	pub fn keystore_ref(&self) -> DKGKeystore {
-		self.key_store.clone()
-	}
-
-	/// set the current rounds
-	pub fn set_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
-		self.rounds = Some(rounds);
-	}
-
-	/// sets the next rounds
-	pub fn set_next_rounds(&mut self, rounds: MultiPartyECDSARounds<NumberFor<B>>) {
-		self.next_rounds = Some(rounds);
-	}
-
-	/// gets the current rounds
-	pub fn take_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
-		self.rounds.take()
-	}
-
-	/// gets the next rounds
-	pub fn take_next_rounds(&mut self) -> Option<MultiPartyECDSARounds<NumberFor<B>>> {
-		self.next_rounds.take()
 	}
 }
 
@@ -334,7 +293,7 @@ where
 	/// Gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
 		if self.latest_header.is_some() {
-			self.latest_header.clone().unwrap().number().clone()
+			*self.latest_header.clone().unwrap().number()
 		} else {
 			NumberFor::<B>::from(0u32)
 		}
@@ -496,7 +455,13 @@ where
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
-		if is_queued_authorities_or_rounds_empty(self, &queued) {
+		// Check if the authority set is empty, return or proceed
+		if queued.authorities.is_empty() {
+			return
+		}
+
+		// Check if the next rounds exists and has processed for this neq queued round idc
+		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().get_id() == queued.id {
 			return
 		}
 
@@ -596,9 +561,9 @@ where
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				self.best_dkg_block = Some(*header.number());
 				// Setting up the DKG
-				self.handle_genesis_dkg_setup(&header, active.clone());
+				self.handle_genesis_dkg_setup(header, active);
 				// Setting up the queued DKG at genesis
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_queued_dkg_setup(header, queued);
 				// Send outgoing messages after processing the queued DKG setup
 				send_outgoing_dkg_messages(self);
 			}
@@ -617,10 +582,10 @@ where
 				// Rotate the rounds since the authority set has changed
 				self.rounds = self.next_rounds.take();
 				// Update the validator sets
-				self.current_validator_set = active.clone();
+				self.current_validator_set = active;
 				self.queued_validator_set = queued.clone();
 				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_queued_dkg_setup(header, queued);
 				// Send outgoing messages after processing the queued DKG setup
 				send_outgoing_dkg_messages(self);
 			}
@@ -675,12 +640,12 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
-			check_signers(authority_accounts.clone().unwrap().1.into())
+		if check_signers(authority_accounts.clone().unwrap().0) ||
+			check_signers(authority_accounts.unwrap().1)
 		{
-			return Ok(dkg_msg)
+			Ok(dkg_msg)
 		} else {
-			return Err(DKGError::GenericError {
+			Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
@@ -733,7 +698,7 @@ where
 			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
 
-		match handle_misbehaviour_report(self, dkg_msg.clone()) {
+		match handle_misbehaviour_report(self, dkg_msg) {
 			Ok(()) => (),
 			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
@@ -831,7 +796,7 @@ where
 		if !success {
 			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority".to_string(),
-			})?
+			})
 		}
 
 		Ok(maybe_signer.unwrap())
@@ -859,9 +824,9 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if proposal.is_some() {
-				proposals.push(proposal.unwrap())
-			}
+			if let Some(prop) = proposal {
+				proposals.push(prop)
+			};
 		}
 		metric_set!(
 			self,
@@ -880,7 +845,7 @@ where
 			Err(_err) => return None,
 		};
 
-		get_signed_proposal(self, finished_round.clone(), payload_key)
+		get_signed_proposal(self, finished_round, payload_key)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
@@ -972,7 +937,7 @@ where
 			debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+					error!(target: "dkg", "🕸️  error creating new vote: {}", e);
 					errors.push(e);
 				};
 			}

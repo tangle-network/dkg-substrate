@@ -12,22 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{
-	worker::{DKGWorker, ENGINE_ID},
-	Client,
-};
+use crate::worker::ENGINE_ID;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId,
-	utils::get_best_authorities, AuthoritySet, ConsensusLog, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId, AuthoritySet, ConsensusLog,
 };
-use dkg_runtime_primitives::crypto::Public;
-use sc_client_api::Backend;
-use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_core::sr25519;
-use sp_runtime::{generic::OpaqueDigestItemId, traits::Header};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use sp_runtime::generic::OpaqueDigestItemId;
+use std::path::PathBuf;
 
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
@@ -38,15 +30,7 @@ pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	None
 }
 
-pub fn validate_threshold(n: u16, t: u16) -> u16 {
-	let max_thresh = n - 1;
-	if t >= 1 && t <= max_thresh {
-		return t
-	}
-
-	return max_thresh
-}
-
+#[allow(clippy::too_many_arguments)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	best_authorities: &[AuthorityId],
 	authority_set_id: RoundId,
@@ -57,16 +41,14 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
 	// Generate the rounds object
-	let rounds = MultiPartyECDSARounds::builder()
+	MultiPartyECDSARounds::builder()
 		.round_id(authority_set_id)
 		.party_index(u16::try_from(party_inx).unwrap())
 		.threshold(signature_threshold)
 		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
 		.authorities(best_authorities.to_vec())
-		.build();
-
-	rounds
+		.build()
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
@@ -92,52 +74,6 @@ fn match_consensus_log(
 		} => Some((validator_set, next_queued_authorities)),
 		_ => None,
 	}
-}
-
-pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	next_authorities: &AuthoritySet<Public>,
-) -> bool
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	if next_authorities.authorities.is_empty() {
-		return true
-	}
-
-	if dkg_worker.rounds.is_some() {
-		if dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id {
-			return true
-		}
-	}
-
-	false
-}
-
-pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	queued_authorities: &AuthoritySet<Public>,
-) -> bool
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	if queued_authorities.authorities.is_empty() {
-		return true
-	}
-
-	if dkg_worker.next_rounds.is_some() {
-		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
-			return true
-		}
-	}
-
-	false
 }
 
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {

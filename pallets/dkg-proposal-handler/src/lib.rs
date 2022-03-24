@@ -314,7 +314,7 @@ pub mod pallet {
 					continue
 				}
 
-				Err(Error::<T>::ProposalSignatureInvalid)?;
+				return Err(Error::<T>::ProposalSignatureInvalid.into())
 			}
 
 			Ok(().into())
@@ -340,10 +340,10 @@ pub mod pallet {
 						UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, prop);
 						Ok(().into())
 					},
-					Err(_) => Err(Error::<T>::ProposalFormatInvalid)?,
+					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
 				}
 			} else {
-				Err(Error::<T>::ProposalFormatInvalid)?
+				Err(Error::<T>::ProposalFormatInvalid.into())
 			}
 		}
 	}
@@ -357,7 +357,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			return Ok(())
 		}
 
-		Err(Error::<T>::ProposalFormatInvalid)?
+		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_proposer_set_update_proposal(
@@ -371,7 +371,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			return Ok(())
 		}
 
-		Err(Error::<T>::ProposalFormatInvalid)?
+		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_refresh_proposal(
@@ -382,11 +382,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 		UnsignedProposalQueue::<T>::insert(
 			TypedChainId::None,
-			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
+			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
 		);
 
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_signed_refresh_proposal(
@@ -394,15 +394,15 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
 			TypedChainId::Evm(0),
-			DKGPayloadKey::RefreshVote(proposal.nonce.into()),
+			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
-		Ok(().into())
+		Ok(())
 	}
 
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
 		let id =
-			decode_proposal_identifier(&prop).map_err(|e| Error::<T>::ProposalFormatInvalid)?;
+			decode_proposal_identifier(&prop).map_err(|_e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
 		frame_support::log::debug!(
 			target: "dkg_proposal_handler",
@@ -422,7 +422,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		);
 		let (data, sig) = match prop.signature() {
 			Some(sig) => (prop.data().clone(), sig),
-			None => return Err(Error::<T>::ProposalSignatureInvalid)?,
+			None => return Err(Error::<T>::ProposalSignatureInvalid.into()),
 		};
 		ensure!(
 			Self::validate_proposal_signature(&data, &sig),
@@ -440,8 +440,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Self::deposit_event(Event::<T>::ProposalSigned {
 			key: id.key,
 			target_chain: id.typed_chain_id,
-			data,
-			signature: sig,
+			data: data.to_vec(),
+			signature: sig.to_vec(),
 		});
 
 		Ok(())
@@ -452,7 +452,7 @@ impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
 	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
-		return UnsignedProposalQueue::<T>::iter()
+		UnsignedProposalQueue::<T>::iter()
 			.map(|(typed_chain_id, key, proposal)| dkg_runtime_primitives::UnsignedProposal {
 				typed_chain_id,
 				key,
@@ -490,7 +490,7 @@ impl<T: Config> Pallet<T> {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)?
+				)
 			}
 			match Self::get_next_offchain_signed_proposal(block_number) {
 				Ok(next_proposals) => {
@@ -539,7 +539,7 @@ impl<T: Config> Pallet<T> {
 					);
 				},
 			};
-			return Ok(())
+			Ok(())
 		}
 	}
 
@@ -608,7 +608,7 @@ impl<T: Config> Pallet<T> {
 
 	// *** Validation methods ***
 
-	fn validate_proposal_signature(data: &Vec<u8>, signature: &Vec<u8>) -> bool {
+	fn validate_proposal_signature(data: &[u8], signature: &[u8]) -> bool {
 		dkg_runtime_primitives::utils::validate_ecdsa_signature(data, signature)
 	}
 
@@ -616,6 +616,6 @@ impl<T: Config> Pallet<T> {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	pub fn signed_proposals_len() -> usize {
-		SignedProposals::<T>::iter_keys().collect::<Vec<_>>().len()
+		SignedProposals::<T>::iter_keys().count()
 	}
 }

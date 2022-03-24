@@ -94,7 +94,7 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id);
+		gossip_public_key(dkg_worker, pub_key.clone(), *round_id);
 	}
 
 	for res in &rounds_send_result {
@@ -127,7 +127,7 @@ where
 
 	for result in &results {
 		if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-			let _ = store_localkey(local_key, round_id, rounds.get_local_key_path(), dkg_worker);
+			let _ = store_localkey(*local_key, round_id, rounds.get_local_key_path(), dkg_worker);
 		}
 	}
 

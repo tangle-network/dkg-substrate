@@ -17,7 +17,7 @@ use sc_network_gossip::{ValidationResult, Validator, ValidatorContext};
 use sp_runtime::traits::Block;
 
 use codec::Decode;
-use log::{debug, error, trace};
+use log::{error, trace};
 
 use crate::types::dkg_topic;
 use dkg_primitives::types::SignedDKGMessage;

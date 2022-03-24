@@ -23,8 +23,6 @@ pub(crate) struct Metrics {
 	pub dkg_votes_sent: Gauge<U64>,
 	/// Most recent concluded voting round
 	pub dkg_round_concluded: Gauge<U64>,
-	/// Best block finalized by DKG
-	pub dkg_best_block: Gauge<U64>,
 	/// Next block DKG should vote on
 	pub dkg_should_vote_on: Gauge<U64>,
 	/// Number of sessions without a signed commitment
@@ -44,10 +42,6 @@ impl Metrics {
 			)?,
 			dkg_round_concluded: register(
 				Gauge::new("dkg_round_concluded", "Voting round, that has been concluded")?,
-				registry,
-			)?,
-			dkg_best_block: register(
-				Gauge::new("dkg_best_block", "Best block finalized by DKG")?,
 				registry,
 			)?,
 			dkg_should_vote_on: register(

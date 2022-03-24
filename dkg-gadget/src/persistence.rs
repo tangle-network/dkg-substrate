@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use crate::{
-	utils::{find_index, set_up_rounds, validate_threshold},
+	utils::{find_index, set_up_rounds},
 	worker::DKGWorker,
 	Client,
 };
@@ -177,7 +177,7 @@ where
 					}
 				}
 			} else {
-				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path.clone());
+				debug!(target: "dkg", "Failed to read local key file {:?}", local_key_path);
 			}
 
 			if let Ok(queued_local_key_serialized) = queued_local_key_serialized {
@@ -246,7 +246,7 @@ where
 						if let Ok(signers_set) = signers_set {
 							rounds.set_signers(signers_set);
 						}
-						worker.set_rounds(rounds)
+						worker.rounds = Some(rounds);
 					}
 				}
 			}
@@ -292,7 +292,7 @@ where
 						if let Ok(signers_set) = signers_set {
 							rounds.set_signers(signers_set);
 						}
-						worker.set_next_rounds(rounds)
+						worker.next_rounds = Some(rounds);
 					}
 				}
 			}
@@ -312,27 +312,27 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let rounds = worker.take_rounds();
-	let next_rounds = worker.take_next_rounds();
+	let rounds = worker.rounds.take();
+	let next_rounds = worker.next_rounds.take();
 	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
-		if rounds.is_none() {
-			true
-		} else {
-			let stalled = rounds.as_ref().unwrap().has_stalled();
-			worker.set_rounds(rounds.unwrap());
+		if let Some(rounds) = rounds {
+			let stalled = rounds.has_stalled();
+			worker.rounds = Some(rounds);
 			stalled
+		} else {
+			true
 		}
 	};
 
 	let should_restart_next_rounds = {
-		if next_rounds.is_none() {
-			true
-		} else {
-			let stalled = next_rounds.as_ref().unwrap().has_stalled();
-			worker.set_next_rounds(next_rounds.unwrap());
+		if let Some(next_round) = next_rounds {
+			let stalled = next_round.has_stalled();
+			worker.next_rounds = Some(next_round);
 			stalled
+		} else {
+			true
 		}
 	};
 
@@ -357,17 +357,10 @@ where
 		local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
 		queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
 	}
-	let public = worker
-		.keystore_ref()
-		.authority_id(&worker.keystore_ref().public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"));
-	let sr25519_public = worker
-		.keystore_ref()
-		.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	let public = worker.get_authority_public_key();
 
-	let authority_set = worker.get_current_validators();
-	let queued_authority_set = worker.get_queued_validators();
+	let authority_set = worker.current_validator_set.clone();
+	let queued_authority_set = worker.queued_validator_set.clone();
 
 	let latest_block_num = *header.number();
 	if restart_rounds && authority_set.authorities.contains(&public) {
@@ -396,7 +389,7 @@ where
 			let _ = rounds.start_keygen(latest_block_num);
 			worker.active_keygen_in_progress = true;
 			worker.dkg_state.listening_for_active_pub_key = true;
-			worker.set_rounds(rounds);
+			worker.rounds = Some(rounds);
 		}
 	}
 
@@ -426,7 +419,7 @@ where
 			let _ = rounds.start_keygen(latest_block_num);
 			worker.queued_keygen_in_progress = true;
 			worker.dkg_state.listening_for_pub_key = true;
-			worker.set_next_rounds(rounds);
+			worker.next_rounds = Some(rounds);
 		}
 	}
 }

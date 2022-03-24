@@ -17,15 +17,16 @@
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, ENDOWED_BALANCE, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		PROPOSER_D, TEST_THRESHOLD,
+		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		TEST_THRESHOLD,
 	},
 	*,
 };
 use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
-	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder, Session,
+	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder,
 };
+use codec::Encode;
 use core::panic;
 use dkg_runtime_primitives::{
 	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,
@@ -265,8 +266,7 @@ fn create_successful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -283,8 +283,7 @@ fn create_successful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![mock_pub_key(PROPOSER_B)],
@@ -301,8 +300,7 @@ fn create_successful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_C)],
 			votes_against: vec![mock_pub_key(PROPOSER_B)],
@@ -359,8 +357,7 @@ fn create_unsucessful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -377,8 +374,7 @@ fn create_unsucessful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![mock_pub_key(PROPOSER_B)],
@@ -395,8 +391,7 @@ fn create_unsucessful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
@@ -450,8 +445,7 @@ fn execute_after_threshold_change() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -471,8 +465,7 @@ fn execute_after_threshold_change() {
 			proposal.clone(),
 		));
 
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -523,8 +516,7 @@ fn proposal_expires() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -536,8 +528,7 @@ fn proposal_expires() {
 		// Increment enough blocks such that now == expiry
 		System::set_block_number(ProposalLifetime::get() + 1);
 
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -559,8 +550,7 @@ fn proposal_expires() {
 		);
 
 		// Proposal state should remain unchanged
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -579,8 +569,7 @@ fn proposal_expires() {
 			),
 			Error::<Test>::ProposalExpired
 		);
-		let prop =
-			DKGProposals::votes(typed_chain_id, (prop_id.clone(), proposal.clone())).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)],
 			votes_against: vec![],
@@ -665,7 +654,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), typed_chain_id));
 		// Set and check resource ID mapped to some junk data
 		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, b"System.remark".to_vec()));
-		assert_eq!(DKGProposals::resource_exists(r_id), true);
+		assert!(DKGProposals::resource_exists(r_id), "{}", true);
 
 		let prop_id = ProposalNonce::from(1u32);
 		let proposal = make_proposal::<42>(Proposal::Unsigned {
@@ -710,7 +699,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone(),
+				proposal,
 			),
 			crate::Error::<Test>::MustBeProposer
 		);
@@ -722,44 +711,48 @@ fn session_change_should_create_proposer_set_update_proposal() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		roll_to(40);
 
-		assert_eq!(
+		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
 				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
+			"{}",
 			true
 		);
 
 		roll_to(41);
 
-		assert_eq!(
+		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
 				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
 			)
-			.is_some(),
-			false
+			.is_none(),
+			"{}",
+			true
 		);
 
 		roll_to(45);
 
-		assert_eq!(
+		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
 				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
+			"{}",
 			true
 		);
 
 		roll_to(80);
-		assert_eq!(
+		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
 				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
 			)
 			.is_some(),
+			"{}",
 			true
 		);
 	})
@@ -789,9 +782,8 @@ fn proposers_iter_keys_should_only_contain_active_proposers() {
 	let src_id = TypedChainId::Evm(1);
 	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
 
-	new_test_ext_initialized(src_id.clone(), r_id, b"System.remark".to_vec()).execute_with(|| {
-		let prop_keys: Vec<_> = Proposers::<Test>::iter_keys().collect();
-		assert_eq!(prop_keys.len(), 3);
+	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
+		assert_eq!(Proposers::<Test>::iter_keys().count(), 3);
 	});
 }
 

@@ -36,7 +36,7 @@ pub fn create(data: &[u8]) -> Result<AnchorCreateProposal, ValidationError> {
 	let zeroes = header.function_signature().to_bytes();
 	// Check that zeroes is actually zero
 	if u32::from_be_bytes(zeroes) != 0 {
-		return Err(ValidationError::InvalidParameter("Function Sig should be zero".to_string()))?
+		return Err(ValidationError::InvalidParameter("Function Sig should be zero".to_string()))
 	}
 	let encoded_call = data[40..].to_vec();
 	Ok(AnchorCreateProposal { header, encoded_call })
