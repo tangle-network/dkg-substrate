@@ -198,7 +198,7 @@ pub fn decode_proposal_identifier(
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::ProposerSetUpdate));
-	
+
 	// Switch on all cases
 	maybe_evm_anchor_update
 		.or(maybe_substrate_anchor_update)
