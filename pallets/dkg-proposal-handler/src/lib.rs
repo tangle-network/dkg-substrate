@@ -364,7 +364,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> DispatchResult {
-		let unsigned_proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
+		let unsigned_proposal =
+			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
 			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, unsigned_proposal);
 
