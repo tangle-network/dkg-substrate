@@ -119,6 +119,7 @@ where
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	finality_notifications: FinalityNotifications<B>,
 	block_import_notification: ImportNotifications<B>,
+	pub votes_sent: u64,
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
@@ -183,6 +184,7 @@ where
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
 			metrics,
+			votes_sent: 0,
 			rounds: None,
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
@@ -519,8 +521,8 @@ where
 		}
 		self.latest_header = Some(header.clone());
 		listen_and_clear_offchain_storage(self, header);
-		// // Attempt to resume when the worker has shut down somehow
-		// try_resume_dkg(self, header);
+		// Attempt to resume when the worker has shut down somehow
+		try_resume_dkg(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
 			debug!(target: "dkg", "Starting genesis DKG setup");
@@ -528,8 +530,8 @@ where
 		} else {
 			self.enact_new_authorities(header);
 		}
-		// // Identify if the worker is stalling and restart the DKG if necessary
-		// try_restart_dkg(self, header);
+		// Identify if the worker is stalling and restart the DKG if necessary
+		try_restart_dkg(self, header);
 		// Send all outgoing messages created from any reactions from resuming, enacting, or
 		// restarting
 		send_outgoing_dkg_messages(self);
@@ -554,6 +556,7 @@ where
 
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
 				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
+				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				self.current_validator_set = active.clone();
 				self.queued_validator_set = queued.clone();
@@ -577,6 +580,7 @@ where
 			// if no queued keygen is currently in progress.
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
+				metric_set!(self, dkg_validator_set_id, active.id);
 				// Rotate the queued key file contents into the local key file
 				self.rotate_local_key_files();
 				// Rotate the rounds since the authority set has changed
@@ -926,7 +930,6 @@ where
 
 		debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 		let rounds = self.rounds.as_mut().unwrap();
-		metric_set!(self, dkg_should_vote_on, &unsigned_proposals.len());
 		let mut errors = Vec::new();
 		for unsigned_proposal in unsigned_proposals {
 			let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
@@ -939,6 +942,8 @@ where
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
 					error!(target: "dkg", "🕸️  error creating new vote: {}", e);
 					errors.push(e);
+				} else {
+					self.votes_sent += 1;
 				};
 			}
 		}
@@ -946,6 +951,9 @@ where
 		for e in errors {
 			self.handle_dkg_error(e);
 		}
+		// Votes sent to the DKG are unsigned proposals
+		metric_set!(self, dkg_votes_sent, self.votes_sent);
+
 		// Send messages to all peers
 		send_outgoing_dkg_messages(self);
 	}
