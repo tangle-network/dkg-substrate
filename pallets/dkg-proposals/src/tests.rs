@@ -710,11 +710,10 @@ fn only_current_authorities_should_make_successful_proposals() {
 fn session_change_should_create_proposer_set_update_proposal() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		roll_to(40);
-
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(4.into())
 			)
 			.is_some(),
 			"{}",
@@ -726,14 +725,14 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_none(),
 			"{}",
 			true
 		);
 
-		roll_to(45);
+		roll_to(50);
 
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
@@ -749,7 +748,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(8.into())
 			)
 			.is_some(),
 			"{}",

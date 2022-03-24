@@ -200,30 +200,18 @@ pub mod pallet {
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
 				target: "dkg",
-				"Current Authority({}) DKG PublicKey (Compressed): 0x{}",
+				"Current Authority({}) DKG PublicKey:\n	compressed: 0x{}\n	uncompressed: 0x{}",
 				authority_id,
 				hex::encode(pk.clone()),
-			);
-			#[cfg(feature = "std")] // required since we use hex and strings
-			frame_support::log::debug!(
-				target: "dkg",
-				"Current Authority({}) DKG PublicKey (Uncompressed): 0x{}",
-				authority_id,
 				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
 			);
-
 			#[cfg(feature = "std")] // required since we use hex and strings
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
 				frame_support::log::debug!(
 					target: "dkg",
-					"Next Authority({}) DKG PublicKey (Compressed): 0x{}",
+					"Next Authority({}) DKG PublicKey:\n	compressed: 0x{}\n	uncompressed: 0x{}",
 					next_authority_id,
 					hex::encode(next_pk.clone()),
-				);
-				frame_support::log::debug!(
-					target: "dkg",
-					"Next Authority({}) DKG PublicKey (Uncompressed): 0x{}",
-					next_authority_id,
 					hex::encode(Self::decompress_public_key(next_pk).unwrap_or_default()),
 				);
 			}
@@ -1105,10 +1093,11 @@ impl<T: Config> Pallet<T> {
 				RefreshProposal { nonce: refresh_nonce.into(), pub_key: uncompressed_pub_key };
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(signature, &data.encode())
 				.map_err(|_| {
+					#[cfg(feature = "std")]
 					frame_support::log::error!(
 						target: "dkg",
-						"Invalid signature: {:?}",
-						signature
+						"Invalid signature for RefreshProposal\n	signature: {:?}",
+						hex::encode(signature),
 					);
 					Error::<T>::InvalidSignature
 				})?;
