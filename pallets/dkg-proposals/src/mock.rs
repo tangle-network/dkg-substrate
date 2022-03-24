@@ -271,7 +271,7 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 }
 
 pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
-	DKGEcdsaToEthereum::convert(mock_dkg_id(id).into())
+	DKGEcdsaToEthereum::convert(mock_dkg_id(id))
 }
 
 pub(crate) fn roll_to(n: u64) {
