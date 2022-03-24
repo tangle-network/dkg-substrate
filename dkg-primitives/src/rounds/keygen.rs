@@ -31,6 +31,7 @@ pub use multi_party_ecdsa::protocols::multi_party_ecdsa::{
 };
 
 /// Wrapper state-machine for Keygen rounds
+#[allow(clippy::all)]
 pub enum KeygenState<Clock>
 where
 	Clock: AtLeast32BitUnsigned + Copy,
@@ -99,6 +100,12 @@ pub struct PreKeygenRounds<Clock> {
 impl<C> PreKeygenRounds<C> {
 	pub fn new() -> Self {
 		Self { pending_keygen_msgs: Vec::default(), clock_type: PhantomData }
+	}
+}
+
+impl<C> Default for PreKeygenRounds<C> {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -213,16 +220,16 @@ where
 
 			let enc_messages = keygen
 				.message_queue()
-				.into_iter()
+				.iter_mut()
 				.map(|m| {
 					trace!(target: "dkg", "🕸️  MPC protocol message {:?}", m);
 					let serialized = serde_json::to_string(&m).unwrap();
-					return DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
+					DKGKeygenMessage { round_id, keygen_msg: serialized.into_bytes() }
 				})
 				.collect::<Vec<DKGKeygenMessage>>();
 
 			keygen.message_queue().clear();
-			return enc_messages
+			enc_messages
 		} else {
 			Vec::new()
 		}
@@ -267,7 +274,7 @@ where
 			msg.body,
 		);
 		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", keygen);
-		match keygen.handle_incoming(msg.clone()) {
+		match keygen.handle_incoming(msg) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {
 				error!(target: "dkg", "🕸️  Critical error encountered: {:?}", err);

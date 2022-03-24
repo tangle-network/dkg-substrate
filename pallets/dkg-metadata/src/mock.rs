@@ -195,7 +195,7 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 	let session_keys: Vec<_> = authorities
 		.iter()
 		.enumerate()
-		.map(|(_, id)| (id.0.clone(), id.0.clone(), MockSessionKeys { dummy: id.1.clone() }))
+		.map(|(_, id)| (id.0, id.0, MockSessionKeys { dummy: id.1.clone() }))
 		.collect();
 
 	BasicExternalities::execute_with_storage(&mut t, || {

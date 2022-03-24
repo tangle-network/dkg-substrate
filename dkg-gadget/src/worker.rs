@@ -276,7 +276,7 @@ where
 			}
 		}
 
-		return None
+		None
 	}
 
 	/// gets authority reputations from an header
@@ -308,7 +308,7 @@ where
 
 	/// gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		self.latest_header.clone().unwrap().number().clone()
+		*self.latest_header.clone().unwrap().number()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -420,6 +420,7 @@ where
 	/// sets the current rounds if there is next rounds in the Dkg worker instance
 	///
 	/// else it creates new rounds to set
+	#[allow(clippy::too_many_arguments)]
 	fn handle_setting_of_rounds(
 		&mut self,
 		next_authorities: &AuthoritySet<Public>,
@@ -444,7 +445,7 @@ where
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
 				Some(set_up_rounds(
-					&next_authorities,
+					next_authorities,
 					&public,
 					&sr25519_public,
 					thresh,
@@ -562,8 +563,8 @@ where
 				debug!(target: "dkg", "🕸️  Active validator set {:?}: {:?}", active.id, active.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				debug!(target: "dkg", "🕸️  Queued validator set {:?}: {:?}", queued.id, queued.clone().authorities.iter().map(|x| format!("\n{:?}", x)).collect::<Vec<String>>());
 				// Setting up the DKG
-				self.handle_dkg_setup(&header, active.clone());
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_dkg_setup(header, active);
+				self.handle_queued_dkg_setup(header, queued.clone());
 
 				if !self.current_validator_set.authorities.is_empty() {
 					send_outgoing_dkg_messages(self);
@@ -581,7 +582,7 @@ where
 			{
 				debug!(target: "dkg", "🕸️  Queued authorities changed, running key gen");
 				self.queued_validator_set = queued.clone();
-				self.handle_queued_dkg_setup(&header, queued.clone());
+				self.handle_queued_dkg_setup(header, queued);
 				send_outgoing_dkg_messages(self);
 			}
 		}
@@ -639,12 +640,12 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
-			check_signers(authority_accounts.clone().unwrap().1.into())
+		if check_signers(authority_accounts.clone().unwrap().0) ||
+			check_signers(authority_accounts.unwrap().1)
 		{
-			return Ok(dkg_msg)
+			Ok(dkg_msg)
 		} else {
-			return Err(DKGError::GenericError {
+			Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
@@ -699,7 +700,7 @@ where
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
 
-		match handle_misbehaviour_report(self, dkg_msg.clone()) {
+		match handle_misbehaviour_report(self, dkg_msg) {
 			Ok(()) => (),
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
@@ -797,7 +798,7 @@ where
 		if !success {
 			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority".to_string(),
-			})?
+			})
 		}
 
 		Ok(maybe_signer.unwrap())
@@ -825,9 +826,9 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if proposal.is_some() {
-				proposals.push(proposal.unwrap())
-			}
+			if let Some(prop) = proposal {
+				proposals.push(prop)
+			};
 		}
 		metric_set!(
 			self,
@@ -846,7 +847,7 @@ where
 			Err(_err) => return None,
 		};
 
-		get_signed_proposal(self, finished_round.clone(), payload_key)
+		get_signed_proposal(self, finished_round, payload_key)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
@@ -941,7 +942,7 @@ where
 			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+					error!(target: "dkg", "🕸️  error creating new vote: {}", e);
 					errors.push(e);
 				};
 			}

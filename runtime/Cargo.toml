@@ -84,6 +84,8 @@ xcm-executor = { git = "https://github.com/paritytech/polkadot", default-feature
 [features]
 default = ['std']
 runtime-benchmarks = [
+	'xcm-builder/runtime-benchmarks',
+	'pallet-xcm/runtime-benchmarks',
 	'sp-runtime/runtime-benchmarks',
 	'frame-benchmarking',
 	'frame-support/runtime-benchmarks',

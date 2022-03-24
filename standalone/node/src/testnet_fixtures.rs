@@ -25,7 +25,7 @@ use sp_finality_grandpa::AuthorityId as GrandpaId;
 /// Testnet root key
 pub fn get_testnet_root_key() -> AccountId {
 	// Arana sudo key: 5F9jS22zsSzmWNXKt4kknBsrhVAokEQ9e3UcuBeg21hkzqWz
-	return hex!["888a3ab33eea2b827f15302cb26af0e007b067ccfbf693faff3aa7ffcfa25925"].into()
+	hex!["888a3ab33eea2b827f15302cb26af0e007b067ccfbf693faff3aa7ffcfa25925"].into()
 }
 
 /// Arana bootnodes

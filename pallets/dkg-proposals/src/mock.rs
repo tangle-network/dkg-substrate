@@ -24,7 +24,7 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::{ecdsa, sr25519::Signature, H256};
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
 	testing::{Header, TestXt},
@@ -271,7 +271,7 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 }
 
 pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
-	DKGEcdsaToEthereum::convert(mock_dkg_id(id).into())
+	DKGEcdsaToEthereum::convert(mock_dkg_id(id))
 }
 
 pub(crate) fn roll_to(n: u64) {
@@ -356,8 +356,8 @@ impl ExtBuilder {
 				.cloned()
 				.map(|(acc, dkg, _)| {
 					(
-						acc.clone(),           // account id
-						acc.clone(),           // validator id
+						acc,                   // account id
+						acc,                   // validator id
 						dkg_session_keys(dkg), // session keys
 					)
 				})
@@ -410,7 +410,7 @@ pub fn new_test_ext_initialized(
 		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_chain_id));
 		// Set and check resource ID mapped to some junk data
 		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, resource));
-		assert_eq!(DKGProposals::resource_exists(r_id), true);
+		assert!(DKGProposals::resource_exists(r_id), "{}", true);
 	});
 	t
 }
@@ -433,19 +433,20 @@ pub fn assert_events(mut expected: Vec<Event>) {
 	expected.reverse();
 	for evt in expected {
 		let next = actual.pop().expect("event expected");
-		assert_eq!(next, evt.into(), "Events don't match (actual,expected)");
+		assert_eq!(next, evt, "Events don't match (actual,expected)");
 	}
 }
 
-pub fn assert_has_event(ev: Event) -> () {
-	let actual: Vec<Event> =
-		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
-	assert!(actual.contains(&ev))
+pub fn assert_has_event(ev: Event) {
+	assert!(system::Pallet::<Test>::events()
+		.iter()
+		.map(|e| e.event.clone())
+		.any(|x| x == ev))
 }
 
-pub fn assert_does_not_have_event(ev: Event) -> () {
-	let actual: Vec<Event> =
-		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
-
-	assert!(!actual.contains(&ev))
+pub fn assert_does_not_have_event(ev: Event) {
+	assert!(!system::Pallet::<Test>::events()
+		.iter()
+		.map(|e| e.event.clone())
+		.any(|x| x == ev))
 }

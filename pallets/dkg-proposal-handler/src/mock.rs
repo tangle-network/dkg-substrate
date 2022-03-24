@@ -34,7 +34,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, ProposalHeader, TransactionV2, TypedChainId};
+use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
 
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
@@ -340,9 +340,5 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	return Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.clone(),
-		signature: sig_vec,
-	}
+	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
 }
