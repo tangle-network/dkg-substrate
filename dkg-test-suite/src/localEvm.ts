@@ -24,6 +24,7 @@ import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { fetchComponentsFromFilePaths } from '@webb-tools/utils';
 import path from 'path';
 import child from 'child_process';
+import { BLOCK_TIME } from './constants';
 
 export type GanacheAccounts = {
 	balance: string;

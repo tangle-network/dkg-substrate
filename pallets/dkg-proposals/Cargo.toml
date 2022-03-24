@@ -15,7 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 # primitives
 codec = { package = "parity-scale-codec", version = "2.3.0", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
-k256 = { version = "0.10.2", default-features = false, features = ["arithmetic"] }
+k256 = { version = "0.10.2", default-features = false, features = ["arithmetic", "ecdsa"] }
 log = { version = "0.4.13", default-features = false }
 
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
@@ -40,6 +40,7 @@ pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polka
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
 pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17" }
+hex = { version = "0.4", default-features = false }
 
 [features]
 default = ["std"]
