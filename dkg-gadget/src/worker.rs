@@ -17,17 +17,16 @@
 use sc_keystore::LocalKeystore;
 use std::{
 	collections::{BTreeSet, HashMap},
+	future::Future,
 	marker::PhantomData,
 	path::PathBuf,
+	pin::Pin,
 	sync::Arc,
 };
-use std::future::Future;
-use std::pin::Pin;
 
 use codec::{Codec, Decode, Encode};
-use futures::{FutureExt, StreamExt};
+use futures::{lock::Mutex as AsyncMutex, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use futures::lock::Mutex as AsyncMutex;
 
 use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
@@ -278,7 +277,7 @@ where
 			}
 		}
 
-		return None
+		None
 	}
 
 	/// gets authority reputations from an header
@@ -310,7 +309,7 @@ where
 
 	/// gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		self.latest_header.clone().unwrap().number().clone()
+		*self.latest_header.clone().unwrap().number()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -367,7 +366,11 @@ where
 		Ok(())
 	}
 
-	async fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
+	async fn handle_dkg_setup(
+		&mut self,
+		header: &B::Header,
+		next_authorities: AuthoritySet<Public>,
+	) {
 		if is_next_authorities_or_rounds_empty(self, &next_authorities) {
 			return
 		}
@@ -402,6 +405,14 @@ where
 		);
 
 		if next_authorities.id == GENESIS_AUTHORITY_SET_ID {
+			// let (ref incoming, ref mut outgoing) = futures::channel::mpsc::unbounded();
+			// // TODO: Wrap incoming so that we verify signatures against authorities
+			// // TODO: Wrap outgoing so that we sign messages before gossiping
+			// let keygen = Keygen::new(args.index, args.threshold, args.number_of_parties)?;
+			// let output = AsyncProtocol::new(keygen, incoming, outgoing)
+			// 	.run()
+			// 	.await
+			// 	.map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
 			self.dkg_state.listening_for_active_pub_key = true;
 
 			if let Some(rounds) = self.rounds.as_mut() {
@@ -422,6 +433,7 @@ where
 	/// sets the current rounds if there is next rounds in the Dkg worker instance
 	///
 	/// else it creates new rounds to set
+	#[allow(clippy::too_many_arguments)]
 	fn handle_setting_of_rounds(
 		&mut self,
 		next_authorities: &AuthoritySet<Public>,
@@ -446,7 +458,7 @@ where
 			debug!(target: "dkg", "🕸️  public: {:?} is_authority: {:?}", public, is_authority);
 			if next_authorities.id == GENESIS_AUTHORITY_SET_ID && is_authority {
 				Some(set_up_rounds(
-					&next_authorities,
+					next_authorities,
 					&public,
 					&sr25519_public,
 					thresh,
@@ -639,12 +651,12 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
-			check_signers(authority_accounts.clone().unwrap().1.into())
+		if check_signers(authority_accounts.clone().unwrap().0) ||
+			check_signers(authority_accounts.unwrap().1)
 		{
-			return Ok(dkg_msg)
+			Ok(dkg_msg)
 		} else {
-			return Err(DKGError::GenericError {
+			Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
@@ -699,7 +711,7 @@ where
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
 
-		match handle_misbehaviour_report(self, dkg_msg.clone()) {
+		match handle_misbehaviour_report(self, dkg_msg) {
 			Ok(()) => (),
 			Err(err) => debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 		};
@@ -797,7 +809,7 @@ where
 		if !success {
 			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority".to_string(),
-			})?
+			})
 		}
 
 		Ok(maybe_signer.unwrap())
@@ -825,9 +837,9 @@ where
 		let mut proposals = Vec::new();
 		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
 			let proposal = self.handle_finished_round(finished_round);
-			if proposal.is_some() {
-				proposals.push(proposal.unwrap())
-			}
+			if let Some(prop) = proposal {
+				proposals.push(prop)
+			};
 		}
 		metric_set!(
 			self,
@@ -846,7 +858,7 @@ where
 			Err(_err) => return None,
 		};
 
-		get_signed_proposal(self, finished_round.clone(), payload_key)
+		get_signed_proposal(self, finished_round, payload_key)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
@@ -941,7 +953,7 @@ where
 			if let Proposal::Unsigned { kind: _, data } = unsigned_proposal.proposal {
 				debug!(target: "dkg", "Got unsigned proposal with data = {:?} with key = {:?}", &data, key);
 				if let Err(e) = rounds.vote(key.encode(), data, latest_block_num) {
-					error!(target: "dkg", "🕸️  error creating new vote: {}", e.to_string());
+					error!(target: "dkg", "🕸️  error creating new vote: {}", e);
 					errors.push(e);
 				};
 			}
@@ -963,7 +975,6 @@ where
 		let (ref dkg_message_tx, ref mut dkg_message_rx) = futures::channel::mpsc::unbounded();
 
 		let dkg_engine_handler = async move {
-
 			println!("executing DKGWorker::run::dkg_engine");
 			let ref mut gossip_engine = Box::pin(async move {
 				let mut lock = engine.lock().await;
@@ -974,13 +985,20 @@ where
 
 			'engine_loop: loop {
 				let mut lock = engine.lock().await;
-				// this function MUST be called iteratively since the rx channel may have been replaced
+				// this function MUST be called iteratively since the rx channel may have been
+				// replaced
 				let mut messages = lock.messages_for(dkg_topic::<B>());
 
 				let ref mut messages_exhauster = Box::pin(async move {
 					while let Some(notification) = messages.next().await {
-						let dkg_msg = SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-						dkg_message_tx.unbounded_send(dkg_msg).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						let dkg_msg =
+							SignedDKGMessage::<Public>::decode(&mut &notification.message[..])
+								.map_err(|err| DKGError::GenericError {
+									reason: err.to_string(),
+								})?;
+						dkg_message_tx
+							.unbounded_send(dkg_msg)
+							.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 					}
 
 					Ok(())

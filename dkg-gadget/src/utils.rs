@@ -43,9 +43,10 @@ pub fn validate_threshold(n: u16, t: u16) -> u16 {
 		return t
 	}
 
-	return max_thresh
+	max_thresh
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	authority_set: &AuthoritySet<AuthorityId>,
 	public: &AuthorityId,
@@ -67,17 +68,16 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	});
 	let n = authority_set.authorities.len();
 	// Generate the rounds object
-	let rounds = MultiPartyECDSARounds::builder()
-		.round_id(authority_set.id.clone())
+
+	MultiPartyECDSARounds::builder()
+		.round_id(authority_set.id)
 		.party_index(u16::try_from(party_inx).unwrap())
 		.threshold(thresh)
 		.parties(u16::try_from(n).unwrap())
 		.local_key_path(local_key_path)
 		.reputations(authority_set_reputations)
 		.authorities(authority_set.authorities.clone())
-		.build();
-
-	rounds
+		.build()
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
@@ -119,10 +119,10 @@ where
 		return true
 	}
 
-	if dkg_worker.rounds.is_some() {
-		if dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id {
-			return true
-		}
+	if dkg_worker.rounds.is_some() &&
+		dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id
+	{
+		return true
 	}
 
 	false
@@ -142,10 +142,10 @@ where
 		return true
 	}
 
-	if dkg_worker.next_rounds.is_some() {
-		if dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id {
-			return true
-		}
+	if dkg_worker.next_rounds.is_some() &&
+		dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id
+	{
+		return true
 	}
 
 	false

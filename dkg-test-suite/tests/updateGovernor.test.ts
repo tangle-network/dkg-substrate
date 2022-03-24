@@ -66,7 +66,8 @@ describe('Update SignatureBridge Governor', () => {
 		const tx = await contract.transferOwnershipWithSignaturePubKey(
 			dkgPublicKey!,
 			refreshNonce,
-			dkgPublicKeySignature!
+			dkgPublicKeySignature!,
+			{gasLimit: '0x5B8D80'}
 		);
 		await expect(tx.wait()).toResolve();
 		// check that the new governor is the same as the one we just set.

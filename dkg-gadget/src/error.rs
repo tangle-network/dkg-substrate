@@ -36,6 +36,6 @@ pub enum MPCError {
 
 impl From<keygen::Error> for MPCError {
 	fn from(e: keygen::Error) -> Self {
-		MPCError::CryptoOperation(e.to_string()).into()
+		MPCError::CryptoOperation(e.to_string())
 	}
 }

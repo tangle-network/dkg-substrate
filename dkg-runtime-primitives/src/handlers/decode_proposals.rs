@@ -200,6 +200,7 @@ pub fn decode_proposal_identifier(
 	let maybe_proposer_set_update = super::proposer_set_update::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::ProposerSetUpdateProposal(p.nonce);
+			identifier.typed_chain_id = webb_proposals::TypedChainId::None;
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::ProposerSetUpdate));

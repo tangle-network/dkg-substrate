@@ -46,60 +46,57 @@ where
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
-	match dkg_msg.payload {
-		DKGMsgPayload::MisbehaviourBroadcast(msg) => {
-			debug!(target: "dkg", "Received misbehaviour report");
+	if let DKGMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
+		debug!(target: "dkg", "Received misbehaviour report");
 
-			let is_main_round = {
-				if dkg_worker.rounds.is_some() {
-					msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
-				} else {
-					false
-				}
-			};
-			// Create packed message
-			let mut signed_payload = Vec::new();
-			signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
-			signed_payload.extend_from_slice(msg.offender.as_ref());
-			// Authenticate the message against the current authorities
-			let reporter = dkg_worker.authenticate_msg_origin(
-				is_main_round,
-				authority_accounts.unwrap(),
-				&signed_payload,
-				&msg.signature,
-			)?;
-			// Add new report to the aggregated reports
-			let round_id = msg.round_id.clone();
-			let mut reports = match dkg_worker
+		let is_main_round = {
+			if dkg_worker.rounds.is_some() {
+				msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
+			} else {
+				false
+			}
+		};
+		// Create packed message
+		let mut signed_payload = Vec::new();
+		signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
+		signed_payload.extend_from_slice(msg.offender.as_ref());
+		// Authenticate the message against the current authorities
+		let reporter = dkg_worker.authenticate_msg_origin(
+			is_main_round,
+			authority_accounts.unwrap(),
+			&signed_payload,
+			&msg.signature,
+		)?;
+		// Add new report to the aggregated reports
+		let round_id = msg.round_id;
+		let mut reports = match dkg_worker
+			.aggregated_misbehaviour_reports
+			.get(&(round_id, msg.offender.clone()))
+		{
+			Some(r) => r.clone(),
+			None => AggregatedMisbehaviourReports {
+				round_id,
+				offender: msg.offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			},
+		};
+
+		if !reports.reporters.contains(&reporter) {
+			reports.reporters.push(reporter);
+			reports.signatures.push(msg.signature);
+			dkg_worker
 				.aggregated_misbehaviour_reports
-				.get(&(round_id, msg.offender.clone()))
-			{
-				Some(r) => r.clone(),
-				None => AggregatedMisbehaviourReports {
-					round_id,
-					offender: msg.offender.clone(),
-					reporters: Vec::new(),
-					signatures: Vec::new(),
-				},
-			};
+				.insert((round_id, msg.offender), reports.clone());
+		}
 
-			if !reports.reporters.contains(&reporter) {
-				reports.reporters.push(reporter);
-				reports.signatures.push(msg.signature);
-				dkg_worker
-					.aggregated_misbehaviour_reports
-					.insert((round_id, msg.offender), reports.clone());
-			}
-
-			// Fetch the current threshold for the DKG. We will use the
-			// current threshold to determine if we have enough signatures
-			// to submit the next DKG public key.
-			let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-			if reports.reporters.len() >= threshold {
-				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
-			}
-		},
-		_ => {},
+		// Fetch the current threshold for the DKG. We will use the
+		// current threshold to determine if we have enough signatures
+		// to submit the next DKG public key.
+		let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
+		if reports.reporters.len() >= threshold {
+			store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+		}
 	}
 
 	Ok(())
@@ -138,7 +135,7 @@ pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 			signature: encoded_signature.clone(),
 		});
 
-		let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
+		let message = DKGMessage::<AuthorityId> { id: public, round_id, payload };
 		let encoded_dkg_message = message.encode();
 
 		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -149,7 +146,7 @@ pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 
 				dkg_worker.gossip_engine.lock().await.gossip_message(
 					dkg_topic::<B>(),
-					encoded_signed_dkg_message.clone(),
+					encoded_signed_dkg_message,
 					true,
 				);
 			},
@@ -160,12 +157,15 @@ pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let reports = dkg_worker.aggregated_misbehaviour_reports.entry((round_id, offender.clone())).or_insert(AggregatedMisbehaviourReports {
-			round_id,
-			offender: offender.clone(),
-			reporters: Vec::new(),
-			signatures: Vec::new(),
-		});
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
+			.entry((round_id, offender.clone()))
+			.or_insert(AggregatedMisbehaviourReports {
+				round_id,
+				offender: offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			});
 
 		reports.reporters.push(sr25519_public);
 		reports.signatures.push(encoded_signature);

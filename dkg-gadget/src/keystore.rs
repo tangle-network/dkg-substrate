@@ -123,10 +123,8 @@ impl DKGKeystore {
 	pub fn sr25519_public_keys(&self) -> Result<Vec<sr25519::Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, AURA)
-			.iter()
-			.map(|k| sr25519::Public::from(k.clone()))
-			.collect();
+		let pk: Vec<sr25519::Public> =
+			SyncCryptoStore::sr25519_public_keys(&*store, AURA).iter().copied().collect();
 
 		Ok(pk)
 	}

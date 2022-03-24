@@ -29,6 +29,7 @@ use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
+mod async_protocol_handlers;
 mod error;
 mod gossip;
 mod keyring;
@@ -65,7 +66,6 @@ where
 	B: Block,
 	BE: Backend<B>,
 {
-	// empty
 }
 
 impl<B, BE, T> Client<B, BE> for T
