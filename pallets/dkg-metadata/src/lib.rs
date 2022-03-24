@@ -327,6 +327,7 @@ pub mod pallet {
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
+			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
@@ -363,6 +364,7 @@ pub mod pallet {
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
+			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let next_authorities = Self::next_authorities_accounts();
 			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
@@ -992,6 +994,7 @@ impl<T: Config> Pallet<T> {
 				)
 			}
 
+			// TODO: Check if next public key is none
 			if let Ok(Some(agg_keys)) = agg_keys {
 				let _res = signer.send_signed_transaction(|_account| {
 					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
