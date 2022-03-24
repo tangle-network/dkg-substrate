@@ -66,7 +66,6 @@ where
 	B: Block,
 	BE: Backend<B>,
 {
-	// empty
 }
 
 impl<B, BE, T> Client<B, BE> for T
