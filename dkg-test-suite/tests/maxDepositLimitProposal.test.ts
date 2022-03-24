@@ -17,9 +17,9 @@
 import 'jest-extended';
 import {jest} from "@jest/globals";
 import {
-	encodeFunctionSignature,
-	registerResourceId,
-	waitForEvent,
+  encodeFunctionSignature,
+  registerResourceId,
+  waitForEvent,
   startStandaloneNode,
   provider,
   waitUntilDKGPublicKeyStoredOnChain,
@@ -27,7 +27,7 @@ import {
   sleep,
 } from '../src/utils';
 import {ethers} from 'ethers';
-import {MintableToken, GovernedTokenWrapper} from '@webb-tools/tokens';
+import {MintableToken} from '@webb-tools/tokens';
 import {ApiPromise, Keyring} from '@polkadot/api';
 import {hexToNumber, u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
@@ -159,14 +159,14 @@ describe('Wrapping Fee Update Proposal', () => {
       const alice = keyring.addFromUri('//Alice');
       const prop = u8aToHex(proposalBytes);
       const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-      	Evm: localChain.chainId,
+        Evm: localChain.chainId,
       });
       const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'MaxDepositLimitUpdate');
       const maxDepositLimitProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-      	Unsigned: {
-      		kind: kind,
-      		data: prop
-      	}
+        Unsigned: {
+          kind: kind,
+          data: prop
+        }
       });
       const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(maxDepositLimitProposal);
 
@@ -176,17 +176,17 @@ describe('Wrapping Fee Update Proposal', () => {
       await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned');
       // now we need to query the proposal and its signature.
       const key = {
-      	MaxDepositLimitUpdateProposal: proposalPayload.header.nonce,
+        MaxDepositLimitUpdateProposal: proposalPayload.header.nonce,
       };
       const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
       const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
       expect(value.isSome).toBeTrue();
       const dkgProposal = value.unwrap().toJSON() as {
-      	signed: {
-      		kind: 'MaxDepositLimitUpdate';
-      		data: HexString;
-      		signature: HexString;
-      	};
+        signed: {
+          kind: 'MaxDepositLimitUpdate';
+          data: HexString;
+          signature: HexString;
+        };
       };
       // sanity check.
       expect(dkgProposal.signed.data).toEqual(prop);
@@ -194,21 +194,21 @@ describe('Wrapping Fee Update Proposal', () => {
       const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.chainId);
       const contract = bridgeSide.contract;
       const isSignedByGovernor = await contract.isSignatureFromGovernor(
-      	dkgProposal.signed.data,
-      	dkgProposal.signed.signature
+        dkgProposal.signed.data,
+        dkgProposal.signed.signature
       );
       expect(isSignedByGovernor).toBeTrue();
       // check that we have the resouceId mapping.
       const tx2 = await contract.executeProposalWithSignature(
-      	dkgProposal.signed.data,
-      	dkgProposal.signed.signature
+        dkgProposal.signed.data,
+        dkgProposal.signed.signature
       );
       await expect(tx2.wait()).toResolve();
       // Want to check that fee was updated
       const maxDepositLimit = await vAnchor.contract.maximumDepositAmount();
       expect(hexToNumber("0x50000000").toString()).toEqual(maxDepositLimit.toString());
     });
-	afterAll(async () => {
+  afterAll(async () => {
     await polkadotApi.disconnect();
     aliceNode?.kill('SIGINT');
     bobNode?.kill('SIGINT');
@@ -216,5 +216,5 @@ describe('Wrapping Fee Update Proposal', () => {
     await localChain?.stop();
     await localChain2?.stop();
     await sleep(5 * SECONDS);
-	});
+  });
 });
