@@ -17,9 +17,9 @@
 import 'jest-extended';
 import {jest} from "@jest/globals";
 import {
-	encodeFunctionSignature,
-	registerResourceId,
-	waitForEvent,
+  encodeFunctionSignature,
+  registerResourceId,
+  waitForEvent,
   startStandaloneNode,
   provider,
   waitUntilDKGPublicKeyStoredOnChain,
@@ -27,7 +27,7 @@ import {
   sleep,
 } from '../src/utils';
 import {ethers} from 'ethers';
-import {MintableToken, GovernedTokenWrapper} from '@webb-tools/tokens';
+import {MintableToken} from '@webb-tools/tokens';
 import {ApiPromise, Keyring} from '@polkadot/api';
 import {hexToNumber, u8aToHex} from '@polkadot/util';
 import {Option} from '@polkadot/types';
@@ -216,5 +216,5 @@ describe('Wrapping Fee Update Proposal', () => {
     await localChain?.stop();
     await localChain2?.stop();
     await sleep(5 * SECONDS);
-	});
+  });
 });

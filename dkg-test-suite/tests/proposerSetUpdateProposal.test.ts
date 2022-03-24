@@ -15,60 +15,45 @@
  * limitations under the License.
  */
 import 'jest-extended';
-import {BLOCK_TIME, SECONDS} from '../src/constants';
-import {
-  ethAddressFromUncompressedPublicKey,
-  provider,
-  sleep, startStandaloneNode, waitForEvent, waitForTheNextSession
-} from '../src/utils';
+import {BLOCK_TIME} from '../src/constants';
 import {
   localChain,
-  wallet1,
   polkadotApi,
   executeAfter,
-  localChain2,
-  wallet2,
   signatureBridge,
 } from './utils/util';
 import {jest} from "@jest/globals";
-import {ApiPromise, Keyring} from "@polkadot/api";
-import {ChildProcess} from "child_process";
-import {Bridges} from "@webb-tools/protocol-solidity";
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
-import { u8aToBigInt, u8aToHex, u8aToString } from '@polkadot/util';
 import { BigNumber, ethers } from 'ethers';
-import { base58Encode, base58Decode } from '@polkadot/util-crypto/base58'
-import ganache from 'ganache';
 
 jest.setTimeout(10000 * BLOCK_TIME);
 
-
 describe('Validator Node Test', () => {
-	test('proposer set update test', async () => {
+  test('proposer set update test', async () => {
     const provider = localChain.provider();
     
     const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
       None: 0,
     });
     const key = {
-        ProposerSetUpdateProposal: 1,
+      ProposerSetUpdateProposal: 1,
     };
     const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
     const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
     expect(value.isSome).toBeTrue();
     const dkgProposal = value.unwrap().toJSON() as {
-        signed: {
-            kind: 'ProposerSetUpdate';
-            data: HexString;
-            signature: HexString;
-        };
+      signed: {
+        kind: 'ProposerSetUpdate';
+        data: HexString;
+        signature: HexString;
+      };
     };
     const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
     const contract = bridgeSide.contract;
     const isSignedByGovernor = await contract.isSignatureFromGovernor(
-        dkgProposal.signed.data,
-        dkgProposal.signed.signature
+      dkgProposal.signed.data,
+      dkgProposal.signed.signature
     );
     expect(isSignedByGovernor).toBeTrue();
 
@@ -79,11 +64,11 @@ describe('Validator Node Test', () => {
     const proposalNonce = BigNumber.from(`0x${proposalData.slice(88, 96)}`);
 
     const tx = await contract.updateProposerSetData(
-        proposerSetRoot,
-        averageSessionLength,
-        numOfProposers,
-        proposalNonce,
-        dkgProposal.signed.signature
+      proposerSetRoot,
+      averageSessionLength,
+      numOfProposers,
+      proposalNonce,
+      dkgProposal.signed.signature
     );
     await expect(tx.wait()).toResolve();
 
@@ -104,8 +89,8 @@ describe('Validator Node Test', () => {
     let proposerAccounts = await polkadotApi.query.dKGProposals.externalProposerAccounts.entries();
     let accounts = new Array();
     for (let i = 0; i<proposerAccounts.length; i++) {
-        let account = proposerAccounts[i][1];
-        accounts.push(account.toHuman());
+      let account = proposerAccounts[i][1];
+      accounts.push(account.toHuman());
     }
 
     let hash0 = ethers.utils.keccak256(accounts[0]);
@@ -148,9 +133,9 @@ describe('Validator Node Test', () => {
     await contract.connect(provider.getSigner(signer1.address)).voteInFavorForceSetGovernor(voteProposer1);
 
     expect('0x1111111111111111111111111111111111111111').toEqual(await contract.governor());
-	});
+  });
 
-	afterAll(async () => {
-		await executeAfter();
-	});
+  afterAll(async () => {
+    await executeAfter();
+  });
 });
