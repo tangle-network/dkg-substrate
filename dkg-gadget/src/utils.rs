@@ -21,6 +21,7 @@ use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::path::PathBuf;
 
+/// Finds the index of a value in a vector. Returns None if the value is not found.
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
 		if value == v {
@@ -30,6 +31,19 @@ pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	None
 }
 
+/// Sets up the Multi-party ECDSA rounds struct used to receive, process, and handle
+/// incoming and outgoing DKG related messages for key generation, offline stage creation,
+/// and signing. The rounds struct is used to handle the execution of a single round of the DKG
+/// and should be created for each session.
+///
+/// The rounds are intended to be run only by `best_authorities` that are selected from
+/// an externally provided set of reputations. Rounds are parameterized for a `t-of-n` threshold
+/// - `signature_threshold` represents `t`
+/// - `keygen_threshold` represents `n`
+///
+/// We provide an optional `local_key_path` to this struct so that it may save the generated
+/// DKG public / local key to disk. Caching of this key is critical to persistent storage and
+/// resuming the worker from a machine failure.
 #[allow(clippy::too_many_arguments)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	best_authorities: &[AuthorityId],
@@ -64,6 +78,7 @@ where
 	header.digest().convert_first(|l| l.try_to(id).and_then(match_consensus_log))
 }
 
+/// Matches a `ConsensusLog` for a DKG validator set change.
 fn match_consensus_log(
 	log: ConsensusLog<AuthorityId>,
 ) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
@@ -76,6 +91,14 @@ fn match_consensus_log(
 	}
 }
 
+/// Returns an optional key path if a base path is provided.
+///
+/// This path is used to store the DKG public key / local key
+/// generated through the multi-party threshold ECDSA key generation.
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
-	Some(base_path.as_ref().unwrap().join(path_str))
+	if let Some(path) = base_path {
+		Some(path.join(path_str))
+	} else {
+		None
+	}
 }

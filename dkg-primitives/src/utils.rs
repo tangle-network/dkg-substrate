@@ -35,6 +35,10 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 		.public()
 }
 
+/// Inserts a key of type `ACCOUNT` into the keystore for development/testing.
+///
+/// Currently, this only successfully inserts keys if the seed is development related.
+/// i.e. for Alice, Bob, Charlie, etc.
 pub fn insert_controller_account_keys_into_keystore(
 	config: &Configuration,
 	key_store: Option<SyncCryptoStorePtr>,
@@ -80,7 +84,10 @@ pub fn cleanup(path: PathBuf) -> std::io::Result<()> {
 	fs::remove_file(path)?;
 	Ok(())
 }
-// The secret key bytes should be the byte representation of the secret field of an srr25519 keypair
+
+/// Encrypt a vector of bytes `data` with a `secret_key`.
+///
+/// The secret key bytes should be the byte representation of the secret field of an sr25519 keypair
 pub fn encrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>, &'static str> {
 	if secret_key_bytes.len() != 64 {
 		return Err("Secret key bytes must be 64bytes long")
@@ -95,9 +102,11 @@ pub fn encrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>,
 	Ok(encrypted_data)
 }
 
+/// Decrypt an encrypted `data` with a `secret_key_bytes` using
+/// XChaCha20Poly1305 cipher.
 pub fn decrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>, &'static str> {
 	if secret_key_bytes.len() != 64 {
-		return Err("Secret key bytes must be 64bytes long")
+		return Err("Secret key bytes must be 64-bytes long")
 	}
 
 	let key = &secret_key_bytes[..32];
@@ -108,6 +117,8 @@ pub fn decrypt_data(data: Vec<u8>, secret_key_bytes: Vec<u8>) -> Result<Vec<u8>,
 	Ok(decrypted_data)
 }
 
+/// Select a random subset of unsigned u16 from a vector of u16s
+/// of size `amount` with a random seed of `seed`.
 pub fn select_random_set(
 	seed: &[u8],
 	set: Vec<u16>,
@@ -124,6 +135,13 @@ pub fn select_random_set(
 	Ok(random_set)
 }
 
+/// Selects a subset of authorities of size `count` based
+/// on signed integer reputations for each authority.
+///
+/// If there is no reputation for an authority, it defaults to
+/// a reputation of 0. The sort applied to the authorities by
+/// reputation is expected to be stable, so that the same set
+/// of authorities is returned even in the case of equivalent reputations.
 pub fn get_best_authorities<B>(
 	count: usize,
 	authorities: &[B],
