@@ -17,17 +17,16 @@
 use sc_keystore::LocalKeystore;
 use std::{
 	collections::{BTreeSet, HashMap},
+	future::Future,
 	marker::PhantomData,
 	path::PathBuf,
+	pin::Pin,
 	sync::Arc,
 };
-use std::future::Future;
-use std::pin::Pin;
 
 use codec::{Codec, Decode, Encode};
-use futures::{FutureExt, StreamExt};
+use futures::{lock::Mutex as AsyncMutex, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use futures::lock::Mutex as AsyncMutex;
 
 use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
@@ -367,7 +366,11 @@ where
 		Ok(())
 	}
 
-	async fn handle_dkg_setup(&mut self, header: &B::Header, next_authorities: AuthoritySet<Public>) {
+	async fn handle_dkg_setup(
+		&mut self,
+		header: &B::Header,
+		next_authorities: AuthoritySet<Public>,
+	) {
 		if is_next_authorities_or_rounds_empty(self, &next_authorities) {
 			return
 		}
@@ -963,7 +966,6 @@ where
 		let (ref dkg_message_tx, ref mut dkg_message_rx) = futures::channel::mpsc::unbounded();
 
 		let dkg_engine_handler = async move {
-
 			println!("executing DKGWorker::run::dkg_engine");
 			let ref mut gossip_engine = Box::pin(async move {
 				let mut lock = engine.lock().await;
@@ -974,13 +976,20 @@ where
 
 			'engine_loop: loop {
 				let mut lock = engine.lock().await;
-				// this function MUST be called iteratively since the rx channel may have been replaced
+				// this function MUST be called iteratively since the rx channel may have been
+				// replaced
 				let mut messages = lock.messages_for(dkg_topic::<B>());
 
 				let ref mut messages_exhauster = Box::pin(async move {
 					while let Some(notification) = messages.next().await {
-						let dkg_msg = SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-						dkg_message_tx.unbounded_send(dkg_msg).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						let dkg_msg =
+							SignedDKGMessage::<Public>::decode(&mut &notification.message[..])
+								.map_err(|err| DKGError::GenericError {
+									reason: err.to_string(),
+								})?;
+						dkg_message_tx
+							.unbounded_send(dkg_msg)
+							.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 					}
 
 					Ok(())

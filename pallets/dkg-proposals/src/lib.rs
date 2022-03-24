@@ -104,7 +104,7 @@ use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 };
-use frame_system::{ensure_root};
+use frame_system::ensure_root;
 
 use sp_io::hashing::keccak_256;
 use sp_runtime::{

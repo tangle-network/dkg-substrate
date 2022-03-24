@@ -20,8 +20,8 @@ use std::vec;
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		PROPOSER_D, TEST_THRESHOLD,
+		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		TEST_THRESHOLD,
 	},
 	*,
 };

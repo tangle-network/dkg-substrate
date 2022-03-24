@@ -160,12 +160,15 @@ pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let reports = dkg_worker.aggregated_misbehaviour_reports.entry((round_id, offender.clone())).or_insert(AggregatedMisbehaviourReports {
-			round_id,
-			offender: offender.clone(),
-			reporters: Vec::new(),
-			signatures: Vec::new(),
-		});
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
+			.entry((round_id, offender.clone()))
+			.or_insert(AggregatedMisbehaviourReports {
+				round_id,
+				offender: offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			});
 
 		reports.reporters.push(sr25519_public);
 		reports.signatures.push(encoded_signature);

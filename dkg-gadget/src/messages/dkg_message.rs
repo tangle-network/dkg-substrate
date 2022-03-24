@@ -47,7 +47,8 @@ where
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id.clone());
 			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number()).await;
+				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number())
+					.await;
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -79,7 +80,8 @@ where
 					&mut next_rounds,
 					id,
 					dkg_worker.get_latest_block_number(),
-				).await;
+				)
+				.await;
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
@@ -134,7 +136,8 @@ where
 	}
 
 	let id = rounds.get_id();
-	let messages = rounds.get_outgoing_messages()
+	let messages = rounds
+		.get_outgoing_messages()
 		.into_iter()
 		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
 		.collect::<Vec<DKGMessage<_>>>();
@@ -162,11 +165,7 @@ async fn sign_and_send_messages<B, C, BE>(
 				let signed_dkg_message =
 					SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
-				engine_lock.gossip_message(
-					dkg_topic::<B>(),
-					encoded_signed_dkg_message,
-					true,
-				);
+				engine_lock.gossip_message(dkg_topic::<B>(), encoded_signed_dkg_message, true);
 			},
 			Err(e) => trace!(
 				target: "dkg",
