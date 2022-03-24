@@ -24,7 +24,7 @@ use frame_support::{
 };
 use frame_system::{self as system};
 pub use pallet_balances;
-use sp_core::{ecdsa, sr25519::Signature, H256};
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	app_crypto::{ecdsa::Public, sr25519},
 	testing::{Header, TestXt},

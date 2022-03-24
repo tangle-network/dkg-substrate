@@ -26,6 +26,7 @@ use crate::mock::{
 	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
 	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder,
 };
+use codec::Encode;
 use core::panic;
 use dkg_runtime_primitives::{
 	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,
