@@ -126,7 +126,7 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 			// slice of the first 32 bytes because the dkg_key is a compressed public key.
 			frame_support::log::debug!(
 				target: "dkg",
-				"Recovered: \npublic key: {:?}\ncurr_key: {:?}",
+				"Recovered: \n	public key: {:?}\n	curr_key: {:?}",
 				recovered_pub_key, current_dkg
 			);
 			let signer = &recovered_pub_key[..32];

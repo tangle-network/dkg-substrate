@@ -28,12 +28,6 @@ pub fn decode_proposal_header(
 	let mut bytes = [0u8; webb_proposals::ProposalHeader::LENGTH];
 	bytes.copy_from_slice(data[..webb_proposals::ProposalHeader::LENGTH].as_ref());
 	let header = webb_proposals::ProposalHeader::from(bytes);
-	frame_support::log::debug!(
-		target: "dkg_proposal_handler",
-		"🕸️ Decoded Proposal Header: {:?} ({} bytes)",
-		header,
-		data.len(),
-	);
 	Ok(header)
 }
 
@@ -204,6 +198,8 @@ pub fn decode_proposal_identifier(
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::ProposerSetUpdate));
+	
+	// Switch on all cases
 	maybe_evm_anchor_update
 		.or(maybe_substrate_anchor_update)
 		.or(maybe_evm_token_add)

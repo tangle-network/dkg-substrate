@@ -350,7 +350,6 @@ pub mod pallet {
 			}
 
 			if accepted {
-				// TODO Do something about accounts that posted a wrong key
 				return Ok(().into())
 			}
 

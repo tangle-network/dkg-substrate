@@ -148,7 +148,7 @@ where
 	/// when the `local_key` is extracted.
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
 		debug!(target: "dkg",
-			"🕸️  State before proceed:\n round_id: {:?}, signers: {:?}",
+			"🕸️  State before proceed:\n	round_id: {:?}\n	signers: {:?}",
 			&self.round_id, &self.signers);
 
 		let mut results = vec![];
