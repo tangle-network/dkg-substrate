@@ -95,7 +95,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::{Encode, EncodeAppend, EncodeLike};
+use codec::{EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
@@ -899,7 +899,7 @@ impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaT
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
 		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		use sp_core::crypto::ByteArray;
-		let x = VerifyingKey::from_sec1_bytes(
+		let _x = VerifyingKey::from_sec1_bytes(
 			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a),
 		);
 		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
