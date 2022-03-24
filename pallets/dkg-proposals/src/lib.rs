@@ -858,7 +858,7 @@ impl<T: Config>
 	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
 	fn on_authority_set_changed(
 		authorities: Vec<T::AccountId>,
-		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
+		authority_set_id: dkg_runtime_primitives::AuthoritySetId,
 		authority_ids: Vec<T::DKGId>,
 	) {
 		// Get the new external accounts for the new authorities by converting
@@ -889,7 +889,9 @@ impl<T: Config>
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
 		// Create the new proposer set merkle tree and update proposal
-		Self::create_proposer_set_update();
+		if authority_set_id > dkg_runtime_primitives::AuthoritySetId::from(0u32) {
+			Self::create_proposer_set_update();
+		}
 	}
 }
 
