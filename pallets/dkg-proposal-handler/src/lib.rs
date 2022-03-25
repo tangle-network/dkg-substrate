@@ -272,9 +272,11 @@ pub mod pallet {
 
 			for prop in &props {
 				if let Proposal::Signed { kind, data, signature } = prop {
-					let result =
-						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, &data[..])
-							.map_err(|_| Error::<T>::ProposalSignatureInvalid);
+					let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+						signature,
+						&data[..],
+					)
+					.map_err(|_| Error::<T>::ProposalSignatureInvalid);
 					match result {
 						Ok(_) => {
 							// Do nothing, it is all good.

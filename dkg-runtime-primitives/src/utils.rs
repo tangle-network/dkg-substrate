@@ -120,12 +120,12 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature)
 		.map_err(|_| SignatureError::InvalidECDSASignature(BadOrigin))?;
-	
+
 	// Validate possibility of using current key
 	if dkg_key.is_empty() || dkg_key.len() != 33 {
 		return Err(SignatureError::InvalidDKGKey(BadOrigin))
 	}
-	
+
 	let current_dkg = &dkg_key[1..];
 
 	#[cfg(feature = "std")]
