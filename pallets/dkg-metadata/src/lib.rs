@@ -113,7 +113,7 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, ProposalHandlerTrait, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+	ConsensusLog, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -124,7 +124,7 @@ use sp_runtime::{
 	traits::{IsMember, Member},
 	DispatchError, Permill, RuntimeAppPublic,
 };
-use sp_std::{borrow::ToOwned, collections::btree_map::BTreeMap, prelude::*};
+use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 
 pub mod types;
 use types::RoundMetadata;
@@ -200,7 +200,11 @@ pub mod pallet {
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
 				target: "dkg",
-				"Current Authority({}) DKG PublicKey:\n	compressed: 0x{}\n	uncompressed: 0x{}",
+				"Current Authority({}) DKG PublicKey:
+				**********************************************************
+				compressed: 0x{}
+				uncompressed: 0x{}
+				**********************************************************",
 				authority_id,
 				hex::encode(pk.clone()),
 				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
@@ -209,7 +213,11 @@ pub mod pallet {
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
 				frame_support::log::debug!(
 					target: "dkg",
-					"Next Authority({}) DKG PublicKey:\n	compressed: 0x{}\n	uncompressed: 0x{}",
+					"Next Authority({}) DKG PublicKey:
+					**********************************************************
+					compressed: 0x{}
+					uncompressed: 0x{}
+					**********************************************************",
 					next_authority_id,
 					hex::encode(next_pk.clone()),
 					hex::encode(Self::decompress_public_key(next_pk).unwrap_or_default()),
@@ -387,29 +395,54 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
 		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
-
-			let authorities = Self::current_authorities_accounts();
+			ensure_signed(origin)?;
+			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
+			ensure!(
+				Self::next_public_key_signature().is_none(),
+				Error::<T>::AlreadySubmittedSignature
+			);
 			let used_signatures = Self::used_signatures();
-
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-
+			// Deconstruct the signature and nonce for easier access
+			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
 			ensure!(
-				signature_proposal.nonce == Self::refresh_nonce().into(),
+				nonce == Self::refresh_nonce().into() || !signature.is_empty(),
 				Error::<T>::InvalidSignature
 			);
+			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
-			ensure!(
-				!used_signatures.contains(&signature_proposal.signature),
-				Error::<T>::UsedSignature
-			);
+			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
+			let data = RefreshProposal {
+				nonce: Self::refresh_nonce().into(),
+				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
+			};
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+				.map_err(|_| {
+					#[cfg(feature = "std")]
+					frame_support::log::error!(
+						target: "dkg",
+						"Invalid signature for RefreshProposal
+						**********************************************************
+						signature: {:?}
+						**********************************************************",
+						hex::encode(signature.clone()),
+					);
+					Error::<T>::InvalidSignature
+				})?;
 
-			ensure!(
-				signature_proposal.signature != Vec::<u8>::default(),
-				Error::<T>::InvalidSignature
-			);
+			NextPublicKeySignature::<T>::put(signature.clone());
+			// Remove unsigned refresh proposal from queue
+			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
+			// Handle manual refresh if flag is set
+			if Self::should_manual_refresh() {
+				ShouldManualRefresh::<T>::put(false);
+				let next_authority_set_id = Self::authority_set_id() + 1u64;
+				AuthoritySetId::<T>::put(next_authority_set_id);
+				Self::refresh_keys();
+				Self::deposit_event(Event::RefreshKeysFinished { next_authority_set_id });
+			}
 
-			Self::verify_pub_key_signature(origin, &signature_proposal.signature)
+			Ok(().into())
 		}
 
 		#[transactional]
@@ -1080,46 +1113,6 @@ impl<T: Config> Pallet<T> {
 			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
 		}
 		false
-	}
-
-	pub fn verify_pub_key_signature(
-		_origin: T::AccountId,
-		signature: &[u8],
-	) -> DispatchResultWithPostInfo {
-		let refresh_nonce = Self::refresh_nonce();
-		if let Some(pub_key) = Self::next_dkg_public_key() {
-			let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-			let data =
-				RefreshProposal { nonce: refresh_nonce.into(), pub_key: uncompressed_pub_key };
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(signature, &data.encode())
-				.map_err(|_| {
-					#[cfg(feature = "std")]
-					frame_support::log::error!(
-						target: "dkg",
-						"Invalid signature for RefreshProposal\n	signature: {:?}",
-						hex::encode(signature),
-					);
-					Error::<T>::InvalidSignature
-				})?;
-
-			if Self::next_public_key_signature().is_none() {
-				NextPublicKeySignature::<T>::put(signature.to_owned());
-				// Remove unsigned refresh proposal from queue
-				T::ProposalHandler::handle_signed_refresh_proposal(data)?;
-				Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-					pub_key_sig: signature.to_owned(),
-				});
-				if Self::should_manual_refresh() {
-					ShouldManualRefresh::<T>::put(false);
-					let next_authority_set_id = Self::authority_set_id() + 1u64;
-					AuthoritySetId::<T>::put(next_authority_set_id);
-					Self::refresh_keys();
-					Self::deposit_event(Event::RefreshKeysFinished { next_authority_set_id });
-				}
-			}
-		}
-
-		Ok(().into())
 	}
 
 	pub fn refresh_keys() {

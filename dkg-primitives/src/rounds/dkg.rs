@@ -147,7 +147,7 @@ where
 	/// state to `KeygenState::Finished`. We decide on the signing set
 	/// when the `local_key` is extracted.
 	pub fn proceed(&mut self, at: C) -> Vec<Result<DKGResult, DKGError>> {
-		debug!(target: "dkg",
+		trace!(target: "dkg",
 			"🕸️  State before proceed:\n	round_id: {:?}\n	signers: {:?}",
 			&self.round_id, &self.signers);
 
@@ -166,7 +166,6 @@ where
 				KeygenState::Started(rounds) => {
 					let finish_result = rounds.try_finish();
 					if let Ok(local_key) = &finish_result {
-						// TODO: Understand setting signers more deeply
 						self.generate_and_set_signers(local_key);
 						debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
 

@@ -286,7 +286,7 @@ where
 				error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
 			},
 		}
-		trace!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
+		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", keygen);
 
 		Ok(())
 	}

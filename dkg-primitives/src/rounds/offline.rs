@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 
 use sp_runtime::traits::AtLeast32BitUnsigned;
@@ -281,7 +281,7 @@ where
 			msg.receiver.is_none(),
 			msg.body,
 		);
-		trace!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
+		debug!(target: "dkg", "🕸️  State before incoming message processing: {:?}", offline_stage);
 		match offline_stage.handle_incoming(msg) {
 			Ok(()) => (),
 			Err(err) if err.is_critical() => {

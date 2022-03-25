@@ -127,7 +127,11 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 			#[cfg(feature = "std")]
 			frame_support::log::debug!(
 				target: "dkg",
-				"Recovered: \n	public key: {}\n	curr_key: {}",
+				"Recovered:
+				**********************************************************
+				public key: {}
+				curr_key: {}
+				**********************************************************",
 				hex::encode(recovered_pub_key.clone()),
 				hex::encode(current_dkg),
 			);

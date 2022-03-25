@@ -23,7 +23,7 @@ use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use log::{debug, error, info, trace};
+use log::{error, info, trace};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
@@ -43,7 +43,6 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  ROUND {} | Try sending DKG messages", rounds.get_id());
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -71,7 +70,6 @@ where
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
-				debug!(target: "dkg", "🕸️  ROUND {} | Try sending DKG messages", next_rounds.get_id());
 				next_rounds_send_result = send_messages(
 					dkg_worker,
 					&mut next_rounds,

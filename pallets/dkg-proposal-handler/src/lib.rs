@@ -394,7 +394,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
-			TypedChainId::Evm(0),
+			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
