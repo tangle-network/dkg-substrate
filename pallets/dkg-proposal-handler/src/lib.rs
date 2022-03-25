@@ -273,7 +273,7 @@ pub mod pallet {
 			for prop in &props {
 				if let Proposal::Signed { kind, data, signature } = prop {
 					let result =
-						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
+						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, &data[..])
 							.map_err(|_| Error::<T>::ProposalSignatureInvalid);
 					match result {
 						Ok(_) => {
@@ -518,7 +518,7 @@ impl<T: Config> Pallet<T> {
 						if result.is_err() {
 							frame_support::log::error!(
 								target: "dkg_proposal_handler",
-								"failure: failed to send unsigned transactiion to chain: {:?}",
+								"failure: failed to send unsigned transaction to chain: {:?}",
 								call,
 							);
 						} else {
