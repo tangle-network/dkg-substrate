@@ -756,18 +756,28 @@ where
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
 		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { return };
 
-		match dkg_report {
+		let round_id = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
-				gossip_misbehaviour_report(self, offender, round_id);
+				if let Some(rounds) = &self.next_rounds {
+					rounds.get_id()
+				} else {
+					0
+				}
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
-				gossip_misbehaviour_report(self, offender, round_id);
+				if let Some(rounds) = &self.rounds {
+					rounds.get_id()
+				} else {
+					0
+				}
 			},
-		}
+		};
+
+		gossip_misbehaviour_report(self, dkg_report, round_id);
 	}
 
 	pub fn authenticate_msg_origin(

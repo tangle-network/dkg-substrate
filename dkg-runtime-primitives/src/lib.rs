@@ -79,8 +79,17 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
+#[derive(Debug, Clone, Decode, Encode, PartialEq, Eq, TypeInfo)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub enum MisbehaviourType {
+	Keygen,
+	Sign,
+}
+
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
 pub struct AggregatedMisbehaviourReports {
+	/// Offending type
+	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
 	pub round_id: u64,
 	/// The offending authority
@@ -131,6 +140,7 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 	}
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
 	KeygenMisbehaviour { offender: AuthorityId },
 	SigningMisbehaviour { offender: AuthorityId },

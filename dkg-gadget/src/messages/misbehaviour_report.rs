@@ -17,9 +17,9 @@ use crate::{
 	worker::DKGWorker, Client,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,
-};
+use dkg_primitives::{types::{
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage, MisbehaviourType,
+}, DKGReport};
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
@@ -58,6 +58,10 @@ where
 		};
 		// Create packed message
 		let mut signed_payload = Vec::new();
+		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
+			MisbehaviourType::Keygen => [0x01],
+			MisbehaviourType::Sign => [0x02],
+		});
 		signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
 		signed_payload.extend_from_slice(msg.offender.as_ref());
 		// Authenticate the message against the current authorities
@@ -75,6 +79,7 @@ where
 		{
 			Some(r) => r.clone(),
 			None => AggregatedMisbehaviourReports {
+				misbehaviour_type: msg.misbehaviour_type,
 				round_id,
 				offender: msg.offender.clone(),
 				reporters: Vec::new(),
@@ -104,7 +109,7 @@ where
 
 pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	offender: dkg_runtime_primitives::crypto::AuthorityId,
+	report: DKGMisbehaviourMessage,
 	round_id: RoundId,
 ) where
 	B: Block,
@@ -124,15 +129,19 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 
 	// Create packed message
 	let mut payload = Vec::new();
+	let misbehaviour_type: [u8; 1] = match report.misbehaviour_type {
+		MisbehaviourType::Keygen => [0x01],
+		MisbehaviourType::Sign => [0x02],
+	};
+	payload.extend_from_slice(&misbehaviour_type);
 	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
-	payload.extend_from_slice(offender.as_ref());
+	payload.extend_from_slice(report.offender.as_ref());
 
 	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &payload) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::MisbehaviourBroadcast(DKGMisbehaviourMessage {
-			round_id,
-			offender: offender.clone(),
 			signature: encoded_signature.clone(),
+			..report
 		});
 
 		let message = DKGMessage::<AuthorityId> { id: public, round_id, payload };
