@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{
-	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
-};
+use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic, utils::fetch_sr25519_public_key, worker::DKGWorker, Client, DKGKeystore};
 use codec::Encode;
+use futures::lock::Mutex;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
@@ -25,6 +24,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
+use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
@@ -142,13 +142,14 @@ where
 		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
 		.collect::<Vec<DKGMessage<_>>>();
 
-	sign_and_send_messages(dkg_worker, messages).await;
+	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store,messages).await;
 
 	results
 }
 
-async fn sign_and_send_messages<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub async fn sign_and_send_messages<B, C, BE>(
+	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
+	dkg_keystore: &DKGKeystore,
 	dkg_messages: Vec<DKGMessage<AuthorityId>>,
 ) where
 	B: Block,
@@ -157,10 +158,10 @@ async fn sign_and_send_messages<B, C, BE>(
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
-	let mut engine_lock = dkg_worker.gossip_engine.lock().await;
+	let mut engine_lock = gossip_engine.lock().await;
 
 	for dkg_message in dkg_messages {
-		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
+		match dkg_keystore.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };

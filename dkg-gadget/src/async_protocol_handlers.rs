@@ -2,6 +2,8 @@
 //! let (tx1, rx2) = futures::channel() // outgoing
 //!
 //! let state_machine = DKGStateMachine::new(...);
+//! send_to_proper_locations_in_code(tx::<SignedDKGMessage>, rx2::<SignedDKGMessage>)
+//! comment: sending: gossip_engine.lock().send
 //! AsyncProtocol::new(
 //!     state_machine,
 //!     IncomingAsyncProtocolWrapper { receiver: rx },
@@ -14,7 +16,7 @@ use std::{task::{Context, Poll}, pin::Pin};
 use codec::Encode;
 use dkg_primitives::{types::{DKGError, DKGMessage, SignedDKGMessage, DKGMsgPayload}, crypto::Public, AuthoritySet};
 use dkg_runtime_primitives::utils::to_slice_32;
-use futures::{stream::Stream, Sink};
+use futures::{stream::Stream, Sink, TryStreamExt};
 use log::error;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{keygen::Keygen};
 use round_based::{Msg, async_runtime::AsyncProtocol, StateMachine, IsCritical};
@@ -51,19 +53,28 @@ impl TransformIncoming for SignedDKGMessage<Public> {
 
 /// Check a `signature` of some `data` against a `set` of accounts.
 /// Returns true if the signature was produced from an account in the set and false otherwise.
-fn check_signers(data: &[u8], signature: &[u8], set: &[AccountId32]) -> bool {
-    dkg_runtime_primitives::utils::verify_signer_from_set(
-        set.iter()
-            .map(|x| {
-                sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-                    panic!("Failed to convert account id to sr25519 public key")
-                }))
-            })
-            .collect(),
+fn check_signers(data: &[u8], signature: &[u8], set: &[AccountId32]) -> Result<bool, DKGError> {
+	let maybe_signers = set.iter()
+		.map(|x| {
+			let val = x.encode().map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+			let slice = to_slice_32(&val).ok_or_else(|| DKGError::GenericError { reason: "Failed to convert account id to sr25519 public key".to_string() })?;
+			Ok(sr25519::Public(slice))
+		}).collect::<Vec<Result<sr25519::Public, DKGError>>>();
+
+	let mut processed = vec![];
+
+	for maybe_signer in maybe_signers {
+		processed.push(maybe_signer?);
+	}
+
+    let is_okay = dkg_runtime_primitives::utils::verify_signer_from_set(
+        processed,
+		collect(),
         data,
         signature,
-    )
-    .1
+    ).1;
+
+	Ok(is_okay)
 }
 
 /// Verifies a SignedDKGMessage was signed by the active or next authorities
@@ -76,7 +87,7 @@ fn verify_signature_against_authorities(
     let encoded = dkg_msg.encode();
     let signature = signed_dkg_msg.signature.unwrap_or_default();
 
-    if check_signers(&encoded, &signature, active_authorities) || check_signers(&encoded, &signature, next_authorities) {
+    if check_signers(&encoded, &signature, active_authorities)? == true || check_signers(&encoded, &signature, next_authorities) == Ok(true) {
         Ok(dkg_msg)
     } else {
         Err(DKGError::GenericError {
@@ -171,10 +182,129 @@ impl MappedIncomingHandler for DKGMessage<Public> {
             DKGMsgPayload::Offline(msg) => todo!(),
 
             DKGMsgPayload::Vote(msg) => todo!(),
-            DKGMsgPayload::PublicKeyBroadcast(_) => unimplemented!(),
-            DKGMsgPayload::MisbehaviourBroadcast(_) => unimplemented!(),
+            err => Err(DKGError::GenericError { reason: format!("{:?} ", err) })
         }
     }
+}
+
+pub mod meta_channel {
+	use std::future::Future;
+	use std::pin::Pin;
+	use std::sync::Arc;
+	use std::task::{Context, Poll};
+	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+	use futures::lock::Mutex;
+	use futures::{select, StreamExt};
+	use round_based::async_runtime::watcher::StderrWatcher;
+	use round_based::AsyncProtocol;
+	use sc_network_gossip::GossipEngine;
+	use sp_runtime::traits::Block;
+	use dkg_primitives::Public;
+	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
+	use crate::async_protocol_handlers::state_machines::{KeygenStateMachine, OfflineStateMachine, VotingStateMachine};
+	use crate::DKGKeystore;
+	use crate::messages::dkg_message::sign_and_send_messages;
+
+	pub type AsyncProtoType<SM, T> = AsyncProtocol<SM, UnboundedReceiver<T>, UnboundedSender<DKGMessage<Public>>, StderrWatcher>;
+	pub trait SendFuture: Future<Output=Result<(), DKGError>> + Send {}
+	impl<T> SendFuture for T where T: Future<Output=Result<(), DKGError>> + Send {}
+
+	pub struct MetaDKGMessageHandler {
+		to_keygen_state_machine: UnboundedSender<DKGKeygenMessage>,
+		to_offline_state_machine: UnboundedSender<DKGOfflineMessage>,
+		to_vote_state_machine: UnboundedSender<DKGVoteMessage>,
+		protocol: Pin<Box<dyn SendFuture>>
+	}
+
+	impl MetaDKGMessageHandler {
+		/// `to_outbound_wire` must be a function that takes DKGMessages and sends them outbound to
+		/// the internet
+		pub fn new<B>(gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore) -> Self
+				where
+		          B: Block {
+			let (incoming_tx_keygen, incoming_rx_keygen) = futures::channel::mpsc::unbounded();
+			let (outgoing_tx_keygen, outgoing_rx_keygen) = futures::channel::mpsc::unbounded();
+
+			let (incoming_tx_offline, incoming_rx_offline) = futures::channel::mpsc::unbounded();
+			let (outgoing_tx_offline, outgoing_rx_offline) = futures::channel::mpsc::unbounded();
+
+			let (incoming_tx_vote, incoming_rx_vote) = futures::channel::mpsc::unbounded();
+			let (outgoing_tx_vote, outgoing_rx_vote) = futures::channel::mpsc::unbounded();
+
+			let keygen_state_machine = KeygenStateMachine { };
+			let offline_state_machine = OfflineStateMachine { };
+			let voting_state_machine = VotingStateMachine { };
+
+			let ref mut keygen_proto = AsyncProtocol::new(keygen_state_machine, incoming_rx_keygen, outgoing_tx_keygen).set_watcher(StderrWatcher);
+			let ref mut offline_proto = AsyncProtocol::new(offline_state_machine, incoming_rx_offline, outgoing_tx_offline).set_watcher(StderrWatcher);
+			let ref mut voting_proto = AsyncProtocol::new(voting_state_machine, incoming_rx_vote, outgoing_tx_vote).set_watcher(StderrWatcher);
+
+			let ref mut outgoing_to_wire = Box::pin(async move {
+				let mut merged_stream = futures::stream_select!(outgoing_rx_keygen, outgoing_rx_offline, outgoing_rx_vote);
+
+				while let Some(unsigned_message) = merged_stream.next().await {
+					let unsigned_message: DKGMessage<Public> = unsigned_message;
+					sign_and_send_messages(&gossip_engine,&keystore, vec![unsigned_message]).await;
+				}
+
+				Err(DKGError::CriticalError { reason: "Outbound stream stopped producing items".to_string() })
+			});
+
+			let protocol = async move {
+				select! {
+					keygen_res = keygen_proto.run() => {
+						error!(target: "dkg", "🕸️  Keygen Protocol Ended: {:?}", keygen_res);
+					},
+
+					offline_res = offline_proto.run() => {
+						error!(target: "dkg", "🕸️ Offline Protocol Ended: {:?}", offline_res);
+					},
+
+					voting_res = voting_proto.run() => {
+						error!(target: "dkg", "🕸️  Voting Protocol Ended: {:?}", keygen_res);
+					},
+
+					outgoing = outgoing_to_wire => {
+						error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", keygen_res);
+					}
+				}
+
+				// For now, return ok. Errors cna be propagated after further debugging
+				Ok(())
+			};
+
+
+			Self {
+				to_keygen_state_machine: incoming_tx_keygen,
+				to_offline_state_machine: incoming_tx_offline,
+				to_vote_state_machine: incoming_tx_vote,
+				protocol: Box::pin(protocol)
+			}
+		}
+	}
+
+	impl Future for MetaDKGMessageHandler {
+		type Output = Result<(), DKGError>;
+
+		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+			self.protocol.as_mut().poll(cx)
+		}
+	}
+}
+
+pub mod state_machines {
+	use futures::channel::mpsc::UnboundedReceiver;
+	use dkg_primitives::types::DKGKeygenMessage;
+
+	pub struct KeygenStateMachine {
+
+	}
+
+	pub struct OfflineStateMachine {
+
+	}
+
+	pub struct VotingStateMachine;
 }
 
 pub mod state_machine {
@@ -258,7 +388,9 @@ pub mod state_machine {
         /// For example, in `.proceed()` at verification stage we could find some party trying to
         /// sabotage the protocol, but protocol might be designed to be resistant to such attack, so
         /// it's not a critical error, but obviously it should be reported.
-        fn proceed(&mut self) -> Result<(), Self::Err>;
+        fn proceed(&mut self) -> Result<(), Self::Err> {
+
+		}
 
         /// Deadline for a particular round
         ///

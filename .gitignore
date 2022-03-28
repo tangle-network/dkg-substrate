@@ -24,3 +24,4 @@ para-2074-wasm
 **/.idea/
 /.idea/
 /dkg-gadget/.idea/
+/DKG.iml
