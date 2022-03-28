@@ -875,25 +875,31 @@ impl<T: Config> Pallet<T> {
 		new_authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
 	) {
-		let threshold = Self::signature_threshold();
-
-		if next_authority_ids.len() <= threshold.into() {
-			SignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+		let next_id = Self::authority_set_id() + 1u64;
+		// Ensure pending thresholds remain valid across authority set changes that may break.
+		// We update the pending thresholds because we call `refresh_keys` below, which rotates
+		// all the thresholds into the current / next sets. Pending becomes the next, next becomes
+		// the current.
+		if next_authority_ids.len() < Self::pending_keygen_threshold().into() {
+			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 		}
-
+		if next_authority_ids.len() <= Self::pending_signature_threshold().into() {
+			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+		}
+		// Update the new and next authorities
 		Authorities::<T>::put(&new_authority_ids);
 		CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
-
-		let next_id = Self::authority_set_id() + 1u64;
-
+		NextAuthorities::<T>::put(&next_authority_ids);
+		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
+		// Call set change handler to trigger the other pallet implementing this hook
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
 		>>::on_authority_set_changed(new_authorities_accounts, next_id, new_authority_ids.clone());
-
+		// Update the set id after changing
 		AuthoritySetId::<T>::put(next_id);
-
+		// Deposit a consensus log about the authority set change
 		let log: DigestItem = DigestItem::Consensus(
 			DKG_ENGINE_ID,
 			ConsensusLog::AuthoritiesChange {
@@ -907,9 +913,6 @@ impl<T: Config> Pallet<T> {
 		);
 		<frame_system::Pallet<T>>::deposit_log(log);
 		Self::refresh_keys();
-
-		NextAuthorities::<T>::put(&next_authority_ids);
-		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {

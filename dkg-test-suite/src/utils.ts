@@ -144,6 +144,7 @@ export function startStandaloneNode(
 	const proc = child.spawn(
 		nodePath,
 		[
+			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
 			options.tmp ? '--tmp' : '',
 			`--ws-port=${ports[authority].ws}`,
@@ -167,7 +168,6 @@ export function startStandaloneNode(
 						'--ws-external',
 				  ]
 				: []),
-			`--${authority}`,
 		],
 		{
 			cwd: gitRoot,
@@ -219,19 +219,32 @@ export async function waitForPublicKeySignatureToChange(api: ApiPromise): Promis
 export async function waitForEvent(
 	api: ApiPromise,
 	pallet: string,
-	eventVariant: string
+	eventVariant: string,
+	dataQuery?: { key: string }
 ): Promise<void> {
-	return new Promise(async (reolve, _) => {
+	return new Promise(async (resolve, _rej) => {
 		// Subscribe to system events via storage
 		const unsub = await api.query.system.events((events) => {
+			const handleUnsub = () => {
+				// Unsubscribe from the storage
+				unsub();
+				// Resolve the promise
+				resolve(void 0);
+			};
+
 			// Loop through the Vec<EventRecord>
 			events.forEach((record) => {
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
-					// Unsubscribe from the storage
-					unsub();
-					// Resolve the promise
-					reolve(void 0);
+					if (dataQuery) {
+						const dataKeys = (event.toHuman() as any).data
+							.map((elt: any) => Object.keys(elt)[0]);
+						if (dataKeys.includes(dataQuery.key)) {
+							handleUnsub();
+						}
+					} else {
+						handleUnsub();
+					}
 				}
 			});
 		});
