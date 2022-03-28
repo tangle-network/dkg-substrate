@@ -39,7 +39,7 @@ import { VBridge } from '@webb-tools/protocol-solidity';
 import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../src/constants';
 
 describe('Wrapping Fee Update Proposal', () => {
-  jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
+  jest.setTimeout(10000 * BLOCK_TIME); // 100 blocks
 
   let polkadotApi: ApiPromise;
   let aliceNode: ChildProcess;

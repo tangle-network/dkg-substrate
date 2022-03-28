@@ -29,7 +29,7 @@ import {
 	waitUntilDKGPublicKeyStoredOnChain
 } from "../../src/utils";
 
-jest.setTimeout(100 * BLOCK_TIME); // 100 blocks
+jest.setTimeout(10000 * BLOCK_TIME); // 100 blocks
 
 export let polkadotApi: ApiPromise;
 export let aliceNode: ChildProcess;
