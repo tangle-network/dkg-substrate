@@ -42,7 +42,7 @@ describe('E2E Test Runner', function () {
   importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
   importTest('Anchor Update Proposal', './updateAnchorProposal.test');
   importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
-  importTest('Threshold Update (Staking Chill)', './threshold.test');
+  // importTest('Threshold Update (Staking Chill)', './threshold.test');
   
   after(async () => {
     await executeAfter();
