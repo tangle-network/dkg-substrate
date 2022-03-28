@@ -241,8 +241,10 @@ pub mod meta_channel {
 			let ref mut voting_proto = AsyncProtocol::new(voting_state_machine, incoming_rx_vote, outgoing_tx_vote).set_watcher(StderrWatcher);
 
 			let ref mut outgoing_to_wire = Box::pin(async move {
+				// merge all unsigned messages into a single stream
 				let mut merged_stream = futures::stream_select!(outgoing_rx_keygen, outgoing_rx_offline, outgoing_rx_vote);
 
+				// take all unsigned messages, then sign them and send outbound
 				while let Some(unsigned_message) = merged_stream.next().await {
 					let unsigned_message: DKGMessage<Public> = unsigned_message;
 					sign_and_send_messages(&gossip_engine,&keystore, vec![unsigned_message]).await;
