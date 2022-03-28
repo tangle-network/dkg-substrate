@@ -29,7 +29,6 @@ use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
-mod async_protocol_handlers;
 mod error;
 mod gossip;
 mod keyring;
@@ -42,6 +41,7 @@ pub mod storage;
 mod types;
 mod utils;
 mod worker;
+mod async_protocol_handlers;
 
 pub use keystore::DKGKeystore;
 
