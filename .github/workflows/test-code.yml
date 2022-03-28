@@ -30,30 +30,35 @@ jobs:
             task: "nextest run"
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v2
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
 
-    - name: Install cargo-nextest
-      uses: baptiste0928/cargo-install@v1
-      with:
-        crate: cargo-nextest
-        version: latest
+      - name: Checkout Code
+        uses: actions/checkout@v2
 
-    - name: Install toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.rust }}
-    # Preserve directories between job runs
-    - name: Cache cargo registry
-      uses: actions/cache@v2
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          version: latest
 
-    # Runs actual checks, fmt, and tests  
-    - name: ${{ matrix.make.name }}
-      run: cargo ${{ matrix.make.task }}
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+      # Preserve directories between job runs
+      - name: Cache cargo registry
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      # Runs actual checks, fmt, and tests  
+      - name: ${{ matrix.make.name }}
+        run: cargo ${{ matrix.make.task }}

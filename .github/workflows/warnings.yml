@@ -19,6 +19,10 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
       - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
       - run: cargo check --workspace --all-targets --verbose --no-default-features
@@ -30,6 +34,10 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
+        - name: Cancel Previous Runs
+          uses: styfle/cancel-workflow-action@0.9.1
+          with:
+            access_token: ${{ github.token }}
         - uses: actions/checkout@v2
         - uses: hecrj/setup-rust-action@v1
           with:
