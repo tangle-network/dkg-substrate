@@ -713,7 +713,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(4.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
 			"{}",
@@ -725,7 +725,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
 			)
 			.is_none(),
 			"{}",
@@ -737,7 +737,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
 			)
 			.is_some(),
 			"{}",
@@ -748,7 +748,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(8.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
 			)
 			.is_some(),
 			"{}",
