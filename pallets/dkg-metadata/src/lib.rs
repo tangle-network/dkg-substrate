@@ -905,7 +905,7 @@ impl<T: Config> Pallet<T> {
 			ConsensusLog::AuthoritiesChange {
 				next_authorities: AuthoritySet { authorities: new_authority_ids, id: next_id },
 				next_queued_authorities: AuthoritySet {
-					authorities: next_authority_ids.clone(),
+					authorities: next_authority_ids,
 					id: next_id + 1u64,
 				},
 			}

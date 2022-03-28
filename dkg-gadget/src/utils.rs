@@ -96,9 +96,5 @@ fn match_consensus_log(
 /// This path is used to store the DKG public key / local key
 /// generated through the multi-party threshold ECDSA key generation.
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
-	if let Some(path) = base_path {
-		Some(path.join(path_str))
-	} else {
-		None
-	}
+	base_path.as_ref().map(|path| path.join(path_str))
 }

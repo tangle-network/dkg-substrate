@@ -148,9 +148,9 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	let is_not_current_dkg = signer != current_dkg;
 
 	if !is_not_current_dkg {
-		return Ok(())
+		Ok(())
 	} else {
-		return Err(SignatureError::InvalidRecovery(SignatureResult {
+		Err(SignatureError::InvalidRecovery(SignatureResult {
 			expected: dkg_key.to_vec(),
 			actual: recovered_key.clone(),
 		}))
