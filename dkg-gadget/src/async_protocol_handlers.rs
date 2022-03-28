@@ -276,7 +276,7 @@ pub mod meta_channel {
 					}
 				}
 
-				// For now, return ok. Errors cna be propagated after further debugging
+				// For now, return ok. Errors can be propagated after further debugging
 				Ok(())
 			};
 
