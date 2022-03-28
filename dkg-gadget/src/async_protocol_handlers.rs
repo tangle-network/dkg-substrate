@@ -209,6 +209,7 @@ pub mod meta_channel {
 	pub trait SendFuture: Future<Output=Result<(), DKGError>> + Send {}
 	impl<T> SendFuture for T where T: Future<Output=Result<(), DKGError>> + Send {}
 
+	/// Once created, the MetaDKGMessageHandler should be .awaited to begin execution
 	pub struct MetaDKGMessageHandler {
 		to_keygen_state_machine: UnboundedSender<DKGKeygenMessage>,
 		to_offline_state_machine: UnboundedSender<DKGOfflineMessage>,
