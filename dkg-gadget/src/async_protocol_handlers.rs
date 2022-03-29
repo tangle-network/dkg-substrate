@@ -1,14 +1,16 @@
-//! let (tx, rx) = futures::channel() // incoming
-//! let (tx1, rx2) = futures::channel() // outgoing
-//!
-//! let state_machine = DKGStateMachine::new(...);
-//! send_to_proper_locations_in_code(tx::<SignedDKGMessage>, rx2::<SignedDKGMessage>)
-//! comment: sending: gossip_engine.lock().send
-//! AsyncProtocol::new(
-//!     state_machine,
-//!     IncomingAsyncProtocolWrapper { receiver: rx },
-//!     OutgoingAsyncProtocolWrapper { sender: tx1 },
-//! ).run().await
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 
 use std::{task::{Context, Poll}, pin::Pin};
@@ -87,7 +89,7 @@ fn verify_signature_against_authorities(
     let encoded = dkg_msg.encode();
     let signature = signed_dkg_msg.signature.unwrap_or_default();
 
-    if check_signers(&encoded, &signature, active_authorities)? == true || check_signers(&encoded, &signature, next_authorities) == Ok(true) {
+    if check_signers(&encoded, &signature, active_authorities) == Ok(true) || check_signers(&encoded, &signature, next_authorities) == Ok(true) {
         Ok(dkg_msg)
     } else {
         Err(DKGError::GenericError {
@@ -232,9 +234,9 @@ pub mod meta_channel {
 
 							// Send the payload to the appropriate AsyncProtocols
 							match payload {
-								DKGMsgPayload::Keygen(msg) => incoming_tx_keygen.unbounded_send(msg)?,
-								DKGMsgPayload::Offline(msg) => incoming_tx_offline.unbounded_send(msg)?,
-								DKGMsgPayload::Vote(msg) => incoming_tx_vote.unbounded_send(msg)?,
+								DKGMsgPayload::Keygen(msg) => incoming_tx_keygen.unbounded_send(msg).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+								DKGMsgPayload::Offline(msg) => incoming_tx_offline.unbounded_send(msg).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+								DKGMsgPayload::Vote(msg) => incoming_tx_vote.unbounded_send(msg).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 								err => debug!(target: dkg, "Invalid payload received: {:?}", err)
 							}
 						}
@@ -253,27 +255,29 @@ pub mod meta_channel {
 				select! {
 					keygen_res = keygen_proto.run() => {
 						error!(target: "dkg", "🕸️  Keygen Protocol Ended: {:?}", keygen_res);
+						keygen_res
 					},
 
 					offline_res = offline_proto.run() => {
 						error!(target: "dkg", "🕸️ Offline Protocol Ended: {:?}", offline_res);
+						offline_res
 					},
 
 					voting_res = voting_proto.run() => {
 						error!(target: "dkg", "🕸️  Voting Protocol Ended: {:?}", voting_res);
+						voting_res
 					},
 
-					outgoing = outgoing_to_wire => {
-						error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing);
+					outgoing_res = outgoing_to_wire => {
+						error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
+						outgoing_res
 					},
 
-					incoming = inbound_signed_message_receiver => {
-						error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming);
+					incoming_res = inbound_signed_message_receiver => {
+						error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
+						incoming_res
 					}
 				}
-
-				// For now, return ok. Errors can be propagated after further debugging
-				Ok(())
 			};
 
 
@@ -293,8 +297,10 @@ pub mod meta_channel {
 }
 
 pub mod state_machines {
+	use std::time::Duration;
 	use futures::channel::mpsc::UnboundedReceiver;
-	use dkg_primitives::types::DKGKeygenMessage;
+	use round_based::{Msg, StateMachine};
+	use dkg_primitives::types::{DKGError, DKGKeygenMessage};
 
 	pub struct KeygenStateMachine {
 
@@ -304,7 +310,63 @@ pub mod state_machines {
 
 	}
 
-	pub struct VotingStateMachine;
+	pub struct VotingStateMachine {
+
+	}
+
+	impl StateMachine for KeygenStateMachine {
+		type MessageBody = DKGKeygenMessage;
+		type Err = DKGError;
+		type Output = ();
+
+		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+			msg.body.
+		}
+
+		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
+			todo!()
+		}
+
+		fn wants_to_proceed(&self) -> bool {
+			todo!()
+		}
+
+		fn proceed(&mut self) -> Result<(), Self::Err> {
+			todo!()
+		}
+
+		fn round_timeout(&self) -> Option<Duration> {
+			todo!()
+		}
+
+		fn round_timeout_reached(&mut self) -> Self::Err {
+			todo!()
+		}
+
+		fn is_finished(&self) -> bool {
+			todo!()
+		}
+
+		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
+			todo!()
+		}
+
+		fn current_round(&self) -> u16 {
+			todo!()
+		}
+
+		fn total_rounds(&self) -> Option<u16> {
+			todo!()
+		}
+
+		fn party_ind(&self) -> u16 {
+			todo!()
+		}
+
+		fn parties(&self) -> u16 {
+			todo!()
+		}
+	}
 }
 
 impl IsCritical for DKGError {
