@@ -150,17 +150,18 @@ where
 pub async fn sign_and_send_messages<B, C, BE>(
 	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
 	dkg_keystore: &DKGKeystore,
-	dkg_messages: Vec<DKGMessage<AuthorityId>>,
+	dkg_messages: impl Into<UnsignedMessages>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
+	let mut dkg_messages = dkg_messages.into();
 	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
 	let mut engine_lock = gossip_engine.lock().await;
 
-	for dkg_message in dkg_messages {
+	while let Some(dkg_message) = dkg_messages.next() {
 		match dkg_keystore.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 			Ok(sig) => {
 				let signed_dkg_message =
@@ -176,5 +177,34 @@ pub async fn sign_and_send_messages<B, C, BE>(
 		};
 
 		trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
+	}
+}
+
+
+enum UnsignedMessages {
+	Single(Option<DKGMessage<AuthorityId>>),
+	Multiple(Vec<DKGMessage<AuthorityId>>)
+}
+
+impl From<DKGMessage<AuthorityId>> for UnsignedMessages {
+	fn from(item: DKGMessage<AuthorityId>) -> Self {
+		UnsignedMessages::Single(Some(item))
+	}
+}
+
+impl From<Vec<DKGMessage<AuthorityId>>> for UnsignedMessages {
+	fn from(messages: Vec<DKGMessage<AuthorityId>>) -> Self {
+		UnsignedMessages::Multiple(messages)
+	}
+}
+
+impl Iterator for UnsignedMessages {
+	type Item = DKGMessage<AuthorityId>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Single(msg) => msg.take(),
+			Self::Multiple(messages) => messages.pop()
+		}
 	}
 }
