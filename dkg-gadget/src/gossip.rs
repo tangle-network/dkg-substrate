@@ -17,7 +17,7 @@ use sc_network_gossip::{ValidationResult, Validator, ValidatorContext};
 use sp_runtime::traits::Block;
 
 use codec::Decode;
-use log::{debug, error, trace};
+use log::{error, trace};
 
 use crate::types::dkg_topic;
 use dkg_primitives::types::SignedDKGMessage;
@@ -58,7 +58,6 @@ where
 		data: &[u8],
 	) -> ValidationResult<B::Hash> {
 		let mut data_copy = data;
-		debug!(target: "dkg", "🕸️  Got a signed message ({:?} bytes) from: {:?}", data_copy.len(), sender);
 		match SignedDKGMessage::<Public>::decode(&mut data_copy) {
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got a signed dkg message: {:?}, from: {:?}", msg, sender);

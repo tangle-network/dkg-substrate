@@ -250,7 +250,7 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-#[cfg(not(feature = "integration-tests"))]
+#[cfg(feature = "integration-tests")]
 parameter_types! {
 	// How often we trigger a new session.
 	// during integration tests, we use manual sessions.
@@ -258,10 +258,10 @@ parameter_types! {
 	pub const Offset: BlockNumber = 0;
 }
 
-#[cfg(feature = "integration-tests")]
+#[cfg(not(feature = "integration-tests"))]
 parameter_types! {
 	// How often we trigger a new session.
-	pub const Period: BlockNumber = 3 * MINUTES;
+	pub const Period: BlockNumber = 2 * MINUTES;
 	pub const Offset: BlockNumber = 0;
 }
 
@@ -820,6 +820,18 @@ impl_runtime_apis! {
 
 		fn signature_threshold() -> u16 {
 			DKG::signature_threshold()
+		}
+
+		fn keygen_threshold() -> u16 {
+			DKG::keygen_threshold()
+		}
+
+		fn next_signature_threshold() -> u16 {
+			DKG::next_signature_threshold()
+		}
+
+		fn next_keygen_threshold() -> u16 {
+			DKG::next_keygen_threshold()
 		}
 
 		fn should_refresh(block_number: BlockNumber) -> bool {

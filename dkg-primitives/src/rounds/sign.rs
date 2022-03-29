@@ -255,7 +255,7 @@ where
 						signature: signature.encode(),
 					};
 
-					debug!(target: "dkg", "🕸️  Finished round /w key: {:?}", self.round_key);
+					debug!(target: "dkg", "🕸️  Finished round w/ key: {:?}", self.round_key);
 					Ok(signed_payload)
 				},
 				_ => Err(DKGError::GenericError {
@@ -314,7 +314,7 @@ where
 
 	fn complete(mut self) -> Result<SignatureRecid, DKGError> {
 		if let Some(sign_manual) = self.sign_manual.take() {
-			debug!(target: "dkg", "Tyring to complete vote with {} votes", self.votes.len());
+			debug!(target: "dkg", "Trying to complete vote with {} votes", self.votes.len());
 
 			let votes: Vec<PartialSignature> = self.votes.into_values().collect();
 
@@ -339,7 +339,7 @@ where
 								bad_actors: vec_usize_to_u16(err_type.bad_actors),
 							}),
 						_ => return Err(DKGError::GenericError { reason: sign_err.to_string() }),
-					};
+					}
 				},
 			}
 		}

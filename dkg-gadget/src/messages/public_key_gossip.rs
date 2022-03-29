@@ -42,9 +42,7 @@ where
 	if !dkg_worker.dkg_state.listening_for_pub_key &&
 		!dkg_worker.dkg_state.listening_for_active_pub_key
 	{
-		return Err(DKGError::GenericError {
-			reason: "Not listening for public key broadcast".to_string(),
-		})
+		return Ok(())
 	}
 
 	// Get authority accounts
@@ -57,7 +55,7 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "Received public key broadcast");
+		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
 
 		let is_main_round = {
 			if dkg_worker.rounds.is_some() {
@@ -90,8 +88,8 @@ where
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-		if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
+		if aggregated_public_keys.keys_and_signatures.len() >= (threshold + 1) {
 			store_aggregated_public_keys(
 				dkg_worker,
 				is_main_round,
