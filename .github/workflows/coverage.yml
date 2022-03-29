@@ -14,16 +14,13 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   coverage:
-    name: coverage
+    name: Cover
     runs-on: ubuntu-latest
-
-    container:
-      image: xd009642/tarpaulin:develop-nightly
-      options: --security-opt seccomp=unconfined
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
 
       - name: Install apt dependencies
         run: |
@@ -31,22 +28,33 @@ jobs:
           apt-get install -y clang libssl-dev llvm libudev-dev libgmp3-dev && \
           rm -rf /var/lib/apt/lists/*
 
+      - name: Checkout Sources
+        uses: actions/checkout@v2
+
+      - name: Install Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
-        
-      - name: Generate code coverage
-        run: |
-          SKIP_WASM_BUILD=1 cargo +nightly tarpaulin --out Xml \
-          -p pallet-dkg-metadata \
-          -p pallet-dkg-proposal-handler \
-          -p pallet-dkg-proposals \
-          -p dkg-primitives \
-          -p dkg-runtime-primitives \
-          --timeout 3600
 
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v2
+      - name: Run Tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
         with:
-          version: "v0.1.15"
-          fail_ci_if_error: true
+          args: |
+            '--out Xml 
+            -p pallet-dkg-metadata \
+            -p pallet-dkg-proposal-handler \
+            -p pallet-dkg-proposals \
+            -p dkg-primitives \
+            -p dkg-runtime-primitives \ 
+             --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16 '
+
+      - name: Upload CodeCov
+        uses: codecov/codecov-action@v2
+
+   
 
