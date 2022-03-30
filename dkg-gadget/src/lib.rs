@@ -160,9 +160,6 @@ where
 		local_keystore,
 		dkg_state: DKGState {
 			accepted: false,
-			epoch_is_over: true,
-			curr_dkg: None,
-			past_dkg: None,
 			listening_for_pub_key: false,
 			listening_for_active_pub_key: false,
 			created_offlinestage_at: HashMap::new(),

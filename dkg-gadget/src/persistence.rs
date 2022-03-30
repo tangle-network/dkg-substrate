@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use crate::{
-	utils::{fetch_public_key, fetch_sr25519_public_key, set_up_rounds, validate_threshold},
+	utils::{find_index, set_up_rounds},
 	worker::DKGWorker,
 	Client,
 };
@@ -23,8 +23,8 @@ use dkg_primitives::{
 	serde_json,
 	types::RoundId,
 	utils::{
-		decrypt_data, encrypt_data, select_random_set, StoredLocalKey, DKG_LOCAL_KEY_FILE,
-		QUEUED_DKG_LOCAL_KEY_FILE,
+		decrypt_data, encrypt_data, get_best_authorities, select_random_set, StoredLocalKey,
+		DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
 	},
 };
 use dkg_runtime_primitives::{
@@ -51,10 +51,6 @@ impl DKGPersistenceState {
 	pub fn new() -> Self {
 		Self { initial_check: false }
 	}
-
-	pub fn start(&mut self) {
-		self.initial_check = true;
-	}
 }
 
 pub(crate) fn store_localkey<B, C, BE>(
@@ -73,7 +69,7 @@ where
 		if let Some(local_keystore) = worker.local_keystore.clone() {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
 			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-				&Public::try_from(&fetch_sr25519_public_key(worker).0[..])
+				&Public::try_from(&worker.get_sr25519_public_key().0[..])
 					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 			);
 
@@ -113,16 +109,23 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
+	// We only try to resume the dkg once even if there is no data to recover
 	if worker.dkg_persistence.initial_check {
+		return
+	} else {
+		worker.dkg_persistence.initial_check = true;
+	}
+
+	// If there is no local keystore then there is no DKG to resume.
+	// We return in this case.
+	if worker.local_keystore.is_none() {
 		return
 	}
 
-	worker.dkg_persistence.start();
-
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
 	if let Some((active, queued)) = worker.validator_set(header) {
-		let public = fetch_public_key(worker);
-		let sr25519_public = fetch_sr25519_public_key(worker);
+		let public = worker.get_authority_public_key();
+		let sr25519_public = worker.get_sr25519_public_key();
 
 		let mut local_key = None;
 		let mut queued_local_key = None;
@@ -201,80 +204,96 @@ where
 			}
 
 			if active.authorities.contains(&public) {
-				let threshold = validate_threshold(
-					active.authorities.len() as u16,
-					worker.get_threshold(header).unwrap(),
-				);
+				let round_id = active.id;
+				let best_authorities: Vec<AuthorityId> = get_best_authorities(
+					worker.get_keygen_threshold(header).into(),
+					&active.authorities,
+					&worker.get_authority_reputations(header, &active),
+				)
+				.iter()
+				.map(|(_, key)| key.clone())
+				.collect();
 
-				let mut rounds = set_up_rounds(
-					&active,
-					&public,
-					&sr25519_public,
-					threshold,
-					Some(local_key_path),
-					*header.number(),
-					worker.local_keystore.clone(),
-					&worker.get_authority_reputations(header),
-				);
+				// If the authority is not selected in the keygen set return
+				if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
+					let mut rounds = set_up_rounds(
+						&best_authorities,
+						round_id,
+						&public,
+						worker.get_signature_threshold(header),
+						worker.get_keygen_threshold(header),
+						Some(local_key_path),
+					);
 
-				if local_key.is_some() {
-					debug!(target: "dkg_persistence", "Local key set");
-					rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
-					// We create a deterministic signer set using the public key as a seed to the
-					// random number generator We need a 32 byte seed, the compressed public key is
-					// 33 bytes
-					let seed =
-						&local_key.as_ref().unwrap().local_key.clone().public_key().to_bytes(true)
-							[1..];
+					if local_key.is_some() {
+						debug!(target: "dkg_persistence", "Local key set");
+						rounds.set_local_key(local_key.as_ref().unwrap().local_key.clone());
+						// We create a deterministic signer set using the public key as a seed to
+						// the random number generator We need a 32 byte seed, the compressed public
+						// key is 33 bytes
+						let seed = &local_key
+							.as_ref()
+							.unwrap()
+							.local_key
+							.clone()
+							.public_key()
+							.to_bytes(true)[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
+						// Signers are chosen from ids used in Keygen phase starting from 1 to n
+						// inclusive
+						let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+						let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+						if let Ok(signers_set) = signers_set {
+							rounds.set_signers(signers_set);
+						}
+						worker.rounds = Some(rounds);
 					}
-					worker.set_rounds(rounds)
 				}
 			}
 
 			if queued.authorities.contains(&public) {
-				let threshold = validate_threshold(
-					queued.authorities.len() as u16,
-					worker.get_threshold(header).unwrap(),
-				);
+				let round_id = queued.id;
+				let best_authorities: Vec<AuthorityId> = get_best_authorities(
+					worker.get_next_keygen_threshold(header).into(),
+					&queued.authorities,
+					&worker.get_authority_reputations(header, &queued),
+				)
+				.iter()
+				.map(|(_, key)| key.clone())
+				.collect();
 
-				let mut rounds = set_up_rounds(
-					&queued,
-					&public,
-					&sr25519_public,
-					threshold,
-					Some(queued_local_key_path),
-					*header.number(),
-					worker.local_keystore.clone(),
-					&worker.get_authority_reputations(header),
-				);
+				// If the authority is not selected in the keygen set return
+				if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
+					let mut rounds = set_up_rounds(
+						&best_authorities,
+						round_id,
+						&public,
+						worker.get_next_signature_threshold(header),
+						worker.get_next_keygen_threshold(header),
+						Some(queued_local_key_path),
+					);
 
-				if queued_local_key.is_some() {
-					rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
-					// We set the signer set using the public key as a seed to select signers at
-					// random We need a 32byte seed, the compressed public key is 32 bytes
-					let seed = &queued_local_key
-						.as_ref()
-						.unwrap()
-						.local_key
-						.clone()
-						.public_key()
-						.to_bytes(true)[1..];
+					if queued_local_key.is_some() {
+						rounds.set_local_key(queued_local_key.as_ref().unwrap().local_key.clone());
+						// We set the signer set using the public key as a seed to select signers at
+						// random We need a 32byte seed, the compressed public key is 32 bytes
+						let seed = &queued_local_key
+							.as_ref()
+							.unwrap()
+							.local_key
+							.clone()
+							.public_key()
+							.to_bytes(true)[1..];
 
-					// Signers are chosen from ids used in Keygen phase starting from 1 to n
-					// inclusive
-					let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
-					let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
-					if let Ok(signers_set) = signers_set {
-						rounds.set_signers(signers_set);
+						// Signers are chosen from ids used in Keygen phase starting from 1 to n
+						// inclusive
+						let set = (1..=rounds.dkg_params().2).collect::<Vec<_>>();
+						let signers_set = select_random_set(seed, set, rounds.dkg_params().1 + 1);
+						if let Ok(signers_set) = signers_set {
+							rounds.set_signers(signers_set);
+						}
+						worker.next_rounds = Some(rounds);
 					}
-					worker.set_next_rounds(rounds)
 				}
 			}
 		}
@@ -293,14 +312,14 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let rounds = worker.take_rounds();
-	let next_rounds = worker.take_next_rounds();
+	let rounds = worker.rounds.take();
+	let next_rounds = worker.next_rounds.take();
 	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if let Some(rounds) = rounds {
 			let stalled = rounds.has_stalled();
-			worker.set_rounds(rounds);
+			worker.rounds = Some(rounds);
 			stalled
 		} else {
 			true
@@ -310,7 +329,7 @@ where
 	let should_restart_next_rounds = {
 		if let Some(next_round) = next_rounds {
 			let stalled = next_round.has_stalled();
-			worker.set_next_rounds(next_round);
+			worker.next_rounds = Some(next_round);
 			stalled
 		} else {
 			true
@@ -330,73 +349,77 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker, header);
-	let mut local_key_path = None;
-	let mut queued_local_key_path = None;
+	let mut local_key_path: Option<PathBuf> = None;
+	let mut queued_local_key_path: Option<PathBuf> = None;
 
 	if worker.base_path.is_some() {
 		let base_path = worker.base_path.as_ref().unwrap();
 		local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
 		queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
 	}
-	let public = worker
-		.keystore_ref()
-		.authority_id(&worker.keystore_ref().public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"));
-	let sr25519_public = worker
-		.keystore_ref()
-		.sr25519_authority_id(&worker.keystore_ref().sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	let public = worker.get_authority_public_key();
 
-	let authority_set = worker.get_current_validators();
-	let queued_authority_set = worker.get_queued_validators();
+	let authority_set = worker.current_validator_set.clone();
+	let queued_authority_set = worker.queued_validator_set.clone();
 
 	let latest_block_num = *header.number();
 	if restart_rounds && authority_set.authorities.contains(&public) {
 		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
+		let round_id = authority_set.id;
+		let best_authorities: Vec<AuthorityId> = get_best_authorities(
+			worker.get_keygen_threshold(header).into(),
+			&authority_set.authorities,
+			&worker.get_authority_reputations(header, &authority_set),
+		)
+		.iter()
+		.map(|(_, key)| key.clone())
+		.collect();
 
-		let threshold = validate_threshold(
-			authority_set.authorities.len() as u16,
-			worker.get_threshold(header).unwrap(),
-		);
+		// If the authority is not selected in the keygen set return
+		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
+			let mut rounds = set_up_rounds(
+				&best_authorities,
+				round_id,
+				&public,
+				worker.get_signature_threshold(header),
+				worker.get_keygen_threshold(header),
+				local_key_path,
+			);
 
-		let mut rounds = set_up_rounds(
-			&authority_set,
-			&public,
-			&sr25519_public,
-			threshold,
-			local_key_path,
-			*header.number(),
-			worker.local_keystore.clone(),
-			&worker.get_authority_reputations(header),
-		);
-
-		let _ = rounds.start_keygen(latest_block_num);
-		worker.active_keygen_in_progress = true;
-		worker.dkg_state.listening_for_active_pub_key = true;
-		worker.set_rounds(rounds);
+			let _ = rounds.start_keygen(latest_block_num);
+			worker.active_keygen_in_progress = true;
+			worker.dkg_state.listening_for_active_pub_key = true;
+			worker.rounds = Some(rounds);
+		}
 	}
 
 	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
-		debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
-		let threshold = validate_threshold(
-			queued_authority_set.authorities.len() as u16,
-			worker.get_threshold(header).unwrap(),
-		);
+		let round_id = queued_authority_set.id;
+		let best_authorities: Vec<AuthorityId> = get_best_authorities(
+			worker.get_next_keygen_threshold(header).into(),
+			&queued_authority_set.authorities,
+			&worker.get_authority_reputations(header, &queued_authority_set),
+		)
+		.iter()
+		.map(|(_, key)| key.clone())
+		.collect();
 
-		let mut rounds = set_up_rounds(
-			&queued_authority_set,
-			&public,
-			&sr25519_public,
-			threshold,
-			queued_local_key_path,
-			*header.number(),
-			worker.local_keystore.clone(),
-			&worker.get_authority_reputations(header),
-		);
+		// If the authority is not selected in the keygen set return
+		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
+			debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
+			let mut rounds = set_up_rounds(
+				&best_authorities,
+				round_id,
+				&public,
+				worker.get_signature_threshold(header),
+				worker.get_keygen_threshold(header),
+				queued_local_key_path,
+			);
 
-		let _ = rounds.start_keygen(latest_block_num);
-		worker.queued_keygen_in_progress = true;
-		worker.dkg_state.listening_for_pub_key = true;
-		worker.set_next_rounds(rounds);
+			let _ = rounds.start_keygen(latest_block_num);
+			worker.queued_keygen_in_progress = true;
+			worker.dkg_state.listening_for_pub_key = true;
+			worker.next_rounds = Some(rounds);
+		}
 	}
 }

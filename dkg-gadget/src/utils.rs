@@ -12,22 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{
-	worker::{DKGWorker, ENGINE_ID},
-	Client,
-};
+use crate::worker::ENGINE_ID;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
+	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId, AuthoritySet, ConsensusLog,
 };
-use dkg_runtime_primitives::crypto::Public;
-use sc_client_api::Backend;
-use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_core::sr25519;
-use sp_runtime::{generic::OpaqueDigestItemId, traits::Header};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use sp_runtime::generic::OpaqueDigestItemId;
+use std::path::PathBuf;
 
+/// Finds the index of a value in a vector. Returns None if the value is not found.
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	for (i, v) in queue.iter().enumerate() {
 		if value == v {
@@ -37,46 +31,37 @@ pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	None
 }
 
-pub fn validate_threshold(n: u16, t: u16) -> u16 {
-	let max_thresh = n - 1;
-	if t >= 1 && t <= max_thresh {
-		return t
-	}
-
-	max_thresh
-}
-
+/// Sets up the Multi-party ECDSA rounds struct used to receive, process, and handle
+/// incoming and outgoing DKG related messages for key generation, offline stage creation,
+/// and signing. The rounds struct is used to handle the execution of a single round of the DKG
+/// and should be created for each session.
+///
+/// The rounds are intended to be run only by `best_authorities` that are selected from
+/// an externally provided set of reputations. Rounds are parameterized for a `t-of-n` threshold
+/// - `signature_threshold` represents `t`
+/// - `keygen_threshold` represents `n`
+///
+/// We provide an optional `local_key_path` to this struct so that it may save the generated
+/// DKG public / local key to disk. Caching of this key is critical to persistent storage and
+/// resuming the worker from a machine failure.
 #[allow(clippy::too_many_arguments)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
-	authority_set: &AuthoritySet<AuthorityId>,
+	best_authorities: &[AuthorityId],
+	authority_set_id: RoundId,
 	public: &AuthorityId,
-	// TODO: remove param
-	_sr25519_public: &sr25519::Public,
-	thresh: u16,
+	signature_threshold: u16,
+	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
-	// TODO: remove param
-	_created_at: N,
-	// TODO: remove param
-	_local_keystore: Option<Arc<LocalKeystore>>,
-	reputations: &HashMap<AuthorityId, i64>,
 ) -> MultiPartyECDSARounds<N> {
-	let party_inx = find_index::<AuthorityId>(&authority_set.authorities[..], public).unwrap() + 1;
-	// Compute the reputations of only the currently selected authorities for these rounds
-	let mut authority_set_reputations = HashMap::new();
-	authority_set.authorities.iter().for_each(|id| {
-		authority_set_reputations.insert(id.clone(), *reputations.get(id).unwrap_or(&0i64));
-	});
-	let n = authority_set.authorities.len();
+	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
 	// Generate the rounds object
-
 	MultiPartyECDSARounds::builder()
-		.round_id(authority_set.id)
+		.round_id(authority_set_id)
 		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(thresh)
-		.parties(u16::try_from(n).unwrap())
+		.threshold(signature_threshold)
+		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
-		.reputations(authority_set_reputations)
-		.authorities(authority_set.authorities.clone())
+		.authorities(best_authorities.to_vec())
 		.build()
 }
 
@@ -93,6 +78,7 @@ where
 	header.digest().convert_first(|l| l.try_to(id).and_then(match_consensus_log))
 }
 
+/// Matches a `ConsensusLog` for a DKG validator set change.
 fn match_consensus_log(
 	log: ConsensusLog<AuthorityId>,
 ) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
@@ -105,80 +91,10 @@ fn match_consensus_log(
 	}
 }
 
-pub(crate) fn is_next_authorities_or_rounds_empty<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	next_authorities: &AuthoritySet<Public>,
-) -> bool
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	if next_authorities.authorities.is_empty() {
-		return true
-	}
-
-	if dkg_worker.rounds.is_some() &&
-		dkg_worker.rounds.as_ref().unwrap().get_id() == next_authorities.id
-	{
-		return true
-	}
-
-	false
-}
-
-pub(crate) fn is_queued_authorities_or_rounds_empty<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	queued_authorities: &AuthoritySet<Public>,
-) -> bool
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	if queued_authorities.authorities.is_empty() {
-		return true
-	}
-
-	if dkg_worker.next_rounds.is_some() &&
-		dkg_worker.next_rounds.as_ref().unwrap().get_id() == queued_authorities.id
-	{
-		return true
-	}
-
-	false
-}
-
-pub(crate) fn fetch_public_key<B, C, BE>(dkg_worker: &mut DKGWorker<B, C, BE>) -> Public
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	dkg_worker
-		.key_store
-		.authority_id(&dkg_worker.key_store.public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"))
-}
-
-pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-) -> sp_core::sr25519::Public
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	dkg_worker
-		.key_store
-		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
-}
-
+/// Returns an optional key path if a base path is provided.
+///
+/// This path is used to store the DKG public key / local key
+/// generated through the multi-party threshold ECDSA key generation.
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
-	Some(base_path.as_ref().unwrap().join(path_str))
+	base_path.as_ref().map(|path| path.join(path_str))
 }

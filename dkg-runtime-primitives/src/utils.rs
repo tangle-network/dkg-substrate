@@ -100,52 +100,59 @@ pub fn to_slice_32(val: &[u8]) -> Option<[u8; 32]> {
 	None
 }
 
+pub struct SignatureResult {
+	pub expected: Vec<u8>,
+	pub actual: Vec<u8>,
+}
+
+pub enum SignatureError {
+	InvalidDKGKey(BadOrigin),
+	InvalidRecovery(SignatureResult),
+	InvalidECDSASignature(BadOrigin),
+}
+
 /// This function takes the ecdsa signature and the unhashed data
 pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	signature: &[u8],
 	data: &[u8],
-) -> Result<(), BadOrigin> {
+) -> Result<(), SignatureError> {
 	let dkg_key = T::dkg_key();
+
+	let recovered_key = recover_ecdsa_pub_key(data, signature)
+		.map_err(|_| SignatureError::InvalidECDSASignature(BadOrigin))?;
+
+	// Validate possibility of using current key
+	if dkg_key.is_empty() || dkg_key.len() != 33 {
+		return Err(SignatureError::InvalidDKGKey(BadOrigin))
+	}
+
+	let current_dkg = &dkg_key[1..];
+
+	#[cfg(feature = "std")]
 	frame_support::log::debug!(
 		target: "dkg",
-		"Stored public key: {:?}",
-		dkg_key
+		"Recovered:
+		**********************************************************
+		public key: {}
+		curr_key: {}
+		**********************************************************",
+		hex::encode(recovered_key.clone()),
+		hex::encode(current_dkg),
 	);
-	if dkg_key.len() != 33 {
-		return Err(BadOrigin)
+
+	// The stored_key public key is 33 bytes compressed.
+	// The recovered key is 64 bytes uncompressed. The first 32 bytes represent the compressed
+	// portion of the key.
+	let signer = &recovered_key[..32];
+	// Check if the signer is the current DKG or the previous DKG to buffer for timing issues
+	let is_not_current_dkg = signer != current_dkg;
+
+	if !is_not_current_dkg {
+		Ok(())
+	} else {
+		Err(SignatureError::InvalidRecovery(SignatureResult {
+			expected: dkg_key.to_vec(),
+			actual: recovered_key.clone(),
+		}))
 	}
-
-	let recovered_key = recover_ecdsa_pub_key(data, signature);
-
-	match recovered_key {
-		Ok(recovered_pub_key) => {
-			let current_dkg = &dkg_key[1..];
-			// The stored_key public key is 33 bytes long and contains the prefix which is the first
-			// byte.
-			// The recovered key does not contain the prefix and is 64 bytes long, we take a
-			// slice of the first 32 bytes because the dkg_key is a compressed public key.
-			frame_support::log::debug!(
-				target: "dkg",
-				"Recovered: \npublic key: {:?}\ncurr_key: {:?}",
-				recovered_pub_key, current_dkg
-			);
-			let signer = &recovered_pub_key[..32];
-			// now we do check if the signer is not the current dkg or the previous one.
-			let is_not_current_dkg = signer != current_dkg;
-			if is_not_current_dkg {
-				let prev_key = T::previous_dkg_key();
-				if prev_key.len() != 33 {
-					return Err(BadOrigin)
-				}
-				let prev_dkg = &prev_key[1..];
-				let is_not_prev_dkg = signer != prev_dkg;
-				if is_not_prev_dkg {
-					return Err(BadOrigin)
-				}
-			}
-		},
-		Err(_) => return Err(BadOrigin),
-	}
-
-	Ok(())
 }

@@ -294,7 +294,7 @@ where
 				error!(target: "dkg", "🕸️  Non-critical error encountered: {:?}", err);
 			},
 		}
-		debug!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
+		trace!(target: "dkg", "🕸️  State after incoming message processing: {:?}", offline_stage);
 
 		Ok(())
 	}

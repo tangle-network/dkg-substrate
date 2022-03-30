@@ -14,7 +14,7 @@
 //
 use crate::{
 	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	utils::fetch_sr25519_public_key, worker::DKGWorker, Client,
+	worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -23,7 +23,7 @@ use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use log::{debug, error, trace};
+use log::{error, info, trace};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
@@ -35,8 +35,6 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	debug!(target: "dkg", "🕸️  Try sending DKG messages");
-
 	let mut keys_to_gossip = Vec::new();
 	let mut rounds_send_result = vec![];
 	let mut next_rounds_send_result = vec![];
@@ -45,7 +43,6 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -55,7 +52,7 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 				let round_id = rounds.get_id();
@@ -72,7 +69,6 @@ where
 			.key_store
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
 				next_rounds_send_result = send_messages(
 					dkg_worker,
@@ -83,7 +79,7 @@ where
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
@@ -151,7 +147,7 @@ fn sign_and_send_message<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
+	let sr25519_public = dkg_worker.get_sr25519_public_key();
 	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 		Ok(sig) => {
 			let signed_dkg_message =
@@ -169,5 +165,4 @@ fn sign_and_send_message<B, C, BE>(
 			e
 		),
 	};
-	trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
 }

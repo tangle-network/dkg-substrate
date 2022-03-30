@@ -210,13 +210,13 @@ export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice:
 	const unsub = await api.tx.sudo
 		.sudo(proposalCall)
 		.signAndSend(alice, ({ events = [], status }) => {
-			console.log(`Current status is: ${status.type}`);
+			// console.log(`Current status is: ${status.type}`);
 
 			if (status.isFinalized) {
-				console.log(`Transaction included at blockHash ${status.asFinalized}`);
+				// console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
 				events.forEach(({ phase, event: { data, method, section } }) => {
-					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+					// console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
 				});
 
 				unsub();

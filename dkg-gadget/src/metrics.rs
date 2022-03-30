@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! DKG Prometheus metrics definition
-use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
+use prometheus::{register, Gauge, PrometheusError, Registry, U64};
 
 /// DKG metrics exposed through Prometheus
 pub(crate) struct Metrics {
@@ -23,12 +23,6 @@ pub(crate) struct Metrics {
 	pub dkg_votes_sent: Gauge<U64>,
 	/// Most recent concluded voting round
 	pub dkg_round_concluded: Gauge<U64>,
-	/// Best block finalized by DKG
-	pub dkg_best_block: Gauge<U64>,
-	/// Next block DKG should vote on
-	pub dkg_should_vote_on: Gauge<U64>,
-	/// Number of sessions without a signed commitment
-	pub dkg_skipped_sessions: Counter<U64>,
 }
 
 impl Metrics {
@@ -44,21 +38,6 @@ impl Metrics {
 			)?,
 			dkg_round_concluded: register(
 				Gauge::new("dkg_round_concluded", "Voting round, that has been concluded")?,
-				registry,
-			)?,
-			dkg_best_block: register(
-				Gauge::new("dkg_best_block", "Best block finalized by DKG")?,
-				registry,
-			)?,
-			dkg_should_vote_on: register(
-				Gauge::new("dkg_should_vote_on", "Next block, DKG should vote on")?,
-				registry,
-			)?,
-			dkg_skipped_sessions: register(
-				Counter::new(
-					"dkg_skipped_sessions",
-					"Number of sessions without a signed commitment",
-				)?,
 				registry,
 			)?,
 		})

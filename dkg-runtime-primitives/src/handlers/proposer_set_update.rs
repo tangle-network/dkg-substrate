@@ -31,7 +31,7 @@ pub struct ProposerSetUpdateProposal {
 /// Total Bytes: 32 + 8 + 4 + 4= 48 bytes
 pub fn create(data: &[u8]) -> Result<ProposerSetUpdateProposal, ValidationError> {
 	if data.len() != 48 {
-		return Err(ValidationError::InvalidParameter("Proposal data must be 50 bytes".to_string()))
+		return Err(ValidationError::InvalidParameter("Proposal data must be 48 bytes".to_string()))
 	}
 
 	let mut merkle_root_bytes = [0u8; 32];
