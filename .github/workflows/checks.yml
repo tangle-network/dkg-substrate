@@ -61,8 +61,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
             toolchain: nightly
-            override: true
-            target: wasm32-unknown-unknown
             components: rustfmt, clippy
 
       - name: Rust Cache
@@ -70,5 +68,5 @@ jobs:
 
       - name: Run Linters
         run: |
-          cargo fmt --all -- --check
+          cargo +nightly fmt --all -- --check
           cargo clippy --workspace --all-targets --verbose --no-default-features -- -D warnings
