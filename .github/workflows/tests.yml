@@ -48,7 +48,7 @@ jobs:
   # dkg-substrate base unit tests
   tests:
     name: tests
-    runs-on: buildjet-16vcpu-ubuntu-2004
+    runs-on: buildjet-8vcpu-ubuntu-2004
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
@@ -80,7 +80,7 @@ jobs:
   # dkg-substrate integration tests
   e2e:
     name: e2e
-    runs-on: buildjet-16vcpu-ubuntu-2004
+    runs-on: buildjet-8vcpu-ubuntu-2004
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
