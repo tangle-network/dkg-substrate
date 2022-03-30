@@ -137,8 +137,10 @@ where
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports:
-		HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports>,
+	pub aggregated_misbehaviour_reports: HashMap<
+		(MisbehaviourType, RoundId, AuthorityId),
+		AggregatedMisbehaviourReports<AuthorityId>,
+	>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -303,11 +305,6 @@ where
 			.runtime_api()
 			.get_signing_jailed(&at, set.to_vec())
 			.unwrap_or_default()
-	}
-
-	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
 	/// Gets latest block number from latest block header

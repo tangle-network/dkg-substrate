@@ -87,13 +87,13 @@ pub enum MisbehaviourType {
 }
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports {
+pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
 	pub round_id: u64,
 	/// The offending authority
-	pub offender: crypto::AuthorityId,
+	pub offender: DKGId,
 	/// A list of reporters
 	pub reporters: Vec<sr25519::Public>,
 	/// A list of signed reports
@@ -220,7 +220,5 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Get the time to restart for the dkg keygen
-		fn time_to_restart() -> N;
 	}
 }

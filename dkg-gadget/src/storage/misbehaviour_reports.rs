@@ -29,7 +29,7 @@ use sp_runtime::traits::{Block, Header};
 /// stores aggregated misbehaviour reports offchain
 pub(crate) fn store_aggregated_misbehaviour_reports<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	reports: &AggregatedMisbehaviourReports,
+	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
 	B: Block,

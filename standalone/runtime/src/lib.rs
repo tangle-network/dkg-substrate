@@ -37,8 +37,8 @@ use sp_runtime::{
 	curve::PiecewiseLinear,
 	generic, impl_opaque_keys,
 	traits::{
-		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor,
-		OpaqueKeys, StaticLookup, Verify,
+		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount,
+		NumberFor, OpaqueKeys, StaticLookup, Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
@@ -549,7 +549,9 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 }
 
@@ -874,19 +876,15 @@ impl_runtime_apis! {
 		}
 
 		fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-			set.iter().filter(|a| DKG::jailed_keygen_authorities(a)).cloned().collect()
+			set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect()
 		}
 
 		fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-			set.iter().filter(|a| DKG::jailed_signing_authorities(a)).cloned().collect()
+			set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect()
 		}
 
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
-		}
-
-		fn time_to_restart() -> BlockNumber {
-			DKG::time_to_restart()
 		}
 	}
 

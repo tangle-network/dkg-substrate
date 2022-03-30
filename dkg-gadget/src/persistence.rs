@@ -306,7 +306,6 @@ where
 /// protocol is stuck at the keygen stage
 pub(crate) fn should_restart_dkg<B, C, BE>(
 	worker: &mut DKGWorker<B, C, BE>,
-	header: &B::Header,
 ) -> (bool, bool)
 where
 	B: Block,
@@ -316,7 +315,6 @@ where
 {
 	let rounds = worker.rounds.take();
 	let next_rounds = worker.next_rounds.take();
-	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if let Some(rounds) = rounds {
@@ -350,7 +348,7 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker, header);
+	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker);
 	let mut local_key_path: Option<PathBuf> = None;
 	let mut queued_local_key_path: Option<PathBuf> = None;
 

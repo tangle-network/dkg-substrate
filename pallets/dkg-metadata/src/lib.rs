@@ -121,7 +121,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{IsMember, Member},
+	traits::{Convert, IsMember, Member, Saturating},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, prelude::*};
@@ -149,12 +149,26 @@ pub mod pallet {
 	};
 	use sp_runtime::Permill;
 
+	/// A `Convert` implementation that finds the stash of the given controller account,
+	/// if any.
+	pub struct AuthorityIdOf<T>(sp_std::marker::PhantomData<T>);
+
+	impl<T: Config> Convert<T::AccountId, Option<T::DKGId>> for AuthorityIdOf<T> {
+		fn convert(controller: T::AccountId) -> Option<T::DKGId> {
+			AccountToAuthority::<T>::get(controller)
+		}
+	}
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
-		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
+		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize + AsRef<[u8]>;
+
+		type KeygenJailSentence: Get<Self::BlockNumber>;
+		type SigningJailSentence: Get<Self::BlockNumber>;
+		type AuthorityIdOf: Convert<Self::AccountId, Option<Self::DKGId>>;
 
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
@@ -178,9 +192,6 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
-		/// Default number of blocks after which dkg keygen will be restarted if it has stalled
-		#[pallet::constant]
-		type TimeToRestart: Get<Self::BlockNumber>;
 	}
 
 	#[pallet::pallet]
@@ -249,6 +260,260 @@ pub mod pallet {
 			}
 
 			0
+		}
+	}
+
+	/// Public key Signatures for past sessions
+	#[pallet::storage]
+	#[pallet::getter(fn used_signatures)]
+	pub type UsedSignatures<T: Config> = StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
+
+	/// Nonce value for next refresh proposal
+	#[pallet::storage]
+	#[pallet::getter(fn refresh_nonce)]
+	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	/// Session progress required to kickstart refresh process
+	#[pallet::storage]
+	#[pallet::getter(fn refresh_delay)]
+	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
+
+	/// Check if there is a refresh in progress.
+	#[pallet::storage]
+	#[pallet::getter(fn refresh_in_progress)]
+	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	/// Should we manually trigger a DKG refresh process.
+	#[pallet::storage]
+	#[pallet::getter(fn should_manual_refresh)]
+	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	/// Holds public key for next session
+	#[pallet::storage]
+	#[pallet::getter(fn next_dkg_public_key)]
+	pub type NextDKGPublicKey<T: Config> =
+		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
+
+	/// Signature of the DKG public key for the next session
+	#[pallet::storage]
+	#[pallet::getter(fn next_public_key_signature)]
+	pub type NextPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, OptionQuery>;
+
+	/// Holds active public key for ongoing session
+	#[pallet::storage]
+	#[pallet::getter(fn dkg_public_key)]
+	pub type DKGPublicKey<T: Config> =
+		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
+
+	/// Signature of the current DKG public key
+	#[pallet::storage]
+	#[pallet::getter(fn public_key_signature)]
+	pub type DKGPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
+
+	/// Holds public key for immediate past session
+	#[pallet::storage]
+	#[pallet::getter(fn previous_public_key)]
+	pub type PreviousPublicKey<T: Config> =
+		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
+
+	/// Tracks current proposer set
+	#[pallet::storage]
+	#[pallet::getter(fn historical_rounds)]
+	pub type HistoricalRounds<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		dkg_runtime_primitives::AuthoritySetId,
+		RoundMetadata,
+		ValueQuery,
+	>;
+
+	/// The current signature threshold (i.e. the `t` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn signature_threshold)]
+	pub(super) type SignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn keygen_threshold)]
+	pub(super) type KeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current signature threshold (i.e. the `t` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn next_signature_threshold)]
+	pub(super) type NextSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn next_keygen_threshold)]
+	pub(super) type NextKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The pending signature threshold (i.e. the `t` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn pending_signature_threshold)]
+	pub(super) type PendingSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The pending signature threshold (i.e. the `n` in t-of-n)
+	#[pallet::storage]
+	#[pallet::getter(fn pending_keygen_threshold)]
+	pub(super) type PendingKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
+
+	/// The current authorities set
+	#[pallet::storage]
+	#[pallet::getter(fn authorities)]
+	pub(super) type Authorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
+
+	/// The current authority set id
+	#[pallet::storage]
+	#[pallet::getter(fn authority_set_id)]
+	pub(super) type AuthoritySetId<T: Config> =
+		StorageValue<_, dkg_runtime_primitives::AuthoritySetId, ValueQuery>;
+
+	/// Authorities set scheduled to be used with the next session
+	#[pallet::storage]
+	#[pallet::getter(fn next_authorities)]
+	pub(super) type NextAuthorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
+
+	/// Accounts for the current authorities
+	#[pallet::storage]
+	#[pallet::getter(fn current_authorities_accounts)]
+	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
+		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+
+	/// Authority account ids scheduled for the next session
+	#[pallet::storage]
+	#[pallet::getter(fn next_authorities_accounts)]
+	pub(super) type NextAuthoritiesAccounts<T: Config> =
+		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+
+	/// Authority account ids scheduled for the next session
+	#[pallet::storage]
+	#[pallet::getter(fn account_to_authority)]
+	pub(super) type AccountToAuthority<T: Config> =
+		StorageMap<_, Blake2_256, T::AccountId, T::DKGId, OptionQuery>;
+
+	/// Tracks misbehaviour reports
+	#[pallet::storage]
+	#[pallet::getter(fn misbehaviour_reports)]
+	pub type MisbehaviourReports<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		(
+			dkg_runtime_primitives::MisbehaviourType,
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		),
+		AggregatedMisbehaviourReports<T::DKGId>,
+		OptionQuery,
+	>;
+
+	/// Tracks authority reputations
+	#[pallet::storage]
+	#[pallet::getter(fn authority_reputations)]
+	pub type AuthorityReputations<T: Config> = StorageMap<_, Blake2_256, T::DKGId, i64, ValueQuery>;
+
+	/// Tracks jailed authorities for keygen by mapping
+	/// to the block number when the authority was last jailed
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_keygen_authorities)]
+	pub type JailedKeygenAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+
+	/// Tracks jailed authorities for signing by mapping
+	/// to the block number when the authority was last jailed
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_signing_authorities)]
+	pub type JailedSigningAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub authorities: Vec<T::DKGId>,
+		pub threshold: u32,
+		pub authority_ids: Vec<T::AccountId>,
+	}
+
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Invalid threshold
+		InvalidThreshold,
+		/// Must be queued  to become an authority
+		MustBeAQueuedAuthority,
+		/// Must be an an authority
+		MustBeAnActiveAuthority,
+		/// Refresh delay should be in the range of 0% - 100%
+		InvalidRefreshDelay,
+		/// Invalid public key submission
+		InvalidPublicKeys,
+		/// Already submitted a public key
+		AlreadySubmittedPublicKey,
+		/// Already submitted a public key signature
+		AlreadySubmittedSignature,
+		/// Used signature from past sessions
+		UsedSignature,
+		/// Invalid public key signature submission
+		InvalidSignature,
+		/// Invalid misbehaviour reports
+		InvalidMisbehaviourReports,
+		/// DKG Refresh is already in progress.
+		RefreshInProgress,
+		/// Manual DKG Refresh failed to progress.
+		ManualRefreshFailed,
+		/// No NextPublicKey stored on-chain.
+		NoNextPublicKey,
+		/// Must be calling from the controller account
+		InvalidControllerAccount,
+	}
+
+	// Pallets use events to inform users when important changes are made.
+	#[pallet::event]
+	#[pallet::generate_deposit(pub fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// Current public key submitted
+		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		/// Next public key submitted
+		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		/// Next public key signature submitted
+		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+		/// Current Public Key Changed.
+		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		/// Current Public Key Signature Changed.
+		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
+		/// Misbehaviour reports submitted
+		MisbehaviourReportsSubmitted {
+			misbehaviour_type: MisbehaviourType,
+			reporters: Vec<sr25519::Public>,
+		},
+		/// Refresh DKG Keys Finished (forcefully).
+		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
+	}
+
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self { authorities: Vec::new(), threshold: 0, authority_ids: Vec::new() }
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			let mut signature_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
+			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
+
+			if keygen_threshold <= signature_threshold {
+				signature_threshold = keygen_threshold - 1;
+			}
+
+			// Set thresholds to be the same
+			SignatureThreshold::<T>::put(signature_threshold);
+			KeygenThreshold::<T>::put(keygen_threshold);
+			NextSignatureThreshold::<T>::put(signature_threshold);
+			NextKeygenThreshold::<T>::put(keygen_threshold);
+			PendingSignatureThreshold::<T>::put(signature_threshold);
+			PendingKeygenThreshold::<T>::put(keygen_threshold);
+			// Set refresh parameters
+			RefreshDelay::<T>::put(T::RefreshDelay::get());
+			RefreshNonce::<T>::put(0);
 		}
 	}
 
@@ -449,28 +714,69 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
-			reports: AggregatedMisbehaviourReports,
+			reports: AggregatedMisbehaviourReports<T::DKGId>,
 		) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
-
-			let authorities = Self::current_authorities_accounts();
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let offender = reports.offender.clone();
 			let misbehaviour_type = reports.misbehaviour_type;
+			let authorities = match misbehaviour_type {
+				// Keygen misbehaviours are from next keygen authorities
+				MisbehaviourType::Keygen => Self::next_authorities_accounts(),
+				// Signing misbehaviours are from current authorities
+				MisbehaviourType::Sign => Self::current_authorities_accounts(),
+			};
+			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
-			let threshold = Self::signature_threshold();
+			// Get the threshold for the misbehaviour type
+			let threshold = match misbehaviour_type {
+				// Keygen misbehaviours are from next keygen authorities
+				MisbehaviourType::Keygen => Self::next_signature_threshold(),
+				// Signing misbehaviours are from current authorities
+				MisbehaviourType::Sign => Self::signature_threshold(),
+			};
 
-			if valid_reporters.len() >= (threshold + 1) as usize {
+			if valid_reporters.len() > threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
 				AuthorityReputations::<T>::insert(&offender, reputation - 1);
 				// Jail the respective misbehaving party depending on the misbehaviour type
+				// TODO: Track when the offender was jailed so we can remove them from the jail
 				match misbehaviour_type {
-					MisbehaviourType::Keygen =>
-						JailedKeygenAuthorities::<T>::insert(offender, true),
-					MisbehaviourType::Sign => JailedSigningAuthorities::<T>::insert(offender, true),
+					MisbehaviourType::Keygen => {
+						JailedKeygenAuthorities::<T>::insert(
+							offender,
+							frame_system::Pallet::<T>::block_number(),
+						);
+						// Check if we have enough unjailed authorities to run after the next
+						// session change
+						let unjailed_authorities = Self::next_authorities()
+							.into_iter()
+							.filter(|a| !JailedKeygenAuthorities::<T>::contains_key(a))
+							.collect::<Vec<T::DKGId>>();
+						// TODO: This is odd because we don't know the next `next_authorities` yet.
+						// We anticipate that we will need to decrease the threshold
+						// if it is below the pending keygen threshold.
+						if unjailed_authorities.len() <= Self::pending_keygen_threshold().into() {
+							PendingKeygenThreshold::<T>::put(
+								u16::try_from(unjailed_authorities.len()).unwrap_or_default(),
+							);
+							if unjailed_authorities.len() <=
+								Self::pending_signature_threshold().into()
+							{
+								PendingSignatureThreshold::<T>::put(
+									u16::try_from(unjailed_authorities.len() - 1)
+										.unwrap_or_default(),
+								);
+							}
+						}
+					},
+					MisbehaviourType::Sign => JailedSigningAuthorities::<T>::insert(
+						offender,
+						frame_system::Pallet::<T>::block_number(),
+					),
 				};
+
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
 					misbehaviour_type,
 					reporters: valid_reporters,
@@ -482,12 +788,23 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(0)]
-		pub fn set_time_to_restart(
-			origin: OriginFor<T>,
-			interval: T::BlockNumber,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			TimeToRestart::<T>::put(interval);
+		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let origin = ensure_signed(origin)?;
+			let authority =
+				T::AuthorityIdOf::convert(origin).ok_or(Error::<T>::InvalidControllerAccount)?;
+			if frame_system::Pallet::<T>::block_number() >
+				JailedKeygenAuthorities::<T>::get(authority.clone())
+					.saturating_add(T::KeygenJailSentence::get())
+			{
+				JailedKeygenAuthorities::<T>::remove(authority.clone());
+			}
+
+			if frame_system::Pallet::<T>::block_number() >
+				JailedSigningAuthorities::<T>::get(authority.clone())
+					.saturating_add(T::SigningJailSentence::get())
+			{
+				JailedSigningAuthorities::<T>::remove(authority.clone());
+			}
 			Ok(().into())
 		}
 
@@ -542,258 +859,6 @@ pub mod pallet {
 			} else {
 				Err(Error::<T>::NoNextPublicKey.into())
 			}
-		}
-	}
-
-	/// Public key Signatures for past sessions
-	#[pallet::storage]
-	#[pallet::getter(fn used_signatures)]
-	pub type UsedSignatures<T: Config> = StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
-
-	/// Nonce value for next refresh proposal
-	#[pallet::storage]
-	#[pallet::getter(fn refresh_nonce)]
-	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
-
-	/// Session progress required to kickstart refresh process
-	#[pallet::storage]
-	#[pallet::getter(fn refresh_delay)]
-	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
-
-	/// Check if there is a refresh in progress.
-	#[pallet::storage]
-	#[pallet::getter(fn refresh_in_progress)]
-	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
-
-	/// Should we manually trigger a DKG refresh process.
-	#[pallet::storage]
-	#[pallet::getter(fn should_manual_refresh)]
-	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
-
-	/// Number of blocks that should elapse after which the dkg keygen is restarted
-	/// if it has stalled
-	#[pallet::storage]
-	#[pallet::getter(fn time_to_restart)]
-	pub type TimeToRestart<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
-
-	/// Holds public key for next session
-	#[pallet::storage]
-	#[pallet::getter(fn next_dkg_public_key)]
-	pub type NextDKGPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
-
-	/// Signature of the DKG public key for the next session
-	#[pallet::storage]
-	#[pallet::getter(fn next_public_key_signature)]
-	pub type NextPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, OptionQuery>;
-
-	/// Holds active public key for ongoing session
-	#[pallet::storage]
-	#[pallet::getter(fn dkg_public_key)]
-	pub type DKGPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
-
-	/// Signature of the current DKG public key
-	#[pallet::storage]
-	#[pallet::getter(fn public_key_signature)]
-	pub type DKGPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
-
-	/// Holds public key for immediate past session
-	#[pallet::storage]
-	#[pallet::getter(fn previous_public_key)]
-	pub type PreviousPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
-
-	/// Tracks current proposer set
-	#[pallet::storage]
-	#[pallet::getter(fn historical_rounds)]
-	pub type HistoricalRounds<T: Config> = StorageMap<
-		_,
-		Blake2_256,
-		dkg_runtime_primitives::AuthoritySetId,
-		RoundMetadata,
-		ValueQuery,
-	>;
-
-	/// The current signature threshold (i.e. the `t` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn signature_threshold)]
-	pub(super) type SignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The current signature threshold (i.e. the `n` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn keygen_threshold)]
-	pub(super) type KeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The current signature threshold (i.e. the `t` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn next_signature_threshold)]
-	pub(super) type NextSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The current signature threshold (i.e. the `n` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn next_keygen_threshold)]
-	pub(super) type NextKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The pending signature threshold (i.e. the `t` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn pending_signature_threshold)]
-	pub(super) type PendingSignatureThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The pending signature threshold (i.e. the `n` in t-of-n)
-	#[pallet::storage]
-	#[pallet::getter(fn pending_keygen_threshold)]
-	pub(super) type PendingKeygenThreshold<T: Config> = StorageValue<_, u16, ValueQuery>;
-
-	/// The current authorities set
-	#[pallet::storage]
-	#[pallet::getter(fn authorities)]
-	pub(super) type Authorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
-
-	/// The current authority set id
-	#[pallet::storage]
-	#[pallet::getter(fn authority_set_id)]
-	pub(super) type AuthoritySetId<T: Config> =
-		StorageValue<_, dkg_runtime_primitives::AuthoritySetId, ValueQuery>;
-
-	/// Authorities set scheduled to be used with the next session
-	#[pallet::storage]
-	#[pallet::getter(fn next_authorities)]
-	pub(super) type NextAuthorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
-
-	/// Accounts for the current authorities
-	#[pallet::storage]
-	#[pallet::getter(fn current_authorities_accounts)]
-	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
-		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
-
-	/// Authority account ids scheduled for the next session
-	#[pallet::storage]
-	#[pallet::getter(fn next_authorities_accounts)]
-	pub(super) type NextAuthoritiesAccounts<T: Config> =
-		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
-
-	/// Tracks misbehaviour reports
-	#[pallet::storage]
-	#[pallet::getter(fn misbehaviour_reports)]
-	pub type MisbehaviourReports<T: Config> = StorageMap<
-		_,
-		Blake2_256,
-		(
-			dkg_runtime_primitives::MisbehaviourType,
-			dkg_runtime_primitives::AuthoritySetId,
-			dkg_runtime_primitives::crypto::AuthorityId,
-		),
-		AggregatedMisbehaviourReports,
-		OptionQuery,
-	>;
-
-	/// Tracks authority reputations
-	#[pallet::storage]
-	#[pallet::getter(fn authority_reputations)]
-	pub type AuthorityReputations<T: Config> =
-		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, i64, ValueQuery>;
-
-	/// Tracks jailed authorities for keygen
-	#[pallet::storage]
-	#[pallet::getter(fn jailed_keygen_authorities)]
-	pub type JailedKeygenAuthorities<T: Config> =
-		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, bool, ValueQuery>;
-
-	/// Tracks jailed authorities for signing
-	#[pallet::storage]
-	#[pallet::getter(fn jailed_signing_authorities)]
-	pub type JailedSigningAuthorities<T: Config> =
-		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, bool, ValueQuery>;
-
-	#[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config> {
-		pub authorities: Vec<T::DKGId>,
-		pub threshold: u32,
-		pub authority_ids: Vec<T::AccountId>,
-	}
-
-	#[pallet::error]
-	pub enum Error<T> {
-		/// Invalid threshold
-		InvalidThreshold,
-		/// Must be queued  to become an authority
-		MustBeAQueuedAuthority,
-		/// Must be an an authority
-		MustBeAnActiveAuthority,
-		/// Refresh delay should be in the range of 0% - 100%
-		InvalidRefreshDelay,
-		/// Invalid public key submission
-		InvalidPublicKeys,
-		/// Already submitted a public key
-		AlreadySubmittedPublicKey,
-		/// Already submitted a public key signature
-		AlreadySubmittedSignature,
-		/// Used signature from past sessions
-		UsedSignature,
-		/// Invalid public key signature submission
-		InvalidSignature,
-		/// Invalid misbehaviour reports
-		InvalidMisbehaviourReports,
-		/// DKG Refresh is already in progress.
-		RefreshInProgress,
-		/// Manual DKG Refresh failed to progress.
-		ManualRefreshFailed,
-		/// No NextPublicKey stored on-chain.
-		NoNextPublicKey,
-	}
-
-	// Pallets use events to inform users when important changes are made.
-	#[pallet::event]
-	#[pallet::generate_deposit(pub fn deposit_event)]
-	pub enum Event<T: Config> {
-		/// Current public key submitted
-		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
-		/// Next public key submitted
-		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
-		/// Next public key signature submitted
-		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
-		/// Current Public Key Changed.
-		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
-		/// Current Public Key Signature Changed.
-		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
-		/// Misbehaviour reports submitted
-		MisbehaviourReportsSubmitted {
-			misbehaviour_type: MisbehaviourType,
-			reporters: Vec<sr25519::Public>,
-		},
-		/// Refresh DKG Keys Finished (forcefully).
-		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
-	}
-
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self { authorities: Vec::new(), threshold: 0, authority_ids: Vec::new() }
-		}
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
-		fn build(&self) {
-			let mut signature_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
-			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
-
-			if keygen_threshold <= signature_threshold {
-				signature_threshold = keygen_threshold - 1;
-			}
-
-			// Set thresholds to be the same
-			SignatureThreshold::<T>::put(signature_threshold);
-			KeygenThreshold::<T>::put(keygen_threshold);
-			NextSignatureThreshold::<T>::put(signature_threshold);
-			NextKeygenThreshold::<T>::put(keygen_threshold);
-			PendingSignatureThreshold::<T>::put(signature_threshold);
-			PendingKeygenThreshold::<T>::put(keygen_threshold);
-			// Set refresh parameters
-			RefreshDelay::<T>::put(T::RefreshDelay::get());
-			RefreshNonce::<T>::put(0);
-			TimeToRestart::<T>::put(T::TimeToRestart::get());
 		}
 	}
 }
@@ -864,7 +929,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn process_misbehaviour_reports(
-		reports: AggregatedMisbehaviourReports,
+		reports: AggregatedMisbehaviourReports<T::DKGId>,
 		authorities: Vec<T::AccountId>,
 	) -> Vec<sr25519::Public> {
 		let mut valid_reporters = Vec::new();
@@ -1114,7 +1179,8 @@ impl<T: Config> Pallet<T> {
 			}
 
 			let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOUR_REPORTS);
-			let agg_misbehaviour_reports = agg_reports_ref.get::<AggregatedMisbehaviourReports>();
+			let agg_misbehaviour_reports =
+				agg_reports_ref.get::<AggregatedMisbehaviourReports<T::DKGId>>();
 
 			if let Ok(Some(reports)) = agg_misbehaviour_reports {
 				// If this offender has already been reported, don't report it again.
@@ -1263,8 +1329,9 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let mut authority_account_ids = Vec::new();
 		let mut queued_authority_account_ids = Vec::new();
 		let next_authorities = validators
-			.map(|(l, k)| {
-				authority_account_ids.push(l.clone());
+			.map(|(acc, k)| {
+				authority_account_ids.push(acc.clone());
+				AccountToAuthority::<T>::insert(&acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();
@@ -1272,6 +1339,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let next_queued_authorities = queued_validators
 			.map(|(acc, k)| {
 				queued_authority_account_ids.push(acc.clone());
+				AccountToAuthority::<T>::insert(&acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();
