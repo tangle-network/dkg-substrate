@@ -417,8 +417,7 @@ where
 
 		// If we have less than the threshold, we need to add the best jailed authorities
 		// to the best unjailed authorities to meet the threshold.
-		// TODO: Identify if we should preven this from happening by always adjusting
-		// thresholds on-chain.
+		// TODO: Prevent this from happening by always adjusting thresholds on-chain.
 		if best_unjailed_authorities.len() < threshold {
 			let best_jailed_authorities: Vec<Public> = get_best_authorities(
 				threshold - best_unjailed_authorities.len(),
