@@ -803,7 +803,7 @@ pub mod pallet {
 				JailedSigningAuthorities::<T>::get(authority.clone())
 					.saturating_add(T::SigningJailSentence::get())
 			{
-				JailedSigningAuthorities::<T>::remove(authority.clone());
+				JailedSigningAuthorities::<T>::remove(authority);
 			}
 			Ok(().into())
 		}
