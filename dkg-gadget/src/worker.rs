@@ -252,9 +252,7 @@ where
 			.client
 			.runtime_api()
 			.get_reputations(&at, authorities.to_vec())
-			.unwrap_or_else(|_| {
-				authorities.iter().map(|id| (id.clone(), 0)).collect()
-			});
+			.unwrap_or_else(|_| authorities.iter().map(|id| (id.clone(), 0)).collect());
 		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
 		for (id, rep) in reputations {
 			reputation_map.insert(id, rep);
@@ -266,63 +264,46 @@ where
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.signature_threshold(&at)
-			.unwrap_or_default()
+		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the keygen threshold at a specific block
 	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.keygen_threshold(&at)
-			.unwrap_or_default()
+		return self.client.runtime_api().keygen_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.next_signature_threshold(&at)
-			.unwrap_or_default()
+		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the next keygen threshold at a specific block
 	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.next_keygen_threshold(&at)
-			.unwrap_or_default()
+		return self.client.runtime_api().next_keygen_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the jailed keygen authorities
-	pub fn get_keygen_jailed(&self, header: &B::Header, set: Vec<AuthorityId>) -> Vec<AuthorityId> {
+	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.get_keygen_jailed(&at, set)
-			.unwrap_or_default()
+		return self.client.runtime_api().get_keygen_jailed(&at, set.to_vec()).unwrap_or_default()
 	}
 
 	/// Get the jailed signing authorities
-	pub fn get_signing_jailed(&self, header: &B::Header, set: Vec<AuthorityId>) -> Vec<AuthorityId> {
+	pub fn get_signing_jailed(
+		&self,
+		header: &B::Header,
+		set: &[AuthorityId],
+	) -> Vec<AuthorityId> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.get_signing_jailed(&at, set)
-			.unwrap_or_default()
+		return self.client.runtime_api().get_signing_jailed(&at, set.to_vec()).unwrap_or_default()
 	}
 
 	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client
-			.runtime_api()
-			.time_to_restart(&at)
-			.ok()
+		return self.client.runtime_api().time_to_restart(&at).ok()
 	}
 
 	/// Gets latest block number from latest block header
@@ -418,13 +399,12 @@ where
 		};
 		// Filter the authority set from the jailed authorities
 		let authorities = authority_set.authorities;
-		let jailed_authorities = self.get_keygen_jailed(header, authorities.clone());
-		let unjailed_authorities = authorities.iter().map(|a| {
-			if jailed_authorities.contains(a) {
-				return None;
-			}
-			Some(a.clone())
-		}).filter_map(|a| a).collect::<Vec<_>>();
+		let jailed_authorities = self.get_keygen_jailed(header, &authorities);
+		let unjailed_authorities = authorities
+			.iter()
+			.filter(|a| jailed_authorities.contains(a))
+			.cloned()
+			.collect::<Vec<_>>();
 		// Best unjailed authorities are taken from the on-chain reputations
 		let mut best_unjailed_authorities: Vec<Public> = get_best_authorities(
 			threshold,
@@ -448,7 +428,7 @@ where
 			.iter()
 			.map(|(_, key)| key.clone())
 			.collect();
-			
+
 			best_unjailed_authorities.extend(best_jailed_authorities);
 			best_unjailed_authorities
 		} else {
@@ -500,6 +480,7 @@ where
 			self.get_signature_threshold(header),
 			self.get_keygen_threshold(header),
 			local_key_path,
+			&self.get_signing_jailed(header, &best_authorities),
 		));
 
 		self.dkg_state.listening_for_active_pub_key = true;
@@ -523,7 +504,7 @@ where
 			return
 		}
 
-		// Check if the next rounds exists and has processed for this neq queued round idc
+		// Check if the next rounds exists and has processed for this next queued round id
 		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().get_id() == queued.id {
 			return
 		}
@@ -556,6 +537,7 @@ where
 			self.get_next_signature_threshold(header),
 			self.get_next_keygen_threshold(header),
 			queued_local_key_path,
+			&self.get_signing_jailed(header, &best_authorities)
 		));
 
 		self.dkg_state.listening_for_pub_key = true;
@@ -940,8 +922,19 @@ where
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for unsinged_proposal in &unsigned_proposals {
-				let key = (unsinged_proposal.typed_chain_id, unsinged_proposal.key);
+			// Update jailed signers each time an offline stage is created
+			// This will trigger a regeneration of signing parties in hopes of
+			// both randomizing the set of signers as well as removing jailed
+			// signers after reported signing misbehaviour.
+			let at: BlockId<B> = BlockId::hash(header.hash());
+			let jailed_signers = self.client
+				.runtime_api()
+				.get_signing_jailed(&at, rounds.authorities.clone())
+				.unwrap_or_default();
+			rounds.set_jailed_signers(jailed_signers);
+			// Iterate through each unsigned proposal and create offline stages
+			for unsigned_proposals in &unsigned_proposals {
+				let key = (unsigned_proposals.typed_chain_id, unsigned_proposals.key);
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
 				}

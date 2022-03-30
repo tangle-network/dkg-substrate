@@ -874,11 +874,11 @@ impl_runtime_apis! {
 		}
 
 		fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-			set.iter().filter(|a| DKG::jailed_keygen_authorities(a)).map(|a| a.clone()).collect()
+			set.iter().filter(|a| DKG::jailed_keygen_authorities(a)).cloned().collect()
 		}
 
 		fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-			set.iter().filter(|a| DKG::jailed_signing_authorities(a)).map(|a| a.clone()).collect()
+			set.iter().filter(|a| DKG::jailed_signing_authorities(a)).cloned().collect()
 		}
 
 		fn refresh_nonce() -> u32 {

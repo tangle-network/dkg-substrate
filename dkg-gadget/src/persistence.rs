@@ -223,6 +223,7 @@ where
 						worker.get_signature_threshold(header),
 						worker.get_keygen_threshold(header),
 						Some(local_key_path),
+						&worker.get_signing_jailed(header, &best_authorities)
 					);
 
 					if local_key.is_some() {
@@ -271,6 +272,7 @@ where
 						worker.get_next_signature_threshold(header),
 						worker.get_next_keygen_threshold(header),
 						Some(queued_local_key_path),
+						&worker.get_signing_jailed(header, &best_authorities)
 					);
 
 					if queued_local_key.is_some() {
@@ -384,6 +386,7 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				local_key_path,
+				&worker.get_signing_jailed(header, &best_authorities)
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);
@@ -414,6 +417,7 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				queued_local_key_path,
+				&worker.get_signing_jailed(header, &best_authorities)
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);

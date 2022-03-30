@@ -113,7 +113,7 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID, MisbehaviourType,
+	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -459,7 +459,7 @@ pub mod pallet {
 			let misbehaviour_type = reports.misbehaviour_type;
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			let threshold = Self::signature_threshold();
-			
+
 			if valid_reporters.len() >= (threshold + 1) as usize {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
@@ -467,7 +467,8 @@ pub mod pallet {
 				AuthorityReputations::<T>::insert(&offender, reputation - 1);
 				// Jail the respective misbehaving party depending on the misbehaviour type
 				match misbehaviour_type {
-					MisbehaviourType::Keygen => JailedKeygenAuthorities::<T>::insert(offender, true),
+					MisbehaviourType::Keygen =>
+						JailedKeygenAuthorities::<T>::insert(offender, true),
 					MisbehaviourType::Sign => JailedSigningAuthorities::<T>::insert(offender, true),
 				};
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
@@ -696,24 +697,14 @@ pub mod pallet {
 	/// Tracks jailed authorities for keygen
 	#[pallet::storage]
 	#[pallet::getter(fn jailed_keygen_authorities)]
-	pub type JailedKeygenAuthorities<T: Config> = StorageMap<
-		_,
-		Blake2_256,
-		dkg_runtime_primitives::crypto::AuthorityId,
-		bool,
-		ValueQuery,
-	>;
+	pub type JailedKeygenAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, bool, ValueQuery>;
 
 	/// Tracks jailed authorities for signing
 	#[pallet::storage]
 	#[pallet::getter(fn jailed_signing_authorities)]
-	pub type JailedSigningAuthorities<T: Config> = StorageMap<
-		_,
-		Blake2_256,
-		dkg_runtime_primitives::crypto::AuthorityId,
-		bool,
-		ValueQuery,
-	>;
+	pub type JailedSigningAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, bool, ValueQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -767,7 +758,10 @@ pub mod pallet {
 		/// Current Public Key Signature Changed.
 		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
 		/// Misbehaviour reports submitted
-		MisbehaviourReportsSubmitted { misbehaviour_type: MisbehaviourType, reporters: Vec<sr25519::Public> },
+		MisbehaviourReportsSubmitted {
+			misbehaviour_type: MisbehaviourType,
+			reporters: Vec<sr25519::Public>,
+		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
 	}
