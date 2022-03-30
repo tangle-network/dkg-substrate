@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # checks markdown links
+  # ensures markdown links are active
   link-check:
     name: links
     runs-on: ubuntu-latest
