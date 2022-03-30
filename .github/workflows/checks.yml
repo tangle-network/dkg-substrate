@@ -33,7 +33,7 @@ jobs:
           config: .licenserc.yaml
   # ensures build succeeds without warnings
   cargo-check:
-    name: warnings
+    name: build
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: -Dwarnings
