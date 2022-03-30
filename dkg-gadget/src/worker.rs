@@ -288,17 +288,21 @@ where
 	/// Get the jailed keygen authorities
 	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_keygen_jailed(&at, set.to_vec()).unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.get_keygen_jailed(&at, set.to_vec())
+			.unwrap_or_default()
 	}
 
 	/// Get the jailed signing authorities
-	pub fn get_signing_jailed(
-		&self,
-		header: &B::Header,
-		set: &[AuthorityId],
-	) -> Vec<AuthorityId> {
+	pub fn get_signing_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_signing_jailed(&at, set.to_vec()).unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.get_signing_jailed(&at, set.to_vec())
+			.unwrap_or_default()
 	}
 
 	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
@@ -536,7 +540,7 @@ where
 			self.get_next_signature_threshold(header),
 			self.get_next_keygen_threshold(header),
 			queued_local_key_path,
-			&self.get_signing_jailed(header, &best_authorities)
+			&self.get_signing_jailed(header, &best_authorities),
 		));
 
 		self.dkg_state.listening_for_pub_key = true;
@@ -926,7 +930,8 @@ where
 			// both randomizing the set of signers as well as removing jailed
 			// signers after reported signing misbehaviour.
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			let jailed_signers = self.client
+			let jailed_signers = self
+				.client
 				.runtime_api()
 				.get_signing_jailed(&at, rounds.authorities.clone())
 				.unwrap_or_default();

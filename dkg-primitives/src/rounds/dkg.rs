@@ -568,7 +568,10 @@ where
 	/// Generates the signer set by randomly selecting t+1 signers
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
-	pub fn generate_signers(&self, local_key: &LocalKey<Secp256k1>) -> Result<Vec<u16>, &'static str> {
+	pub fn generate_signers(
+		&self,
+		local_key: &LocalKey<Secp256k1>,
+	) -> Result<Vec<u16>, &'static str> {
 		let (_, threshold, parties) = self.dkg_params();
 		info!(target: "dkg", "🕸️  Generating threshold signer set with threshold {}-out-of-{}", threshold, parties);
 		// Select the random subset using the local key as a seed
@@ -576,21 +579,23 @@ where
 		// let set = (1..=self.authorities.len())
 		// 	.map(|x| u16::try_from(x).unwrap())
 		// 	.collect::<Vec<u16>>();
-		let unjailed_set = self.authorities
+		let unjailed_set = self
+			.authorities
 			.iter()
 			.enumerate()
 			.filter(|(_, key)| !self.jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i+1).unwrap())
+			.map(|(i, _)| u16::try_from(i + 1).unwrap())
 			.collect::<Vec<u16>>();
-		
+
 		if unjailed_set.len() > threshold.into() {
 			select_random_set(seed, unjailed_set, threshold + 1)
 		} else {
-			let jailed_set = self.authorities
+			let jailed_set = self
+				.authorities
 				.iter()
 				.enumerate()
 				.filter(|(_, key)| self.jailed_signers.contains(key))
-				.map(|(i, _)| u16::try_from(i+1).unwrap())
+				.map(|(i, _)| u16::try_from(i + 1).unwrap())
 				.collect::<Vec<u16>>();
 			let diff = usize::from(threshold) + 1 - unjailed_set.len();
 			let combined = unjailed_set
