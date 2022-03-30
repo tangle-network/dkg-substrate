@@ -1,0 +1,123 @@
+name: run
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  # code coverage job
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y clang libssl-dev llvm libudev-dev libgmp3-dev && \
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Run Tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          args: '--out Xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16 '
+
+      - name: Upload CodeCov
+        uses: codecov/codecov-action@v2
+  # dkg-substrate base unit tests
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+ 
+      - name: Checkout Sources
+        uses: actions/checkout@v2
+
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          version: latest
+
+      - name: Install Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Cargo Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Run tests
+        run: cargo nextest run
+
+  # dkg-substrate integration tests
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          submodules: "recursive"
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+
+      - name: Build Standalone Node for Integration Tests (Release)
+        run: cargo build --release -p dkg-standalone-node --features integration-tests
+
+      - name: Install Nodejs
+        uses: actions/setup-node@v2
+        with:
+          node-version-file: "./dkg-test-suite/.nvmrc"
+          cache: "yarn"
+          cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Install Packages
+        run: cd dkg-test-suite && yarn
+
+      - name: Run E2E Tests
+        run: cd dkg-test-suite && yarn test

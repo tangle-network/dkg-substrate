@@ -1,4 +1,4 @@
-name: Publish Docs
+name: publish
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - master
 
 jobs:
-  publish_docs:
+  docs:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/master'
     name: Publish Documentation
     runs-on: ubuntu-20.04
