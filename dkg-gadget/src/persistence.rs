@@ -208,7 +208,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_keygen_threshold(header).into(),
 					&active.authorities,
-					&worker.get_authority_reputations(header, &active),
+					&worker.get_authority_reputations(header, &active.authorities),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -256,7 +256,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_next_keygen_threshold(header).into(),
 					&queued.authorities,
-					&worker.get_authority_reputations(header, &queued),
+					&worker.get_authority_reputations(header, &queued.authorities),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -369,7 +369,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_keygen_threshold(header).into(),
 			&authority_set.authorities,
-			&worker.get_authority_reputations(header, &authority_set),
+			&worker.get_authority_reputations(header, &authority_set.authorities),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -398,7 +398,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_next_keygen_threshold(header).into(),
 			&queued_authority_set.authorities,
-			&worker.get_authority_reputations(header, &queued_authority_set),
+			&worker.get_authority_reputations(header, &queued_authority_set.authorities),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())

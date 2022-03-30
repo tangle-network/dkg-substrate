@@ -23,7 +23,7 @@ use sc_service::{ChainType, Configuration};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
-use sp_runtime::key_types::ACCOUNT;
+use sp_runtime::{key_types::ACCOUNT};
 use std::{collections::HashMap, fs, hash::Hash, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};

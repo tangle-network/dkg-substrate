@@ -56,9 +56,9 @@ use crate::storage::{
 };
 
 use dkg_primitives::{
-	types::{DKGError, RoundId},
+	types::{DKGError, DKGMisbehaviourMessage, RoundId},
 	utils::get_best_authorities,
-	DKGReport, Proposal,
+	DKGReport, MisbehaviourType, Proposal,
 };
 
 use dkg_runtime_primitives::{
@@ -138,7 +138,7 @@ where
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports:
-		HashMap<(RoundId, AuthorityId), AggregatedMisbehaviourReports>,
+		HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -245,15 +245,15 @@ where
 	pub fn get_authority_reputations(
 		&self,
 		header: &B::Header,
-		authority_set: &AuthoritySet<Public>,
+		authorities: &[AuthorityId],
 	) -> HashMap<Public, i64> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
 			.runtime_api()
-			.get_reputations(&at, authority_set.authorities.clone())
+			.get_reputations(&at, authorities.to_vec())
 			.unwrap_or_else(|_| {
-				authority_set.authorities.iter().map(|id| (id.clone(), 0)).collect()
+				authorities.iter().map(|id| (id.clone(), 0)).collect()
 			});
 		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
 		for (id, rep) in reputations {
@@ -266,30 +266,63 @@ where
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).unwrap()
+		return self.client
+			.runtime_api()
+			.signature_threshold(&at)
+			.unwrap_or_default()
 	}
 
 	/// Get the keygen threshold at a specific block
 	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().keygen_threshold(&at).unwrap()
+		return self.client
+			.runtime_api()
+			.keygen_threshold(&at)
+			.unwrap_or_default()
 	}
 
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_signature_threshold(&at).unwrap()
+		return self.client
+			.runtime_api()
+			.next_signature_threshold(&at)
+			.unwrap_or_default()
 	}
 
 	/// Get the next keygen threshold at a specific block
 	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_keygen_threshold(&at).unwrap()
+		return self.client
+			.runtime_api()
+			.next_keygen_threshold(&at)
+			.unwrap_or_default()
+	}
+
+	/// Get the jailed keygen authorities
+	pub fn get_keygen_jailed(&self, header: &B::Header, set: Vec<AuthorityId>) -> Vec<AuthorityId> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client
+			.runtime_api()
+			.get_keygen_jailed(&at, set)
+			.unwrap_or_default()
+	}
+
+	/// Get the jailed signing authorities
+	pub fn get_signing_jailed(&self, header: &B::Header, set: Vec<AuthorityId>) -> Vec<AuthorityId> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client
+			.runtime_api()
+			.get_signing_jailed(&at, set)
+			.unwrap_or_default()
 	}
 
 	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().time_to_restart(&at).ok()
+		return self.client
+			.runtime_api()
+			.time_to_restart(&at)
+			.ok()
 	}
 
 	/// Gets latest block number from latest block header
@@ -369,7 +402,8 @@ where
 		Ok(())
 	}
 
-	/// Gets the best authorities by authority keys using on-chain reputations
+	/// Gets the best authorities by authority keys using on-chain reputations.
+	/// Additionally, it filters the best authority keys from the jailed authorities.
 	fn get_best_authority_keys(
 		&self,
 		header: &B::Header,
@@ -378,21 +412,48 @@ where
 	) -> Vec<Public> {
 		// Get active threshold or get the next threshold
 		let threshold = if active {
-			self.get_keygen_threshold(header)
+			self.get_keygen_threshold(header) as usize
 		} else {
-			self.get_next_keygen_threshold(header)
+			self.get_next_keygen_threshold(header) as usize
 		};
-		// Best authorities are taken from the on-chain reputations
-		let best_authorities: Vec<Public> = get_best_authorities(
-			threshold.into(),
-			&authority_set.authorities,
-			&self.get_authority_reputations(header, &authority_set),
+		// Filter the authority set from the jailed authorities
+		let authorities = authority_set.authorities;
+		let jailed_authorities = self.get_keygen_jailed(header, authorities.clone());
+		let unjailed_authorities = authorities.iter().map(|a| {
+			if jailed_authorities.contains(a) {
+				return None;
+			}
+			Some(a.clone())
+		}).filter_map(|a| a).collect::<Vec<_>>();
+		// Best unjailed authorities are taken from the on-chain reputations
+		let mut best_unjailed_authorities: Vec<Public> = get_best_authorities(
+			threshold,
+			&unjailed_authorities,
+			&self.get_authority_reputations(header, &unjailed_authorities),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
 		.collect();
 
-		best_authorities
+		// If we have less than the threshold, we need to add the best jailed authorities
+		// to the best unjailed authorities to meet the threshold.
+		// TODO: Identify if we should preven this from happening by always adjusting
+		// thresholds on-chain.
+		if best_unjailed_authorities.len() < threshold {
+			let best_jailed_authorities: Vec<Public> = get_best_authorities(
+				threshold - best_unjailed_authorities.len(),
+				&jailed_authorities,
+				&self.get_authority_reputations(header, &jailed_authorities),
+			)
+			.iter()
+			.map(|(_, key)| key.clone())
+			.collect();
+			
+			best_unjailed_authorities.extend(best_jailed_authorities);
+			best_unjailed_authorities
+		} else {
+			best_unjailed_authorities
+		}
 	}
 
 	fn handle_genesis_dkg_setup(
@@ -754,30 +815,31 @@ where
 	}
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
-		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { return };
-
-		let round_id = match dkg_report {
+		let (offender, round_id, misbehaviour_type) = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
 				if let Some(rounds) = &self.next_rounds {
-					rounds.get_id()
+					(offender, rounds.get_id(), MisbehaviourType::Keygen)
 				} else {
-					0
+					(offender, 0, MisbehaviourType::Keygen)
 				}
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
 				if let Some(rounds) = &self.rounds {
-					rounds.get_id()
+					(offender, rounds.get_id(), MisbehaviourType::Sign)
 				} else {
-					0
+					(offender, 0, MisbehaviourType::Sign)
 				}
 			},
 		};
 
-		gossip_misbehaviour_report(self, dkg_report, round_id);
+		gossip_misbehaviour_report(
+			self,
+			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] },
+		);
 	}
 
 	pub fn authenticate_msg_origin(

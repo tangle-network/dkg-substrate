@@ -50,9 +50,11 @@ where
 		reports.encode()
 	);
 
-	let _ = dkg_worker
-		.aggregated_misbehaviour_reports
-		.remove(&(reports.round_id, reports.offender.clone()));
+	let _ = dkg_worker.aggregated_misbehaviour_reports.remove(&(
+		reports.misbehaviour_type,
+		reports.round_id,
+		reports.offender.clone(),
+	));
 
 	Ok(())
 }

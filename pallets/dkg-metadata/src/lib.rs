@@ -113,7 +113,7 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{sr25519, to_slice_32, verify_signer_from_set},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+	ConsensusLog, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID, MisbehaviourType,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -456,14 +456,22 @@ pub mod pallet {
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let offender = reports.offender.clone();
+			let misbehaviour_type = reports.misbehaviour_type;
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			let threshold = Self::signature_threshold();
-
+			
 			if valid_reporters.len() >= (threshold + 1) as usize {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
+				// Compute reputation impact and apply to the offender
 				AuthorityReputations::<T>::insert(&offender, reputation - 1);
+				// Jail the respective misbehaving party depending on the misbehaviour type
+				match misbehaviour_type {
+					MisbehaviourType::Keygen => JailedKeygenAuthorities::<T>::insert(offender, true),
+					MisbehaviourType::Sign => JailedSigningAuthorities::<T>::insert(offender, true),
+				};
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
+					misbehaviour_type,
 					reporters: valid_reporters,
 				});
 				return Ok(().into())
@@ -670,7 +678,11 @@ pub mod pallet {
 	pub type MisbehaviourReports<T: Config> = StorageMap<
 		_,
 		Blake2_256,
-		(dkg_runtime_primitives::AuthoritySetId, dkg_runtime_primitives::crypto::AuthorityId),
+		(
+			dkg_runtime_primitives::MisbehaviourType,
+			dkg_runtime_primitives::AuthoritySetId,
+			dkg_runtime_primitives::crypto::AuthorityId,
+		),
 		AggregatedMisbehaviourReports,
 		OptionQuery,
 	>;
@@ -680,6 +692,28 @@ pub mod pallet {
 	#[pallet::getter(fn authority_reputations)]
 	pub type AuthorityReputations<T: Config> =
 		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, i64, ValueQuery>;
+
+	/// Tracks jailed authorities for keygen
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_keygen_authorities)]
+	pub type JailedKeygenAuthorities<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		dkg_runtime_primitives::crypto::AuthorityId,
+		bool,
+		ValueQuery,
+	>;
+
+	/// Tracks jailed authorities for signing
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_signing_authorities)]
+	pub type JailedSigningAuthorities<T: Config> = StorageMap<
+		_,
+		Blake2_256,
+		dkg_runtime_primitives::crypto::AuthorityId,
+		bool,
+		ValueQuery,
+	>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -733,7 +767,7 @@ pub mod pallet {
 		/// Current Public Key Signature Changed.
 		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
 		/// Misbehaviour reports submitted
-		MisbehaviourReportsSubmitted { reporters: Vec<sr25519::Public> },
+		MisbehaviourReportsSubmitted { misbehaviour_type: MisbehaviourType, reporters: Vec<sr25519::Public> },
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
 	}
@@ -851,6 +885,10 @@ impl<T: Config> Pallet<T> {
 				.collect::<Vec<sr25519::Public>>();
 
 			let mut signed_payload = Vec::new();
+			signed_payload.extend_from_slice(&match reports.misbehaviour_type {
+				MisbehaviourType::Keygen => [0x01],
+				MisbehaviourType::Sign => [0x02],
+			});
 			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
@@ -1086,8 +1124,12 @@ impl<T: Config> Pallet<T> {
 
 			if let Ok(Some(reports)) = agg_misbehaviour_reports {
 				// If this offender has already been reported, don't report it again.
-				if Self::misbehaviour_reports((reports.round_id, reports.offender.clone()))
-					.is_some()
+				if Self::misbehaviour_reports((
+					reports.misbehaviour_type,
+					reports.round_id,
+					reports.offender.clone(),
+				))
+				.is_some()
 				{
 					agg_reports_ref.clear();
 					return Ok(())

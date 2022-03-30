@@ -79,7 +79,7 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
-#[derive(Debug, Clone, Decode, Encode, PartialEq, Eq, TypeInfo)]
+#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub enum MisbehaviourType {
 	Keygen,
@@ -212,6 +212,10 @@ sp_api::decl_runtime_apis! {
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
 		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
+		/// Returns the set of jailed keygen authorities from a set of authorities
+		fn get_keygen_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
+		/// Returns the set of jailed signing authorities from a set of authorities
+		fn get_signing_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal

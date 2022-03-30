@@ -873,6 +873,14 @@ impl_runtime_apis! {
 			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
 		}
 
+		fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| DKG::jailed_keygen_authorities(a)).map(|a| a.clone()).collect()
+		}
+
+		fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| DKG::jailed_signing_authorities(a)).map(|a| a.clone()).collect()
+		}
+
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}
