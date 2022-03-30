@@ -45,41 +45,9 @@ jobs:
 
       - name: Upload CodeCov
         uses: codecov/codecov-action@v2
-  # dkg-substrate base unit tests
-  tests:
-    name: tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.9.1
-        with:
-          access_token: ${{ github.token }}
- 
-      - name: Checkout Sources
-        uses: actions/checkout@v2
-
-      - name: Install cargo-nextest
-        uses: baptiste0928/cargo-install@v1
-        with:
-          crate: cargo-nextest
-          version: latest
-
-      - name: Install Toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          override: true
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v1.3.0
-
-      - name: Run tests
-        run: cargo nextest run
-
-  # dkg-substrate integration tests
-  e2e:
-    name: e2e
+  # dkg-substrate e2e and base unit test
+  test:
+    name: e2e & tests
     runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
@@ -91,6 +59,12 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: "recursive"
+      
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          version: latest
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
@@ -98,7 +72,7 @@ jobs:
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
+          target: wasm32-unknown-unknown
           toolchain: nightly
 
       - name: Build Standalone Node for Integration Tests (Release)
@@ -110,6 +84,9 @@ jobs:
           node-version-file: "./dkg-test-suite/.nvmrc"
           cache: "yarn"
           cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Run tests
+        run: cargo nextest run --release
 
       - name: Install Packages
         run: cd dkg-test-suite && yarn
