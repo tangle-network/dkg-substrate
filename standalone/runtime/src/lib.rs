@@ -37,8 +37,8 @@ use sp_runtime::{
 	curve::PiecewiseLinear,
 	generic, impl_opaque_keys,
 	traits::{
-		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount,
-		NumberFor, OpaqueKeys, StaticLookup, Verify,
+		self, AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor,
+		OpaqueKeys, StaticLookup, Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,

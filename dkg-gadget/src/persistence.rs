@@ -304,9 +304,7 @@ where
 
 /// To determine if the protocol should be restarted, we check if the
 /// protocol is stuck at the keygen stage
-pub(crate) fn should_restart_dkg<B, C, BE>(
-	worker: &mut DKGWorker<B, C, BE>,
-) -> (bool, bool)
+pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
 where
 	B: Block,
 	BE: Backend<B>,
