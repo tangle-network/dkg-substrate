@@ -28,6 +28,7 @@ use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
+/// rounds, current_validator_set_authorities, active_keygen_in_process, queued_keygen_in_progress, key_store, queued_validator_set, next_rounds
 pub(crate) async fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
 where
 	B: Block,
@@ -37,7 +38,7 @@ where
 {
 	debug!(target: "dkg", "🕸️  Try sending DKG messages");
 
-	let mut keys_to_gossip = Vec::new();
+	let mut keys_to_gossip = vec![];
 	let mut rounds_send_result = vec![];
 	let mut next_rounds_send_result = vec![];
 

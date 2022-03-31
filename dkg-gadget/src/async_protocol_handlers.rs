@@ -300,7 +300,7 @@ pub mod state_machines {
 	use std::time::Duration;
 	use futures::channel::mpsc::UnboundedReceiver;
 	use round_based::{Msg, StateMachine};
-	use dkg_primitives::types::{DKGError, DKGKeygenMessage};
+	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGOfflineMessage, DKGVoteMessage};
 
 	pub struct KeygenStateMachine {
 
@@ -320,7 +320,115 @@ pub mod state_machines {
 		type Output = ();
 
 		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-			msg.body.
+
+		}
+
+		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
+			todo!()
+		}
+
+		fn wants_to_proceed(&self) -> bool {
+			todo!()
+		}
+
+		fn proceed(&mut self) -> Result<(), Self::Err> {
+			todo!()
+		}
+
+		fn round_timeout(&self) -> Option<Duration> {
+			todo!()
+		}
+
+		fn round_timeout_reached(&mut self) -> Self::Err {
+			todo!()
+		}
+
+		fn is_finished(&self) -> bool {
+			todo!()
+		}
+
+		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
+			todo!()
+		}
+
+		fn current_round(&self) -> u16 {
+			todo!()
+		}
+
+		fn total_rounds(&self) -> Option<u16> {
+			todo!()
+		}
+
+		fn party_ind(&self) -> u16 {
+			todo!()
+		}
+
+		fn parties(&self) -> u16 {
+			todo!()
+		}
+	}
+
+	impl StateMachine for OfflineStateMachine {
+		type MessageBody = DKGOfflineMessage;
+		type Err = DKGError;
+		type Output = ();
+
+		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+
+		}
+
+		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
+			todo!()
+		}
+
+		fn wants_to_proceed(&self) -> bool {
+			todo!()
+		}
+
+		fn proceed(&mut self) -> Result<(), Self::Err> {
+			todo!()
+		}
+
+		fn round_timeout(&self) -> Option<Duration> {
+			todo!()
+		}
+
+		fn round_timeout_reached(&mut self) -> Self::Err {
+			todo!()
+		}
+
+		fn is_finished(&self) -> bool {
+			todo!()
+		}
+
+		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
+			todo!()
+		}
+
+		fn current_round(&self) -> u16 {
+			todo!()
+		}
+
+		fn total_rounds(&self) -> Option<u16> {
+			todo!()
+		}
+
+		fn party_ind(&self) -> u16 {
+			todo!()
+		}
+
+		fn parties(&self) -> u16 {
+			todo!()
+		}
+	}
+
+	impl StateMachine for VotingStateMachine {
+		type MessageBody = DKGVoteMessage;
+		type Err = DKGError;
+		type Output = ();
+
+		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+			todo!()
 		}
 
 		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
