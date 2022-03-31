@@ -211,7 +211,7 @@ sp_api::decl_runtime_apis! {
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
-		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, u128)>;
 		/// Returns the set of jailed keygen authorities from a set of authorities
 		fn get_keygen_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
 		/// Returns the set of jailed signing authorities from a set of authorities

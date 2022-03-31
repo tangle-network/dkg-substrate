@@ -93,7 +93,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Encode;
+use codec::{Decode, Encode};
 
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -121,7 +121,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{Convert, IsMember, Member, Saturating},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Member, Saturating},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, prelude::*};
@@ -147,7 +147,7 @@ pub mod pallet {
 		offchain::{AppCrypto, CreateSignedTransaction},
 		pallet_prelude::*,
 	};
-	use sp_runtime::Permill;
+	use sp_runtime::{Percent, Permill};
 
 	/// A `Convert` implementation that finds the stash of the given controller account,
 	/// if any.
@@ -165,11 +165,21 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize + AsRef<[u8]>;
-
+		/// Jail lengths for misbehaviours
 		type KeygenJailSentence: Get<Self::BlockNumber>;
 		type SigningJailSentence: Get<Self::BlockNumber>;
+		/// Map from controller accounts to their DKG authority identifier.
 		type AuthorityIdOf: Convert<Self::AccountId, Option<Self::DKGId>>;
-
+		/// The reputation decay percentage
+		type Reputation: Member
+			+ Parameter
+			+ Default
+			+ Encode
+			+ Decode
+			+ AtLeast32BitUnsigned
+			+ Copy;
+		/// The reputation decay percentage
+		type DecayPercentage: Get<Percent>;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 
@@ -409,7 +419,8 @@ pub mod pallet {
 	/// Tracks authority reputations
 	#[pallet::storage]
 	#[pallet::getter(fn authority_reputations)]
-	pub type AuthorityReputations<T: Config> = StorageMap<_, Blake2_256, T::DKGId, i64, ValueQuery>;
+	pub type AuthorityReputations<T: Config> =
+		StorageMap<_, Blake2_256, T::DKGId, T::Reputation, ValueQuery>;
 
 	/// Tracks jailed authorities for keygen by mapping
 	/// to the block number when the authority was last jailed
@@ -606,6 +617,17 @@ pub mod pallet {
 					});
 					accepted = true;
 
+					for account in accounts {
+						let decay: Percent = T::DecayPercentage::get();
+						if let Some(authority) = AccountToAuthority::<T>::get(account) {
+							let reputation = AuthorityReputations::<T>::get(authority.clone());
+							AuthorityReputations::<T>::insert(
+								authority,
+								decay.mul_floor(reputation).saturating_add(reputation),
+							);
+						}
+					}
+
 					break
 				}
 			}
@@ -739,7 +761,8 @@ pub mod pallet {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
-				AuthorityReputations::<T>::insert(&offender, reputation - 1);
+				let decay = T::DecayPercentage::get();
+				AuthorityReputations::<T>::insert(&offender, decay.mul_floor(reputation));
 				// Jail the respective misbehaving party depending on the misbehaviour type
 				// TODO: Track when the offender was jailed so we can remove them from the jail
 				match misbehaviour_type {
@@ -805,6 +828,26 @@ pub mod pallet {
 			{
 				JailedSigningAuthorities::<T>::remove(authority);
 			}
+			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn force_unjail_keygen(
+			origin: OriginFor<T>,
+			authority: T::DKGId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			JailedKeygenAuthorities::<T>::remove(authority);
+			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn force_unjail_signing(
+			origin: OriginFor<T>,
+			authority: T::DKGId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			JailedSigningAuthorities::<T>::remove(authority);
 			Ok(().into())
 		}
 
@@ -901,8 +944,8 @@ impl<T: Config> Pallet<T> {
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
 		authorities: Vec<T::AccountId>,
-	) -> BTreeMap<Vec<u8>, Vec<Vec<u8>>> {
-		let mut dict: BTreeMap<Vec<u8>, Vec<Vec<u8>>> = BTreeMap::new();
+	) -> BTreeMap<Vec<u8>, Vec<T::AccountId>> {
+		let mut dict: BTreeMap<Vec<u8>, Vec<T::AccountId>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
 			let maybe_signers = authorities
@@ -914,14 +957,15 @@ impl<T: Config> Pallet<T> {
 				})
 				.collect::<Vec<sr25519::Public>>();
 
-			let can_proceed = verify_signer_from_set(maybe_signers, &pub_key, &signature);
+			let (_, success, index) = verify_signer_from_set(maybe_signers, &pub_key, &signature);
 
-			if can_proceed.1 {
+			if success {
 				if !dict.contains_key(&pub_key) {
 					dict.insert(pub_key.clone(), Vec::new());
 				}
+				let authority_account = &authorities[index.unwrap_or_default()];
 				let temp = dict.get_mut(&pub_key).unwrap();
-				temp.push(can_proceed.0.unwrap().encode());
+				temp.push(authority_account.clone());
 			}
 		}
 

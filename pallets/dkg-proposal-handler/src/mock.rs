@@ -206,6 +206,7 @@ impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
@@ -234,6 +235,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = u128;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 }

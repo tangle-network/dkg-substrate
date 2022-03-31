@@ -120,6 +120,7 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
 	pub const ProposalLifetime: u64 = 50;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
@@ -164,6 +165,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = u128;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 }

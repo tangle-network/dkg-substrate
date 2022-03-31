@@ -86,6 +86,8 @@ pub type Index = u32;
 pub type Hash = sp_core::H256;
 /// An index to a block.
 pub type BlockNumber = u32;
+/// Reputation type
+pub type Reputation = u128;
 /// The address format for describing accounts.
 pub type Address = MultiAddress<AccountId, Index>;
 /// Block header type as expected by this runtime.
@@ -410,6 +412,7 @@ impl pallet_session::Config for Runtime {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const PotId: PalletId = PalletId(*b"PotStake");
 	pub const MaxCandidates: u32 = 1000;
 	pub const MinCandidates: u32 = 5;
@@ -447,6 +450,8 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = Reputation;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 }
@@ -687,7 +692,7 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, i64)> {
+		fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
 			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
 		}
 

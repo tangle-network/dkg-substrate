@@ -248,14 +248,14 @@ where
 		&self,
 		header: &B::Header,
 		authorities: &[AuthorityId],
-	) -> HashMap<Public, i64> {
+	) -> HashMap<Public, u128> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let reputations = self
 			.client
 			.runtime_api()
 			.get_reputations(&at, authorities.to_vec())
 			.unwrap_or_else(|_| authorities.iter().map(|id| (id.clone(), 0)).collect());
-		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
+		let mut reputation_map: HashMap<Public, u128> = HashMap::new();
 		for (id, rep) in reputations {
 			reputation_map.insert(id, rep);
 		}
@@ -848,7 +848,7 @@ where
 			get_keys(&authority_accounts.1)
 		};
 
-		let (maybe_signer, success) =
+		let (maybe_signer, success, _) =
 			dkg_runtime_primitives::utils::verify_signer_from_set(maybe_signers, msg, signature);
 
 		if !success {
