@@ -15,7 +15,7 @@ Follow these steps to prepare a local Substrate development environment :hammer_
 ### Setup of Machine
 
 If necessary, refer to the setup instructions at the
-[Substrate Developer Hub](https://substrate.dev/docs/en/knowledgebase/getting-started/#manual-installation).
+[Substrate Developer Hub](https://docs.substrate.io/v3/getting-started/installation/#manual-installation).
 
 #### Mac OS dependency 
 Install gmp dependency  
@@ -27,8 +27,8 @@ brew install gmp
 
 Once the development environment is set up, build the DKG. This command will
 build the
-[Wasm Runtime](https://substrate.dev/docs/en/knowledgebase/advanced/executor#wasm-execution) and
-[native](https://substrate.dev/docs/en/knowledgebase/advanced/executor#native-execution) code:
+[Wasm Runtime](https://docs.substrate.io/v3/advanced/executor/#wasm-execution) and
+[native](https://docs.substrate.io/v3/advanced/executor/#native-execution) code:
 
 ```bash
 cargo build --release
@@ -187,7 +187,7 @@ cargo build --release
 First, we create the chain specification file (chainspec). Note the chainspec file _must_ be generated on a
 _single node_ and then shared among all nodes!
 
-👉 Learn more about chain specification [here](https://substrate.dev/docs/en/knowledgebase/integrate/chain-spec).
+👉 Learn more about chain specification [here](https://docs.substrate.io/v3/runtime/chain-specs/).
 
 ```bash
 ./target/release/polkadot build-spec \
@@ -260,7 +260,7 @@ Extensions {
 
 > You can choose from any pre-set runtime chainspec in the Polkadot repo, by referring to the
 > `cli/src/command.rs` and `node/service/src/chain_spec.rs` files or generate your own and use
-> that. See the [Cumulus Workshop](https://substrate.dev/cumulus-workshop/) for how.
+> that. See the [Cumulus Workshop](https://docs.substrate.io/tutorials/v3/cumulus/start-relay/) for how.
 
 In the following examples, we will use the `rococo-local` relay network we setup in the last section.
 
@@ -321,7 +321,7 @@ From the dkg-substrate working directory:
 
 Now that you have two relay chain nodes, and a parachain node accompanied with a relay chain light
 client running, the next step is to register the parachain in the relay chain with the following
-steps (for detail, refer to the [Substrate Cumulus Worship](https://substrate.dev/cumulus-workshop/#/en/3-parachains/2-register)):
+steps (for detail, refer to the [Substrate Cumulus Worship](https://docs.substrate.io/tutorials/v3/cumulus/start-relay/#/en/3-parachains/2-register)):
 
 -   Goto [Polkadot Apps UI](https://polkadot.js.org/apps/#/explorer), connecting to your relay chain.
 
