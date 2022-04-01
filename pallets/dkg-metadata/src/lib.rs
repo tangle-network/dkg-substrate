@@ -577,6 +577,8 @@ pub mod pallet {
 			Self::update_keygen_threshold(new_threshold)
 		}
 
+		/// Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
+		/// proposal queue.
 		#[pallet::weight(0)]
 		pub fn set_refresh_delay(
 			origin: OriginFor<T>,
@@ -592,6 +594,13 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Submits and stores the active public key for the genesis session into the on-chain
+		/// storage. This is primarily used to separate the genesis public key submission from
+		/// non-genesis rounds.
+		///
+		/// Can only be submitted by the current authorities. It is also required that a
+		/// `SignatureThreshold` of submissions is reached in order to successfully
+		/// store the public key on-chain.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key(
@@ -604,7 +613,7 @@ pub mod pallet {
 			let authorities = Self::current_authorities_accounts();
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-			let threshold = Self::next_signature_threshold();
+			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;
 			for (key, accounts) in dict.iter() {
@@ -639,6 +648,11 @@ pub mod pallet {
 			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
+		/// Submits and stores the next public key for the next session into the on-chain storage.
+		///
+		/// Can only be submitted by the next authorities. It is also required that a
+		/// `NextSignatureThreshold` of submissions is reached in order to successfully
+		/// store the public key on-chain.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_next_public_key(
@@ -676,6 +690,16 @@ pub mod pallet {
 			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
+		/// Submits the public key signature for the key refresh/rotation process.
+		///
+		/// The signature is the signature of the next public key `RefreshProposal`, signed by the
+		/// current DKG. It is stored on-chain only if it verifies successfully against the current
+		/// DKG's public key. Successful storage of this public key signature also removes
+		/// the unsigned `RefreshProposal` from the unsigned queue.
+		///
+		/// For manual refreshes, after the signature is submitted and stored on-chain,
+		/// the keys are immediately refreshed and the authority set is immediately rotated
+		/// and incremented.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key_signature(
@@ -732,6 +756,20 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Submits misbehaviour reports on chain. Signatures of the offending authority are
+		/// verified against the current or next authorities depending on the type of misbehaviour.
+		/// - Keygen: Verifies against the next authorities, since they are doing keygen.
+		/// - Signing: Verifies against the current authorities, since they are doing signing.
+		///
+		/// Verifies the reports against the respective thresholds and if enough reports are met
+		/// begins to jail and decrease the reputation of the offending authority.
+		///
+		/// The misbehaviour reputation update is:
+		/// 	AUTHORITY_REPUTATION = DECAY_PERCENTAGE * AUTHORITY_REPUTATION
+		///
+		/// If there are not enough unjailed keygen authorities to perform a keygen after the next
+		/// session, then we deduct the pending keygen threshold (and pending signing threshold)
+		/// accordingly.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_misbehaviour_reports(
@@ -810,6 +848,12 @@ pub mod pallet {
 			Err(Error::<T>::InvalidMisbehaviourReports.into())
 		}
 
+		/// Attempts to remove an authority from all possible jails (keygen & signing).
+		/// This can only be called by the controller of the authority in jail. The
+		/// origin must map directly to the authority in jail.
+		///
+		/// The authority's jail sentence for either keygen or signing must be elapsed
+		/// for the authority to be removed from the jail.
 		#[pallet::weight(0)]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
@@ -831,6 +875,9 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Force removes an authority from keygen jail.
+		///
+		/// Can only be called by a root origin.
 		#[pallet::weight(0)]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
@@ -841,6 +888,9 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Force removes an authority from signing jail.
+		///
+		/// Can only be called by a root origin.
 		#[pallet::weight(0)]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
