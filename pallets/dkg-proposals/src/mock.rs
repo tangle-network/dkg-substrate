@@ -32,7 +32,7 @@ use sp_runtime::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Permill,
+	Percent, Permill,
 };
 
 use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, TypedChainId};

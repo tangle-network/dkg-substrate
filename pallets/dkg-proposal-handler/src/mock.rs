@@ -25,7 +25,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Permill, Percent,
+	Percent, Permill,
 };
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
