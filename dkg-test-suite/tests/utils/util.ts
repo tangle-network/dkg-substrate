@@ -150,8 +150,6 @@ export const executeBefore = async ({ isVariable, both }: {
 
 		await handleSetup(!!isVariable, governorAddress);
 	}
-
-	await sleep(BLOCK_TIME * 2);
 }
 
 export async function executeAfter() {
