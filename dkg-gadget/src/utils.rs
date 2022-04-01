@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{
-	worker::{DKGWorker, ENGINE_ID},
-	Client,
-};
+use crate::{worker::{DKGWorker, ENGINE_ID}, Client, DKGKeystore};
 use dkg_primitives::{
 	crypto::AuthorityId, rounds::MultiPartyECDSARounds, AuthoritySet, ConsensusLog, DKGApi,
 };
@@ -164,18 +161,12 @@ where
 		.unwrap_or_else(|| panic!("Halp"))
 }
 
-pub(crate) fn fetch_sr25519_public_key<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn fetch_sr25519_public_key(
+	key_store: &DKGKeystore
 ) -> sp_core::sr25519::Public
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	dkg_worker
-		.key_store
-		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
+	key_store
+		.sr25519_authority_id(&key_store.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 }
 

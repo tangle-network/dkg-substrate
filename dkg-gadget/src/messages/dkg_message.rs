@@ -48,8 +48,7 @@ where
 		{
 			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number())
-					.await;
+				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
 			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
 		}
@@ -99,18 +98,18 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id).await;
+		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id);
 	}
 
 	for res in &rounds_send_result {
 		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone()).await;
+			dkg_worker.handle_dkg_error(err.clone());
 		}
 	}
 
 	for res in &next_rounds_send_result {
 		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone()).await;
+			dkg_worker.handle_dkg_error(err.clone());
 		}
 	}
 }
@@ -159,7 +158,7 @@ pub fn sign_and_send_messages<B, C, BE>(
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let mut dkg_messages = dkg_messages.into();
-	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
+	let sr25519_public = fetch_sr25519_public_key(dkg_keystore);
 	let mut engine_lock = gossip_engine.lock();
 
 	while let Some(dkg_message) = dkg_messages.next() {

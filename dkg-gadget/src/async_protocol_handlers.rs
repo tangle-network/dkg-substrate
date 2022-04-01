@@ -14,24 +14,20 @@
 
 
 use std::{task::{Context, Poll}, pin::Pin};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use codec::Encode;
 use curv::elliptic::curves::Secp256k1;
-use dkg_primitives::{types::{DKGError, DKGMessage, SignedDKGMessage, DKGMsgPayload}, crypto::Public, AuthoritySet};
+use dkg_primitives::{types::{DKGError, DKGMessage, SignedDKGMessage, DKGMsgPayload}, crypto::Public};
 use dkg_runtime_primitives::utils::to_slice_32;
 use futures::{stream::Stream, Sink, TryStreamExt};
 use log::error;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{keygen::Keygen};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{LocalKey, ProtocolMessage};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::OfflineProtocolMessage;
-use round_based::{Msg, async_runtime::AsyncProtocol, StateMachine, IsCritical};
+use round_based::Msg;
 use sp_core::sr25519;
 use sp_runtime::{traits::Block, AccountId32};
-use sc_client_api::Backend;
-use crate::Client;
-
-use crate::worker::DKGWorker;
 
 use self::state_machine::DKGStateMachine;
 
@@ -39,7 +35,8 @@ pub type SignedMessageReceiver = tokio::sync::broadcast::Receiver<Arc<SignedDKGM
 
 pub struct IncomingAsyncProtocolWrapper<T> {
     pub receiver: SignedMessageReceiver,
-	ty: ProtocolType
+	ty: ProtocolType,
+	_pd: PhantomData<T>
 }
 
 pub struct OutgoingAsyncProtocolWrapper<T: TransformOutgoing> {
@@ -68,8 +65,8 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
     fn transform(self, party_index: u16, active: &[AccountId32], next: &[AccountId32], stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized {
         verify_signature_against_authorities(&*self, active, next).map(|body| {
 			match (stream_type, &body.payload) {
-				(ProtocolType::Keygen(..), DKGMsgPayload::Keygen(..)) |
-				(ProtocolType::Offline(..), DKGMsgPayload::Offline(..)) |
+				(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
+				(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 				(ProtocolType::Voting, DKGMsgPayload::Vote(..)) => {
 					// only clone if the downstream receiver expects this type
 					Some(Msg { sender: party_index, receiver: None, body: body.clone() })
@@ -86,7 +83,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 fn check_signers(data: &[u8], signature: &[u8], set: &[AccountId32]) -> Result<bool, DKGError> {
 	let maybe_signers = set.iter()
 		.map(|x| {
-			let val = x.encode().map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+			let val = x.encode();
 			let slice = to_slice_32(&val).ok_or_else(|| DKGError::GenericError { reason: "Failed to convert account id to sr25519 public key".to_string() })?;
 			Ok(sr25519::Public(slice))
 		}).collect::<Vec<Result<sr25519::Public, DKGError>>>();
@@ -108,11 +105,11 @@ fn check_signers(data: &[u8], signature: &[u8], set: &[AccountId32]) -> Result<b
 }
 
 /// Verifies a SignedDKGMessage was signed by the active or next authorities
-fn verify_signature_against_authorities(
-    signed_dkg_msg: &SignedDKGMessage<Public>,
-    active_authorities: &[AccountId32],
-    next_authorities: &[AccountId32],
-) -> Result<&DKGMessage<Public>, DKGError> {
+fn verify_signature_against_authorities<'a>(
+    signed_dkg_msg: &'a SignedDKGMessage<Public>,
+    active_authorities: &'a [AccountId32],
+    next_authorities: &'a [AccountId32],
+) -> Result<&'a DKGMessage<Public>, DKGError> {
     let dkg_msg = &signed_dkg_msg.msg;
     let encoded = dkg_msg.encode();
     let signature = signed_dkg_msg.signature.unwrap_or_default();
@@ -167,7 +164,7 @@ where
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Msg<T>) -> Result<(), Self::Error> {
-        let transformed_item = item.body.transform(); // result<T::Output>
+        let transformed_item = item.body.transform();
         match transformed_item {
             Ok(item) => Pin::new(&mut self.sender).start_send(item).map_err(|err| DKGError::GenericError { reason: err.to_string() }),
             Err(err) => {
@@ -205,8 +202,7 @@ pub mod meta_channel {
 	use sc_network_gossip::GossipEngine;
 	use sp_runtime::traits::Block;
 	use dkg_primitives::Public;
-	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
-	use dkg_runtime_primitives::crypto::AuthorityId;
+	use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
 	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, SignedMessageReceiver};
 	use crate::async_protocol_handlers::state_machines::{KeygenStateMachine, OfflineStateMachine, VotingStateMachine};
 	use crate::DKGKeystore;
@@ -239,7 +235,7 @@ pub mod meta_channel {
 					to_async_proto.unbounded_send(message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 				},
 
-				err => debug!(target: dkg, "Invalid payload received: {:?}", err)
+				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
 			}
 
 			Ok(())
@@ -257,7 +253,7 @@ pub mod meta_channel {
 					to_async_proto.unbounded_send(message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 				},
 
-				err => debug!(target: dkg, "Invalid payload received: {:?}", err)
+				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
 			}
 
 			Ok(())
@@ -270,7 +266,7 @@ pub mod meta_channel {
 		          B: Block {
 			match channel_type.clone() {
 				ProtocolType::Keygen { i, t, n } => {
-					Self::new_inner(Keygen::new(, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, signed_message_receiver, channel_type, gossip_engine, keystore)
+					Self::new_inner(Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, signed_message_receiver, channel_type, gossip_engine, keystore)
 				}
 				ProtocolType::Offline { i, s_l, local_key } => {
 					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, signed_message_receiver, channel_type, gossip_engine, keystore)
@@ -322,14 +318,13 @@ pub mod meta_channel {
 		}
 
 		fn new_voting<B: Block>(signed_message_receiver: SignedMessageReceiver, gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore) -> Result<Self, DKGError> {
-			let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 			let (outgoing_tx, mut outgoing_rx) = futures::channel::mpsc::unbounded::<DKGMessage<Public>>();
 
 			let ref mut outgoing_to_wire = Self::generate_outgoing_to_wire_fn(gossip_engine, keystore, outgoing_rx);
 
 			let ref mut inbound_signed_message_receiver = Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: ProtocolType::Voting };
+				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: ProtocolType::Voting, _pd: Default::default() };
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
 					match unsigned_message {
@@ -343,7 +338,7 @@ pub mod meta_channel {
 						}
 
 						Err(err) => {
-							debug!(target: dkg, "Invalid signed DKG message received: {:?}", err)
+							debug!(target: "dkg", "Invalid signed DKG message received: {:?}", err)
 						}
 					}
 				}
@@ -355,12 +350,12 @@ pub mod meta_channel {
 			let protocol = async move {
 				select! {
 					outgoing_res = outgoing_to_wire => {
-						error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
+						log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
 						outgoing_res
 					},
 
 					incoming_res = inbound_signed_message_receiver => {
-						error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
+						log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
 						incoming_res
 					}
 				}
@@ -386,7 +381,7 @@ pub mod meta_channel {
 		fn generate_inbound_signed_message_receiver_fn<SM: StateMachineIface>(signed_message_receiver: SignedMessageReceiver, channel_type: ProtocolType, ref to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> Pin<Box<dyn Future<Output=Result<(), DKGError>>>> {
 			Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: channel_type };
+				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: channel_type, _pd: Default::default() };
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
 					match unsigned_message {
@@ -399,7 +394,7 @@ pub mod meta_channel {
 						}
 
 						Err(err) => {
-							debug!(target: dkg, "Invalid signed DKG message received: {:?}", err)
+							debug!(target: "dkg", "Invalid signed DKG message received: {:?}", err)
 						}
 					}
 				}
@@ -414,197 +409,6 @@ pub mod meta_channel {
 
 		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
 			self.protocol.as_mut().poll(cx)
-		}
-	}
-}
-
-pub mod state_machines {
-	use std::time::Duration;
-	use futures::channel::mpsc::UnboundedReceiver;
-	use round_based::{Msg, StateMachine};
-	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGOfflineMessage, DKGVoteMessage};
-
-	pub struct KeygenStateMachine {
-
-	}
-
-	pub struct OfflineStateMachine {
-
-	}
-
-	pub struct VotingStateMachine {
-
-	}
-
-	impl StateMachine for KeygenStateMachine {
-		type MessageBody = DKGKeygenMessage;
-		type Err = DKGError;
-		type Output = ();
-
-		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-
-		}
-
-		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-			todo!()
-		}
-
-		fn wants_to_proceed(&self) -> bool {
-			todo!()
-		}
-
-		fn proceed(&mut self) -> Result<(), Self::Err> {
-			todo!()
-		}
-
-		fn round_timeout(&self) -> Option<Duration> {
-			todo!()
-		}
-
-		fn round_timeout_reached(&mut self) -> Self::Err {
-			todo!()
-		}
-
-		fn is_finished(&self) -> bool {
-			todo!()
-		}
-
-		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
-			todo!()
-		}
-
-		fn current_round(&self) -> u16 {
-			todo!()
-		}
-
-		fn total_rounds(&self) -> Option<u16> {
-			todo!()
-		}
-
-		fn party_ind(&self) -> u16 {
-			todo!()
-		}
-
-		fn parties(&self) -> u16 {
-			todo!()
-		}
-	}
-
-	impl StateMachine for OfflineStateMachine {
-		type MessageBody = DKGOfflineMessage;
-		type Err = DKGError;
-		type Output = ();
-
-		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-
-		}
-
-		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-			todo!()
-		}
-
-		fn wants_to_proceed(&self) -> bool {
-			todo!()
-		}
-
-		fn proceed(&mut self) -> Result<(), Self::Err> {
-			todo!()
-		}
-
-		fn round_timeout(&self) -> Option<Duration> {
-			todo!()
-		}
-
-		fn round_timeout_reached(&mut self) -> Self::Err {
-			todo!()
-		}
-
-		fn is_finished(&self) -> bool {
-			todo!()
-		}
-
-		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
-			todo!()
-		}
-
-		fn current_round(&self) -> u16 {
-			todo!()
-		}
-
-		fn total_rounds(&self) -> Option<u16> {
-			todo!()
-		}
-
-		fn party_ind(&self) -> u16 {
-			todo!()
-		}
-
-		fn parties(&self) -> u16 {
-			todo!()
-		}
-	}
-
-	impl StateMachine for VotingStateMachine {
-		type MessageBody = DKGVoteMessage;
-		type Err = DKGError;
-		type Output = ();
-
-		fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-			todo!()
-		}
-
-		fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-			todo!()
-		}
-
-		fn wants_to_proceed(&self) -> bool {
-			todo!()
-		}
-
-		fn proceed(&mut self) -> Result<(), Self::Err> {
-			todo!()
-		}
-
-		fn round_timeout(&self) -> Option<Duration> {
-			todo!()
-		}
-
-		fn round_timeout_reached(&mut self) -> Self::Err {
-			todo!()
-		}
-
-		fn is_finished(&self) -> bool {
-			todo!()
-		}
-
-		fn pick_output(&mut self) -> Option<Result<Self::Output, Self::Err>> {
-			todo!()
-		}
-
-		fn current_round(&self) -> u16 {
-			todo!()
-		}
-
-		fn total_rounds(&self) -> Option<u16> {
-			todo!()
-		}
-
-		fn party_ind(&self) -> u16 {
-			todo!()
-		}
-
-		fn parties(&self) -> u16 {
-			todo!()
-		}
-	}
-}
-
-impl IsCritical for DKGError {
-	/// Indicates whether an error critical or not
-	fn is_critical(&self) -> bool {
-		match self {
-			DKGError::CriticalError { .. } => true,
-			_ => false
 		}
 	}
 }

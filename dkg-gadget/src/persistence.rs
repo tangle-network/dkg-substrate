@@ -73,7 +73,7 @@ where
 		if let Some(local_keystore) = worker.local_keystore.clone() {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
 			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-				&Public::try_from(&fetch_sr25519_public_key(worker).0[..])
+				&Public::try_from(&fetch_sr25519_public_key(&worker.key_store).0[..])
 					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 			);
 
@@ -122,7 +122,7 @@ where
 	debug!(target: "dkg_persistence", "Trying to restore key gen data");
 	if let Some((active, queued)) = worker.validator_set(header) {
 		let public = fetch_public_key(worker);
-		let sr25519_public = fetch_sr25519_public_key(worker);
+		let sr25519_public = fetch_sr25519_public_key(&worker.key_store);
 
 		let mut local_key = None;
 		let mut queued_local_key = None;
