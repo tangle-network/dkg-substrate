@@ -536,12 +536,16 @@ pub mod pallet {
 		/// After all, if we are in a new session the next DKG may have already completed.
 		/// Therefore, when we update the thresholds we are updating a threshold
 		/// that will become the next threshold after the next session update.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_threshold` - The new signature threshold for the DKG.
 		#[pallet::weight(0)]
 		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
+			ensure!(new_threshold > 0, Error::<T>::InvalidThreshold);
 			ensure!(
 				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
@@ -558,6 +562,9 @@ pub mod pallet {
 		/// After all, if we are in a new session the next DKG may have already completed.
 		/// Therefore, when we update the thresholds we are updating a threshold
 		/// that will become the next threshold after the next session update.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_threshold` - The new keygen threshold for the DKG.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn set_keygen_threshold(
@@ -565,6 +572,7 @@ pub mod pallet {
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
+			ensure!(new_threshold > 1, Error::<T>::InvalidThreshold);
 			ensure!(
 				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
@@ -579,6 +587,10 @@ pub mod pallet {
 
 		/// Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
 		/// proposal queue.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_delay` - The percentage of elapsed session duration to wait before adding an
+		///   unsigned refresh proposal to the unsigned proposal queue.
 		#[pallet::weight(0)]
 		pub fn set_refresh_delay(
 			origin: OriginFor<T>,
@@ -601,6 +613,10 @@ pub mod pallet {
 		/// Can only be submitted by the current authorities. It is also required that a
 		/// `SignatureThreshold` of submissions is reached in order to successfully
 		/// store the public key on-chain.
+		///
+		/// * `origin` - The account origin.
+		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
+		///   DKG public keys.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key(
@@ -653,6 +669,10 @@ pub mod pallet {
 		/// Can only be submitted by the next authorities. It is also required that a
 		/// `NextSignatureThreshold` of submissions is reached in order to successfully
 		/// store the public key on-chain.
+		///
+		/// * `origin` - The account origin.
+		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
+		///   DKG public keys.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_next_public_key(
@@ -700,6 +720,10 @@ pub mod pallet {
 		/// For manual refreshes, after the signature is submitted and stored on-chain,
 		/// the keys are immediately refreshed and the authority set is immediately rotated
 		/// and incremented.
+		///
+		/// * `origin` - The account origin.
+		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
+		///   and nonce.
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_public_key_signature(
@@ -770,6 +794,10 @@ pub mod pallet {
 		/// If there are not enough unjailed keygen authorities to perform a keygen after the next
 		/// session, then we deduct the pending keygen threshold (and pending signing threshold)
 		/// accordingly.
+		///
+		/// * `origin` - The account origin.
+		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
+		///   authority
 		#[transactional]
 		#[pallet::weight(0)]
 		pub fn submit_misbehaviour_reports(
@@ -854,6 +882,8 @@ pub mod pallet {
 		///
 		/// The authority's jail sentence for either keygen or signing must be elapsed
 		/// for the authority to be removed from the jail.
+		///
+		/// * `origin` - The account origin.
 		#[pallet::weight(0)]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
@@ -877,7 +907,10 @@ pub mod pallet {
 
 		/// Force removes an authority from keygen jail.
 		///
-		/// Can only be called by a root origin.
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
+		/// * `authority` - The authority to be removed from the keygen jail.
 		#[pallet::weight(0)]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
@@ -890,7 +923,10 @@ pub mod pallet {
 
 		/// Force removes an authority from signing jail.
 		///
-		/// Can only be called by a root origin.
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
+		/// * `authority` - The authority to be removed from the signing jail.
 		#[pallet::weight(0)]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
@@ -903,7 +939,9 @@ pub mod pallet {
 
 		/// Manually Update the `RefreshNonce` (increment it by one).
 		///
-		/// * `origin` - The account that is calling this must be root.
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
 		/// **Important**: This function is only available for testing purposes.
 		#[pallet::weight(0)]
 		#[transactional]
@@ -919,7 +957,9 @@ pub mod pallet {
 
 		/// Manual Trigger DKG Refresh process.
 		///
-		/// * `origin` - The account that is initiating the refresh process and must be root.
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account that is initiating the refresh process.
 		/// **Important**: This function is only available for testing purposes.
 		#[pallet::weight(0)]
 		#[transactional]
