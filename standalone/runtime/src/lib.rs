@@ -77,9 +77,9 @@ pub type Signature = MultiSignature;
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
-
+/// Resource ID type
 pub type ResourceId = [u8; 32];
-
+/// Reputation type
 pub type Reputation = u128;
 
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Call, SignedExtra>;
