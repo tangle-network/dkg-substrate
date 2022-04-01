@@ -44,6 +44,7 @@ round-based = { version = "0.1.4", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.59"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
+tokio = { version = "1.17.0", features = ["sync"] }
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }

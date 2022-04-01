@@ -29,7 +29,7 @@ use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
 /// rounds, current_validator_set_authorities, active_keygen_in_process, queued_keygen_in_progress, key_store, queued_validator_set, next_rounds
-pub(crate) async fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
+pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
 where
 	B: Block,
 	BE: Backend<B>,
@@ -116,7 +116,7 @@ where
 }
 
 /// send actual messages
-async fn send_messages<B, C, BE>(
+fn send_messages<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 	authority_id: Public,
@@ -143,12 +143,12 @@ where
 		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
 		.collect::<Vec<DKGMessage<_>>>();
 
-	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store,messages).await;
+	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store,messages);
 
 	results
 }
 
-pub async fn sign_and_send_messages<B, C, BE>(
+pub fn sign_and_send_messages<B, C, BE>(
 	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
@@ -160,7 +160,7 @@ pub async fn sign_and_send_messages<B, C, BE>(
 {
 	let mut dkg_messages = dkg_messages.into();
 	let sr25519_public = fetch_sr25519_public_key(dkg_worker);
-	let mut engine_lock = gossip_engine.lock().await;
+	let mut engine_lock = gossip_engine.lock();
 
 	while let Some(dkg_message) = dkg_messages.next() {
 		match dkg_keystore.sr25519_sign(&sr25519_public, &dkg_message.encode()) {

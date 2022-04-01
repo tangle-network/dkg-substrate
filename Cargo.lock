@@ -2144,6 +2144,7 @@ dependencies = [
  "strum 0.21.0",
  "substrate-prometheus-endpoint",
  "thiserror",
+ "tokio",
  "wasm-timer",
 ]
 
