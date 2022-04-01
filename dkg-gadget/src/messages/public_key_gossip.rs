@@ -19,7 +19,7 @@ use crate::{
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId, SignedDKGMessage},
+	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
 use log::{debug, error, trace};
@@ -105,8 +105,7 @@ where
 
 pub(crate) fn gossip_public_key<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	public_key: Vec<u8>,
-	round_id: RoundId,
+	msg: DKGPublicKeyMessage,
 ) where
 	B: Block,
 	BE: Backend<B>,
@@ -123,15 +122,15 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 		.authority_id(&dkg_worker.key_store.public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find an ecdsa key in keystore"));
 
-	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &public_key) {
+	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &msg.pub_key) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
-			round_id,
-			pub_key: public_key.clone(),
 			signature: encoded_signature.clone(),
+			..msg.clone()
 		});
 
-		let message = DKGMessage::<AuthorityId> { id: public.clone(), round_id, payload };
+		let message =
+			DKGMessage::<AuthorityId> { id: public.clone(), round_id: msg.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
 		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -154,17 +153,17 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 		}
 
 		let mut aggregated_public_keys =
-			if dkg_worker.aggregated_public_keys.get(&round_id).is_some() {
-				dkg_worker.aggregated_public_keys.get(&round_id).unwrap().clone()
+			if dkg_worker.aggregated_public_keys.get(&msg.round_id).is_some() {
+				dkg_worker.aggregated_public_keys.get(&msg.round_id).unwrap().clone()
 			} else {
 				AggregatedPublicKeys::default()
 			};
 
 		aggregated_public_keys
 			.keys_and_signatures
-			.push((public_key.clone(), encoded_signature));
+			.push((msg.pub_key.clone(), encoded_signature));
 
-		dkg_worker.aggregated_public_keys.insert(round_id, aggregated_public_keys);
+		dkg_worker.aggregated_public_keys.insert(msg.round_id, aggregated_public_keys);
 
 		debug!(target: "dkg", "Gossiping local node  {:?} public key and signature", public)
 	} else {

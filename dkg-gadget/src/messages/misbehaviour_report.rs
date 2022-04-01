@@ -181,6 +181,10 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			},
 		};
 
+		if reports.reporters.contains(&sr25519_public) {
+			return
+		}
+
 		reports.reporters.push(sr25519_public);
 		reports.signatures.push(encoded_signature);
 

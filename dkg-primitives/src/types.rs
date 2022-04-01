@@ -119,7 +119,9 @@ pub struct DKGSignedPayload {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
+	/// Round ID of DKG protocol
 	pub round_id: RoundId,
+	/// Public key for the DKG
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
 	pub signature: Vec<u8>,

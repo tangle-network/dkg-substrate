@@ -141,6 +141,8 @@ where
 		(MisbehaviourType, RoundId, AuthorityId),
 		AggregatedMisbehaviourReports<AuthorityId>,
 	>,
+	/// Tracking for sent gossip messages: using blake2_128 for message hashes
+	pub has_sent_gossip_msg: HashMap<[u8; 16], bool>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -202,6 +204,7 @@ where
 			msg_cache: Vec::new(),
 			aggregated_public_keys: HashMap::new(),
 			aggregated_misbehaviour_reports: HashMap::new(),
+			has_sent_gossip_msg: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
@@ -818,10 +821,15 @@ where
 			},
 		};
 
-		gossip_misbehaviour_report(
-			self,
-			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] },
-		);
+		let misbehaviour_msg =
+			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
+		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
+		if self.has_sent_gossip_msg.contains_key(&hash) {
+			return
+		} else {
+			gossip_misbehaviour_report(self, misbehaviour_msg);
+			self.has_sent_gossip_msg.insert(hash, true);
+		}
 	}
 
 	pub fn authenticate_msg_origin(
