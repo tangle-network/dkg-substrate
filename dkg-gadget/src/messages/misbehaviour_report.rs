@@ -93,8 +93,8 @@ where
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-		if reports.reporters.len() >= threshold {
+		let threshold = dkg_worker.get_signature_threshold(header) as usize;
+		if reports.reporters.len() >= (threshold + 1) {
 			store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 		}
 	}
@@ -102,7 +102,7 @@ where
 	Ok(())
 }
 
-pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
+pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	offender: dkg_runtime_primitives::crypto::AuthorityId,
 	round_id: RoundId,
@@ -144,7 +144,7 @@ pub(crate) async fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().await.gossip_message(
+				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
 					true,

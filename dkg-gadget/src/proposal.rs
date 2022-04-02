@@ -19,7 +19,7 @@ use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
 	Proposal, ProposalKind, RefreshProposalSigned,
 };
-use log::trace;
+use log::{info, trace};
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
@@ -39,6 +39,7 @@ where
 {
 	let signed_proposal = match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
+			info!(target: "dkg", "🕸️  Refresh vote with nonce {:?} received", nonce);
 			let offchain = dkg_worker.backend.offchain_storage();
 
 			if let Some(mut offchain) = offchain {

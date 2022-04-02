@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	utils::{fetch_public_key, find_index},
+	utils::find_index,
 	worker::{DKGWorker, MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
 	Client,
 };
@@ -45,7 +45,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 
 	debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
-	let public = fetch_public_key(dkg_worker);
+	let public = dkg_worker.get_authority_public_key();
 
 	if find_index::<AuthorityId>(&dkg_worker.current_validator_set.authorities[..], &public)
 		.is_none()

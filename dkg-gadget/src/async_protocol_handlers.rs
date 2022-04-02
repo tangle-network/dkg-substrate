@@ -14,7 +14,6 @@
 
 
 use std::{task::{Context, Poll}, pin::Pin};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use codec::Encode;
@@ -28,15 +27,22 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 use round_based::Msg;
 use sp_core::sr25519;
 use sp_runtime::{traits::Block, AccountId32};
-
-use self::state_machine::DKGStateMachine;
+use tokio_stream::wrappers::BroadcastStream;
 
 pub type SignedMessageReceiver = tokio::sync::broadcast::Receiver<Arc<SignedDKGMessage<Public>>>;
 
-pub struct IncomingAsyncProtocolWrapper<T> {
-    pub receiver: SignedMessageReceiver,
-	ty: ProtocolType,
-	_pd: PhantomData<T>
+pub struct IncomingAsyncProtocolWrapper<T: TransformIncoming> {
+    pub receiver: BroadcastStream<T>,
+	ty: ProtocolType
+}
+
+impl<T: TransformIncoming> IncomingAsyncProtocolWrapper<T> {
+	pub fn new(receiver: tokio::sync::broadcast::Receiver<T>, ty: ProtocolType) -> Self {
+		Self {
+			receiver: BroadcastStream::new(receiver),
+			ty
+		}
+	}
 }
 
 pub struct OutgoingAsyncProtocolWrapper<T: TransformOutgoing> {
@@ -55,7 +61,7 @@ enum ProtocolMessageType {
 	Offline(OfflineProtocolMessage)
 }
 
-pub trait TransformIncoming {
+pub trait TransformIncoming: Clone + Send + 'static {
     type IncomingMapped;
     fn transform(self, party_index: u16, active: &[AccountId32], next: &[AccountId32], stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized;
 }
@@ -96,8 +102,7 @@ fn check_signers(data: &[u8], signature: &[u8], set: &[AccountId32]) -> Result<b
 
     let is_okay = dkg_runtime_primitives::utils::verify_signer_from_set(
         processed,
-		collect(),
-        data,
+		data,
         signature,
     ).1;
 
@@ -114,14 +119,18 @@ fn verify_signature_against_authorities<'a>(
     let encoded = dkg_msg.encode();
     let signature = signed_dkg_msg.signature.unwrap_or_default();
 
-    if check_signers(&encoded, &signature, active_authorities) == Ok(true) || check_signers(&encoded, &signature, next_authorities) == Ok(true) {
-        Ok(dkg_msg)
-    } else {
-        Err(DKGError::GenericError {
-            reason: "Message signature is not from a registered authority or next authority"
-                .into(),
-        })
-    }
+	let res0 = check_signers(&encoded, &signature, active_authorities);
+	let res1 = check_signers(&encoded, &signature, next_authorities);
+
+	match (res0, res1) {
+		(Ok(true), _) | (_, Ok(true)) => Ok(dkg_msg),
+		_ => {
+			Err(DKGError::GenericError {
+				reason: "Message signature is not from a registered authority or next authority"
+					.into(),
+			})
+		}
+	}
 }
 
 
@@ -134,19 +143,34 @@ impl<T> Stream for IncomingAsyncProtocolWrapper<T>
 where
     T: TransformIncoming,
 {
-    type Item = Result<Option<Msg<T>>, DKGError>;
+    type Item = Msg<T::IncomingMapped>;
+
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>
     ) -> Poll<Option<Self::Item>> {
         match futures::ready!(Pin::new(&mut self.receiver).poll_next(cx)) {
-            Some(msg) => {
+            Some(Ok(msg)) => {
 				let ty = &self.ty;
                 match msg.transform(ty) {
-                    Ok(res) => Poll::Ready(Some(Ok(msg))),
-                    Err(e) => Poll::Ready(Some(Err(e))),
-                }
+					Ok(Some(msg)) => {
+						Poll::Ready(Some(msg))
+					}
+
+					Ok(None) => {
+						Poll::Pending
+					}
+
+					Err(err) => {
+						log::warn!(target: "dkg", "While mapping signed message, received an error: {:?}", err);
+						Poll::Pending
+					}
+				}
             },
+			Some(Err(err)) => {
+				log::error!(target: "dkg", "Stream RECV error: {:?}", err);
+				Poll::Ready(None)
+			}
             None => Poll::Ready(None),
         }
     }
@@ -192,19 +216,20 @@ pub mod meta_channel {
 	use std::sync::Arc;
 	use std::task::{Context, Poll};
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-	use futures::lock::Mutex;
+	use parking_lot::Mutex;
 	use futures::{select, StreamExt};
 	use log::debug;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage};
 	use round_based::async_runtime::watcher::StderrWatcher;
 	use round_based::{AsyncProtocol, Msg, StateMachine};
+	use round_based::containers::StoreErr;
 	use sc_network_gossip::GossipEngine;
+	use serde::Serialize;
 	use sp_runtime::traits::Block;
 	use dkg_primitives::Public;
-	use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
+	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage};
 	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, SignedMessageReceiver};
-	use crate::async_protocol_handlers::state_machines::{KeygenStateMachine, OfflineStateMachine, VotingStateMachine};
 	use crate::DKGKeystore;
 	use crate::messages::dkg_message::sign_and_send_messages;
 
@@ -216,23 +241,24 @@ pub mod meta_channel {
 		protocol: Pin<Box<dyn SendFuture>>
 	}
 
-	trait StateMachineIface: StateMachine {
+	trait StateMachineIface: StateMachine + Send {
 		fn generate_channel() -> (futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, futures::channel::mpsc::UnboundedReceiver<Msg<<Self as StateMachine>::MessageBody>>) {
 			futures::channel::mpsc::unbounded()
 		}
 
-		fn handle_unsigned_message(to_async_proto: &futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, msg: DKGMessage<Public>) -> Result<(), DKGError>;
+		fn handle_unsigned_message(to_async_proto: &futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err>;
 	}
 
 	impl StateMachineIface for Keygen {
-		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: DKGMessage<Public>) -> Result<(), DKGError> {
-			let DKGMessage { id, payload, round_id } = msg;
+		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
+			let DKGMessage { id, payload, round_id } = msg.body;
 
 			// Send the payload to the appropriate AsyncProtocols
 			match payload {
 				DKGMsgPayload::Keygen(msg) => {
-					let message: Msg<ProtocolMessage> = serde_json::from_slice(msg.keygen_msg.as_slice()).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-					to_async_proto.unbounded_send(message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error as Error;
+					let message: Msg<ProtocolMessage> = serde_json::from_slice(msg.keygen_msg.as_slice()).map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
+					to_async_proto.unbounded_send(message).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
 				},
 
 				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
@@ -243,14 +269,15 @@ pub mod meta_channel {
 	}
 
 	impl StateMachineIface for OfflineStage {
-		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>, msg: DKGMessage<Public>) -> Result<(), DKGError> {
-			let DKGMessage { id, payload, round_id } = msg;
+		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
+			let DKGMessage { id, payload, round_id } = msg.body;
 
 			// Send the payload to the appropriate AsyncProtocols
 			match payload {
 				DKGMsgPayload::Offline(msg) => {
-					let message: Msg<OfflineProtocolMessage> = serde_json::from_slice(msg.offline_msg.as_slice()).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-					to_async_proto.unbounded_send(message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error as Error;
+					let message: Msg<OfflineProtocolMessage> = serde_json::from_slice(msg.offline_msg.as_slice()).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
+					to_async_proto.unbounded_send(message).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
 				},
 
 				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
@@ -279,76 +306,26 @@ pub mod meta_channel {
 
 		fn new_inner<B: Block, SM: StateMachineIface>(sm: SM, signed_message_receiver: SignedMessageReceiver, channel_type: ProtocolType, gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore) -> Result<Self, DKGError> {
 			let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
-			let (outgoing_tx, mut outgoing_rx) = futures::channel::mpsc::unbounded::<DKGMessage<Public>>();
+			let (outgoing_tx, mut outgoing_rx) = futures::channel::mpsc::unbounded();
 
-			let ref mut async_proto = AsyncProtocol::new(sm, incoming_rx_proto, outgoing_tx.clone()).set_watcher(StderrWatcher);
+			let async_proto = AsyncProtocol::new(sm, incoming_rx_proto.map(Ok), outgoing_tx.clone()).run();
 
 			// For taking all unsigned messages generated by the AsyncProtocols, signing them,
 			// and thereafter sending them outbound
-			let ref mut outgoing_to_wire = Self::generate_outgoing_to_wire_fn(gossip_engine, keystore, outgoing_rx);
+			let outgoing_to_wire = Self::generate_outgoing_to_wire_fn(gossip_engine, keystore, outgoing_rx, channel_type.clone());
 
 			// For taking raw inbound signed messages, mapping them to unsigned messages, then sending
 			// to the appropriate AsyncProtocol
-			let ref mut inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn(signed_message_receiver, channel_type, incoming_tx_proto);
+			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn(signed_message_receiver, channel_type, incoming_tx_proto);
 
 			// Combine all futures into a concurrent select subroutine
 			let protocol = async move {
 				select! {
-					proto_res = async_proto.run() => {
-						error!(target: "dkg", "🕸️  Async Protocol {:?} Ended: {:?}", channel_type, keygen_res);
+					proto_res = async_proto => {
+						log::error!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type, proto_res);
 						proto_res
 					},
 
-					outgoing_res = outgoing_to_wire => {
-						error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
-						outgoing_res
-					},
-
-					incoming_res = inbound_signed_message_receiver => {
-						error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
-						incoming_res
-					}
-				}
-			};
-
-
-			Ok(Self {
-				protocol: Box::pin(protocol)
-			})
-		}
-
-		fn new_voting<B: Block>(signed_message_receiver: SignedMessageReceiver, gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore) -> Result<Self, DKGError> {
-			let (outgoing_tx, mut outgoing_rx) = futures::channel::mpsc::unbounded::<DKGMessage<Public>>();
-
-			let ref mut outgoing_to_wire = Self::generate_outgoing_to_wire_fn(gossip_engine, keystore, outgoing_rx);
-
-			let ref mut inbound_signed_message_receiver = Box::pin(async move {
-				// the below wrapper will map signed messages into unsigned messages
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: ProtocolType::Voting, _pd: Default::default() };
-
-				while let Some(unsigned_message) = incoming_wrapper.next().await {
-					match unsigned_message {
-						Ok(Some(msg)) => {
-							// instead of sending to async protocol, send straight to outbound channel to be signed and sent
-							outgoing_tx.unbounded_send(msg.body).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
-						}
-
-						Ok(None) => {
-							// do nothing. This message was not meant for this handler
-						}
-
-						Err(err) => {
-							debug!(target: "dkg", "Invalid signed DKG message received: {:?}", err)
-						}
-					}
-				}
-
-				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
-			});
-
-			// Combine all futures into a concurrent select subroutine
-			let protocol = async move {
-				select! {
 					outgoing_res = outgoing_to_wire => {
 						log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
 						outgoing_res
@@ -367,11 +344,50 @@ pub mod meta_channel {
 			})
 		}
 
-		fn generate_outgoing_to_wire_fn<B: Block, SM: StateMachineIface>(ref gossip_engine: Arc<Mutex<GossipEngine<B>>>, ref keystore: DKGKeystore, mut outgoing_rx: UnboundedReceiver<DKGMessage<Public>>) -> Pin<Box<dyn Future<Output=Result<(), DKGError>>>> {
+		fn new_voting<B: Block>(signed_message_receiver: SignedMessageReceiver, gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore) -> Result<Self, DKGError> {
+			let protocol = Box::pin(async move {
+				// the below wrapper will map signed messages into unsigned messages
+				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(signed_message_receiver, ProtocolType::Voting);
+
+				while let Some(unsigned_message) = incoming_wrapper.next().await {
+					// TODO: handle entirely here, including signing + sending too wire
+				}
+
+				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
+			});
+
+			Ok(Self {
+				protocol
+			})
+		}
+
+		fn generate_outgoing_to_wire_fn<B: Block, SM: StateMachineIface>(ref gossip_engine: Arc<Mutex<GossipEngine<B>>>, ref keystore: DKGKeystore, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, ref proto_ty: ProtocolType) -> Pin<Box<dyn Future<Output=Result<(), DKGError>>>>
+			where <SM as StateMachine>::MessageBody: Serialize {
 			 Box::pin(async move {
 				// take all unsigned messages, then sign them and send outbound
 				while let Some(unsigned_message) = outgoing_rx.next().await {
-					sign_and_send_messages(gossip_engine,keystore, unsigned_message);
+					let serialized_body = serde_json::to_vec(&unsigned_message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+					let round_id = 0;
+					let id = Default::default();
+
+					let payload = match proto_ty {
+						ProtocolType::Keygen { .. } => {
+							DKGMsgPayload::Keygen(DKGKeygenMessage { round_id, keygen_msg: serialized_body })
+						}
+						ProtocolType::Offline { .. } => {
+							DKGMsgPayload::Offline(DKGOfflineMessage {
+								key: vec![],
+								signer_set_id: 0,
+								offline_msg: serialized_body
+							})
+						}
+						_ => {
+							unreachable!("Should not happen since voting is handled with a custom subroutine")
+						}
+					};
+
+					let unsigned_dkg_message = DKGMessage { id, payload, round_id };
+					sign_and_send_messages(gossip_engine,keystore, unsigned_dkg_message);
 				}
 
 				Err(DKGError::CriticalError { reason: "Outbound stream stopped producing items".to_string() })
@@ -381,22 +397,10 @@ pub mod meta_channel {
 		fn generate_inbound_signed_message_receiver_fn<SM: StateMachineIface>(signed_message_receiver: SignedMessageReceiver, channel_type: ProtocolType, ref to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> Pin<Box<dyn Future<Output=Result<(), DKGError>>>> {
 			Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper { receiver: signed_message_receiver, ty: channel_type, _pd: Default::default() };
+				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(signed_message_receiver, channel_type);
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
-					match unsigned_message {
-						Ok(Some(msg)) => {
-							SM::handle_unsigned_message(to_async_proto, msg)?;
-						}
-
-						Ok(None) => {
-							// do nothing. This message was not meant for this handler
-						}
-
-						Err(err) => {
-							debug!(target: "dkg", "Invalid signed DKG message received: {:?}", err)
-						}
-					}
+					SM::handle_unsigned_message(to_async_proto, unsigned_message)?;
 				}
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })

@@ -13,16 +13,16 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic, utils::fetch_sr25519_public_key, worker::DKGWorker, Client, DKGKeystore};
+use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,  worker::DKGWorker, Client, DKGKeystore};
 use codec::Encode;
-use futures::lock::Mutex;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
 	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use log::{debug, error, trace};
+use log::{error, info, trace};
+use parking_lot::Mutex;
 use sc_client_api::Backend;
 use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header, NumberFor};
@@ -36,8 +36,6 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	debug!(target: "dkg", "🕸️  Try sending DKG messages");
-
 	let mut keys_to_gossip = vec![];
 	let mut rounds_send_result = vec![];
 	let mut next_rounds_send_result = vec![];
@@ -46,7 +44,6 @@ where
 		if let Some(id) =
 			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -56,7 +53,7 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				debug!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 				let round_id = rounds.get_id();
@@ -73,19 +70,17 @@ where
 			.key_store
 			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
 		{
-			debug!(target: "dkg", "🕸️  Local authority id: {:?}", id);
 			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
 				next_rounds_send_result = send_messages(
 					dkg_worker,
 					&mut next_rounds,
 					id,
 					dkg_worker.get_latest_block_number(),
-				)
-				.await;
+				);
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					debug!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
@@ -147,18 +142,17 @@ where
 	results
 }
 
-pub fn sign_and_send_messages<B, C, BE>(
+pub fn sign_and_send_messages<B>(
 	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
 ) where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	B: Block
 {
 	let mut dkg_messages = dkg_messages.into();
-	let sr25519_public = fetch_sr25519_public_key(dkg_keystore);
+	let sr25519_public = dkg_keystore.sr25519_authority_id(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
+	.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+
 	let mut engine_lock = gossip_engine.lock();
 
 	while let Some(dkg_message) = dkg_messages.next() {

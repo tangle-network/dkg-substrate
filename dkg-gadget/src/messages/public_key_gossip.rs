@@ -42,9 +42,7 @@ where
 	if !dkg_worker.dkg_state.listening_for_pub_key &&
 		!dkg_worker.dkg_state.listening_for_active_pub_key
 	{
-		return Err(DKGError::GenericError {
-			reason: "Not listening for public key broadcast".to_string(),
-		})
+		return Ok(())
 	}
 
 	// Get authority accounts
@@ -57,7 +55,7 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "Received public key broadcast");
+		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
 
 		let is_main_round = {
 			if dkg_worker.rounds.is_some() {
@@ -90,8 +88,8 @@ where
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_threshold(header).unwrap() as usize;
-		if aggregated_public_keys.keys_and_signatures.len() >= threshold {
+		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
+		if aggregated_public_keys.keys_and_signatures.len() >= (threshold + 1) {
 			store_aggregated_public_keys(
 				dkg_worker,
 				is_main_round,
@@ -105,7 +103,7 @@ where
 	Ok(())
 }
 
-pub(crate) async fn gossip_public_key<B, C, BE>(
+pub(crate) fn gossip_public_key<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	public_key: Vec<u8>,
 	round_id: RoundId,
@@ -142,7 +140,7 @@ pub(crate) async fn gossip_public_key<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().await.gossip_message(
+				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
 					true,
@@ -155,18 +153,11 @@ pub(crate) async fn gossip_public_key<B, C, BE>(
 			),
 		}
 
-		let mut aggregated_public_keys =
-			if dkg_worker.aggregated_public_keys.get(&round_id).is_some() {
-				dkg_worker.aggregated_public_keys.get(&round_id).unwrap().clone()
-			} else {
-				AggregatedPublicKeys::default()
-			};
+		let mut aggregated_public_keys = dkg_worker.aggregated_public_keys.entry(round_id).or_default();
 
 		aggregated_public_keys
 			.keys_and_signatures
 			.push((public_key.clone(), encoded_signature));
-
-		dkg_worker.aggregated_public_keys.insert(round_id, aggregated_public_keys);
 
 		debug!(target: "dkg", "Gossiping local node  {:?} public key and signature", public)
 	} else {

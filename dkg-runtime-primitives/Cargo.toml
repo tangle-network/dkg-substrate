@@ -22,6 +22,7 @@ webb-proposals = { version = "0.2.0", default-features = false, features = [
 	"scale",
 ] }
 
+hex = { version = "0.4", default-features = false }
 sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
@@ -32,12 +33,13 @@ frame-system = { git = "https://github.com/paritytech/substrate", branch = "polk
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 
 [dev-dependencies]
-hex = { version = "0.4", default-features = false }
+
 
 [features]
 default = ["std"]
 std = [
 	"codec/std",
+	"hex/std",
 	"scale-info/std",
 	"webb-proposals/std",
 	"sp-io/std",

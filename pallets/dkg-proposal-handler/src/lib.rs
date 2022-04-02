@@ -106,9 +106,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://substrate.dev/docs/en/knowledgebase/runtime/frame>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -275,9 +272,11 @@ pub mod pallet {
 
 			for prop in &props {
 				if let Proposal::Signed { kind, data, signature } = prop {
-					let result =
-						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data)
-							.map_err(|_| Error::<T>::ProposalSignatureInvalid);
+					let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+						signature,
+						&data[..],
+					)
+					.map_err(|_| Error::<T>::ProposalSignatureInvalid);
 					match result {
 						Ok(_) => {
 							// Do nothing, it is all good.
@@ -367,9 +366,10 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> DispatchResult {
-		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
-		if let Ok(v) = decode_proposal_identifier(&proposal) {
-			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
+		let unsigned_proposal =
+			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
+		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
+			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, unsigned_proposal);
 
 			return Ok(())
 		}
@@ -384,7 +384,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
 		UnsignedProposalQueue::<T>::insert(
-			TypedChainId::Evm(0),
+			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
 		);
@@ -396,7 +396,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
 		UnsignedProposalQueue::<T>::remove(
-			TypedChainId::Evm(0),
+			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 		);
 
@@ -520,7 +520,7 @@ impl<T: Config> Pallet<T> {
 						if result.is_err() {
 							frame_support::log::error!(
 								target: "dkg_proposal_handler",
-								"failure: failed to send unsigned transactiion to chain: {:?}",
+								"failure: failed to send unsigned transaction to chain: {:?}",
 								call,
 							);
 						} else {
@@ -558,13 +558,13 @@ impl<T: Config> Pallet<T> {
 			match res {
 				Ok(Some(mut prop_wrapper)) => {
 					// log the proposals
-					frame_support::log::debug!(
+					frame_support::log::trace!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals: {:?}",
 						prop_wrapper.proposals
 					);
 					// log how many proposal batches are left
-					frame_support::log::debug!(
+					frame_support::log::trace!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()

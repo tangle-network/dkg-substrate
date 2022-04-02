@@ -309,7 +309,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 
 	/// Gets the active Sr25519 authority key
-	pub fn get_sr25519_public_key(&mut self) -> sp_core::sr25519::Public {
+	pub fn get_sr25519_public_key(&self) -> sp_core::sr25519::Public {
 		self.key_store
 			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
 			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
