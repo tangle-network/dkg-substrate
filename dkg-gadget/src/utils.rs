@@ -52,6 +52,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	signature_threshold: u16,
 	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
+	jailed_signers: &[AuthorityId],
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
 	// Generate the rounds object
@@ -62,6 +63,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
 		.authorities(best_authorities.to_vec())
+		.jailed_signers(jailed_signers.to_vec())
 		.build()
 }
 

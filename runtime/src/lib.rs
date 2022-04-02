@@ -86,6 +86,8 @@ pub type Index = u32;
 pub type Hash = sp_core::H256;
 /// An index to a block.
 pub type BlockNumber = u32;
+/// Reputation type
+pub type Reputation = u128;
 /// The address format for describing accounts.
 pub type Address = MultiAddress<AccountId, Index>;
 /// Block header type as expected by this runtime.
@@ -410,6 +412,7 @@ impl pallet_session::Config for Runtime {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const PotId: PalletId = PalletId(*b"PotStake");
 	pub const MaxCandidates: u32 = 1000;
 	pub const MinCandidates: u32 = 5;
@@ -445,7 +448,11 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = Reputation;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 }
 
@@ -685,16 +692,20 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, i64)> {
+		fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
 			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
+		}
+
+		fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect()
+		}
+
+		fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect()
 		}
 
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
-		}
-
-		fn time_to_restart() -> BlockNumber {
-			DKG::time_to_restart()
 		}
 	}
 

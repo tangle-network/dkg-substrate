@@ -145,7 +145,7 @@ pub fn select_random_set(
 pub fn get_best_authorities<B>(
 	count: usize,
 	authorities: &[B],
-	reputations: &HashMap<B, i64>,
+	reputations: &HashMap<B, u128>,
 ) -> Vec<(u16, B)>
 where
 	B: Eq + Hash + Clone,

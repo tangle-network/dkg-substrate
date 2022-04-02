@@ -18,9 +18,11 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, RoundId, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
 };
-use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
+};
 use log::{debug, error, trace};
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -58,6 +60,10 @@ where
 		};
 		// Create packed message
 		let mut signed_payload = Vec::new();
+		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
+			MisbehaviourType::Keygen => [0x01],
+			MisbehaviourType::Sign => [0x02],
+		});
 		signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
 		signed_payload.extend_from_slice(msg.offender.as_ref());
 		// Authenticate the message against the current authorities
@@ -68,14 +74,15 @@ where
 			&msg.signature,
 		)?;
 		// Add new report to the aggregated reports
-		let round_id = msg.round_id;
-		let mut reports = match dkg_worker
-			.aggregated_misbehaviour_reports
-			.get(&(round_id, msg.offender.clone()))
-		{
+		let mut reports = match dkg_worker.aggregated_misbehaviour_reports.get(&(
+			msg.misbehaviour_type,
+			msg.round_id,
+			msg.offender.clone(),
+		)) {
 			Some(r) => r.clone(),
 			None => AggregatedMisbehaviourReports {
-				round_id,
+				misbehaviour_type: msg.misbehaviour_type,
+				round_id: msg.round_id,
 				offender: msg.offender.clone(),
 				reporters: Vec::new(),
 				signatures: Vec::new(),
@@ -87,14 +94,14 @@ where
 			reports.signatures.push(msg.signature);
 			dkg_worker
 				.aggregated_misbehaviour_reports
-				.insert((round_id, msg.offender), reports.clone());
+				.insert((msg.misbehaviour_type, msg.round_id, msg.offender), reports.clone());
 		}
 
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_signature_threshold(header) as usize;
-		if reports.reporters.len() >= (threshold + 1) {
+		if reports.reporters.len() > threshold {
 			store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
 		}
 	}
@@ -104,8 +111,7 @@ where
 
 pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
-	offender: dkg_runtime_primitives::crypto::AuthorityId,
-	round_id: RoundId,
+	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
 	BE: Backend<B>,
@@ -124,18 +130,21 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 
 	// Create packed message
 	let mut payload = Vec::new();
-	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
-	payload.extend_from_slice(offender.as_ref());
+	payload.extend_from_slice(&match report.misbehaviour_type {
+		MisbehaviourType::Keygen => [0x01],
+		MisbehaviourType::Sign => [0x02],
+	});
+	payload.extend_from_slice(report.round_id.to_be_bytes().as_ref());
+	payload.extend_from_slice(report.offender.as_ref());
 
 	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &payload) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::MisbehaviourBroadcast(DKGMisbehaviourMessage {
-			round_id,
-			offender: offender.clone(),
 			signature: encoded_signature.clone(),
+			..report.clone()
 		});
 
-		let message = DKGMessage::<AuthorityId> { id: public, round_id, payload };
+		let message = DKGMessage::<AuthorityId> { id: public, round_id: report.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
 		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
@@ -157,21 +166,31 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let mut reports =
-			match dkg_worker.aggregated_misbehaviour_reports.get(&(round_id, offender.clone())) {
-				Some(reports) => reports.clone(),
-				None => AggregatedMisbehaviourReports {
-					round_id,
-					offender: offender.clone(),
-					reporters: Vec::new(),
-					signatures: Vec::new(),
-				},
-			};
+		let mut reports = match dkg_worker.aggregated_misbehaviour_reports.get(&(
+			report.misbehaviour_type,
+			report.round_id,
+			report.offender.clone(),
+		)) {
+			Some(reports) => reports.clone(),
+			None => AggregatedMisbehaviourReports {
+				misbehaviour_type: report.misbehaviour_type,
+				round_id: report.round_id,
+				offender: report.offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			},
+		};
+
+		if reports.reporters.contains(&sr25519_public) {
+			return
+		}
 
 		reports.reporters.push(sr25519_public);
 		reports.signatures.push(encoded_signature);
 
-		dkg_worker.aggregated_misbehaviour_reports.insert((round_id, offender), reports);
+		dkg_worker
+			.aggregated_misbehaviour_reports
+			.insert((report.misbehaviour_type, report.round_id, report.offender), reports);
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature")
 	} else {
 		error!(target: "dkg", "Could not sign public key");

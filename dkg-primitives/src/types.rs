@@ -15,7 +15,7 @@
 use crate::rounds::LocalKey;
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
-use dkg_runtime_primitives::crypto::AuthorityId;
+use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
 use std::fmt;
 
 pub type FE = Scalar<Secp256k1>;
@@ -119,7 +119,9 @@ pub struct DKGSignedPayload {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
+	/// Round ID of DKG protocol
 	pub round_id: RoundId,
+	/// Public key for the DKG
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
 	pub signature: Vec<u8>,
@@ -128,6 +130,9 @@ pub struct DKGPublicKeyMessage {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGMisbehaviourMessage {
+	/// Offending type
+	pub misbehaviour_type: MisbehaviourType,
+	/// Misbehaving round
 	pub round_id: RoundId,
 	/// Offending authority's id
 	pub offender: AuthorityId,
