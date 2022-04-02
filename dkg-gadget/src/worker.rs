@@ -824,9 +824,8 @@ where
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
 		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
-		if self.has_sent_gossip_msg.contains_key(&hash) {
-			return
-		} else {
+		#[allow(clippy::map_entry)]
+		if !self.has_sent_gossip_msg.contains_key(&hash) {
 			gossip_misbehaviour_report(self, misbehaviour_msg);
 			self.has_sent_gossip_msg.insert(hash, true);
 		}

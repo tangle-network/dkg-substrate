@@ -93,14 +93,13 @@ where
 
 	for (round_id, pub_key) in &keys_to_gossip {
 		let pub_key_msg = DKGPublicKeyMessage {
-			round_id: round_id.clone(),
+			round_id: *round_id,
 			pub_key: pub_key.clone(),
 			signature: vec![],
 		};
 		let hash = sp_core::blake2_128(&pub_key_msg.encode());
-		if dkg_worker.has_sent_gossip_msg.contains_key(&hash) {
-			return
-		} else {
+		#[allow(clippy::map_entry)]
+		if !dkg_worker.has_sent_gossip_msg.contains_key(&hash) {
 			gossip_public_key(dkg_worker, pub_key_msg);
 			dkg_worker.has_sent_gossip_msg.insert(hash, true);
 		}
