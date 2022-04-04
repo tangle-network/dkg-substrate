@@ -359,7 +359,7 @@ where
 	}
 	let public = worker.get_authority_public_key();
 
-	let authority_set = worker.current_validator_set.clone();
+	let authority_set = worker.current_validator_set.read().clone();
 	let queued_authority_set = worker.queued_validator_set.clone();
 
 	let latest_block_num = *header.number();

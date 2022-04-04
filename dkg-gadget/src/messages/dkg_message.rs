@@ -42,7 +42,7 @@ where
 
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
 		if let Some(id) =
-			dkg_worker.key_store.authority_id(&dkg_worker.current_validator_set.authorities)
+			dkg_worker.key_store.authority_id(&*dkg_worker.current_validator_set.read().authorities)
 		{
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());

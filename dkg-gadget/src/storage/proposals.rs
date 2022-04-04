@@ -47,11 +47,13 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 
 	let public = dkg_worker.get_authority_public_key();
 
-	if find_index::<AuthorityId>(&dkg_worker.current_validator_set.authorities[..], &public)
+	if find_index::<AuthorityId>(&dkg_worker.current_validator_set.read().authorities[..], &public)
 		.is_none()
 	{
 		return
 	}
+
+	let latest_header = dkg_worker.latest_header.read().clone();
 
 	// If the header is none, it means no block has been imported yet, so we can exit
 	if dkg_worker.latest_header.is_none() {
@@ -59,7 +61,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 	}
 
 	let current_block_number = {
-		let header = dkg_worker.latest_header.as_ref().unwrap();
+		let header = latest_header.as_ref().unwrap();
 		header.number()
 	};
 

@@ -39,7 +39,7 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// Get authority accounts
-	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+	let header = dkg_worker.latest_header.read().clone().as_ref().ok_or(DKGError::NoHeader)?;
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
 	if authority_accounts.is_none() {

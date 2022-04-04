@@ -25,7 +25,8 @@ use std::{
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use parking_lot::Mutex;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::CompletedOfflineStage;
+use parking_lot::{Mutex, RwLock};
 
 use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
@@ -82,6 +83,7 @@ use dkg_primitives::{
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
+use crate::async_protocol_handlers::SignedMessageReceiver;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -111,6 +113,7 @@ pub(crate) struct DKGWorker<B, C, BE>
 		C: Client<B, BE>,
 {
 	pub client: Arc<C>,
+	pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
@@ -123,9 +126,9 @@ pub(crate) struct DKGWorker<B, C, BE>
 	/// Best block a DKG voting round has been concluded for
 	best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
-	pub latest_header: Option<B::Header>,
+	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Current validator set
-	pub current_validator_set: AuthoritySet<Public>,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
 	/// keep rustc happy
@@ -151,6 +154,7 @@ pub(crate) struct DKGWorker<B, C, BE>
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
+	pub completed_offline_stage: Arc<Mutex<Option<CompletedOfflineStage>>>
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -178,8 +182,13 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			local_keystore,
 		} = worker_params;
 
+		// we drop the rx handle since we can call tx.subscribe() every time we need to fire up
+		// a new AsyncProto
+		let (to_async_proto, _) = tokio::sync::broadcast::channel(10);
+
 		DKGWorker {
 			client: client.clone(),
+			to_async_proto,
 			backend,
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
@@ -190,9 +199,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			finality_notifications: client.finality_notification_stream(),
 			block_import_notification: client.import_notification_stream(),
 			best_dkg_block: None,
-			current_validator_set: AuthoritySet::empty(),
+			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
-			latest_header: None,
+			latest_header: Arc::new(RwLock::new(None)),
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
@@ -203,9 +212,23 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
+			completed_offline_stage: Arc::new(Mutex::new(None)),
 			_backend: PhantomData,
 		}
 	}
+}
+
+#[derive(Clone)]
+pub struct AsyncProtocolParameters<B: Block, C> {
+	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub client: Arc<C>,
+	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub keystore: DKGKeystore,
+	pub completed_offline_stage: Arc<Mutex<Option<CompletedOfflineStage>>>,
+	pub signed_message_receiver: SignedMessageReceiver,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub best_authorities: Vec<Public>,
+	pub authority_public_key: Public
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -215,6 +238,20 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		C: Client<B, BE>,
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
+
+	fn generate_async_proto_params(&self, best_authorities: Vec<Public>, authority_public_key: Public) -> AsyncProtocolParameters<B, C> {
+		AsyncProtocolParameters {
+			latest_header: self.latest_header.clone(),
+			client: self.client.clone(),
+			gossip_engine: self.gossip_engine.clone(),
+			keystore: self.key_store.clone(),
+			completed_offline_stage: self.completed_offline_stage.clone(),
+			signed_message_receiver: self.to_async_proto.subscribe(),
+			current_validator_set: self.current_validator_set.clone(),
+			best_authorities,
+			authority_public_key
+		}
+	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
 	///
 	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
@@ -294,8 +331,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 
 	/// Gets latest block number from latest block header
 	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		if self.latest_header.is_some() {
-			*self.latest_header.clone().unwrap().number()
+		if let Some(latest_header) = self.latest_header.read().clone() {
+			*latest_header.number()
 		} else {
 			NumberFor::<B>::from(0u32)
 		}
@@ -514,12 +551,12 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
-		if let Some(latest_header) = &self.latest_header {
+		if let Some(latest_header) = self.latest_header.read().clone() {
 			if latest_header.number() >= header.number() {
 				return
 			}
 		}
-		self.latest_header = Some(header.clone());
+		*self.latest_header.write() = Some(header.clone());
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to resume when the worker has shut down somehow
 		try_resume_dkg(self, header);
@@ -558,7 +595,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
-				self.current_validator_set = active.clone();
+				*self.current_validator_set.write() = active.clone();
 				self.queued_validator_set = queued.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
@@ -586,7 +623,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				// Rotate the rounds since the authority set has changed
 				self.rounds = self.next_rounds.take();
 				// Update the validator sets
-				self.current_validator_set = active;
+				*self.current_validator_set.write() = active;
 				self.queued_validator_set = queued.clone();
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
@@ -607,7 +644,15 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 
 	fn verify_signature_against_authorities(
-		&mut self,
+		&self,
+		signed_dkg_msg: SignedDKGMessage<Public>,
+	) -> Result<DKGMessage<Public>, DKGError> {
+		Self::verify_signature_against_authorities_inner(&*self.latest_header.read(), &self.client, signed_dkg_msg)
+	}
+
+	pub fn verify_signature_against_authorities_inner(
+		latest_header: &Option<B::Header>,
+		client: &Arc<C>,
 		signed_dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
@@ -616,9 +661,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		// Get authority accounts
 		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
 
-		if let Some(header) = self.latest_header.as_ref() {
+		if let Some(header) = latest_header.as_ref() {
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
+			let accounts = client.runtime_api().get_authority_accounts(&at).ok();
 
 			if accounts.is_some() {
 				authority_accounts = accounts;
@@ -656,63 +701,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		}
 	}
 
-	fn process_incoming_dkg_message(&mut self, dkg_msg: DKGMessage<Public>) {
-		if let Some(rounds) = self.rounds.as_mut() {
-			if dkg_msg.round_id == rounds.get_id() {
-				let block_number = {
-					if self.latest_header.is_some() {
-						Some(*self.latest_header.as_ref().unwrap().number())
-					} else {
-						None
-					}
-				};
-				match rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
-					Ok(()) => (),
-					Err(err) =>
-						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-				}
-
-				if rounds.is_keygen_finished() {
-					trace!(target: "dkg", "🕸️  DKG is ready to sign");
-					self.dkg_state.accepted = true;
-				}
-			}
-		}
-
-		if let Some(next_rounds) = self.next_rounds.as_mut() {
-			if next_rounds.get_id() == dkg_msg.round_id {
-				let block_number = {
-					if self.latest_header.is_some() {
-						Some(*self.latest_header.as_ref().unwrap().number())
-					} else {
-						None
-					}
-				};
-
-				match next_rounds.handle_incoming(dkg_msg.payload.clone(), block_number) {
-					Ok(()) => {},
-					Err(err) =>
-						debug!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-				}
-			}
-		}
-
-		match handle_public_key_broadcast(self, dkg_msg.clone()) {
-			Ok(()) => (),
-			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-		};
-
-		match handle_misbehaviour_report(self, dkg_msg) {
-			Ok(()) => (),
-			Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
-		};
-
-		send_outgoing_dkg_messages(self);
-		self.process_finished_rounds();
-	}
-
 	pub fn handle_dkg_error(&mut self, dkg_error: DKGError) {
-		let authorities = self.current_validator_set.authorities.clone();
+		let authorities = self.current_validator_set.read().authorities.clone();
 
 		let bad_actors = match dkg_error {
 			DKGError::KeygenMisbehaviour { ref bad_actors } => bad_actors.clone(),
@@ -968,6 +958,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				},
 			));
 
+		let ref to_async_proto = self.to_async_proto.clone();
+
 		loop {
 			let engine = self.gossip_engine.clone();
 			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
@@ -989,33 +981,20 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						if self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+						if self.to_async_proto.receiver_count() == 0 || self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
 						} else {
-							let msgs = self.msg_cache.clone();
+							let msgs = self.msg_cache.drain();
 							for msg in msgs {
-								match self.verify_signature_against_authorities(msg) {
-									Ok(raw) => {
-										trace!(target: "dkg", "🕸️  Got a cached message from gossip engine: ({:?} bytes)", raw.encoded_size());
-										self.process_incoming_dkg_message(raw);
-									},
-									Err(e) => {
-										error!(target: "dkg", "🕸️  Received signature error {:?}", e);
-									}
+								if let Err(err) = to_async_proto.send(Arc::new(msg)) {
+									log::error!(target: "dkg", "Unable to send message to async proto: {:?}", err);
 								}
 							}
 
-							match self.verify_signature_against_authorities(dkg_msg) {
-								Ok(raw) => {
-									trace!(target: "dkg", "🕸️  Got message from gossip engine: ({:?} bytes)", raw.encoded_size());
-									self.process_incoming_dkg_message(raw);
-								},
-								Err(e) => {
-									error!(target: "dkg", "🕸️  Received signature error {:?}", e);
-								}
+							// send dkg_msg to async_proto
+							if let Err(err) = to_async_proto.send(Arc::new(dkg_msg)) {
+								log::error!(target: "dkg", "Unable to send message to async proto: {:?}", err);
 							}
-							// Reset the cache
-							self.msg_cache = Vec::new();
 						}
 					} else {
 						return;
