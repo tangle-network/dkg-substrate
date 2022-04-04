@@ -56,7 +56,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 	let latest_header = dkg_worker.latest_header.read().clone();
 
 	// If the header is none, it means no block has been imported yet, so we can exit
-	if dkg_worker.latest_header.is_none() {
+	if latest_header.is_none() {
 		return
 	}
 

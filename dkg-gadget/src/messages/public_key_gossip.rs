@@ -46,7 +46,7 @@ where
 	}
 
 	// Get authority accounts
-	let header = dkg_worker.latest_header.read().clone().as_ref().ok_or(DKGError::NoHeader)?;
+	let ref header = dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
 	let current_block_number = *header.number();
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
@@ -153,7 +153,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			),
 		}
 
-		let mut aggregated_public_keys = dkg_worker.aggregated_public_keys.entry(round_id).or_default();
+		let aggregated_public_keys = dkg_worker.aggregated_public_keys.entry(round_id).or_default();
 
 		aggregated_public_keys
 			.keys_and_signatures

@@ -41,8 +41,9 @@ where
 	let mut next_rounds_send_result = vec![];
 
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
+		let authorities = &dkg_worker.current_validator_set.read().authorities.clone();
 		if let Some(id) =
-			dkg_worker.key_store.authority_id(&*dkg_worker.current_validator_set.read().authorities)
+			dkg_worker.key_store.authority_id(authorities)
 		{
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
@@ -175,7 +176,7 @@ pub fn sign_and_send_messages<B>(
 }
 
 
-enum UnsignedMessages {
+pub enum UnsignedMessages {
 	Single(Option<DKGMessage<AuthorityId>>),
 	Multiple(Vec<DKGMessage<AuthorityId>>)
 }

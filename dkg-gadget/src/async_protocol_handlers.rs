@@ -32,16 +32,19 @@ use dkg_runtime_primitives::crypto::Public;
 
 pub type SignedMessageReceiver = tokio::sync::broadcast::Receiver<Arc<SignedDKGMessage<Public>>>;
 
+pub trait VerifyFn<T: TransformIncoming>: FnMut(T) -> Result<(T::IncomingMapped, PartyIndex), DKGError> + Send {}
+impl<T: TransformIncoming, F: FnMut(T) -> Result<(T::IncomingMapped, PartyIndex), DKGError> + Send> VerifyFn<T> for F {}
+
 pub struct IncomingAsyncProtocolWrapper<T: TransformIncoming> {
     pub receiver: BroadcastStream<T>,
-	verification_function: Box<dyn Fn(SignedDKGMessage<Public>) -> Result<(T::IncomingMapped, PartyIndex), DKGError>>,
+	verification_function: Box<dyn VerifyFn<T>>,
 	ty: ProtocolType
 }
 
 impl<T: TransformIncoming> IncomingAsyncProtocolWrapper<T> {
 	pub fn new(receiver: tokio::sync::broadcast::Receiver<T>,
 			   ty: ProtocolType,
-			   verification_function: Box<dyn Fn(SignedDKGMessage<Public>) -> Result<(T::IncomingMapped, PartyIndex), DKGError>>) -> Self {
+			   verification_function: Box<dyn VerifyFn<T>>) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),
 			verification_function,
@@ -55,7 +58,7 @@ pub struct OutgoingAsyncProtocolWrapper<T: TransformOutgoing> {
 }
 
 #[derive(Debug, Clone)]
-enum ProtocolType {
+pub enum ProtocolType {
 	Keygen { i: u16, t: u16, n: u16 },
 	Offline { i: u16, s_l: Vec<u16>, local_key: LocalKey<Secp256k1> },
 	Voting
@@ -70,12 +73,12 @@ pub type PartyIndex = u16;
 
 pub trait TransformIncoming: Clone + Send + 'static {
     type IncomingMapped;
-    fn transform(self, verify: impl Fn(Self) -> Result<(Self::IncomingMapped, PartyIndex), DKGError>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized;
+    fn transform(self, verify: impl VerifyFn<Self>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized;
 }
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
     type IncomingMapped = DKGMessage<Public>;
-    fn transform(self, verify: impl Fn(Self) -> Result<(Self::IncomingMapped, PartyIndex), DKGError>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized {
+    fn transform(self, mut verify: impl VerifyFn<Self>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized {
 		verify(self).map(|(body, party_index)| {
 			match (stream_type, &body.payload) {
 				(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
@@ -106,12 +109,11 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>
     ) -> Poll<Option<Self::Item>> {
-        match futures::ready!(Pin::new(&mut self.receiver).poll_next(cx)) {
-            Some(Ok(msg)) => {
-				let ty = &self.ty;
-				let verify = &self.verification_function;
+		let Self { receiver, ty, verification_function } = &mut *self;
 
-                match msg.transform(verify, ty) {
+        match futures::ready!(Pin::new(receiver).poll_next(cx)) {
+            Some(Ok(msg)) => {
+                match msg.transform(verification_function, &*ty) {
 					Ok(Some(msg)) => {
 						Poll::Ready(Some(msg))
 					}
@@ -194,18 +196,17 @@ pub mod meta_channel {
 	use dkg_runtime_primitives::crypto::Public;
 	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
 	use dkg_runtime_primitives::crypto::AuthorityId;
-	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType, SignedMessageReceiver};
+	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, SignedMessageReceiver, VerifyFn};
 	use crate::{Client, DKGKeystore};
 	use crate::messages::dkg_message::sign_and_send_messages;
 	use crate::utils::find_index;
 	use crate::worker::{AsyncProtocolParameters, DKGWorker};
 
-	pub trait SendFuture: Future<Output=Result<(), DKGError>> + Send {}
-	impl<T> SendFuture for T where T: Future<Output=Result<(), DKGError>> + Send {}
+	pub trait SendFuture: Future<Output=Result<(), DKGError>> + Send + 'static {}
+	impl<T> SendFuture for T where T: Future<Output=Result<(), DKGError>> + Send + 'static {}
 
 	/// Once created, the MetaDKGMessageHandler should be .awaited to begin execution
 	pub struct MetaDKGMessageHandler<B, BE, C> {
-		protocol: Pin<Box<dyn SendFuture>>,
 		_pd: PhantomData<(B, BE, C)>
 	}
 
@@ -224,14 +225,14 @@ pub mod meta_channel {
 
 	impl StateMachineIface for Keygen {
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
-			let DKGMessage { id, payload, round_id } = msg.body;
+			let DKGMessage { payload, .. } = msg.body;
 
 			// Send the payload to the appropriate AsyncProtocols
 			match payload {
 				DKGMsgPayload::Keygen(msg) => {
 					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error as Error;
 					let message: Msg<ProtocolMessage> = serde_json::from_slice(msg.keygen_msg.as_slice()).map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
-					to_async_proto.unbounded_send(message).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
+					to_async_proto.unbounded_send(message).map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
 				},
 
 				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
@@ -243,14 +244,14 @@ pub mod meta_channel {
 
 	impl StateMachineIface for OfflineStage {
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
-			let DKGMessage { id, payload, round_id } = msg.body;
+			let DKGMessage { payload, .. } = msg.body;
 
 			// Send the payload to the appropriate AsyncProtocols
 			match payload {
 				DKGMsgPayload::Offline(msg) => {
 					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error as Error;
 					let message: Msg<OfflineProtocolMessage> = serde_json::from_slice(msg.offline_msg.as_slice()).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
-					to_async_proto.unbounded_send(message).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
+					to_async_proto.unbounded_send(message).map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
 				},
 
 				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
@@ -263,16 +264,16 @@ pub mod meta_channel {
 	impl<B, BE, C> MetaDKGMessageHandler<B, BE, C> where
 		B: Block,
 		BE: Backend<B>,
-		C: Client<B, BE>,
+		C: Client<B, BE> + 'static,
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
 
-		pub fn new(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError> {
+		pub async fn execute(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<(), DKGError> {
 			match channel_type.clone() {
 				ProtocolType::Keygen { i, t, n } => {
-					Self::new_inner(Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
+					Self::new_inner(Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type).await
 				}
 				ProtocolType::Offline { i, s_l, local_key } => {
-					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
+					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type).await
 				}
 				ProtocolType::Voting => {
 					unimplemented!("Voting not yet implemented")
@@ -281,18 +282,19 @@ pub mod meta_channel {
 			}
 		}
 
-		fn new_inner<SM: StateMachineIface>(sm: SM, params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError>
+		async fn new_inner<SM: StateMachineIface>(sm: SM, params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<(), DKGError>
 			where <SM as StateMachine>::Err: Send + Debug,
 				  <SM as StateMachine>::MessageBody: std::marker::Send,
 				  <SM as StateMachine>::MessageBody: Serialize {
 			use futures::FutureExt;
 
 			let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
-			let (outgoing_tx, mut outgoing_rx) = futures::channel::mpsc::unbounded();
+			let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
 
-			let async_proto = Box::pin(AsyncProtocol::new(sm, incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>), outgoing_tx.clone())
-				.set_watcher(StderrWatcher)
-				.run()
+			let mut async_proto = AsyncProtocol::new(sm, incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>), outgoing_tx.clone())
+				.set_watcher(StderrWatcher);
+
+			let async_proto = Box::pin(async_proto.run()
 				.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })
 				.map(|_| ()));
 
@@ -308,14 +310,13 @@ pub mod meta_channel {
 
 			// For taking raw inbound signed messages, mapping them to unsigned messages, then sending
 			// to the appropriate AsyncProtocol
-			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<SM>(params.signed_message_receiver, params.client, params.latest_header, best_authorities, authority_public_key, channel_type, incoming_tx_proto);
+			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<SM>(params.signed_message_receiver, params.client, params.latest_header, best_authorities, authority_public_key, channel_type.clone(), incoming_tx_proto);
 
 			// Combine all futures into a concurrent select subroutine
-			let protocol = async move {
-				select! {
+			select! {
 					proto_res = async_proto.fuse() => {
 						log::error!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type, proto_res);
-						proto_res;
+						let _ = proto_res;
 						Ok(())
 					},
 
@@ -328,14 +329,7 @@ pub mod meta_channel {
 						log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
 						incoming_res
 					}
-				}
-			};
-
-
-			Ok(Self {
-				protocol: Box::pin(protocol),
-				_pd: Default::default()
-			})
+			}
 		}
 
 		/*fn new_voting(params: AsyncProtocolParameters<B, C>) -> Result<Self, DKGError> {
@@ -356,23 +350,24 @@ pub mod meta_channel {
 			})
 		}*/
 
-		fn generate_verification_function(client: Arc<C>, latest_header: Arc<RwLock<Option<B::Header>>>, best_authorities: Vec<Public>, authority_public_key: Public) -> Box<dyn Fn(SignedDKGMessage<Public>) -> Result<(DKGMessage<Public>, PartyIndex), DKGError>> {
+		fn generate_verification_function(client: Arc<C>, latest_header: Arc<RwLock<Option<B::Header>>>, best_authorities: Vec<Public>, authority_public_key: Public) -> Box<dyn VerifyFn<Arc<SignedDKGMessage<Public>>>> {
 			let latest_header = latest_header.clone();
 			let client = client.clone();
 
-			Box::new(move |msg| {
+			Box::new(move |msg: Arc<SignedDKGMessage<Public>>| {
 				let latest_header = &*latest_header.read();
 				let client = &client;
 
-				let party_inx = find_index::<AuthorityId>(&best_authorities, &authority_public_key).unwrap() + 1;
+				let party_inx = find_index::<AuthorityId>(&best_authorities, &authority_public_key).unwrap() as u16 + 1;
 
-				DKGWorker::verify_signature_against_authorities_inner(latest_header, client, msg)
-					.map(|msg| (msg, part_inx))
+				DKGWorker::verify_signature_against_authorities_inner(latest_header, client, (&*msg).clone())
+					.map(|msg| (msg, party_inx))
 			})
 		}
 
-		fn generate_outgoing_to_wire_fn<SM: StateMachineIface>(ref current_authority_set: Arc<RwLock<AuthoritySet<Public>>>, ref gossip_engine: Arc<Mutex<GossipEngine<B>>>, ref keystore: DKGKeystore, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, ref proto_ty: ProtocolType) -> Pin<Box<dyn SendFuture>>
-			where <SM as StateMachine>::MessageBody: Serialize {
+		fn generate_outgoing_to_wire_fn<SM: StateMachineIface>(current_authority_set: Arc<RwLock<AuthoritySet<Public>>>, gossip_engine: Arc<Mutex<GossipEngine<B>>>, keystore: DKGKeystore, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, proto_ty: ProtocolType) -> Pin<Box<dyn SendFuture>>
+			where <SM as StateMachine>::MessageBody: Serialize,
+				  <SM as StateMachine>::MessageBody: Send {
 			 Box::pin(async move {
 				// take all unsigned messages, then sign them and send outbound
 				while let Some(unsigned_message) = outgoing_rx.next().await {
@@ -382,7 +377,7 @@ pub mod meta_channel {
 						.authority_id(&keystore.public_keys().unwrap())
 						.unwrap_or_else(|| panic!("Halp"));
 
-					let payload = match proto_ty {
+					let payload = match &proto_ty {
 						ProtocolType::Keygen { .. } => {
 							DKGMsgPayload::Keygen(DKGKeygenMessage { round_id, keygen_msg: serialized_body })
 						}
@@ -399,7 +394,7 @@ pub mod meta_channel {
 					};
 
 					let unsigned_dkg_message = DKGMessage { id, payload, round_id };
-					sign_and_send_messages(gossip_engine,keystore, unsigned_dkg_message);
+					sign_and_send_messages(&gossip_engine,&keystore, unsigned_dkg_message);
 				}
 
 				Err(DKGError::CriticalError { reason: "Outbound stream stopped producing items".to_string() })
@@ -412,14 +407,15 @@ pub mod meta_channel {
 																			  best_authorities: Vec<Public>,
 																			  authority_public_key: Public,
 																			  channel_type: ProtocolType,
-																			  ref to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> Pin<Box<dyn SendFuture>> {
+																			  to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> Pin<Box<dyn SendFuture>>
+			where <SM as StateMachine>::MessageBody: Send {
 			Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
 				let verify_fn = Self::generate_verification_function(client, latest_header, best_authorities, authority_public_key);
 				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(signed_message_receiver, channel_type, verify_fn);
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
-					if let Err(_) = SM::handle_unsigned_message(to_async_proto, unsigned_message) {
+					if let Err(_) = SM::handle_unsigned_message(&to_async_proto, unsigned_message) {
 						log::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
 						break;
 					}
@@ -427,14 +423,6 @@ pub mod meta_channel {
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
 			})
-		}
-	}
-
-	impl<B, BE, C> Future for MetaDKGMessageHandler<B, BE, C> {
-		type Output = Result<(), DKGError>;
-
-		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-			self.protocol.as_mut().poll(cx)
 		}
 	}
 }

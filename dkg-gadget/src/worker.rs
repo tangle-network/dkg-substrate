@@ -218,7 +218,6 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 }
 
-#[derive(Clone)]
 pub struct AsyncProtocolParameters<B: Block, C> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -981,10 +980,10 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				},
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						if self.to_async_proto.receiver_count() == 0 || self.current_validator_set.authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+						if self.to_async_proto.receiver_count() == 0 || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
 						} else {
-							let msgs = self.msg_cache.drain();
+							let msgs = self.msg_cache.drain(..);
 							for msg in msgs {
 								if let Err(err) = to_async_proto.send(Arc::new(msg)) {
 									log::error!(target: "dkg", "Unable to send message to async proto: {:?}", err);
