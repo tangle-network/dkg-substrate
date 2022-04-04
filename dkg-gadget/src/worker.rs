@@ -114,26 +114,22 @@ where
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-	metrics: Option<Metrics>,
+	pub metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
-	finality_notifications: FinalityNotifications<B>,
-	block_import_notification: ImportNotifications<B>,
+	pub finality_notifications: FinalityNotifications<B>,
+	pub import_notifications: ImportNotifications<B>,
 	pub votes_sent: u64,
 	/// Best block a DKG voting round has been concluded for
-	best_dkg_block: Option<NumberFor<B>>,
+	pub best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
 	pub latest_header: Option<B::Header>,
 	/// Current validator set
 	pub current_validator_set: AuthoritySet<Public>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// keep rustc happy
-	_backend: PhantomData<BE>,
-	/// public key refresh in progress
-	pub refresh_in_progress: bool,
 	/// Msg cache for startup if authorities aren't set
-	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
+	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
@@ -155,6 +151,8 @@ where
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
+	/// keep rustc happy
+	_backend: PhantomData<BE>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -192,7 +190,7 @@ where
 			rounds: None,
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
-			block_import_notification: client.import_notification_stream(),
+			import_notifications: client.import_notification_stream(),
 			best_dkg_block: None,
 			current_validator_set: AuthoritySet::empty(),
 			queued_validator_set: AuthoritySet::empty(),
@@ -200,7 +198,6 @@ where
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
-			refresh_in_progress: false,
 			msg_cache: Vec::new(),
 			aggregated_public_keys: HashMap::new(),
 			aggregated_misbehaviour_reports: HashMap::new(),
@@ -351,10 +348,12 @@ where
 			Some((new, queued))
 		} else {
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			Some((
-				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default(),
-				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default(),
-			))
+			let current_authority_set = self.client.runtime_api().authority_set(&at).ok();
+			let queued_authority_set = self.client.runtime_api().queued_authority_set(&at).ok();
+			match (current_authority_set, queued_authority_set) {
+				(Some(current), Some(queued)) => Some((current, queued)),
+				_ => None,
+			}
 		};
 
 		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
@@ -389,7 +388,7 @@ where
 
 	/// Gets the best authorities by authority keys using on-chain reputations.
 	/// Additionally, it filters the best authority keys from the jailed authorities.
-	fn get_best_authority_keys(
+	pub fn get_best_authority_keys(
 		&self,
 		header: &B::Header,
 		authority_set: AuthoritySet<Public>,
@@ -406,7 +405,7 @@ where
 		let jailed_authorities = self.get_keygen_jailed(header, &authorities);
 		let unjailed_authorities = authorities
 			.iter()
-			.filter(|a| jailed_authorities.contains(a))
+			.filter(|a| !jailed_authorities.contains(a))
 			.cloned()
 			.collect::<Vec<_>>();
 		// Best unjailed authorities are taken from the on-chain reputations
@@ -421,7 +420,6 @@ where
 
 		// If we have less than the threshold, we need to add the best jailed authorities
 		// to the best unjailed authorities to meet the threshold.
-		// TODO: Prevent this from happening by always adjusting thresholds on-chain.
 		if best_unjailed_authorities.len() < threshold {
 			let best_jailed_authorities: Vec<Public> = get_best_authorities(
 				threshold - best_unjailed_authorities.len(),
@@ -508,7 +506,7 @@ where
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().get_id() == queued.id {
+		if self.next_rounds.is_some() {
 			return
 		}
 
@@ -566,8 +564,9 @@ where
 			}
 		}
 		self.latest_header = Some(header.clone());
+		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
-		// Attempt to resume when the worker has shut down somehow
+		// Try to resume DKG when we hear of a new block
 		try_resume_dkg(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
@@ -576,8 +575,6 @@ where
 		} else {
 			self.enact_new_authorities(header);
 		}
-		// Identify if the worker is stalling and restart the DKG if necessary
-		try_restart_dkg(self, header);
 		// Send all outgoing messages created from any reactions from resuming, enacting, or
 		// restarting
 		send_outgoing_dkg_messages(self);
@@ -589,17 +586,9 @@ where
 	}
 
 	fn enact_genesis_authorities(&mut self, header: &B::Header) {
+		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
-			let best_authorities: Vec<Public> =
-				self.get_best_authority_keys(header, queued.clone(), false);
-			// Check whether the worker is in the best next set or return
-			if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key())
-				.is_none()
-			{
-				self.next_rounds = None;
-				return
-			}
-
+			// If we are in the genesis state, we need to enact the genesis authorities
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
 				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
@@ -622,13 +611,14 @@ where
 	fn enact_new_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
-			// If the cached queued set id is not equal to the new queued set then update
-			// if no queued keygen is currently in progress.
+			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Rotate the queued key file contents into the local key file
 				self.rotate_local_key_files();
+				// verify the new validator set
+				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Rotate the rounds since the authority set has changed
 				self.rounds = self.next_rounds.take();
 				// Update the validator sets
@@ -642,13 +632,15 @@ where
 		}
 	}
 
-	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
+	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
+		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		// Handle import notifications
 		self.process_block_notification(&notification.header);
 	}
 
-	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
+	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
 		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
 
@@ -1053,9 +1045,9 @@ where
 						return;
 					}
 				},
-				notification = self.block_import_notification.next().fuse() => {
+				notification = self.import_notifications.next().fuse() => {
 					if let Some(notification) = notification {
-						self.handle_import_notifications(notification);
+						self.handle_import_notification(notification);
 					} else {
 						return;
 					}

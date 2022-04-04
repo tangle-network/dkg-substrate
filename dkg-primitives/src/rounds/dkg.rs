@@ -113,8 +113,8 @@ where
 		self.signers = signers;
 	}
 
-	pub fn set_jailed_signers(&mut self, signers: Vec<AuthorityId>) {
-		self.jailed_signers = signers;
+	pub fn set_jailed_signers(&mut self, jailed_signers: Vec<AuthorityId>) {
+		self.jailed_signers = jailed_signers;
 
 		match &self.keygen {
 			KeygenState::Finished(Ok(local_key)) => {
@@ -573,7 +573,6 @@ where
 		local_key: &LocalKey<Secp256k1>,
 	) -> Result<Vec<u16>, &'static str> {
 		let (_, threshold, parties) = self.dkg_params();
-		info!(target: "dkg", "🕸️  Generating threshold signer set with threshold {}-out-of-{}", threshold, parties);
 		// Select the random subset using the local key as a seed
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
 		// let set = (1..=self.authorities.len())
@@ -588,7 +587,10 @@ where
 			.collect::<Vec<u16>>();
 
 		if unjailed_set.len() > threshold.into() {
-			select_random_set(seed, unjailed_set, threshold + 1)
+			select_random_set(seed, unjailed_set, threshold + 1).map(|set| {
+				info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", self.round_id, threshold, parties, set);
+				set
+			})
 		} else {
 			let jailed_set = self
 				.authorities
@@ -603,7 +605,10 @@ where
 				.chain(jailed_set.iter().take(diff))
 				.cloned()
 				.collect::<Vec<u16>>();
-			select_random_set(seed, combined, threshold + 1)
+			select_random_set(seed, combined, threshold + 1).map(|set| {
+				info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signer: ({:?})", self.round_id, threshold, parties, set);
+				set
+			})
 		}
 	}
 

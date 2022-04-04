@@ -68,7 +68,6 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 		}
 
 		if let Ok(Some(_sig)) = public_key_sig {
-			dkg_worker.refresh_in_progress = false;
 			if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
 				debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _sig);
 				offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);

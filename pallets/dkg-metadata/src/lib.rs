@@ -648,7 +648,7 @@ pub mod pallet {
 							let reputation = AuthorityReputations::<T>::get(authority.clone());
 							AuthorityReputations::<T>::insert(
 								authority,
-								decay.mul_floor(reputation).saturating_add(reputation),
+								decay.mul_floor(reputation).saturating_add(1_000_000_000u32.into()),
 							);
 						}
 					}
@@ -750,10 +750,15 @@ pub mod pallet {
 				nonce: Self::refresh_nonce().into(),
 				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
 			};
+			// Remove unsigned refresh proposal from queue
+			// The assumption here is that even if the proposal signature fails, we still want
+			// to remove the unsigned proposal from the queue to prevent it from being
+			// continuously signed with an outdated nonce.
+			T::ProposalHandler::handle_signed_refresh_proposal(data.clone())?;
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
 				.map_err(|_| {
 					#[cfg(feature = "std")]
-					frame_support::log::error!(
+					log::error!(
 						target: "dkg",
 						"Invalid signature for RefreshProposal
 						**********************************************************
@@ -765,15 +770,13 @@ pub mod pallet {
 				})?;
 
 			NextPublicKeySignature::<T>::put(signature.clone());
-			// Remove unsigned refresh proposal from queue
-			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
 			// Handle manual refresh if flag is set
 			if Self::should_manual_refresh() {
 				ShouldManualRefresh::<T>::put(false);
 				let next_authority_set_id = Self::authority_set_id() + 1u64;
 				AuthoritySetId::<T>::put(next_authority_set_id);
-				Self::refresh_keys();
+				Self::execute_rotation(false);
 				Self::deposit_event(Event::RefreshKeysFinished { next_authority_set_id });
 			}
 
@@ -823,7 +826,7 @@ pub mod pallet {
 				MisbehaviourType::Sign => Self::signature_threshold(),
 			};
 
-			if valid_reporters.len() > threshold.into() {
+			if valid_reporters.len() >= threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
@@ -993,6 +996,28 @@ pub mod pallet {
 				Err(Error::<T>::NoNextPublicKey.into())
 			}
 		}
+
+		/// Forcefully rotate the DKG
+		///
+		/// This forces the next authorities into the current authority spot and
+		/// automatically increments the authority ID. It uses `change_authorities`
+		/// to execute the rotation forcefully.
+		#[pallet::weight(0)]
+		#[transactional]
+		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			let next_authorities = NextAuthorities::<T>::get();
+			let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
+			// Force rotate the next authorities into the active and next set.
+			Self::change_authorities(
+				next_authorities.clone(),
+				next_authorities,
+				next_authority_accounts.clone(),
+				next_authority_accounts,
+				true,
+			);
+			Ok(().into())
+		}
 	}
 }
 
@@ -1105,6 +1130,7 @@ impl<T: Config> Pallet<T> {
 		next_authority_ids: Vec<T::DKGId>,
 		new_authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
+		forced: bool,
 	) {
 		let next_id = Self::authority_set_id() + 1u64;
 		// Ensure pending thresholds remain valid across authority set changes that may break.
@@ -1143,7 +1169,7 @@ impl<T: Config> Pallet<T> {
 			.encode(),
 		);
 		<frame_system::Pallet<T>>::deposit_log(log);
-		Self::refresh_keys();
+		Self::execute_rotation(forced);
 	}
 
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
@@ -1354,13 +1380,18 @@ impl<T: Config> Pallet<T> {
 		false
 	}
 
-	pub fn refresh_keys() {
+	pub fn update_thresholds() {
 		// Update the active thresholds for the next session
 		SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
 		KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
 		// Update the next thresholds for the next session
 		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
 		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
+	}
+
+	pub fn execute_rotation(forced: bool) {
+		// Update the thresholds for signing and keygen
+		Self::update_thresholds();
 		// Update the keys for the next authorities
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
@@ -1368,7 +1399,15 @@ impl<T: Config> Pallet<T> {
 		let pub_key_signature = Self::public_key_signature();
 		NextDKGPublicKey::<T>::kill();
 		NextPublicKeySignature::<T>::kill();
-		let v = next_pub_key.zip(next_pub_key_signature);
+
+		// Switch on forced for forceful rotations
+		let v = if forced {
+			// If forced we supply an empty signature
+			next_pub_key.zip(Some(vec![]))
+		} else {
+			next_pub_key.zip(next_pub_key_signature)
+		};
+
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Insert historical round metadata consisting of the current round's
 			// public key before rotation, the next round's public key, and the refresh
@@ -1393,17 +1432,18 @@ impl<T: Config> Pallet<T> {
 			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {
+					forced,
 					new_key_signature: next_pub_key_signature.clone(),
 					old_public_key: dkg_pub_key.1,
 					new_public_key: next_pub_key.1.clone(),
 				}
 				.encode(),
 			);
-			let uncompressed_pub_key = Self::decompress_public_key(next_pub_key.1.clone()).unwrap();
 			<frame_system::Pallet<T>>::deposit_log(log);
 			// Emit events so other front-end know that.
 			Self::deposit_event(Event::PublicKeyChanged {
-				uncompressed_pub_key,
+				uncompressed_pub_key: Self::decompress_public_key(next_pub_key.1.clone())
+					.unwrap_or_default(),
 				compressed_pub_key: next_pub_key.1,
 			});
 			Self::deposit_event(Event::PublicKeySignatureChanged {
@@ -1483,6 +1523,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 			next_queued_authorities,
 			authority_account_ids,
 			queued_authority_account_ids,
+			false,
 		);
 	}
 

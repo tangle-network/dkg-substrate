@@ -168,7 +168,12 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 	OnDisabled(AuthorityIndex),
 	/// The DKG keys have changed
 	#[codec(index = 4)]
-	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
+	KeyRefresh {
+		forced: bool,
+		old_public_key: Vec<u8>,
+		new_public_key: Vec<u8>,
+		new_key_signature: Vec<u8>,
+	},
 }
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
