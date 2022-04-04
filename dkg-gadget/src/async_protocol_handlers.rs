@@ -207,6 +207,7 @@ pub mod meta_channel {
 
 	/// Once created, the MetaDKGMessageHandler should be .awaited to begin execution
 	pub struct MetaDKGMessageHandler<B, BE, C> {
+		protocol: Pin<Box<dyn SendFuture>>,
 		_pd: PhantomData<(B, BE, C)>
 	}
 
@@ -267,13 +268,13 @@ pub mod meta_channel {
 		C: Client<B, BE> + 'static,
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
 
-		pub async fn execute(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<(), DKGError> {
+		pub fn new(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError> {
 			match channel_type.clone() {
 				ProtocolType::Keygen { i, t, n } => {
-					Self::new_inner(Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type).await
+					Self::new_inner(Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 				}
 				ProtocolType::Offline { i, s_l, local_key } => {
-					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type).await
+					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 				}
 				ProtocolType::Voting => {
 					unimplemented!("Voting not yet implemented")
@@ -282,7 +283,7 @@ pub mod meta_channel {
 			}
 		}
 
-		async fn new_inner<SM: StateMachineIface>(sm: SM, params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<(), DKGError>
+		fn new_inner<SM: StateMachineIface>(sm: SM, params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError>
 			where <SM as StateMachine>::Err: Send + Debug,
 				  <SM as StateMachine>::MessageBody: std::marker::Send,
 				  <SM as StateMachine>::MessageBody: Serialize {
@@ -294,9 +295,11 @@ pub mod meta_channel {
 			let mut async_proto = AsyncProtocol::new(sm, incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>), outgoing_tx.clone())
 				.set_watcher(StderrWatcher);
 
-			let async_proto = Box::pin(async_proto.run()
-				.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })
-				.map(|_| ()));
+			let async_proto = Box::pin(async move {
+				async_proto.run().await
+					.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })
+					.map(|_| ())
+			});
 
 			let gossip_engine = params.gossip_engine.clone();
 			let keystore = params.keystore.clone();
@@ -313,11 +316,11 @@ pub mod meta_channel {
 			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<SM>(params.signed_message_receiver, params.client, params.latest_header, best_authorities, authority_public_key, channel_type.clone(), incoming_tx_proto);
 
 			// Combine all futures into a concurrent select subroutine
-			select! {
+			let protocol = async move {
+				select! {
 					proto_res = async_proto.fuse() => {
 						log::error!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type, proto_res);
-						let _ = proto_res;
-						Ok(())
+						proto_res
 					},
 
 					outgoing_res = outgoing_to_wire.fuse() => {
@@ -329,7 +332,14 @@ pub mod meta_channel {
 						log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
 						incoming_res
 					}
-			}
+				}
+			};
+
+
+			Ok(Self {
+				protocol: Box::pin(protocol),
+				_pd: Default::default()
+			})
 		}
 
 		/*fn new_voting(params: AsyncProtocolParameters<B, C>) -> Result<Self, DKGError> {
@@ -423,6 +433,16 @@ pub mod meta_channel {
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
 			})
+		}
+	}
+
+	impl<B, BE, C> Unpin for MetaDKGMessageHandler<B, BE, C> {}
+
+	impl<B, BE, C> Future for MetaDKGMessageHandler<B, BE, C> {
+		type Output = Result<(), DKGError>;
+
+		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+			self.protocol.as_mut().poll(cx)
 		}
 	}
 }
