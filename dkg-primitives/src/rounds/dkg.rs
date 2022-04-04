@@ -384,14 +384,15 @@ where
 	/// Starts new offline stage for the provided key.
 	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
-		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
-
 		let sign_params = self.sign_params();
 		// Get the offline index in the signer set (different than the party index).
 		let offline_i = match self.get_offline_stage_index() {
-			Some(i) => i,
+			Some(i) => {
+				debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
+				i
+			},
 			None => {
-				trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+				debug!(target: "dkg", "🕸️  We are not among signers, skipping");
 				return Ok(())
 			},
 		};

@@ -57,6 +57,9 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
 pub const GENESIS_BLOCK_NUMBER: u32 = 0;
 
+/// Gossip message resending limit for outbound messages
+pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
+
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 

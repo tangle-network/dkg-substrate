@@ -21,6 +21,7 @@ use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
 	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
+	GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{error, info, trace};
@@ -98,11 +99,12 @@ where
 			signature: vec![],
 		};
 		let hash = sp_core::blake2_128(&pub_key_msg.encode());
-		#[allow(clippy::map_entry)]
-		if !dkg_worker.has_sent_gossip_msg.contains_key(&hash) {
-			gossip_public_key(dkg_worker, pub_key_msg);
-			dkg_worker.has_sent_gossip_msg.insert(hash, true);
+		let count = dkg_worker.has_sent_gossip_msg.get(&hash).unwrap_or_else(|| &0u8).clone();
+		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
+			return
 		}
+		gossip_public_key(dkg_worker, pub_key_msg);
+		dkg_worker.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 
 	for res in &rounds_send_result {

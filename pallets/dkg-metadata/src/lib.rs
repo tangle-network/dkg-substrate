@@ -808,7 +808,8 @@ pub mod pallet {
 			let offender = reports.offender.clone();
 			let misbehaviour_type = reports.misbehaviour_type;
 			let authorities = match misbehaviour_type {
-				// Keygen misbehaviours are from next keygen authorities
+				// We assume genesis ran successfully. Therefore, keygen misbehaviours are from next
+				// keygen authorities
 				MisbehaviourType::Keygen => Self::next_authorities_accounts(),
 				// Signing misbehaviours are from current authorities
 				MisbehaviourType::Sign => Self::current_authorities_accounts(),
@@ -816,54 +817,72 @@ pub mod pallet {
 			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			// Get the threshold for the misbehaviour type
-			let threshold = match misbehaviour_type {
+			let signature_threshold = match misbehaviour_type {
 				// Keygen misbehaviours are from next keygen authorities
 				MisbehaviourType::Keygen => Self::next_signature_threshold(),
 				// Signing misbehaviours are from current authorities
 				MisbehaviourType::Sign => Self::signature_threshold(),
 			};
 
-			if valid_reporters.len() >= threshold.into() {
+			if valid_reporters.len() >= signature_threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
 				let decay = T::DecayPercentage::get();
 				AuthorityReputations::<T>::insert(&offender, decay.mul_floor(reputation));
 				// Jail the respective misbehaving party depending on the misbehaviour type
-				// TODO: Track when the offender was jailed so we can remove them from the jail
+				let now = frame_system::Pallet::<T>::block_number();
 				match misbehaviour_type {
 					MisbehaviourType::Keygen => {
-						JailedKeygenAuthorities::<T>::insert(
-							offender,
-							frame_system::Pallet::<T>::block_number(),
-						);
 						// Check if we have enough unjailed authorities to run after the next
 						// session change
 						let unjailed_authorities = Self::next_authorities()
 							.into_iter()
-							.filter(|a| !JailedKeygenAuthorities::<T>::contains_key(a))
+							.filter(|a| {
+								!JailedKeygenAuthorities::<T>::contains_key(a) || *a != offender
+							})
 							.collect::<Vec<T::DKGId>>();
-						// This is odd because we don't know the next `next_authorities` yet.
-						// We anticipate that we will need to decrease the threshold
-						// if it is below the pending keygen threshold.
-						if unjailed_authorities.len() <= Self::pending_keygen_threshold().into() {
-							PendingKeygenThreshold::<T>::put(
-								u16::try_from(unjailed_authorities.len()).unwrap_or_default(),
-							);
-							if unjailed_authorities.len() <=
-								Self::pending_signature_threshold().into()
-							{
-								PendingSignatureThreshold::<T>::put(
-									u16::try_from(unjailed_authorities.len() - 1)
-										.unwrap_or_default(),
-								);
+						if unjailed_authorities.len() < Self::next_keygen_threshold().into() {
+							// Handle edge case properly (shouldn't drop below 2 authorities)
+							if unjailed_authorities.len() > 1 {
+								JailedKeygenAuthorities::<T>::insert(offender, now);
+
+								let new_val =
+									u16::try_from(unjailed_authorities.len()).unwrap_or_default();
+								NextKeygenThreshold::<T>::put(new_val);
+								PendingKeygenThreshold::<T>::put(new_val);
 							}
+						} else {
+							JailedKeygenAuthorities::<T>::insert(offender, now);
 						}
 					},
-					MisbehaviourType::Sign => JailedSigningAuthorities::<T>::insert(
-						offender,
-						frame_system::Pallet::<T>::block_number(),
-					),
+					MisbehaviourType::Sign => {
+						// TODO: Compute best next authorities instead of next authorities since
+						// these are the authorities who underwent keygen.
+						let unjailed_authorities = Self::next_authorities()
+							.into_iter()
+							.filter(|a| {
+								!JailedSigningAuthorities::<T>::contains_key(a) || *a != offender
+							})
+							.collect::<Vec<T::DKGId>>();
+						if unjailed_authorities.len() < signature_threshold.into() {
+							// Handle edge case properly (can't have -1 signers)
+							if unjailed_authorities.len() > 0 {
+								JailedSigningAuthorities::<T>::insert(offender, now);
+								// Update the next and pending threshold
+								// Since this updates the signature threshold it likely means that
+								// all signing under the active DKG is failing. We have to ensure
+								// that the DKG signing set contains jailed authorities in a
+								// deterministic manner or expect for a forced rotation.
+								let new_val = u16::try_from(unjailed_authorities.len() - 1)
+									.unwrap_or_default();
+								NextSignatureThreshold::<T>::put(new_val);
+								PendingSignatureThreshold::<T>::put(new_val);
+							}
+						} else {
+							JailedSigningAuthorities::<T>::insert(offender, now)
+						}
+					},
 				};
 
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {

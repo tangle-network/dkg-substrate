@@ -22,7 +22,7 @@ use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
-use log::{debug, error, trace};
+use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::{
 	generic::BlockId,
@@ -145,7 +145,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 					true,
 				);
 			},
-			Err(e) => trace!(
+			Err(e) => error!(
 				target: "dkg",
 				"🕸️  Error signing DKG message: {:?}",
 				e

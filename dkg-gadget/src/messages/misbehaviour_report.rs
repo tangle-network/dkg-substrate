@@ -23,7 +23,7 @@ use dkg_primitives::types::{
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
 };
-use log::{debug, error, trace};
+use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::{
 	generic::BlockId,
@@ -153,13 +153,14 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
+				debug!(target: "dkg", "Gossiping misbehaviour report");
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
 					true,
 				);
 			},
-			Err(e) => trace!(
+			Err(e) => error!(
 				target: "dkg",
 				"🕸️  Error signing DKG message: {:?}",
 				e

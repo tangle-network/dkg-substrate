@@ -413,11 +413,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			let index = i as u32;
 			UnsignedProposalQueue::<T>::remove(
 				TypedChainId::None,
-				DKGPayloadKey::RefreshVote(
-					proposal
-						.nonce
-						.saturating_sub(ProposalNonce(index)),
-				),
+				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
 			);
 		}
 

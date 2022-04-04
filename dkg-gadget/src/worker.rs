@@ -58,7 +58,7 @@ use crate::storage::{
 use dkg_primitives::{
 	types::{DKGError, DKGMisbehaviourMessage, RoundId},
 	utils::get_best_authorities,
-	DKGReport, MisbehaviourType, Proposal,
+	DKGReport, MisbehaviourType, Proposal, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 
 use dkg_runtime_primitives::{
@@ -138,7 +138,8 @@ where
 		AggregatedMisbehaviourReports<AuthorityId>,
 	>,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
-	pub has_sent_gossip_msg: HashMap<[u8; 16], bool>,
+	/// The value is the number of times the message has been sent.
+	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -444,14 +445,20 @@ where
 	) {
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
-		if genesis_authority_set.authorities.is_empty() ||
-			genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID
-		{
+		if genesis_authority_set.authorities.is_empty() {
+			return
+		}
+		// If the rounds is none and we are not using the genesis authority set ID
+		// there is a critical error. I'm not sure how this can happen but it should
+		// prevent an edge case.
+		if self.rounds.is_none() && genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
+			error!(target: "dkg", "🕸️  Rounds is not and authority set is not genesis set ID 0");
 			return
 		}
 
 		// Check if we've already set up the DKG for this authority set
-		if self.rounds.is_some() {
+		if self.rounds.is_some() && !self.rounds.as_ref().unwrap().has_stalled() {
+			debug!(target: "dkg", "🕸️  Rounds exists an has not stalled");
 			return
 		}
 
@@ -470,8 +477,11 @@ where
 
 		// Check whether the worker is in the best set or return
 		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 			self.rounds = None;
 			return
+		} else {
+			info!(target: "dkg", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 		}
 
 		self.rounds = Some(set_up_rounds(
@@ -506,7 +516,7 @@ where
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() {
+		if self.next_rounds.is_some() && !self.next_rounds.as_ref().unwrap().has_stalled() {
 			return
 		}
 
@@ -580,6 +590,8 @@ where
 		send_outgoing_dkg_messages(self);
 		// Get all unsigned proposals and create offline stages for them
 		self.create_offline_stages(header);
+		// Send outgoing messages after offline stage creation
+		send_outgoing_dkg_messages(self);
 		// Get all unsigned proposals and check if they are ready to be signed.
 		self.process_unsigned_proposals(header);
 		self.untrack_unsigned_proposals(header);
@@ -611,6 +623,20 @@ where
 	fn enact_new_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
+			// If the active rounds have stalled, it means we haven't
+			// successfully generate a genesis key yet. Therefore, we
+			// continue to re-run keygen.
+			if let Some(rounds) = self.rounds.as_mut() {
+				if rounds.has_stalled() {
+					self.handle_genesis_dkg_setup(header, active.clone());
+				}
+			}
+			// If the next rounds have stalled, we restart similarly to above.
+			if let Some(rounds) = self.next_rounds.as_mut() {
+				if rounds.has_stalled() {
+					self.handle_queued_dkg_setup(header, queued.clone());
+				}
+			}
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
@@ -797,7 +823,7 @@ where
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
-				if let Some(rounds) = &self.next_rounds {
+				if let Some(rounds) = self.next_rounds.as_mut() {
 					(offender, rounds.get_id(), MisbehaviourType::Keygen)
 				} else {
 					(offender, 0, MisbehaviourType::Keygen)
@@ -805,7 +831,7 @@ where
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
-				if let Some(rounds) = &self.rounds {
+				if let Some(rounds) = self.rounds.as_mut() {
 					(offender, rounds.get_id(), MisbehaviourType::Sign)
 				} else {
 					(offender, 0, MisbehaviourType::Sign)
@@ -816,11 +842,12 @@ where
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
 		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
-		#[allow(clippy::map_entry)]
-		if !self.has_sent_gossip_msg.contains_key(&hash) {
-			gossip_misbehaviour_report(self, misbehaviour_msg);
-			self.has_sent_gossip_msg.insert(hash, true);
+		let count = self.has_sent_gossip_msg.get(&hash).unwrap_or_else(|| &0u8).clone();
+		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
+			return
 		}
+		gossip_misbehaviour_report(self, misbehaviour_msg);
+		self.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 
 	pub fn authenticate_msg_origin(
