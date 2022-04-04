@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use sp_core::ecdsa;
+pub use sp_core::ecdsa;
 pub use sp_core::sr25519;
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
 use sp_runtime::traits::BadOrigin;

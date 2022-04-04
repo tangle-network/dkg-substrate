@@ -15,8 +15,8 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
 
-use std::vec;
-
+use std::{vec,sync::Arc};
+use sp_keystore::{testing::KeyStore, KeystoreExt};
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -133,6 +133,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type TimeToRestart = TimeToRestart;
 	type ProposalHandler = ();
+	type WeightInfo = ();
 }
 
 parameter_types! {
@@ -208,5 +209,9 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-	t.into()
+	let mut ext = sp_io::TestExternalities::new(t);
+	let keystore = KeyStore::new();
+	ext.register_extension(KeystoreExt(Arc::new(keystore)));
+	ext.into()
+
 }
