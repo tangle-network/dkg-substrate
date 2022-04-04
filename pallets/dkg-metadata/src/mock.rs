@@ -33,7 +33,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Permill,
+	Percent, Permill,
 };
 
 use crate as pallet_dkg_metadata;
@@ -131,12 +131,17 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = u128;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type WeightInfo = ();
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);

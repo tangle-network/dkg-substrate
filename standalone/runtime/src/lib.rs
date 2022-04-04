@@ -41,7 +41,7 @@ use sp_runtime::{
 		OpaqueKeys, StaticLookup, Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
+	ApplyExtrinsicResult, MultiSignature, Percent, SaturatedConversion,
 };
 
 use frame_system::EnsureRoot;
@@ -77,8 +77,10 @@ pub type Signature = MultiSignature;
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
-
+/// Resource ID type
 pub type ResourceId = [u8; 32];
+/// Reputation type
+pub type Reputation = u128;
 
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Call, SignedExtra>;
 
@@ -524,6 +526,7 @@ impl pallet_balances::Config for Runtime {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const TransactionByteFee: Balance = 1;
 	pub const OperationalFeeMultiplier: u8 = 5;
 }
@@ -549,7 +552,11 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = Reputation;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
@@ -798,8 +805,8 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> for Runtime {
-		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+	impl dkg_runtime_primitives::DKGApi<Block, DKGId, BlockNumber> for Runtime {
+		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
 			let authorities = DKG::authorities();
 			let authority_set_id = DKG::authority_set_id();
 
@@ -809,7 +816,7 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
 			let queued_authorities = DKG::next_authorities();
 			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 
@@ -870,16 +877,20 @@ impl_runtime_apis! {
 			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
 		}
 
-		fn get_reputations(authorities: Vec<dkg_runtime_primitives::crypto::AuthorityId>) -> Vec<(dkg_runtime_primitives::crypto::AuthorityId, i64)> {
+		fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
 			authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
+		}
+
+		fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect()
+		}
+
+		fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+			set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect()
 		}
 
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
-		}
-
-		fn time_to_restart() -> BlockNumber {
-			DKG::time_to_restart()
 		}
 	}
 

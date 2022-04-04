@@ -79,12 +79,21 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
+#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub enum MisbehaviourType {
+	Keygen,
+	Sign,
+}
+
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports {
+pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
+	/// Offending type
+	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
 	pub round_id: u64,
 	/// The offending authority
-	pub offender: crypto::AuthorityId,
+	pub offender: DKGId,
 	/// A list of reporters
 	pub reporters: Vec<sr25519::Public>,
 	/// A list of signed reports
@@ -131,6 +140,7 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 	}
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
 	KeygenMisbehaviour { offender: AuthorityId },
 	SigningMisbehaviour { offender: AuthorityId },
@@ -201,12 +211,14 @@ sp_api::decl_runtime_apis! {
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
-		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, u128)>;
+		/// Returns the set of jailed keygen authorities from a set of authorities
+		fn get_keygen_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
+		/// Returns the set of jailed signing authorities from a set of authorities
+		fn get_signing_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Get the time to restart for the dkg keygen
-		fn time_to_restart() -> N;
 	}
 }

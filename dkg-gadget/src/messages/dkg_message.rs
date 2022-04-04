@@ -20,7 +20,7 @@ use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
+	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{error, info, trace};
@@ -92,7 +92,17 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(dkg_worker, pub_key.clone(), *round_id);
+		let pub_key_msg = DKGPublicKeyMessage {
+			round_id: *round_id,
+			pub_key: pub_key.clone(),
+			signature: vec![],
+		};
+		let hash = sp_core::blake2_128(&pub_key_msg.encode());
+		#[allow(clippy::map_entry)]
+		if !dkg_worker.has_sent_gossip_msg.contains_key(&hash) {
+			gossip_public_key(dkg_worker, pub_key_msg);
+			dkg_worker.has_sent_gossip_msg.insert(hash, true);
+		}
 	}
 
 	for res in &rounds_send_result {
