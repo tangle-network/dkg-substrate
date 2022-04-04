@@ -125,7 +125,7 @@ where
 		if let Ok(Some(key_pair)) = key_pair {
 			let secret_key = key_pair.to_raw_vec();
 
-			let encrypted_data = fs::read(path.clone())?;
+			let encrypted_data = fs::read(path)?;
 			let decrypted_data = decrypt_data(encrypted_data, secret_key)
 				.map_err(|e| Error::new(ErrorKind::Other, e))?;
 			let stored_local_key: StoredLocalKey = serde_json::from_slice(&decrypted_data)
@@ -204,7 +204,7 @@ where
 		}
 		// Get the best active authorities for setting up rounds
 		let best_active_authorities: Vec<AuthorityId> =
-			worker.get_best_authority_keys(header, active.clone(), true);
+			worker.get_best_authority_keys(header, active, true);
 		// Create the active rounds only if the authority is selected in the best set
 		if find_index::<AuthorityId>(&best_active_authorities[..], &public).is_some() {
 			let jailed_signers = worker.get_signing_jailed(header, &best_active_authorities);
@@ -231,7 +231,7 @@ where
 
 		// Get the best queued authorities for setting up next rounds
 		let best_queued_authorities: Vec<AuthorityId> =
-			worker.get_best_authority_keys(header, queued.clone(), false);
+			worker.get_best_authority_keys(header, queued, false);
 		// Create next rounds only if the authority is selected in the best next set
 		if find_index::<AuthorityId>(&best_queued_authorities[..], &public).is_some() {
 			let jailed_signers = worker.get_signing_jailed(header, &best_queued_authorities);
@@ -241,7 +241,7 @@ where
 				&public,
 				worker.get_next_signature_threshold(header),
 				worker.get_next_keygen_threshold(header),
-				Some(queued_local_key_path.clone()),
+				Some(queued_local_key_path),
 				&jailed_signers,
 			);
 

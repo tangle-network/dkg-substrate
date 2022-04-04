@@ -765,7 +765,7 @@ pub mod pallet {
 					Error::<T>::InvalidSignature
 				})?;
 			// Remove unsigned refresh proposal from queue
-			T::ProposalHandler::handle_signed_refresh_proposal(data.clone())?;
+			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 			NextPublicKeySignature::<T>::put(signature.clone());
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
 			// Handle manual refresh if flag is set
