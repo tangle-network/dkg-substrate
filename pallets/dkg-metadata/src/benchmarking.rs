@@ -19,20 +19,21 @@ use super::*;
 #[allow(unused)]
 use crate::Pallet;
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{AggregatedPublicKeys, RefreshProposalSigned,RefreshProposal,
-							ProposalNonce,AggregatedMisbehaviourReports,
-							crypto::AuthorityId as DKGId,keccak_256,KEY_TYPE,
-						    utils::{sr25519,ecdsa}};
+use dkg_runtime_primitives::{
+	keccak_256,
+	utils::{ecdsa, sr25519},
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, MisbehaviourType, ProposalNonce,
+	RefreshProposal, RefreshProposalSigned, KEY_TYPE,
+};
+
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
 use frame_system::RawOrigin;
-use sp_runtime::{Permill,key_types::AURA};
-use sp_io::crypto::{ecdsa_sign_prehashed,sr25519_sign,ecdsa_generate,sr25519_generate};
-use sp_runtime::traits::TrailingZeroInput;
+use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign};
+use sp_runtime::{key_types::AURA, traits::TrailingZeroInput, Permill};
 
-
-
-const MAX_AUTHORITIES: u32 = 10;
+const MAX_AUTHORITIES: u32 = 20;
 const MAX_BLOCKNUMBER: u32 = 100;
+const BLOCK_NUMBER: u32 = 2;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -42,43 +43,49 @@ fn assert_has_event<T: Config>(generic_event: <T as Config>::Event) {
 	frame_system::Pallet::<T>::assert_has_event(generic_event.into());
 }
 
-fn mock_signature(pub_key:sr25519::Public, dkg_key:ecdsa::Public)->(Vec<u8>,Vec<u8>)  {
+fn mock_signature(pub_key: sr25519::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
 	let msg = dkg_key.encode();
-	let signature:sr25519::Signature= sr25519_sign(AURA,&pub_key,&msg).unwrap();
-	frame_support::log::debug!("mock signature signed by {:?}",pub_key.0);
-	(msg,signature.encode())
+	let signature: sr25519::Signature = sr25519_sign(AURA, &pub_key, &msg).unwrap();
+	(msg, signature.encode())
 }
 
-fn mock_pub_key()->sr25519::Public  {
-	sr25519_generate(AURA,None)
+fn mock_pub_key() -> sr25519::Public {
+	sr25519_generate(AURA, None)
 }
 
-
-fn mock_misbehaviour_report(pub_key:sr25519::Public,offender:DKGId)->Vec<u8>{
-	let round_id:u64 = 1;
+fn mock_misbehaviour_report<T: Config>(
+	pub_key: sr25519::Public,
+	offender: T::DKGId,
+	misbehaviour_type: MisbehaviourType,
+) -> Vec<u8> {
+	let round_id: u64 = 1;
 	let mut payload = Vec::new();
+	payload.extend_from_slice(&match misbehaviour_type {
+		MisbehaviourType::Keygen => [0x01],
+		MisbehaviourType::Sign => [0x02],
+	});
 	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(offender.clone().as_ref());
 
-	let signature = sr25519_sign(AURA,&pub_key,&payload).unwrap();
+	let signature = sr25519_sign(AURA, &pub_key, &payload).unwrap();
 
 	signature.encode()
 }
 
-fn mock_accoun_id<T:frame_system::Config>(pub_key:sr25519::Public)-><T as frame_system::Config>::AccountId{
+fn mock_accoun_id<T: Config>(pub_key: sr25519::Public) -> T::AccountId {
 	pub_key.using_encoded(|entropy| {
 		T::AccountId::decode(&mut TrailingZeroInput::new(entropy))
 			.expect("infinite input; no invalid input; qed")
 	})
 }
 
-
 benchmarks! {
 
 	where_clause {
 		where
 			T::DKGId: From<ecdsa::Public>,
-			T::AccountId: From<sr25519::Public>
+			T::AccountId : From<sr25519::Public>
+
 	}
 
 	set_signature_threshold {
@@ -127,13 +134,6 @@ benchmarks! {
 		assert!(Pallet::<T>::refresh_nonce() ==  refresh_nounce+1);
 	}
 
-	set_time_to_restart {
-		let interval:T::BlockNumber = MAX_BLOCKNUMBER.into();
-	}: _(RawOrigin::Root,interval)
-	verify {
-		assert!(Pallet::<T>::time_to_restart() ==  interval);
-	}
-
 	manual_refresh {
 		let current_dkg = ecdsa_generate(KEY_TYPE,None);
 		let next_dkg = ecdsa_generate(KEY_TYPE,None);
@@ -143,7 +143,6 @@ benchmarks! {
 	verify {
 		assert!(Pallet::<T>::should_manual_refresh() ==  true);
 	}
-
 
 	submit_public_key {
 		let n in 3..MAX_AUTHORITIES;
@@ -191,39 +190,6 @@ benchmarks! {
 			}.into());
 	}
 
-
-	submit_misbehaviour_reports {
-		let n in 3..MAX_AUTHORITIES;
-		let offender = DKGId::from(ecdsa_generate(KEY_TYPE,None));
-		let mut current_authorities:Vec<T::AccountId> = Vec::new();
-		let mut reporters:Vec<sr25519::Public> = Vec::new();
-		let mut signatures: Vec<Vec<u8>> = Vec::new();
-		for id in 1..=n{
-			let authority_id = mock_pub_key();
-			let sig = mock_misbehaviour_report(authority_id,offender.clone());
-			signatures.push(sig);
-			reporters.push(authority_id);
-			current_authorities.push(mock_accoun_id::<T>(authority_id));
-		}
-		let threshold = u16::try_from(current_authorities.len() / 2).unwrap() + 1;
-		SignatureThreshold::<T>::put(threshold);
-		CurrentAuthoritiesAccounts::<T>::put(&current_authorities);
-		let round_id = 1;
-		let aggregated_misbehaviour_reports = AggregatedMisbehaviourReports {
-													round_id,
-													offender,
-													reporters:reporters.clone(),
-													signatures,
-												};
-		let caller = current_authorities[0].clone();
-	}: _(RawOrigin::Signed(caller), aggregated_misbehaviour_reports)
-	verify {
-		assert_last_event::<T>(Event::MisbehaviourReportsSubmitted{
-			reporters: reporters.clone(),
-			}.into());
-	}
-
-
 	submit_public_key_signature {
 		let current_dkg = ecdsa_generate(KEY_TYPE,None);
 		let next_dkg =  ecdsa_generate(KEY_TYPE,None);
@@ -251,8 +217,73 @@ benchmarks! {
 			}.into());
 	}
 
+	submit_misbehaviour_reports {
+		let n in 3..MAX_AUTHORITIES;
+		let offender:T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
+		let mut next_authorities:Vec<T::AccountId> = Vec::new();
+		let mut reporters:Vec<sr25519::Public> = Vec::new();
+		let mut signatures: Vec<Vec<u8>> = Vec::new();
+		let round_id = 1;
+		let misbehaviour_type = MisbehaviourType::Keygen;
+		for id in 1..=n{
+			let authority_id = mock_pub_key();
+			let sig = mock_misbehaviour_report::<T>(authority_id,offender.clone(),misbehaviour_type);
+			signatures.push(sig);
+			reporters.push(authority_id);
+			next_authorities.push(mock_accoun_id::<T>(authority_id));
+		}
+		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
+		NextSignatureThreshold::<T>::put(threshold);
+		NextAuthoritiesAccounts::<T>::put(&next_authorities);
+		let aggregated_misbehaviour_reports= AggregatedMisbehaviourReports {
+													misbehaviour_type,
+													round_id,
+													offender,
+													reporters:reporters.clone(),
+													signatures,
+												};
+		let caller = next_authorities[0].clone();
+	}: _(RawOrigin::Signed(caller), aggregated_misbehaviour_reports)
+	verify {
+		assert_last_event::<T>(Event::MisbehaviourReportsSubmitted{
+			misbehaviour_type,
+			reporters: reporters.clone(),
+			}.into());
+	}
 
+	unjail {
+		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
+		let account_id = T::AccountId::from(mock_pub_key());
+		let block_number: T::BlockNumber = BLOCK_NUMBER.into();
+		AccountToAuthority::<T>::insert(&account_id,offender.clone());
+		JailedKeygenAuthorities::<T>::insert(offender.clone(),block_number);
+		JailedSigningAuthorities::<T>::insert(offender.clone(),block_number);
+		let key_gen_sentence = T::KeygenJailSentence::get();
+		let block_number = key_gen_sentence + T::BlockNumber::from(BLOCK_NUMBER) + T::BlockNumber::from(1u32);
+		frame_system::Pallet::<T>::set_block_number(block_number.into());
+	}: _(RawOrigin::Signed(account_id))
+	verify {
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+	}
+
+	force_unjail_signing {
+		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
+		let block_number : T::BlockNumber = BLOCK_NUMBER.into();
+		JailedSigningAuthorities::<T>::insert(offender.clone(),block_number);
+	}: _(RawOrigin::Root,offender.clone())
+	verify {
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+	}
+
+	force_unjail_keygen {
+		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
+		let block_number: T::BlockNumber = BLOCK_NUMBER.into();
+		JailedKeygenAuthorities::<T>::insert(offender.clone(),block_number);
+	}: _(RawOrigin::Root,offender.clone())
+	verify {
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+	}
 }
 
-
-impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(vec![1, 2, 3,4]), crate::mock::Test);
+impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(vec![1, 2, 3, 4]), crate::mock::Test);
