@@ -239,6 +239,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type Reputation = u128;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type WeightInfo = ();
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";

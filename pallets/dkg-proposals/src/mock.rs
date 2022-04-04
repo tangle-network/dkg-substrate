@@ -169,6 +169,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type Reputation = u128;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type WeightInfo = ();
 }
 
 pub const MILLISECS_PER_BLOCK: u64 = 10000;
