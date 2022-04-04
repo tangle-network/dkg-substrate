@@ -72,7 +72,7 @@ fn mock_misbehaviour_report<T: Config>(
 	signature.encode()
 }
 
-fn mock_accoun_id<T: Config>(pub_key: sr25519::Public) -> T::AccountId {
+fn mock_account_id<T: Config>(pub_key: sr25519::Public) -> T::AccountId {
 	pub_key.using_encoded(|entropy| {
 		T::AccountId::decode(&mut TrailingZeroInput::new(entropy))
 			.expect("infinite input; no invalid input; qed")
