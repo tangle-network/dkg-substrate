@@ -178,12 +178,14 @@ pub mod meta_channel {
 	use std::pin::Pin;
 	use std::sync::Arc;
 	use std::task::{Context, Poll};
+	use curv::arithmetic::Converter;
+	use curv::BigInt;
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 	use parking_lot::{Mutex, RwLock};
 	use futures::{select, StreamExt, TryFutureExt};
 	use log::debug;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage};
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage, SignManual};
 	use round_based::async_runtime::watcher::StderrWatcher;
 	use round_based::{AsyncProtocol, Msg, StateMachine};
 	use round_based::containers::StoreErr;
@@ -342,14 +344,48 @@ pub mod meta_channel {
 			})
 		}
 
-		/*fn new_voting(params: AsyncProtocolParameters<B, C>) -> Result<Self, DKGError> {
+		fn new_voting(params: AsyncProtocolParameters<B, C>) -> Result<Self, DKGError> {
 			let protocol = Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
 				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(params.signed_message_receiver, ProtocolType::Voting);
 
-				while let Some(unsigned_message) = incoming_wrapper.next().await {
-					// TODO: handle entirely here, including signing + sending too wire
-				}
+				// the first step is to generate the partial sig based on the offline stage
+				let completed_offline_stage= params.completed_offline_stage.lock().take().ok_or(DKGError::Vote { reason: "Offline stage has not yet been completed".to_string() })?;
+
+				// TODO: determine number of parties
+				let number_of_parties = 0;
+
+				let (signing, partial_signature) = SignManual::new(
+					// TODO: determine "data to sign"
+					BigInt::from_bytes(args.data_to_sign.as_bytes()),
+					completed_offline_stage,
+				)?;
+
+				let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
+
+				let party_ind = find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key).unwrap() as u16 + 1;
+				let round_id = params.current_validator_set.read().clone().id;
+				let id = params.keystore
+					.authority_id(&keystore.public_keys().unwrap())
+					.unwrap_or_else(|| panic!("Halp"));
+
+				let payload = DKGMsgPayload::Vote(DKGVoteMessage {
+					party_ind,
+					round_key: vec![],
+					partial_signature: partial_sig_bytes
+				});
+
+				// now, broadcast the data
+				let unsigned_dkg_message = DKGMessage { id, payload, round_id };
+				sign_and_send_messages(&params.gossip_engine,&params.keystore, unsigned_dkg_message);
+
+
+				// now, take number_of_parties -1 message (TODO: Map raw json-serded bytes to signatures)
+				let partial_sigs = incoming_wrapper.take(number_of_parties.saturating_sub(1) as _).map_ok(|r| r.body).try_collect().await?;
+				let signature = signing
+					.complete(&partial_signatures)
+					.context("voting stage failed")?;
+				let signature = serde_json::to_string(&signature).context("serialize signature")?;
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
 			});
@@ -358,7 +394,7 @@ pub mod meta_channel {
 				protocol,
 				_pd: Default::default()
 			})
-		}*/
+		}
 
 		fn generate_verification_function(client: Arc<C>, latest_header: Arc<RwLock<Option<B::Header>>>, best_authorities: Vec<Public>, authority_public_key: Public) -> Box<dyn VerifyFn<Arc<SignedDKGMessage<Public>>>> {
 			let latest_header = latest_header.clone();
