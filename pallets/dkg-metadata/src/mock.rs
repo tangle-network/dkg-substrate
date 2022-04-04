@@ -217,5 +217,5 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 	let mut ext = sp_io::TestExternalities::new(t);
 	let keystore = KeyStore::new();
 	ext.register_extension(KeystoreExt(Arc::new(keystore)));
-	ext.into()
+	ext
 }
