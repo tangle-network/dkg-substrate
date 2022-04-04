@@ -99,6 +99,12 @@ where
 	}
 }
 
+/// Loads a stored `StoredLocalKey` from the file system.
+/// Expects the local keystore to exist in order to retrieve the file.
+/// Expects there to be an sr25519 keypair with `KEY_TYPE` = `ACCOUNT`.
+///
+/// Uses the raw keypair as a seed for a secret key input to the XChaCha20Poly1305
+/// encryption cipher.
 pub(crate) fn load_stored_key<B, C, BE>(
 	path: PathBuf,
 	worker: &mut DKGWorker<B, C, BE>,

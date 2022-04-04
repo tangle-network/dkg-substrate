@@ -395,23 +395,31 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			unsigned_proposal,
 		);
 
-		if proposal.nonce > ProposalNonce::from(0) {
-			UnsignedProposalQueue::<T>::remove(
-				TypedChainId::None,
-				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_add(ProposalNonce(1u32))),
-			);
-		}
-
 		Ok(())
 	}
 
 	fn handle_signed_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
-		UnsignedProposalQueue::<T>::remove(
-			TypedChainId::None,
-			DKGPayloadKey::RefreshVote(proposal.nonce),
-		);
+		// Attempt to remove all previous unsigned refresh proposals too
+		// This may also remove ProposerSetUpdate proposals that haven't been signed
+		// yet, but given that this action is only to clean storage when a refresh
+		// fails, we can assume that the previous proposer set update will nonetheless
+		// need to be used to update the governors on the respective webb Apps anyway.
+		let remaining_untyped_proposals: usize =
+			UnsignedProposalQueue::<T>::iter_key_prefix(TypedChainId::None).count();
+
+		for i in 0..remaining_untyped_proposals {
+			let index = i as u32;
+			UnsignedProposalQueue::<T>::remove(
+				TypedChainId::None,
+				DKGPayloadKey::RefreshVote(
+					proposal
+						.nonce
+						.saturating_sub(ProposalNonce(index)),
+				),
+			);
+		}
 
 		Ok(())
 	}

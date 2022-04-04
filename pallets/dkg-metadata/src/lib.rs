@@ -508,7 +508,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let mut signature_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
+			let mut signature_threshold = 1u16;
 			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
 
 			if keygen_threshold <= signature_threshold {
