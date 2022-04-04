@@ -105,7 +105,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
+use dkg_runtime_primitives::{
+	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
+};
 pub use pallet::*;
 
 #[cfg(test)]
@@ -123,9 +125,12 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::offchain::{
-	storage::StorageValueRef,
-	storage_lock::{StorageLock, Time},
+use sp_runtime::{
+	offchain::{
+		storage::StorageValueRef,
+		storage_lock::{StorageLock, Time},
+	},
+	traits::Saturating,
 };
 use sp_std::vec::Vec;
 
@@ -383,11 +388,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
+		// Add new refresh proposal to the queue
 		UnsignedProposalQueue::<T>::insert(
 			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
 			unsigned_proposal,
 		);
+
+		if proposal.nonce > ProposalNonce::from(0) {
+			UnsignedProposalQueue::<T>::remove(
+				TypedChainId::None,
+				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_add(ProposalNonce(1u32))),
+			);
+		}
 
 		Ok(())
 	}

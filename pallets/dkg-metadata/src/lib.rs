@@ -750,11 +750,7 @@ pub mod pallet {
 				nonce: Self::refresh_nonce().into(),
 				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
 			};
-			// Remove unsigned refresh proposal from queue
-			// The assumption here is that even if the proposal signature fails, we still want
-			// to remove the unsigned proposal from the queue to prevent it from being
-			// continuously signed with an outdated nonce.
-			T::ProposalHandler::handle_signed_refresh_proposal(data.clone())?;
+			// Verify signature against the `RefreshProposal`
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
 				.map_err(|_| {
 					#[cfg(feature = "std")]
@@ -768,7 +764,8 @@ pub mod pallet {
 					);
 					Error::<T>::InvalidSignature
 				})?;
-
+			// Remove unsigned refresh proposal from queue
+			T::ProposalHandler::handle_signed_refresh_proposal(data.clone())?;
 			NextPublicKeySignature::<T>::put(signature.clone());
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
 			// Handle manual refresh if flag is set
@@ -846,7 +843,7 @@ pub mod pallet {
 							.into_iter()
 							.filter(|a| !JailedKeygenAuthorities::<T>::contains_key(a))
 							.collect::<Vec<T::DKGId>>();
-						// TODO: This is odd because we don't know the next `next_authorities` yet.
+						// This is odd because we don't know the next `next_authorities` yet.
 						// We anticipate that we will need to decrease the threshold
 						// if it is below the pending keygen threshold.
 						if unjailed_authorities.len() <= Self::pending_keygen_threshold().into() {

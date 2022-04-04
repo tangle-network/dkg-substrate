@@ -42,7 +42,7 @@ use sp_runtime::{
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{try_resume_dkg, DKGPersistenceState},
 };
 
 use crate::messages::{

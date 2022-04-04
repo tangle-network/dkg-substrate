@@ -23,15 +23,14 @@ use dkg_primitives::{
 	serde_json,
 	types::RoundId,
 	utils::{
-		decrypt_data, encrypt_data, get_best_authorities, StoredLocalKey, DKG_LOCAL_KEY_FILE,
-		QUEUED_DKG_LOCAL_KEY_FILE,
+		decrypt_data, encrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
 	},
 };
 use dkg_runtime_primitives::{
 	offchain::crypto::{Pair as AppPair, Public},
 	DKGApi,
 };
-use log::{debug, error};
+use log::debug;
 use sc_client_api::Backend;
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
@@ -255,6 +254,7 @@ where
 
 /// To determine if the protocol should be restarted, we check if the
 /// protocol is stuck at the keygen stage
+#[allow(dead_code)]
 pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
 where
 	B: Block,
@@ -271,7 +271,7 @@ where
 			worker.rounds = Some(rounds);
 			stalled
 		} else {
-			true
+			false
 		}
 	};
 
@@ -281,96 +281,9 @@ where
 			worker.next_rounds = Some(next_round);
 			stalled
 		} else {
-			true
+			false
 		}
 	};
 
 	(should_restart_rounds, should_restart_next_rounds)
-}
-
-/// If we ascertain that the protocol has stalled and we are part of the current authority set or
-/// queued authority set We restart the protocol on our end
-pub(crate) fn try_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker);
-	let mut local_key_path: Option<PathBuf> = None;
-	let mut queued_local_key_path: Option<PathBuf> = None;
-
-	if worker.base_path.is_some() {
-		let base_path = worker.base_path.as_ref().unwrap();
-		local_key_path = Some(base_path.join(DKG_LOCAL_KEY_FILE));
-		queued_local_key_path = Some(base_path.join(QUEUED_DKG_LOCAL_KEY_FILE));
-	}
-	let public = worker.get_authority_public_key();
-
-	let authority_set = worker.current_validator_set.clone();
-	let queued_authority_set = worker.queued_validator_set.clone();
-
-	let latest_block_num = *header.number();
-	if restart_rounds && authority_set.authorities.contains(&public) {
-		debug!(target: "dkg_persistence", "Trying to restart dkg for current validators");
-		let round_id = authority_set.id;
-		let best_authorities: Vec<AuthorityId> = get_best_authorities(
-			worker.get_keygen_threshold(header).into(),
-			&authority_set.authorities,
-			&worker.get_authority_reputations(header, &authority_set.authorities),
-		)
-		.iter()
-		.map(|(_, key)| key.clone())
-		.collect();
-
-		// If the authority is not selected in the keygen set return
-		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
-			let mut rounds = set_up_rounds(
-				&best_authorities,
-				round_id,
-				&public,
-				worker.get_signature_threshold(header),
-				worker.get_keygen_threshold(header),
-				local_key_path,
-				&worker.get_signing_jailed(header, &best_authorities),
-			);
-
-			let _ = rounds.start_keygen(latest_block_num);
-			worker.active_keygen_in_progress = true;
-			worker.dkg_state.listening_for_active_pub_key = true;
-			worker.rounds = Some(rounds);
-		}
-	}
-
-	if restart_next_rounds && queued_authority_set.authorities.contains(&public) {
-		let round_id = queued_authority_set.id;
-		let best_authorities: Vec<AuthorityId> = get_best_authorities(
-			worker.get_next_keygen_threshold(header).into(),
-			&queued_authority_set.authorities,
-			&worker.get_authority_reputations(header, &queued_authority_set.authorities),
-		)
-		.iter()
-		.map(|(_, key)| key.clone())
-		.collect();
-
-		// If the authority is not selected in the keygen set return
-		if find_index::<AuthorityId>(&best_authorities[..], &public).is_some() {
-			debug!(target: "dkg_persistence", "Trying to restart dkg for queued validators");
-			let mut rounds = set_up_rounds(
-				&best_authorities,
-				round_id,
-				&public,
-				worker.get_signature_threshold(header),
-				worker.get_keygen_threshold(header),
-				queued_local_key_path,
-				&worker.get_signing_jailed(header, &best_authorities),
-			);
-
-			let _ = rounds.start_keygen(latest_block_num);
-			worker.queued_keygen_in_progress = true;
-			worker.dkg_state.listening_for_pub_key = true;
-			worker.next_rounds = Some(rounds);
-		}
-	}
 }
