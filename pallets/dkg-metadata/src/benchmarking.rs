@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-//! Benchmarking for dkg-metadata
 
 use super::*;
 
@@ -31,7 +30,7 @@ use frame_system::RawOrigin;
 use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign};
 use sp_runtime::{key_types::AURA, traits::TrailingZeroInput, Permill};
 
-const MAX_AUTHORITIES: u32 = 20;
+const MAX_AUTHORITIES: u32 = 100;
 const MAX_BLOCKNUMBER: u32 = 100;
 const BLOCK_NUMBER: u32 = 2;
 
@@ -85,13 +84,12 @@ benchmarks! {
 		where
 			T::DKGId: From<ecdsa::Public>,
 			T::AccountId : From<sr25519::Public>
-
 	}
 
 	set_signature_threshold {
 		// threshold should be less than total number of next authorities
-		let mut next_authorities:Vec<T::DKGId> = Vec::new();
-		for id in 1..=MAX_AUTHORITIES{
+		let mut next_authorities: Vec<T::DKGId> = Vec::new();
+		for id in 1..= MAX_AUTHORITIES{
 			let account_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
 			next_authorities.push(account_id);
 		}
@@ -108,7 +106,7 @@ benchmarks! {
 		// threshold should be <= total number of next authorities
 		// threshold <= PendingSignatureThreshold
 		let mut next_authorities:Vec<T::DKGId> = Vec::new();
-		for id in 1..=MAX_AUTHORITIES{
+		for id in 1..= MAX_AUTHORITIES{
 			let account_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
 			next_authorities.push(account_id);
 		}
@@ -121,7 +119,7 @@ benchmarks! {
 
 	set_refresh_delay {
 		// new refresh delay should be <= 100
-		let n in 1..100;
+		let n in 1..MAX_BLOCKNUMBER;
 	}: _(RawOrigin::Root, n as u8)
 	verify {
 		assert!(Pallet::<T>::refresh_delay() == Permill::from_percent(n as u32));
@@ -131,28 +129,28 @@ benchmarks! {
 		let refresh_nounce = Pallet::<T>::refresh_nonce();
 	}: _(RawOrigin::Root)
 	verify {
-		assert!(Pallet::<T>::refresh_nonce() ==  refresh_nounce+1);
+		assert!(Pallet::<T>::refresh_nonce() == refresh_nounce+1);
 	}
 
 	manual_refresh {
-		let current_dkg = ecdsa_generate(KEY_TYPE,None);
-		let next_dkg = ecdsa_generate(KEY_TYPE,None);
-		DKGPublicKey::<T>::put((0,current_dkg.encode()));
-		NextDKGPublicKey::<T>::put((1,next_dkg.encode()));
+		let current_dkg = ecdsa_generate(KEY_TYPE, None);
+		let next_dkg = ecdsa_generate(KEY_TYPE, None);
+		DKGPublicKey::<T>::put((0, current_dkg.encode()));
+		NextDKGPublicKey::<T>::put((1, next_dkg.encode()));
 	}: _(RawOrigin::Root)
 	verify {
-		assert!(Pallet::<T>::should_manual_refresh() ==  true);
+		assert!(Pallet::<T>::should_manual_refresh() == true);
 	}
 
 	submit_public_key {
 		let n in 3..MAX_AUTHORITIES;
-		let dkg_key = ecdsa_generate(KEY_TYPE,None);
+		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut current_authorities:Vec<T::AccountId> = Vec::new();
+		let mut current_authorities: Vec<T::AccountId> = Vec::new();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
-			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id,dkg_key.clone()));
-			current_authorities.push(mock_accoun_id::<T>(authority_id));
+			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key.clone()));
+			current_authorities.push(mock_account_id::<T>(authority_id));
 		}
 		let threshold = u16::try_from(current_authorities.len() / 2).unwrap() + 1;
 		SignatureThreshold::<T>::put(threshold);
@@ -160,7 +158,7 @@ benchmarks! {
 		let caller = current_authorities[0].clone();
 	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
 	verify {
-		let (id ,dkg_key) = Pallet::<T>::dkg_public_key();
+		let (id, dkg_key) = Pallet::<T>::dkg_public_key();
 		assert_last_event::<T>(Event::PublicKeySubmitted{
 			compressed_pub_key: dkg_key.clone(),
 			uncompressed_pub_key: Pallet::<T>::decompress_public_key(dkg_key.clone()).unwrap_or_default(),
@@ -169,13 +167,13 @@ benchmarks! {
 
 	submit_next_public_key {
 		let n in 3..MAX_AUTHORITIES;
-		let dkg_key = ecdsa_generate(KEY_TYPE,None);
+		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut next_authorities:Vec<T::AccountId> = Vec::new();
+		let mut next_authorities: Vec<T::AccountId> = Vec::new();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
-			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id,dkg_key.clone()));
-			next_authorities.push(mock_accoun_id::<T>(authority_id));
+			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key.clone()));
+			next_authorities.push(mock_account_id::<T>(authority_id));
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
@@ -191,10 +189,10 @@ benchmarks! {
 	}
 
 	submit_public_key_signature {
-		let current_dkg = ecdsa_generate(KEY_TYPE,None);
-		let next_dkg =  ecdsa_generate(KEY_TYPE,None);
-		DKGPublicKey::<T>::put((0,current_dkg.encode()));
-		NextDKGPublicKey::<T>::put((1,next_dkg.encode()));
+		let current_dkg = ecdsa_generate(KEY_TYPE, None);
+		let next_dkg =  ecdsa_generate(KEY_TYPE, None);
+		DKGPublicKey::<T>::put((0, current_dkg.encode()));
+		NextDKGPublicKey::<T>::put((1, next_dkg.encode()));
 		let uncompressed_pub_key = Pallet::<T>::decompress_public_key(next_dkg.encode()).unwrap();
 		let refresh_nounce = Pallet::<T>::refresh_nonce();
 		let refresh_proposal = RefreshProposal {
@@ -203,15 +201,16 @@ benchmarks! {
 								};
 		let hash = keccak_256(&refresh_proposal.encode());
 		let signature = ecdsa_sign_prehashed(KEY_TYPE, &current_dkg, &hash).expect("Expected a valid signature");
-		let signed_proposal = RefreshProposalSigned { nonce: ProposalNonce::from(0),
-													 signature: signature.encode()
-													};
+		let signed_proposal = RefreshProposalSigned {
+								nonce: ProposalNonce::from(0),
+								signature: signature.encode()
+							};
 		ShouldManualRefresh::<T>::put(true);
 		let all_accounts = Pallet::<T>::current_authorities_accounts();
 		let caller:T::AccountId = all_accounts[0].clone();
 	}: _(RawOrigin::Signed(caller), signed_proposal)
 	verify {
-		assert!(Pallet::<T>::should_manual_refresh()== false);
+		assert!(Pallet::<T>::should_manual_refresh() == false);
 		assert_has_event::<T>(Event::NextPublicKeySignatureSubmitted{
 			pub_key_sig: signature.encode(),
 			}.into());
@@ -219,18 +218,18 @@ benchmarks! {
 
 	submit_misbehaviour_reports {
 		let n in 3..MAX_AUTHORITIES;
-		let offender:T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
-		let mut next_authorities:Vec<T::AccountId> = Vec::new();
-		let mut reporters:Vec<sr25519::Public> = Vec::new();
+		let offender: T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE, None));
+		let mut next_authorities: Vec<T::AccountId> = Vec::new();
+		let mut reporters: Vec<sr25519::Public> = Vec::new();
 		let mut signatures: Vec<Vec<u8>> = Vec::new();
 		let round_id = 1;
 		let misbehaviour_type = MisbehaviourType::Keygen;
 		for id in 1..=n{
 			let authority_id = mock_pub_key();
-			let sig = mock_misbehaviour_report::<T>(authority_id,offender.clone(),misbehaviour_type);
+			let sig = mock_misbehaviour_report::<T>(authority_id, offender.clone(), misbehaviour_type);
 			signatures.push(sig);
 			reporters.push(authority_id);
-			next_authorities.push(mock_accoun_id::<T>(authority_id));
+			next_authorities.push(mock_account_id::<T>(authority_id));
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
@@ -252,37 +251,47 @@ benchmarks! {
 	}
 
 	unjail {
-		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
-		let account_id = T::AccountId::from(mock_pub_key());
-		let block_number: T::BlockNumber = BLOCK_NUMBER.into();
-		AccountToAuthority::<T>::insert(&account_id,offender.clone());
-		JailedKeygenAuthorities::<T>::insert(offender.clone(),block_number);
-		JailedSigningAuthorities::<T>::insert(offender.clone(),block_number);
+		for id in 1..MAX_AUTHORITIES{
+			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
+			let account_id = T::AccountId::from(sr25519::Public::from_raw([id as u8; 32]));
+			let block_number: T::BlockNumber = id.into();
+			AccountToAuthority::<T>::insert(&account_id, dkg_id.clone());
+			JailedKeygenAuthorities::<T>::insert(dkg_id.clone(), block_number);
+			JailedSigningAuthorities::<T>::insert(dkg_id.clone(), block_number);
+		}
+		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
+		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
 		let key_gen_sentence = T::KeygenJailSentence::get();
-		let block_number = key_gen_sentence + T::BlockNumber::from(BLOCK_NUMBER) + T::BlockNumber::from(1u32);
+		let block_number = key_gen_sentence + T::BlockNumber::from(BLOCK_NUMBER);
 		frame_system::Pallet::<T>::set_block_number(block_number.into());
-	}: _(RawOrigin::Signed(account_id))
+	}: _(RawOrigin::Signed(caller))
 	verify {
-		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
-		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone()) == false);
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone()) == false);
 	}
 
 	force_unjail_signing {
-		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
-		let block_number : T::BlockNumber = BLOCK_NUMBER.into();
-		JailedSigningAuthorities::<T>::insert(offender.clone(),block_number);
-	}: _(RawOrigin::Root,offender.clone())
+		for id in 1..MAX_AUTHORITIES{
+			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
+			let block_number: T::BlockNumber = id.into();
+			JailedSigningAuthorities::<T>::insert(dkg_id.clone(), block_number);
+		}
+		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
+	}: _(RawOrigin::Root, offender.clone())
 	verify {
-		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+		assert!(JailedSigningAuthorities::<T>::contains_key(offender.clone()) == false);
 	}
 
 	force_unjail_keygen {
-		let offender = T::DKGId::from(ecdsa_generate(KEY_TYPE,None));
-		let block_number: T::BlockNumber = BLOCK_NUMBER.into();
-		JailedKeygenAuthorities::<T>::insert(offender.clone(),block_number);
-	}: _(RawOrigin::Root,offender.clone())
+		for id in 1..MAX_AUTHORITIES{
+			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
+			let block_number: T::BlockNumber = id.into();
+			JailedKeygenAuthorities::<T>::insert(dkg_id.clone(), block_number);
+		}
+		let offender = T::DKGId::from(ecdsa::Public::from_raw([1u8; 33]));
+	}: _(RawOrigin::Root, offender.clone())
 	verify {
-		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone())== false);
+		assert!(JailedKeygenAuthorities::<T>::contains_key(offender.clone()) == false);
 	}
 }
 
