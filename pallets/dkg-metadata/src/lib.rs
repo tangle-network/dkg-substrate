@@ -135,6 +135,12 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+pub mod weights;
+use weights::WeightInfo;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -181,6 +187,8 @@ pub mod pallet {
 		/// Default number of blocks after which dkg keygen will be restarted if it has stalled
 		#[pallet::constant]
 		type TimeToRestart: Get<Self::BlockNumber>;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -260,7 +268,7 @@ pub mod pallet {
 		/// After all, if we are in a new session the next DKG may have already completed.
 		/// Therefore, when we update the thresholds we are updating a threshold
 		/// that will become the next threshold after the next session update.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_signature_threshold())]
 		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -283,7 +291,7 @@ pub mod pallet {
 		/// Therefore, when we update the thresholds we are updating a threshold
 		/// that will become the next threshold after the next session update.
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
 		pub fn set_keygen_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -301,7 +309,7 @@ pub mod pallet {
 			Self::update_keygen_threshold(new_threshold)
 		}
 
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_refresh_delay(*new_delay as u32))]
 		pub fn set_refresh_delay(
 			origin: OriginFor<T>,
 			new_delay: u8,
@@ -316,8 +324,9 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -353,7 +362,7 @@ pub mod pallet {
 		}
 
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_next_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -390,7 +399,7 @@ pub mod pallet {
 		}
 
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
@@ -446,7 +455,7 @@ pub mod pallet {
 		}
 
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports,
@@ -472,7 +481,7 @@ pub mod pallet {
 			Err(Error::<T>::InvalidMisbehaviourReports.into())
 		}
 
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_time_to_restart())]
 		pub fn set_time_to_restart(
 			origin: OriginFor<T>,
 			interval: T::BlockNumber,
@@ -486,7 +495,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account that is calling this must be root.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::manual_increment_nonce())]
 		#[transactional]
 		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -502,7 +511,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account that is initiating the refresh process and must be root.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::manual_refresh())]
 		#[transactional]
 		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
