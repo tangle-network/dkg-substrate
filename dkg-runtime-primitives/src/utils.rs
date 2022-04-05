@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use sp_core::ecdsa;
-pub use sp_core::sr25519;
+pub use sp_core::{ecdsa, sr25519};
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
 use sp_runtime::traits::BadOrigin;
 use sp_std::vec::Vec;
@@ -75,18 +74,20 @@ pub fn verify_signer_from_set(
 	maybe_signers: Vec<sr25519::Public>,
 	msg: &[u8],
 	signature: &[u8],
-) -> (Option<sr25519::Public>, bool) {
+) -> (Option<sr25519::Public>, bool, Option<usize>) {
 	let mut signer = None;
-	let res = maybe_signers.iter().any(|x| {
+	let mut inx: Option<usize> = None;
+	let res = maybe_signers.iter().enumerate().any(|(index, x)| {
 		let decoded_signature = sr25519::Signature::from_slice(signature);
 		let res = sp_io::crypto::sr25519_verify(&decoded_signature, msg, x);
 		if res {
+			inx = Some(index);
 			signer = Some(*x);
 		}
 
 		res
 	});
-	(signer, res)
+	(signer, res, inx)
 }
 
 pub fn to_slice_32(val: &[u8]) -> Option<[u8; 32]> {

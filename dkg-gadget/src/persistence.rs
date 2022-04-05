@@ -208,7 +208,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_keygen_threshold(header).into(),
 					&active.authorities,
-					&worker.get_authority_reputations(header, &active),
+					&worker.get_authority_reputations(header, &active.authorities),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -223,6 +223,7 @@ where
 						worker.get_signature_threshold(header),
 						worker.get_keygen_threshold(header),
 						Some(local_key_path),
+						&worker.get_signing_jailed(header, &best_authorities),
 					);
 
 					if local_key.is_some() {
@@ -256,7 +257,7 @@ where
 				let best_authorities: Vec<AuthorityId> = get_best_authorities(
 					worker.get_next_keygen_threshold(header).into(),
 					&queued.authorities,
-					&worker.get_authority_reputations(header, &queued),
+					&worker.get_authority_reputations(header, &queued.authorities),
 				)
 				.iter()
 				.map(|(_, key)| key.clone())
@@ -271,6 +272,7 @@ where
 						worker.get_next_signature_threshold(header),
 						worker.get_next_keygen_threshold(header),
 						Some(queued_local_key_path),
+						&worker.get_signing_jailed(header, &best_authorities),
 					);
 
 					if queued_local_key.is_some() {
@@ -302,10 +304,7 @@ where
 
 /// To determine if the protocol should be restarted, we check if the
 /// protocol is stuck at the keygen stage
-pub(crate) fn should_restart_dkg<B, C, BE>(
-	worker: &mut DKGWorker<B, C, BE>,
-	header: &B::Header,
-) -> (bool, bool)
+pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
 where
 	B: Block,
 	BE: Backend<B>,
@@ -314,7 +313,6 @@ where
 {
 	let rounds = worker.rounds.take();
 	let next_rounds = worker.next_rounds.take();
-	worker.get_time_to_restart(header);
 
 	let should_restart_rounds = {
 		if let Some(rounds) = rounds {
@@ -348,7 +346,7 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker, header);
+	let (restart_rounds, restart_next_rounds) = should_restart_dkg(worker);
 	let mut local_key_path: Option<PathBuf> = None;
 	let mut queued_local_key_path: Option<PathBuf> = None;
 
@@ -369,7 +367,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_keygen_threshold(header).into(),
 			&authority_set.authorities,
-			&worker.get_authority_reputations(header, &authority_set),
+			&worker.get_authority_reputations(header, &authority_set.authorities),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -384,6 +382,7 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				local_key_path,
+				&worker.get_signing_jailed(header, &best_authorities),
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);
@@ -398,7 +397,7 @@ where
 		let best_authorities: Vec<AuthorityId> = get_best_authorities(
 			worker.get_next_keygen_threshold(header).into(),
 			&queued_authority_set.authorities,
-			&worker.get_authority_reputations(header, &queued_authority_set),
+			&worker.get_authority_reputations(header, &queued_authority_set.authorities),
 		)
 		.iter()
 		.map(|(_, key)| key.clone())
@@ -414,6 +413,7 @@ where
 				worker.get_signature_threshold(header),
 				worker.get_keygen_threshold(header),
 				queued_local_key_path,
+				&worker.get_signing_jailed(header, &best_authorities),
 			);
 
 			let _ = rounds.start_keygen(latest_block_num);

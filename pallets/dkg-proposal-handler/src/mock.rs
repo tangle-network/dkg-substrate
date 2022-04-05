@@ -25,7 +25,7 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Permill,
+	Percent, Permill,
 };
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
@@ -206,6 +206,7 @@ impl pallet_session::SessionManager<AccountId> for MockSessionManager {
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
@@ -232,8 +233,13 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = u128;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type WeightInfo = ();
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
