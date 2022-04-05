@@ -15,7 +15,10 @@
 use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
-use sp_application_crypto::{key_types::AURA, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
+use sp_application_crypto::{
+	key_types::{ACCOUNT, AURA},
+	sr25519, CryptoTypePublicPair, RuntimeAppPublic,
+};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -144,7 +147,7 @@ impl DKGKeystore {
 
 		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
 
-		let sig = SyncCryptoStore::sign_with(&*store, AURA, &crypto_pair, message)
+		let sig = SyncCryptoStore::sign_with(&*store, ACCOUNT, &crypto_pair, message)
 			.map_err(|e| error::Error::Keystore(e.to_string()))?
 			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
 

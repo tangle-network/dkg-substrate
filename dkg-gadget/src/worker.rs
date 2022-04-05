@@ -665,7 +665,7 @@ where
 		if let Some(header) = self.latest_header.as_ref() {
 			let at: BlockId<B> = BlockId::hash(header.hash());
 			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
-
+			println!("++++++++++ AUTHORITY ACCOUNTS {:?}", accounts);
 			if accounts.is_some() {
 				authority_accounts = accounts;
 			}
