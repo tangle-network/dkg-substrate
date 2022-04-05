@@ -67,4 +67,4 @@
 
  * [`System`](https://github.com/paritytech/substrate/tree/master/frame/system)
  * [`Support`](https://github.com/paritytech/substrate/tree/master/frame/support)
- * [`DKG Proposal Handler`](../../pallet-dkg-proposal-handler)
+ * [`DKG Proposal Handler`](https://github.com/webb-tools/dkg-substrate/blob/664aebd10e6c1dc9e787a0465fd36b60e5e82c0d/pallets/dkg-proposal-handler)
