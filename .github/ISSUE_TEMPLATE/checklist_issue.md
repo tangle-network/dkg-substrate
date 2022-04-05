@@ -1,5 +1,5 @@
 ---
-name: Checklist issue type
+name: Checklist
 about: Creates a checklist of tasks that make up a larger milestone
 title: '[CHECKLIST] '
 labels: 'type: checklist'
