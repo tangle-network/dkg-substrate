@@ -5,7 +5,7 @@
   </a>
   </div>
 <p align="center">
-    <strong>🚀 Thresholds ECDSA Distributed Key Generation Protocol 🔑 </strong>
+    <strong>🚀 Threshold ECDSA Distributed Key Generation Protocol 🔑 </strong>
     <br />
     <sub> ⚠️ Beta Software ⚠️ </sub>
 </p>
