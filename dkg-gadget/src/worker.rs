@@ -218,16 +218,17 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 }
 
+#[derive(Clone)]
 pub struct AsyncProtocolParameters<B: Block, C> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub keystore: DKGKeystore,
 	pub completed_offline_stage: Arc<Mutex<Option<CompletedOfflineStage>>>,
-	pub signed_message_receiver: SignedMessageReceiver,
+	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
-	pub best_authorities: Vec<Public>,
-	pub authority_public_key: Public
+	pub best_authorities: Arc<Vec<Public>>,
+	pub authority_public_key: Arc<Public>
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -238,6 +239,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 
+	// NOTE: This must be ran after every session
 	fn generate_async_proto_params(&self, best_authorities: Vec<Public>, authority_public_key: Public) -> AsyncProtocolParameters<B, C> {
 		AsyncProtocolParameters {
 			latest_header: self.latest_header.clone(),
@@ -245,10 +247,10 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			gossip_engine: self.gossip_engine.clone(),
 			keystore: self.key_store.clone(),
 			completed_offline_stage: self.completed_offline_stage.clone(),
-			signed_message_receiver: self.to_async_proto.subscribe(),
+			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe())),
 			current_validator_set: self.current_validator_set.clone(),
-			best_authorities,
-			authority_public_key
+			best_authorities: Arc::new(best_authorities),
+			authority_public_key: Arc::new(authority_public_key)
 		}
 	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
