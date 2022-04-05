@@ -162,7 +162,7 @@ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
 instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
 
-<h3 id="launch"> Run local testnet with <a href="https://github.com/paritytech/polkadot-launch">polkadot-launch</a> </h3>
+<h3 id="launch"> Run local testnet with <a href="https://github.com/paritytech/polkadot-launch">polkadot-launch</a> ☄️</h3>
 
 The fastest way to set up the DKG to run as a parachain is to make use of [polkadot-launch](https://github.com/paritytech/polkadot-launch). Follow the below steps to get up and running! 🏃
 
@@ -190,7 +190,7 @@ If everything went well you should see `POLKADOT LAUNCHED SUCCESSFULLY 🚀`. To
 tail -f 9988.log
 ```
 
-<h3 id="para"> Run local testnet with <a ref="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
+<h3 id="para"> Run local testnet with <a href="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
 
 This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
 
