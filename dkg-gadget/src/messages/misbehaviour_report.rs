@@ -97,13 +97,8 @@ where
 				.insert((msg.misbehaviour_type, msg.round_id, msg.offender), reports.clone());
 		}
 
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_signature_threshold(header) as usize;
-		if reports.reporters.len() > threshold {
-			store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
-		}
+		// Try to store reports offchain
+		try_store_offchain(dkg_worker, reports)?;
 	}
 
 	Ok(())
@@ -191,9 +186,41 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 
 		dkg_worker
 			.aggregated_misbehaviour_reports
-			.insert((report.misbehaviour_type, report.round_id, report.offender), reports);
-		debug!(target: "dkg", "Gossiping misbehaviour report and signature")
+			.insert((report.misbehaviour_type, report.round_id, report.offender), reports.clone());
+		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
+
+		// Try to store reports offchain
+		let _ = try_store_offchain(dkg_worker, reports);
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}
+}
+
+pub(crate) fn try_store_offchain<B, C, BE>(
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	reports: AggregatedMisbehaviourReports<AuthorityId>,
+) -> Result<(), DKGError>
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+	// Fetch the current threshold for the DKG. We will use the
+	// current threshold to determine if we have enough signatures
+	// to submit the next DKG public key.
+	let threshold = dkg_worker.get_signature_threshold(header) as usize;
+	match reports.misbehaviour_type {
+		MisbehaviourType::Keygen =>
+			if reports.reporters.len() > threshold {
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+			},
+		MisbehaviourType::Sign =>
+			if reports.reporters.len() >= threshold {
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+			},
+	};
+
+	Ok(())
 }

@@ -411,6 +411,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 		for i in 0..remaining_untyped_proposals {
 			let index = i as u32;
+			// Ensure we break when we reach the bottom
+			if proposal.nonce.saturating_sub(ProposalNonce(index)) == ProposalNonce(0u32) {
+				break
+			}
+			// Otherwise continue removing old refresh votes
 			UnsignedProposalQueue::<T>::remove(
 				TypedChainId::None,
 				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),

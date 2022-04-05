@@ -79,9 +79,9 @@ where
 
 	// Signing
 	#[builder(default)]
-	signers: Vec<u16>,
+	pub signers: Vec<u16>,
 	#[builder(default)]
-	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
+	pub offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
 	#[builder(default)]
 	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
@@ -566,6 +566,26 @@ where
 		None
 	}
 
+	/// Get the unjailed signers
+	pub fn get_unjailed_signers(&self) -> Vec<u16> {
+		self.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| !self.jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect()
+	}
+
+	/// Get the jailed signers
+	pub fn get_jailed_signers(&self) -> Vec<u16> {
+		self.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| self.jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect()
+	}
+
 	/// Generates the signer set by randomly selecting t+1 signers
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
@@ -576,41 +596,22 @@ where
 		let (_, threshold, parties) = self.dkg_params();
 		// Select the random subset using the local key as a seed
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		// let set = (1..=self.authorities.len())
-		// 	.map(|x| u16::try_from(x).unwrap())
-		// 	.collect::<Vec<u16>>();
-		let unjailed_set = self
-			.authorities
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| !self.jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap())
-			.collect::<Vec<u16>>();
-
-		if unjailed_set.len() > threshold.into() {
-			select_random_set(seed, unjailed_set, threshold + 1).map(|set| {
-				info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", self.round_id, threshold, parties, set);
-				set
-			})
-		} else {
-			let jailed_set = self
-				.authorities
-				.iter()
-				.enumerate()
-				.filter(|(_, key)| self.jailed_signers.contains(key))
-				.map(|(i, _)| u16::try_from(i + 1).unwrap())
-				.collect::<Vec<u16>>();
-			let diff = usize::from(threshold) + 1 - unjailed_set.len();
-			let combined = unjailed_set
+		let mut final_set = self.get_unjailed_signers();
+		// Mutate the final set if we don't have enough unjailed signers
+		if final_set.len() <= threshold.into() {
+			let jailed_set = self.get_jailed_signers();
+			let diff = usize::from(threshold) + 1 - final_set.len();
+			final_set = final_set
 				.iter()
 				.chain(jailed_set.iter().take(diff))
 				.cloned()
 				.collect::<Vec<u16>>();
-			select_random_set(seed, combined, threshold + 1).map(|set| {
-				info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signer: ({:?})", self.round_id, threshold, parties, set);
-				set
-			})
 		}
+
+		select_random_set(seed, final_set, threshold + 1).map(|set| {
+			info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", self.round_id, threshold, parties, set);
+			set
+		})
 	}
 
 	fn keygen_params(&self) -> KeygenParams {

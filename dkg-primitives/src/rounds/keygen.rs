@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 use curv::elliptic::curves::Secp256k1;
+use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use log::{debug, error, info, trace, warn};
 use round_based::{IsCritical, Msg, StateMachine};
 

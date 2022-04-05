@@ -908,6 +908,7 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 			let authority =
 				T::AuthorityIdOf::convert(origin).ok_or(Error::<T>::InvalidControllerAccount)?;
+			// TODO: Consider adding a payment to unjail similar to a slash
 			if frame_system::Pallet::<T>::block_number() >
 				JailedKeygenAuthorities::<T>::get(authority.clone())
 					.saturating_add(T::KeygenJailSentence::get())
@@ -1126,6 +1127,7 @@ impl<T: Config> Pallet<T> {
 			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
+			// TODO: Verify signer from set over the best authorities set (compute it on chain)
 			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, signature);
 
 			if can_proceed.1 && !valid_reporters.contains(&reports.reporters[inx]) {
@@ -1136,7 +1138,7 @@ impl<T: Config> Pallet<T> {
 		valid_reporters
 	}
 
-	/// Change the current DKG authority set by rotating in the `new_authority_ids` set.
+	/// Change the current DKG authority set by rotating to the `new_authority_ids` set.
 	///
 	/// This function is meant to be called on a new session when the next authorities
 	/// become the current or `new` authorities. We track the accounts for these
@@ -1148,6 +1150,7 @@ impl<T: Config> Pallet<T> {
 		next_authorities_accounts: Vec<T::AccountId>,
 		forced: bool,
 	) {
+		// Compute next ID
 		let next_id = Self::authority_set_id() + 1u64;
 		// Ensure pending thresholds remain valid across authority set changes that may break.
 		// We update the pending thresholds because we call `refresh_keys` below, which rotates
@@ -1188,6 +1191,8 @@ impl<T: Config> Pallet<T> {
 		Self::execute_rotation(forced);
 	}
 
+	/// Initializes the storage values for authorities and their accounts
+	/// on a genesis session and triggers the first authority set change.
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
 			return
@@ -1209,6 +1214,13 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(authority_account_ids.to_vec(), 0, authorities.to_vec());
 	}
 
+	/// An offchain function that collects the genesis DKG public key
+	/// and submits it to the chain.
+	///
+	/// This submission process is modelled similarly after an oracle.
+	/// We require the respective threshold of submissions of the same
+	/// DKG public key to be submitted in order to modify the on-chain
+	/// storage.
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK);
 		{
@@ -1255,6 +1267,13 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the next DKG public key
+	/// and submits it to the chain.
+	///
+	/// This submission process is modelled similarly after an oracle.
+	/// We require the respective threshold of submissions of the same
+	/// DKG public key to be submitted in order to modify the on-chain
+	/// storage.
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
 		{
@@ -1303,6 +1322,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the next DKG public key
+	/// signature and submits it to the chain.
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
@@ -1340,6 +1361,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the misbehaviour reports in
+	/// the offchain storage and submits them to the chain.
 	fn submit_misbehaviour_reports_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
@@ -1384,6 +1407,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Identifies if a new `RefreshProposal` should be created
+	/// at a given block number. This is meant to be called on the
+	/// `on_initialize` hook at every block to check if we should begin
+	/// the refresh proposal signing process.
 	pub fn should_refresh(now: T::BlockNumber) -> bool {
 		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
@@ -1396,6 +1423,9 @@ impl<T: Config> Pallet<T> {
 		false
 	}
 
+	/// Rotates the thresholds into their next places.
+	/// Next thresholds become current thresholds.
+	/// Pending thresholds become next thresholds.
 	pub fn update_thresholds() {
 		// Update the active thresholds for the next session
 		SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
@@ -1425,6 +1455,8 @@ impl<T: Config> Pallet<T> {
 		};
 
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
+			// Set refresh in progress to false
+			RefreshInProgress::<T>::put(false);
 			// Insert historical round metadata consisting of the current round's
 			// public key before rotation, the next round's public key, and the refresh
 			// signature signed by the current key refreshing the next.
@@ -1443,8 +1475,6 @@ impl<T: Config> Pallet<T> {
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
-			// Set refresh in progress to false
-			RefreshInProgress::<T>::put(false);
 			let log: DigestItem = DigestItem::Consensus(
 				DKG_ENGINE_ID,
 				ConsensusLog::<T::DKGId>::KeyRefresh {
@@ -1505,7 +1535,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		Self::initialize_authorities(&authorities, &authority_account_ids);
 	}
 
-	// We want to run this function always because there are other factors(forcing a new era) that
+	// We want to run this function always because there are other factors (forcing a new era) that
 	// can affect changes to the queued validator set that the session pallet will not take not of
 	// until the next session, and this could cause the value of `changed` to be wrong, causing an
 	// out of sync between this pallet and the session pallet. The `changed` value is true most of

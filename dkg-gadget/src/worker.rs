@@ -16,7 +16,7 @@
 
 use sc_keystore::LocalKeystore;
 use std::{
-	collections::{BTreeSet, HashMap},
+	collections::{hash_map::RandomState, BTreeSet, HashMap, HashSet},
 	marker::PhantomData,
 	path::PathBuf,
 	sync::Arc,
@@ -948,6 +948,9 @@ where
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
+			// Current signers before resetting jailed signers
+			let signers_hashset =
+				rounds.signers.iter().cloned().collect::<HashSet<u16, RandomState>>();
 			// Update jailed signers each time an offline stage is created
 			// This will trigger a regeneration of signing parties in hopes of
 			// both randomizing the set of signers as well as removing jailed
@@ -958,12 +961,21 @@ where
 				.runtime_api()
 				.get_signing_jailed(&at, rounds.authorities.clone())
 				.unwrap_or_default();
+			// Update the jailed signers which may mutate the signers set
 			rounds.set_jailed_signers(jailed_signers);
+			let new_signers_hashset =
+				rounds.signers.iter().cloned().collect::<HashSet<u16, RandomState>>();
 			// Iterate through each unsigned proposal and create offline stages
 			for unsigned_proposals in &unsigned_proposals {
 				let key = (unsigned_proposals.typed_chain_id, unsigned_proposals.key);
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
+				}
+
+				// If there are newly jailed signers we need to ensure we restart the offline stage
+				// process
+				if signers_hashset.intersection(&new_signers_hashset).next().is_some() {
+					rounds.offlines.remove(&key.encode());
 				}
 
 				if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
