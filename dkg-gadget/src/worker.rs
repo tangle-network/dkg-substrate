@@ -15,6 +15,7 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
+use sp_core::ecdsa;
 use std::{
 	collections::{hash_map::RandomState, BTreeSet, HashMap, HashSet},
 	marker::PhantomData,
@@ -35,10 +36,7 @@ use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
 use sp_api::BlockId;
-use sp_runtime::{
-	traits::{Block, Header, NumberFor},
-	AccountId32,
-};
+use sp_runtime::traits::{Block, Header, NumberFor};
 
 use crate::{
 	keystore::DKGKeystore,
@@ -63,7 +61,7 @@ use dkg_primitives::{
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	utils::{sr25519, to_slice_32},
+	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID,
 };
 
@@ -322,13 +320,6 @@ where
 		self.key_store
 			.authority_id(&self.key_store.public_keys().unwrap())
 			.unwrap_or_else(|| panic!("Halp"))
-	}
-
-	/// Gets the active Sr25519 authority key
-	pub fn get_sr25519_public_key(&mut self) -> sp_core::sr25519::Public {
-		self.key_store
-			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -676,31 +667,21 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
-		let signature = signed_dkg_msg.signature.unwrap_or_default();
+		let signature = signed_dkg_msg.signature.unwrap();
 		// Get authority accounts
-		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
-
+		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = self.latest_header.as_ref() {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			let accounts = self.client.runtime_api().get_authority_accounts(&at).ok();
-
-			if accounts.is_some() {
-				authority_accounts = accounts;
-			}
+			authorities = self.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
 		}
 
-		if authority_accounts.is_none() {
+		if authorities.is_none() {
 			return Err(DKGError::GenericError { reason: "No authorities".into() })
 		}
 
-		let check_signers = |xs: Vec<AccountId32>| {
-			return dkg_runtime_primitives::utils::verify_signer_from_set(
+		let check_signers = |xs: &[AuthorityId]| {
+			return dkg_runtime_primitives::utils::verify_signer_from_set_ecdsa(
 				xs.iter()
-					.map(|x| {
-						sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-							panic!("Failed to convert account id to sr25519 public key")
-						}))
-					})
+					.map(|x| ecdsa::Public::from_raw(to_slice_33(&x.encode()).unwrap()))
 					.collect(),
 				&encoded,
 				&signature,
@@ -708,8 +689,7 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0) ||
-			check_signers(authority_accounts.unwrap().1)
+		if check_signers(&authorities.clone().unwrap().0) || check_signers(&authorities.unwrap().1)
 		{
 			Ok(dkg_msg)
 		} else {
@@ -842,7 +822,7 @@ where
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
 		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
-		let count = self.has_sent_gossip_msg.get(&hash).unwrap_or_else(|| &0u8).clone();
+		let count = *self.has_sent_gossip_msg.get(&hash).unwrap_or(&0u8);
 		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
 			return
 		}
@@ -853,29 +833,29 @@ where
 	pub fn authenticate_msg_origin(
 		&self,
 		is_main_round: bool,
-		authority_accounts: (Vec<AccountId32>, Vec<AccountId32>),
+		authorities: (Vec<Public>, Vec<Public>),
 		msg: &[u8],
 		signature: &[u8],
-	) -> Result<sr25519::Public, DKGError> {
-		let get_keys = |accts: &Vec<AccountId32>| {
+	) -> Result<Public, DKGError> {
+		let get_keys = |accts: &[Public]| {
 			accts
 				.iter()
 				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
+					ecdsa::Public(to_slice_33(&x.encode()).unwrap_or_else(|| {
 						panic!("Failed to convert account id to sr25519 public key")
 					}))
 				})
-				.collect::<Vec<sr25519::Public>>()
+				.collect::<Vec<ecdsa::Public>>()
 		};
 
-		let maybe_signers = if is_main_round {
-			get_keys(&authority_accounts.0)
-		} else {
-			get_keys(&authority_accounts.1)
-		};
+		let maybe_signers =
+			if is_main_round { get_keys(&authorities.0) } else { get_keys(&authorities.1) };
 
-		let (maybe_signer, success, _) =
-			dkg_runtime_primitives::utils::verify_signer_from_set(maybe_signers, msg, signature);
+		let (maybe_signer, success) = dkg_runtime_primitives::utils::verify_signer_from_set_ecdsa(
+			maybe_signers,
+			msg,
+			signature,
+		);
 
 		if !success {
 			return Err(DKGError::GenericError {
@@ -883,7 +863,7 @@ where
 			})
 		}
 
-		Ok(maybe_signer.unwrap())
+		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
 	/// Generate a random delay to wait before taking an action.

@@ -111,7 +111,7 @@ use dkg_runtime_primitives::{
 		SUBMIT_KEYS_AT,
 	},
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
-	utils::{sr25519, to_slice_32, verify_signer_from_set},
+	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
 	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
@@ -164,7 +164,13 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
-		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize + AsRef<[u8]>;
+		type DKGId: Member
+			+ Parameter
+			+ RuntimeAppPublic
+			+ MaybeSerializeDeserialize
+			+ AsRef<[u8]>
+			+ Into<ecdsa::Public>
+			+ From<ecdsa::Public>;
 		/// Jail lengths for misbehaviours
 		type KeygenJailSentence: Get<Self::BlockNumber>;
 		type SigningJailSentence: Get<Self::BlockNumber>;
@@ -445,6 +451,8 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// No mapped account to authority
+		NoMappedAccount,
 		/// Invalid threshold
 		InvalidThreshold,
 		/// Must be queued  to become an authority
@@ -492,7 +500,7 @@ pub mod pallet {
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
-			reporters: Vec<sr25519::Public>,
+			reporters: Vec<T::DKGId>,
 		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
@@ -623,17 +631,16 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let authorities = Self::current_authorities_accounts();
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
+			let authorities = Self::authorities();
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;
-			for (key, accounts) in dict.iter() {
-				if accounts.len() >= (threshold + 1) as usize {
+			for (key, reporters) in dict.iter() {
+				if reporters.len() >= (threshold + 1) as usize {
 					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
 					Self::deposit_event(Event::PublicKeySubmitted {
 						compressed_pub_key: key.clone(),
@@ -642,15 +649,13 @@ pub mod pallet {
 					});
 					accepted = true;
 
-					for account in accounts {
+					for authority in reporters {
 						let decay: Percent = T::DecayPercentage::get();
-						if let Some(authority) = AccountToAuthority::<T>::get(account) {
-							let reputation = AuthorityReputations::<T>::get(authority.clone());
-							AuthorityReputations::<T>::insert(
-								authority,
-								decay.mul_floor(reputation).saturating_add(1_000_000_000u32.into()),
-							);
-						}
+						let reputation = AuthorityReputations::<T>::get(authority.clone());
+						AuthorityReputations::<T>::insert(
+							authority,
+							decay.mul_floor(reputation).saturating_add(1_000_000_000u32.into()),
+						);
 					}
 
 					break
@@ -679,11 +684,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let next_authorities = Self::next_authorities_accounts();
-			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
+			let next_authorities = Self::next_authorities();
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			let threshold = Self::next_signature_threshold();
 
@@ -804,17 +808,16 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<T::DKGId>,
 		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 			let offender = reports.offender.clone();
 			let misbehaviour_type = reports.misbehaviour_type;
 			let authorities = match misbehaviour_type {
 				// We assume genesis ran successfully. Therefore, keygen misbehaviours are from next
 				// keygen authorities
-				MisbehaviourType::Keygen => Self::next_authorities_accounts(),
+				MisbehaviourType::Keygen => Self::next_authorities(),
 				// Signing misbehaviours are from current authorities
-				MisbehaviourType::Sign => Self::current_authorities_accounts(),
+				MisbehaviourType::Sign => Self::authorities(),
 			};
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
 			// Get the threshold for the misbehaviour type
 			let signature_threshold = match misbehaviour_type {
@@ -867,7 +870,7 @@ pub mod pallet {
 							.collect::<Vec<T::DKGId>>();
 						if unjailed_authorities.len() < signature_threshold.into() {
 							// Handle edge case properly (can't have -1 signers)
-							if unjailed_authorities.len() > 0 {
+							if !unjailed_authorities.is_empty() {
 								JailedSigningAuthorities::<T>::insert(offender, now);
 								// Update the next and pending threshold
 								// Since this updates the signature threshold it likely means that
@@ -1075,29 +1078,32 @@ impl<T: Config> Pallet<T> {
 
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
-		authorities: Vec<T::AccountId>,
-	) -> BTreeMap<Vec<u8>, Vec<T::AccountId>> {
-		let mut dict: BTreeMap<Vec<u8>, Vec<T::AccountId>> = BTreeMap::new();
+		authorities: Vec<T::DKGId>,
+	) -> BTreeMap<Vec<u8>, Vec<T::DKGId>> {
+		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
 			let maybe_signers = authorities
 				.iter()
 				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
+					ecdsa::Public(to_slice_33(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to ecdsa public key")
 					}))
 				})
-				.collect::<Vec<sr25519::Public>>();
+				.collect::<Vec<ecdsa::Public>>();
 
-			let (_, success, index) = verify_signer_from_set(maybe_signers, &pub_key, &signature);
+			let (maybe_authority, success) =
+				verify_signer_from_set_ecdsa(maybe_signers, &pub_key, &signature);
 
 			if success {
+				let authority = T::DKGId::from(maybe_authority.unwrap());
 				if !dict.contains_key(&pub_key) {
 					dict.insert(pub_key.clone(), Vec::new());
 				}
-				let authority_account = &authorities[index.unwrap_or_default()];
 				let temp = dict.get_mut(&pub_key).unwrap();
-				temp.push(authority_account.clone());
+				if !temp.contains(&authority) {
+					temp.push(authority);
+				}
 			}
 		}
 
@@ -1106,19 +1112,10 @@ impl<T: Config> Pallet<T> {
 
 	pub fn process_misbehaviour_reports(
 		reports: AggregatedMisbehaviourReports<T::DKGId>,
-		authorities: Vec<T::AccountId>,
-	) -> Vec<sr25519::Public> {
+		verifying_set: Vec<T::DKGId>,
+	) -> Vec<T::DKGId> {
 		let mut valid_reporters = Vec::new();
 		for (inx, signature) in reports.signatures.iter().enumerate() {
-			let maybe_signers = authorities
-				.iter()
-				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
-					}))
-				})
-				.collect::<Vec<sr25519::Public>>();
-
 			let mut signed_payload = Vec::new();
 			signed_payload.extend_from_slice(&match reports.misbehaviour_type {
 				MisbehaviourType::Keygen => [0x01],
@@ -1128,10 +1125,15 @@ impl<T: Config> Pallet<T> {
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
 			// TODO: Verify signer from set over the best authorities set (compute it on chain)
-			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, signature);
+			let verifying_set: Vec<ecdsa::Public> = verifying_set
+				.iter()
+				.map(|x| ecdsa::Public(to_slice_33(&x.encode()).unwrap_or([0u8; 33])))
+				.collect();
+			let (_, success) =
+				verify_signer_from_set_ecdsa(verifying_set, &signed_payload, signature);
 
-			if can_proceed.1 && !valid_reporters.contains(&reports.reporters[inx]) {
-				valid_reporters.push(reports.reporters[inx]);
+			if success && !valid_reporters.contains(&reports.reporters[inx]) {
+				valid_reporters.push(reports.reporters[inx].clone());
 			}
 		}
 

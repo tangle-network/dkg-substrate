@@ -26,10 +26,7 @@ use dkg_primitives::{
 		decrypt_data, encrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
 	},
 };
-use dkg_runtime_primitives::{
-	offchain::crypto::{Pair as AppPair, Public},
-	DKGApi,
-};
+use dkg_runtime_primitives::DKGApi;
 use log::debug;
 use sc_client_api::Backend;
 use sp_api::{BlockT as Block, HeaderT as Header};
@@ -67,10 +64,10 @@ where
 	if let Some(path) = path {
 		if let Some(local_keystore) = worker.local_keystore.clone() {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
-			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-				&Public::try_from(&worker.get_sr25519_public_key().0[..])
-					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
-			);
+			let key_pair =
+				local_keystore.as_ref().key_pair::<dkg_runtime_primitives::crypto::Pair>(
+					&worker.get_authority_public_key(),
+				);
 
 			if let Ok(Some(key_pair)) = key_pair {
 				let secret_key = key_pair.to_raw_vec();
@@ -117,10 +114,9 @@ where
 {
 	if let Some(local_keystore) = worker.local_keystore.clone() {
 		debug!(target: "dkg_persistence", "Loading local key for {:?}", &path);
-		let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-			&Public::try_from(&worker.get_sr25519_public_key().0[..])
-				.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
-		);
+		let key_pair = local_keystore
+			.as_ref()
+			.key_pair::<dkg_runtime_primitives::crypto::Pair>(&worker.get_authority_public_key());
 
 		if let Ok(Some(key_pair)) = key_pair {
 			let secret_key = key_pair.to_raw_vec();

@@ -27,7 +27,6 @@ pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
 pub use proposal::*;
-use sp_application_crypto::sr25519;
 
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
@@ -105,7 +104,7 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// The offending authority
 	pub offender: DKGId,
 	/// A list of reporters
-	pub reporters: Vec<sr25519::Public>,
+	pub reporters: Vec<DKGId>,
 	/// A list of signed reports
 	pub signatures: Vec<Vec<u8>>,
 }
