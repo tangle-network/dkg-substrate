@@ -250,7 +250,7 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
 #[test]
 fn create_successful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -340,7 +340,7 @@ fn create_successful_proposal() {
 #[test]
 fn create_unsucessful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"transfer");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"transfer");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -428,7 +428,7 @@ fn create_unsucessful_proposal() {
 #[test]
 fn execute_after_threshold_change() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"transfer");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"transfer");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -499,7 +499,7 @@ fn execute_after_threshold_change() {
 #[test]
 fn proposal_expires() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -644,7 +644,7 @@ fn should_reset_proposers_if_authorities_changed() {
 #[test]
 fn only_current_authorities_should_make_successful_proposals() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
@@ -779,7 +779,7 @@ fn proposers_tree_height_should_compute_correctly() {
 #[test]
 fn proposers_iter_keys_should_only_contain_active_proposers() {
 	let src_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(src_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		assert_eq!(Proposers::<Test>::iter_keys().count(), 3);
