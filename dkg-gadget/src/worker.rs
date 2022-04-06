@@ -224,6 +224,9 @@ where
 	///
 	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
 	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
+	///
+	/// This should never execute unless we are certain that the rotation will succeed, i.e.
+	/// that the signature of the next DKG public key has been created and stored on-chain.
 	fn rotate_local_key_files(&mut self) {
 		let mut local_key_path: Option<PathBuf> = None;
 		let mut queued_local_key_path: Option<PathBuf> = None;
@@ -284,6 +287,12 @@ where
 	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_keygen_threshold(&at).unwrap_or_default()
+	}
+
+	/// Get the signature of the next DKG public key
+	pub fn get_next_pub_key_sig(&self, header: &B::Header) -> Option<Vec<u8>> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().next_pub_key_sig(&at).ok().unwrap_or(None)
 	}
 
 	/// Get the jailed keygen authorities
@@ -632,8 +641,14 @@ where
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
-				// Rotate the queued key file contents into the local key file
-				self.rotate_local_key_files();
+				// Rotate the queued key file contents into the local key file if the next
+				// DKG public key signature has been posted on-chain.
+				if self.get_next_pub_key_sig(header).is_some() {
+					debug!(target: "dkg", "🕸️  ROTATING LOCAL KEY FILE");
+					self.rotate_local_key_files();
+				} else {
+					debug!(target: "dkg", "🕸️  WAITING FOR NEXT DKG PUBLIC KEY SIG");
+				}
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Rotate the rounds since the authority set has changed
@@ -954,7 +969,8 @@ where
 
 				// If there are newly jailed signers we need to ensure we restart the offline stage
 				// process
-				if signers_hashset.intersection(&new_signers_hashset).next().is_some() {
+				if signers_hashset.difference(&new_signers_hashset).next().is_some() {
+					debug!(target: "dkg", "🕸️  FOUND INTERSECTION, REMOVING OLD OFFLINE STAGE\n{:?}\n{:?}", signers_hashset, new_signers_hashset);
 					rounds.offlines.remove(&key.encode());
 				}
 
