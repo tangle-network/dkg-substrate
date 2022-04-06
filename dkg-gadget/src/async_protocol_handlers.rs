@@ -16,17 +16,17 @@
 use std::{task::{Context, Poll}, pin::Pin};
 use std::sync::Arc;
 
-use codec::Encode;
+
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::types::{DKGError, DKGMessage, SignedDKGMessage, DKGMsgPayload};
-use dkg_runtime_primitives::utils::to_slice_32;
+
 use futures::{stream::Stream, Sink};
 use log::error;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{LocalKey, ProtocolMessage};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::OfflineProtocolMessage;
 use round_based::Msg;
-use sp_core::sr25519;
-use sp_runtime::AccountId32;
+
+
 use tokio_stream::wrappers::BroadcastStream;
 use dkg_runtime_primitives::crypto::Public;
 
@@ -51,10 +51,6 @@ impl<T: TransformIncoming> IncomingAsyncProtocolWrapper<T> {
 			ty
 		}
 	}
-}
-
-pub struct OutgoingAsyncProtocolWrapper<T: TransformOutgoing> {
-    pub sender: futures::channel::mpsc::UnboundedSender<T::Output>,
 }
 
 #[derive(Debug, Clone)]
@@ -137,40 +133,6 @@ where
     }
 }
 
-impl<T> Sink<Msg<T>> for OutgoingAsyncProtocolWrapper<T>
-where
-    T: TransformOutgoing
-{
-    type Error = DKGError;
-
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sender).poll_ready(cx)
-            .map_err(|err| DKGError::GenericError { reason: err.to_string() })
-    }
-
-    fn start_send(mut self: Pin<&mut Self>, item: Msg<T>) -> Result<(), Self::Error> {
-        let transformed_item = item.body.transform();
-        match transformed_item {
-            Ok(item) => Pin::new(&mut self.sender).start_send(item).map_err(|err| DKGError::GenericError { reason: err.to_string() }),
-            Err(err) => {
-                // log the error
-                error!(target: "dkg", "🕸️  Failed to transform outgoing message: {:?}", err);
-                Ok(())
-            }
-        }
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sender).poll_flush(cx)
-            .map_err(|err| DKGError::GenericError { reason: err.to_string() })
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sender).poll_close(cx)
-            .map_err(|err| DKGError::GenericError { reason: err.to_string() })
-    }
-}
-
 pub mod meta_channel {
 	use std::fmt::Debug;
 	use std::future::Future;
@@ -181,8 +143,8 @@ pub mod meta_channel {
 	use curv::arithmetic::Converter;
 	use curv::BigInt;
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-	use parking_lot::{Mutex, RwLock};
-	use futures::{select, StreamExt, TryFutureExt, TryStreamExt};
+	use parking_lot::{Mutex};
+	use futures::{StreamExt, TryFutureExt, TryStreamExt};
 	use log::debug;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage, PartialSignature, SignManual};
@@ -194,11 +156,11 @@ pub mod meta_channel {
 	use serde::Serialize;
 	use dkg_runtime_primitives::{AuthoritySetId, DKGApi};
 	use sp_runtime::traits::{Block, Header};
-	use dkg_runtime_primitives::AuthoritySet;
+
 	use dkg_runtime_primitives::crypto::Public;
 	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
 	use dkg_runtime_primitives::crypto::AuthorityId;
-	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, SignedMessageReceiver, VerifyFn};
+	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, VerifyFn};
 	use crate::{Client, DKGKeystore};
 	use crate::messages::dkg_message::sign_and_send_messages;
 	use crate::utils::find_index;
@@ -254,7 +216,7 @@ pub mod meta_channel {
 			match payload {
 				DKGMsgPayload::Offline(msg) => {
 					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error as Error;
-					let message: Msg<OfflineProtocolMessage> = serde_json::from_slice(msg.offline_msg.as_slice()).map_err(|err| Error::HandleMessage(StoreErr::NotForMe))?;
+					let message: Msg<OfflineProtocolMessage> = serde_json::from_slice(msg.offline_msg.as_slice()).map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
 					to_async_proto.unbounded_send(message).map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
 				},
 
@@ -403,7 +365,7 @@ pub mod meta_channel {
 					.complete(&sigs)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
-				let signature = serde_json::to_string(&signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+				let _signature = serde_json::to_string(&signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
 			});

@@ -48,8 +48,7 @@ use crate::{
 
 use crate::messages::{
 	dkg_message::send_outgoing_dkg_messages,
-	misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
-	public_key_gossip::handle_public_key_broadcast,
+	misbehaviour_report::{gossip_misbehaviour_report},
 };
 
 use crate::storage::{

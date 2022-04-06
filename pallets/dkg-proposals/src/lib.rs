@@ -95,7 +95,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::{Encode, EncodeAppend, EncodeLike};
+use codec::{EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,

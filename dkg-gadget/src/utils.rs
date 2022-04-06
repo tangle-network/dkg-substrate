@@ -23,7 +23,7 @@ use std::path::PathBuf;
 
 /// Finds the index of a value in a vector. Returns None if the value is not found.
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
-	queue.iter().enumerate().find(|(i, v)| value == *v).map(|r| r.0)
+	queue.iter().enumerate().find(|(_i, v)| value == *v).map(|r| r.0)
 }
 
 /// Sets up the Multi-party ECDSA rounds struct used to receive, process, and handle
