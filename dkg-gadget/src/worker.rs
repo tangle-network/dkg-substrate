@@ -218,17 +218,33 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 }
 
-#[derive(Clone)]
 pub struct AsyncProtocolParameters<B: Block, C> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub keystore: DKGKeystore,
 	pub completed_offline_stage: Arc<Mutex<Option<CompletedOfflineStage>>>,
-	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>,
+	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>
+}
+
+// Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
+impl<B: Block, C> Clone for AsyncProtocolParameters<B, C> {
+	fn clone(&self) -> Self {
+		Self {
+			latest_header: self.latest_header.clone(),
+			client: self.client.clone(),
+			gossip_engine: self.gossip_engine.clone(),
+			keystore: self.keystore.clone(),
+			completed_offline_stage: self.completed_offline_stage.clone(),
+			signed_message_receiver: self.signed_message_receiver.clone(),
+			current_validator_set: self.current_validator_set.clone(),
+			best_authorities: self.best_authorities.clone(),
+			authority_public_key: self.authority_public_key.clone()
+		}
+	}
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -247,7 +263,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			gossip_engine: self.gossip_engine.clone(),
 			keystore: self.key_store.clone(),
 			completed_offline_stage: self.completed_offline_stage.clone(),
-			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe())),
+			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe()))),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: Arc::new(best_authorities),
 			authority_public_key: Arc::new(authority_public_key)

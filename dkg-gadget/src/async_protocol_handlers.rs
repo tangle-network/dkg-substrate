@@ -224,7 +224,7 @@ pub mod meta_channel {
 		}
 
 		fn handle_unsigned_message(to_async_proto: &futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err>;
-		fn on_finish<B, C>(_result: <Self as StateMachine>::Output, _params: &AsyncProtocolParameters<B, C>) {}
+		fn on_finish<B: Block, C>(_result: <Self as StateMachine>::Output, _params: &AsyncProtocolParameters<B, C>) {}
 	}
 
 	impl StateMachineIface for Keygen {
@@ -264,7 +264,7 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn on_finish<B, C>(result: <Self as StateMachine>::Output, params: &AsyncProtocolParameters<B, C>) {
+		fn on_finish<B: Block, C>(result: <Self as StateMachine>::Output, params: &AsyncProtocolParameters<B, C>) {
 			log::info!(target: "dkg", "Completed offline stage successfully!");
 			*params.completed_offline_stage.lock() = Some(result);
 		}
@@ -285,8 +285,7 @@ pub mod meta_channel {
 					Self::new_inner(OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 				}
 				ProtocolType::Voting => {
-					unimplemented!("Voting not yet implemented")
-					//Self::new_voting(params)
+					Self::new_voting(params)
 				}
 			}
 		}
@@ -351,19 +350,19 @@ pub mod meta_channel {
 				// the below wrapper will map signed messages into unsigned messages
 				let verify_fn = Self::generate_verification_function(params.clone());
 				let incoming = params.signed_message_receiver.lock().take().unwrap();
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ProtocolType::Voting, verify_fn);
+				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ProtocolType::Voting, verify_fn);
 
 				// the first step is to generate the partial sig based on the offline stage
 				let completed_offline_stage= params.completed_offline_stage.lock().take().ok_or(DKGError::Vote { reason: "Offline stage has not yet been completed".to_string() })?;
 
-				// TODO: determine number of parties
-				let number_of_parties = 0;
+				let number_of_parties = params.best_authorities.len();
+				log::info!(target: "dkg", "Will now begin the voting stage with n={} parties", number_of_parties);
 
 				let (signing, partial_signature) = SignManual::new(
 					// TODO: determine "data to sign"
-					BigInt::from_bytes(INSERT HERE),
+					BigInt::from_bytes(b"Hello world!"),
 					completed_offline_stage,
-				)?;
+				).map_err(|err| DKGError::Vote { reason: err.to_string() })?;
 
 				let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
 
@@ -380,18 +379,31 @@ pub mod meta_channel {
 				let unsigned_dkg_message = DKGMessage { id, payload, round_id };
 				sign_and_send_messages(&params.gossip_engine,&params.keystore, unsigned_dkg_message);
 
-				// now, take number_of_parties -1 messages
-				let partial_sigs = incoming_wrapper.take(number_of_parties.saturating_sub(1) as _).map_ok(|r| match r.body {
-					DKGMsgPayload::Vote(dkg_vote_msg) => {
-						serde_json::from_slice(&dkg_vote_msg.partial_signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })
-					}
+				let number_of_partial_sigs = number_of_parties.saturating_sub(1) as usize;
+				let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
-					 _ => unreachable!("Should not happen")
-				}).try_collect::<Vec<PartialSignature>>().await?;
+				while let Some(msg) = incoming_wrapper.take(number_of_partial_sigs).next().await {
+					match msg.body.payload {
+						DKGMsgPayload::Vote(dkg_vote_msg) => {
+							let partial = serde_json::from_slice::<PartialSignature>(&dkg_vote_msg.partial_signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+							sigs.push(partial);
+						}
+
+						_ => unreachable!("Should not happen")
+					}
+				}
+
+				if sigs.len() != number_of_partial_sigs {
+					log::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
+					return Err(DKGError::Vote { reason: "Invalid number of received partial sigs".to_string() })
+				}
+
+
 				let signature = signing
-					.complete(&partial_sigs)
-					.context("voting stage failed")?;
-				let signature = serde_json::to_string(&signature).context("serialize signature")?;
+					.complete(&sigs)
+					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+
+				let signature = serde_json::to_string(&signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
 			});
@@ -417,7 +429,7 @@ pub mod meta_channel {
 			let client = params.client;
 
 			Box::new(move |msg: Arc<SignedDKGMessage<Public>>| {
-				let latest_header = &*params.latest_header.read();
+				let latest_header = &*latest_header.read();
 				let client = &client;
 
 				let party_inx = find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key).unwrap() as u16 + 1;
