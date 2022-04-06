@@ -135,6 +135,12 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+pub mod weights;
+use weights::WeightInfo;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -208,6 +214,8 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -547,7 +555,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new signature threshold for the DKG.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_signature_threshold())]
 		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -574,7 +582,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new keygen threshold for the DKG.
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
 		pub fn set_keygen_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -599,7 +607,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `new_delay` - The percentage of elapsed session duration to wait before adding an
 		///   unsigned refresh proposal to the unsigned proposal queue.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_refresh_delay(*new_delay as u32))]
 		pub fn set_refresh_delay(
 			origin: OriginFor<T>,
 			new_delay: u8,
@@ -626,7 +634,7 @@ pub mod pallet {
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
 		///   DKG public keys.
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -679,7 +687,7 @@ pub mod pallet {
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
 		///   DKG public keys.
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_next_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -729,7 +737,7 @@ pub mod pallet {
 		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
 		///   and nonce.
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
@@ -803,7 +811,7 @@ pub mod pallet {
 		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
 		///   authority
 		#[transactional]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<T::DKGId>,
@@ -906,7 +914,7 @@ pub mod pallet {
 		/// for the authority to be removed from the jail.
 		///
 		/// * `origin` - The account origin.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::unjail())]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 			let authority =
@@ -934,7 +942,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the keygen jail.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -950,7 +958,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the signing jail.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_signing())]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -966,7 +974,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::manual_increment_nonce())]
 		#[transactional]
 		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -984,7 +992,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account that is initiating the refresh process.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::manual_refresh())]
 		#[transactional]
 		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
