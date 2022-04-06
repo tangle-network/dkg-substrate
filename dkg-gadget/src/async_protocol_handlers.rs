@@ -20,8 +20,8 @@ use std::sync::Arc;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::types::{DKGError, DKGMessage, SignedDKGMessage, DKGMsgPayload};
 
-use futures::{stream::Stream, Sink};
-use log::error;
+use futures::{stream::Stream};
+
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{LocalKey, ProtocolMessage};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::OfflineProtocolMessage;
 use round_based::Msg;
@@ -154,7 +154,8 @@ pub mod meta_channel {
 	use sc_client_api::Backend;
 	use sc_network_gossip::GossipEngine;
 	use serde::Serialize;
-	use dkg_runtime_primitives::{AuthoritySetId, DKGApi};
+	use sp_runtime::generic::BlockId;
+	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, keccak_256, Proposal};
 	use sp_runtime::traits::{Block, Header};
 
 	use dkg_runtime_primitives::crypto::Public;
@@ -320,9 +321,29 @@ pub mod meta_channel {
 				let number_of_parties = params.best_authorities.len();
 				log::info!(target: "dkg", "Will now begin the voting stage with n={} parties", number_of_parties);
 
+				let message = || -> Result<[u8; 32], DKGError> {
+					let lock = params.latest_header.read();
+					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
+					let at: BlockId<B> = BlockId::hash(latest_header.hash());
+					let unsigned_proposals = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
+					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+
+					let mut data_to_hash = vec![];
+
+					for unsigned_proposal in unsigned_proposals {
+						let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
+						log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
+						if let Proposal::Unsigned { data, .. } = unsigned_proposal.proposal {
+							log::debug!(target: "dkg", "Adding unsigned proposal to hash vec");
+							data_to_hash.extend(data);
+						}
+					}
+
+					Ok(keccak_256(&data_to_hash))
+				};
+
 				let (signing, partial_signature) = SignManual::new(
-					// TODO: determine "data to sign"
-					BigInt::from_bytes(b"Hello world!"),
+					BigInt::from_bytes(&message()?),
 					completed_offline_stage,
 				).map_err(|err| DKGError::Vote { reason: err.to_string() })?;
 
@@ -344,6 +365,7 @@ pub mod meta_channel {
 				let number_of_partial_sigs = number_of_parties.saturating_sub(1) as usize;
 				let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
+				// obtain number of parties - 1 messages (i.e., all except self)
 				while let Some(msg) = incoming_wrapper.take(number_of_partial_sigs).next().await {
 					match msg.body.payload {
 						DKGMsgPayload::Vote(dkg_vote_msg) => {
