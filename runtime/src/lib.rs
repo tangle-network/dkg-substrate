@@ -454,6 +454,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type Reputation = Reputation;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
+	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
 parameter_types! {

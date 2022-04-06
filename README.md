@@ -1,34 +1,90 @@
-<h1 align="center">Webb DKG</h1>
-
+<h1 align="center">Webb DKG 🕸️ </h1>
+<div align="center">
+<a href="https://www.webb.tools/">
+    <img alt="Webb Logo" src="./assets/webb-icon.svg" width="15%" height="30%" />
+  </a>
+  </div>
 <p align="center">
-    <strong>🕸️  The Webb DKG  🧑‍✈️</strong>
+    <strong>🚀 Threshold ECDSA Distributed Key Generation Protocol 🔑 </strong>
     <br />
     <sub> ⚠️ Beta Software ⚠️ </sub>
 </p>
 
-<br />
+<div align="center" >
 
-## Build & Run
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webb-tools/dkg-substrate/check?style=flat-square)](https://github.com/webb-tools/dkg-substrate/actions)
+[![Codecov](https://img.shields.io/codecov/c/gh/webb-tools/dkg-substrate?style=flat-square&token=HNT1CEZ01E)](https://codecov.io/gh/webb-tools/dkg-substrate)
+[![License Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
+[![Twitter](https://img.shields.io/twitter/follow/webbprotocol.svg?style=flat-square&label=Twitter&color=1DA1F2)](https://twitter.com/webbprotocol)
+[![Telegram](https://img.shields.io/badge/Telegram-gray?logo=telegram)](https://t.me/webbprotocol)
+[![Discord](https://img.shields.io/discord/833784453251596298.svg?style=flat-square&label=Discord&logo=discord)](https://discord.gg/cv8EfJu3Tn)
 
-Follow these steps to prepare a local Substrate development environment :hammer_and_wrench:
+</div>
 
-### Setup of Machine
+<!-- TABLE OF CONTENTS -->
+<h2 id="table-of-contents"> 📖 Table of Contents</h2>
 
-If necessary, refer to the setup instructions at the
-[Substrate Developer Hub](https://docs.substrate.io/v3/getting-started/installation/#manual-installation).
+<details open="open">
+  <summary>Table of Contents</summary>
+  <ul>
+    <li><a href="#start"> Getting Started</a></li>
+    <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#install">Installation</a></li>
+        <ul>
+          <li><a href="#trouble">Troubleshooting Apple Silicon</a>
+          </li>
+        </ul>
+    </ul>
+    <li><a href="#usage">Usage</a></li>
+    <ul>
+        <li><a href="#standalone">Standalone Testnet</a></li>
+        <li><a href="#launch">Run local testnet with polkadot-launch</a></li>
+        <li><a href="#para">Run local testnet with parachain-launch</a></li>
+    </ul>
+    <li><a href="#test">Testing</a></li>
+    <li><a href="#contribute">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+  </ul>  
+</details>
 
-#### Mac OS dependency 
-Install gmp dependency  
+<h1 id="start"> Getting Started  🎉 </h1>
+
+The DKG is a multi-party computation protocol that generates a group public and private key. We aim to use this group keypair to sign arbitrary messages that will govern protocols deployed around the blockchain ecosystem. One primary purpose for the DKG is to govern and facilitate operations of the private signature bridge/anchor protocol.
+
+The DKG is meant to be coupled with the relayer network of the system. Currently, there is a fixed set of proposers that can propose messages to be signed by the DKG. This set includes only the active validators or collators of the underlying chain. We hope to increase the set of proposers to any relayer that is participating around the system as well.
+
+For additional information, please refer to the [Webb DKG Rust Docs](https://docs.webb.tools/dkg-substrate/dkg_gadget/index.html) 📝. Have feedback on how to improve the dkg? Or have a specific question to ask? Checkout the [DKG Feedback Discussion](https://github.com/webb-tools/feedback/discussions/categories/dkg-feedback) 💬.
+
+## Prerequisites
+
+This guide uses <https://rustup.rs> installer and the `rustup` tool to manage the Rust toolchain.
+
+First install and configure `rustup`:
+
+```bash
+# Install
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Configure
+source ~/.cargo/env
 ```
-brew install gmp
+
+Configure the Rust toolchain to default to the latest stable version, add nightly and the nightly wasm target:
+
+```bash
+rustup default nightly
+rustup update
+rustup update nightly
+rustup target add wasm32-unknown-unknown --toolchain nightly
 ```
 
-### Build
+Great! Now your Rust environment is ready! 🚀🚀
 
-Once the development environment is set up, build the DKG. This command will
-build the
-[Wasm Runtime](https://docs.substrate.io/v3/advanced/executor/#wasm-execution) and
-[native](https://docs.substrate.io/v3/advanced/executor/#native-execution) code:
+**Note:** You may need additional dependencies, checkout [substrate.io](https://docs.substrate.io/v3/getting-started/installation) for more information.
+
+## Installation 💻
+
+Once the development environment is set up, build the DKG. This command will build the [Wasm Runtime](https://docs.substrate.io/v3/advanced/executor/#wasm-execution) and [native](https://docs.substrate.io/v3/advanced/executor/#native-execution) code:
 
 ```bash
 cargo build --release
@@ -68,7 +124,17 @@ In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-dar
 echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
 ```
 
-## Running the `dkg-standalone-node`
+Ensure `gmp` dependency is installed correctly.
+
+```
+brew install gmp
+```
+
+<h1 id="usage"> Usage </h1>
+
+<h2 style="border-bottom:none"> Quick Start ⚡ </h2>
+
+<h3 id="standalone"> Standalone Local Testnet </h3>
 
 Currently the easiest way to run the DKG is to use a 3-node local testnet using `dkg-standalone-node`. We will call those nodes `Alice`, `Bob` and
 `Charlie`. Each node will use the built-in development account with the same name, i.e. node `Alice` will use the `Alice` development
@@ -96,38 +162,37 @@ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
 instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
 
-## Setting up debugging logs
+<h3 id="launch"> Run local testnet with <a href="https://github.com/paritytech/polkadot-launch">polkadot-launch</a> ☄️</h3>
 
-If you would like to run the dkg with verbose logs you may add the following arguments during initial setup. You may change the target to include `debug | error | info| trace | warn`. Further, you may also want to review [Substrate runtime debugging](https://docs.substrate.io/v3/runtime/debugging/).
+The fastest way to set up the DKG to run as a parachain is to make use of [polkadot-launch](https://github.com/paritytech/polkadot-launch). Follow the below steps to get up and running! 🏃
+
+**Install polkadot-launch:**
 
 ```
--ldkg=debug \
--ldkg_metadata=debug \
--lruntime::offchain=debug \
--ldkg_proposal_handler=debug \
--ldkg_proposals=debug
+npm install -g polkadot-launch
 ```
 
-## Relay Chain
+**Update configuration script:**
 
-> **NOTE**: In the following sections, we document how to start a few relay chain
-> nodes, start a parachain node (collator), and register the parachain with the relay chain.
->
-> We also have the [**`polkadot-launch`**](https://www.npmjs.com/package/polkadot-launch) CLI tool
-> that automate the following steps and help you easily launch relay chains and parachains. However
-> it is still good to go through the following procedures once to understand the mechanism for running
-> and registering a parachain.
+1. Run: `cd scripts/polkadot-launch`
+2. Update the `bin` field for `relaychain` and `parachains` to point to appropriate paths. **Note:** You will need to have a built Polkadot binary. For Polkadot installation instructions follow the steps outlined [here](https://github.com/paritytech/polkadot).
+3. Update ports and debug logs as you see fit.
 
-To operate a parathread or parachain, you _must_ connect to a relay chain. Typically you would test
-on a local Rococo development network, then move to the testnet, and finally launch on the mainnet.
-**Keep in mind you need to configure the specific relay chain you will connect to in your collator
-`chain_spec.rs`**. In the following examples, we will use `rococo-local` as the relay network.
+**Launch Polkadot relay chain and DKG parachain:**
 
-### Using parachain-launch for Docker setup
+```bash
+polkadot-launch dkg-launch.json
+```
+
+If everything went well you should see `POLKADOT LAUNCHED SUCCESSFULLY 🚀`. To follow the DKG parachain logs:
+
+```bash
+tail -f 9988.log
+```
+
+<h3 id="para"> Run local testnet with <a href="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
 
 This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
-
-**Note:** If you make changes to the `dkg-node` that you want to see reflected in parachain-launch setup, you will need to run the script in `/scripts/docker-hub-publish-dkg-node.sh`. This will build the docker package and publish it so that it may be used in the generated docker-compose file.
 
 ```
 cd launch
@@ -141,254 +206,21 @@ yarn run start generate --config=config.yml
 
 # start relaychain and parachain
 cd output
+
 # NOTE: If regenerate the output directory, need to rebuild the images.
 docker-compose up -d --build
 ```
 
-**Note:** Due to usage of offchain workers you will need to add the sr25519 account keys to the node's local keystore by using the `author_insertKey` RPC on the Polkadot UI. 
+**Note:** Due to usage of offchain workers you will need to add the sr25519 account keys to the node's local keystore by using the `author_insertKey` RPC on the Polkadot UI. If you do not add a sr25519 account key to each of the parachain nodes keystore the node will fail.
 
-If you do not add a sr25519 account key to each of the parachain nodes keystore the node will fail. 
-
-### Additional docker commands
-```
-# list all of the containers.
-docker ps -a
-
-# track container logs
-docker logs -f [container_id/container_name]
-
-# stop all of the containers.
-docker-compose stop
-
-# remove all of the containers.
-docker-compose rm
-
-# NOTE: If you want to clear the data and restart, you need to clear the volumes.
-# remove volume
-docker volume ls
-docker volume rm [volume_name]
-# prune all volumes
-docker volume prune
-```
-
-### Build Relay Chain
-
-Clone and build [Polkadot](https://github.com/paritytech/polkadot) (be aware of the version tag we used):
-
-```bash
-# Get a fresh clone, or `cd` to where you have polkadot already:
-git clone -b v0.9.7 --depth 1 https://github.com/paritytech/polkadot.git
-cd polkadot
-cargo build --release
-```
-
-### Generate the Relay Chain Chainspec
-
-First, we create the chain specification file (chainspec). Note the chainspec file _must_ be generated on a
-_single node_ and then shared among all nodes!
-
-👉 Learn more about chain specification [here](https://docs.substrate.io/v3/runtime/chain-specs/).
-
-```bash
-./target/release/polkadot build-spec \
---chain rococo-local \
---raw \
---disable-default-bootnode \
-> rococo_local.json
-```
-
-### Start Relay Chain
-
-We need _n + 1_ full _validator_ nodes running on a relay chain to accept _n_ parachain / parathread
-connections. Here we will start two relay chain nodes so we can have one parachain node connecting in
-later.
-
-From the Polkadot working directory:
-
-```bash
-# Start Relay `Alice` node
-./target/release/polkadot \
---chain ./rococo_local.json \
--d /tmp/relay/alice \
---validator \
---alice \
---port 50555
-```
-
-Open a new terminal, same directory:
-
-```bash
-# Start Relay `Bob` node
-./target/release/polkadot \
---chain ./rococo_local.json \
--d /tmp/relay/bob \
---validator \
---bob \
---port 50556
-```
-
-Add more nodes as needed, with non-conflicting ports, DB directories, and validator keys
-(`--charlie`, `--dave`, etc.).
-
-### Reserve a ParaID
-
-To connect to a relay chain, you must first \_reserve a `ParaId` for your parathread that will
-become a parachain. To do this, you will need sufficient amount of currency on the network account
-to reserve the ID.
-
-In this example, we will use **`Charlie` development account** where we have funds available.
-Once you submit this extrinsic successfully, you can start your collators.
-
-The easiest way to reserve your `ParaId` is via
-[Polkadot Apps UI](https://polkadot.js.org/apps/?rpc=ws%3A%2F%2F127.0.0.1%3A9944#/parachains/parathreads)
-under the `Parachains` -> `Parathreads` tab and use the `+ ParaID` button.
-
-## Parachain
-
-### Select the Correct Relay Chain
-
-To operate your parachain, you need to specify the correct relay chain you will connect to in your
-collator `chain_spec.rs`. Specifically you pass the command for the network you need in the
-`Extensions` of your `ChainSpec::from_genesis()` [in the code](node/src/chain_spec.rs#78-81).
-
-```rust
-Extensions {
-	relay_chain: "rococo-local".into(), // You MUST set this to the correct network!
-	para_id: id.into(),
-},
-```
-
-> You can choose from any pre-set runtime chainspec in the Polkadot repo, by referring to the
-> `cli/src/command.rs` and `node/service/src/chain_spec.rs` files or generate your own and use
-> that. See the [Cumulus Workshop](https://docs.substrate.io/tutorials/v3/cumulus/start-relay/) for how.
-
-In the following examples, we will use the `rococo-local` relay network we setup in the last section.
-
-### Export the DKG Genesis and Runtime
-
-We first generate the **genesis state** and **genesis wasm** needed for the parachain registration.
-
-```bash
-# Build the dkg node (from it's top level dir)
-cd dkg-substrate
-cargo build --release
-
-# Folder to store resource files needed for parachain registration
-mkdir -p resources
-
-# Build the chainspec
-./target/release/dkg-standalone-node build-spec \
---disable-default-bootnode > ./resources/template-local-plain.json
-
-# Build the raw chainspec file
-./target/release/dkg-standalone-node build-spec \
---chain=./resources/template-local-plain.json \
---raw --disable-default-bootnode > ./resources/template-local-raw.json
-
-# Export genesis state to `./resources`, using 2000 as the ParaId
-./target/release/dkg-standalone-node export-genesis-state --parachain-id 2000 > ./resources/para-2000-genesis
-
-# Export the genesis wasm
-./target/release/dkg-standalone-node export-genesis-wasm > ./resources/para-2000-wasm
-```
-
-> **NOTE**: we have set the `para_ID` to be **2000** here. This _must_ be unique for all parathreads/chains
-> on the relay chain you register with. You _must_ reserve this first on the relay chain for the
-> testnet or mainnet.
-
-### Start a DKG Node (Collator)
-
-From the dkg-substrate working directory:
-
-```bash
-# NOTE: this command assumes the chain spec is in a directory named `polkadot`
-# that is at the same level of the template working directory. Change as needed.
-#
-# It also assumes a ParaId of 2000. Change as needed.
-./target/release/dkg-standalone-node \
--d /tmp/parachain/alice \
---collator \
---alice \
---force-authoring \
---ws-port 9945 \
---parachain-id 2000 \
--- \
---execution wasm \
---chain ../polkadot/rococo_local.json
-```
-
-### Parachain Registration
-
-Now that you have two relay chain nodes, and a parachain node accompanied with a relay chain light
-client running, the next step is to register the parachain in the relay chain with the following
-steps (for detail, refer to the [Substrate Cumulus Worship](https://docs.substrate.io/tutorials/v3/cumulus/start-relay/#/en/3-parachains/2-register)):
-
--   Goto [Polkadot Apps UI](https://polkadot.js.org/apps/#/explorer), connecting to your relay chain.
-
--   Execute a sudo extrinsic on the relay chain by going to `Developer` -> `sudo` page.
-
--   Pick `paraSudoWrapper` -> `sudoScheduleParaInitialize(id, genesis)` as the extrinsic type,
-    shown below.
-
-        ![Polkadot Apps UI](docs/assets/ss01.png)
-
--   Set the `id: ParaId` to 2,000 (or whatever ParaId you used above), and set the `parachain: Bool`
-    option to **Yes**.
-
--   For the `genesisHead`, drag the genesis state file exported above, `para-2000-genesis`, in.
-
--   For the `validationCode`, drag the genesis wasm file exported above, `para-2000-wasm`, in.
-
-> **Note**: When registering to the public Rococo testnet, ensure you set a **unique** `paraId`
-> larger than 1,000. Values below 1,000 are reserved _exclusively_ for system parachains.
-
-### Restart the DKG (Collator)
-
-The DKG node may need to be restarted to get it functioning as expected. After a
-[new epoch](https://wiki.polkadot.network/docs/en/glossary#epoch) starts on the relay chain,
-your parachain will come online. Once this happens, you should see the collator start
-reporting _parachain_ blocks:
-
-**Note the delay here!** It may take some time for your relay chain to enter a new epoch.
-
-### Run local testnet with [polkadot-launch](https://github.com/paritytech/polkadot-launch)
-
-you can use npm to install polkadot-launch
-
-```
-npm install -g polkadot-launch
-```
-
-copy dkg-launch launch json to polkadot-launch:
-
-```bash
-# $polkadot-launch is the home of polkadot-launch
-cp scripts/polkadot-launch/dkg-launch.json $polkadot-launch/
-```
-
-build polkadot:
-
-```bash
-git clone -n https://github.com/paritytech/polkadot.git
-git checkout v0.9.17
-cargo build --release
-cp target/release/polkadot /tmp/polkadot
-```
-
-launch polkadot and parachain with json config file in polkadot-launch:
-
-```bash
-polkadot-launch dkg-launch.json
-```
-
-## How to run tests
+<h2 id="test"> Testing 🧪 </h2>
 
 The following instructions outlines how to run dkg-substrate's base test suite and E2E test suite.
 
 ### To run base tests
 
 ```
-cargo test 
+cargo test
 ```
 
 ### To run E2E tests
@@ -426,46 +258,38 @@ cargo test
 
 You need to have docker installed to generate code coverage.
 
+> Build docker image:
+
 ```sh
 docker build -t cov -f docker/Coverage.Dockerfile .
 ```
 
+> Run docker image and generate code coverage reports:
+
 ```sh
 docker run --security-opt seccomp=unconfined cov
 ```
-### Pallets
 
-The DKG runtime is uses the following pallets which are central to how the protocol functions.
+### Setting up debugging logs
 
-## pallet-dkg-metadata
+If you would like to run the dkg with verbose logs you may add the following arguments during initial setup. You may change the target to include `debug | error | info| trace | warn`. You may also want to review [Substrate runtime debugging](https://docs.substrate.io/v3/runtime/debugging/).
 
-This pallet essentially tracks the information about the current and next authority sets, including the set Ids.
-It does this by implementing the `OneSessionHandler` trait which allows it to receieve both new and queued authority sets when the session changes.
+```
+-ldkg=debug \
+-ldkg_metadata=debug \
+-lruntime::offchain=debug \
+-ldkg_proposal_handler=debug \
+-ldkg_proposals=debug
+```
 
-## pallet-dkg-proposals
+<h2 id="contribute"> Contributing </h2>
 
-This pallet handles maintaining valid proposers and also voting on proposals.
-The valid set of proposers is equivalent to the current DKG authorities. This pallet gains access to the current DKG authorities by
-implementing the `OnAuthoritySetChangedHandler` trait, that way it is able to receive the updated DKG authorities from `pallet-dkg-metadata`.
+Interested in contributing to the Webb Relayer Network? Thank you so much for your interest! We are always appreciative for contributions from the open-source community!
 
-This pallet maintains a queue for pending proposals which the DKG authorities vote on and if the vote threshold is met, the proposal is passed on to be handled
-by a type that implements the `ProposalHandlerTrait`.
+If you have a contribution in mind, please check out our [Contribution Guide](./.github/CONTRIBUTING.md) for information on how to do so. We are excited for your first contribution!
 
-In this current iteration the proposals are Ethereum transactions.
+<h2 id="license"> License </h2>
 
-## pallet-dkg-proposal-handler
+Licensed under <a href="LICENSE">Apache 2.0 license</a>.
 
-This pallet implements the `ProposalHandlerTrait` accepts proposals and signs them using the DKG authority keys.
-
-### Note on Offchain workers
-
-The DKG makes use of offchain workers to submit some extrinsics back on chain and the runtime validates that the origin of such extrinsics is part of the active or queued authoritiy set, if running a development node or a local test net, the sr25519 account keys
-for the predefined validators Alice, Bob, etc, have been added to the keystore for convenience.
-
-If running a live chain as a validator or collator, please add your sr25519 account keys to the node's local keystore either by using the `author_insertKey` RPC or using the `key` subcommand (`dkg-standalone-node key insert --key-type acco --scheme sr25519 --suri <path-secret-phrase>`) of the node cli
-
-> Key Type is acco
-> Scheme is sr25519
-
-**Note**
-For the standalone node the account being added to the keystore should be the Stash account used in staking not the Controller account
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this crate by you, as defined in the Apache 2.0 license, shall be licensed as above, without any additional terms or conditions.
