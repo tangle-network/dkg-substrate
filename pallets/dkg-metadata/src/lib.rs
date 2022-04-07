@@ -1102,6 +1102,11 @@ impl<T: Config> Pallet<T> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
 	}
 
+	/// Return the next DKG authority set.
+	pub fn next_authority_set() -> AuthoritySet<T::DKGId> {
+		AuthoritySet::<T::DKGId> { authorities: Self::next_authorities(), id: Self::next_authority_set_id() }
+	}
+
 	pub fn update_signature_threshold(new_threshold: u16) -> DispatchResultWithPostInfo {
 		PendingSignatureThreshold::<T>::try_mutate(|threshold| {
 			*threshold = new_threshold;
