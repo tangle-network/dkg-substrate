@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{
-	utils::{find_index, set_up_rounds},
-	worker::DKGWorker,
-	Client,
-};
+use crate::{worker::DKGWorker, Client};
+use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::AuthorityId,
-	rounds::LocalKey,
+	rounds::{LocalKey, MultiPartyECDSARounds},
 	serde_json,
 	types::RoundId,
 	utils::{
@@ -39,8 +36,6 @@ use std::{
 	io::{Error, ErrorKind},
 	path::PathBuf,
 };
-
-use curv::elliptic::curves::Secp256k1;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -71,7 +66,6 @@ where
 				&Public::try_from(&worker.get_sr25519_public_key().0[..])
 					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 			);
-
 			if let Ok(Some(key_pair)) = key_pair {
 				let secret_key = key_pair.to_raw_vec();
 
@@ -173,8 +167,6 @@ where
 	if let Some((active, queued)) = worker.validator_set(header) {
 		worker.current_validator_set = active.clone();
 		worker.queued_validator_set = queued.clone();
-
-		let public = worker.get_authority_public_key();
 		// Set local key paths
 		let base_path = worker.base_path.as_ref().unwrap();
 		let local_key_path = base_path.join(DKG_LOCAL_KEY_FILE);
@@ -203,20 +195,21 @@ where
 			}
 		}
 		// Get the best active authorities for setting up rounds
-		let best_active_authorities: Vec<AuthorityId> =
-			worker.get_best_authority_keys(header, active, true);
+		let maybe_party_index = worker.get_party_index(header);
 		// Create the active rounds only if the authority is selected in the best set
-		if find_index::<AuthorityId>(&best_active_authorities[..], &public).is_some() {
-			let jailed_signers = worker.get_signing_jailed(header, &best_active_authorities);
-			let mut rounds = set_up_rounds(
-				&best_active_authorities,
-				round_id,
-				&public,
-				worker.get_signature_threshold(header),
-				worker.get_keygen_threshold(header),
-				Some(local_key_path),
-				&jailed_signers,
-			);
+		if let Some(party_index) = maybe_party_index {
+			let best_authorities: Vec<AuthorityId> =
+				worker.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+			let jailed_signers = worker.get_signing_jailed(header, &best_authorities);
+			let mut rounds = MultiPartyECDSARounds::builder()
+				.round_id(round_id)
+				.party_index(party_index)
+				.threshold(worker.get_signature_threshold(header))
+				.parties(worker.get_keygen_threshold(header))
+				.local_key_path(Some(local_key_path))
+				.authorities(best_authorities.clone())
+				.jailed_signers(worker.get_signing_jailed(header, &best_authorities))
+				.build();
 
 			if let Some(key) = local_key {
 				debug!(target: "dkg_persistence", "Local key set");
@@ -230,20 +223,21 @@ where
 		}
 
 		// Get the best queued authorities for setting up next rounds
-		let best_queued_authorities: Vec<AuthorityId> =
-			worker.get_best_authority_keys(header, queued, false);
-		// Create next rounds only if the authority is selected in the best next set
-		if find_index::<AuthorityId>(&best_queued_authorities[..], &public).is_some() {
-			let jailed_signers = worker.get_signing_jailed(header, &best_queued_authorities);
-			let mut rounds = set_up_rounds(
-				&best_queued_authorities,
-				queued_round_id,
-				&public,
-				worker.get_next_signature_threshold(header),
-				worker.get_next_keygen_threshold(header),
-				Some(queued_local_key_path),
-				&jailed_signers,
-			);
+		let maybe_next_party_index = worker.get_next_party_index(header);
+		// Create the active rounds only if the authority is selected in the best set
+		if let Some(party_index) = maybe_next_party_index {
+			let best_authorities: Vec<AuthorityId> =
+				worker.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+			let jailed_signers = worker.get_signing_jailed(header, &best_authorities);
+			let mut rounds = MultiPartyECDSARounds::builder()
+				.round_id(queued_round_id)
+				.party_index(party_index)
+				.threshold(worker.get_next_signature_threshold(header))
+				.parties(worker.get_next_keygen_threshold(header))
+				.local_key_path(Some(queued_local_key_path))
+				.authorities(best_authorities.clone())
+				.jailed_signers(worker.get_signing_jailed(header, &best_authorities))
+				.build();
 
 			if let Some(key) = queued_local_key {
 				debug!(target: "dkg_persistence", "Queued local key set");
