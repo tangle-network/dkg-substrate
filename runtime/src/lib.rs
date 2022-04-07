@@ -662,23 +662,24 @@ impl_runtime_apis! {
 			DKG::should_refresh(block_number)
 		}
 
-		fn next_dkg_pub_key() -> Option<Vec<u8>> {
-			if let Some((.., pub_key)) = DKG::next_dkg_public_key() {
-				return Some(pub_key)
-			}
-			None
+		fn next_dkg_pub_key() -> Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
+			DKG::next_dkg_public_key()
 		}
 
 		fn next_pub_key_sig() -> Option<Vec<u8>> {
 			DKG::next_public_key_signature()
 		}
 
-		fn dkg_pub_key() -> Option<Vec<u8>> {
-			let dkg_pub_key = DKG::dkg_public_key();
-			if !dkg_pub_key.1.is_empty() {
-				return Some(dkg_pub_key.1)
-			}
-			None
+		fn dkg_pub_key() -> (dkg_runtime_primitives::AuthoritySetId, Vec<u8>) {
+			DKG::dkg_public_key()
+		}
+
+		fn get_best_authorities() -> Vec<(u16, DKGId)> {
+			DKG::best_authorities()
+		}
+
+		fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
+			DKG::next_best_authorities()
 		}
 
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {

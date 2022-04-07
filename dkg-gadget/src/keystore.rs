@@ -67,7 +67,7 @@ impl DKGKeystore {
 	///
 	/// Return the public key for which we also do have a private key. If no
 	/// matching private key is found, `None` will be returned.
-	pub fn sr25519_authority_id(&self, keys: &[sr25519::Public]) -> Option<sr25519::Public> {
+	pub fn sr25519_public_key(&self, keys: &[sr25519::Public]) -> Option<sr25519::Public> {
 		let store = self.0.clone()?;
 
 		// we do check for multiple private keys as a key store sanity check.

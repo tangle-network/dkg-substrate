@@ -53,9 +53,9 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed: {:?}", pub_key);
 				let round_id = rounds.get_id();
 				keys_to_gossip.push((round_id, pub_key));
 			}
@@ -80,9 +80,9 @@ where
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed: {:?}", pub_key);
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
 				}
 				dkg_worker.next_rounds = Some(next_rounds);

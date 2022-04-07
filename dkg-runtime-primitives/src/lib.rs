@@ -168,10 +168,7 @@ pub type AuthorityIndex = u32;
 pub enum ConsensusLog<AuthorityId: Codec> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange {
-		next_authorities: AuthoritySet<AuthorityId>,
-		next_queued_authorities: AuthoritySet<AuthorityId>,
-	},
+	AuthoritiesChange { active: AuthoritySet<AuthorityId>, queued: AuthoritySet<AuthorityId> },
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
@@ -202,6 +199,10 @@ sp_api::decl_runtime_apis! {
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
+		/// Return the current best authority set chosen for keygen
+		fn get_best_authorities() -> Vec<(u16, AuthorityId)>;
+		/// Return the next best authority set chosen for the queued keygen
+		fn get_next_best_authorities() -> Vec<(u16, AuthorityId)>;
 		/// Return the current signature threshold for the DKG
 		fn signature_threshold() -> u16;
 		/// Return the current keygen threshold for the DKG
@@ -215,9 +216,9 @@ sp_api::decl_runtime_apis! {
 		/// Check if refresh process should start
 		fn should_refresh(_block_number: N) -> bool;
 		/// Fetch DKG public key for queued authorities
-		fn next_dkg_pub_key() -> Option<Vec<u8>>;
+		fn next_dkg_pub_key() -> Option<(AuthoritySetId, Vec<u8>)>;
 		/// Fetch DKG public key for current authorities
-		fn dkg_pub_key() -> Option<Vec<u8>>;
+		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted

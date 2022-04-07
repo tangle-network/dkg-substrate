@@ -43,8 +43,9 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 {
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let next_dkg_public_key = dkg_worker.client.runtime_api().next_dkg_pub_key(&at);
-	let dkg_public_key = dkg_worker.client.runtime_api().dkg_pub_key(&at);
-	let public_key_sig = dkg_worker.client.runtime_api().next_pub_key_sig(&at);
+	let dkg_public_key = dkg_worker.client.runtime_api().dkg_pub_key(&at).ok();
+	let public_key_sig =
+		dkg_worker.client.runtime_api().next_pub_key_sig(&at).ok().unwrap_or_default();
 
 	let offchain = dkg_worker.backend.offchain_storage();
 
@@ -58,8 +59,10 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 			}
 		}
 
-		if let Ok(Some(_key)) = dkg_public_key {
-			if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS).is_some() {
+		if let Some(_key) = dkg_public_key {
+			if offchain.get(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS).is_some() &&
+				!_key.1.is_empty()
+			{
 				debug!(target: "dkg", "cleaned offchain storage, genesis_pub_key: {:?}", _key);
 				offchain.remove(STORAGE_PREFIX, AGGREGATED_PUBLIC_KEYS_AT_GENESIS);
 
@@ -67,7 +70,7 @@ pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
 			}
 		}
 
-		if let Ok(Some(_sig)) = public_key_sig {
+		if let Some(_sig) = public_key_sig {
 			if offchain.get(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG).is_some() {
 				debug!(target: "dkg", "cleaned offchain storage, next_pub_key_sig: {:?}", _sig);
 				offchain.remove(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG);

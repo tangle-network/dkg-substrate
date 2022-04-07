@@ -856,11 +856,7 @@ impl<T: Config>
 	///   accounts
 	/// - Create a new proposer set update proposal by merkleizing the new proposer set
 	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
-	fn on_authority_set_changed(
-		authorities: Vec<T::AccountId>,
-		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
-		authority_ids: Vec<T::DKGId>,
-	) {
+	fn on_authority_set_changed(authorities: Vec<T::AccountId>, authority_ids: Vec<T::DKGId>) {
 		// Get the new external accounts for the new authorities by converting
 		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids

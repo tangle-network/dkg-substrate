@@ -18,7 +18,6 @@ use sp_std::vec::Vec;
 pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 	fn on_authority_set_changed(
 		authority_accounts: Vec<AccountId>,
-		authority_set_id: AuthoritySetId,
 		authority_ids: Vec<AuthorityId>,
 	);
 }
@@ -28,7 +27,6 @@ impl<AccountId, AuthoritySetId, AuthorityId>
 {
 	fn on_authority_set_changed(
 		_authority_accounts: Vec<AccountId>,
-		_authority_set_id: AuthoritySetId,
 		_authority_ids: Vec<AuthorityId>,
 	) {
 	}

@@ -85,7 +85,13 @@ where
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
-		if aggregated_public_keys.keys_and_signatures.len() >= (threshold + 1) {
+		log::debug!(
+			target: "dkg",
+			"ROUND {:?} | Threshold {} | Aggregated pubkeys {}",
+			msg.round_id, threshold,
+			aggregated_public_keys.keys_and_signatures.len()
+		);
+		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys(
 				dkg_worker,
 				is_main_round,
