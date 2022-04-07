@@ -170,6 +170,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type ProposalLifetime: Get<Self::BlockNumber>;
 
+		/// The session period
+		#[pallet::constant]
+		type Period: Get<Self::BlockNumber>;
+
 		type ProposalHandler: ProposalHandlerTrait;
 
 		type WeightInfo: WeightInfo;
@@ -311,7 +315,18 @@ pub mod pallet {
 	}
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(n: T::BlockNumber) -> Weight {
+			if n % T::Period::get() == T::BlockNumber::from(0u32) {
+				// Create the new proposer set merkle tree and update proposal
+				Self::create_proposer_set_update();
+
+				return 1
+			}
+
+			0
+		}
+	}
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -884,8 +899,6 @@ impl<T: Config>
 		// Update the external accounts of the new authorities
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
-		// Create the new proposer set merkle tree and update proposal
-		Self::create_proposer_set_update();
 	}
 }
 

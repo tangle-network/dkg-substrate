@@ -179,6 +179,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type Period = Period;
 	type WeightInfo = ();
 }
 

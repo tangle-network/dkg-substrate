@@ -253,6 +253,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
+	type Period = Period;
 	type WeightInfo = ();
 }
 
@@ -287,6 +288,7 @@ pub(crate) fn roll_to(n: u64) {
 		Session::on_finalize(System::block_number());
 		Aura::on_finalize(System::block_number());
 		System::on_finalize(System::block_number());
+		DKGProposals::on_finalize(System::block_number());
 		System::set_block_number(System::block_number() + 1);
 		System::on_initialize(System::block_number());
 		Timestamp::on_initialize(System::block_number());
@@ -294,6 +296,7 @@ pub(crate) fn roll_to(n: u64) {
 		Session::on_initialize(System::block_number());
 		CollatorSelection::on_initialize(System::block_number());
 		Aura::on_initialize(System::block_number());
+		DKGProposals::on_initialize(System::block_number());
 	}
 }
 
@@ -306,6 +309,7 @@ pub const PROPOSER_A: u8 = 1;
 pub const PROPOSER_B: u8 = 2;
 pub const PROPOSER_C: u8 = 3;
 pub const PROPOSER_D: u8 = 4;
+pub const PROPOSER_E: u8 = 4;
 pub const SMALL_BALANCE: u64 = 100_000;
 pub const ENDOWED_BALANCE: u64 = 100_000_000;
 pub const TEST_THRESHOLD: u32 = 2;
@@ -444,6 +448,8 @@ pub fn assert_events(mut expected: Vec<Event>) {
 }
 
 pub fn assert_has_event(ev: Event) {
+	println!("{:?}", ev);
+	println!("{:?}", system::Pallet::<Test>::events());
 	assert!(system::Pallet::<Test>::events()
 		.iter()
 		.map(|e| e.event.clone())

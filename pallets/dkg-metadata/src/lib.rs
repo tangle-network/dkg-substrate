@@ -280,6 +280,8 @@ pub mod pallet {
 							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
 						},
 					}
+
+					return 1
 				}
 			}
 
@@ -1102,6 +1104,14 @@ impl<T: Config> Pallet<T> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
 	}
 
+	/// Return the next DKG authority set.
+	pub fn next_authority_set() -> AuthoritySet<T::DKGId> {
+		AuthoritySet::<T::DKGId> {
+			authorities: Self::next_authorities(),
+			id: Self::next_authority_set_id(),
+		}
+	}
+
 	pub fn update_signature_threshold(new_threshold: u16) -> DispatchResultWithPostInfo {
 		PendingSignatureThreshold::<T>::try_mutate(|threshold| {
 			*threshold = new_threshold;
@@ -1226,6 +1236,12 @@ impl<T: Config> Pallet<T> {
 		next_authorities_accounts: Vec<T::AccountId>,
 		forced: bool,
 	) {
+		// Call set change handler to trigger the other pallet implementing this hook
+		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+			T::AccountId,
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
 		// Update the next thresholds for the next session
@@ -1277,12 +1293,6 @@ impl<T: Config> Pallet<T> {
 			Authorities::<T>::put(&new_authority_ids);
 			CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
 			BestAuthorities::<T>::put(next_best_authorities);
-			// Call set change handler to trigger the other pallet implementing this hook
-			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-				T::AccountId,
-				dkg_runtime_primitives::AuthoritySetId,
-				T::DKGId,
-			>>::on_authority_set_changed(new_authorities_accounts, new_authority_ids.clone());
 			let next_id = Self::authority_set_id().saturating_add(1);
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
