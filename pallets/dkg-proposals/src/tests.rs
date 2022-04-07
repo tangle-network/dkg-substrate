@@ -17,7 +17,7 @@
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D, PROPOSER_E,
 		TEST_THRESHOLD,
 	},
 	*,
@@ -683,19 +683,10 @@ fn only_current_authorities_should_make_successful_proposals() {
 		));
 
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
-		roll_to(10);
-		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
-			proposers: vec![
-				mock_pub_key(PROPOSER_A),
-				mock_pub_key(PROPOSER_B),
-				mock_pub_key(PROPOSER_C),
-			],
-		}));
-
 		// Create proposal (& vote)
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(mock_pub_key(PROPOSER_D)),
+				Origin::signed(mock_pub_key(PROPOSER_E)),
 				prop_id,
 				typed_chain_id,
 				r_id,
@@ -713,7 +704,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(4.into())
 			)
 			.is_some(),
 			"{}",
@@ -725,7 +716,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_none(),
 			"{}",
@@ -737,7 +728,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
 			"{}",
@@ -748,7 +739,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(8.into())
 			)
 			.is_some(),
 			"{}",
