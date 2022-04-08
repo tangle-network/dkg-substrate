@@ -37,7 +37,7 @@ import {
   executeBefore
 } from './utils/util';
 
-it('should be able to transfer ownership to new Governor with Signature', async () => {
+it.skip('should be able to transfer ownership to new Governor with Signature', async () => {
   // we trigger a manual renonce since we already transfered the ownership before.
   await triggerDkgManuaIncrementNonce(polkadotApi);
   // for some reason, we have to wait for a bit ¯\_(ツ)_/¯.

@@ -30,7 +30,7 @@ import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
 import { ethAddressFromUncompressedPublicKey, fetchDkgPublicKey, fetchDkgPublicKeySignature, fetchDkgRefreshNonce, triggerDkgManuaIncrementNonce, waitForEvent, waitForPublicKeySignatureToChange, waitForPublicKeyToChange } from '../src/utils';
 
-it('proposer set update test', async () => {
+it.skip('proposer set update test', async () => {
   const provider = localChain.provider();
   await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', { key: 'ProposerSetUpdateProposal' });
   const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', { None: 0 });

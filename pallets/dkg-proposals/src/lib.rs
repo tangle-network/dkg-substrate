@@ -170,6 +170,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type ProposalLifetime: Get<Self::BlockNumber>;
 
+		/// The session period
+		#[pallet::constant]
+		type Period: Get<Self::BlockNumber>;
+
 		type ProposalHandler: ProposalHandlerTrait;
 
 		type WeightInfo: WeightInfo;
@@ -311,7 +315,18 @@ pub mod pallet {
 	}
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(n: T::BlockNumber) -> Weight {
+			if n % T::Period::get() == T::BlockNumber::from(0u32) {
+				// Create the new proposer set merkle tree and update proposal
+				Self::create_proposer_set_update();
+
+				return 1
+			}
+
+			0
+		}
+	}
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -856,11 +871,7 @@ impl<T: Config>
 	///   accounts
 	/// - Create a new proposer set update proposal by merkleizing the new proposer set
 	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
-	fn on_authority_set_changed(
-		authorities: Vec<T::AccountId>,
-		_authority_set_id: dkg_runtime_primitives::AuthoritySetId,
-		authority_ids: Vec<T::DKGId>,
-	) {
+	fn on_authority_set_changed(authorities: Vec<T::AccountId>, authority_ids: Vec<T::DKGId>) {
 		// Get the new external accounts for the new authorities by converting
 		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids
@@ -888,8 +899,6 @@ impl<T: Config>
 		// Update the external accounts of the new authorities
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
-		// Create the new proposer set merkle tree and update proposal
-		Self::create_proposer_set_update();
 	}
 }
 

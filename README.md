@@ -54,7 +54,7 @@ The DKG is a multi-party computation protocol that generates a group public and 
 
 The DKG is meant to be coupled with the relayer network of the system. Currently, there is a fixed set of proposers that can propose messages to be signed by the DKG. This set includes only the active validators or collators of the underlying chain. We hope to increase the set of proposers to any relayer that is participating around the system as well.
 
-For additional information, please refer to the [Webb DKG Rust Docs](https://docs.webb.tools/dkg-substrate/dkg_gadget/index.html) 📝. Have feedback on how to improve the dkg? Or have a specific question to ask? Checkout the [DKG Feedback Discussion](https://github.com/webb-tools/feedback/discussions/categories/dkg-feedback) 💬.
+For additional information, please refer to the [Webb DKG Rust Docs](https://webb-tools.github.io/dkg-substrate/) 📝. Have feedback on how to improve the dkg? Or have a specific question to ask? Checkout the [DKG Feedback Discussion](https://github.com/webb-tools/feedback/discussions/categories/dkg-feedback) 💬.
 
 ## Prerequisites
 

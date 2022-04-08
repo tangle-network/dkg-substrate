@@ -21,6 +21,7 @@ use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
 	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
+	GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{error, info, trace};
@@ -52,9 +53,9 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed: {:?}", pub_key);
 				let round_id = rounds.get_id();
 				keys_to_gossip.push((round_id, pub_key));
 			}
@@ -79,9 +80,9 @@ where
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed: {:?}", pub_key);
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
 				}
 				dkg_worker.next_rounds = Some(next_rounds);
@@ -98,11 +99,12 @@ where
 			signature: vec![],
 		};
 		let hash = sp_core::blake2_128(&pub_key_msg.encode());
-		#[allow(clippy::map_entry)]
-		if !dkg_worker.has_sent_gossip_msg.contains_key(&hash) {
-			gossip_public_key(dkg_worker, pub_key_msg);
-			dkg_worker.has_sent_gossip_msg.insert(hash, true);
+		let count = *dkg_worker.has_sent_gossip_msg.get(&hash).unwrap_or(&0u8);
+		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
+			return
 		}
+		gossip_public_key(dkg_worker, pub_key_msg);
+		dkg_worker.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 
 	for res in &rounds_send_result {
@@ -157,8 +159,8 @@ fn sign_and_send_message<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let sr25519_public = dkg_worker.get_sr25519_public_key();
-	match dkg_worker.key_store.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
+	let public = dkg_worker.get_authority_public_key();
+	match dkg_worker.key_store.sign(&public, &dkg_message.encode()) {
 		Ok(sig) => {
 			let signed_dkg_message =
 				SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };

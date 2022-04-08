@@ -22,12 +22,9 @@ use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
-use log::{debug, error, trace};
+use log::{debug, error};
 use sc_client_api::Backend;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header},
-};
+use sp_runtime::traits::{Block, Header};
 
 pub(crate) fn handle_public_key_broadcast<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
@@ -48,9 +45,8 @@ where
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
 	let current_block_number = *header.number();
-	let at: BlockId<B> = BlockId::hash(header.hash());
-	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
-	if authority_accounts.is_none() {
+	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
+	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
@@ -67,7 +63,7 @@ where
 
 		dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			authority_accounts.unwrap(),
+			authorities.unwrap(),
 			&msg.pub_key,
 			&msg.signature,
 		)?;
@@ -89,7 +85,13 @@ where
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
-		if aggregated_public_keys.keys_and_signatures.len() >= (threshold + 1) {
+		log::debug!(
+			target: "dkg",
+			"ROUND {:?} | Threshold {} | Aggregated pubkeys {}",
+			msg.round_id, threshold,
+			aggregated_public_keys.keys_and_signatures.len()
+		);
+		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys(
 				dkg_worker,
 				is_main_round,
@@ -112,17 +114,8 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let sr25519_public = dkg_worker
-		.key_store
-		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
-
-	let public = dkg_worker
-		.key_store
-		.authority_id(&dkg_worker.key_store.public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find an ecdsa key in keystore"));
-
-	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &msg.pub_key) {
+	let public = dkg_worker.get_authority_public_key();
+	if let Ok(signature) = dkg_worker.key_store.sign(&public, &msg.pub_key) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
 			signature: encoded_signature.clone(),
@@ -133,7 +126,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			DKGMessage::<AuthorityId> { id: public.clone(), round_id: msg.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
-		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+		match dkg_worker.key_store.sign(&public, &encoded_dkg_message) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
@@ -145,7 +138,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 					true,
 				);
 			},
-			Err(e) => trace!(
+			Err(e) => error!(
 				target: "dkg",
 				"🕸️  Error signing DKG message: {:?}",
 				e

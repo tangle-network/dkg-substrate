@@ -81,23 +81,23 @@ fn authority_set_at_genesis() {
 }
 
 #[test]
-fn authority_set_updates_work() {
+fn next_authority_set_updates_work() {
 	let want = vec![mock_dkg_id(1), mock_dkg_id(2), mock_dkg_id(3), mock_dkg_id(4)];
 
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
 		init_block(1);
 
-		let vs = DKGMetadata::authority_set();
+		let vs = DKGMetadata::next_authority_set();
 
-		assert_eq!(vs.id, 1u64);
-		assert_eq!(want[0], vs.authorities[0]);
-		assert_eq!(want[1], vs.authorities[1]);
+		assert_eq!(vs.id, 2u64);
+		assert_eq!(want[2], vs.authorities[0]);
+		assert_eq!(want[3], vs.authorities[1]);
 
 		init_block(2);
 
-		let vs = DKGMetadata::authority_set();
+		let vs = DKGMetadata::next_authority_set();
 
-		assert_eq!(vs.id, 2u64);
+		assert_eq!(vs.id, 3u64);
 		assert_eq!(want[2], vs.authorities[0]);
 		assert_eq!(want[3], vs.authorities[1]);
 	});

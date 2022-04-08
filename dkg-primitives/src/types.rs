@@ -140,10 +140,6 @@ pub struct DKGMisbehaviourMessage {
 	pub signature: Vec<u8>,
 }
 
-pub const KEYGEN_TIMEOUT: u32 = 10;
-pub const OFFLINE_TIMEOUT: u32 = 10;
-pub const SIGN_TIMEOUT: u32 = 3;
-
 pub trait DKGRoundsSM<Payload, Output, Clock> {
 	fn proceed(&mut self, _at: Clock) -> Result<bool, DKGError> {
 		Ok(false)

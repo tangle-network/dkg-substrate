@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::{collections::HashMap, fs, hash::Hash, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
@@ -74,7 +74,7 @@ pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
 pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct StoredLocalKey {
 	pub round_id: RoundId,
 	pub local_key: LocalKey<Secp256k1>,
@@ -133,35 +133,6 @@ pub fn select_random_set(
 	let random_set =
 		set.choose_multiple(&mut std_rng, amount as usize).cloned().collect::<Vec<_>>();
 	Ok(random_set)
-}
-
-/// Selects a subset of authorities of size `count` based
-/// on signed integer reputations for each authority.
-///
-/// If there is no reputation for an authority, it defaults to
-/// a reputation of 0. The sort applied to the authorities by
-/// reputation is expected to be stable, so that the same set
-/// of authorities is returned even in the case of equivalent reputations.
-pub fn get_best_authorities<B>(
-	count: usize,
-	authorities: &[B],
-	reputations: &HashMap<B, u128>,
-) -> Vec<(u16, B)>
-where
-	B: Eq + Hash + Clone,
-{
-	let mut reputations_of_authorities = authorities
-		.iter()
-		.enumerate()
-		.map(|(index, id)| (index + 1, reputations.get(id).unwrap_or(&0), id))
-		.collect::<Vec<(_, _, _)>>();
-	reputations_of_authorities.sort_by(|a, b| b.1.cmp(a.1));
-
-	return reputations_of_authorities
-		.iter()
-		.map(|x| (x.0 as u16, x.2.clone()))
-		.take(count)
-		.collect()
 }
 
 #[cfg(test)]

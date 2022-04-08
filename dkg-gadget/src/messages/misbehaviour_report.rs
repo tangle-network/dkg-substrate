@@ -23,12 +23,9 @@ use dkg_primitives::types::{
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
 };
-use log::{debug, error, trace};
+use log::{debug, error};
 use sc_client_api::Backend;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header},
-};
+use sp_runtime::traits::{Block, Header};
 
 pub(crate) fn handle_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
@@ -42,9 +39,8 @@ where
 {
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
-	let at: BlockId<B> = BlockId::hash(header.hash());
-	let authority_accounts = dkg_worker.client.runtime_api().get_authority_accounts(&at).ok();
-	if authority_accounts.is_none() {
+	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
+	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
@@ -69,7 +65,7 @@ where
 		// Authenticate the message against the current authorities
 		let reporter = dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			authority_accounts.unwrap(),
+			authorities.unwrap(),
 			&signed_payload,
 			&msg.signature,
 		)?;
@@ -97,13 +93,8 @@ where
 				.insert((msg.misbehaviour_type, msg.round_id, msg.offender), reports.clone());
 		}
 
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_signature_threshold(header) as usize;
-		if reports.reporters.len() > threshold {
-			store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
-		}
+		// Try to store reports offchain
+		try_store_offchain(dkg_worker, reports)?;
 	}
 
 	Ok(())
@@ -118,15 +109,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let sr25519_public = dkg_worker
-		.key_store
-		.sr25519_authority_id(&dkg_worker.key_store.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
-
-	let public = dkg_worker
-		.key_store
-		.authority_id(&dkg_worker.key_store.public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find an ecdsa key in keystore"));
+	let public = dkg_worker.get_authority_public_key();
 
 	// Create packed message
 	let mut payload = Vec::new();
@@ -137,29 +120,31 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	payload.extend_from_slice(report.round_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(report.offender.as_ref());
 
-	if let Ok(signature) = dkg_worker.key_store.sr25519_sign(&sr25519_public, &payload) {
+	if let Ok(signature) = dkg_worker.key_store.sign(&public.clone(), &payload) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::MisbehaviourBroadcast(DKGMisbehaviourMessage {
 			signature: encoded_signature.clone(),
 			..report.clone()
 		});
 
-		let message = DKGMessage::<AuthorityId> { id: public, round_id: report.round_id, payload };
+		let message =
+			DKGMessage::<AuthorityId> { id: public.clone(), round_id: report.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
-		match dkg_worker.key_store.sr25519_sign(&sr25519_public, &encoded_dkg_message) {
+		match dkg_worker.key_store.sign(&public, &encoded_dkg_message) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
+				debug!(target: "dkg", "Gossiping misbehaviour report");
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
 					true,
 				);
 			},
-			Err(e) => trace!(
+			Err(e) => error!(
 				target: "dkg",
 				"🕸️  Error signing DKG message: {:?}",
 				e
@@ -181,18 +166,50 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			},
 		};
 
-		if reports.reporters.contains(&sr25519_public) {
+		if reports.reporters.contains(&public) {
 			return
 		}
 
-		reports.reporters.push(sr25519_public);
+		reports.reporters.push(public);
 		reports.signatures.push(encoded_signature);
 
 		dkg_worker
 			.aggregated_misbehaviour_reports
-			.insert((report.misbehaviour_type, report.round_id, report.offender), reports);
-		debug!(target: "dkg", "Gossiping misbehaviour report and signature")
+			.insert((report.misbehaviour_type, report.round_id, report.offender), reports.clone());
+		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
+
+		// Try to store reports offchain
+		let _ = try_store_offchain(dkg_worker, reports);
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}
+}
+
+pub(crate) fn try_store_offchain<B, C, BE>(
+	dkg_worker: &mut DKGWorker<B, C, BE>,
+	reports: AggregatedMisbehaviourReports<AuthorityId>,
+) -> Result<(), DKGError>
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+{
+	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
+	// Fetch the current threshold for the DKG. We will use the
+	// current threshold to determine if we have enough signatures
+	// to submit the next DKG public key.
+	let threshold = dkg_worker.get_signature_threshold(header) as usize;
+	match reports.misbehaviour_type {
+		MisbehaviourType::Keygen =>
+			if reports.reporters.len() > threshold {
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+			},
+		MisbehaviourType::Sign =>
+			if reports.reporters.len() >= threshold {
+				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+			},
+	};
+
+	Ok(())
 }
