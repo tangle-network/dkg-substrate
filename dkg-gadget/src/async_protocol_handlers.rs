@@ -144,7 +144,7 @@ pub mod meta_channel {
 	use curv::BigInt;
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 	use parking_lot::{Mutex};
-	use futures::{StreamExt, TryFutureExt, TryStreamExt};
+	use futures::StreamExt;
 	use log::debug;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage, PartialSignature, SignManual};
@@ -155,7 +155,7 @@ pub mod meta_channel {
 	use sc_network_gossip::GossipEngine;
 	use serde::Serialize;
 	use sp_runtime::generic::BlockId;
-	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, keccak_256, Proposal};
+	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, keccak_256, Proposal, UnsignedProposal};
 	use sp_runtime::traits::{Block, Header};
 
 	use dkg_runtime_primitives::crypto::Public;
@@ -229,7 +229,7 @@ pub mod meta_channel {
 
 		fn on_finish<B: Block, C>(result: <Self as StateMachine>::Output, params: &AsyncProtocolParameters<B, C>) {
 			log::info!(target: "dkg", "Completed offline stage successfully!");
-			*params.completed_offline_stage.lock() = Some(result);
+			*params.completed_offline_stages.lock() = Some(result);
 		}
 	}
 
@@ -257,7 +257,6 @@ pub mod meta_channel {
 			where <SM as StateMachine>::Err: Send + Debug,
 				  <SM as StateMachine>::MessageBody: std::marker::Send,
 				  <SM as StateMachine>::MessageBody: Serialize {
-			use futures::FutureExt;
 
 			let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 			let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
@@ -316,7 +315,7 @@ pub mod meta_channel {
 				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ProtocolType::Voting, verify_fn);
 
 				// the first step is to generate the partial sig based on the offline stage
-				let completed_offline_stage= params.completed_offline_stage.lock().take().ok_or(DKGError::Vote { reason: "Offline stage has not yet been completed".to_string() })?;
+				let completed_offline_stage= params.completed_offline_stages.lock().take().ok_or(DKGError::Vote { reason: "Offline stage has not yet been completed".to_string() })?;
 
 				let number_of_parties = params.best_authorities.len();
 				log::info!(target: "dkg", "Will now begin the voting stage with n={} parties", number_of_parties);
@@ -325,7 +324,7 @@ pub mod meta_channel {
 					let lock = params.latest_header.read();
 					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
 					let at: BlockId<B> = BlockId::hash(latest_header.hash());
-					let unsigned_proposals = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
+					let unsigned_proposals: Vec<UnsignedProposal> = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
 					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 					let mut data_to_hash = vec![];

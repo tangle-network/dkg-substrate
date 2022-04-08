@@ -73,7 +73,7 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Decode, Encode, Copy, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
+#[derive(Debug, Clone, Decode, Encode, Copy, Eq, Hash, PartialOrd, Ord, scale_info::TypeInfo)]
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
