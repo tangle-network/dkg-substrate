@@ -537,12 +537,9 @@ where
 	/// Indexing starts from 1.
 	/// OfflineStage must be created using this index if present (not the original keygen index)
 	fn get_offline_stage_index(&self) -> Option<u16> {
-		for (i, &keygen_i) in (1..).zip(&self.signers) {
-			if self.party_index == keygen_i {
-				return Some(i)
-			}
-		}
-		None
+		(1..).zip(&self.signers)
+			.find(|(_i, keygen_i)| self.party_index == **keygen_i)
+			.map(|r| r.0)
 	}
 
 	/// Generates the signer set by randomly selecting t+1 signers

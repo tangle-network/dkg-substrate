@@ -21,12 +21,10 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
-use std::collections::HashSet;
 
 use codec::{Codec, Decode, Encode};
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::CompletedOfflineStage;
 use parking_lot::{Mutex, RwLock};
 
 use sc_client_api::{
@@ -153,8 +151,7 @@ pub(crate) struct DKGWorker<B, C, BE>
 	/// Local keystore for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
-	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub completed_offline_stage: Arc<Mutex<Option<CompletedOfflineStage>>>
+	pub local_keystore: Option<Arc<LocalKeystore>>
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -212,7 +209,6 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
-			completed_offline_stage: Arc::new(Mutex::new(None)),
 			_backend: PhantomData,
 		}
 	}
@@ -223,17 +219,10 @@ pub struct AsyncProtocolParameters<B: Block, C> {
 	pub client: Arc<C>,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub keystore: DKGKeystore,
-	pub completed_offline_stages: Arc<Mutex<HashMap<OfflineStageKey, Vec<CompletedOfflineStage>>>>,
 	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct OfflineStageKey {
-	pub offline_id: u16,
-	pub hashset_of_signer_set: HashSet<u16>
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
@@ -244,7 +233,6 @@ impl<B: Block, C> Clone for AsyncProtocolParameters<B, C> {
 			client: self.client.clone(),
 			gossip_engine: self.gossip_engine.clone(),
 			keystore: self.keystore.clone(),
-			completed_offline_stages: self.completed_offline_stages.clone(),
 			signed_message_receiver: self.signed_message_receiver.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
@@ -268,7 +256,6 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			client: self.client.clone(),
 			gossip_engine: self.gossip_engine.clone(),
 			keystore: self.key_store.clone(),
-			completed_offline_stages: self.completed_offline_stage.clone(),
 			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe()))),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: Arc::new(best_authorities),
