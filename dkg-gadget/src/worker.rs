@@ -23,8 +23,10 @@ use std::{
 };
 
 use codec::{Codec, Decode, Encode};
+use curv::elliptic::curves::Secp256k1;
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::{Mutex, RwLock};
 
 use sc_client_api::{
@@ -222,7 +224,8 @@ pub struct AsyncProtocolParameters<B: Block, C> {
 	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
-	pub authority_public_key: Arc<Public>
+	pub authority_public_key: Arc<Public>,
+	pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
@@ -236,7 +239,8 @@ impl<B: Block, C> Clone for AsyncProtocolParameters<B, C> {
 			signed_message_receiver: self.signed_message_receiver.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
-			authority_public_key: self.authority_public_key.clone()
+			authority_public_key: self.authority_public_key.clone(),
+			keygen: Arc::new(Mutex::new(None))
 		}
 	}
 }
@@ -259,7 +263,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe()))),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: Arc::new(best_authorities),
-			authority_public_key: Arc::new(authority_public_key)
+			authority_public_key: Arc::new(authority_public_key),
+			keygen: Arc::new(Mutex::new(None))
 		}
 	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.

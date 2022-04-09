@@ -162,9 +162,9 @@ pub mod meta_channel {
 	use curv::BigInt;
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 	use parking_lot::{Mutex};
-	use futures::StreamExt;
+	use futures::{StreamExt, TryStreamExt};
 	use log::debug;
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, LocalKey, ProtocolMessage};
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{CompletedOfflineStage, OfflineProtocolMessage, OfflineStage, PartialSignature, SignManual};
 	use round_based::async_runtime::watcher::StderrWatcher;
 	use round_based::{AsyncProtocol, Msg, StateMachine};
@@ -175,9 +175,13 @@ pub mod meta_channel {
 	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, keccak_256, Proposal, UnsignedProposal};
 	use sp_runtime::traits::{Block, Header};
 	use async_trait::async_trait;
+	use curv::elliptic::curves::Secp256k1;
+	use futures::stream::FuturesUnordered;
+	use sp_runtime::generic::BlockId;
 
 	use dkg_runtime_primitives::crypto::Public;
 	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
+	use dkg_primitives::utils::select_random_set;
 	use dkg_runtime_primitives::crypto::AuthorityId;
 	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, VerifyFn};
 	use crate::{Client, DKGKeystore};
@@ -219,6 +223,7 @@ pub mod meta_channel {
 		}
 	}
 
+	#[async_trait]
 	impl StateMachineIface for Keygen {
 		type AdditionalReturnParam = ();
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
@@ -235,6 +240,20 @@ pub mod meta_channel {
 				err => debug!(target: "dkg", "Invalid payload received: {:?}", err)
 			}
 
+			Ok(())
+		}
+
+		async fn on_finish<B, BE, C>(local_key: <Self as StateMachine>::Output, params: AsyncProtocolParameters<B, C>, _: Self::AdditionalReturnParam)
+									 -> Result<(), DKGError>
+			where B: Block,
+				  BE: Backend<B>,
+				  C: Client<B, BE> + 'static,
+				  C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>
+		{
+			log::info!(target: "dkg", "Completed keygen stage successfully!");
+			// take the completed offline stage, and, immediately execute the corresponding voting stage
+			// (this will allow parallelism between offline stages executing across the network)
+			*params.keygen.lock() = Some(local_key);
 			Ok(())
 		}
 	}
@@ -282,6 +301,60 @@ pub mod meta_channel {
 		BE: Backend<B>,
 		C: Client<B, BE> + 'static,
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
+
+		/// This should be executed after genesis is complete
+		pub fn post_genesis(params: AsyncProtocolParameters<B, C>, threshold: u16) -> Result<Self, DKGError> {
+			let protocol = Box::pin(async move {
+				let at = {
+					let lock = params.latest_header.read();
+					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
+					let at: BlockId<B> = BlockId::hash(latest_header.hash());
+					at
+				};
+
+				let mut unsigned_proposals: Vec<UnsignedProposal> = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
+				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+				let (keygen_id, b, c) = Self::get_party_round_id(&params);
+				let keygen_id = keygen_id.unwrap();
+
+				let t = threshold;
+				let n = params.best_authorities.len() as u16;
+
+				// causal flow: create 1 keygen then, fan-out to unsigned_proposals.len() offline-stage async subroutines
+				// those offline-stages will each automatically proceed with their corresponding voting stages in parallel
+				let _keygen_stage = Self::new(params.clone(), ProtocolType::Keygen { i: keygen_id, t, n })?.await?;
+				// a successful completion of keygen guarantees the local key's existence
+				let local_key = params.keygen.lock().take().unwrap();
+				log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
+
+				let ref s_l = Self::generate_signers(&local_key, t, n);
+				// create one offline stage for each unsigned proposal
+				let futures = FuturesUnordered::new();
+				for unsigned_proposal in unsigned_proposals {
+					if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
+						futures.push(
+							Box::pin(
+									Self::new(params.clone(), ProtocolType::Offline {
+										unsigned_proposal,
+										i: offline_i,
+										s_l: s_l.clone(),
+										local_key: local_key.clone()
+									}
+								)?
+						));
+					} else {
+						log::trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+					}
+				}
+
+				futures.try_collect::<()>().await.map(|_| ())
+			});
+
+			Ok(Self {
+				protocol,
+				_pd: Default::default()
+			})
+		}
 
 		pub fn new(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError> {
 			match channel_type.clone() {
@@ -373,15 +446,6 @@ pub mod meta_channel {
 				log::info!(target: "dkg", "Will now begin the voting stage with n={} parties for idx={}", number_of_parties, party_ind);
 
 				let message = || -> Result<[u8; 32], DKGError> {
-					/*let lock = params.latest_header.read();
-					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
-					let at: BlockId<B> = BlockId::hash(latest_header.hash());
-					let mut unsigned_proposals: Vec<UnsignedProposal> = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
-					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
-
-					// get the unsigned proposal for THIS voting stage, which is at the ith index
-					let unsigned_proposal = unsigned_proposals.remove(party_ind as _);*/
-
 					let key = (unsigned_proposal.typed_chain_id, unsigned_proposal.key);
 					log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 					if let Proposal::Unsigned { data, .. } = unsigned_proposal.proposal {
@@ -458,6 +522,7 @@ pub mod meta_channel {
 		}
 
 		fn get_party_round_id(params: &AsyncProtocolParameters<B, C>) -> (Option<u16>, AuthoritySetId, Public) {
+			// TODO: only run if local is authority
 			let party_ind = find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key).map(|r| r as u16 + 1);
 			let round_id = params.current_validator_set.read().clone().id;
 			let id = params.keystore
@@ -465,6 +530,29 @@ pub mod meta_channel {
 				.unwrap_or_else(|| panic!("Halp"));
 
 			(party_ind, round_id, id)
+		}
+
+		/// Returns our party's index in signers vec if any.
+		/// Indexing starts from 1.
+		/// OfflineStage must be created using this index if present (not the original keygen index)
+		fn get_offline_stage_index(s_l: &Vec<u16>, keygen_party_idx: u16) -> Option<u16> {
+			(1..).zip(s_l)
+				.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
+				.map(|r| r.0)
+		}
+
+		/// After keygen, this should be called to generate a random set of signers
+		fn generate_signers(local_key: &LocalKey<Secp256k1>, t: u16, n: u16) -> Vec<u16> {
+			let seed = &local_key
+				.public_key()
+				.to_bytes(true)[1..];
+			log::info!(target: "dkg", "Generating signers w/seed: {:?} (len={})", seed, seed.len());
+
+			// Signers are chosen from ids used in Keygen phase starting from 1 to n
+			// inclusive
+			let set = (1..=n).collect::<Vec<_>>();
+			// below will only fail if seed is not 32 bytes long
+			select_random_set(seed, set, t + 1).unwrap()
 		}
 
 		fn generate_verification_function(params: AsyncProtocolParameters<B, C>) -> Box<dyn VerifyFn<Arc<SignedDKGMessage<Public>>>> {
