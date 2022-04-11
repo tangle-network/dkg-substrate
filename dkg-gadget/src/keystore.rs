@@ -16,7 +16,7 @@ use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
 use sp_application_crypto::{
-	key_types::{ACCOUNT, AURA},
+	key_types::{ACCOUNT},
 	sr25519, CryptoTypePublicPair, RuntimeAppPublic,
 };
 use sp_core::keccak_256;
@@ -73,7 +73,7 @@ impl DKGKeystore {
 		// we do check for multiple private keys as a key store sanity check.
 		let public: Vec<sr25519::Public> = keys
 			.iter()
-			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), AURA)]))
+			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), ACCOUNT)]))
 			.cloned()
 			.collect();
 
