@@ -41,6 +41,7 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 	AccountId32,
 };
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
 	keystore::DKGKeystore,
@@ -62,11 +63,7 @@ use dkg_primitives::{
 	DKGReport, Proposal,
 };
 
-use dkg_runtime_primitives::{
-	crypto::{AuthorityId, Public},
-	utils::{sr25519, to_slice_32},
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID,
-};
+use dkg_runtime_primitives::{crypto::{AuthorityId, Public}, utils::{sr25519, to_slice_32}, AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID, UnsignedProposal};
 
 use crate::{
 	error, metric_set,
@@ -83,6 +80,7 @@ use dkg_primitives::{
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
+use crate::async_protocol_handlers::meta_channel::DKGIface;
 use crate::async_protocol_handlers::SignedMessageReceiver;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -153,7 +151,8 @@ pub(crate) struct DKGWorker<B, C, BE>
 	/// Local keystore for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
-	pub local_keystore: Option<Arc<LocalKeystore>>
+	pub local_keystore: Option<Arc<LocalKeystore>>,
+	pub unsigned_proposals_tx: Arc<Mutex<Option<UnboundedSender<Vec<UnsignedProposal>>>>>
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -211,36 +210,35 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
+			unsigned_proposals_tx: Arc::new(Mutex::new(None)),
 			_backend: PhantomData,
 		}
 	}
 }
 
-pub struct AsyncProtocolParameters<B: Block, C> {
-	pub latest_header: Arc<RwLock<Option<B::Header>>>,
-	pub client: Arc<C>,
-	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+pub struct AsyncProtocolParameters<BCIface> {
+	pub blockchain_iface: Arc<BCIface>,
 	pub keystore: DKGKeystore,
 	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>
+	pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
+	pub unsigned_proposals_rx: Arc<Mutex<Option<UnboundedReceiver<Vec<UnsignedProposal>>>>>
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
-impl<B: Block, C> Clone for AsyncProtocolParameters<B, C> {
+impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
 	fn clone(&self) -> Self {
 		Self {
-			latest_header: self.latest_header.clone(),
-			client: self.client.clone(),
-			gossip_engine: self.gossip_engine.clone(),
+			blockchain_iface: self.blockchain_iface.clone(),
 			keystore: self.keystore.clone(),
 			signed_message_receiver: self.signed_message_receiver.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
-			keygen: Arc::new(Mutex::new(None))
+			keygen: Arc::new(Mutex::new(None)),
+			unsigned_proposals_rx: self.unsigned_proposals_rx.clone()
 		}
 	}
 }
@@ -253,18 +251,31 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 
-	// NOTE: This must be ran after every session
-	fn generate_async_proto_params(&self, best_authorities: Vec<Public>, authority_public_key: Public) -> AsyncProtocolParameters<B, C> {
+	// NOTE: This must be ran at the start of each epoch since best_authorities may change
+	fn generate_async_proto_params(&self, best_authorities: Vec<Public>, authority_public_key: Public) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
+		let best_authorities = Arc::new(best_authorities);
+		let authority_public_key = Arc::new(authority_public_key);
+
+		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
+		*self.unsigned_proposals_tx.lock() = Some(unsigned_proposals_tx);
+
 		AsyncProtocolParameters {
-			latest_header: self.latest_header.clone(),
-			client: self.client.clone(),
-			gossip_engine: self.gossip_engine.clone(),
+			blockchain_iface: Arc::new(DKGIface {
+				latest_header: self.latest_header.clone(),
+				client: self.client.clone(),
+				keystore: self.key_store.clone(),
+				gossip_engine: self.gossip_engine.clone(),
+				best_authorities: best_authorities.clone(),
+				authority_public_key: authority_public_key.clone(),
+				_pd: Default::default()
+			}),
 			keystore: self.key_store.clone(),
 			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe()))),
 			current_validator_set: self.current_validator_set.clone(),
-			best_authorities: Arc::new(best_authorities),
-			authority_public_key: Arc::new(authority_public_key),
-			keygen: Arc::new(Mutex::new(None))
+			best_authorities,
+			authority_public_key,
+			keygen: Arc::new(Mutex::new(None)),
+			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx)))
 		}
 	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.

@@ -31,25 +31,23 @@ use round_based::Msg;
 use tokio_stream::wrappers::BroadcastStream;
 use dkg_runtime_primitives::crypto::Public;
 use dkg_runtime_primitives::UnsignedProposal;
+use crate::async_protocol_handlers::meta_channel::BlockChainIface;
 
 pub type SignedMessageReceiver = tokio::sync::broadcast::Receiver<Arc<SignedDKGMessage<Public>>>;
 
-pub trait VerifyFn<T: TransformIncoming>: FnMut(T) -> Result<(T::IncomingMapped, PartyIndex), DKGError> + Send {}
-impl<T: TransformIncoming, F: FnMut(T) -> Result<(T::IncomingMapped, PartyIndex), DKGError> + Send> VerifyFn<T> for F {}
-
-pub struct IncomingAsyncProtocolWrapper<T: TransformIncoming> {
+pub struct IncomingAsyncProtocolWrapper<T, B> {
     pub receiver: BroadcastStream<T>,
-	verification_function: Box<dyn VerifyFn<T>>,
+	bc_iface: Arc<B>,
 	ty: ProtocolType
 }
 
-impl<T: TransformIncoming> IncomingAsyncProtocolWrapper<T> {
+impl<T: TransformIncoming, B: BlockChainIface> IncomingAsyncProtocolWrapper<T, B> {
 	pub fn new(receiver: tokio::sync::broadcast::Receiver<T>,
 			   ty: ProtocolType,
-			   verification_function: Box<dyn VerifyFn<T>>) -> Self {
+			   bc_iface: Arc<B>) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),
-			verification_function,
+			bc_iface,
 			ty
 		}
 	}
@@ -87,13 +85,13 @@ pub type PartyIndex = u16;
 
 pub trait TransformIncoming: Clone + Send + 'static {
     type IncomingMapped;
-    fn transform(self, verify: impl VerifyFn<Self>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized;
+    fn transform<B: BlockChainIface>(self, verify: &B, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized;
 }
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
     type IncomingMapped = DKGMessage<Public>;
-    fn transform(self, mut verify: impl VerifyFn<Self>, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized {
-		verify(self).map(|(body, party_index)| {
+    fn transform<B: BlockChainIface>(self, verify: &B, stream_type: &ProtocolType) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError> where Self: Sized {
+		verify.verify_signature_against_authorities(self).map(|(body, party_index)| {
 			match (stream_type, &body.payload) {
 				(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
 				(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
@@ -113,9 +111,10 @@ pub trait TransformOutgoing {
     fn transform(self) -> Result<Self::Output, DKGError> where Self: Sized;
 }
 
-impl<T> Stream for IncomingAsyncProtocolWrapper<T>
+impl<T, B> Stream for IncomingAsyncProtocolWrapper<T, B>
 where
     T: TransformIncoming,
+	B: BlockChainIface
 {
     type Item = Msg<T::IncomingMapped>;
 
@@ -123,11 +122,11 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>
     ) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, verification_function } = &mut *self;
+		let Self { receiver, ty, bc_iface } = &mut *self;
 
         match futures::ready!(Pin::new(receiver).poll_next(cx)) {
             Some(Ok(msg)) => {
-                match msg.transform(verification_function, &*ty) {
+                match msg.transform(&**bc_iface, &*ty) {
 					Ok(Some(msg)) => {
 						Poll::Ready(Some(msg))
 					}
@@ -161,7 +160,7 @@ pub mod meta_channel {
 	use curv::arithmetic::Converter;
 	use curv::BigInt;
 	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-	use parking_lot::{Mutex};
+	use parking_lot::{Mutex, RwLock};
 	use futures::{StreamExt, TryStreamExt};
 	use log::debug;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, LocalKey, ProtocolMessage};
@@ -177,13 +176,12 @@ pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::elliptic::curves::Secp256k1;
 	use futures::stream::FuturesUnordered;
-	use sp_runtime::generic::BlockId;
 
 	use dkg_runtime_primitives::crypto::Public;
 	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
 	use dkg_primitives::utils::select_random_set;
 	use dkg_runtime_primitives::crypto::AuthorityId;
-	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, ProtocolType, VerifyFn};
+	use crate::async_protocol_handlers::{IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType};
 	use crate::{Client, DKGKeystore};
 	use crate::messages::dkg_message::sign_and_send_messages;
 	use crate::utils::find_index;
@@ -193,14 +191,8 @@ pub mod meta_channel {
 	impl<T> SendFuture for T where T: Future<Output=Result<(), DKGError>> + Send + 'static {}
 
 	/// Once created, the MetaDKGMessageHandler should be .awaited to begin execution
-	pub struct MetaDKGMessageHandler<B, BE, C> {
-		protocol: Pin<Box<dyn SendFuture>>,
-		_pd: PhantomData<(B, BE, C)>
-	}
-
-	pub struct DKGParamsForAsyncProto<B: Block> {
-		gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-		keystore: DKGKeystore
+	pub struct MetaDKGMessageHandler {
+		protocol: Pin<Box<dyn SendFuture>>
 	}
 
 	#[async_trait]
@@ -214,13 +206,7 @@ pub mod meta_channel {
 
 		fn handle_unsigned_message(to_async_proto: &futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err>;
 
-		async fn on_finish<B, BE, C>(_result: <Self as StateMachine>::Output, _params: AsyncProtocolParameters<B, C>, _additional_param: Self::AdditionalReturnParam) -> Result<(), DKGError>
-			where 	B: Block,
-					 BE: Backend<B>,
-					 C: Client<B, BE> + 'static,
-					 C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
-			Ok(())
-		}
+		async fn on_finish<B: BlockChainIface>(_result: <Self as StateMachine>::Output, _params: AsyncProtocolParameters<B>, _additional_param: Self::AdditionalReturnParam) -> Result<(), DKGError>;
 	}
 
 	#[async_trait]
@@ -243,13 +229,7 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		async fn on_finish<B, BE, C>(local_key: <Self as StateMachine>::Output, params: AsyncProtocolParameters<B, C>, _: Self::AdditionalReturnParam)
-									 -> Result<(), DKGError>
-			where B: Block,
-				  BE: Backend<B>,
-				  C: Client<B, BE> + 'static,
-				  C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>
-		{
+		async fn on_finish<BCIface: BlockChainIface>(local_key: <Self as StateMachine>::Output, params: AsyncProtocolParameters<BCIface>, _: Self::AdditionalReturnParam) -> Result<(), DKGError> {
 			log::info!(target: "dkg", "Completed keygen stage successfully!");
 			// take the completed offline stage, and, immediately execute the corresponding voting stage
 			// (this will allow parallelism between offline stages executing across the network)
@@ -279,13 +259,7 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		async fn on_finish<B, BE, C>(offline_stage: <Self as StateMachine>::Output, params: AsyncProtocolParameters<B, C>, unsigned_proposal: Self::AdditionalReturnParam)
-			-> Result<(), DKGError>
-				where B: Block,
-					  BE: Backend<B>,
-					  C: Client<B, BE> + 'static,
-					  C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>
-		{
+		async fn on_finish<BCIface: BlockChainIface>(offline_stage: <Self as StateMachine>::Output, params: AsyncProtocolParameters<BCIface>, unsigned_proposal: Self::AdditionalReturnParam) -> Result<(), DKGError> {
 			log::info!(target: "dkg", "Completed offline stage successfully!");
 			// take the completed offline stage, and, immediately execute the corresponding voting stage
 			// (this will allow parallelism between offline stages executing across the network)
@@ -296,25 +270,53 @@ pub mod meta_channel {
 		}
 	}
 
-	impl<B, BE, C> MetaDKGMessageHandler<B, BE, C> where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE> + 'static,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
+	pub trait BlockChainIface: Send + Sync + 'static {
+		fn verify_signature_against_authorities(&self, message: Arc<SignedDKGMessage<Public>>) -> Result<(DKGMessage<Public>, PartyIndex), DKGError>;
+		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
+	}
 
+	pub struct DKGIface<B: Block, BE, C> {
+		pub latest_header: Arc<RwLock<Option<B::Header>>>,
+		pub client: Arc<C>,
+		pub keystore: DKGKeystore,
+		pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+		pub best_authorities: Arc<Vec<Public>>,
+		pub authority_public_key: Arc<Public>,
+		pub _pd: PhantomData<BE>
+	}
+
+	impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
+		where
+			B: Block,
+			BE: Backend<B> + 'static,
+			C: Client<B, BE> + 'static,
+			C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
+
+		fn verify_signature_against_authorities(&self, msg: Arc<SignedDKGMessage<Public>>) -> Result<(DKGMessage<Public>, PartyIndex), DKGError> {
+			let latest_header = &*self.latest_header.read();
+			let client = &self.client;
+
+			let party_inx = find_index::<AuthorityId>(&self.best_authorities, &self.authority_public_key).map(|r| r as u16 +1).ok_or_else(||DKGError::GenericError { reason: "Party not in best_authorities".to_string() })?;
+
+			DKGWorker::verify_signature_against_authorities_inner(latest_header, client, (&*msg).clone())
+				.map(|msg| (msg, party_inx))
+		}
+
+		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
+			sign_and_send_messages(&self.gossip_engine,&self.keystore, unsigned_msg);
+			Ok(())
+		}
+	}
+
+
+	impl MetaDKGMessageHandler {
 		/// This should be executed after genesis is complete
-		pub fn post_genesis(params: AsyncProtocolParameters<B, C>, threshold: u16) -> Result<Self, DKGError> {
+		pub fn post_genesis<B: BlockChainIface>(params: AsyncProtocolParameters<B>, threshold: u16) -> Result<Self, DKGError> {
 			let protocol = Box::pin(async move {
-				let at = {
-					let lock = params.latest_header.read();
-					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
-					let at: BlockId<B> = BlockId::hash(latest_header.hash());
-					at
-				};
-
-				let mut unsigned_proposals: Vec<UnsignedProposal> = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
-				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+				let params = params;
 				let (keygen_id, b, c) = Self::get_party_round_id(&params);
+				// TODO: enforce whoever creates these handlers MUST be in the best authority set
+				// return early
 				let keygen_id = keygen_id.unwrap();
 
 				let t = threshold;
@@ -327,36 +329,57 @@ pub mod meta_channel {
 				let local_key = params.keygen.lock().take().unwrap();
 				log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
 
-				let ref s_l = Self::generate_signers(&local_key, t, n);
-				// create one offline stage for each unsigned proposal
-				let futures = FuturesUnordered::new();
-				for unsigned_proposal in unsigned_proposals {
-					if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
-						futures.push(
-							Box::pin(
+				let mut unsigned_proposals_rx = params.unsigned_proposals_rx.lock().take().ok_or_else(|| DKGError::CriticalError { reason: "unsigned_proposals_rx already taken".to_string() })?;
+
+				while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
+					let ref s_l = Self::generate_signers(&local_key, t, n);
+
+					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+
+					// create one offline stage for each unsigned proposal
+					let futures = FuturesUnordered::new();
+					for unsigned_proposal in unsigned_proposals {
+						if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
+							futures.push(
+								Box::pin(
 									Self::new(params.clone(), ProtocolType::Offline {
 										unsigned_proposal,
 										i: offline_i,
 										s_l: s_l.clone(),
 										local_key: local_key.clone()
 									}
-								)?
-						));
-					} else {
-						log::trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+									)?
+								));
+						} else {
+							log::trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+						}
 					}
+
+					futures.try_collect::<()>().await.map(|_| ())?;
 				}
 
-				futures.try_collect::<()>().await.map(|_| ())
+				/*
+				let at = {
+					let lock = params.latest_header.read();
+					let latest_header = lock.as_ref().ok_or_else(|| DKGError::Vote { reason: "Latest header does not exist".to_string() })?;
+					let at: BlockId<B> = BlockId::hash(latest_header.hash());
+					at
+				};
+
+				// TODO: move all this code to inside the DKG worker
+				let mut unsigned_proposals: Vec<UnsignedProposal> = params.client.runtime_api().get_unsigned_proposals(&at).map_err(|_err| DKGError::Vote { reason: "Unable to obtain unsigned proposals".to_string() })?;
+
+				 */
+
+				Ok(())
 			});
 
 			Ok(Self {
-				protocol,
-				_pd: Default::default()
+				protocol
 			})
 		}
 
-		pub fn new(params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError> {
+		pub fn new<B: BlockChainIface>(params: AsyncProtocolParameters<B>, channel_type: ProtocolType) -> Result<Self, DKGError> {
 			match channel_type.clone() {
 				ProtocolType::Keygen { i, t, n } => {
 					Self::new_inner((), Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
@@ -370,7 +393,7 @@ pub mod meta_channel {
 			}
 		}
 
-		fn new_inner<SM: StateMachineIface>(additional_param: SM::AdditionalReturnParam, sm: SM, params: AsyncProtocolParameters<B, C>, channel_type: ProtocolType) -> Result<Self, DKGError>
+		fn new_inner<SM: StateMachineIface, B: BlockChainIface>(additional_param: SM::AdditionalReturnParam, sm: SM, params: AsyncProtocolParameters<B>, channel_type: ProtocolType) -> Result<Self, DKGError>
 			where <SM as StateMachine>::Err: Send + Debug,
 				  <SM as StateMachine>::MessageBody: Send,
 				  <SM as StateMachine>::MessageBody: Serialize,
@@ -393,11 +416,11 @@ pub mod meta_channel {
 
 			// For taking all unsigned messages generated by the AsyncProtocols, signing them,
 			// and thereafter sending them outbound
-			let outgoing_to_wire = Self::generate_outgoing_to_wire_fn::<SM>(params.clone(), outgoing_rx, channel_type.clone());
+			let outgoing_to_wire = Self::generate_outgoing_to_wire_fn::<SM, B>(params.clone(), outgoing_rx, channel_type.clone());
 
 			// For taking raw inbound signed messages, mapping them to unsigned messages, then sending
 			// to the appropriate AsyncProtocol
-			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<SM>(params,channel_type.clone(), incoming_tx_proto);
+			let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<SM, B>(params,channel_type.clone(), incoming_tx_proto);
 
 			// Combine all futures into a concurrent select subroutine
 			let protocol = async move {
@@ -421,22 +444,19 @@ pub mod meta_channel {
 
 
 			Ok(Self {
-				protocol: Box::pin(protocol),
-				_pd: Default::default()
+				protocol: Box::pin(protocol)
 			})
 		}
 
-		fn new_voting(params: AsyncProtocolParameters<B, C>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal) -> Result<Self, DKGError> {
+		fn new_voting<B: BlockChainIface>(params: AsyncProtocolParameters<B>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal) -> Result<Self, DKGError> {
 			let protocol = Box::pin(async move {
 				let ty = ProtocolType::Voting {
 					offline_stage: completed_offline_stage.clone(),
 					unsigned_proposal: unsigned_proposal.clone()
 				};
 				// the below wrapper will map signed messages into unsigned messages
-				let verify_fn = Self::generate_verification_function(params.clone());
-
 				let incoming = params.signed_message_receiver.lock().take().unwrap();
-				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ty, verify_fn);
+				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ty, params.blockchain_iface.clone());
 
 				// the first step is to generate the partial sig based on the offline stage
 				let number_of_parties = params.best_authorities.len();
@@ -476,7 +496,7 @@ pub mod meta_channel {
 
 				// now, broadcast the data
 				let unsigned_dkg_message = DKGMessage { id, payload, round_id };
-				sign_and_send_messages(&params.gossip_engine,&params.keystore, unsigned_dkg_message);
+				params.blockchain_iface.sign_and_send_msg(unsigned_dkg_message)?;
 
 				let number_of_partial_sigs = number_of_parties.saturating_sub(1) as usize;
 				let mut sigs = Vec::with_capacity(number_of_partial_sigs);
@@ -516,13 +536,11 @@ pub mod meta_channel {
 			});
 
 			Ok(Self {
-				protocol,
-				_pd: Default::default()
+				protocol
 			})
 		}
 
-		fn get_party_round_id(params: &AsyncProtocolParameters<B, C>) -> (Option<u16>, AuthoritySetId, Public) {
-			// TODO: only run if local is authority
+		fn get_party_round_id<B: BlockChainIface>(params: &AsyncProtocolParameters<B>) -> (Option<u16>, AuthoritySetId, Public) {
 			let party_ind = find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key).map(|r| r as u16 + 1);
 			let round_id = params.current_validator_set.read().clone().id;
 			let id = params.keystore
@@ -542,6 +560,8 @@ pub mod meta_channel {
 		}
 
 		/// After keygen, this should be called to generate a random set of signers
+		/// NOTE: since the random set is called using a symmetric seed to and RNG,
+		/// the resulting set is symmetric
 		fn generate_signers(local_key: &LocalKey<Secp256k1>, t: u16, n: u16) -> Vec<u16> {
 			let seed = &local_key
 				.public_key()
@@ -555,22 +575,7 @@ pub mod meta_channel {
 			select_random_set(seed, set, t + 1).unwrap()
 		}
 
-		fn generate_verification_function(params: AsyncProtocolParameters<B, C>) -> Box<dyn VerifyFn<Arc<SignedDKGMessage<Public>>>> {
-			let latest_header = params.latest_header;
-			let client = params.client;
-
-			Box::new(move |msg: Arc<SignedDKGMessage<Public>>| {
-				let latest_header = &*latest_header.read();
-				let client = &client;
-
-				let party_inx = find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key).unwrap() as u16 + 1;
-
-				DKGWorker::verify_signature_against_authorities_inner(latest_header, client, (&*msg).clone())
-					.map(|msg| (msg, party_inx))
-			})
-		}
-
-		fn generate_outgoing_to_wire_fn<SM: StateMachineIface>(params: AsyncProtocolParameters<B, C>, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, proto_ty: ProtocolType) -> Pin<Box<dyn SendFuture>>
+		fn generate_outgoing_to_wire_fn<SM: StateMachineIface, B: BlockChainIface>(params: AsyncProtocolParameters<B>, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, proto_ty: ProtocolType) -> Pin<Box<dyn SendFuture>>
 			where <SM as StateMachine>::MessageBody: Serialize,
 				  <SM as StateMachine>::MessageBody: Send,
 				  <SM as StateMachine>::Output: Send + 'static {
@@ -597,14 +602,14 @@ pub mod meta_channel {
 					};
 
 					let unsigned_dkg_message = DKGMessage { id, payload, round_id };
-					sign_and_send_messages(&params.gossip_engine,&params.keystore, unsigned_dkg_message);
+					params.blockchain_iface.sign_and_send_msg(unsigned_dkg_message)?;
 				}
 
 				Err(DKGError::CriticalError { reason: "Outbound stream stopped producing items".to_string() })
 			})
 		}
 
-		fn generate_inbound_signed_message_receiver_fn<SM: StateMachineIface>(params: AsyncProtocolParameters<B, C>,
+		fn generate_inbound_signed_message_receiver_fn<SM: StateMachineIface, B: BlockChainIface>(params: AsyncProtocolParameters<B>,
 																			  channel_type: ProtocolType,
 																			  to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> Pin<Box<dyn SendFuture>>
 			where <SM as StateMachine>::MessageBody: Send,
@@ -612,8 +617,7 @@ pub mod meta_channel {
 			Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
 				let incoming = params.signed_message_receiver.lock().take().unwrap();
-				let verify_fn = Self::generate_verification_function(params);
-				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, channel_type, verify_fn);
+				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, channel_type, params.blockchain_iface);
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
 					// TODO: we ensure the payload type, but, not that the message is for the nth index
@@ -628,8 +632,8 @@ pub mod meta_channel {
 		}
 	}
 
-	impl<B, BE, C> Unpin for MetaDKGMessageHandler<B, BE, C> {}
-	impl<B, BE, C> Future for MetaDKGMessageHandler<B, BE, C> {
+	impl Unpin for MetaDKGMessageHandler {}
+	impl Future for MetaDKGMessageHandler {
 		type Output = Result<(), DKGError>;
 
 		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
