@@ -76,11 +76,6 @@ impl Debug for ProtocolType {
 	}
 }
 
-enum ProtocolMessageType {
-	Keygen(ProtocolMessage),
-	Offline(OfflineProtocolMessage)
-}
-
 pub type PartyIndex = u16;
 
 pub trait TransformIncoming: Clone + Send + 'static  {
@@ -104,11 +99,6 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			}
         })
     }
-}
-
-pub trait TransformOutgoing {
-    type Output;
-    fn transform(self) -> Result<Self::Output, DKGError> where Self: Sized;
 }
 
 impl<T, B> Stream for IncomingAsyncProtocolWrapper<T, B>
@@ -214,10 +204,10 @@ pub mod meta_channel {
 		type AdditionalReturnParam = ();
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: Msg<DKGMessage<Public>>) -> Result<(), <Self as StateMachine>::Err> {
 			let DKGMessage { payload, .. } = msg.body;
-
 			// Send the payload to the appropriate AsyncProtocols
 			match payload {
 				DKGMsgPayload::Keygen(msg) => {
+					log::info!(target: "dkg", "Handling Keygen inbound message for round={}", msg.round_id);
 					use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error as Error;
 					let message: Msg<ProtocolMessage> = serde_json::from_slice(msg.keygen_msg.as_slice()).map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
 					to_async_proto.unbounded_send(message).map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
@@ -308,13 +298,33 @@ pub mod meta_channel {
 		}
 	}
 
+	#[derive(Clone)]
+	pub struct TestDummyIface {
+		pub sender: tokio::sync::broadcast::Sender<SignedDKGMessage<Public>>,
+		pub best_authorities: Arc<Vec<Public>>,
+		pub authority_public_key: Arc<Public>,
+	}
+
+	impl BlockChainIface for TestDummyIface {
+		fn verify_signature_against_authorities(&self, message: Arc<SignedDKGMessage<Public>>) -> Result<(DKGMessage<Public>, PartyIndex), DKGError> {
+			let party_inx = find_index::<AuthorityId>(&self.best_authorities, &self.authority_public_key).map(|r| r as u16 +1).ok_or_else(||DKGError::GenericError { reason: "Party not in best_authorities".to_string() })?;
+			Ok((message.msg.clone(), party_inx))
+		}
+
+		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
+			let faux_signed_message = SignedDKGMessage { msg: unsigned_msg, signature: None };
+			self.sender.send(faux_signed_message).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+			Ok(())
+		}
+	}
+
 
 	impl<'a> MetaDKGMessageHandler<'a> {
 		/// This should be executed after genesis is complete
 		pub fn post_genesis<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, threshold: u16) -> Result<Self, DKGError> {
 			let protocol = Box::pin(async move {
 				let params = params;
-				let (keygen_id, b, c) = Self::get_party_round_id(&params);
+				let (keygen_id, _b, _c) = Self::get_party_round_id(&params);
 				if let Some(keygen_id) = keygen_id {
 					log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
 					let t = threshold;
@@ -534,7 +544,7 @@ pub mod meta_channel {
 				let _signature = serde_json::to_string(&signature).map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 				// TODO: determine what to do
 
-				Err::<(), _>(DKGError::CriticalError { reason: "Inbound stream stopped producing items".to_string() })
+				Ok(())
 			});
 
 			Ok(Self {
@@ -642,4 +652,141 @@ pub mod meta_channel {
 			self.protocol.as_mut().poll(cx)
 		}
 	}
+}
+
+
+#[cfg(test)]
+mod tests {
+	use std::sync::Arc;
+	use std::time::Duration;
+	use futures::stream::FuturesUnordered;
+	use futures::{TryStreamExt, StreamExt};
+	use parking_lot::lock_api::{Mutex, RwLock};
+	use crate::async_protocol_handlers::meta_channel::{BlockChainIface, MetaDKGMessageHandler, TestDummyIface};
+	use crate::DKGKeystore;
+	use crate::worker::AsyncProtocolParameters;
+	use rstest::{rstest, fixture};
+	use sc_keystore::LocalKeystore;
+	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+	use tokio::sync::mpsc::UnboundedReceiver;
+	use dkg_primitives::types::DKGError;
+	use dkg_runtime_primitives::{AuthoritySet, crypto, DKGPayloadKey, KEY_TYPE, Proposal, ProposalKind, TypedChainId, UnsignedProposal};
+	use crate::async_protocol_handlers::SignedMessageReceiver;
+	use crate::keyring::Keyring;
+	use tokio_stream::wrappers::IntervalStream;
+	use dkg_primitives::ProposalNonce;
+
+	// inserts into ks, returns public
+	fn generate_new(ks: &dyn SyncCryptoStore, kr: Keyring) -> crypto::Public {
+		SyncCryptoStore::ecdsa_generate_new(ks,KEY_TYPE, Some(&kr.to_seed())).unwrap().into()
+	}
+
+	#[allow(unused_must_use)]
+	fn setup_log() {
+		std::env::set_var("RUST_LOG", "info");
+		let _ = env_logger::try_init();
+		log::trace!("TRACE enabled");
+		log::info!("INFO enabled");
+		log::warn!("WARN enabled");
+		log::error!("ERROR enabled");
+	}
+
+	#[fixture]
+	fn raw_keystore() -> SyncCryptoStorePtr {
+		Arc::new(LocalKeystore::in_memory())
+	}
+
+	#[rstest]
+	#[case(2, 3)]
+	#[tokio::test(flavor = "multi_thread")]
+	async fn test_async_protocol(#[case] threshold: u16, #[case] num_parties: u16, raw_keystore: SyncCryptoStorePtr) -> Result<(), DKGError> {
+		setup_log();
+		let authority_set = (0..num_parties).into_iter().map(|id| generate_new(&*raw_keystore, Keyring::Custom(id as _))).collect::<Vec<crypto::Public>>();
+		let authority_public_key = authority_set.first().unwrap().clone();
+		let dkg_keystore = DKGKeystore::from(Some(raw_keystore));
+		let mut validators = AuthoritySet::empty();
+		validators.authorities = authority_set.clone();
+
+
+		let (signed_message_receiver_tx, _signed_message_receiver_rx) = tokio::sync::broadcast::channel(1024);
+
+		let mut unsigned_props_txs = Vec::with_capacity(num_parties as usize);
+
+		let (to_faux_net_tx, mut to_faux_net_rx) = tokio::sync::broadcast::channel(1024);
+
+		let test_iface = TestDummyIface {
+			sender: to_faux_net_tx,
+			best_authorities: Arc::new(authority_set.clone()),
+			authority_public_key: Arc::new(authority_public_key.clone())
+		};
+
+		let async_protocols = FuturesUnordered::new();
+
+		for _ in 0..num_parties {
+			let (unsigned_props_tx, unsigned_props_rx) = tokio::sync::mpsc::unbounded_channel();
+			let async_protocol = create_async_proto_inner(test_iface.clone(), threshold, dkg_keystore.clone(), signed_message_receiver_tx.subscribe(), validators.clone(), authority_set.clone(), authority_public_key.clone(), unsigned_props_rx);
+			async_protocols.push(async_protocol);
+			unsigned_props_txs.push(unsigned_props_tx);
+		}
+
+		// forward messages sent from async protocol to rest of network
+		let outbound_to_broadcast_faux_net = async move {
+			while let Ok(outbound_msg) = to_faux_net_rx.recv().await {
+				signed_message_receiver_tx.send(Arc::new(outbound_msg)).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
+			}
+
+			Err::<(), _>(DKGError::CriticalError { reason: "to_faux_net_rx died".to_string() })
+		};
+
+		let unsigned_proposal_broadcaster = async move {
+			let mut ticks = IntervalStream::new(tokio::time::interval(Duration::from_millis(1000))).take(1);
+			while let Some(v) = ticks.next().await {
+				log::info!(target: "dkg", "Now beginning broadcast of new UnsignedProposals");
+				let unsigned_proposals = (0..num_parties).into_iter().map(|_| UnsignedProposal {
+					typed_chain_id: TypedChainId::None,
+					key: DKGPayloadKey::RefreshVote(ProposalNonce::from(0)),
+					proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data: vec![] }
+				}).collect::<Vec<UnsignedProposal>>();
+
+				for tx in unsigned_props_txs.iter() {
+					tx.send(unsigned_proposals.clone()).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
+				}
+			}
+
+			Ok(())
+		};
+
+		// join these two futures to ensure that when the unsigned proposals broadcaster ends,
+		// the entire test doesn't end
+		let aux_handler = futures::future::try_join(outbound_to_broadcast_faux_net, unsigned_proposal_broadcaster);
+
+		tokio::select! {
+			res0 = async_protocols.try_collect::<()>() => res0.map(|_| ()),
+			res1 = aux_handler => res1.map(|_| ())
+		}
+	}
+
+	fn create_async_proto_inner<'a, B: BlockChainIface + Clone + 'a>(b: B,
+														threshold: u16,
+														keystore: DKGKeystore,
+														signed_message_receiver: SignedMessageReceiver,
+														validator_set: AuthoritySet<crypto::Public>,
+														best_authorities: Vec<crypto::Public>,
+														authority_public_key: crypto::Public,
+														unsigned_proposals_rx: UnboundedReceiver<Vec<UnsignedProposal>>) -> MetaDKGMessageHandler<'a> {
+
+		let async_params = AsyncProtocolParameters {
+			blockchain_iface: Arc::new(b),
+			keystore,
+			signed_message_receiver: Arc::new(Mutex::new(Some(signed_message_receiver))),
+			current_validator_set: Arc::new(RwLock::new(validator_set)),
+			best_authorities: Arc::new(best_authorities),
+			authority_public_key: Arc::new(authority_public_key),
+			keygen: Arc::new(Default::default()),
+			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx)))
+		};
+
+		MetaDKGMessageHandler::post_genesis(async_params, threshold).unwrap()
+	}
+
 }
