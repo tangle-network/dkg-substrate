@@ -81,7 +81,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 use crate::async_protocol_handlers::meta_channel::DKGIface;
-use crate::async_protocol_handlers::SignedMessageReceiver;
+use crate::async_protocol_handlers::SignedMessageBroadcastHandle;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -219,11 +219,10 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 pub struct AsyncProtocolParameters<BCIface> {
 	pub blockchain_iface: Arc<BCIface>,
 	pub keystore: DKGKeystore,
-	pub signed_message_receiver: Arc<Mutex<Option<SignedMessageReceiver>>>,
+	pub signed_message_broadcast_handle: SignedMessageBroadcastHandle,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 	pub unsigned_proposals_rx: Arc<Mutex<Option<UnboundedReceiver<Vec<UnsignedProposal>>>>>
 }
 
@@ -233,11 +232,10 @@ impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
 		Self {
 			blockchain_iface: self.blockchain_iface.clone(),
 			keystore: self.keystore.clone(),
-			signed_message_receiver: self.signed_message_receiver.clone(),
+			signed_message_broadcast_handle: self.signed_message_broadcast_handle.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
-			keygen: Arc::new(Mutex::new(None)),
 			unsigned_proposals_rx: self.unsigned_proposals_rx.clone()
 		}
 	}
@@ -267,14 +265,15 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				gossip_engine: self.gossip_engine.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
+				keygen: Arc::new(Default::default()),
+				vote_results: Arc::new(Default::default()),
 				_pd: Default::default()
 			}),
 			keystore: self.key_store.clone(),
-			signed_message_receiver: Arc::new(Mutex::new(Some(self.to_async_proto.subscribe()))),
+			signed_message_broadcast_handle: self.to_async_proto.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
 			authority_public_key,
-			keygen: Arc::new(Mutex::new(None)),
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx)))
 		}
 	}

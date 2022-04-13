@@ -25,7 +25,7 @@ pub mod utils;
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::RuntimeDebug;
+use frame_support::{log, RuntimeDebug};
 pub use proposal::*;
 use sp_application_crypto::sr25519;
 
@@ -168,6 +168,19 @@ pub struct UnsignedProposal {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
 	pub proposal: Proposal,
+}
+
+impl UnsignedProposal {
+	pub fn hash(&self) -> Option<[u8; 32]> {
+		let key = (self.typed_chain_id, self.key);
+		log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
+		if let Proposal::Unsigned { data, .. } = &self.proposal {
+			log::debug!(target: "dkg", "Adding unsigned proposal to hash vec");
+			Some(keccak_256(data))
+		} else {
+			None
+		}
+	}
 }
 
 sp_api::decl_runtime_apis! {

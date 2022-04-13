@@ -56,5 +56,6 @@ dkg-primitives = { path = "../dkg-primitives", default-features = false }
 sc-network-test = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.17", default-features = false }
 rstest = "0.12.0"
 env_logger = "0.9.0"
+itertools = "0.10.3"
 
 [features]
