@@ -265,7 +265,6 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				gossip_engine: self.gossip_engine.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
-				keygen: Arc::new(Default::default()),
 				vote_results: Arc::new(Default::default()),
 				_pd: Default::default()
 			}),

@@ -208,18 +208,19 @@ pub mod meta_channel {
 	use crate::utils::find_index;
 	use crate::worker::{AsyncProtocolParameters, DKGWorker};
 
-	pub trait SendFuture<'a>: Future<Output=Result<(), DKGError>> + Send + 'a {}
-	impl<'a, T> SendFuture<'a> for T where T: Future<Output=Result<(), DKGError>> + Send + 'a {}
+	pub trait SendFuture<'a, Out: 'a>: Future<Output=Result<Out, DKGError>> + Send + 'a {}
+	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where T: Future<Output=Result<Out, DKGError>> + Send + 'a {}
 
 	/// Once created, the MetaDKGMessageHandler should be .awaited to begin execution
-	pub struct MetaDKGMessageHandler<'a> {
-		protocol: Pin<Box<dyn SendFuture<'a>>>
+	pub struct MetaDKGMessageHandler<'a, Out> {
+		protocol: Pin<Box<dyn SendFuture<'a, Out>>>
 	}
 
 	#[async_trait]
 	trait StateMachineIface: StateMachine + Send
 		where <Self as StateMachine>::Output: Send  {
 		type AdditionalReturnParam: Debug + Send ;
+		type Return: Debug + Send;
 
 		fn generate_channel() -> (futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, futures::channel::mpsc::UnboundedReceiver<Msg<<Self as StateMachine>::MessageBody>>) {
 			futures::channel::mpsc::unbounded()
@@ -227,12 +228,13 @@ pub mod meta_channel {
 
 		fn handle_unsigned_message(to_async_proto: &futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>, msg: Msg<DKGMessage<Public>>, local_ty: &ProtocolType) -> Result<(), <Self as StateMachine>::Err>;
 
-		async fn on_finish<B: BlockChainIface>(_result: <Self as StateMachine>::Output, _params: AsyncProtocolParameters<B>, _additional_param: Self::AdditionalReturnParam) -> Result<(), DKGError>;
+		async fn on_finish<B: BlockChainIface>(_result: <Self as StateMachine>::Output, _params: AsyncProtocolParameters<B>, _additional_param: Self::AdditionalReturnParam) -> Result<Self::Return, DKGError>;
 	}
 
 	#[async_trait]
 	impl StateMachineIface for Keygen {
 		type AdditionalReturnParam = ();
+		type Return = <Self as StateMachine>::Output;
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>, msg: Msg<DKGMessage<Public>>, local_ty: &ProtocolType) -> Result<(), <Self as StateMachine>::Err> {
 			let DKGMessage { payload, .. } = msg.body;
 			// Send the payload to the appropriate AsyncProtocols
@@ -257,18 +259,18 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		async fn on_finish<BCIface: BlockChainIface>(local_key: <Self as StateMachine>::Output, params: AsyncProtocolParameters<BCIface>, _: Self::AdditionalReturnParam) -> Result<(), DKGError> {
+		async fn on_finish<BCIface: BlockChainIface>(local_key: <Self as StateMachine>::Output, params: AsyncProtocolParameters<BCIface>, _: Self::AdditionalReturnParam) -> Result<<Self as StateMachine>::Output, DKGError> {
 			log::info!(target: "dkg", "Completed keygen stage successfully!");
 			// take the completed offline stage, and, immediately execute the corresponding voting stage
 			// (this will allow parallelism between offline stages executing across the network)
-			*params.blockchain_iface.get_keygen_result().lock() = Some(local_key);
-			Ok(())
+			Ok(local_key)
 		}
 	}
 
 	#[async_trait]
 	impl StateMachineIface for OfflineStage {
 		type AdditionalReturnParam = (UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>);
+		type Return = ();
 
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>, msg: Msg<DKGMessage<Public>>, local_ty: &ProtocolType) -> Result<(), <Self as StateMachine>::Err> {
 			let DKGMessage { payload, .. } = msg.body;
@@ -305,7 +307,8 @@ pub mod meta_channel {
 			// take the completed offline stage, and, immediately execute the corresponding voting stage
 			// (this will allow parallelism between offline stages executing across the network)
 			// NOTE: we pass the generated offline stage id for the i in voting to keep consistency
-			MetaDKGMessageHandler::new_voting(params, offline_stage, unsigned_proposal.0, unsigned_proposal.1, unsigned_proposal.2)?.await
+			MetaDKGMessageHandler::new_voting(params, offline_stage, unsigned_proposal.0, unsigned_proposal.1, unsigned_proposal.2)?.await?;
+			Ok(())
 		}
 	}
 
@@ -313,7 +316,6 @@ pub mod meta_channel {
 		fn verify_signature_against_authorities(&self, message: Arc<SignedDKGMessage<Public>>) -> Result<DKGMessage<Public>, DKGError>;
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>>;
-		fn get_keygen_result(&self) -> &Mutex<Option<LocalKey<Secp256k1>>>;
 	}
 
 	pub struct DKGIface<B: Block, BE, C> {
@@ -323,7 +325,6 @@ pub mod meta_channel {
 		pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
-		pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 		// key is party_index, hash of data. Needed especially for local unit tests
 		pub vote_results: Arc<Mutex<HashMap<(u16, [u8; 32]), String>>>,
 		pub _pd: PhantomData<BE>
@@ -351,10 +352,6 @@ pub mod meta_channel {
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
 			&*self.vote_results
 		}
-
-		fn get_keygen_result(&self) -> &Mutex<Option<LocalKey<Secp256k1>>> {
-			&*self.keygen
-		}
 	}
 
 	#[derive(Clone)]
@@ -362,7 +359,6 @@ pub mod meta_channel {
 		pub sender: tokio::sync::broadcast::Sender<SignedDKGMessage<Public>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
-		pub keygen: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 		// key is party_index, hash of data. Needed especially for local unit tests
 		pub vote_results: Arc<Mutex<HashMap<(u16, [u8; 32]), String>>>
 	}
@@ -382,16 +378,12 @@ pub mod meta_channel {
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
 			&*self.vote_results
 		}
-
-		fn get_keygen_result(&self) -> &Mutex<Option<LocalKey<Secp256k1>>> {
-			&*self.keygen
-		}
 	}
 
 
-	impl<'a> MetaDKGMessageHandler<'a> {
+	impl<'a, Out: Send + Debug + 'a> MetaDKGMessageHandler<'a, Out> where (): Extend<Out> {
 		/// This should be executed after genesis is complete
-		pub fn post_genesis<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, threshold: u16) -> Result<Self, DKGError> {
+		pub fn post_genesis<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, threshold: u16) -> Result<MetaDKGMessageHandler<'a, ()>, DKGError> {
 			let protocol = Box::pin(async move {
 				let params = params;
 				let (keygen_id, _b, _c) = Self::get_party_round_id(&params);
@@ -402,9 +394,7 @@ pub mod meta_channel {
 
 					// causal flow: create 1 keygen then, fan-out to unsigned_proposals.len() offline-stage async subroutines
 					// those offline-stages will each automatically proceed with their corresponding voting stages in parallel
-					let _keygen_stage = Self::new(params.clone(), ProtocolType::Keygen { i: keygen_id, t, n })?.await?;
-					// a successful completion of keygen guarantees the local key's existence
-					let local_key = params.blockchain_iface.get_keygen_result().lock().take().unwrap();
+					let local_key = MetaDKGMessageHandler::new_keygen(params.clone(), keygen_id, t, n)?.await?;
 					log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
 
 					let mut unsigned_proposals_rx = params.unsigned_proposals_rx.lock().take().ok_or_else(|| DKGError::CriticalError { reason: "unsigned_proposals_rx already taken".to_string() })?;
@@ -422,13 +412,7 @@ pub mod meta_channel {
 
 								futures.push(
 									Box::pin(
-										Self::new(params.clone(), ProtocolType::Offline {
-											unsigned_proposal,
-											i: offline_i,
-											s_l: s_l.clone(),
-											local_key: local_key.clone()
-										}
-										)?
+										MetaDKGMessageHandler::new_offline(params.clone(), unsigned_proposal, offline_i, s_l.clone(), local_key.clone())?
 									));
 							}
 
@@ -463,28 +447,23 @@ pub mod meta_channel {
 				Ok(())
 			});
 
-			Ok(Self {
+			Ok(MetaDKGMessageHandler {
 				protocol
 			})
 		}
 
-		pub fn new<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, channel_type: ProtocolType) -> Result<Self, DKGError> {
-			match channel_type.clone() {
-				ProtocolType::Keygen { i, t, n } => {
-					Self::new_inner((), Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
-				}
-				ProtocolType::Offline { unsigned_proposal, i, s_l, local_key } => {
-					let early_handle = params.signed_message_broadcast_handle.subscribe();
-					Self::new_inner((unsigned_proposal, i, early_handle), OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
-				}
-				ProtocolType::Voting { offline_stage, unsigned_proposal, i: party_index } => {
-					let handle = params.signed_message_broadcast_handle.subscribe();
-					Self::new_voting(params, offline_stage, unsigned_proposal, party_index, handle)
-				}
-			}
+		fn new_keygen<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, i: u16, t: u16, n: u16) -> Result<MetaDKGMessageHandler<'a, <Keygen as StateMachineIface>::Return>, DKGError> {
+			let channel_type = ProtocolType::Keygen { i, t, n };
+			MetaDKGMessageHandler::new_inner((), Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 		}
 
-		fn new_inner<SM: StateMachineIface + 'static, B: BlockChainIface + 'a>(additional_param: SM::AdditionalReturnParam, sm: SM, params: AsyncProtocolParameters<B>, channel_type: ProtocolType) -> Result<Self, DKGError>
+		fn new_offline<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, unsigned_proposal: UnsignedProposal, i: u16, s_l: Vec<u16>, local_key: LocalKey<Secp256k1>) -> Result<MetaDKGMessageHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError> {
+			let channel_type = ProtocolType::Offline { unsigned_proposal: unsigned_proposal.clone(), i, s_l: s_l.clone(), local_key: local_key.clone() };
+			let early_handle = params.signed_message_broadcast_handle.subscribe();
+			MetaDKGMessageHandler::new_inner((unsigned_proposal, i, early_handle), OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
+		}
+
+		fn new_inner<SM: StateMachineIface + 'static, B: BlockChainIface + 'a>(additional_param: SM::AdditionalReturnParam, sm: SM, params: AsyncProtocolParameters<B>, channel_type: ProtocolType) -> Result<MetaDKGMessageHandler<'a, SM::Return>, DKGError>
 			where <SM as StateMachine>::Err: Send + Debug,
 				  <SM as StateMachine>::MessageBody: Send,
 				  <SM as StateMachine>::MessageBody: Serialize,
@@ -523,32 +502,29 @@ pub mod meta_channel {
 
 					outgoing_res = outgoing_to_wire => {
 						log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
-						outgoing_res
+						Err(DKGError::GenericError { reason: "Outbound sender ended".to_string() })
 					},
 
 					incoming_res = inbound_signed_message_receiver => {
 						log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
-						incoming_res
+						Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
 					}
 				}
 			};
 
 
-			Ok(Self {
+			Ok(MetaDKGMessageHandler {
 				protocol: Box::pin(protocol)
 			})
 		}
 
-		fn new_voting<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal, party_ind: PartyIndex, rx: Receiver<Arc<SignedDKGMessage<Public>>>) -> Result<Self, DKGError> {
+		fn new_voting<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal, party_ind: PartyIndex, rx: Receiver<Arc<SignedDKGMessage<Public>>>) -> Result<MetaDKGMessageHandler<'a, ()>, DKGError> {
 			let protocol = Box::pin(async move {
 				let ty = ProtocolType::Voting {
 					offline_stage: completed_offline_stage.clone(),
 					unsigned_proposal: unsigned_proposal.clone(),
 					i: party_ind
 				};
-
-				static COUNT: AtomicUsize = AtomicUsize::new(0);
-				log::info!(target: "dkg", "votings spawned: {}", COUNT.fetch_add(1, Ordering::SeqCst) + 1);
 
 				// the below wrapper will map signed messages into unsigned messages
 				let incoming = rx;
@@ -631,7 +607,7 @@ pub mod meta_channel {
 				}
 			});
 
-			Ok(Self {
+			Ok(MetaDKGMessageHandler {
 				protocol
 			})
 		}
@@ -671,7 +647,7 @@ pub mod meta_channel {
 			select_random_set(seed, set, t + 1).unwrap()
 		}
 
-		fn generate_outgoing_to_wire_fn<SM: StateMachineIface + 'a, B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, proto_ty: ProtocolType) -> impl SendFuture<'a>
+		fn generate_outgoing_to_wire_fn<SM: StateMachineIface + 'a, B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>, proto_ty: ProtocolType) -> impl SendFuture<'a, ()>
 			where <SM as StateMachine>::MessageBody: Serialize,
 				  <SM as StateMachine>::MessageBody: Send,
 				  <SM as StateMachine>::Output: Send  {
@@ -710,7 +686,7 @@ pub mod meta_channel {
 
 		fn generate_inbound_signed_message_receiver_fn<SM: StateMachineIface + 'a, B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>,
 																			  channel_type: ProtocolType,
-																			  to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> impl SendFuture<'a>
+																			  to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>) -> impl SendFuture<'a, ()>
 			where <SM as StateMachine>::MessageBody: Send,
 				  <SM as StateMachine>::Output: Send  {
 			Box::pin(async move {
@@ -730,9 +706,9 @@ pub mod meta_channel {
 		}
 	}
 
-	impl Unpin for MetaDKGMessageHandler<'_> {}
-	impl Future for MetaDKGMessageHandler<'_> {
-		type Output = Result<(), DKGError>;
+	impl<Out> Unpin for MetaDKGMessageHandler<'_, Out> {}
+	impl<Out> Future for MetaDKGMessageHandler<'_, Out> {
+		type Output = Result<Out, DKGError>;
 
 		fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
 			self.protocol.as_mut().poll(cx)
@@ -820,7 +796,6 @@ mod tests {
 				sender: to_faux_net_tx.clone(),
 				best_authorities: Arc::new(authority_set.clone()),
 				authority_public_key: Arc::new(authority_public_key.clone()),
-				keygen: Arc::new(Default::default()),
 				vote_results: Arc::new(Mutex::new(HashMap::new()))
 			};
 
@@ -880,7 +855,7 @@ mod tests {
 																	 validator_set: AuthoritySet<crypto::Public>,
 																	 best_authorities: Vec<crypto::Public>,
 																	 authority_public_key: crypto::Public,
-																	 unsigned_proposals_rx: UnboundedReceiver<Vec<UnsignedProposal>>) -> MetaDKGMessageHandler<'a> {
+																	 unsigned_proposals_rx: UnboundedReceiver<Vec<UnsignedProposal>>) -> MetaDKGMessageHandler<'a, ()> {
 
 		let async_params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(b),
