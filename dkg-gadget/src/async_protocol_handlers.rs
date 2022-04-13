@@ -120,7 +120,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 
 			(l, r) => {
 				// TODO: route
-				log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
+				//log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
 				Ok(None)
 			}
 		}
@@ -196,6 +196,7 @@ pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::elliptic::curves::Secp256k1;
 	use futures::stream::FuturesUnordered;
+	use tokio::sync::broadcast::Receiver;
 
 	use dkg_runtime_primitives::crypto::Public;
 	use dkg_primitives::types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, SignedDKGMessage};
@@ -267,7 +268,7 @@ pub mod meta_channel {
 
 	#[async_trait]
 	impl StateMachineIface for OfflineStage {
-		type AdditionalReturnParam = (UnsignedProposal, PartyIndex);
+		type AdditionalReturnParam = (UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>);
 
 		fn handle_unsigned_message(to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>, msg: Msg<DKGMessage<Public>>, local_ty: &ProtocolType) -> Result<(), <Self as StateMachine>::Err> {
 			let DKGMessage { payload, .. } = msg.body;
@@ -304,11 +305,7 @@ pub mod meta_channel {
 			// take the completed offline stage, and, immediately execute the corresponding voting stage
 			// (this will allow parallelism between offline stages executing across the network)
 			// NOTE: we pass the generated offline stage id for the i in voting to keep consistency
-			MetaDKGMessageHandler::new(params, ProtocolType::Voting {
-				offline_stage,
-				unsigned_proposal: unsigned_proposal.0,
-				i: unsigned_proposal.1
-			})?.await
+			MetaDKGMessageHandler::new_voting(params, offline_stage, unsigned_proposal.0, unsigned_proposal.1, unsigned_proposal.2)?.await
 		}
 	}
 
@@ -477,10 +474,12 @@ pub mod meta_channel {
 					Self::new_inner((), Keygen::new(i, t, n).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 				}
 				ProtocolType::Offline { unsigned_proposal, i, s_l, local_key } => {
-					Self::new_inner((unsigned_proposal, i), OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
+					let early_handle = params.signed_message_broadcast_handle.subscribe();
+					Self::new_inner((unsigned_proposal, i, early_handle), OfflineStage::new(i, s_l, local_key).map_err(|err| DKGError::CriticalError { reason: err.to_string() })?, params, channel_type)
 				}
 				ProtocolType::Voting { offline_stage, unsigned_proposal, i: party_index } => {
-					Self::new_voting(params, offline_stage, unsigned_proposal, party_index)
+					let handle = params.signed_message_broadcast_handle.subscribe();
+					Self::new_voting(params, offline_stage, unsigned_proposal, party_index, handle)
 				}
 			}
 		}
@@ -540,7 +539,7 @@ pub mod meta_channel {
 			})
 		}
 
-		fn new_voting<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal, party_ind: PartyIndex) -> Result<Self, DKGError> {
+		fn new_voting<B: BlockChainIface + 'a>(params: AsyncProtocolParameters<B>, completed_offline_stage: CompletedOfflineStage, unsigned_proposal: UnsignedProposal, party_ind: PartyIndex, rx: Receiver<Arc<SignedDKGMessage<Public>>>) -> Result<Self, DKGError> {
 			let protocol = Box::pin(async move {
 				let ty = ProtocolType::Voting {
 					offline_stage: completed_offline_stage.clone(),
@@ -552,7 +551,7 @@ pub mod meta_channel {
 				log::info!(target: "dkg", "votings spawned: {}", COUNT.fetch_add(1, Ordering::SeqCst) + 1);
 
 				// the below wrapper will map signed messages into unsigned messages
-				let incoming = params.signed_message_broadcast_handle.subscribe();
+				let incoming = rx;
 				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ty, params.blockchain_iface.clone());
 				let (_,round_id,id) = Self::get_party_round_id(&params);
 				// the first step is to generate the partial sig based on the offline stage
@@ -605,7 +604,7 @@ pub mod meta_channel {
 							}
 						}
 
-						_ => unreachable!("Should not happen")
+						_ => {}
 					}
 				}
 
