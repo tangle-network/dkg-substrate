@@ -1,0 +1,53 @@
+name: run
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  # moved to own workflow file due to running out of disk space. 
+  # The runner will stop working when the machine runs out of disk space. Free space left: 72 MB
+  # dkg-substrate integration tests
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          submodules: "recursive"
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+
+      - name: Build Standalone Node for Integration Tests (Release)
+        run: cargo build --release -p dkg-standalone-node --features integration-tests
+
+      - name: Install Nodejs
+        uses: actions/setup-node@v2
+        with:
+          node-version-file: "./dkg-test-suite/.nvmrc"
+          cache: "yarn"
+          cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Install Packages
+        run: cd dkg-test-suite && yarn
+
+      - name: Run E2E Tests
+        run: cd dkg-test-suite && yarn test
+

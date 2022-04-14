@@ -79,9 +79,9 @@ where
 
 	// Signing
 	#[builder(default)]
-	signers: Vec<u16>,
+	pub signers: Vec<u16>,
 	#[builder(default)]
-	offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
+	pub offlines: HashMap<Vec<u8>, OfflineState<Clock>>,
 	#[builder(default)]
 	votes: HashMap<Vec<u8>, SignState<Clock>>,
 
@@ -91,7 +91,10 @@ where
 
 	// Authorities
 	#[builder(default)]
-	authorities: Vec<AuthorityId>,
+	pub authorities: Vec<AuthorityId>,
+	// Jailed signing authorities
+	#[builder(default)]
+	jailed_signers: Vec<AuthorityId>,
 }
 
 impl<C> MultiPartyECDSARounds<C>
@@ -108,6 +111,21 @@ where
 
 	pub fn set_signers(&mut self, signers: Vec<u16>) {
 		self.signers = signers;
+	}
+
+	pub fn set_jailed_signers(&mut self, jailed_signers: Vec<AuthorityId>) {
+		self.jailed_signers = jailed_signers;
+
+		match &self.keygen {
+			KeygenState::Finished(Ok(local_key)) => {
+				if let Ok(signer_set) = self.generate_signers(&local_key.clone()) {
+					self.signers = signer_set;
+				}
+			},
+			_ => {
+				error!(target: "dkg", "set_jailed_signers called before local_key is set");
+			},
+		}
 	}
 
 	pub fn is_signer(&self) -> bool {
@@ -166,8 +184,10 @@ where
 				KeygenState::Started(rounds) => {
 					let finish_result = rounds.try_finish();
 					if let Ok(local_key) = &finish_result {
-						self.generate_and_set_signers(local_key);
-						debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
+						if let Ok(signers_set) = self.generate_signers(local_key) {
+							self.set_signers(signers_set);
+							debug!("Party {}, new signers: {:?}", self.party_index, &self.signers);
+						}
 
 						results.push(Ok(DKGResult::KeygenFinished {
 							round_id: self.round_id,
@@ -364,14 +384,15 @@ where
 	/// Starts new offline stage for the provided key.
 	/// All of the messages collected so far for this key will be processed immediately.
 	pub fn create_offline_stage(&mut self, key: Vec<u8>, started_at: C) -> Result<(), DKGError> {
-		debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
-
 		let sign_params = self.sign_params();
 		// Get the offline index in the signer set (different than the party index).
 		let offline_i = match self.get_offline_stage_index() {
-			Some(i) => i,
+			Some(i) => {
+				debug!(target: "dkg", "🕸️  Creating offline stage for {:?} with signers {:?}", &key, &self.signers);
+				i
+			},
 			None => {
-				trace!(target: "dkg", "🕸️  We are not among signers, skipping");
+				debug!(target: "dkg", "🕸️  We are not among signers, skipping");
 				return Ok(())
 			},
 		};
@@ -542,22 +563,52 @@ where
 			.map(|r| r.0)
 	}
 
+	/// Get the unjailed signers
+	pub fn get_unjailed_signers(&self) -> Vec<u16> {
+		self.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| !self.jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect()
+	}
+
+	/// Get the jailed signers
+	pub fn get_jailed_signers(&self) -> Vec<u16> {
+		self.authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| self.jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect()
+	}
+
 	/// Generates the signer set by randomly selecting t+1 signers
 	/// to participate in the signing protocol. We set the signers in the local
 	/// storage once selected.
-	fn generate_and_set_signers(&mut self, local_key: &LocalKey<Secp256k1>) {
+	pub fn generate_signers(
+		&self,
+		local_key: &LocalKey<Secp256k1>,
+	) -> Result<Vec<u16>, &'static str> {
 		let (_, threshold, parties) = self.dkg_params();
-		info!(target: "dkg", "🕸️  Generating threshold signer set with threshold {}-out-of-{}", threshold, parties);
-
+		// Select the random subset using the local key as a seed
 		let seed = &local_key.clone().public_key().to_bytes(true)[1..];
-		let set = (1..=self.authorities.len())
-			.map(|x| u16::try_from(x).unwrap())
-			.collect::<Vec<u16>>();
-		let signers_set = select_random_set(seed, set, threshold + 1);
-
-		if let Ok(signers_set) = signers_set {
-			self.set_signers(signers_set);
+		let mut final_set = self.get_unjailed_signers();
+		// Mutate the final set if we don't have enough unjailed signers
+		if final_set.len() <= threshold.into() {
+			let jailed_set = self.get_jailed_signers();
+			let diff = usize::from(threshold) + 1 - final_set.len();
+			final_set = final_set
+				.iter()
+				.chain(jailed_set.iter().take(diff))
+				.cloned()
+				.collect::<Vec<u16>>();
 		}
+
+		select_random_set(seed, final_set, threshold + 1).map(|set| {
+			info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", self.round_id, threshold, parties, set);
+			set
+		})
 	}
 
 	fn keygen_params(&self) -> KeygenParams {

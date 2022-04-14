@@ -27,7 +27,6 @@ pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::{log, RuntimeDebug};
 pub use proposal::*;
-use sp_application_crypto::sr25519;
 
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
@@ -55,7 +54,17 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-pub const GENESIS_BLOCK_NUMBER: u32 = 0;
+/// Gossip message resending limit for outbound messages
+pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
+
+/// The keygen timeout limit in blocks before we consider misbehaviours
+pub const KEYGEN_TIMEOUT: u32 = 5;
+
+/// The offline timeout limit in blocks before we consider misbehaviours
+pub const OFFLINE_TIMEOUT: u32 = 5;
+
+/// The sign timeout limit in blocks before we consider misbehaviours
+pub const SIGN_TIMEOUT: u32 = 3;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -79,14 +88,23 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
+#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub enum MisbehaviourType {
+	Keygen,
+	Sign,
+}
+
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports {
+pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
+	/// Offending type
+	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
 	pub round_id: u64,
 	/// The offending authority
-	pub offender: crypto::AuthorityId,
+	pub offender: DKGId,
 	/// A list of reporters
-	pub reporters: Vec<sr25519::Public>,
+	pub reporters: Vec<DKGId>,
 	/// A list of signed reports
 	pub signatures: Vec<Vec<u8>>,
 }
@@ -131,6 +149,7 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 	}
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
 	KeygenMisbehaviour { offender: AuthorityId },
 	SigningMisbehaviour { offender: AuthorityId },
@@ -149,16 +168,18 @@ pub type AuthorityIndex = u32;
 pub enum ConsensusLog<AuthorityId: Codec> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange {
-		next_authorities: AuthoritySet<AuthorityId>,
-		next_queued_authorities: AuthoritySet<AuthorityId>,
-	},
+	AuthoritiesChange { active: AuthoritySet<AuthorityId>, queued: AuthoritySet<AuthorityId> },
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
 	/// The DKG keys have changed
 	#[codec(index = 4)]
-	KeyRefresh { old_public_key: Vec<u8>, new_public_key: Vec<u8>, new_key_signature: Vec<u8> },
+	KeyRefresh {
+		forced: bool,
+		old_public_key: Vec<u8>,
+		new_public_key: Vec<u8>,
+		new_key_signature: Vec<u8>,
+	},
 }
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
@@ -191,6 +212,10 @@ sp_api::decl_runtime_apis! {
 	{
 		/// Return the current active authority set
 		fn authority_set() -> AuthoritySet<AuthorityId>;
+		/// Return the current best authority set chosen for keygen
+		fn get_best_authorities() -> Vec<(u16, AuthorityId)>;
+		/// Return the next best authority set chosen for the queued keygen
+		fn get_next_best_authorities() -> Vec<(u16, AuthorityId)>;
 		/// Return the current signature threshold for the DKG
 		fn signature_threshold() -> u16;
 		/// Return the current keygen threshold for the DKG
@@ -204,9 +229,9 @@ sp_api::decl_runtime_apis! {
 		/// Check if refresh process should start
 		fn should_refresh(_block_number: N) -> bool;
 		/// Fetch DKG public key for queued authorities
-		fn next_dkg_pub_key() -> Option<Vec<u8>>;
+		fn next_dkg_pub_key() -> Option<(AuthoritySetId, Vec<u8>)>;
 		/// Fetch DKG public key for current authorities
-		fn dkg_pub_key() -> Option<Vec<u8>>;
+		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
@@ -214,12 +239,14 @@ sp_api::decl_runtime_apis! {
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
-		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, i64)>;
+		fn get_reputations(authorities: Vec<AuthorityId>) -> Vec<(AuthorityId, u128)>;
+		/// Returns the set of jailed keygen authorities from a set of authorities
+		fn get_keygen_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
+		/// Returns the set of jailed signing authorities from a set of authorities
+		fn get_signing_jailed(set: Vec<AuthorityId>) -> Vec<AuthorityId>;
 		/// Fetch DKG public key for sig
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Get the time to restart for the dkg keygen
-		fn time_to_restart() -> N;
 	}
 }

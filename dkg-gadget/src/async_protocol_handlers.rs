@@ -338,10 +338,9 @@ pub mod meta_channel {
 			C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number> {
 
 		fn verify_signature_against_authorities(&self, msg: Arc<SignedDKGMessage<Public>>) -> Result<DKGMessage<Public>, DKGError> {
-			let latest_header = &*self.latest_header.read();
 			let client = &self.client;
 
-			DKGWorker::verify_signature_against_authorities_inner(latest_header, client, (&*msg).clone())
+			DKGWorker::verify_signature_against_authorities_inner((&*msg).clone(), &self.latest_header, client)
 		}
 
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {

@@ -93,7 +93,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Encode;
+use codec::{Decode, Encode};
 
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -111,9 +111,9 @@ use dkg_runtime_primitives::{
 		SUBMIT_KEYS_AT,
 	},
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
-	utils::{sr25519, to_slice_32, verify_signer_from_set},
+	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
 use sp_runtime::{
 	generic::DigestItem,
@@ -121,7 +121,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{IsMember, Member},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Member, Saturating},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{collections::btree_map::BTreeMap, prelude::*};
@@ -135,6 +135,12 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+pub mod weights;
+use weights::WeightInfo;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -147,15 +153,45 @@ pub mod pallet {
 		offchain::{AppCrypto, CreateSignedTransaction},
 		pallet_prelude::*,
 	};
-	use sp_runtime::Permill;
+	use sp_runtime::{Percent, Permill};
+
+	/// A `Convert` implementation that finds the stash of the given controller account,
+	/// if any.
+	pub struct AuthorityIdOf<T>(sp_std::marker::PhantomData<T>);
+
+	impl<T: Config> Convert<T::AccountId, Option<T::DKGId>> for AuthorityIdOf<T> {
+		fn convert(controller: T::AccountId) -> Option<T::DKGId> {
+			AccountToAuthority::<T>::get(controller)
+		}
+	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Authority identifier type
-		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
-
+		type DKGId: Member
+			+ Parameter
+			+ RuntimeAppPublic
+			+ MaybeSerializeDeserialize
+			+ AsRef<[u8]>
+			+ Into<ecdsa::Public>
+			+ From<ecdsa::Public>;
+		/// Jail lengths for misbehaviours
+		type KeygenJailSentence: Get<Self::BlockNumber>;
+		type SigningJailSentence: Get<Self::BlockNumber>;
+		/// Map from controller accounts to their DKG authority identifier.
+		type AuthorityIdOf: Convert<Self::AccountId, Option<Self::DKGId>>;
+		/// The reputation decay percentage
+		type Reputation: Member
+			+ Parameter
+			+ Default
+			+ Encode
+			+ Decode
+			+ AtLeast32BitUnsigned
+			+ Copy;
+		/// The reputation decay percentage
+		type DecayPercentage: Get<Percent>;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 
@@ -178,9 +214,8 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
-		/// Default number of blocks after which dkg keygen will be restarted if it has stalled
-		#[pallet::constant]
-		type TimeToRestart: Get<Self::BlockNumber>;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -245,294 +280,12 @@ pub mod pallet {
 							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
 						},
 					}
+
+					return 1
 				}
 			}
 
 			0
-		}
-	}
-
-	#[pallet::call]
-	impl<T: Config> Pallet<T> {
-		/// Set the pending signature threshold for the session following the next session.
-		///
-		/// We cannot assume that the next DKG has not already completed keygen.
-		/// After all, if we are in a new session the next DKG may have already completed.
-		/// Therefore, when we update the thresholds we are updating a threshold
-		/// that will become the next threshold after the next session update.
-		#[pallet::weight(0)]
-		pub fn set_signature_threshold(
-			origin: OriginFor<T>,
-			new_threshold: u16,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			ensure!(
-				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
-				Error::<T>::InvalidThreshold
-			);
-			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
-				*threshold = new_threshold;
-				Ok(().into())
-			})
-		}
-
-		/// Set the pending keygen threshold for the session following the next session.
-		///
-		/// We cannot assume that the next DKG has not already completed keygen.
-		/// After all, if we are in a new session the next DKG may have already completed.
-		/// Therefore, when we update the thresholds we are updating a threshold
-		/// that will become the next threshold after the next session update.
-		#[transactional]
-		#[pallet::weight(0)]
-		pub fn set_keygen_threshold(
-			origin: OriginFor<T>,
-			new_threshold: u16,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			ensure!(
-				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
-				Error::<T>::InvalidThreshold
-			);
-
-			if new_threshold <= PendingSignatureThreshold::<T>::get() {
-				Self::update_signature_threshold(new_threshold.saturating_sub(1))?;
-			}
-
-			Self::update_keygen_threshold(new_threshold)
-		}
-
-		#[pallet::weight(0)]
-		pub fn set_refresh_delay(
-			origin: OriginFor<T>,
-			new_delay: u8,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-
-			ensure!(new_delay <= 100, Error::<T>::InvalidRefreshDelay);
-
-			// set the new delay
-			RefreshDelay::<T>::put(Permill::from_percent(new_delay as u32));
-
-			Ok(().into())
-		}
-
-		#[transactional]
-		#[pallet::weight(0)]
-		pub fn submit_public_key(
-			origin: OriginFor<T>,
-			keys_and_signatures: AggregatedPublicKeys,
-		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
-			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
-
-			let authorities = Self::current_authorities_accounts();
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
-			let threshold = Self::next_signature_threshold();
-
-			let mut accepted = false;
-			for (key, accounts) in dict.iter() {
-				if accounts.len() >= (threshold + 1) as usize {
-					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
-					Self::deposit_event(Event::PublicKeySubmitted {
-						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: Self::decompress_public_key(key.clone())
-							.unwrap_or_default(),
-					});
-					accepted = true;
-
-					break
-				}
-			}
-
-			if accepted {
-				return Ok(().into())
-			}
-
-			Err(Error::<T>::InvalidPublicKeys.into())
-		}
-
-		#[transactional]
-		#[pallet::weight(0)]
-		pub fn submit_next_public_key(
-			origin: OriginFor<T>,
-			keys_and_signatures: AggregatedPublicKeys,
-		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
-			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
-
-			let next_authorities = Self::next_authorities_accounts();
-			ensure!(next_authorities.contains(&origin), Error::<T>::MustBeAQueuedAuthority);
-			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
-			let threshold = Self::next_signature_threshold();
-
-			let mut accepted = false;
-			for (key, accounts) in dict.iter() {
-				if accounts.len() >= (threshold + 1) as usize {
-					NextDKGPublicKey::<T>::put((Self::authority_set_id() + 1u64, key.clone()));
-					Self::deposit_event(Event::NextPublicKeySubmitted {
-						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: Self::decompress_public_key(key.clone())
-							.unwrap_or_default(),
-					});
-					accepted = true;
-
-					break
-				}
-			}
-
-			if accepted {
-				// TODO Do something about accounts that posted a wrong key
-				return Ok(().into())
-			}
-
-			Err(Error::<T>::InvalidPublicKeys.into())
-		}
-
-		#[transactional]
-		#[pallet::weight(0)]
-		pub fn submit_public_key_signature(
-			origin: OriginFor<T>,
-			signature_proposal: RefreshProposalSigned,
-		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
-			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
-			ensure!(
-				Self::next_public_key_signature().is_none(),
-				Error::<T>::AlreadySubmittedSignature
-			);
-			let used_signatures = Self::used_signatures();
-			// Deconstruct the signature and nonce for easier access
-			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
-			ensure!(
-				nonce == Self::refresh_nonce().into() || !signature.is_empty(),
-				Error::<T>::InvalidSignature
-			);
-			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
-
-			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
-			let data = RefreshProposal {
-				nonce: Self::refresh_nonce().into(),
-				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
-			};
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
-				.map_err(|_| {
-					#[cfg(feature = "std")]
-					frame_support::log::error!(
-						target: "dkg",
-						"Invalid signature for RefreshProposal
-						**********************************************************
-						signature: {:?}
-						**********************************************************",
-						hex::encode(signature.clone()),
-					);
-					Error::<T>::InvalidSignature
-				})?;
-
-			NextPublicKeySignature::<T>::put(signature.clone());
-			// Remove unsigned refresh proposal from queue
-			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
-			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
-			// Handle manual refresh if flag is set
-			if Self::should_manual_refresh() {
-				ShouldManualRefresh::<T>::put(false);
-				let next_authority_set_id = Self::authority_set_id() + 1u64;
-				AuthoritySetId::<T>::put(next_authority_set_id);
-				Self::refresh_keys();
-				Self::deposit_event(Event::RefreshKeysFinished { next_authority_set_id });
-			}
-
-			Ok(().into())
-		}
-
-		#[transactional]
-		#[pallet::weight(0)]
-		pub fn submit_misbehaviour_reports(
-			origin: OriginFor<T>,
-			reports: AggregatedMisbehaviourReports,
-		) -> DispatchResultWithPostInfo {
-			let origin = ensure_signed(origin)?;
-
-			let authorities = Self::current_authorities_accounts();
-			ensure!(authorities.contains(&origin), Error::<T>::MustBeAnActiveAuthority);
-			let offender = reports.offender.clone();
-			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
-			let threshold = Self::signature_threshold();
-
-			if valid_reporters.len() >= (threshold + 1) as usize {
-				// Deduct one point for misbehaviour report
-				let reputation = AuthorityReputations::<T>::get(&offender);
-				AuthorityReputations::<T>::insert(&offender, reputation - 1);
-				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
-					reporters: valid_reporters,
-				});
-				return Ok(().into())
-			}
-
-			Err(Error::<T>::InvalidMisbehaviourReports.into())
-		}
-
-		#[pallet::weight(0)]
-		pub fn set_time_to_restart(
-			origin: OriginFor<T>,
-			interval: T::BlockNumber,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			TimeToRestart::<T>::put(interval);
-			Ok(().into())
-		}
-
-		/// Manually Update the `RefreshNonce` (increment it by one).
-		///
-		/// * `origin` - The account that is calling this must be root.
-		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
-		#[transactional]
-		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			if Self::refresh_in_progress() {
-				return Err(Error::<T>::RefreshInProgress.into())
-			}
-			let next_nonce = Self::refresh_nonce() + 1u32;
-			RefreshNonce::<T>::put(next_nonce);
-			Ok(().into())
-		}
-
-		/// Manual Trigger DKG Refresh process.
-		///
-		/// * `origin` - The account that is initiating the refresh process and must be root.
-		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(0)]
-		#[transactional]
-		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			if Self::refresh_in_progress() {
-				return Err(Error::<T>::RefreshInProgress.into())
-			}
-			if let Some(pub_key) = Self::next_dkg_public_key() {
-				RefreshInProgress::<T>::put(true);
-				let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
-				let next_nonce = Self::refresh_nonce() + 1u32;
-				let data = dkg_runtime_primitives::RefreshProposal {
-					nonce: next_nonce.into(),
-					pub_key: uncompressed_pub_key,
-				};
-
-				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
-					Ok(()) => {
-						RefreshNonce::<T>::put(next_nonce);
-						ShouldManualRefresh::<T>::put(true);
-						frame_support::log::debug!("Handled refresh proposal");
-						Ok(().into())
-					},
-					Err(e) => {
-						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
-						Err(Error::<T>::ManualRefreshFailed.into())
-					},
-				}
-			} else {
-				Err(Error::<T>::NoNextPublicKey.into())
-			}
 		}
 	}
 
@@ -560,12 +313,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn should_manual_refresh)]
 	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
-
-	/// Number of blocks that should elapse after which the dkg keygen is restarted
-	/// if it has stalled
-	#[pallet::storage]
-	#[pallet::getter(fn time_to_restart)]
-	pub type TimeToRestart<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -647,6 +394,12 @@ pub mod pallet {
 	pub(super) type AuthoritySetId<T: Config> =
 		StorageValue<_, dkg_runtime_primitives::AuthoritySetId, ValueQuery>;
 
+	/// The next authority set id
+	#[pallet::storage]
+	#[pallet::getter(fn next_authority_set_id)]
+	pub(super) type NextAuthoritySetId<T: Config> =
+		StorageValue<_, dkg_runtime_primitives::AuthoritySetId, ValueQuery>;
+
 	/// Authorities set scheduled to be used with the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities)]
@@ -664,14 +417,24 @@ pub mod pallet {
 	pub(super) type NextAuthoritiesAccounts<T: Config> =
 		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
+	/// Authority account ids scheduled for the next session
+	#[pallet::storage]
+	#[pallet::getter(fn account_to_authority)]
+	pub(super) type AccountToAuthority<T: Config> =
+		StorageMap<_, Blake2_256, T::AccountId, T::DKGId, OptionQuery>;
+
 	/// Tracks misbehaviour reports
 	#[pallet::storage]
 	#[pallet::getter(fn misbehaviour_reports)]
 	pub type MisbehaviourReports<T: Config> = StorageMap<
 		_,
 		Blake2_256,
-		(dkg_runtime_primitives::AuthoritySetId, dkg_runtime_primitives::crypto::AuthorityId),
-		AggregatedMisbehaviourReports,
+		(
+			dkg_runtime_primitives::MisbehaviourType,
+			dkg_runtime_primitives::AuthoritySetId,
+			T::DKGId,
+		),
+		AggregatedMisbehaviourReports<T::DKGId>,
 		OptionQuery,
 	>;
 
@@ -679,7 +442,32 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn authority_reputations)]
 	pub type AuthorityReputations<T: Config> =
-		StorageMap<_, Blake2_256, dkg_runtime_primitives::crypto::AuthorityId, i64, ValueQuery>;
+		StorageMap<_, Blake2_256, T::DKGId, T::Reputation, ValueQuery>;
+
+	/// Tracks jailed authorities for keygen by mapping
+	/// to the block number when the authority was last jailed
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_keygen_authorities)]
+	pub type JailedKeygenAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+
+	/// Tracks jailed authorities for signing by mapping
+	/// to the block number when the authority was last jailed
+	#[pallet::storage]
+	#[pallet::getter(fn jailed_signing_authorities)]
+	pub type JailedSigningAuthorities<T: Config> =
+		StorageMap<_, Blake2_256, T::DKGId, T::BlockNumber, ValueQuery>;
+
+	/// The current best authorities of the active keygen set
+	#[pallet::storage]
+	#[pallet::getter(fn best_authorities)]
+	pub(super) type BestAuthorities<T: Config> = StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
+
+	/// The next best authorities of the active keygen set
+	#[pallet::storage]
+	#[pallet::getter(fn next_best_authorities)]
+	pub(super) type NextBestAuthorities<T: Config> =
+		StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -690,6 +478,8 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// No mapped account to authority
+		NoMappedAccount,
 		/// Invalid threshold
 		InvalidThreshold,
 		/// Must be queued  to become an authority
@@ -716,6 +506,8 @@ pub mod pallet {
 		ManualRefreshFailed,
 		/// No NextPublicKey stored on-chain.
 		NoNextPublicKey,
+		/// Must be calling from the controller account
+		InvalidControllerAccount,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -733,7 +525,10 @@ pub mod pallet {
 		/// Current Public Key Signature Changed.
 		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
 		/// Misbehaviour reports submitted
-		MisbehaviourReportsSubmitted { reporters: Vec<sr25519::Public> },
+		MisbehaviourReportsSubmitted {
+			misbehaviour_type: MisbehaviourType,
+			reporters: Vec<T::DKGId>,
+		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
 	}
@@ -748,7 +543,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let mut signature_threshold = u16::try_from(self.authorities.len() / 2).unwrap() + 1;
+			let mut signature_threshold = 1u16;
 			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
 
 			if keygen_threshold <= signature_threshold {
@@ -765,7 +560,540 @@ pub mod pallet {
 			// Set refresh parameters
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
-			TimeToRestart::<T>::put(T::TimeToRestart::get());
+		}
+	}
+
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
+		/// Set the pending signature threshold for the session following the next session.
+		///
+		/// We cannot assume that the next DKG has not already completed keygen.
+		/// After all, if we are in a new session the next DKG may have already completed.
+		/// Therefore, when we update the thresholds we are updating a threshold
+		/// that will become the next threshold after the next session update.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_threshold` - The new signature threshold for the DKG.
+		#[pallet::weight(<T as Config>::WeightInfo::set_signature_threshold())]
+		pub fn set_signature_threshold(
+			origin: OriginFor<T>,
+			new_threshold: u16,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(new_threshold > 0, Error::<T>::InvalidThreshold);
+			ensure!(
+				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
+				Error::<T>::InvalidThreshold
+			);
+			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
+				*threshold = new_threshold;
+				Ok(().into())
+			})
+		}
+
+		/// Set the pending keygen threshold for the session following the next session.
+		///
+		/// We cannot assume that the next DKG has not already completed keygen.
+		/// After all, if we are in a new session the next DKG may have already completed.
+		/// Therefore, when we update the thresholds we are updating a threshold
+		/// that will become the next threshold after the next session update.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_threshold` - The new keygen threshold for the DKG.
+		#[transactional]
+		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
+		pub fn set_keygen_threshold(
+			origin: OriginFor<T>,
+			new_threshold: u16,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(new_threshold > 1, Error::<T>::InvalidThreshold);
+			ensure!(
+				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
+				Error::<T>::InvalidThreshold
+			);
+
+			if new_threshold <= PendingSignatureThreshold::<T>::get() {
+				Self::update_signature_threshold(new_threshold.saturating_sub(1))?;
+			}
+
+			Self::update_keygen_threshold(new_threshold)
+		}
+
+		/// Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
+		/// proposal queue.
+		///
+		/// * `origin` - The account origin.
+		/// * `new_delay` - The percentage of elapsed session duration to wait before adding an
+		///   unsigned refresh proposal to the unsigned proposal queue.
+		#[pallet::weight(<T as Config>::WeightInfo::set_refresh_delay(*new_delay as u32))]
+		pub fn set_refresh_delay(
+			origin: OriginFor<T>,
+			new_delay: u8,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(new_delay <= 100, Error::<T>::InvalidRefreshDelay);
+
+			// set the new delay
+			RefreshDelay::<T>::put(Permill::from_percent(new_delay as u32));
+
+			Ok(().into())
+		}
+
+		/// Submits and stores the active public key for the genesis session into the on-chain
+		/// storage. This is primarily used to separate the genesis public key submission from
+		/// non-genesis rounds.
+		///
+		/// Can only be submitted by the current authorities. It is also required that a
+		/// `SignatureThreshold` of submissions is reached in order to successfully
+		/// store the public key on-chain.
+		///
+		/// * `origin` - The account origin.
+		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
+		///   DKG public keys.
+		#[transactional]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
+		pub fn submit_public_key(
+			origin: OriginFor<T>,
+			keys_and_signatures: AggregatedPublicKeys,
+		) -> DispatchResultWithPostInfo {
+			ensure_signed(origin)?;
+			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
+
+			let authorities = Self::authorities();
+			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
+			let threshold = Self::signature_threshold();
+
+			let mut accepted = false;
+			for (key, reporters) in dict.iter() {
+				if reporters.len() > threshold.into() {
+					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
+					Self::deposit_event(Event::PublicKeySubmitted {
+						compressed_pub_key: key.clone(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
+					});
+					accepted = true;
+
+					for authority in reporters {
+						let decay: Percent = T::DecayPercentage::get();
+						let reputation = AuthorityReputations::<T>::get(authority.clone());
+						AuthorityReputations::<T>::insert(
+							authority,
+							decay.mul_floor(reputation).saturating_add(1_000_000_000u32.into()),
+						);
+					}
+
+					break
+				}
+			}
+
+			if accepted {
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidPublicKeys.into())
+		}
+
+		/// Submits and stores the next public key for the next session into the on-chain storage.
+		///
+		/// Can only be submitted by the next authorities. It is also required that a
+		/// `NextSignatureThreshold` of submissions is reached in order to successfully
+		/// store the public key on-chain.
+		///
+		/// * `origin` - The account origin.
+		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
+		///   DKG public keys.
+		#[transactional]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
+		pub fn submit_next_public_key(
+			origin: OriginFor<T>,
+			keys_and_signatures: AggregatedPublicKeys,
+		) -> DispatchResultWithPostInfo {
+			ensure_signed(origin)?;
+			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
+
+			let next_authorities = Self::next_authorities();
+			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
+			let threshold = Self::next_signature_threshold();
+
+			let mut accepted = false;
+			for (key, accounts) in dict.iter() {
+				if accounts.len() > threshold.into() {
+					NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
+					Self::deposit_event(Event::NextPublicKeySubmitted {
+						compressed_pub_key: key.clone(),
+						uncompressed_pub_key: Self::decompress_public_key(key.clone())
+							.unwrap_or_default(),
+					});
+					accepted = true;
+
+					break
+				}
+			}
+
+			if accepted {
+				// TODO Do something about accounts that posted a wrong key
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidPublicKeys.into())
+		}
+
+		/// Submits the public key signature for the key refresh/rotation process.
+		///
+		/// The signature is the signature of the next public key `RefreshProposal`, signed by the
+		/// current DKG. It is stored on-chain only if it verifies successfully against the current
+		/// DKG's public key. Successful storage of this public key signature also removes
+		/// the unsigned `RefreshProposal` from the unsigned queue.
+		///
+		/// For manual refreshes, after the signature is submitted and stored on-chain,
+		/// the keys are immediately refreshed and the authority set is immediately rotated
+		/// and incremented.
+		///
+		/// * `origin` - The account origin.
+		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
+		///   and nonce.
+		#[transactional]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
+		pub fn submit_public_key_signature(
+			origin: OriginFor<T>,
+			signature_proposal: RefreshProposalSigned,
+		) -> DispatchResultWithPostInfo {
+			ensure_signed(origin)?;
+			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
+			ensure!(
+				Self::next_public_key_signature().is_none(),
+				Error::<T>::AlreadySubmittedSignature
+			);
+			let used_signatures = Self::used_signatures();
+			// Deconstruct the signature and nonce for easier access
+			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
+			ensure!(
+				nonce == Self::refresh_nonce().into() || !signature.is_empty(),
+				Error::<T>::InvalidSignature
+			);
+			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
+
+			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
+			let data = RefreshProposal {
+				nonce: Self::refresh_nonce().into(),
+				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
+			};
+			// Verify signature against the `RefreshProposal`
+			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
+				.map_err(|_| {
+					#[cfg(feature = "std")]
+					log::error!(
+						target: "dkg",
+						"Invalid signature for RefreshProposal
+						**********************************************************
+						signature: {:?}
+						**********************************************************",
+						hex::encode(signature.clone()),
+					);
+					Error::<T>::InvalidSignature
+				})?;
+			// Remove unsigned refresh proposal from queue
+			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
+			NextPublicKeySignature::<T>::put(signature.clone());
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
+			// Handle manual refresh if flag is set
+			if Self::should_manual_refresh() {
+				ShouldManualRefresh::<T>::put(false);
+				let next_authorities = NextAuthorities::<T>::get();
+				let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
+				// Force rotate the next authorities into the active and next set.
+				Self::change_authorities(
+					next_authorities.clone(),
+					next_authorities,
+					next_authority_accounts.clone(),
+					next_authority_accounts,
+					true,
+				);
+			}
+
+			Ok(().into())
+		}
+
+		/// Submits misbehaviour reports on chain. Signatures of the offending authority are
+		/// verified against the current or next authorities depending on the type of misbehaviour.
+		/// - Keygen: Verifies against the next authorities, since they are doing keygen.
+		/// - Signing: Verifies against the current authorities, since they are doing signing.
+		///
+		/// Verifies the reports against the respective thresholds and if enough reports are met
+		/// begins to jail and decrease the reputation of the offending authority.
+		///
+		/// The misbehaviour reputation update is:
+		/// 	AUTHORITY_REPUTATION = DECAY_PERCENTAGE * AUTHORITY_REPUTATION
+		///
+		/// If there are not enough unjailed keygen authorities to perform a keygen after the next
+		/// session, then we deduct the pending keygen threshold (and pending signing threshold)
+		/// accordingly.
+		///
+		/// * `origin` - The account origin.
+		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
+		///   authority
+		#[transactional]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
+		pub fn submit_misbehaviour_reports(
+			origin: OriginFor<T>,
+			reports: AggregatedMisbehaviourReports<T::DKGId>,
+		) -> DispatchResultWithPostInfo {
+			ensure_signed(origin)?;
+			let offender = reports.offender.clone();
+			let misbehaviour_type = reports.misbehaviour_type;
+			let authorities = match misbehaviour_type {
+				// We assume genesis ran successfully. Therefore, keygen misbehaviours are from next
+				// keygen authorities
+				MisbehaviourType::Keygen => Self::next_authorities(),
+				// Signing misbehaviours are from current authorities
+				MisbehaviourType::Sign => Self::authorities(),
+			};
+			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
+			// Get the threshold for the misbehaviour type
+			let signature_threshold = match misbehaviour_type {
+				// Keygen misbehaviours are from next keygen authorities
+				MisbehaviourType::Keygen => Self::next_signature_threshold(),
+				// Signing misbehaviours are from current authorities
+				MisbehaviourType::Sign => Self::signature_threshold(),
+			};
+
+			if valid_reporters.len() >= signature_threshold.into() {
+				// Deduct one point for misbehaviour report
+				let reputation = AuthorityReputations::<T>::get(&offender);
+				// Compute reputation impact and apply to the offender
+				let decay = T::DecayPercentage::get();
+				AuthorityReputations::<T>::insert(&offender, decay.mul_floor(reputation));
+				// Jail the respective misbehaving party depending on the misbehaviour type
+				let now = frame_system::Pallet::<T>::block_number();
+				match misbehaviour_type {
+					MisbehaviourType::Keygen => {
+						// Check if we have enough unjailed authorities to run after the next
+						// session change
+						let unjailed_authorities = Self::next_best_authorities()
+							.into_iter()
+							.filter(|(_, id)| {
+								!JailedKeygenAuthorities::<T>::contains_key(id) || *id != offender
+							})
+							.map(|(_, id)| id)
+							.collect::<Vec<T::DKGId>>();
+						if unjailed_authorities.len() < Self::next_keygen_threshold().into() {
+							// Handle edge case properly (shouldn't drop below 2 authorities)
+							if unjailed_authorities.len() > 2 {
+								JailedKeygenAuthorities::<T>::insert(offender, now);
+
+								let new_val =
+									u16::try_from(unjailed_authorities.len()).unwrap_or_default();
+								NextKeygenThreshold::<T>::put(new_val);
+								PendingKeygenThreshold::<T>::put(new_val);
+							}
+						} else {
+							JailedKeygenAuthorities::<T>::insert(offender, now);
+						}
+					},
+					MisbehaviourType::Sign => {
+						// These are the authorities who underwent keygen.
+						let unjailed_authorities = Self::best_authorities()
+							.into_iter()
+							.filter(|(_, id)| {
+								!JailedSigningAuthorities::<T>::contains_key(id) || *id != offender
+							})
+							.map(|(_, id)| id)
+							.collect::<Vec<T::DKGId>>();
+						if unjailed_authorities.len() < signature_threshold.into() {
+							// Handle edge case properly (can't have -1 signers)
+							if !unjailed_authorities.is_empty() {
+								JailedSigningAuthorities::<T>::insert(offender, now);
+								// Update the next and pending threshold
+								// Since this updates the signature threshold it likely means that
+								// all signing under the active DKG is failing. We have to ensure
+								// that the DKG signing set contains jailed authorities in a
+								// deterministic manner or expect for a forced rotation.
+								let new_val = u16::try_from(unjailed_authorities.len() - 1)
+									.unwrap_or_default();
+								NextSignatureThreshold::<T>::put(new_val);
+								PendingSignatureThreshold::<T>::put(new_val);
+							}
+						} else {
+							JailedSigningAuthorities::<T>::insert(offender, now)
+						}
+					},
+				};
+
+				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
+					misbehaviour_type,
+					reporters: valid_reporters,
+				});
+				return Ok(().into())
+			}
+
+			Err(Error::<T>::InvalidMisbehaviourReports.into())
+		}
+
+		/// Attempts to remove an authority from all possible jails (keygen & signing).
+		/// This can only be called by the controller of the authority in jail. The
+		/// origin must map directly to the authority in jail.
+		///
+		/// The authority's jail sentence for either keygen or signing must be elapsed
+		/// for the authority to be removed from the jail.
+		///
+		/// * `origin` - The account origin.
+		#[pallet::weight(<T as Config>::WeightInfo::unjail())]
+		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let origin = ensure_signed(origin)?;
+			let authority =
+				T::AuthorityIdOf::convert(origin).ok_or(Error::<T>::InvalidControllerAccount)?;
+			// TODO: Consider adding a payment to unjail similar to a slash
+			if frame_system::Pallet::<T>::block_number() >
+				JailedKeygenAuthorities::<T>::get(authority.clone())
+					.saturating_add(T::KeygenJailSentence::get())
+			{
+				JailedKeygenAuthorities::<T>::remove(authority.clone());
+			}
+
+			if frame_system::Pallet::<T>::block_number() >
+				JailedSigningAuthorities::<T>::get(authority.clone())
+					.saturating_add(T::SigningJailSentence::get())
+			{
+				JailedSigningAuthorities::<T>::remove(authority);
+			}
+			Ok(().into())
+		}
+
+		/// Force removes an authority from keygen jail.
+		///
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
+		/// * `authority` - The authority to be removed from the keygen jail.
+		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
+		pub fn force_unjail_keygen(
+			origin: OriginFor<T>,
+			authority: T::DKGId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			JailedKeygenAuthorities::<T>::remove(authority);
+			Ok(().into())
+		}
+
+		/// Force removes an authority from signing jail.
+		///
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
+		/// * `authority` - The authority to be removed from the signing jail.
+		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_signing())]
+		pub fn force_unjail_signing(
+			origin: OriginFor<T>,
+			authority: T::DKGId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			JailedSigningAuthorities::<T>::remove(authority);
+			Ok(().into())
+		}
+
+		/// Manually Update the `RefreshNonce` (increment it by one).
+		///
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account origin.
+		/// **Important**: This function is only available for testing purposes.
+		#[pallet::weight(<T as Config>::WeightInfo::manual_increment_nonce())]
+		#[transactional]
+		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			if Self::refresh_in_progress() {
+				return Err(Error::<T>::RefreshInProgress.into())
+			}
+			let next_nonce = Self::refresh_nonce() + 1u32;
+			RefreshNonce::<T>::put(next_nonce);
+			Ok(().into())
+		}
+
+		/// Manual Trigger DKG Refresh process.
+		///
+		/// Can only be called by the root origin.
+		///
+		/// * `origin` - The account that is initiating the refresh process.
+		/// **Important**: This function is only available for testing purposes.
+		#[pallet::weight(<T as Config>::WeightInfo::manual_refresh())]
+		#[transactional]
+		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			if Self::refresh_in_progress() {
+				return Err(Error::<T>::RefreshInProgress.into())
+			}
+			if let Some(pub_key) = Self::next_dkg_public_key() {
+				RefreshInProgress::<T>::put(true);
+				let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
+				let next_nonce = Self::refresh_nonce() + 1u32;
+				let data = dkg_runtime_primitives::RefreshProposal {
+					nonce: next_nonce.into(),
+					pub_key: uncompressed_pub_key,
+				};
+
+				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+					Ok(()) => {
+						RefreshNonce::<T>::put(next_nonce);
+						ShouldManualRefresh::<T>::put(true);
+						frame_support::log::debug!("Handled refresh proposal");
+						Ok(().into())
+					},
+					Err(e) => {
+						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						Err(Error::<T>::ManualRefreshFailed.into())
+					},
+				}
+			} else {
+				Err(Error::<T>::NoNextPublicKey.into())
+			}
+		}
+
+		/// Forcefully rotate the DKG
+		///
+		/// This forces the next authorities into the current authority spot and
+		/// automatically increments the authority ID. It uses `change_authorities`
+		/// to execute the rotation forcefully.
+		#[pallet::weight(0)]
+		#[transactional]
+		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			let next_authorities = NextAuthorities::<T>::get();
+			let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
+			let next_pub_key = Self::next_dkg_public_key();
+			// Force rotate the next authorities into the active and next set.
+			Self::change_authorities(
+				next_authorities.clone(),
+				next_authorities,
+				next_authority_accounts.clone(),
+				next_authority_accounts,
+				true,
+			);
+			// If there's a next key we immediately create a refresh proposal
+			// to sign our own key as a means of jumpstarting the mechanism.
+			if let Some(pub_key) = next_pub_key {
+				RefreshInProgress::<T>::put(true);
+				let uncompressed_pub_key =
+					Self::decompress_public_key(pub_key.1).unwrap_or_default();
+				let next_nonce = Self::refresh_nonce() + 1u32;
+				let data = dkg_runtime_primitives::RefreshProposal {
+					nonce: next_nonce.into(),
+					pub_key: uncompressed_pub_key,
+				};
+				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+					Ok(()) => {
+						RefreshNonce::<T>::put(next_nonce);
+						frame_support::log::debug!("Handled refresh proposal");
+					},
+					Err(e) => {
+						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+					},
+				}
+			}
+
+			Ok(().into())
 		}
 	}
 }
@@ -774,6 +1102,14 @@ impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
 	pub fn authority_set() -> AuthoritySet<T::DKGId> {
 		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
+	}
+
+	/// Return the next DKG authority set.
+	pub fn next_authority_set() -> AuthoritySet<T::DKGId> {
+		AuthoritySet::<T::DKGId> {
+			authorities: Self::next_authorities(),
+			id: Self::next_authority_set_id(),
+		}
 	}
 
 	pub fn update_signature_threshold(new_threshold: u16) -> DispatchResultWithPostInfo {
@@ -807,28 +1143,32 @@ impl<T: Config> Pallet<T> {
 
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
-		authorities: Vec<T::AccountId>,
-	) -> BTreeMap<Vec<u8>, Vec<Vec<u8>>> {
-		let mut dict: BTreeMap<Vec<u8>, Vec<Vec<u8>>> = BTreeMap::new();
+		authorities: Vec<T::DKGId>,
+	) -> BTreeMap<Vec<u8>, Vec<T::DKGId>> {
+		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
 			let maybe_signers = authorities
 				.iter()
 				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
+					ecdsa::Public(to_slice_33(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to ecdsa public key")
 					}))
 				})
-				.collect::<Vec<sr25519::Public>>();
+				.collect::<Vec<ecdsa::Public>>();
 
-			let can_proceed = verify_signer_from_set(maybe_signers, &pub_key, &signature);
+			let (maybe_authority, success) =
+				verify_signer_from_set_ecdsa(maybe_signers, &pub_key, &signature);
 
-			if can_proceed.1 {
+			if success {
+				let authority = T::DKGId::from(maybe_authority.unwrap());
 				if !dict.contains_key(&pub_key) {
 					dict.insert(pub_key.clone(), Vec::new());
 				}
 				let temp = dict.get_mut(&pub_key).unwrap();
-				temp.push(can_proceed.0.unwrap().encode());
+				if !temp.contains(&authority) {
+					temp.push(authority);
+				}
 			}
 		}
 
@@ -836,35 +1176,55 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn process_misbehaviour_reports(
-		reports: AggregatedMisbehaviourReports,
-		authorities: Vec<T::AccountId>,
-	) -> Vec<sr25519::Public> {
+		reports: AggregatedMisbehaviourReports<T::DKGId>,
+		verifying_set: Vec<T::DKGId>,
+	) -> Vec<T::DKGId> {
 		let mut valid_reporters = Vec::new();
 		for (inx, signature) in reports.signatures.iter().enumerate() {
-			let maybe_signers = authorities
-				.iter()
-				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
-					}))
-				})
-				.collect::<Vec<sr25519::Public>>();
-
 			let mut signed_payload = Vec::new();
+			signed_payload.extend_from_slice(&match reports.misbehaviour_type {
+				MisbehaviourType::Keygen => [0x01],
+				MisbehaviourType::Sign => [0x02],
+			});
 			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
-			let can_proceed = verify_signer_from_set(maybe_signers, &signed_payload, signature);
+			// TODO: Verify signer from set over the best authorities set (compute it on chain)
+			let verifying_set: Vec<ecdsa::Public> = verifying_set
+				.iter()
+				.map(|x| ecdsa::Public(to_slice_33(&x.encode()).unwrap_or([0u8; 33])))
+				.collect();
+			let (_, success) =
+				verify_signer_from_set_ecdsa(verifying_set, &signed_payload, signature);
 
-			if can_proceed.1 && !valid_reporters.contains(&reports.reporters[inx]) {
-				valid_reporters.push(reports.reporters[inx]);
+			if success && !valid_reporters.contains(&reports.reporters[inx]) {
+				valid_reporters.push(reports.reporters[inx].clone());
 			}
 		}
 
 		valid_reporters
 	}
 
-	/// Change the current DKG authority set by rotating in the `new_authority_ids` set.
+	pub fn store_consensus_log(
+		authority_ids: Vec<T::DKGId>,
+		next_authority_ids: Vec<T::DKGId>,
+		active_set_id: dkg_runtime_primitives::AuthoritySetId,
+	) {
+		let log: DigestItem = DigestItem::Consensus(
+			DKG_ENGINE_ID,
+			ConsensusLog::AuthoritiesChange {
+				active: AuthoritySet { authorities: authority_ids, id: active_set_id },
+				queued: AuthoritySet {
+					authorities: next_authority_ids,
+					id: active_set_id.saturating_add(1),
+				},
+			}
+			.encode(),
+		);
+		<frame_system::Pallet<T>>::deposit_log(log);
+	}
+
+	/// Change the current DKG authority set by rotating to the `new_authority_ids` set.
 	///
 	/// This function is meant to be called on a new session when the next authorities
 	/// become the current or `new` authorities. We track the accounts for these
@@ -874,68 +1234,128 @@ impl<T: Config> Pallet<T> {
 		next_authority_ids: Vec<T::DKGId>,
 		new_authorities_accounts: Vec<T::AccountId>,
 		next_authorities_accounts: Vec<T::AccountId>,
+		forced: bool,
 	) {
-		let next_id = Self::authority_set_id() + 1u64;
-		// Ensure pending thresholds remain valid across authority set changes that may break.
-		// We update the pending thresholds because we call `refresh_keys` below, which rotates
-		// all the thresholds into the current / next sets. Pending becomes the next, next becomes
-		// the current.
-		if next_authority_ids.len() < Self::pending_keygen_threshold().into() {
-			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
-		}
-		if next_authority_ids.len() <= Self::pending_signature_threshold().into() {
-			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-		}
-		// Update the new and next authorities
-		Authorities::<T>::put(&new_authority_ids);
-		CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
-		NextAuthorities::<T>::put(&next_authority_ids);
-		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 		// Call set change handler to trigger the other pallet implementing this hook
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(new_authorities_accounts, next_id, new_authority_ids.clone());
-		// Update the set id after changing
-		AuthoritySetId::<T>::put(next_id);
-		// Deposit a consensus log about the authority set change
-		let log: DigestItem = DigestItem::Consensus(
-			DKG_ENGINE_ID,
-			ConsensusLog::AuthoritiesChange {
-				next_authorities: AuthoritySet { authorities: new_authority_ids, id: next_id },
-				next_queued_authorities: AuthoritySet {
-					authorities: next_authority_ids,
-					id: next_id + 1u64,
-				},
+		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
+		// Set refresh in progress to false
+		RefreshInProgress::<T>::put(false);
+		// Update the next thresholds for the next session
+		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
+		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
+		// Compute next ID for next authorities
+		let next_id = Self::next_authority_set_id();
+		// We continue to rotate the next authority set in case of failure of the previous
+		// next authorities to generate a key, thus preventing a signature from being produced.
+		NextAuthorities::<T>::put(&next_authority_ids);
+		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
+		NextAuthoritySetId::<T>::put(next_id.saturating_add(1));
+		let next_best_authorities = Self::next_best_authorities();
+		NextBestAuthorities::<T>::put(Self::get_best_authorities(
+			Self::next_keygen_threshold() as usize,
+			&next_authority_ids,
+		));
+		// Update the keys for the next authorities
+		let next_pub_key = Self::next_dkg_public_key();
+		let next_pub_key_signature = Self::next_public_key_signature();
+		let dkg_pub_key = Self::dkg_public_key();
+		let pub_key_signature = Self::public_key_signature();
+		// Switch on forced for forceful rotations
+		let v = if forced {
+			// If forced we supply an empty signature
+			next_pub_key.zip(Some(vec![]))
+		} else {
+			next_pub_key.zip(next_pub_key_signature)
+		};
+		// Rotate the authority set if a next pub key and next signature exist
+		if let Some((next_pub_key, next_pub_key_signature)) = v {
+			// Update the active thresholds for the next session
+			SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
+			KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
+			// Ensure next/pending thresholds remain valid across authority set changes that may
+			// break. We update the pending thresholds because we call `refresh_keys` below, which
+			// rotates all the thresholds into the current / next sets. Pending becomes the next,
+			// next becomes the current.
+			if next_authority_ids.len() < Self::next_keygen_threshold().into() {
+				NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+				PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 			}
-			.encode(),
-		);
-		<frame_system::Pallet<T>>::deposit_log(log);
-		Self::refresh_keys();
+			if next_authority_ids.len() <= Self::next_signature_threshold().into() {
+				NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+				PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+			}
+
+			// Update the new and next authorities
+			Authorities::<T>::put(&new_authority_ids);
+			CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
+			BestAuthorities::<T>::put(next_best_authorities);
+			let next_id = Self::authority_set_id().saturating_add(1);
+			// Update the set id after changing
+			AuthoritySetId::<T>::put(next_id);
+			// Deposit a consensus log about the authority set change
+			Self::store_consensus_log(new_authority_ids, next_authority_ids, next_id);
+			// Delete next records
+			NextDKGPublicKey::<T>::kill();
+			NextPublicKeySignature::<T>::kill();
+			// Record historical refresh record
+			Self::insert_historical_refresh(&dkg_pub_key, &next_pub_key, &next_pub_key_signature);
+			// Set new keys
+			DKGPublicKey::<T>::put(next_pub_key.clone());
+			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone());
+			PreviousPublicKey::<T>::put(dkg_pub_key);
+			UsedSignatures::<T>::mutate(|val| {
+				val.push(pub_key_signature.clone());
+			});
+			// Emit events so other front-end know that.
+			Self::deposit_event(Event::PublicKeyChanged {
+				uncompressed_pub_key: Self::decompress_public_key(next_pub_key.1.clone())
+					.unwrap_or_default(),
+				compressed_pub_key: next_pub_key.1,
+			});
+			Self::deposit_event(Event::PublicKeySignatureChanged {
+				pub_key_sig: next_pub_key_signature,
+			})
+		}
 	}
 
+	/// Initializes the storage values for authorities and their accounts
+	/// on a genesis session and triggers the first authority set change.
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
 			return
 		}
-
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
-
+		// Initialize current authorities
 		Authorities::<T>::put(authorities);
 		AuthoritySetId::<T>::put(0);
-		// Like `pallet_session`, initialize the next validator set as well.
-		NextAuthorities::<T>::put(authorities);
 		CurrentAuthoritiesAccounts::<T>::put(authority_account_ids);
+		// Initialize next authorities
+		NextAuthorities::<T>::put(authorities);
+		NextAuthoritySetId::<T>::put(1);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
+		let best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		BestAuthorities::<T>::put(best_authorities);
+		let next_best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		NextBestAuthorities::<T>::put(next_best_authorities);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(authority_account_ids.to_vec(), 0, authorities.to_vec());
+		>>::on_authority_set_changed(authority_account_ids.to_vec(), authorities.to_vec());
 	}
 
+	/// An offchain function that collects the genesis DKG public key
+	/// and submits it to the chain.
+	///
+	/// This submission process is modelled similarly after an oracle.
+	/// We require the respective threshold of submissions of the same
+	/// DKG public key to be submitted in order to modify the on-chain
+	/// storage.
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK);
 		{
@@ -982,6 +1402,13 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the next DKG public key
+	/// and submits it to the chain.
+	///
+	/// This submission process is modelled similarly after an oracle.
+	/// We require the respective threshold of submissions of the same
+	/// DKG public key to be submitted in order to modify the on-chain
+	/// storage.
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
 		{
@@ -994,7 +1421,7 @@ impl<T: Config> Pallet<T> {
 
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					frame_support::log::debug!(target: "dkg", "Offchain worker skipping next public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1017,7 +1444,6 @@ impl<T: Config> Pallet<T> {
 				)
 			}
 
-			// TODO: Check if next public key is none
 			if let Ok(Some(agg_keys)) = agg_keys {
 				let _res = signer.send_signed_transaction(|_account| {
 					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
@@ -1030,6 +1456,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the next DKG public key
+	/// signature and submits it to the chain.
 	fn submit_public_key_signature_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
@@ -1067,6 +1495,8 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// An offchain function that collects the misbehaviour reports in
+	/// the offchain storage and submits them to the chain.
 	fn submit_misbehaviour_reports_onchain(
 		_block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
@@ -1082,12 +1512,17 @@ impl<T: Config> Pallet<T> {
 			}
 
 			let mut agg_reports_ref = StorageValueRef::persistent(AGGREGATED_MISBEHAVIOUR_REPORTS);
-			let agg_misbehaviour_reports = agg_reports_ref.get::<AggregatedMisbehaviourReports>();
+			let agg_misbehaviour_reports =
+				agg_reports_ref.get::<AggregatedMisbehaviourReports<T::DKGId>>();
 
 			if let Ok(Some(reports)) = agg_misbehaviour_reports {
 				// If this offender has already been reported, don't report it again.
-				if Self::misbehaviour_reports((reports.round_id, reports.offender.clone()))
-					.is_some()
+				if Self::misbehaviour_reports((
+					reports.misbehaviour_type,
+					reports.round_id,
+					reports.offender.clone(),
+				))
+				.is_some()
 				{
 					agg_reports_ref.clear();
 					return Ok(())
@@ -1106,6 +1541,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Identifies if a new `RefreshProposal` should be created
+	/// at a given block number. This is meant to be called on the
+	/// `on_initialize` hook at every block to check if we should begin
+	/// the refresh proposal signing process.
 	pub fn should_refresh(now: T::BlockNumber) -> bool {
 		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
@@ -1118,62 +1557,24 @@ impl<T: Config> Pallet<T> {
 		false
 	}
 
-	pub fn refresh_keys() {
-		// Update the active thresholds for the next session
-		SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
-		KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
-		// Update the next thresholds for the next session
-		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
-		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
-		// Update the keys for the next authorities
-		let next_pub_key = Self::next_dkg_public_key();
-		let next_pub_key_signature = Self::next_public_key_signature();
-		let dkg_pub_key = Self::dkg_public_key();
-		let pub_key_signature = Self::public_key_signature();
-		NextDKGPublicKey::<T>::kill();
-		NextPublicKeySignature::<T>::kill();
-		let v = next_pub_key.zip(next_pub_key_signature);
-		if let Some((next_pub_key, next_pub_key_signature)) = v {
-			// Insert historical round metadata consisting of the current round's
-			// public key before rotation, the next round's public key, and the refresh
-			// signature signed by the current key refreshing the next.
-			HistoricalRounds::<T>::insert(
-				next_pub_key.0,
-				RoundMetadata {
-					curr_round_pub_key: dkg_pub_key.1.clone(),
-					next_round_pub_key: next_pub_key.clone().1,
-					refresh_signature: next_pub_key_signature.clone(),
-				},
-			);
-			// Set new keys
-			DKGPublicKey::<T>::put(next_pub_key.clone());
-			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone());
-			PreviousPublicKey::<T>::put(dkg_pub_key.clone());
-			UsedSignatures::<T>::mutate(|val| {
-				val.push(pub_key_signature.clone());
-			});
-			// Set refresh in progress to false
-			RefreshInProgress::<T>::put(false);
-			let log: DigestItem = DigestItem::Consensus(
-				DKG_ENGINE_ID,
-				ConsensusLog::<T::DKGId>::KeyRefresh {
-					new_key_signature: next_pub_key_signature.clone(),
-					old_public_key: dkg_pub_key.1,
-					new_public_key: next_pub_key.1.clone(),
-				}
-				.encode(),
-			);
-			let uncompressed_pub_key = Self::decompress_public_key(next_pub_key.1.clone()).unwrap();
-			<frame_system::Pallet<T>>::deposit_log(log);
-			// Emit events so other front-end know that.
-			Self::deposit_event(Event::PublicKeyChanged {
-				uncompressed_pub_key,
-				compressed_pub_key: next_pub_key.1,
-			});
-			Self::deposit_event(Event::PublicKeySignatureChanged {
-				pub_key_sig: next_pub_key_signature,
-			})
-		}
+	/// Inserts a successful rotation into the history
+	///
+	/// Insert historical round metadata consisting of the current round's
+	/// public key before rotation, the next round's public key, and the refresh
+	/// signature signed by the current key refreshing the next.
+	pub fn insert_historical_refresh(
+		dkg_pub_key: &(dkg_runtime_primitives::AuthoritySetId, Vec<u8>),
+		next_pub_key: &(dkg_runtime_primitives::AuthoritySetId, Vec<u8>),
+		next_pub_key_signature: &[u8],
+	) {
+		HistoricalRounds::<T>::insert(
+			next_pub_key.0,
+			RoundMetadata {
+				curr_round_pub_key: dkg_pub_key.1.clone(),
+				next_round_pub_key: next_pub_key.clone().1,
+				refresh_signature: next_pub_key_signature.to_vec(),
+			},
+		);
 	}
 
 	pub fn max_extrinsic_delay(_block_number: T::BlockNumber) -> T::BlockNumber {
@@ -1183,6 +1584,46 @@ impl<T: Config> Pallet<T> {
 		>>::average_session_length();
 
 		Permill::from_percent(50) * (refresh_delay * session_length)
+	}
+
+	pub fn get_best_authorities_by_reputation(
+		count: usize,
+		authorities: &[T::DKGId],
+	) -> Vec<(u16, T::DKGId)> {
+		let mut reputations_of_authorities = authorities
+			.iter()
+			.map(|id| (AuthorityReputations::<T>::get(id), id))
+			.collect::<Vec<(_, _)>>();
+		reputations_of_authorities.sort_by(|a, b| b.0.cmp(&a.0));
+
+		return reputations_of_authorities
+			.iter()
+			.take(count)
+			.cloned()
+			.enumerate()
+			.map(|(i, (_, id))| ((i + 1) as u16, id.clone()))
+			.collect()
+	}
+
+	pub fn get_best_authorities(count: usize, authorities: &[T::DKGId]) -> Vec<(u16, T::DKGId)> {
+		let jailed_authorities = authorities
+			.iter()
+			.cloned()
+			.filter(|id| JailedKeygenAuthorities::<T>::contains_key(id))
+			.collect::<Vec<T::DKGId>>();
+		let mut best_authorities = authorities
+			.iter()
+			.cloned()
+			.filter(|id| !JailedKeygenAuthorities::<T>::contains_key(id))
+			.collect::<Vec<T::DKGId>>();
+		if best_authorities.len() < count {
+			let best_jailed = Self::get_best_authorities_by_reputation(
+				count - best_authorities.len(),
+				&jailed_authorities,
+			);
+			best_authorities.extend(best_jailed.iter().map(|x| x.1.clone()));
+		}
+		Self::get_best_authorities_by_reputation(count, &best_authorities)
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
@@ -1213,7 +1654,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		Self::initialize_authorities(&authorities, &authority_account_ids);
 	}
 
-	// We want to run this function always because there are other factors(forcing a new era) that
+	// We want to run this function always because there are other factors (forcing a new era) that
 	// can affect changes to the queued validator set that the session pallet will not take not of
 	// until the next session, and this could cause the value of `changed` to be wrong, causing an
 	// out of sync between this pallet and the session pallet. The `changed` value is true most of
@@ -1227,8 +1668,9 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let mut authority_account_ids = Vec::new();
 		let mut queued_authority_account_ids = Vec::new();
 		let next_authorities = validators
-			.map(|(l, k)| {
-				authority_account_ids.push(l.clone());
+			.map(|(acc, k)| {
+				authority_account_ids.push(acc.clone());
+				AccountToAuthority::<T>::insert(&acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();
@@ -1236,6 +1678,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let next_queued_authorities = queued_validators
 			.map(|(acc, k)| {
 				queued_authority_account_ids.push(acc.clone());
+				AccountToAuthority::<T>::insert(&acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();
@@ -1245,6 +1688,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 			next_queued_authorities,
 			authority_account_ids,
 			queued_authority_account_ids,
+			false,
 		);
 	}
 

@@ -13,12 +13,13 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,  worker::DKGWorker, Client, DKGKeystore};
+use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic, worker::DKGWorker, Client, DKGKeystore};
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
+	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
+	GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use log::{error, info, trace};
@@ -28,7 +29,6 @@ use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
-/// rounds, current_validator_set_authorities, active_keygen_in_process, queued_keygen_in_progress, key_store, queued_validator_set, next_rounds
 pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
 where
 	B: Block,
@@ -36,14 +36,14 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let mut keys_to_gossip = vec![];
+	let mut keys_to_gossip = Vec::new();
 	let mut rounds_send_result = vec![];
 	let mut next_rounds_send_result = vec![];
 
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
-		let authorities = &dkg_worker.current_validator_set.read().authorities.clone();
+		let authorities = dkg_worker.current_validator_set.read().authorities.clone();
 		if let Some(id) =
-			dkg_worker.key_store.authority_id(authorities)
+			dkg_worker.key_store.authority_id(&authorities)
 		{
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
@@ -54,9 +54,9 @@ where
 		if dkg_worker.active_keygen_in_progress {
 			let is_keygen_finished = rounds.is_keygen_finished();
 			if is_keygen_finished {
-				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed");
 				dkg_worker.active_keygen_in_progress = false;
 				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed: {:?}", pub_key);
 				let round_id = rounds.get_id();
 				keys_to_gossip.push((round_id, pub_key));
 			}
@@ -81,9 +81,9 @@ where
 
 				let is_keygen_finished = next_rounds.is_keygen_finished();
 				if is_keygen_finished {
-					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed");
 					dkg_worker.queued_keygen_in_progress = false;
 					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
+					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed: {:?}", pub_key);
 					keys_to_gossip.push((next_rounds.get_id(), pub_key));
 				}
 				dkg_worker.next_rounds = Some(next_rounds);
@@ -94,7 +94,18 @@ where
 	}
 
 	for (round_id, pub_key) in &keys_to_gossip {
-		gossip_public_key(&mut dkg_worker, pub_key.clone(), *round_id);
+		let pub_key_msg = DKGPublicKeyMessage {
+			round_id: *round_id,
+			pub_key: pub_key.clone(),
+			signature: vec![],
+		};
+		let hash = sp_core::blake2_128(&pub_key_msg.encode());
+		let count = *dkg_worker.has_sent_gossip_msg.get(&hash).unwrap_or(&0u8);
+		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
+			return
+		}
+		gossip_public_key(dkg_worker, pub_key_msg);
+		dkg_worker.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 
 	for res in &rounds_send_result {
@@ -117,11 +128,11 @@ fn send_messages<B, C, BE>(
 	authority_id: Public,
 	at: NumberFor<B>,
 ) -> Vec<Result<DKGResult, DKGError>>
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let results = rounds.proceed(at);
 
@@ -143,7 +154,7 @@ where
 	results
 }
 
-pub fn sign_and_send_messages<B>(
+pub(crate) fn sign_and_send_messages<B>(
 	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
@@ -151,8 +162,8 @@ pub fn sign_and_send_messages<B>(
 	B: Block
 {
 	let mut dkg_messages = dkg_messages.into();
-	let sr25519_public = dkg_keystore.sr25519_authority_id(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
-	.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	let sr25519_public = dkg_keystore.sr25519_public_key(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
+		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 	let mut engine_lock = gossip_engine.lock();
 
@@ -176,7 +187,7 @@ pub fn sign_and_send_messages<B>(
 }
 
 
-pub enum UnsignedMessages {
+pub(crate) enum UnsignedMessages {
 	Single(Option<DKGMessage<AuthorityId>>),
 	Multiple(Vec<DKGMessage<AuthorityId>>)
 }

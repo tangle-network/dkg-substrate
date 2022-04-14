@@ -15,14 +15,16 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
+use sp_core::{ecdsa, sr25519};
 use std::{
-	collections::{BTreeSet, HashMap},
+	collections::{hash_map::RandomState, BTreeSet, HashMap, HashSet},
 	marker::PhantomData,
 	path::PathBuf,
 	sync::Arc,
 };
 
 use codec::{Codec, Decode, Encode};
+use dkg_runtime_primitives::utils::to_slice_32;
 use curv::elliptic::curves::Secp256k1;
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
@@ -37,15 +39,13 @@ use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
 use sp_api::BlockId;
-use sp_runtime::{
-	traits::{Block, Header, NumberFor},
-	AccountId32,
-};
+use sp_core::crypto::AccountId32;
+use sp_runtime::traits::{Block, Header, NumberFor};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_restart_dkg, try_resume_dkg, DKGPersistenceState},
+	persistence::{try_resume_dkg, DKGPersistenceState},
 };
 
 use crate::messages::{
@@ -58,19 +58,18 @@ use crate::storage::{
 };
 
 use dkg_primitives::{
-	types::{DKGError, RoundId},
-	utils::get_best_authorities,
-	DKGReport, Proposal,
+	types::{DKGError, DKGMisbehaviourMessage, RoundId},
+	AuthoritySetId, DKGReport, MisbehaviourType, Proposal, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 
-use dkg_runtime_primitives::{crypto::{AuthorityId, Public}, utils::{sr25519, to_slice_32}, AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::{AuthorityId, Public}, utils::to_slice_33, AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID, UnsignedProposal};
 
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	types::dkg_topic,
-	utils::{find_authorities_change, find_index, get_key_path, set_up_rounds},
+	utils::{find_authorities_change, get_key_path},
 	Client,
 };
 
@@ -115,31 +114,32 @@ pub(crate) struct DKGWorker<B, C, BE>
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
-	metrics: Option<Metrics>,
+	pub metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
-	finality_notifications: FinalityNotifications<B>,
-	block_import_notification: ImportNotifications<B>,
+	pub finality_notifications: FinalityNotifications<B>,
+	pub import_notifications: ImportNotifications<B>,
 	pub votes_sent: u64,
 	/// Best block a DKG voting round has been concluded for
-	best_dkg_block: Option<NumberFor<B>>,
+	pub best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Current validator set
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// keep rustc happy
-	_backend: PhantomData<BE>,
-	/// public key refresh in progress
-	pub refresh_in_progress: bool,
 	/// Msg cache for startup if authorities aren't set
-	msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
+	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports:
-	HashMap<(RoundId, AuthorityId), AggregatedMisbehaviourReports>,
+	HashMap<(MisbehaviourType, RoundId, AuthorityId),
+		AggregatedMisbehaviourReports<AuthorityId>,
+	>,
+	/// Tracking for sent gossip messages: using blake2_128 for message hashes
+	/// The value is the number of times the message has been sent.
+	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
 	/// dkg state
 	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Setting up keygen for current authorities
@@ -152,7 +152,9 @@ pub(crate) struct DKGWorker<B, C, BE>
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub unsigned_proposals_tx: Arc<Mutex<Option<UnboundedSender<Vec<UnsignedProposal>>>>>
+	pub unsigned_proposals_tx: Arc<Mutex<Option<UnboundedSender<Vec<UnsignedProposal>>>>>,
+	// keep rustc happy
+	_backend: PhantomData<BE>,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -195,7 +197,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			rounds: None,
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
-			block_import_notification: client.import_notification_stream(),
+			import_notifications: client.import_notification_stream(),
 			best_dkg_block: None,
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
@@ -203,10 +205,10 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			dkg_state,
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
-			refresh_in_progress: false,
 			msg_cache: Vec::new(),
 			aggregated_public_keys: HashMap::new(),
 			aggregated_misbehaviour_reports: HashMap::new(),
+			has_sent_gossip_msg: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
@@ -284,6 +286,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	///
 	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
 	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
+	///
+	/// This should never execute unless we are certain that the rotation will succeed, i.e.
+	/// that the signature of the next DKG public key has been created and stored on-chain.
 	fn rotate_local_key_files(&mut self) {
 		let mut local_key_path: Option<PathBuf> = None;
 		let mut queued_local_key_path: Option<PathBuf> = None;
@@ -302,55 +307,104 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		}
 	}
 
-	/// gets authority reputations from an header
-	pub fn get_authority_reputations(
-		&self,
-		header: &B::Header,
-		authority_set: &AuthoritySet<Public>,
-	) -> HashMap<Public, i64> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		let reputations = self
-			.client
-			.runtime_api()
-			.get_reputations(&at, authority_set.authorities.clone())
-			.unwrap_or_else(|_| {
-				authority_set.authorities.iter().map(|id| (id.clone(), 0)).collect()
-			});
-		let mut reputation_map: HashMap<Public, i64> = HashMap::new();
-		for (id, rep) in reputations {
-			reputation_map.insert(id, rep);
-		}
-
-		reputation_map
-	}
-
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).unwrap()
+		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the keygen threshold at a specific block
 	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().keygen_threshold(&at).unwrap()
+		return self.client.runtime_api().keygen_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_signature_threshold(&at).unwrap()
+		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the next keygen threshold at a specific block
 	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_keygen_threshold(&at).unwrap()
+		return self.client.runtime_api().next_keygen_threshold(&at).unwrap_or_default()
 	}
 
-	pub fn get_time_to_restart(&self, header: &B::Header) -> Option<NumberFor<B>> {
+	/// Get the active DKG public key
+	pub fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().time_to_restart(&at).ok()
+		return self.client.runtime_api().dkg_pub_key(&at).ok().unwrap_or_default()
+	}
+
+	/// Get the next DKG public key
+	#[allow(dead_code)]
+	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
+	}
+
+	/// Get the jailed keygen authorities
+	#[allow(dead_code)]
+	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self
+			.client
+			.runtime_api()
+			.get_keygen_jailed(&at, set.to_vec())
+			.unwrap_or_default()
+	}
+
+	/// Get the jailed signing authorities
+	pub fn get_signing_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self
+			.client
+			.runtime_api()
+			.get_signing_jailed(&at, set.to_vec())
+			.unwrap_or_default()
+	}
+
+	/// Get the best authorities for keygen
+	pub fn get_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().get_best_authorities(&at).unwrap_or_default()
+	}
+
+	/// Get the next best authorities for keygen
+	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
+	}
+
+	/// Get the party index of our worker
+	///
+	/// Returns `None` if we are not in the best authority set
+	pub fn get_party_index(&mut self, header: &B::Header) -> Option<u16> {
+		let public = self.get_authority_public_key();
+		let best_authorities = self.get_best_authorities(header);
+		for elt in best_authorities {
+			if elt.1 == public {
+				return Some(elt.0)
+			}
+		}
+
+		None
+	}
+
+	/// Get the next party index of our worker for possible queued keygen
+	///
+	/// Returns `None` if we are not in the next best authority set
+	pub fn get_next_party_index(&mut self, header: &B::Header) -> Option<u16> {
+		let public = self.get_authority_public_key();
+		let next_best_authorities = self.get_next_best_authorities(header);
+		for elt in next_best_authorities {
+			if elt.1 == public {
+				return Some(elt.0)
+			}
+		}
+
+		None
 	}
 
 	/// Gets latest block number from latest block header
@@ -369,10 +423,10 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			.unwrap_or_else(|| panic!("Halp"))
 	}
 
-	/// Gets the active Sr25519 authority key
+	/// Gets the active Sr25519 public key
 	pub fn get_sr25519_public_key(&self) -> sp_core::sr25519::Public {
 		self.key_store
-			.sr25519_authority_id(&self.key_store.sr25519_public_keys().unwrap_or_default())
+			.sr25519_public_key(&self.key_store.sr25519_public_keys().unwrap_or_default())
 			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 	}
 
@@ -394,10 +448,12 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			Some((new, queued))
 		} else {
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			Some((
-				self.client.runtime_api().authority_set(&at).ok().unwrap_or_default(),
-				self.client.runtime_api().queued_authority_set(&at).ok().unwrap_or_default(),
-			))
+			let current_authority_set = self.client.runtime_api().authority_set(&at).ok();
+			let queued_authority_set = self.client.runtime_api().queued_authority_set(&at).ok();
+			match (current_authority_set, queued_authority_set) {
+				(Some(current), Some(queued)) => Some((current, queued)),
+				_ => None,
+			}
 		};
 
 		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
@@ -444,10 +500,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			self.get_next_keygen_threshold(header)
 		};
 		// Best authorities are taken from the on-chain reputations
-		let best_authorities: Vec<Public> = get_best_authorities(
-			threshold.into(),
-			&authority_set.authorities,
-			&self.get_authority_reputations(header, &authority_set),
+		let best_authorities: Vec<Public> = self.get_best_authorities(
+			header,
 		)
 			.iter()
 			.map(|(_, key)| key.clone())
@@ -463,14 +517,20 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	) {
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
-		if genesis_authority_set.authorities.is_empty() ||
-			genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID
-		{
+		if genesis_authority_set.authorities.is_empty() {
+			return
+		}
+		// If the rounds is none and we are not using the genesis authority set ID
+		// there is a critical error. I'm not sure how this can happen but it should
+		// prevent an edge case.
+		if self.rounds.is_none() && genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
+			error!(target: "dkg", "🕸️  Rounds is not and authority set is not genesis set ID 0");
 			return
 		}
 
 		// Check if we've already set up the DKG for this authority set
-		if self.rounds.is_some() {
+		if self.rounds.is_some() && !self.rounds.as_ref().unwrap().has_stalled() {
+			debug!(target: "dkg", "🕸️  Rounds exists and has not stalled");
 			return
 		}
 
@@ -484,23 +544,29 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 
 		// DKG keygen authorities are always taken from the best set of authorities
 		let round_id = genesis_authority_set.id;
-		let best_authorities: Vec<Public> =
-			self.get_best_authority_keys(header, genesis_authority_set, true);
-
+		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
-		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+		if maybe_party_index.is_none() {
+			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 			self.rounds = None;
 			return
+		} else {
+			info!(target: "dkg", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 		}
 
-		self.rounds = Some(set_up_rounds(
-			&best_authorities,
-			round_id,
-			&self.get_authority_public_key(),
-			self.get_signature_threshold(header),
-			self.get_keygen_threshold(header),
-			local_key_path,
-		));
+		let best_authorities: Vec<Public> =
+			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		self.rounds = Some(
+			MultiPartyECDSARounds::builder()
+				.round_id(round_id)
+				.party_index(maybe_party_index.unwrap())
+				.threshold(self.get_signature_threshold(header))
+				.parties(self.get_keygen_threshold(header))
+				.local_key_path(local_key_path)
+				.authorities(best_authorities.clone())
+				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
+				.build(),
+		);
 
 		self.dkg_state.listening_for_active_pub_key = true;
 		if let Some(rounds) = self.rounds.as_mut() {
@@ -523,8 +589,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			return
 		}
 
-		// Check if the next rounds exists and has processed for this neq queued round idc
-		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().get_id() == queued.id {
+		// Check if the next rounds exists and has processed for this next queued round id
+		if self.next_rounds.is_some() && !self.next_rounds.as_ref().unwrap().has_stalled() {
 			return
 		}
 
@@ -538,9 +604,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 
 		// Get the best next authorities using the keygen threshold
 		let round_id = queued.id;
-		let best_authorities: Vec<Public> = self.get_best_authority_keys(header, queued, false);
-		// Check whether the worker is in the best next set or return
-		if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key()).is_none() {
+		let maybe_party_index = self.get_next_party_index(header);
+		// Check whether the worker is in the best set or return
+		if maybe_party_index.is_none() {
 			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 			self.next_rounds = None;
 			return
@@ -548,15 +614,19 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			info!(target: "dkg", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 		}
 
-		// Setting up DKG for queued authorities
-		self.next_rounds = Some(set_up_rounds(
-			&best_authorities,
-			round_id,
-			&self.get_authority_public_key(),
-			self.get_next_signature_threshold(header),
-			self.get_next_keygen_threshold(header),
-			queued_local_key_path,
-		));
+		let best_authorities: Vec<Public> =
+			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		self.next_rounds = Some(
+			MultiPartyECDSARounds::builder()
+				.round_id(round_id)
+				.party_index(maybe_party_index.unwrap())
+				.threshold(self.get_next_signature_threshold(header))
+				.parties(self.get_next_keygen_threshold(header))
+				.local_key_path(queued_local_key_path)
+				.authorities(best_authorities.clone())
+				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
+				.build(),
+		);
 
 		self.dkg_state.listening_for_pub_key = true;
 		if let Some(rounds) = self.next_rounds.as_mut() {
@@ -581,8 +651,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			}
 		}
 		*self.latest_header.write() = Some(header.clone());
+		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
-		// Attempt to resume when the worker has shut down somehow
+		// Try to resume DKG when we hear of a new block
 		try_resume_dkg(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
@@ -591,30 +662,26 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		} else {
 			self.enact_new_authorities(header);
 		}
-		// Identify if the worker is stalling and restart the DKG if necessary
-		try_restart_dkg(self, header);
-		// Send all outgoing messages created from any reactions from resuming, enacting, or
-		// restarting
+		// Send all outgoing messages
 		send_outgoing_dkg_messages(self);
-		// Get all unsigned proposals and create offline stages for them
-		self.create_offline_stages(header);
-		// Get all unsigned proposals and check if they are ready to be signed.
-		self.process_unsigned_proposals(header);
-		self.untrack_unsigned_proposals(header);
+		// Get all unsigned proposals, create offline stages, attempt voting.
+		// Only do this if the public key is set on-chain.
+		if !self.get_dkg_pub_key(header).1.is_empty() {
+			self.create_offline_stages(header);
+			// Send outgoing messages after offline stage creation
+			send_outgoing_dkg_messages(self);
+			// Get all unsigned proposals and check if they are ready to be signed.
+			self.process_unsigned_proposals(header);
+			self.untrack_unsigned_proposals(header);
+		} else {
+			debug!(target: "dkg", "Public key not set on-chain, not creating offline stages {:?}", self.get_dkg_pub_key(header));
+		}
 	}
 
 	fn enact_genesis_authorities(&mut self, header: &B::Header) {
+		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
-			let best_authorities: Vec<Public> =
-				self.get_best_authority_keys(header, queued.clone(), false);
-			// Check whether the worker is in the best next set or return
-			if find_index::<Public>(&best_authorities[..], &self.get_authority_public_key())
-				.is_none()
-			{
-				self.next_rounds = None;
-				return
-			}
-
+			// If we are in the genesis state, we need to enact the genesis authorities
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
 				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
@@ -637,15 +704,38 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	fn enact_new_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
-			// If the cached queued set id is not equal to the new queued set then update
-			// if no queued keygen is currently in progress.
+			// If the active rounds have stalled, it means we haven't
+			// successfully generate a genesis key yet. Therefore, we
+			// continue to re-run keygen.
+			if let Some(rounds) = self.rounds.as_mut() {
+				if rounds.has_stalled() {
+					self.handle_genesis_dkg_setup(header, active.clone());
+				}
+			}
+			// If the next rounds have stalled, we restart similarly to above.
+			if let Some(rounds) = self.next_rounds.as_mut() {
+				if rounds.has_stalled() {
+					self.handle_queued_dkg_setup(header, queued.clone());
+				}
+			}
+			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
-				// Rotate the queued key file contents into the local key file
-				self.rotate_local_key_files();
-				// Rotate the rounds since the authority set has changed
-				self.rounds = self.next_rounds.take();
+				// Rotate the queued key file contents into the local key file if the next
+				// DKG public key signature has been posted on-chain.
+				let (set_id, _) = self.get_dkg_pub_key(header);
+				if set_id == queued.id - 1 {
+					debug!(target: "dkg", "🕸️  ROTATING LOCAL KEY FILE");
+					self.rotate_local_key_files();
+					// Rotate the rounds since the authority set has changed
+					self.rounds = self.next_rounds.take();
+				} else {
+					debug!(target: "dkg", "🕸️  WAITING FOR NEXT DKG PUBLIC KEY SIG");
+				}
+
+				// verify the new validator set
+				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Update the validator sets
 				*self.current_validator_set.write() = active;
 				self.queued_validator_set = queued.clone();
@@ -657,27 +747,29 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		}
 	}
 
-	fn handle_import_notifications(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Block import notification: {:?}", notification);
+	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
+		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		// Handle import notifications
 		self.process_block_notification(&notification.header);
 	}
 
-	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
+	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
 		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
 
 	fn verify_signature_against_authorities(
-		&self,
+		&mut self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
-		Self::verify_signature_against_authorities_inner(&*self.latest_header.read(), &self.client, signed_dkg_msg)
+		Self::verify_signature_against_authorities_inner(signed_dkg_msg, &self.latest_header, &self.client)
 	}
 
 	pub fn verify_signature_against_authorities_inner(
-		latest_header: &Option<B::Header>,
-		client: &Arc<C>,
 		signed_dkg_msg: SignedDKGMessage<Public>,
+		latest_header: &Arc<RwLock<Option<B::Header>>>,
+		client: &Arc<C>
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
@@ -685,7 +777,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		// Get authority accounts
 		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
 
-		if let Some(header) = latest_header.as_ref() {
+		if let Some(ref header) = latest_header.read().clone() {
 			let at: BlockId<B> = BlockId::hash(header.hash());
 			let accounts = client.runtime_api().get_authority_accounts(&at).ok();
 
@@ -713,12 +805,12 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0) ||
-			check_signers(authority_accounts.unwrap().1)
+		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
+			check_signers(authority_accounts.clone().unwrap().1.into())
 		{
-			Ok(dkg_msg)
+			return Ok(dkg_msg)
 		} else {
-			Err(DKGError::GenericError {
+			return Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
@@ -768,48 +860,64 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 	}
 
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
-		let round_id = if let Some(rounds) = &self.rounds { rounds.get_id() } else { return };
-
-		match dkg_report {
+		let (offender, round_id, misbehaviour_type) = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
-				gossip_misbehaviour_report(self, offender, round_id);
+				if let Some(rounds) = self.next_rounds.as_mut() {
+					(offender, rounds.get_id(), MisbehaviourType::Keygen)
+				} else {
+					(offender, 0, MisbehaviourType::Keygen)
+				}
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
-				gossip_misbehaviour_report(self, offender, round_id);
+				if let Some(rounds) = self.rounds.as_mut() {
+					(offender, rounds.get_id(), MisbehaviourType::Sign)
+				} else {
+					(offender, 0, MisbehaviourType::Sign)
+				}
 			},
+		};
+
+		let misbehaviour_msg =
+			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
+		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
+		let count = *self.has_sent_gossip_msg.get(&hash).unwrap_or(&0u8);
+		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
+			return
 		}
+		gossip_misbehaviour_report(self, misbehaviour_msg);
+		self.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 
 	pub fn authenticate_msg_origin(
 		&self,
 		is_main_round: bool,
-		authority_accounts: (Vec<AccountId32>, Vec<AccountId32>),
+		authorities: (Vec<Public>, Vec<Public>),
 		msg: &[u8],
 		signature: &[u8],
-	) -> Result<sr25519::Public, DKGError> {
-		let get_keys = |accts: &Vec<AccountId32>| {
+	) -> Result<Public, DKGError> {
+		let get_keys = |accts: &[Public]| {
 			accts
 				.iter()
 				.map(|x| {
-					sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-						panic!("Failed to convert account id to sr25519 public key")
+					ecdsa::Public(to_slice_33(&x.encode()).unwrap_or_else(|| {
+						panic!("Failed to convert account id to ecdsa public key")
 					}))
 				})
-				.collect::<Vec<sr25519::Public>>()
+				.collect::<Vec<ecdsa::Public>>()
 		};
 
-		let maybe_signers = if is_main_round {
-			get_keys(&authority_accounts.0)
-		} else {
-			get_keys(&authority_accounts.1)
-		};
+		let maybe_signers =
+			if is_main_round { get_keys(&authorities.0) } else { get_keys(&authorities.1) };
 
-		let (maybe_signer, success) =
-			dkg_runtime_primitives::utils::verify_signer_from_set(maybe_signers, msg, signature);
+		let (maybe_signer, success) = dkg_runtime_primitives::utils::verify_signer_from_set_ecdsa(
+			maybe_signers,
+			msg,
+			signature,
+		);
 
 		if !success {
 			return Err(DKGError::GenericError {
@@ -817,7 +925,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			})
 		}
 
-		Ok(maybe_signer.unwrap())
+		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
 	/// Generate a random delay to wait before taking an action.
@@ -882,10 +990,35 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
 		if rounds.is_keygen_finished() {
-			for unsinged_proposal in &unsigned_proposals {
-				let key = (unsinged_proposal.typed_chain_id, unsinged_proposal.key);
+			// Current signers before resetting jailed signers
+			let signers_hashset =
+				rounds.signers.iter().cloned().collect::<HashSet<u16, RandomState>>();
+			// Update jailed signers each time an offline stage is created
+			// This will trigger a regeneration of signing parties in hopes of
+			// both randomizing the set of signers as well as removing jailed
+			// signers after reported signing misbehaviour.
+			let at: BlockId<B> = BlockId::hash(header.hash());
+			let jailed_signers = self
+				.client
+				.runtime_api()
+				.get_signing_jailed(&at, rounds.authorities.clone())
+				.unwrap_or_default();
+			// Update the jailed signers which may mutate the signers set
+			rounds.set_jailed_signers(jailed_signers);
+			let new_signers_hashset =
+				rounds.signers.iter().cloned().collect::<HashSet<u16, RandomState>>();
+			// Iterate through each unsigned proposal and create offline stages
+			for unsigned_proposals in &unsigned_proposals {
+				let key = (unsigned_proposals.typed_chain_id, unsigned_proposals.key);
 				if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
 					continue
+				}
+
+				// If there are newly jailed signers we need to ensure we restart the offline stage
+				// process
+				if signers_hashset.difference(&new_signers_hashset).next().is_some() {
+					debug!(target: "dkg", "🕸️  FOUND INTERSECTION, REMOVING OLD OFFLINE STAGE\n{:?}\n{:?}", signers_hashset, new_signers_hashset);
+					rounds.offlines.remove(&key.encode());
 				}
 
 				if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
@@ -996,9 +1129,9 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 						return;
 					}
 				},
-				notification = self.block_import_notification.next().fuse() => {
+				notification = self.import_notifications.next().fuse() => {
 					if let Some(notification) = notification {
-						self.handle_import_notifications(notification);
+						self.handle_import_notification(notification);
 					} else {
 						return;
 					}

@@ -15,8 +15,6 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
 
-use std::vec;
-
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -25,6 +23,7 @@ use sp_core::{
 	sr25519::{self, Signature},
 	H256,
 };
+use sp_keystore::{testing::KeyStore, KeystoreExt};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
@@ -33,8 +32,9 @@ use sp_runtime::{
 		BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup,
 		OpaqueKeys, Verify,
 	},
-	Permill,
+	Percent, Permill,
 };
+use std::{sync::Arc, vec};
 
 use crate as pallet_dkg_metadata;
 pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
@@ -131,11 +131,17 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
-	type TimeToRestart = TimeToRestart;
+	type KeygenJailSentence = Period;
+	type SigningJailSentence = Period;
+	type DecayPercentage = DecayPercentage;
+	type Reputation = u128;
+	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type WeightInfo = ();
 }
 
 parameter_types! {
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const Period: u64 = 1;
 	pub const Offset: u64 = 0;
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
@@ -208,5 +214,8 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-	t.into()
+	let mut ext = sp_io::TestExternalities::new(t);
+	let keystore = KeyStore::new();
+	ext.register_extension(KeystoreExt(Arc::new(keystore)));
+	ext
 }

@@ -105,7 +105,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use dkg_runtime_primitives::handlers::decode_proposals::decode_proposal_identifier;
+use dkg_runtime_primitives::{
+	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
+};
 pub use pallet::*;
 
 #[cfg(test)]
@@ -123,9 +125,12 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
-use sp_runtime::offchain::{
-	storage::StorageValueRef,
-	storage_lock::{StorageLock, Time},
+use sp_runtime::{
+	offchain::{
+		storage::StorageValueRef,
+		storage_lock::{StorageLock, Time},
+	},
+	traits::Saturating,
 };
 use sp_std::vec::Vec;
 
@@ -366,6 +371,10 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> DispatchResult {
+		#[cfg(feature = "std")]
+		println!("handle_unsigned_proposer_set_update_proposal");
+		#[cfg(feature = "std")]
+		println!("proposal: {:?}", proposal);
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
@@ -383,6 +392,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
+		// Add new refresh proposal to the queue
 		UnsignedProposalQueue::<T>::insert(
 			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
@@ -395,10 +405,26 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_signed_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {
-		UnsignedProposalQueue::<T>::remove(
-			TypedChainId::None,
-			DKGPayloadKey::RefreshVote(proposal.nonce),
-		);
+		// Attempt to remove all previous unsigned refresh proposals too
+		// This may also remove ProposerSetUpdate proposals that haven't been signed
+		// yet, but given that this action is only to clean storage when a refresh
+		// fails, we can assume that the previous proposer set update will nonetheless
+		// need to be used to update the governors on the respective webb Apps anyway.
+		let remaining_untyped_proposals: usize =
+			UnsignedProposalQueue::<T>::iter_key_prefix(TypedChainId::None).count();
+
+		for i in 0..remaining_untyped_proposals {
+			let index = i as u32;
+			// Ensure we break when we reach the bottom
+			if proposal.nonce.saturating_sub(ProposalNonce(index)) == ProposalNonce(0u32) {
+				break
+			}
+			// Otherwise continue removing old refresh votes
+			UnsignedProposalQueue::<T>::remove(
+				TypedChainId::None,
+				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
+			);
+		}
 
 		Ok(())
 	}

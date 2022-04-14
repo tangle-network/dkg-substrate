@@ -15,7 +15,10 @@
 use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
-use sp_application_crypto::{key_types::AURA, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
+use sp_application_crypto::{
+	key_types::{ACCOUNT},
+	sr25519, CryptoTypePublicPair, RuntimeAppPublic,
+};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -64,13 +67,13 @@ impl DKGKeystore {
 	///
 	/// Return the public key for which we also do have a private key. If no
 	/// matching private key is found, `None` will be returned.
-	pub fn sr25519_authority_id(&self, keys: &[sr25519::Public]) -> Option<sr25519::Public> {
+	pub fn sr25519_public_key(&self, keys: &[sr25519::Public]) -> Option<sr25519::Public> {
 		let store = self.0.clone()?;
 
 		// we do check for multiple private keys as a key store sanity check.
 		let public: Vec<sr25519::Public> = keys
 			.iter()
-			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), AURA)]))
+			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), ACCOUNT)]))
 			.cloned()
 			.collect();
 
@@ -124,7 +127,7 @@ impl DKGKeystore {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
 		let pk: Vec<sr25519::Public> =
-			SyncCryptoStore::sr25519_public_keys(&*store, AURA).iter().copied().collect();
+			SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT).iter().copied().collect();
 
 		Ok(pk)
 	}
@@ -144,7 +147,7 @@ impl DKGKeystore {
 
 		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
 
-		let sig = SyncCryptoStore::sign_with(&*store, AURA, &crypto_pair, message)
+		let sig = SyncCryptoStore::sign_with(&*store, ACCOUNT, &crypto_pair, message)
 			.map_err(|e| error::Error::Keystore(e.to_string()))?
 			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
 

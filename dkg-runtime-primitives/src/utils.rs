@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use sp_core::ecdsa;
-pub use sp_core::sr25519;
+pub use sp_core::{ecdsa, sr25519};
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
 use sp_runtime::traits::BadOrigin;
 use sp_std::vec::Vec;
@@ -21,7 +20,8 @@ use sp_std::vec::Vec;
 use crate::traits::GetDKGPublicKey;
 
 pub const SIGNATURE_LENGTH: usize = 65;
-const KEY_LENGTH: usize = 32;
+const SR25519_KEY_LENGTH: usize = 32;
+const ECDSA_KEY_LENGTH: usize = 33;
 
 pub fn validate_ecdsa_signature(data: &[u8], signature: &[u8]) -> bool {
 	if signature.len() == SIGNATURE_LENGTH {
@@ -57,7 +57,8 @@ pub fn verify_signer_from_set_ecdsa(
 	let mut signer = None;
 	let res = maybe_signers.iter().any(|x| {
 		if let Ok(data) = recover_ecdsa_pub_key(msg, signature) {
-			if x.0.to_vec() == data {
+			let recovered = &data[..32];
+			if x.0[1..].to_vec() == recovered.to_vec() {
 				signer = Some(x.clone());
 				true
 			} else {
@@ -75,24 +76,37 @@ pub fn verify_signer_from_set(
 	maybe_signers: Vec<sr25519::Public>,
 	msg: &[u8],
 	signature: &[u8],
-) -> (Option<sr25519::Public>, bool) {
+) -> (Option<sr25519::Public>, bool, Option<usize>) {
 	let mut signer = None;
-	let res = maybe_signers.iter().any(|x| {
+	let mut inx: Option<usize> = None;
+	let res = maybe_signers.iter().enumerate().any(|(index, x)| {
 		let decoded_signature = sr25519::Signature::from_slice(signature);
 		let res = sp_io::crypto::sr25519_verify(&decoded_signature, msg, x);
 		if res {
+			inx = Some(index);
 			signer = Some(*x);
 		}
 
 		res
 	});
-	(signer, res)
+	(signer, res, inx)
 }
 
 pub fn to_slice_32(val: &[u8]) -> Option<[u8; 32]> {
-	if val.len() == KEY_LENGTH {
-		let mut key = [0u8; KEY_LENGTH];
-		key[..KEY_LENGTH].copy_from_slice(val);
+	if val.len() == SR25519_KEY_LENGTH {
+		let mut key = [0u8; SR25519_KEY_LENGTH];
+		key[..SR25519_KEY_LENGTH].copy_from_slice(val);
+
+		return Some(key)
+	}
+
+	None
+}
+
+pub fn to_slice_33(val: &[u8]) -> Option<[u8; 33]> {
+	if val.len() == ECDSA_KEY_LENGTH {
+		let mut key = [0u8; ECDSA_KEY_LENGTH];
+		key[..ECDSA_KEY_LENGTH].copy_from_slice(val);
 
 		return Some(key)
 	}

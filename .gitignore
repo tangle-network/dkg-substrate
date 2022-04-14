@@ -25,3 +25,6 @@ para-2074-wasm
 /.idea/
 /dkg-gadget/.idea/
 /DKG.iml
+
+
+/scripts/seed-arana-testnet.sh

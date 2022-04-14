@@ -28,10 +28,13 @@ function importTest(name: string, path: string) {
 describe('E2E Test Runner', function () {
   this.timeout(100 * BLOCK_TIME);
   before(async () => {
+    let start = performance.now();
     await executeBefore({
       both: true,
     });
-  })
+    let end = performance.now();
+    console.log(`Start - ${start} | End - ${end}`);
+  });
 
   importTest('Proposer Set Update Proposal', './proposerSetUpdateProposal.test');
   importTest('Maximum Deposit Limit Update Proposal', './maxDepositLimitProposal.test');

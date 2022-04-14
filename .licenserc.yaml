@@ -38,5 +38,6 @@ header:
     - '**/*.sh'
     - 'target/*'
     - 'node_modules/*'
+    - 'assets/*'
 
   comment: on-failure

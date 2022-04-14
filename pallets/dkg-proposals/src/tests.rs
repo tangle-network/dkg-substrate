@@ -17,7 +17,7 @@
 use super::{
 	mock::{
 		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Event, Origin,
-		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		ProposalLifetime, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D, PROPOSER_E,
 		TEST_THRESHOLD,
 	},
 	*,
@@ -250,7 +250,7 @@ pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
 #[test]
 fn create_successful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -340,7 +340,7 @@ fn create_successful_proposal() {
 #[test]
 fn create_unsucessful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"transfer");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"transfer");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -428,7 +428,7 @@ fn create_unsucessful_proposal() {
 #[test]
 fn execute_after_threshold_change() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"transfer");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"transfer");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -499,7 +499,7 @@ fn execute_after_threshold_change() {
 #[test]
 fn proposal_expires() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
@@ -644,7 +644,7 @@ fn should_reset_proposers_if_authorities_changed() {
 #[test]
 fn only_current_authorities_should_make_successful_proposals() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(typed_chain_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
@@ -683,19 +683,10 @@ fn only_current_authorities_should_make_successful_proposals() {
 		));
 
 		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
-		roll_to(10);
-		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
-			proposers: vec![
-				mock_pub_key(PROPOSER_A),
-				mock_pub_key(PROPOSER_B),
-				mock_pub_key(PROPOSER_C),
-			],
-		}));
-
 		// Create proposal (& vote)
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(mock_pub_key(PROPOSER_D)),
+				Origin::signed(mock_pub_key(PROPOSER_E)),
 				prop_id,
 				typed_chain_id,
 				r_id,
@@ -713,7 +704,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(4.into())
 			)
 			.is_some(),
 			"{}",
@@ -725,7 +716,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_none(),
 			"{}",
@@ -737,7 +728,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(6.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(5.into())
 			)
 			.is_some(),
 			"{}",
@@ -748,7 +739,7 @@ fn session_change_should_create_proposer_set_update_proposal() {
 		assert!(
 			DKGProposalHandler::unsigned_proposals(
 				TypedChainId::None,
-				DKGPayloadKey::ProposerSetUpdateProposal(9.into())
+				DKGPayloadKey::ProposerSetUpdateProposal(8.into())
 			)
 			.is_some(),
 			"{}",
@@ -779,7 +770,7 @@ fn proposers_tree_height_should_compute_correctly() {
 #[test]
 fn proposers_iter_keys_should_only_contain_active_proposers() {
 	let src_id = TypedChainId::Evm(1);
-	let r_id = derive_resource_id(src_id.chain_id(), 0x0100, b"remark");
+	let r_id = derive_resource_id(src_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		assert_eq!(Proposers::<Test>::iter_keys().count(), 3);

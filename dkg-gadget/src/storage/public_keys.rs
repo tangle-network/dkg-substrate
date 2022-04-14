@@ -50,7 +50,6 @@ where
 	if maybe_offchain.is_none() {
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
-
 	let offchain = maybe_offchain.unwrap();
 	if is_genesis_round {
 		dkg_worker.dkg_state.listening_for_active_pub_key = false;

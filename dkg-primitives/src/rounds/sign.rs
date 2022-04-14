@@ -14,6 +14,7 @@
 //
 use codec::Encode;
 use curv::arithmetic::Converter;
+use dkg_runtime_primitives::SIGN_TIMEOUT;
 use log::{debug, error, trace, warn};
 use sp_core::ecdsa::Signature;
 use sp_runtime::traits::AtLeast32BitUnsigned;

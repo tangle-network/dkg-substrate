@@ -40,6 +40,7 @@ pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 /// DKG public / local key to disk. Caching of this key is critical to persistent storage and
 /// resuming the worker from a machine failure.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	best_authorities: &[AuthorityId],
 	authority_set_id: RoundId,
@@ -47,6 +48,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 	signature_threshold: u16,
 	keygen_threshold: u16,
 	local_key_path: Option<std::path::PathBuf>,
+	jailed_signers: &[AuthorityId],
 ) -> MultiPartyECDSARounds<N> {
 	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
 	// Generate the rounds object
@@ -57,6 +59,7 @@ pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
 		.parties(keygen_threshold)
 		.local_key_path(local_key_path)
 		.authorities(best_authorities.to_vec())
+		.jailed_signers(jailed_signers.to_vec())
 		.build()
 }
 
@@ -78,10 +81,8 @@ fn match_consensus_log(
 	log: ConsensusLog<AuthorityId>,
 ) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
 	match log {
-		ConsensusLog::AuthoritiesChange {
-			next_authorities: validator_set,
-			next_queued_authorities,
-		} => Some((validator_set, next_queued_authorities)),
+		ConsensusLog::AuthoritiesChange { active: authority_set, queued: queued_authority_set } =>
+			Some((authority_set, queued_authority_set)),
 		_ => None,
 	}
 }
