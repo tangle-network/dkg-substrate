@@ -13,7 +13,10 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic, worker::DKGWorker, Client, DKGKeystore};
+use crate::{
+	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
+	worker::DKGWorker, Client, DKGKeystore,
+};
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
@@ -42,9 +45,7 @@ where
 
 	if let Some(mut rounds) = dkg_worker.rounds.take() {
 		let authorities = dkg_worker.current_validator_set.read().authorities.clone();
-		if let Some(id) =
-			dkg_worker.key_store.authority_id(&authorities)
-		{
+		if let Some(id) = dkg_worker.key_store.authority_id(&authorities) {
 			rounds_send_result =
 				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
 		} else {
@@ -128,11 +129,11 @@ fn send_messages<B, C, BE>(
 	authority_id: Public,
 	at: NumberFor<B>,
 ) -> Vec<Result<DKGResult, DKGError>>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let results = rounds.proceed(at);
 
@@ -149,7 +150,7 @@ fn send_messages<B, C, BE>(
 		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
 		.collect::<Vec<DKGMessage<_>>>();
 
-	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store,messages);
+	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store, messages);
 
 	results
 }
@@ -159,10 +160,11 @@ pub(crate) fn sign_and_send_messages<B>(
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
 ) where
-	B: Block
+	B: Block,
 {
 	let mut dkg_messages = dkg_messages.into();
-	let sr25519_public = dkg_keystore.sr25519_public_key(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
+	let sr25519_public = dkg_keystore
+		.sr25519_public_key(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 	let mut engine_lock = gossip_engine.lock();
@@ -186,10 +188,9 @@ pub(crate) fn sign_and_send_messages<B>(
 	}
 }
 
-
 pub(crate) enum UnsignedMessages {
 	Single(Option<DKGMessage<AuthorityId>>),
-	Multiple(Vec<DKGMessage<AuthorityId>>)
+	Multiple(Vec<DKGMessage<AuthorityId>>),
 }
 
 impl From<DKGMessage<AuthorityId>> for UnsignedMessages {
@@ -210,7 +211,7 @@ impl Iterator for UnsignedMessages {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Single(msg) => msg.take(),
-			Self::Multiple(messages) => messages.pop()
+			Self::Multiple(messages) => messages.pop(),
 		}
 	}
 }

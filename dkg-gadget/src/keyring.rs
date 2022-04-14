@@ -30,7 +30,7 @@ pub enum Keyring {
 	Ferdie,
 	One,
 	Two,
-	Custom(u128)
+	Custom(u128),
 }
 
 impl Keyring {

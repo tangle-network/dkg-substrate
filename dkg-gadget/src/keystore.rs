@@ -15,10 +15,7 @@
 use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
-use sp_application_crypto::{
-	key_types::{ACCOUNT},
-	sr25519, CryptoTypePublicPair, RuntimeAppPublic,
-};
+use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 

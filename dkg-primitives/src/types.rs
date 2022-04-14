@@ -82,7 +82,7 @@ impl DKGMsgPayload {
 			DKGMsgPayload::Keygen(kg) => Some(kg.round_id as u16),
 			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
 			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
-			_ => None
+			_ => None,
 		}
 	}
 }

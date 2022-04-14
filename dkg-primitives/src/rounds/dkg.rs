@@ -558,7 +558,8 @@ where
 	/// Indexing starts from 1.
 	/// OfflineStage must be created using this index if present (not the original keygen index)
 	fn get_offline_stage_index(&self) -> Option<u16> {
-		(1..).zip(&self.signers)
+		(1..)
+			.zip(&self.signers)
 			.find(|(_i, keygen_i)| self.party_index == **keygen_i)
 			.map(|r| r.0)
 	}

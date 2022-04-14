@@ -24,8 +24,8 @@ use std::{
 };
 
 use codec::{Codec, Decode, Encode};
-use dkg_runtime_primitives::utils::to_slice_32;
 use curv::elliptic::curves::Secp256k1;
+use dkg_runtime_primitives::utils::to_slice_32;
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
@@ -49,8 +49,7 @@ use crate::{
 };
 
 use crate::messages::{
-	dkg_message::send_outgoing_dkg_messages,
-	misbehaviour_report::{gossip_misbehaviour_report},
+	dkg_message::send_outgoing_dkg_messages, misbehaviour_report::gossip_misbehaviour_report,
 };
 
 use crate::storage::{
@@ -62,7 +61,12 @@ use dkg_primitives::{
 	AuthoritySetId, DKGReport, MisbehaviourType, Proposal, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 
-use dkg_runtime_primitives::{crypto::{AuthorityId, Public}, utils::to_slice_33, AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, GENESIS_AUTHORITY_SET_ID, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	utils::to_slice_33,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, UnsignedProposal,
+	GENESIS_AUTHORITY_SET_ID,
+};
 
 use crate::{
 	error, metric_set,
@@ -73,14 +77,13 @@ use crate::{
 	Client,
 };
 
+use crate::async_protocol_handlers::{meta_channel::DKGIface, SignedMessageBroadcastHandle};
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-use crate::async_protocol_handlers::meta_channel::DKGIface;
-use crate::async_protocol_handlers::SignedMessageBroadcastHandle;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -89,8 +92,8 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub(crate) struct WorkerParams<B, BE, C>
-	where
-		B: Block,
+where
+	B: Block,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -104,10 +107,10 @@ pub(crate) struct WorkerParams<B, BE, C>
 
 /// A DKG worker plays the DKG protocol
 pub(crate) struct DKGWorker<B, C, BE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
 {
 	pub client: Arc<C>,
 	pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
@@ -133,8 +136,8 @@ pub(crate) struct DKGWorker<B, C, BE>
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports:
-	HashMap<(MisbehaviourType, RoundId, AuthorityId),
+	pub aggregated_misbehaviour_reports: HashMap<
+		(MisbehaviourType, RoundId, AuthorityId),
 		AggregatedMisbehaviourReports<AuthorityId>,
 	>,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
@@ -158,11 +161,11 @@ pub(crate) struct DKGWorker<B, C, BE>
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
-	where
-		B: Block + Codec,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+where
+	B: Block + Codec,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -225,7 +228,7 @@ pub struct AsyncProtocolParameters<BCIface> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub unsigned_proposals_rx: Arc<Mutex<Option<UnboundedReceiver<Vec<UnsignedProposal>>>>>
+	pub unsigned_proposals_rx: Arc<Mutex<Option<UnboundedReceiver<Vec<UnsignedProposal>>>>>,
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
@@ -238,21 +241,24 @@ impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
-			unsigned_proposals_rx: self.unsigned_proposals_rx.clone()
+			unsigned_proposals_rx: self.unsigned_proposals_rx.clone(),
 		}
 	}
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
-	fn generate_async_proto_params(&self, best_authorities: Vec<Public>, authority_public_key: Public) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
+	fn generate_async_proto_params(
+		&self,
+		best_authorities: Vec<Public>,
+		authority_public_key: Public,
+	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -268,14 +274,14 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
 				vote_results: Arc::new(Default::default()),
-				_pd: Default::default()
+				_pd: Default::default(),
 			}),
 			keystore: self.key_store.clone(),
 			signed_message_broadcast_handle: self.to_async_proto.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
 			authority_public_key,
-			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx)))
+			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
 		}
 	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
@@ -500,12 +506,8 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 			self.get_next_keygen_threshold(header)
 		};
 		// Best authorities are taken from the on-chain reputations
-		let best_authorities: Vec<Public> = self.get_best_authorities(
-			header,
-		)
-			.iter()
-			.map(|(_, key)| key.clone())
-			.collect();
+		let best_authorities: Vec<Public> =
+			self.get_best_authorities(header).iter().map(|(_, key)| key.clone()).collect();
 
 		best_authorities
 	}
@@ -763,13 +765,17 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 		&mut self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
-		Self::verify_signature_against_authorities_inner(signed_dkg_msg, &self.latest_header, &self.client)
+		Self::verify_signature_against_authorities_inner(
+			signed_dkg_msg,
+			&self.latest_header,
+			&self.client,
+		)
 	}
 
 	pub fn verify_signature_against_authorities_inner(
 		signed_dkg_msg: SignedDKGMessage<Public>,
 		latest_header: &Arc<RwLock<Option<B::Header>>>,
-		client: &Arc<C>
+		client: &Arc<C>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
@@ -802,7 +808,7 @@ impl<B, C, BE> DKGWorker<B, C, BE>
 				&encoded,
 				&signature,
 			)
-				.1
+			.1
 		};
 
 		if check_signers(authority_accounts.clone().unwrap().0.into()) ||

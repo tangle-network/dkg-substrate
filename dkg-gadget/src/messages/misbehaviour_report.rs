@@ -70,17 +70,16 @@ where
 			&msg.signature,
 		)?;
 		// Add new report to the aggregated reports
-		let reports = dkg_worker.aggregated_misbehaviour_reports.entry((
-			msg.misbehaviour_type,
-			msg.round_id,
-			msg.offender.clone(),
-		)).or_insert_with(|| AggregatedMisbehaviourReports {
-			misbehaviour_type: msg.misbehaviour_type,
-			round_id: msg.round_id,
-			offender: msg.offender.clone(),
-			reporters: Vec::new(),
-			signatures: Vec::new(),
-		});
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
+			.entry((msg.misbehaviour_type, msg.round_id, msg.offender.clone()))
+			.or_insert_with(|| AggregatedMisbehaviourReports {
+				misbehaviour_type: msg.misbehaviour_type,
+				round_id: msg.round_id,
+				offender: msg.offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			});
 
 		if !reports.reporters.contains(&reporter) {
 			reports.reporters.push(reporter);
@@ -146,17 +145,16 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 			),
 		}
 
-		let reports = dkg_worker.aggregated_misbehaviour_reports.entry((
-			report.misbehaviour_type,
-			report.round_id,
-			report.offender.clone(),
-		)).or_insert_with(|| AggregatedMisbehaviourReports {
-			misbehaviour_type: report.misbehaviour_type,
-			round_id: report.round_id,
-			offender: report.offender.clone(),
-			reporters: Vec::new(),
-			signatures: Vec::new(),
-		});
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
+			.entry((report.misbehaviour_type, report.round_id, report.offender.clone()))
+			.or_insert_with(|| AggregatedMisbehaviourReports {
+				misbehaviour_type: report.misbehaviour_type,
+				round_id: report.round_id,
+				offender: report.offender.clone(),
+				reporters: Vec::new(),
+				signatures: Vec::new(),
+			});
 
 		if reports.reporters.contains(&public) {
 			return
