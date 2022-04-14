@@ -38,7 +38,7 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// Get authority accounts
-	let ref header = dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
+	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
 	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
@@ -183,7 +183,7 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let ref header = dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
+	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	// Fetch the current threshold for the DKG. We will use the
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.

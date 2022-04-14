@@ -147,7 +147,7 @@ where
 	let messages = rounds
 		.get_outgoing_messages()
 		.into_iter()
-		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id.clone() })
+		.map(|payload| DKGMessage { id: authority_id.clone(), payload, round_id: id })
 		.collect::<Vec<DKGMessage<_>>>();
 
 	sign_and_send_messages(&dkg_worker.gossip_engine, &dkg_worker.key_store, messages);
@@ -162,14 +162,14 @@ pub(crate) fn sign_and_send_messages<B>(
 ) where
 	B: Block,
 {
-	let mut dkg_messages = dkg_messages.into();
+	let dkg_messages = dkg_messages.into();
 	let sr25519_public = dkg_keystore
 		.sr25519_public_key(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
 		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
 
 	let mut engine_lock = gossip_engine.lock();
 
-	while let Some(dkg_message) = dkg_messages.next() {
+	for dkg_message in dkg_messages {
 		match dkg_keystore.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
 			Ok(sig) => {
 				let signed_dkg_message =

@@ -25,8 +25,8 @@ use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessag
 use futures::stream::Stream;
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
-	keygen::{LocalKey, ProtocolMessage},
-	sign::{CompletedOfflineStage, OfflineProtocolMessage},
+	keygen::{LocalKey},
+	sign::{CompletedOfflineStage},
 };
 use round_based::Msg;
 
@@ -106,6 +106,7 @@ impl Debug for ProtocolType {
 }
 
 pub type PartyIndex = u16;
+pub type Threshold = u16;
 
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped;
@@ -139,12 +140,13 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 						.verify_signature_against_authorities(self)
 						.map(|body| Some(Msg { sender, receiver: None, body }))
 				} else {
-					log::info!(target: "dkg", "Will skip passing message to state machine since loopback (loopback_id={})", sender);
+					//log::info!(target: "dkg", "Will skip passing message to state machine since
+					// loopback (loopback_id={})", sender);
 					Ok(None)
 				}
 			},
 
-			(l, r) => {
+			(_l, _r) => {
 				// TODO: route
 				//log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
 				Ok(None)
@@ -162,27 +164,28 @@ where
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		let Self { receiver, ty, bc_iface } = &mut *self;
+		let mut receiver = Pin::new(receiver);
 
-		match futures::ready!(Pin::new(receiver).poll_next(cx)) {
-			Some(Ok(msg)) => match msg.transform(&**bc_iface, &*ty) {
-				Ok(Some(msg)) => Poll::Ready(Some(msg)),
+		loop {
+			match futures::ready!(receiver.as_mut().poll_next(cx)) {
+				Some(Ok(msg)) => match msg.transform(&**bc_iface, &*ty) {
+					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
 
-				Ok(None) => {
-					cx.waker().wake_by_ref();
-					Poll::Pending
+					Ok(None) => {
+						continue
+					},
+
+					Err(err) => {
+						log::warn!(target: "dkg", "While mapping signed message, received an error: {:?}", err);
+						continue
+					},
 				},
-
-				Err(err) => {
-					log::warn!(target: "dkg", "While mapping signed message, received an error: {:?}", err);
-					cx.waker().wake_by_ref();
-					Poll::Pending
+				Some(Err(err)) => {
+					log::error!(target: "dkg", "Stream RECV error: {:?}", err);
+					continue
 				},
-			},
-			Some(Err(err)) => {
-				log::error!(target: "dkg", "Stream RECV error: {:?}", err);
-				Poll::Ready(None)
-			},
-			None => Poll::Ready(None),
+				None => return Poll::Ready(None),
+			}
 		}
 	}
 }
@@ -190,7 +193,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{keccak_256, AuthoritySetId, DKGApi, Proposal, UnsignedProposal};
+	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -220,7 +223,6 @@ pub mod meta_channel {
 		marker::PhantomData,
 		pin::Pin,
 		sync::{
-			atomic::{AtomicUsize, Ordering},
 			Arc,
 		},
 		task::{Context, Poll},
@@ -229,7 +231,7 @@ pub mod meta_channel {
 
 	use crate::{
 		async_protocol_handlers::{
-			IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType, TransformIncoming,
+			IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType, Threshold,
 		},
 		messages::dkg_message::sign_and_send_messages,
 		utils::find_index,
@@ -307,7 +309,8 @@ pub mod meta_channel {
 
 					if let Some(recv) = message.receiver.as_ref() {
 						if *recv != local_ty.get_i() {
-							log::info!("Skipping passing of message to async proto since not intended for local");
+							//log::info!("Skipping passing of message to async proto since not
+							// intended for local");
 							return Ok(())
 						}
 					}
@@ -324,7 +327,7 @@ pub mod meta_channel {
 
 		async fn on_finish<BCIface: BlockChainIface>(
 			local_key: <Self as StateMachine>::Output,
-			params: AsyncProtocolParameters<BCIface>,
+			_params: AsyncProtocolParameters<BCIface>,
 			_: Self::AdditionalReturnParam,
 		) -> Result<<Self as StateMachine>::Output, DKGError> {
 			log::info!(target: "dkg", "Completed keygen stage successfully!");
@@ -338,7 +341,7 @@ pub mod meta_channel {
 	#[async_trait]
 	impl StateMachineIface for OfflineStage {
 		type AdditionalReturnParam =
-			(UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>);
+			(UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>, Threshold);
 		type Return = ();
 
 		fn handle_unsigned_message(
@@ -357,7 +360,8 @@ pub mod meta_channel {
 							.map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
 					if let Some(recv) = message.receiver.as_ref() {
 						if *recv != local_ty.get_i() {
-							log::info!("Skipping passing of message to async proto since not intended for local");
+							//log::info!("Skipping passing of message to async proto since not
+							// intended for local");
 							return Ok(())
 						}
 					}
@@ -365,7 +369,8 @@ pub mod meta_channel {
 					if &local_ty.get_unsigned_proposal().unwrap().hash().unwrap() !=
 						msg.key.as_slice()
 					{
-						log::info!("Skipping passing of message to async proto since not correct unsigned proposal");
+						//log::info!("Skipping passing of message to async proto since not correct
+						// unsigned proposal");
 						return Ok(())
 					}
 
@@ -396,6 +401,7 @@ pub mod meta_channel {
 				unsigned_proposal.0,
 				unsigned_proposal.1,
 				unsigned_proposal.2,
+				unsigned_proposal.3,
 			)?
 			.await?;
 			Ok(())
@@ -519,7 +525,7 @@ pub mod meta_channel {
 						})?;
 
 					while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
-						let ref s_l = Self::generate_signers(&local_key, t, n);
+						let s_l = &Self::generate_signers(&local_key, t, n);
 
 						log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
@@ -534,6 +540,7 @@ pub mod meta_channel {
 									offline_i,
 									s_l.clone(),
 									local_key.clone(),
+									t,
 								)?));
 							}
 
@@ -545,7 +552,7 @@ pub mod meta_channel {
 								"Concluded all Offline->Voting stages for this batch for this node"
 							);
 						} else {
-							log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
+							//log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
 							return Ok(())
 						}
 					}
@@ -563,7 +570,8 @@ pub mod meta_channel {
 
 				 */
 				} else {
-					log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
+					//log::info!(target: "dkg", "Will skip keygen since local is NOT in best
+					// authority set");
 				}
 
 				Ok(())
@@ -594,6 +602,7 @@ pub mod meta_channel {
 			i: u16,
 			s_l: Vec<u16>,
 			local_key: LocalKey<Secp256k1>,
+			threshold: u16,
 		) -> Result<MetaDKGMessageHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError>
 		{
 			let channel_type = ProtocolType::Offline {
@@ -604,7 +613,7 @@ pub mod meta_channel {
 			};
 			let early_handle = params.signed_message_broadcast_handle.subscribe();
 			MetaDKGMessageHandler::new_inner(
-				(unsigned_proposal, i, early_handle),
+				(unsigned_proposal, i, early_handle, threshold),
 				OfflineStage::new(i, s_l, local_key)
 					.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 				params,
@@ -630,7 +639,7 @@ pub mod meta_channel {
 			let mut async_proto = AsyncProtocol::new(
 				sm,
 				incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>),
-				outgoing_tx.clone(),
+				outgoing_tx,
 			)
 			.set_watcher(StderrWatcher);
 
@@ -689,6 +698,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			party_ind: PartyIndex,
 			rx: Receiver<Arc<SignedDKGMessage<Public>>>,
+			threshold: Threshold,
 		) -> Result<MetaDKGMessageHandler<'a, ()>, DKGError> {
 			let protocol = Box::pin(async move {
 				let ty = ProtocolType::Voting {
@@ -699,7 +709,7 @@ pub mod meta_channel {
 
 				// the below wrapper will map signed messages into unsigned messages
 				let incoming = rx;
-				let ref mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(
+				let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(
 					incoming,
 					ty,
 					params.blockchain_iface.clone(),
@@ -734,12 +744,12 @@ pub mod meta_channel {
 				let unsigned_dkg_message = DKGMessage { id, payload, round_id };
 				params.blockchain_iface.sign_and_send_msg(unsigned_dkg_message)?;
 
-				let number_of_partial_sigs = number_of_parties.saturating_sub(1) as usize;
+				// we only need a threshold count of sigs
+				let number_of_partial_sigs = threshold as usize;
 				let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
 				log::info!(target: "dkg", "Must obtain {} partial sigs to continue ...", number_of_partial_sigs);
 
-				// obtain number of parties - 1 messages (i.e., all except self)
 				while let Some(msg) = incoming_wrapper.next().await {
 					match msg.body.payload {
 						DKGMsgPayload::Vote(dkg_vote_msg) => {
@@ -758,7 +768,8 @@ pub mod meta_channel {
 									break
 								}
 							} else {
-								log::info!(target: "dkg", "Skipping DKG vote message since round keys did not match");
+								//log::info!(target: "dkg", "Skipping DKG vote message since round
+								// keys did not match");
 							}
 						},
 
@@ -783,7 +794,7 @@ pub mod meta_channel {
 				log::info!("RD2");
 				let signature = serde_json::to_string(&signature)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-				if let Some(prev) = params
+				if let Some(_prev) = params
 					.blockchain_iface
 					.get_vote_results()
 					.lock()
@@ -951,13 +962,13 @@ mod tests {
 		worker::AsyncProtocolParameters,
 		DKGKeystore,
 	};
-	use codec::Encode;
+
 	use dkg_primitives::{types::DKGError, ProposalNonce};
 	use dkg_runtime_primitives::{
 		crypto, crypto::AuthorityId, AuthoritySet, DKGPayloadKey, Proposal, ProposalKind,
 		TypedChainId, UnsignedProposal, KEY_TYPE,
 	};
-	use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryStreamExt};
+	use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 	use itertools::Itertools;
 	use parking_lot::lock_api::{Mutex, RwLock};
 	use rstest::{fixture, rstest};
@@ -991,6 +1002,7 @@ mod tests {
 
 	#[rstest]
 	#[case(2, 3)]
+	#[case(1, 3)]
 	#[tokio::test(flavor = "multi_thread")]
 	async fn test_async_protocol(
 		#[case] threshold: u16,
@@ -1003,7 +1015,7 @@ mod tests {
 			.into_iter()
 			.map(|id| generate_new(&*raw_keystore, Keyring::Custom(id as _)))
 			.collect::<Vec<crypto::Public>>();
-		assert_eq!(authority_set.len(), authority_set.iter().unique().collect::<Vec<_>>().len()); // assert generated keys are unique
+		assert_eq!(authority_set.len(), authority_set.iter().unique().count()); // assert generated keys are unique
 
 		let dkg_keystore = DKGKeystore::from(Some(raw_keystore));
 		let mut validators = AuthoritySet::empty();
@@ -1065,7 +1077,7 @@ mod tests {
 		let unsigned_proposal_broadcaster = async move {
 			let mut ticks =
 				IntervalStream::new(tokio::time::interval(Duration::from_millis(1000))).take(1);
-			while let Some(v) = ticks.next().await {
+			while let Some(_v) = ticks.next().await {
 				log::info!(target: "dkg", "Now beginning broadcast of new UnsignedProposals");
 				let unsigned_proposals = (0..num_parties)
 					.into_iter()

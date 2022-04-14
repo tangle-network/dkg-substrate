@@ -24,11 +24,11 @@ use std::{
 };
 
 use codec::{Codec, Decode, Encode};
-use curv::elliptic::curves::Secp256k1;
+
 use dkg_runtime_primitives::utils::to_slice_32;
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+
 use parking_lot::{Mutex, RwLock};
 
 use sc_client_api::{
@@ -496,11 +496,11 @@ where
 	fn get_best_authority_keys(
 		&self,
 		header: &B::Header,
-		authority_set: AuthoritySet<Public>,
+		_authority_set: AuthoritySet<Public>,
 		active: bool,
 	) -> Vec<Public> {
 		// Get active threshold or get the next threshold
-		let threshold = if active {
+		let _threshold = if active {
 			self.get_keygen_threshold(header)
 		} else {
 			self.get_next_keygen_threshold(header)
@@ -811,12 +811,12 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0.into()) ||
-			check_signers(authority_accounts.clone().unwrap().1.into())
+		if check_signers(authority_accounts.clone().unwrap().0) ||
+			check_signers(authority_accounts.unwrap().1)
 		{
-			return Ok(dkg_msg)
+			Ok(dkg_msg)
 		} else {
-			return Err(DKGError::GenericError {
+			Err(DKGError::GenericError {
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
@@ -1121,7 +1121,7 @@ where
 				},
 			));
 
-		let ref to_async_proto = self.to_async_proto.clone();
+		let to_async_proto = &self.to_async_proto.clone();
 
 		loop {
 			let engine = self.gossip_engine.clone();
