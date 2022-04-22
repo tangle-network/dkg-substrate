@@ -820,6 +820,16 @@ pub mod meta_channel {
 					.complete(&sigs)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
+				// TODO: Get all the signed signatures into storage
+				// Call worker.rs: handle_finished_round -> Proposal
+				// aggregate Proposal into Vec<Proposal>
+
+				// PublicKeyGossip (we need meta handler to handle this)
+				// when keygen finishes, we gossip the signed key to peers.
+				// [1] create the message, call the "public key gossip" in public_key_gossip.rs:gossip_public_key
+				// [2] store public key locally
+				// [3] handle_public_key_broadcast
+
 				log::info!("RD2");
 				let signature = serde_json::to_string(&signature)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;

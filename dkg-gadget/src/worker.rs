@@ -635,8 +635,8 @@ where
 				.build(),
 		);*/
 
-		let authority_public_key = best_authorities.get(maybe_party_index.clone().unwrap() as usize).cloned().unwrap();
-		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key);
+		let authority_public_key = best_authorities.get_authority_key();
+		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key, false);
 		match MetaDKGMessageHandler::post_genesis(async_proto_params, threshold) {
 			Ok(meta_handler) => {
 				let task = async move {
@@ -1023,6 +1023,19 @@ where
 			Ok(res) => res,
 			Err(_) => return,
 		};
+		// rounds:
+		// next_rounds:
+		// one is active (gets unsigned proposals). We do NOT send proposals to next, ONLY active
+		// queued does not receive anything after being created (STOPS after keygen, then, gets replaced with next)
+		// Always send to "active" - NOT the queued
+		// genesis: run genesis dkg, AND, next_rounds (keygen) (keep retrying until success)
+		// wait til public key on-chain, then, send unsigned proposals to active
+		// active received unsigned proposals and signs them
+		// then, put signed proposals on-chain
+		// Eventually, when the session changes, make next_rounds the active rounds
+
+		// Get rid of function that handles unsigned proposals
+		self.unsigned_proposals_tx.unbounded_send(unsigned_proposals)?;
 
 		let rounds = self.rounds.as_mut().unwrap();
 		let mut errors = Vec::new();
