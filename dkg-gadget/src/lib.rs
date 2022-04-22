@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use dkg_primitives::rounds::DKGState;
 use log::debug;
 use prometheus::Registry;
 

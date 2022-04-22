@@ -84,6 +84,7 @@ use dkg_primitives::{
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
+use crate::async_protocol_handlers::meta_channel::{MetaAsyncProtoStatusHandle, MetaDKGMessageHandler};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -118,8 +119,8 @@ where
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub metrics: Option<Metrics>,
-	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
-	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
+	pub rounds: Option<MetaAsyncProtoStatusHandle>,
+	pub next_rounds: Option<MetaAsyncProtoStatusHandle>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	pub votes_sent: u64,
@@ -155,7 +156,7 @@ where
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub unsigned_proposals_tx: Arc<Mutex<Option<UnboundedSender<Vec<UnsignedProposal>>>>>,
+	pub unsigned_proposals_tx: Option<UnboundedSender<Vec<UnsignedProposal>>>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -215,7 +216,7 @@ where
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
-			unsigned_proposals_tx: Arc::new(Mutex::new(None)),
+			unsigned_proposals_tx: None,
 			_backend: PhantomData,
 		}
 	}
@@ -254,18 +255,22 @@ where
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
+	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
+	// it well set the "next_rounds" field
 	fn generate_async_proto_params(
-		&self,
+		&mut self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
+		current: bool
 	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
-		*self.unsigned_proposals_tx.lock() = Some(unsigned_proposals_tx);
+		let status_handle = MetaAsyncProtoStatusHandle::new();
+		self.unsigned_proposals_tx = Some(unsigned_proposals_tx);
 
-		AsyncProtocolParameters {
+		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
@@ -273,6 +278,7 @@ where
 				gossip_engine: self.gossip_engine.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
+				status: status_handle.clone(),
 				vote_results: Arc::new(Default::default()),
 				_pd: Default::default(),
 			}),
@@ -282,7 +288,15 @@ where
 			best_authorities,
 			authority_public_key,
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
+		};
+
+		if current {
+			self.rounds = Some(status_handle)
+		} else {
+			self.next_rounds = Some(status_handle)
 		}
+
+		params
 	}
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
 	///
@@ -531,8 +545,8 @@ where
 		}
 
 		// Check if we've already set up the DKG for this authority set
-		if self.rounds.is_some() && !self.rounds.as_ref().unwrap().has_stalled() {
-			debug!(target: "dkg", "🕸️  Rounds exists and has not stalled");
+		if !self.rounds.as_ref().map(|r| r.is_running()).unwrap_or(false)  {
+			debug!(target: "dkg", "🕸️  Rounds exists and is active");
 			return
 		}
 
@@ -558,17 +572,7 @@ where
 
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
-		self.rounds = Some(
-			MultiPartyECDSARounds::builder()
-				.round_id(round_id)
-				.party_index(maybe_party_index.unwrap())
-				.threshold(self.get_signature_threshold(header))
-				.parties(self.get_keygen_threshold(header))
-				.local_key_path(local_key_path)
-				.authorities(best_authorities.clone())
-				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
-				.build(),
-		);
+		let threshold = self.get_signature_threshold(header);
 
 		self.dkg_state.listening_for_active_pub_key = true;
 		if let Some(rounds) = self.rounds.as_mut() {
@@ -618,7 +622,8 @@ where
 
 		let best_authorities: Vec<Public> =
 			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
-		self.next_rounds = Some(
+		let threshold = self.get_next_signature_threshold(header);
+		/*self.next_rounds = Some(
 			MultiPartyECDSARounds::builder()
 				.round_id(round_id)
 				.party_index(maybe_party_index.unwrap())
@@ -628,7 +633,34 @@ where
 				.authorities(best_authorities.clone())
 				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
 				.build(),
-		);
+		);*/
+
+		let authority_public_key = best_authorities.get(maybe_party_index.clone().unwrap() as usize).cloned().unwrap();
+		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key);
+		match MetaDKGMessageHandler::post_genesis(async_proto_params, threshold) {
+			Ok(meta_handler) => {
+				let task = async move {
+					match meta_handler.await {
+						Ok(_) => {
+							log::info!(target: "dkg", "The meta handler has executed successfully");
+						}
+
+						Err(err) => {
+							error!(target: "dkg", "Error executing meta handler {:?}", &err);
+							// TODO: pass to dkg error handler channel
+						}
+					}
+				};
+
+				// spawn on parallel thread
+				let _handle = tokio::task::spawn(task);
+			},
+
+			Err(err) => {
+				error!(target: "dkg", "Error starting meta handler {:?}", &err);
+				self.handle_dkg_error(err);
+			}
+		}
 
 		self.dkg_state.listening_for_pub_key = true;
 		if let Some(rounds) = self.next_rounds.as_mut() {
@@ -638,8 +670,7 @@ where
 					self.queued_keygen_in_progress = true;
 				},
 				Err(err) => {
-					error!("Error starting keygen {:?}", &err);
-					self.handle_dkg_error(err);
+
 				},
 			}
 		}

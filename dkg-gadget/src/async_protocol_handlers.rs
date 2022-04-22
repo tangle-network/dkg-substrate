@@ -227,6 +227,7 @@ pub mod meta_channel {
 		},
 		task::{Context, Poll},
 	};
+	use std::sync::atomic::{AtomicBool, Ordering};
 	use tokio::sync::broadcast::Receiver;
 
 	use crate::{
@@ -417,6 +418,33 @@ pub mod meta_channel {
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>>;
 	}
 
+	#[derive(Clone)]
+	pub struct MetaAsyncProtoStatusHandle(pub Arc<AtomicBool>);
+
+	impl MetaAsyncProtoStatusHandle {
+		/// assumes the meta async proto is running
+		pub fn new() -> Self {
+			Self(Arc::new(AtomicBool::new(true)))
+		}
+
+		pub fn is_running(&self) -> bool {
+			self.0.load(Ordering::SeqCst)
+		}
+	}
+
+	impl Drop for MetaAsyncProtoStatusHandle {
+		fn drop(&mut self) {
+			if Arc::strong_count(&self.0) == 2 {
+				// at this point, the only instances of this arc are this one, and,
+				// presumably the one in the DKG worker. This one is asserted to be the one
+				// belonging to the async proto. Signal true to allow the DKG worker to move
+				// forward
+				self.0.store(false, Ordering::SeqCst)
+			}
+		}
+	}
+
+
 	pub struct DKGIface<B: Block, BE, C> {
 		pub latest_header: Arc<RwLock<Option<B::Header>>>,
 		pub client: Arc<C>,
@@ -426,6 +454,7 @@ pub mod meta_channel {
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
 		pub vote_results: Arc<Mutex<HashMap<(u16, [u8; 32]), String>>>,
+		pub status: MetaAsyncProtoStatusHandle,
 		pub _pd: PhantomData<BE>,
 	}
 
