@@ -135,7 +135,7 @@ where
 	/// Msg cache for startup if authorities aren't set
 	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
-	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
+	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: HashMap<
 		(MisbehaviourType, RoundId, AuthorityId),
@@ -210,7 +210,7 @@ where
 			queued_keygen_in_progress: false,
 			active_keygen_in_progress: false,
 			msg_cache: Vec::new(),
-			aggregated_public_keys: HashMap::new(),
+			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
 			aggregated_misbehaviour_reports: HashMap::new(),
 			has_sent_gossip_msg: HashMap::new(),
 			dkg_persistence: DKGPersistenceState::new(),
@@ -272,10 +272,12 @@ where
 
 		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
+				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
 				gossip_engine: self.gossip_engine.clone(),
+				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
 				status: status_handle.clone(),
@@ -637,7 +639,7 @@ where
 
 		let authority_public_key = best_authorities.get_authority_key();
 		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key, false);
-		match MetaDKGMessageHandler::post_genesis(async_proto_params, threshold) {
+		match MetaDKGMessageHandler::execute(async_proto_params, threshold) {
 			Ok(meta_handler) => {
 				let task = async move {
 					match meta_handler.await {

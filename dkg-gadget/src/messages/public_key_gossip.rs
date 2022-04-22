@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +14,7 @@
 // limitations under the License.
 //
 // Handles non-dkg messages
-use crate::{
-	storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client,
-};
+use crate::{storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client, DKGKeystore};
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
@@ -24,7 +23,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
 use log::{debug, error};
 use sc_client_api::Backend;
+use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header};
+use dkg_primitives::types::RoundId;
 
 pub(crate) fn handle_public_key_broadcast<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
@@ -70,16 +71,10 @@ where
 
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let round_id = msg.round_id;
-		let mut aggregated_public_keys = match dkg_worker.aggregated_public_keys.get(&round_id) {
-			Some(keys) => keys.clone(),
-			None => AggregatedPublicKeys::default(),
-		};
+		let aggregated_public_keys = dkg_worker.aggregated_public_keys.lock().entry(round_id).or_default();
 
 		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-			dkg_worker
-				.aggregated_public_keys
-				.insert(round_id, aggregated_public_keys.clone());
 		}
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
@@ -93,10 +88,10 @@ where
 		);
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys(
-				dkg_worker,
+				&dkg_worker.backend,
+				&mut *dkg_worker.aggregated_public_keys.lock(),
 				is_main_round,
 				round_id,
-				&aggregated_public_keys,
 				current_block_number,
 			)?;
 		}
@@ -106,7 +101,9 @@ where
 }
 
 pub(crate) fn gossip_public_key<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+	key_store: &DKGKeystore,
+	gossip_engine: &mut GossipEngine<B>,
+	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
 	msg: DKGPublicKeyMessage,
 ) where
 	B: Block,
@@ -114,8 +111,11 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let public = dkg_worker.get_authority_public_key();
-	if let Ok(signature) = dkg_worker.key_store.sign(&public, &msg.pub_key) {
+	let public = key_store
+		.authority_id(&key_store.public_keys().unwrap())
+		.unwrap_or_else(|| panic!("Halp"));
+
+	if let Ok(signature) = key_store.sign(&public, &msg.pub_key) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
 			signature: encoded_signature.clone(),
@@ -126,13 +126,13 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			DKGMessage::<AuthorityId> { id: public.clone(), round_id: msg.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
-		match dkg_worker.key_store.sign(&public, &encoded_dkg_message) {
+		match key_store.sign(&public, &encoded_dkg_message) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_worker.gossip_engine.lock().gossip_message(
+				gossip_engine.gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
 					true,
@@ -145,18 +145,10 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			),
 		}
 
-		let mut aggregated_public_keys =
-			if dkg_worker.aggregated_public_keys.get(&msg.round_id).is_some() {
-				dkg_worker.aggregated_public_keys.get(&msg.round_id).unwrap().clone()
-			} else {
-				AggregatedPublicKeys::default()
-			};
-
-		aggregated_public_keys
+		aggregated_public_keys.entry(msg.round_id)
+			.or_default()
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));
-
-		dkg_worker.aggregated_public_keys.insert(msg.round_id, aggregated_public_keys);
 
 		debug!(target: "dkg", "Gossiping local node  {:?} public key and signature", public)
 	} else {

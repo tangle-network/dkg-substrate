@@ -3,6 +3,8 @@
 // Copyright (C) 2021 Webb Technologies Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
+use std::sync::Arc;
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -34,10 +36,10 @@ use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// stores genesis or next aggregated public keys offchain
 pub(crate) fn store_aggregated_public_keys<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+	backend: &Arc<BE>,
+	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
 	is_genesis_round: bool,
 	round_id: RoundId,
-	keys: &AggregatedPublicKeys,
 	current_block_number: NumberFor<B>,
 ) -> Result<(), DKGError>
 where
@@ -46,13 +48,14 @@ where
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let maybe_offchain = dkg_worker.backend.offchain_storage();
+	let maybe_offchain = backend.offchain_storage();
 	if maybe_offchain.is_none() {
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
 	let offchain = maybe_offchain.unwrap();
+	let keys = aggregated_public_keys.get(&round_id).ok_or_else(|| DKGError::CriticalError { reason: format!("Aggregated public key for round {} does not exist in map", round_id) })?;
 	if is_genesis_round {
-		dkg_worker.dkg_state.listening_for_active_pub_key = false;
+		//dkg_worker.dkg_state.listening_for_active_pub_key = false;
 		perform_storing_of_aggregated_public_keys(
 			dkg_worker,
 			offchain,
@@ -62,7 +65,7 @@ where
 			SUBMIT_GENESIS_KEYS_AT,
 		);
 	} else {
-		dkg_worker.dkg_state.listening_for_pub_key = false;
+		//dkg_worker.dkg_state.listening_for_pub_key = false;
 		perform_storing_of_aggregated_public_keys(
 			dkg_worker,
 			offchain,
@@ -71,7 +74,7 @@ where
 			AGGREGATED_PUBLIC_KEYS,
 			SUBMIT_KEYS_AT,
 		);
-		let _ = dkg_worker.aggregated_public_keys.remove(&round_id);
+		let _ = aggregated_public_keys.remove(&round_id);
 	}
 
 	Ok(())

@@ -105,7 +105,7 @@ where
 		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
 			return
 		}
-		gossip_public_key(dkg_worker, pub_key_msg);
+		gossip_public_key(&dkg_worker.key_store, &mut *dkg_worker.gossip_engine.lock(), &mut *dkg_worker.aggregated_public_keys.lock(), pub_key_msg);
 		dkg_worker.has_sent_gossip_msg.insert(hash, count + 1);
 	}
 

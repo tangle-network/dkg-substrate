@@ -193,7 +193,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AuthoritySetId, DKGApi, UnsignedProposal};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySetId, DKGApi, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -246,7 +246,10 @@ pub mod meta_channel {
 		},
 		utils::select_random_set,
 	};
+	use dkg_primitives::types::{DKGPublicKeyMessage, RoundId};
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
+	use crate::messages::public_key_gossip::gossip_public_key;
+	use crate::storage::public_keys::store_aggregated_public_keys;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -328,13 +331,24 @@ pub mod meta_channel {
 
 		async fn on_finish<BCIface: BlockChainIface>(
 			local_key: <Self as StateMachine>::Output,
-			_params: AsyncProtocolParameters<BCIface>,
+			params: AsyncProtocolParameters<BCIface>,
 			_: Self::AdditionalReturnParam,
 		) -> Result<<Self as StateMachine>::Output, DKGError> {
 			log::info!(target: "dkg", "Completed keygen stage successfully!");
-			// take the completed offline stage, and, immediately execute the corresponding voting
-			// stage (this will allow parallelism between offline stages executing across the
-			// network)
+			// PublicKeyGossip (we need meta handler to handle this)
+			// when keygen finishes, we gossip the signed key to peers.
+			// [1] create the message, call the "public key gossip" in public_key_gossip.rs:gossip_public_key
+			// [2] store public key locally (public_keys.rs: store_aggregated_public_keys)
+			let round_id = MetaDKGMessageHandler::<()>::get_party_round_id(&params).1;
+			let pub_key_msg = DKGPublicKeyMessage {
+				round_id,
+				pub_key: local_key.public_key().to_bytes(true).to_vec(),
+				signature: vec![],
+			};
+
+			params.blockchain_iface.gossip_public_key(pub_key_msg)?;
+			params.blockchain_iface.store_public_key(local_key.clone(), round_id)?;
+
 			Ok(local_key)
 		}
 	}
@@ -416,6 +430,8 @@ pub mod meta_channel {
 		) -> Result<DKGMessage<Public>, DKGError>;
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>>;
+		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
+		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError>;
 	}
 
 	#[derive(Clone)]
@@ -446,10 +462,12 @@ pub mod meta_channel {
 
 
 	pub struct DKGIface<B: Block, BE, C> {
+		pub backend: Arc<BE>,
 		pub latest_header: Arc<RwLock<Option<B::Header>>>,
 		pub client: Arc<C>,
 		pub keystore: DKGKeystore,
 		pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+		pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
@@ -486,6 +504,18 @@ pub mod meta_channel {
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
 			&*self.vote_results
 		}
+
+		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+			gossip_public_key(&self.keystore, &mut *self.gossip_engine.lock(), &mut *self.aggregated_public_keys.lock(), key);
+			Ok(())
+		}
+
+		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError> {
+			let is_genesis_round = true; // TODO!
+			let header = &(self.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
+			let current_block_number = *header.number();
+			store_aggregated_public_keys(&self.backend, &mut *self.aggregated_public_keys.lock(), is_genesis_round, round_id, current_block_number)
+		}
 	}
 
 	#[derive(Clone)]
@@ -520,6 +550,15 @@ pub mod meta_channel {
 		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
 			&*self.vote_results
 		}
+
+		fn gossip_public_key(&self, _key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+			// we do not gossip the public key in the test interface
+			Ok(())
+		}
+
+		fn store_public_key(&self, _key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
+			Ok(())
+		}
 	}
 
 	impl<'a, Out: Send + Debug + 'a> MetaDKGMessageHandler<'a, Out>
@@ -527,7 +566,7 @@ pub mod meta_channel {
 		(): Extend<Out>,
 	{
 		/// This should be executed after genesis is complete
-		pub fn post_genesis<B: BlockChainIface + 'a>(
+		pub fn execute<B: BlockChainIface + 'a>(
 			params: AsyncProtocolParameters<B>,
 			threshold: u16,
 		) -> Result<MetaDKGMessageHandler<'a, ()>, DKGError> {
@@ -824,15 +863,10 @@ pub mod meta_channel {
 				// Call worker.rs: handle_finished_round -> Proposal
 				// aggregate Proposal into Vec<Proposal>
 
-				// PublicKeyGossip (we need meta handler to handle this)
-				// when keygen finishes, we gossip the signed key to peers.
-				// [1] create the message, call the "public key gossip" in public_key_gossip.rs:gossip_public_key
-				// [2] store public key locally
-				// [3] handle_public_key_broadcast
-
 				log::info!("RD2");
 				let signature = serde_json::to_string(&signature)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+				// TODO: Also store the UnsignedProposal
 				if let Some(_prev) = params
 					.blockchain_iface
 					.get_vote_results()
@@ -1175,6 +1209,6 @@ mod tests {
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
 		};
 
-		MetaDKGMessageHandler::post_genesis(async_params, threshold).unwrap()
+		MetaDKGMessageHandler::execute(async_params, threshold).unwrap()
 	}
 }
