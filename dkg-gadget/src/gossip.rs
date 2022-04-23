@@ -61,7 +61,7 @@ where
 		match SignedDKGMessage::<Public>::decode(&mut data_copy) {
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got a signed dkg message: {:?}, from: {:?}", msg, sender);
-				return ValidationResult::ProcessAndKeep(dkg_topic::<B>())
+				return ValidationResult::ProcessAndDiscard(dkg_topic::<B>())
 			},
 			Err(e) => {
 				error!(target: "dkg", "🕸️  Got invalid signed dkg message: {:?}, from: {:?}", e, sender);
