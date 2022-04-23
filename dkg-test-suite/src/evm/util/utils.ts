@@ -146,10 +146,14 @@ function castToChainIdType(v: number): ChainIdType {
 	 * 32 bytes Hex-encoded string of the `merkleRoot`.
 	 */
 	readonly merkleRoot: string;
+	/**
+	 * 32 bytes Hex-encoded string of the `target`.
+	 */
+	readonly target: string;
 }
 export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
-	const updateProposal = new Uint8Array(40 + 42);
+	const updateProposal = new Uint8Array(40 + 42 + 32);
 	updateProposal.set(header, 0); // 0 -> 40
 	const view = new DataView(updateProposal.buffer);
 	view.setUint16(40, proposal.chainIdType, false); // 40 -> 42
@@ -157,6 +161,8 @@ export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint
 	view.setUint32(46, proposal.lastLeafIndex, false); // 46 -> 50
 	const merkleRoot = hexToU8a(proposal.merkleRoot).slice(0, 32);
 	updateProposal.set(merkleRoot, 50); // 50 -> 82
+	const target = hexToU8a(proposal.target).slice(0, 32);
+	updateProposal.set(target, 82); // 82 -> 114
 	return updateProposal;
 }
 export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdateProposal {
@@ -165,13 +171,15 @@ export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdatePropos
 	const chainIdType = castToChainIdType(chainIdTypeInt);
 	const srcChainId = new DataView(data.buffer).getUint32(42, false); // 42 -> 46
 	const lastLeafIndex = new DataView(data.buffer).getUint32(46, false); // 46 -> 50
-	const merkleRoot = u8aToHex(data.slice(50, 80)); // 50 -> 82
+	const merkleRoot = u8aToHex(data.slice(50, 82)); // 50 -> 82
+	const target = u8aToHex(data.slice(82, 114)); // 82 -> 114
 	return {
 		header,
 		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
+		target,
 	};
 }
 
@@ -568,6 +576,7 @@ function _testEncodeDecode() {
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
+		target: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000',
 	};
 	const headerEncoded = encodeProposalHeader(header);
 	const headerDecoded = decodeProposalHeader(headerEncoded);
