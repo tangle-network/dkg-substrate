@@ -45,6 +45,7 @@ impl Seen {
 
 	/// Increment new seen count
 	fn increment(&mut self, hash: [u8; 32]) {
+		#[allow(clippy::map_entry)]
 		if self.seen.contains_key(&hash) {
 			// Mutate if exists
 			let count = self.get_seen_count(&hash);
@@ -62,7 +63,7 @@ impl Seen {
 
 	/// Check if `hash` is already part of seen messages
 	fn get_seen_count(&self, hash: &[u8]) -> u8 {
-		self.seen.get(hash).map(|val| *val).unwrap_or(0)
+		self.seen.get(hash).copied().unwrap_or(0)
 	}
 }
 
