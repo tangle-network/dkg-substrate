@@ -12693,8 +12693,8 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.2.2"
-source = "git+https://github.com/webb-tools/webb-rs#9d2dc8341ca824e4de03929f5deb63a5c91aad05"
+version = "0.2.3"
+source = "git+https://github.com/webb-tools/webb-rs?branch=drew/edge-metadata-update#5cf6b50b7382f513aecd3b476017d937b8cf3239"
 dependencies = [
  "num-traits",
  "parity-scale-codec",
