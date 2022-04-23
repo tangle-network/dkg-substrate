@@ -193,7 +193,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySetId, DKGApi, UnsignedProposal};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySetId, DKGApi, Proposal, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -228,6 +228,9 @@ pub mod meta_channel {
 		task::{Context, Poll},
 	};
 	use std::sync::atomic::{AtomicBool, Ordering};
+	use codec::Encode;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
+	use round_based::containers::push::Push;
 	use tokio::sync::broadcast::Receiver;
 
 	use crate::{
@@ -246,9 +249,11 @@ pub mod meta_channel {
 		},
 		utils::select_random_set,
 	};
-	use dkg_primitives::types::{DKGPublicKeyMessage, RoundId};
+	use dkg_primitives::rounds::sign::convert_signature;
+	use dkg_primitives::types::{DKGPublicKeyMessage, DKGSignedPayload, RoundId};
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
 	use crate::messages::public_key_gossip::gossip_public_key;
+	use crate::proposal::get_signed_proposal;
 	use crate::storage::public_keys::store_aggregated_public_keys;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
@@ -429,7 +434,7 @@ pub mod meta_channel {
 			message: Arc<SignedDKGMessage<Public>>,
 		) -> Result<DKGMessage<Public>, DKGError>;
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
-		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>>;
+		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
 		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError>;
 	}
@@ -470,9 +475,9 @@ pub mod meta_channel {
 		pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
-		// key is party_index, hash of data. Needed especially for local unit tests
-		pub vote_results: Arc<Mutex<HashMap<(u16, [u8; 32]), String>>>,
+		pub vote_results: Arc<Mutex<HashMap<[u8; 32], Vec<Proposal>>>>,
 		pub status: MetaAsyncProtoStatusHandle,
+		pub is_genesis: bool,
 		pub _pd: PhantomData<BE>,
 	}
 
@@ -501,8 +506,27 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
-			&*self.vote_results
+		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId) -> Result<(), DKGError> {
+			// Call worker.rs: handle_finished_round -> Proposal
+			// aggregate Proposal into Vec<Proposal>
+			let payload_key = unsigned_proposal.key;
+			let hash = unsigned_proposal.hash().unwrap();
+			let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError { reason: "Unable to serialize signature".to_string() })?;
+
+			let finished_round = DKGSignedPayload {
+				key: round_id.encode(),
+				payload: vec![], // the only place in the codebase that uses this is unit testing, and, it is "Webb".encode()
+				signature: signature.encode()
+			};
+
+			let proposals_for_this_batch = self.vote_results.lock().entry(hash).or_default();
+
+			let proposal = get_signed_proposal(&self.backend, finished_round, payload_key).ok_or_else(|| DKGError::CriticalError { reason: "Unable to map round to proposal (backend missing?)".to_string() })?;
+			proposals_for_this_batch.push(proposal);
+
+			// TODO: determine if we save when len(proposals_for_this_batch) == # of unsigned proposals in batch
+
+			Ok(())
 		}
 
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
@@ -511,7 +535,7 @@ pub mod meta_channel {
 		}
 
 		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError> {
-			let is_genesis_round = true; // TODO!
+			let is_genesis_round = self.is_genesis;
 			let header = &(self.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 			let current_block_number = *header.number();
 			store_aggregated_public_keys(&self.backend, &mut *self.aggregated_public_keys.lock(), is_genesis_round, round_id, current_block_number)
@@ -547,8 +571,8 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn get_vote_results(&self) -> &Mutex<HashMap<(u16, [u8; 32]), String>> {
-			&*self.vote_results
+		fn process_vote_result(&self, _signature: SignatureRecid, _unsigned_proposal: UnsignedProposal, _round_id: RoundId) -> Result<(), DKGError> {
+			Ok(())
 		}
 
 		fn gossip_public_key(&self, _key: DKGPublicKeyMessage) -> Result<(), DKGError> {
@@ -859,31 +883,9 @@ pub mod meta_channel {
 					.complete(&sigs)
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
-				// TODO: Get all the signed signatures into storage
-				// Call worker.rs: handle_finished_round -> Proposal
-				// aggregate Proposal into Vec<Proposal>
-
 				log::info!("RD2");
-				let signature = serde_json::to_string(&signature)
-					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-				// TODO: Also store the UnsignedProposal
-				if let Some(_prev) = params
-					.blockchain_iface
-					.get_vote_results()
-					.lock()
-					.insert((party_ind, hash_of_proposal), signature)
-				{
-					log::error!(target: "dkg", "While completing voting stage, overwrote prev key: ({}, {:?})", party_ind, hash_of_proposal);
-					Err(DKGError::GenericError {
-						reason: format!(
-							"While completing voting stage, overwrote prev key: ({}, {:?})",
-							party_ind, hash_of_proposal
-						),
-					})
-				} else {
-					log::info!(target: "dkg", "***Finished voting stage!***");
-					Ok(())
-				}
+
+				params.blockchain_iface.process_vote_result(signature, unsigned_proposal, round_id)
 			});
 
 			Ok(MetaDKGMessageHandler { protocol })

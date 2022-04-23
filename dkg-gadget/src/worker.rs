@@ -247,6 +247,11 @@ impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
 	}
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum ProtoStageType {
+	Genesis, Current, Queued
+}
+
 impl<B, C, BE> DKGWorker<B, C, BE>
 where
 	B: Block,
@@ -261,7 +266,7 @@ where
 		&mut self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
-		current: bool
+		stage: ProtoStageType
 	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -282,6 +287,7 @@ where
 				authority_public_key: authority_public_key.clone(),
 				status: status_handle.clone(),
 				vote_results: Arc::new(Default::default()),
+				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
 			keystore: self.key_store.clone(),
@@ -292,7 +298,7 @@ where
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
 		};
 
-		if current {
+		if stage != ProtoStageType::Queued {
 			self.rounds = Some(status_handle)
 		} else {
 			self.next_rounds = Some(status_handle)
@@ -575,6 +581,7 @@ where
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
+		// TODO: Create new rounds here
 
 		self.dkg_state.listening_for_active_pub_key = true;
 		if let Some(rounds) = self.rounds.as_mut() {
@@ -665,6 +672,7 @@ where
 		}
 
 		self.dkg_state.listening_for_pub_key = true;
+		// NOTE this is already set b/c of creating the async proto params
 		if let Some(rounds) = self.next_rounds.as_mut() {
 			match rounds.start_keygen(latest_block_num) {
 				Ok(()) => {
@@ -967,20 +975,7 @@ where
 		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
-	/// Generate a random delay to wait before taking an action.
-	/// The delay is generated from a random number between 0 and `max_delay`.
-	pub fn generate_delayed_submit_at(
-		&self,
-		start: NumberFor<B>,
-		max_delay: u32,
-	) -> Option<<B::Header as Header>::Number> {
-		let mut rng = rand::thread_rng();
-		let submit_at = start + rng.gen_range(0u32..=max_delay).into();
-		Some(submit_at)
-	}
-
 	/// Rounds handling
-
 	fn process_finished_rounds(&mut self) {
 		if self.rounds.is_none() {
 			return
@@ -999,7 +994,7 @@ where
 			self.rounds.as_mut().unwrap().get_finished_rounds().len()
 		);
 
-		save_signed_proposals_in_storage(self, proposals);
+		save_signed_proposals_in_storage(&self.get_authority_public_key(), &self.current_validator_set, &self.latest_header, &self.backend, proposals);
 	}
 
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
@@ -1010,7 +1005,7 @@ where
 			Err(_err) => return None,
 		};
 
-		get_signed_proposal(self, finished_round, payload_key)
+		get_signed_proposal(&self.backend, finished_round, payload_key)
 	}
 
 	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,

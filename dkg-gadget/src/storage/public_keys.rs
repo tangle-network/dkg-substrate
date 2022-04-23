@@ -33,6 +33,7 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
+use crate::storage::proposals::generate_delayed_submit_at;
 
 /// stores genesis or next aggregated public keys offchain
 pub(crate) fn store_aggregated_public_keys<B, C, BE>(
@@ -96,7 +97,7 @@ fn perform_storing_of_aggregated_public_keys<B, C, BE>(
 {
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
 	let submit_at =
-		dkg_worker.generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
+		generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
 	if let Some(submit_at) = submit_at {
 		offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
 	}
