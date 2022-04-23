@@ -12694,7 +12694,8 @@ dependencies = [
 [[package]]
 name = "webb-proposals"
 version = "0.2.3"
-source = "git+https://github.com/webb-tools/webb-rs?branch=drew/edge-metadata-update#5cf6b50b7382f513aecd3b476017d937b8cf3239"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2680384f7b2701caf6cfc51e14d671fe5615dee4306940a356c05f757a005dbe"
 dependencies = [
  "num-traits",
  "parity-scale-codec",
