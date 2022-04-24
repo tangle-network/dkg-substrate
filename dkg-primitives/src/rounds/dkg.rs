@@ -41,7 +41,6 @@ where
 {
 	pub accepted: bool,
 	pub listening_for_pub_key: bool,
-	pub listening_for_active_pub_key: bool,
 	pub created_offlinestage_at: HashMap<Vec<u8>, C>,
 }
 

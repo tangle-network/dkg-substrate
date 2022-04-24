@@ -26,79 +26,7 @@ use sc_client_api::Backend;
 use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header};
 use dkg_primitives::types::RoundId;
-
-pub(crate) fn handle_public_key_broadcast<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	dkg_msg: DKGMessage<Public>,
-) -> Result<(), DKGError>
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	if !dkg_worker.dkg_state.listening_for_pub_key &&
-		!dkg_worker.dkg_state.listening_for_active_pub_key
-	{
-		return Ok(())
-	}
-
-	// Get authority accounts
-	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
-	let current_block_number = *header.number();
-	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
-	if authorities.is_none() {
-		return Err(DKGError::NoAuthorityAccounts)
-	}
-
-	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
-
-		let is_main_round = {
-			if dkg_worker.rounds.is_some() {
-				msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
-			} else {
-				false
-			}
-		};
-
-		dkg_worker.authenticate_msg_origin(
-			is_main_round,
-			authorities.unwrap(),
-			&msg.pub_key,
-			&msg.signature,
-		)?;
-
-		let key_and_sig = (msg.pub_key, msg.signature);
-		let round_id = msg.round_id;
-		let aggregated_public_keys = dkg_worker.aggregated_public_keys.lock().entry(round_id).or_default();
-
-		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
-			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
-		}
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
-		log::debug!(
-			target: "dkg",
-			"ROUND {:?} | Threshold {} | Aggregated pubkeys {}",
-			msg.round_id, threshold,
-			aggregated_public_keys.keys_and_signatures.len()
-		);
-		if aggregated_public_keys.keys_and_signatures.len() > threshold {
-			store_aggregated_public_keys(
-				&dkg_worker.backend,
-				&mut *dkg_worker.aggregated_public_keys.lock(),
-				is_main_round,
-				round_id,
-				current_block_number,
-			)?;
-		}
-	}
-
-	Ok(())
-}
+use crate::worker::KeystoreExt;
 
 pub(crate) fn gossip_public_key<B, C, BE>(
 	key_store: &DKGKeystore,
@@ -111,9 +39,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	let public = key_store
-		.authority_id(&key_store.public_keys().unwrap())
-		.unwrap_or_else(|| panic!("Halp"));
+	let public = key_store.get_authority_public_key();
 
 	if let Ok(signature) = key_store.sign(&public, &msg.pub_key) {
 		let encoded_signature = signature.encode();
@@ -150,7 +76,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));
 
-		debug!(target: "dkg", "Gossiping local node  {:?} public key and signature", public)
+		debug!(target: "dkg", "Gossiping local node {} public key and signature", public)
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}
