@@ -12173,7 +12173,7 @@ version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ee73e6e4924fe940354b8d4d98cad5231175d615cd855b758adc658c0aac6a0"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "rand 0.8.5",
  "static_assertions",
 ]
@@ -12693,9 +12693,9 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.2.2"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "389b12ef89eae07d5ee9f09068b418477ea0b5296b7e68f1ef9d70b8a1aedd73"
+checksum = "989a673b719232a23f49327db2f2d816f5241ad4ad6b54cc6e45e896bd3c3e5b"
 dependencies = [
  "num-traits",
  "parity-scale-codec",
