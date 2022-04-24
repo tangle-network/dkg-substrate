@@ -107,6 +107,13 @@ impl Debug for ProtocolType {
 
 pub type PartyIndex = u16;
 pub type Threshold = u16;
+pub type BatchId = u64;
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub struct BatchKey {
+	pub len: usize,
+	pub id: BatchId
+}
 
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped;
@@ -193,7 +200,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySetId, DKGApi, Proposal, UnsignedProposal};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -252,9 +259,12 @@ pub mod meta_channel {
 	use dkg_primitives::rounds::sign::convert_signature;
 	use dkg_primitives::types::{DKGPublicKeyMessage, DKGSignedPayload, RoundId};
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
+	use crate::async_protocol_handlers::{BatchId, BatchKey};
 	use crate::messages::public_key_gossip::gossip_public_key;
 	use crate::proposal::get_signed_proposal;
+	use crate::storage::proposals::save_signed_proposals_in_storage;
 	use crate::storage::public_keys::store_aggregated_public_keys;
+	use crate::worker::KeystoreExt;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -361,7 +371,7 @@ pub mod meta_channel {
 	#[async_trait]
 	impl StateMachineIface for OfflineStage {
 		type AdditionalReturnParam =
-			(UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>, Threshold);
+			(UnsignedProposal, PartyIndex, Receiver<Arc<SignedDKGMessage<Public>>>, Threshold, BatchKey);
 		type Return = ();
 
 		fn handle_unsigned_message(
@@ -422,6 +432,7 @@ pub mod meta_channel {
 				unsigned_proposal.1,
 				unsigned_proposal.2,
 				unsigned_proposal.3,
+				unsigned_proposal.4
 			)?
 			.await?;
 			Ok(())
@@ -434,22 +445,32 @@ pub mod meta_channel {
 			message: Arc<SignedDKGMessage<Public>>,
 		) -> Result<DKGMessage<Public>, DKGError>;
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
-		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId) -> Result<(), DKGError>;
+		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId, batch_key: BatchKey) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
 		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError>;
 	}
 
 	#[derive(Clone)]
-	pub struct MetaAsyncProtoStatusHandle(pub Arc<AtomicBool>);
+	pub struct MetaAsyncProtoStatusHandle {
+		status: Arc<AtomicBool>,
+		unsigned_proposal_tx: tokio::sync::mpsc::UnboundedSender<Vec<UnsignedProposal>>
+	}
 
 	impl MetaAsyncProtoStatusHandle {
 		/// assumes the meta async proto is running
-		pub fn new() -> Self {
-			Self(Arc::new(AtomicBool::new(true)))
+		pub fn new(unsigned_proposal_tx: tokio::sync::mpsc::UnboundedSender<Vec<UnsignedProposal>>) -> Self {
+			Self {
+				status: Arc::new(AtomicBool::new(true)),
+				unsigned_proposal_tx
+			}
 		}
 
 		pub fn is_running(&self) -> bool {
 			self.0.load(Ordering::SeqCst)
+		}
+
+		pub fn submit_unsigned_proposals(&self, unsigned_proposals: Vec<UnsignedProposal>) -> Result<(), Vec<UnsignedProposal>> {
+			self.unsigned_proposal_tx.unbounded_send(unsigned_proposals).map_err(|err| err.into_inner())
 		}
 	}
 
@@ -475,10 +496,11 @@ pub mod meta_channel {
 		pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
-		pub vote_results: Arc<Mutex<HashMap<[u8; 32], Vec<Proposal>>>>,
+		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<Proposal>>>>,
 		pub status: MetaAsyncProtoStatusHandle,
 		pub is_genesis: bool,
 		pub _pd: PhantomData<BE>,
+		pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	}
 
 	impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
@@ -506,11 +528,10 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId) -> Result<(), DKGError> {
+		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId, batch_key: BatchKey) -> Result<(), DKGError> {
 			// Call worker.rs: handle_finished_round -> Proposal
 			// aggregate Proposal into Vec<Proposal>
 			let payload_key = unsigned_proposal.key;
-			let hash = unsigned_proposal.hash().unwrap();
 			let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError { reason: "Unable to serialize signature".to_string() })?;
 
 			let finished_round = DKGSignedPayload {
@@ -519,12 +540,20 @@ pub mod meta_channel {
 				signature: signature.encode()
 			};
 
-			let proposals_for_this_batch = self.vote_results.lock().entry(hash).or_default();
+			let mut lock = self.vote_results.lock();
+			let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 			let proposal = get_signed_proposal(&self.backend, finished_round, payload_key).ok_or_else(|| DKGError::CriticalError { reason: "Unable to map round to proposal (backend missing?)".to_string() })?;
 			proposals_for_this_batch.push(proposal);
 
-			// TODO: determine if we save when len(proposals_for_this_batch) == # of unsigned proposals in batch
+			if proposals_for_this_batch.len() == batch_key.len {
+				log::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
+				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
+				std::mem::drop(lock);
+				save_signed_proposals_in_storage(&self.get_authority_public_key(), &self.current_validator_set, &self.latest_header, &self.backend, proposals);
+			} else {
+				log::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+			}
 
 			Ok(())
 		}
@@ -571,7 +600,7 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn process_vote_result(&self, _signature: SignatureRecid, _unsigned_proposal: UnsignedProposal, _round_id: RoundId) -> Result<(), DKGError> {
+		fn process_vote_result(&self, _signature: SignatureRecid, _unsigned_proposal: UnsignedProposal, _round_id: RoundId, _batch_key: BatchKey) -> Result<(), DKGError> {
 			Ok(())
 		}
 
@@ -617,6 +646,7 @@ pub mod meta_channel {
 						})?;
 
 					while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
+						let batch_key = params.get_next_batch_key(&unsigned_proposals);
 						let s_l = &Self::generate_signers(&local_key, t, n);
 
 						log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
@@ -633,6 +663,7 @@ pub mod meta_channel {
 									s_l.clone(),
 									local_key.clone(),
 									t,
+									batch_key
 								)?));
 							}
 
@@ -695,6 +726,7 @@ pub mod meta_channel {
 			s_l: Vec<u16>,
 			local_key: LocalKey<Secp256k1>,
 			threshold: u16,
+			batch_key: BatchKey
 		) -> Result<MetaDKGMessageHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError>
 		{
 			let channel_type = ProtocolType::Offline {
@@ -705,7 +737,7 @@ pub mod meta_channel {
 			};
 			let early_handle = params.signed_message_broadcast_handle.subscribe();
 			MetaDKGMessageHandler::new_inner(
-				(unsigned_proposal, i, early_handle, threshold),
+				(unsigned_proposal, i, early_handle, threshold, batch_key),
 				OfflineStage::new(i, s_l, local_key)
 					.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 				params,
@@ -791,6 +823,7 @@ pub mod meta_channel {
 			party_ind: PartyIndex,
 			rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 			threshold: Threshold,
+			batch_key: BatchKey
 		) -> Result<MetaDKGMessageHandler<'a, ()>, DKGError> {
 			let protocol = Box::pin(async move {
 				let ty = ProtocolType::Voting {
@@ -885,7 +918,7 @@ pub mod meta_channel {
 
 				log::info!("RD2");
 
-				params.blockchain_iface.process_vote_result(signature, unsigned_proposal, round_id)
+				params.blockchain_iface.process_vote_result(signature, unsigned_proposal, round_id, batch_key)
 			});
 
 			Ok(MetaDKGMessageHandler { protocol })
@@ -1209,6 +1242,7 @@ mod tests {
 			best_authorities: Arc::new(best_authorities),
 			authority_public_key: Arc::new(authority_public_key),
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
+			batch_id_gen: Arc::new(Default::default())
 		};
 
 		MetaDKGMessageHandler::execute(async_params, threshold).unwrap()

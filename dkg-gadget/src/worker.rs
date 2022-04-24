@@ -22,6 +22,7 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use codec::{Codec, Decode, Encode};
 
@@ -77,7 +78,7 @@ use crate::{
 	Client,
 };
 
-use crate::async_protocol_handlers::{meta_channel::DKGIface, SignedMessageBroadcastHandle};
+use crate::async_protocol_handlers::{BatchKey, meta_channel::DKGIface, SignedMessageBroadcastHandle};
 use dkg_primitives::{
 	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
@@ -156,7 +157,8 @@ where
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub unsigned_proposals_tx: Option<UnboundedSender<Vec<UnsignedProposal>>>,
+	pub active_unsigned_proposals_tx: Option<UnboundedSender<Vec<UnsignedProposal>>>,
+	pub queued_unsigned_proposals_tx: Option<UnboundedSender<Vec<UnsignedProposal>>>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -216,7 +218,8 @@ where
 			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
-			unsigned_proposals_tx: None,
+			active_unsigned_proposals_tx: None,
+
 			_backend: PhantomData,
 		}
 	}
@@ -230,6 +233,16 @@ pub struct AsyncProtocolParameters<BCIface> {
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	pub unsigned_proposals_rx: Arc<Mutex<Option<UnboundedReceiver<Vec<UnsignedProposal>>>>>,
+	pub batch_id_gen: Arc<AtomicU64>
+}
+
+impl<BCIface> AsyncProtocolParameters<BCIface> {
+	pub fn get_next_batch_key(&self, batch: &Vec<UnsignedProposal>) -> BatchKey {
+		BatchKey {
+			id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst),
+			len: batch.len()
+		}
+	}
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
@@ -243,6 +256,7 @@ impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
 			unsigned_proposals_rx: self.unsigned_proposals_rx.clone(),
+			batch_id_gen: Arc::new(AtomicU64::new(0))
 		}
 	}
 }
@@ -272,8 +286,7 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
-		let status_handle = MetaAsyncProtoStatusHandle::new();
-		self.unsigned_proposals_tx = Some(unsigned_proposals_tx);
+		let status_handle = MetaAsyncProtoStatusHandle::new(unsigned_proposals_tx);
 
 		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
@@ -285,6 +298,7 @@ where
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
+				current_validator_set: self.current_validator_set.clone(),
 				status: status_handle.clone(),
 				vote_results: Arc::new(Default::default()),
 				is_genesis: stage == ProtoStageType::Genesis,
@@ -296,6 +310,7 @@ where
 			best_authorities,
 			authority_public_key,
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
+			batch_id_gen: Arc::new(Default::default())
 		};
 
 		if stage != ProtoStageType::Queued {
@@ -442,20 +457,6 @@ where
 		} else {
 			NumberFor::<B>::from(0u32)
 		}
-	}
-
-	/// Gets the active DKG authority key
-	pub fn get_authority_public_key(&mut self) -> Public {
-		self.key_store
-			.authority_id(&self.key_store.public_keys().unwrap())
-			.unwrap_or_else(|| panic!("Halp"))
-	}
-
-	/// Gets the active Sr25519 public key
-	pub fn get_sr25519_public_key(&self) -> sp_core::sr25519::Public {
-		self.key_store
-			.sr25519_public_key(&self.key_store.sr25519_public_keys().unwrap_or_default())
-			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -1210,5 +1211,42 @@ where
 				}
 			}
 		}
+	}
+}
+
+/// Extension trait for any type that contains a keystore
+pub trait KeystoreExt {
+	fn get_keystore(&self) -> &DKGKeystore;
+	fn get_authority_public_key(&self) -> Public {
+		self.get_keystore()
+			.authority_id(&self.get_keystore().public_keys().unwrap())
+			.unwrap_or_else(|| panic!("Halp"))
+	}
+
+	fn get_sr25519_public_key(&self) -> sp_core::sr25519::Public {
+		self.get_keystore()
+			.sr25519_public_key(&self.get_keystore().sr25519_public_keys().unwrap_or_default())
+			.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"))
+	}
+}
+
+impl<B, BE, C> KeystoreExt for DKGWorker<B, BE, C>
+	where B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE> {
+	fn get_keystore(&self) -> &DKGKeystore {
+		&self.key_store
+	}
+}
+
+impl<B: Block, BE, C> KeystoreExt for DKGIface<B, BE, C> {
+	fn get_keystore(&self) -> &DKGKeystore {
+		&self.keystore
+	}
+}
+
+impl<T> KeystoreExt for AsyncProtocolParameters<T> {
+	fn get_keystore(&self) -> &DKGKeystore {
+		&self.keystore
 	}
 }
