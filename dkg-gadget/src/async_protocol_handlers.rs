@@ -208,7 +208,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, KEYGEN_TIMEOUT, Proposal, UnsignedProposal};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, KEYGEN_TIMEOUT, Proposal, PublicKeyAndSignature, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -655,7 +655,9 @@ pub mod meta_channel {
 			let is_genesis_round = self.is_genesis;
 			let header = &(self.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 			let current_block_number = *header.number();
-			store_aggregated_public_keys::<B, C, BE>(&self.backend, &mut *self.aggregated_public_keys.lock(), is_genesis_round, round_id, current_block_number)
+			let mut lock = self.aggregated_public_keys.lock();
+			lock.entry(round_id).or_default().keys_and_signatures.push(PublicKeyAndSignature {});
+			store_aggregated_public_keys::<B, C, BE>(&self.backend, &mut *lock, is_genesis_round, round_id, current_block_number)
 		}
 
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {

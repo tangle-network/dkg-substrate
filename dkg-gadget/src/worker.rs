@@ -252,7 +252,6 @@ impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ProtoStageType {
 	Genesis,
-	Active,
 	Queued
 }
 
@@ -641,7 +640,6 @@ where
 			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 			let _ = cleanup(queued_local_key_path.as_ref().unwrap().clone());
 		}
-		let latest_block_num = self.get_latest_block_number();
 
 		// Get the best next authorities using the keygen threshold
 		let round_id = queued.id;
