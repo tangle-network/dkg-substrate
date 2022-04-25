@@ -17,7 +17,7 @@ use std::sync::Arc;
 // limitations under the License.
 use crate::{
 	utils::find_index,
-	worker::{DKGWorker, MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
+	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
 	Client,
 };
 use codec::{Decode, Encode};
@@ -80,7 +80,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		// duplicate submissions as much as we can, we add a random submission delay to each
 		// batch stored in offchain storage
 		let submit_at =
-			generate_delayed_submit_at(*current_block_number, MAX_SUBMISSION_DELAY);
+			generate_delayed_submit_at::<B>(*current_block_number, MAX_SUBMISSION_DELAY);
 
 		if let Some(submit_at) = submit_at {
 			prop_wrapper.proposals.push((signed_proposals, submit_at))

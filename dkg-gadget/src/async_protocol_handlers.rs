@@ -222,7 +222,7 @@ pub mod meta_channel {
 	use sc_client_api::Backend;
 	use sc_network_gossip::GossipEngine;
 	use serde::Serialize;
-	use sp_runtime::traits::{Block, Header};
+	use sp_runtime::traits::{Block, Header, NumberFor};
 	use std::{
 		collections::HashMap,
 		fmt::Debug,
@@ -234,12 +234,10 @@ pub mod meta_channel {
 		},
 		task::{Context, Poll},
 	};
-	use std::sync::atomic::{AtomicBool, Ordering};
+	use std::sync::atomic::Ordering;
 	use atomic::Atomic;
 	use codec::Encode;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
-	use round_based::containers::push::Push;
-	use sp_arithmetic::traits::AtLeast32BitUnsigned;
 	use tokio::sync::broadcast::Receiver;
 	use tokio::sync::mpsc::error::SendError;
 
@@ -262,12 +260,15 @@ pub mod meta_channel {
 	use dkg_primitives::rounds::sign::convert_signature;
 	use dkg_primitives::types::{DKGPublicKeyMessage, DKGSignedPayload, RoundId};
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
-	use crate::async_protocol_handlers::{BatchId, BatchKey};
+	use crate::async_protocol_handlers::BatchKey;
 	use crate::messages::public_key_gossip::gossip_public_key;
 	use crate::proposal::get_signed_proposal;
 	use crate::storage::proposals::save_signed_proposals_in_storage;
 	use crate::storage::public_keys::store_aggregated_public_keys;
 	use crate::worker::KeystoreExt;
+	use futures::FutureExt;
+	use sp_arithmetic::traits::AtLeast32BitUnsigned;
+	use sp_runtime::generic::BlockId;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -443,6 +444,7 @@ pub mod meta_channel {
 	}
 
 	pub trait BlockChainIface: Send + Sync {
+		type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
 		fn verify_signature_against_authorities(
 			&self,
 			message: Arc<SignedDKGMessage<Public>>,
@@ -450,62 +452,72 @@ pub mod meta_channel {
 		fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
 		fn process_vote_result(&self, signature: SignatureRecid, unsigned_proposal: UnsignedProposal, round_id: RoundId, batch_key: BatchKey) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
+		fn debug_only_stop_after_first_batch(&self) -> bool { false }
 		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError>;
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError>;
 		fn get_authority_set(&self) -> &Vec<Public>;
 		/// Get the unjailed signers
 		fn get_unjailed_signers(&self) -> Result<Vec<u16>, DKGError> {
 			let jailed_signers = self.get_jailed_signers_inner()?;
-			self.get_authority_set()
+			Ok(self.get_authority_set()
 				.iter()
 				.enumerate()
 				.filter(|(_, key)| !jailed_signers.contains(key))
 				.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-				.collect()
+				.collect())
 		}
 
 		/// Get the jailed signers
 		fn get_jailed_signers(&self) -> Result<Vec<u16>, DKGError> {
 			let jailed_signers = self.get_jailed_signers_inner()?;
-			self.get_authority_set()
+			Ok(self.get_authority_set()
 				.iter()
 				.enumerate()
 				.filter(|(_, key)| jailed_signers.contains(key))
 				.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-				.collect()
+				.collect())
 		}
 	}
 
 	#[derive(Clone)]
-	pub struct MetaAsyncProtocolHandle {
+	pub struct MetaAsyncProtocolHandle<C> {
 		status: Arc<Atomic<MetaHandlerStatus>>,
-		unsigned_proposal_tx: tokio::sync::mpsc::UnboundedSender<Vec<UnsignedProposal>>,
+		unsigned_proposals_tx: tokio::sync::mpsc::UnboundedSender<Vec<UnsignedProposal>>,
 		unsigned_proposals_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Vec<UnsignedProposal>>>>>,
 		stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 		stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
-		started_at: u32
+		started_at: C,
+		pub(crate) round_id: RoundId
 	}
 
+	#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 	pub enum MetaHandlerStatus {
 		Beginning, Keygen, AwaitingProposals, OfflineAndVoting, Complete
 	}
 
-	impl MetaAsyncProtocolHandle {
+	impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolHandle<C> {
 		/// Create at the beginning of each meta handler instantiation
-		pub fn new<B: AtLeast32BitUnsigned>(at: B) -> Self {
+		pub fn new(at: C, round_id: RoundId) -> Self {
 			let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
 			let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 
 			Self {
 				status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
-				unsigned_proposal_tx,
+				unsigned_proposals_tx,
 				unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
-				started_at: at.into(),
+				started_at: at,
 				stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
-				stop_rx: Arc::new(Mutex::new(Some(stop_rx)))
+				stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
+				round_id
 			}
 		}
 
+		pub fn keygen_has_stalled(&self, now: C) -> bool {
+			self.get_status() == MetaHandlerStatus::Keygen && (now - self.started_at > KEYGEN_TIMEOUT.into())
+		}
+	}
+
+	impl<C> MetaAsyncProtocolHandle<C> {
 		pub fn get_status(&self) -> MetaHandlerStatus {
 			self.status.load(Ordering::SeqCst)
 		}
@@ -520,11 +532,7 @@ pub mod meta_channel {
 		}
 
 		pub fn submit_unsigned_proposals(&self, unsigned_proposals: Vec<UnsignedProposal>) -> Result<(), SendError<Vec<UnsignedProposal>>> {
-			self.unsigned_proposal_tx.send(unsigned_proposals)
-		}
-
-		pub fn keygen_has_stalled<B: AtLeast32BitUnsigned>(&self, now: B) -> bool {
-			self.get_status() == MetaHandlerStatus::Keygen && (now.into() - self.started_at > KEYGEN_TIMEOUT)
+			self.unsigned_proposals_tx.send(unsigned_proposals)
 		}
 
 		/// Stops the execution of the meta handler, including all internal asynchronous subroutines
@@ -532,15 +540,26 @@ pub mod meta_channel {
 			let tx = self.stop_tx.lock().take().ok_or_else(|| DKGError::GenericError { reason: "Shutdown has already been called".to_string() })?;
 			tx.send(()).map_err(|_| DKGError::GenericError { reason: "Unable to send shutdown signal (already shut down?)".to_string() })
 		}
+
+		pub fn is_keygen_finished(&self) -> bool {
+			let state = self.get_status();
+			match state {
+				MetaHandlerStatus::AwaitingProposals |
+				MetaHandlerStatus::OfflineAndVoting |
+				MetaHandlerStatus::Complete => true,
+				_ => false
+			}
+		}
 	}
 
-	impl Drop for MetaAsyncProtocolHandle {
+	impl<C> Drop for MetaAsyncProtocolHandle<C> {
 		fn drop(&mut self) {
-			if Arc::strong_count(&self.0) == 2 {
+			if Arc::strong_count(&self.status) == 2 {
 				// at this point, the only instances of this arc are this one, and,
 				// presumably the one in the DKG worker. This one is asserted to be the one
 				// belonging to the async proto. Signal as complete to allow the DKG worker to move
 				// forward
+				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
 				self.set_status(MetaHandlerStatus::Complete);
 			}
 		}
@@ -565,10 +584,12 @@ pub mod meta_channel {
 	impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
 	where
 		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
+		BE: Backend<B> + 'static,
+		C: Client<B, BE> + 'static,
 		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 	{
+		type Clock = NumberFor<B>;
+
 		fn verify_signature_against_authorities(
 			&self,
 			msg: Arc<SignedDKGMessage<Public>>,
@@ -602,14 +623,14 @@ pub mod meta_channel {
 			let mut lock = self.vote_results.lock();
 			let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-			let proposal = get_signed_proposal(&self.backend, finished_round, payload_key).ok_or_else(|| DKGError::CriticalError { reason: "Unable to map round to proposal (backend missing?)".to_string() })?;
+			let proposal = get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key).ok_or_else(|| DKGError::CriticalError { reason: "Unable to map round to proposal (backend missing?)".to_string() })?;
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
 				log::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
-				save_signed_proposals_in_storage(&self.get_authority_public_key(), &self.current_validator_set, &self.latest_header, &self.backend, proposals);
+				save_signed_proposals_in_storage::<B, C, BE>(&self.get_authority_public_key(), &self.current_validator_set, &self.latest_header, &self.backend, proposals);
 			} else {
 				log::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
 			}
@@ -618,7 +639,7 @@ pub mod meta_channel {
 		}
 
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
-			gossip_public_key(&self.keystore, &mut *self.gossip_engine.lock(), &mut *self.aggregated_public_keys.lock(), key);
+			gossip_public_key::<B, C, BE>(&self.keystore, &mut *self.gossip_engine.lock(), &mut *self.aggregated_public_keys.lock(), key);
 			Ok(())
 		}
 
@@ -626,16 +647,17 @@ pub mod meta_channel {
 			let is_genesis_round = self.is_genesis;
 			let header = &(self.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 			let current_block_number = *header.number();
-			store_aggregated_public_keys(&self.backend, &mut *self.aggregated_public_keys.lock(), is_genesis_round, round_id, current_block_number)
+			store_aggregated_public_keys::<B, C, BE>(&self.backend, &mut *self.aggregated_public_keys.lock(), is_genesis_round, round_id, current_block_number)
 		}
 
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {
 			let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError { reason: "latest header does not exist!".to_string() })?;
-			self
+			let at: BlockId<B> = BlockId::hash(now.hash());
+			Ok(self
 				.client
 				.runtime_api()
-				.get_signing_jailed(&now, (&*self.best_authorities).clone())
-				.unwrap_or_default()
+				.get_signing_jailed(&at, (&*self.best_authorities).clone())
+				.unwrap_or_default())
 		}
 
 		fn get_authority_set(&self) -> &Vec<Public> {
@@ -653,6 +675,7 @@ pub mod meta_channel {
 	}
 
 	impl BlockChainIface for TestDummyIface {
+		type Clock = u32;
 		fn verify_signature_against_authorities(
 			&self,
 			message: Arc<SignedDKGMessage<Public>>,
@@ -694,6 +717,8 @@ pub mod meta_channel {
 		fn get_authority_set(&self) -> &Vec<Public> {
 			&*self.best_authorities
 		}
+
+		fn debug_only_stop_after_first_batch(&self) -> bool { true }
 	}
 
 	impl<'a, Out: Send + Debug + 'a> MetaDKGMessageHandler<'a, Out>
@@ -735,7 +760,7 @@ pub mod meta_channel {
 					while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
 						params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 						let batch_key = params.get_next_batch_key(&unsigned_proposals);
-						let s_l = &Self::generate_signers(&local_key, t, n);
+						let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
 
 						log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
@@ -762,6 +787,10 @@ pub mod meta_channel {
 							log::info!(
 								"Concluded all Offline->Voting stages for this batch for this node"
 							);
+
+							if params.blockchain_iface.debug_only_stop_after_first_batch() {
+								return Ok(())
+							}
 						} else {
 							//log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
 							return Ok(())
@@ -779,28 +808,13 @@ pub mod meta_channel {
 			});
 
 			let protocol = Box::pin(async move {
-				let ref mut protocol = Box::pin(protocol);
-				let mut has_stopper_been_dropped = false;
-				loop {
-					if has_stopper_been_dropped {
-						return protocol.await;
-					}
-
-					tokio::select! {
-						res0 = protocol => {
-							return res0
-						},
+				tokio::select! {
+						res0 = protocol => res0,
 						res1 = stop_rx.recv() => {
-							// only stop if okay, since, the handle may be dropped, dropping the tx
-							if res1.is_some() {
-								log::info!(target: "dkg", "Stopper has been called")
-								return Ok(())
-							}
-
-							has_stopper_been_dropped = true;
+							log::info!(target: "dkg", "Stopper has been called {:?}", res1);
+							Ok(())
 						}
 					}
-				}
 			});
 
 			Ok(MetaDKGMessageHandler { protocol })
@@ -1054,15 +1068,25 @@ pub mod meta_channel {
 		/// After keygen, this should be called to generate a random set of signers
 		/// NOTE: since the random set is called using a symmetric seed to and RNG,
 		/// the resulting set is symmetric
-		fn generate_signers(local_key: &LocalKey<Secp256k1>, t: u16, n: u16) -> Vec<u16> {
+		fn generate_signers<B: BlockChainIface + 'a>(local_key: &LocalKey<Secp256k1>, t: u16, n: u16, params: &AsyncProtocolParameters<B>) -> Result<Vec<u16>, DKGError> {
+			// Select the random subset using the local key as a seed
 			let seed = &local_key.public_key().to_bytes(true)[1..];
-			log::info!(target: "dkg", "Generating signers w/seed: {:?} (len={})", seed, seed.len());
-			// TODO: determine if we use this, or, the version with jailed signers
-			// Signers are chosen from ids used in Keygen phase starting from 1 to n
-			// inclusive
-			let set = (1..=n).collect::<Vec<_>>();
-			// below will only fail if seed is not 32 bytes long
-			select_random_set(seed, set, t + 1).unwrap()
+			let mut final_set = params.blockchain_iface.get_unjailed_signers()?;
+			// Mutate the final set if we don't have enough unjailed signers
+			if final_set.len() <= t as usize {
+				let jailed_set = params.blockchain_iface.get_jailed_signers()?;
+				let diff = t as usize + 1 - final_set.len();
+				final_set = final_set
+					.iter()
+					.chain(jailed_set.iter().take(diff))
+					.cloned()
+					.collect::<Vec<u16>>();
+			}
+
+			select_random_set(seed, final_set, t + 1).map(|set| {
+				log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", params.round_id, t, n, set);
+				set
+			}).map_err(|err| DKGError::CreateOfflineStage { reason: err.to_string() })
 		}
 
 		fn generate_outgoing_to_wire_fn<SM: StateMachineIface + 'a, B: BlockChainIface + 'a>(
@@ -1185,6 +1209,8 @@ mod tests {
 	use sc_keystore::LocalKeystore;
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 	use std::{collections::HashMap, sync::Arc, time::Duration};
+	use sc_network_test::Block;
+	use sp_runtime::traits::NumberFor;
 	use tokio::sync::mpsc::UnboundedReceiver;
 	use tokio_stream::wrappers::IntervalStream;
 	use crate::async_protocol_handlers::meta_channel::MetaAsyncProtocolHandle;
@@ -1213,7 +1239,6 @@ mod tests {
 
 	#[rstest]
 	#[case(2, 3)]
-	#[case(1, 3)]
 	#[tokio::test(flavor = "multi_thread")]
 	async fn test_async_protocol(
 		#[case] threshold: u16,
@@ -1256,7 +1281,8 @@ mod tests {
 				vote_results: Arc::new(Mutex::new(HashMap::new())),
 			};
 
-			let handle = MetaAsyncProtocolHandle::new(0);
+			// NumberFor::<Block>::from(0u32)
+			let handle = MetaAsyncProtocolHandle::new(0u32, 0);
 
 			let async_protocol = create_async_proto_inner(
 				test_iface.clone(),
@@ -1337,7 +1363,7 @@ mod tests {
 		validator_set: AuthoritySet<crypto::Public>,
 		best_authorities: Vec<crypto::Public>,
 		authority_public_key: crypto::Public,
-		handle: MetaAsyncProtocolHandle,
+		handle: MetaAsyncProtocolHandle<B::Clock>,
 	) -> MetaDKGMessageHandler<'a, ()> {
 		let async_params = AsyncProtocolParameters {
 			round_id: 0, // default for unit tests

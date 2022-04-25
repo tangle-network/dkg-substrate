@@ -26,6 +26,7 @@ use dkg_runtime_primitives::{
 use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header};
+use crate::worker::KeystoreExt;
 
 pub(crate) fn handle_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
@@ -33,8 +34,8 @@ pub(crate) fn handle_misbehaviour_report<B, C, BE>(
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// Get authority accounts
@@ -49,7 +50,7 @@ where
 
 		let is_main_round = {
 			if dkg_worker.rounds.is_some() {
-				msg.round_id == dkg_worker.rounds.as_ref().unwrap().get_id()
+				msg.round_id == dkg_worker.rounds.as_ref().unwrap().round_id
 			} else {
 				false
 			}
@@ -99,8 +100,8 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let public = dkg_worker.get_authority_public_key();
@@ -179,8 +180,8 @@ pub(crate) fn try_store_offchain<B, C, BE>(
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);

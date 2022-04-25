@@ -17,7 +17,7 @@
 use sc_keystore::LocalKeystore;
 use sp_core::{ecdsa, sr25519};
 use std::{
-	collections::{hash_map::RandomState, BTreeSet, HashMap, HashSet},
+	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
 	path::PathBuf,
 	sync::Arc,
@@ -38,7 +38,6 @@ use sc_client_api::{
 };
 use sc_network_gossip::GossipEngine;
 
-use rand::Rng;
 use sp_api::BlockId;
 use sp_core::crypto::AccountId32;
 use sp_runtime::traits::{Block, Header, NumberFor};
@@ -46,16 +45,12 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
 	keystore::DKGKeystore,
-	persistence::{try_resume_dkg, DKGPersistenceState},
+	persistence::DKGPersistenceState,
 };
 
-use crate::messages::{
-	dkg_message::send_outgoing_dkg_messages, misbehaviour_report::gossip_misbehaviour_report,
-};
+use crate::messages::misbehaviour_report::gossip_misbehaviour_report;
 
-use crate::storage::{
-	clear::listen_and_clear_offchain_storage, proposals::save_signed_proposals_in_storage,
-};
+use crate::storage::clear::listen_and_clear_offchain_storage;
 
 use dkg_primitives::{
 	types::{DKGError, DKGMisbehaviourMessage, RoundId},
@@ -80,12 +75,11 @@ use crate::{
 
 use crate::async_protocol_handlers::{BatchKey, meta_channel::DKGIface, SignedMessageBroadcastHandle};
 use dkg_primitives::{
-	rounds::{DKGState, MultiPartyECDSARounds},
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-use crate::async_protocol_handlers::meta_channel::{MetaAsyncProtocolHandle, MetaDKGMessageHandler, MetaHandlerStatus};
+use crate::async_protocol_handlers::meta_channel::{BlockChainIface, MetaAsyncProtocolHandle, MetaDKGMessageHandler};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -103,8 +97,7 @@ where
 	pub gossip_engine: GossipEngine<B>,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
-	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub dkg_state: DKGState<NumberFor<B>>,
+	pub local_keystore: Option<Arc<LocalKeystore>>
 }
 
 /// A DKG worker plays the DKG protocol
@@ -120,8 +113,8 @@ where
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub metrics: Option<Metrics>,
-	pub rounds: Option<MetaAsyncProtocolHandle>,
-	pub next_rounds: Option<MetaAsyncProtocolHandle>,
+	pub rounds: Option<MetaAsyncProtocolHandle<NumberFor<B>>>,
+	pub next_rounds: Option<MetaAsyncProtocolHandle<NumberFor<B>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	pub votes_sent: u64,
@@ -145,8 +138,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
-	/// dkg state
-	pub dkg_state: DKGState<NumberFor<B>>,
 	/// Track DKG Persistence state
 	pub dkg_persistence: DKGPersistenceState,
 	/// Local keystore for DKG data
@@ -164,8 +155,8 @@ where
 impl<B, C, BE> DKGWorker<B, C, BE>
 where
 	B: Block + Codec,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Return a new DKG worker instance.
@@ -181,7 +172,6 @@ where
 			key_store,
 			gossip_engine,
 			metrics,
-			dkg_state,
 			base_path,
 			local_keystore,
 		} = worker_params;
@@ -207,7 +197,6 @@ where
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
 			latest_header: Arc::new(RwLock::new(None)),
-			dkg_state,
 			msg_cache: Vec::new(),
 			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
 			aggregated_misbehaviour_reports: HashMap::new(),
@@ -222,7 +211,7 @@ where
 	}
 }
 
-pub struct AsyncProtocolParameters<BCIface> {
+pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 	pub blockchain_iface: Arc<BCIface>,
 	pub keystore: DKGKeystore,
 	pub signed_message_broadcast_handle: SignedMessageBroadcastHandle,
@@ -230,11 +219,11 @@ pub struct AsyncProtocolParameters<BCIface> {
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	pub batch_id_gen: Arc<AtomicU64>,
-	pub handle: MetaAsyncProtocolHandle,
+	pub handle: MetaAsyncProtocolHandle<BCIface::Clock>,
 	pub round_id: RoundId
 }
 
-impl<BCIface> AsyncProtocolParameters<BCIface> {
+impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
 	pub fn get_next_batch_key(&self, batch: &Vec<UnsignedProposal>) -> BatchKey {
 		BatchKey {
 			id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst),
@@ -244,7 +233,7 @@ impl<BCIface> AsyncProtocolParameters<BCIface> {
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
-impl<BCIface> Clone for AsyncProtocolParameters<BCIface> {
+impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 	fn clone(&self) -> Self {
 		Self {
 			round_id: self.round_id,
@@ -270,8 +259,8 @@ enum ProtoStageType {
 impl<B, C, BE> DKGWorker<B, C, BE>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
@@ -288,7 +277,7 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let status_handle = MetaAsyncProtocolHandle::new(now);
+		let status_handle = MetaAsyncProtocolHandle::new(now, round_id);
 
 		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
@@ -324,7 +313,7 @@ where
 		params
 	}
 
-	fn spawn_async_protocol(&mut self, best_authorities: Vec<Public>, authority_public_key: Public, round_id: RoundId, stage: ProtoStageType) {
+	fn spawn_async_protocol(&mut self, best_authorities: Vec<Public>, authority_public_key: Public, round_id: RoundId, threshold: u16, stage: ProtoStageType) {
 		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key, round_id, stage);
 		let err_handler_tx = self.error_handler_tx.clone();
 
@@ -631,7 +620,7 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, ProtoStageType::Genesis);
+		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, threshold,ProtoStageType::Genesis);
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
@@ -641,7 +630,7 @@ where
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() && !self.next_rounds.as_ref().unwrap().has_stalled() {
+		if self.next_rounds.is_some() && !self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number()) {
 			return
 		}
 
@@ -681,7 +670,7 @@ where
 		);*/
 
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, ProtoStageType::Queued);
+		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, threshold,ProtoStageType::Queued);
 	}
 
 	// *** Block notifications ***
@@ -694,8 +683,7 @@ where
 		*self.latest_header.write() = Some(header.clone());
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
-		// Try to resume DKG when we hear of a new block
-		try_resume_dkg(self, header);
+		// We no longer "resume" the DKG worker since it is running in a parallel thread
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
 			debug!(target: "dkg", "Starting genesis DKG setup");
@@ -704,16 +692,11 @@ where
 			self.enact_new_authorities(header);
 		}
 		// Send all outgoing messages
-		send_outgoing_dkg_messages(self);
+		//self.send_outgoing_dkg_messages(self);
 		// Get all unsigned proposals, create offline stages, attempt voting.
 		// Only do this if the public key is set on-chain.
 		if !self.get_dkg_pub_key(header).1.is_empty() {
-			self.create_offline_stages(header);
-			// Send outgoing messages after offline stage creation
-			send_outgoing_dkg_messages(self);
-			// Get all unsigned proposals and check if they are ready to be signed.
 			self.process_unsigned_proposals(header);
-			self.untrack_unsigned_proposals(header);
 		} else {
 			debug!(target: "dkg", "Public key not set on-chain, not creating offline stages {:?}", self.get_dkg_pub_key(header));
 		}
@@ -737,32 +720,32 @@ where
 				// Setting up the queued DKG at genesis
 				self.handle_queued_dkg_setup(header, queued);
 				// Send outgoing messages after processing the queued DKG setup
-				send_outgoing_dkg_messages(self);
+				//send_outgoing_dkg_messages(self);
 			}
 		}
 	}
 
 	fn enact_new_authorities(&mut self, header: &B::Header) {
-		let now: BlockId<B> = BlockId::hash(header.hash());
-
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If the active rounds have stalled, it means we haven't
 			// successfully generate a genesis key yet. Therefore, we
 			// continue to re-run keygen.
 			if let Some(rounds) = self.rounds.as_mut() {
-				if rounds.keygen_has_stalled(now) {
+				if rounds.keygen_has_stalled(*header.number()) {
 					self.handle_genesis_dkg_setup(header, active.clone());
 				}
 			}
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.as_mut() {
-				if rounds.keygen_has_stalled(now) {
+				if rounds.keygen_has_stalled(*header.number()) {
 					self.handle_queued_dkg_setup(header, queued.clone());
 				}
 			}
+
+			let queued_keygen_in_progress = self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
 			// If the session has changed and a keygen is not in progress, we rotate
-			if self.queued_validator_set.id != queued.id && !self.queued_keygen_in_progress {
+			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Rotate the queued key file contents into the local key file if the next
@@ -785,7 +768,7 @@ where
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Send outgoing messages after processing the queued DKG setup
-				send_outgoing_dkg_messages(self);
+				//send_outgoing_dkg_messages(self);
 			}
 		}
 	}
@@ -914,7 +897,7 @@ where
 			DKGReport::KeygenMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
 				if let Some(rounds) = self.next_rounds.as_mut() {
-					(offender, rounds.get_id(), MisbehaviourType::Keygen)
+					(offender, rounds.round_id, MisbehaviourType::Keygen)
 				} else {
 					(offender, 0, MisbehaviourType::Keygen)
 				}
@@ -922,7 +905,7 @@ where
 			DKGReport::SigningMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
 				if let Some(rounds) = self.rounds.as_mut() {
-					(offender, rounds.get_id(), MisbehaviourType::Sign)
+					(offender, rounds.round_id, MisbehaviourType::Sign)
 				} else {
 					(offender, 0, MisbehaviourType::Sign)
 				}
@@ -976,28 +959,6 @@ where
 		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
-	/// Rounds handling
-	fn process_finished_rounds(&mut self) {
-		if self.rounds.is_none() {
-			return
-		}
-
-		let mut proposals = Vec::new();
-		for finished_round in self.rounds.as_mut().unwrap().get_finished_rounds() {
-			let proposal = self.handle_finished_round(finished_round);
-			if let Some(prop) = proposal {
-				proposals.push(prop)
-			};
-		}
-		metric_set!(
-			self,
-			dkg_round_concluded,
-			self.rounds.as_mut().unwrap().get_finished_rounds().len()
-		);
-
-		save_signed_proposals_in_storage(&self.get_authority_public_key(), &self.current_validator_set, &self.latest_header, &self.backend, proposals);
-	}
-
 	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
 		trace!(target: "dkg", "Got finished round {:?}", finished_round);
 		let decoded_key = <(TypedChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
@@ -1006,101 +967,11 @@ where
 			Err(_err) => return None,
 		};
 
-		get_signed_proposal(&self.backend, finished_round, payload_key)
+		get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
 	}
 
-	/// Get unsigned proposals and create offline stage using an encoded (ChainIdType<ChainId>,
-	/// DKGPayloadKey) as the round key
-	fn create_offline_stages(&mut self, header: &B::Header) {
+	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
 		if let Some(rounds) = self.rounds.as_ref() {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
-				Ok(res) => res,
-				Err(_) => return,
-			};
-
-			// Get rid of function that handles unsigned proposals
-			rounds.submit_unsigned_proposals(unsigned_proposals)
-
-			let mut errors = Vec::new();
-			if rounds.is_keygen_finished() {
-				// Current signers before resetting jailed signers
-				let signers_hashset =
-					rounds.signers.iter().cloned().collect::<HashSet<u16>>();
-				// Update jailed signers each time an offline stage is created
-				// This will trigger a regeneration of signing parties in hopes of
-				// both randomizing the set of signers as well as removing jailed
-				// signers after reported signing misbehaviour.
-				let at: BlockId<B> = BlockId::hash(header.hash());
-				let jailed_signers = self
-					.client
-					.runtime_api()
-					.get_signing_jailed(&at, rounds.authorities.clone())
-					.unwrap_or_default();
-				// Update the jailed signers which may mutate the signers set
-				rounds.set_jailed_signers(jailed_signers);
-				let new_signers_hashset =
-					rounds.signers.iter().cloned().collect::<HashSet<u16, RandomState>>();
-				// Iterate through each unsigned proposal and create offline stages
-				for unsigned_proposals in &unsigned_proposals {
-					let key = (unsigned_proposals.typed_chain_id, unsigned_proposals.key);
-					if self.dkg_state.created_offlinestage_at.contains_key(&key.encode()) {
-						continue
-					}
-
-					// If there are newly jailed signers we need to ensure we restart the offline stage
-					// process
-					if signers_hashset.difference(&new_signers_hashset).next().is_some() {
-						debug!(target: "dkg", "🕸️  FOUND INTERSECTION, REMOVING OLD OFFLINE STAGE\n{:?}\n{:?}", signers_hashset, new_signers_hashset);
-						rounds.offlines.remove(&key.encode());
-					}
-
-					if let Err(e) = rounds.create_offline_stage(key.encode(), *header.number()) {
-						error!(target: "dkg", "Failed to create offline stage: {:?}", e);
-						errors.push(e);
-					} else {
-						// We note unsigned proposals for which we have started the offline stage
-						// to prevent overwriting running offline stages when next this function is
-						// called this function is called on every block import and the proposal
-						// might still be in the the unsigned proposals queue.
-						self.dkg_state.created_offlinestage_at.insert(key.encode(), *header.number());
-					}
-				}
-			}
-
-			for e in errors {
-				self.handle_dkg_error(e);
-			}
-		}
-	}
-
-	// *** Proposals handling ***
-	/// When we create the offline stage we note that round key since the offline stage and voting
-	/// process could go on for a number of blocks while the proposal is still in the unsigned
-	/// proposal queue. The untrack interval is the number of blocks after which we expect the a
-	/// voting round to have reached completion for a proposal After this time elapses for a round
-	/// key we remove it from [dkg_state.created_offlinestage_at] since we expect that proposal to
-	/// have been signed and moved to the signed proposals queue already.
-	fn untrack_unsigned_proposals(&mut self, header: &B::Header) {
-		let keys = self.dkg_state.created_offlinestage_at.keys().cloned().collect::<Vec<_>>();
-		let _at: BlockId<B> = BlockId::hash(header.hash());
-		let current_block_number = *header.number();
-		for key in keys {
-			let voted_at = self.dkg_state.created_offlinestage_at.get(&key).unwrap();
-			let diff = current_block_number - *voted_at;
-			let untrack_interval = <<B as Block>::Header as Header>::Number::from(
-				dkg_runtime_primitives::UNTRACK_INTERVAL,
-			);
-
-			if diff >= untrack_interval {
-				self.dkg_state.created_offlinestage_at.remove(&key);
-			}
-		}
-	}
-
-	fn process_unsigned_proposals(&mut self, header: &B::Header) {
-		if let Some(rounds) = self.rounds.as_ref() {
-			let latest_block_num = self.get_latest_block_number();
 			let at: BlockId<B> = BlockId::hash(header.hash());
 			let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 				Ok(res) => res,
@@ -1109,15 +980,16 @@ where
 
 			debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
+			// Get rid of function that handles unsigned proposals
 			if let Err(err) = rounds.submit_unsigned_proposals(unsigned_proposals) {
-				self.handle_dkg_error(DKGError::GenericError { reason: err.to_string() })
+				self.handle_dkg_error(DKGError::CreateOfflineStage { reason: err.to_string() })
 			}
-
-			// NOTE: the rest of the code that use to be here is implicitly inside the meta handler now
-
-			// Send messages to all peers
-			send_outgoing_dkg_messages(self);
 		}
+	}
+
+	fn process_unsigned_proposals(&mut self, header: &B::Header) {
+		self.submit_unsigned_proposals(header);
+		//send_outgoing_dkg_messages(self);
 	}
 
 	// *** Main run loop ***
@@ -1153,7 +1025,7 @@ where
 					}
 				},
 
-				error = error_handler_rx.next().fuse() => {
+				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
 						self.handle_dkg_error(error)
 					} else {
@@ -1207,8 +1079,9 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C> KeystoreExt for DKGWorker<B, BE, C>
-	where B: Block,
+impl<B, BE, C> KeystoreExt for DKGWorker<B, C, BE>
+	where
+		B: Block,
 		BE: Backend<B>,
 		C: Client<B, BE> {
 	fn get_keystore(&self) -> &DKGKeystore {
@@ -1222,7 +1095,7 @@ impl<B: Block, BE, C> KeystoreExt for DKGIface<B, BE, C> {
 	}
 }
 
-impl<T> KeystoreExt for AsyncProtocolParameters<T> {
+impl<T: BlockChainIface> KeystoreExt for AsyncProtocolParameters<T> {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}

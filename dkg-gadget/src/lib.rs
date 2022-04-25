@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use log::debug;
 use prometheus::Registry;
@@ -115,8 +115,8 @@ where
 pub async fn start_dkg_gadget<B, BE, C, N>(dkg_params: DKGParams<B, BE, C, N>)
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 	N: GossipNetwork<B> + Clone + Send + 'static,
 {
@@ -156,13 +156,7 @@ where
 		gossip_engine,
 		metrics,
 		base_path,
-		local_keystore,
-		dkg_state: DKGState {
-			accepted: false,
-			listening_for_pub_key: false,
-			listening_for_active_pub_key: false,
-			created_offlinestage_at: HashMap::new(),
-		},
+		local_keystore
 	};
 
 	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);

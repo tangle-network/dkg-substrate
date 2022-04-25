@@ -16,11 +16,11 @@ use crate::{worker::DKGWorker, Client};
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::AuthorityId,
-	rounds::{LocalKey, MultiPartyECDSARounds},
+	rounds::LocalKey,
 	serde_json,
 	types::RoundId,
 	utils::{
-		decrypt_data, encrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
+		decrypt_data, encrypt_data, StoredLocalKey
 	},
 };
 use dkg_runtime_primitives::{
@@ -36,6 +36,7 @@ use std::{
 	io::{Error, ErrorKind},
 	path::PathBuf,
 };
+use crate::worker::KeystoreExt;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -136,6 +137,7 @@ where
 	}
 }
 
+/*
 /// We only try to resume the dkg once, if we can find any data for the completed offline stage for
 /// the current round
 pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
@@ -211,6 +213,8 @@ where
 				.jailed_signers(worker.get_signing_jailed(header, &best_authorities))
 				.build();
 
+
+
 			if let Some(key) = local_key {
 				debug!(target: "dkg_persistence", "Local key set");
 				// Set the local key
@@ -250,40 +254,4 @@ where
 			}
 		}
 	}
-}
-
-/// To determine if the protocol should be restarted, we check if the
-/// protocol is stuck at the keygen stage
-#[allow(dead_code)]
-pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	let rounds = worker.rounds.take();
-	let next_rounds = worker.next_rounds.take();
-
-	let should_restart_rounds = {
-		if let Some(rounds) = rounds {
-			let stalled = rounds.has_stalled();
-			worker.rounds = Some(rounds);
-			stalled
-		} else {
-			false
-		}
-	};
-
-	let should_restart_next_rounds = {
-		if let Some(next_round) = next_rounds {
-			let stalled = next_round.has_stalled();
-			worker.next_rounds = Some(next_round);
-			stalled
-		} else {
-			false
-		}
-	};
-
-	(should_restart_rounds, should_restart_next_rounds)
-}
+}*/

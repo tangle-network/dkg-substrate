@@ -13,7 +13,7 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::Client;
 use codec::Encode;
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{

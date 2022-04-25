@@ -14,113 +14,21 @@ use std::sync::Arc;
 // limitations under the License.
 //
 use crate::{
-	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
+	persistence::store_localkey, types::dkg_topic,
 	worker::DKGWorker, Client, DKGKeystore,
 };
 use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
-	GOSSIP_MESSAGE_RESENDING_LIMIT,
+	types::{DKGError, DKGMessage, DKGResult, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use log::{error, info, trace};
+use log::trace;
 use parking_lot::Mutex;
 use sc_client_api::Backend;
 use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header, NumberFor};
-
-/// Sends outgoing dkg messages
-pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	let mut keys_to_gossip = Vec::new();
-	let mut rounds_send_result = vec![];
-	let mut next_rounds_send_result = vec![];
-
-	if let Some(mut rounds) = dkg_worker.rounds.take() {
-		let authorities = dkg_worker.current_validator_set.read().authorities.clone();
-		if let Some(id) = dkg_worker.key_store.authority_id(&authorities) {
-			rounds_send_result =
-				send_messages(dkg_worker, &mut rounds, id, dkg_worker.get_latest_block_number());
-		} else {
-			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
-		}
-
-		if dkg_worker.active_keygen_in_progress {
-			let is_keygen_finished = rounds.is_keygen_finished();
-			if is_keygen_finished {
-				dkg_worker.active_keygen_in_progress = false;
-				let pub_key = rounds.get_public_key().unwrap().to_bytes(true).to_vec();
-				info!(target: "dkg", "🕸️  Genesis DKGs keygen has completed: {:?}", pub_key);
-				let round_id = rounds.get_id();
-				keys_to_gossip.push((round_id, pub_key));
-			}
-		}
-
-		dkg_worker.rounds = Some(rounds);
-	}
-
-	// Check if a there's a key gen process running for the queued authority set
-	if dkg_worker.queued_keygen_in_progress {
-		if let Some(id) = dkg_worker
-			.key_store
-			.authority_id(dkg_worker.queued_validator_set.authorities.as_slice())
-		{
-			if let Some(mut next_rounds) = dkg_worker.next_rounds.take() {
-				next_rounds_send_result = send_messages(
-					dkg_worker,
-					&mut next_rounds,
-					id,
-					dkg_worker.get_latest_block_number(),
-				);
-
-				let is_keygen_finished = next_rounds.is_keygen_finished();
-				if is_keygen_finished {
-					dkg_worker.queued_keygen_in_progress = false;
-					let pub_key = next_rounds.get_public_key().unwrap().to_bytes(true).to_vec();
-					info!(target: "dkg", "🕸️  Queued DKGs keygen has completed: {:?}", pub_key);
-					keys_to_gossip.push((next_rounds.get_id(), pub_key));
-				}
-				dkg_worker.next_rounds = Some(next_rounds);
-			}
-		} else {
-			error!("No local accounts available. Consider adding one via `author_insertKey` RPC.");
-		}
-	}
-
-	for (round_id, pub_key) in &keys_to_gossip {
-		let pub_key_msg = DKGPublicKeyMessage {
-			round_id: *round_id,
-			pub_key: pub_key.clone(),
-			signature: vec![],
-		};
-		let hash = sp_core::blake2_128(&pub_key_msg.encode());
-		let count = *dkg_worker.has_sent_gossip_msg.get(&hash).unwrap_or(&0u8);
-		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
-			return
-		}
-		gossip_public_key(&dkg_worker.key_store, &mut *dkg_worker.gossip_engine.lock(), &mut *dkg_worker.aggregated_public_keys.lock(), pub_key_msg);
-		dkg_worker.has_sent_gossip_msg.insert(hash, count + 1);
-	}
-
-	for res in &rounds_send_result {
-		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone());
-		}
-	}
-
-	for res in &next_rounds_send_result {
-		if let Err(err) = res {
-			dkg_worker.handle_dkg_error(err.clone());
-		}
-	}
-}
 
 /// send actual messages
 fn send_messages<B, C, BE>(

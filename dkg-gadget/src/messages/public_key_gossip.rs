@@ -14,11 +14,10 @@ use std::collections::HashMap;
 // limitations under the License.
 //
 // Handles non-dkg messages
-use crate::{storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client, DKGKeystore};
+use crate::{types::dkg_topic, Client, DKGKeystore};
 use codec::Encode;
 use dkg_primitives::{
-	crypto::Public,
-	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
+	types::{DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
 use log::{debug, error};

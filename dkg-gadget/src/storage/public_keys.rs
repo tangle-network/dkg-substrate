@@ -17,7 +17,7 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	worker::{DKGWorker, MAX_SUBMISSION_DELAY},
+	worker::MAX_SUBMISSION_DELAY,
 	Client,
 };
 use codec::Encode;
@@ -57,8 +57,7 @@ where
 	let keys = aggregated_public_keys.get(&round_id).ok_or_else(|| DKGError::CriticalError { reason: format!("Aggregated public key for round {} does not exist in map", round_id) })?;
 	if is_genesis_round {
 		//dkg_worker.dkg_state.listening_for_active_pub_key = false;
-		perform_storing_of_aggregated_public_keys(
-			dkg_worker,
+		perform_storing_of_aggregated_public_keys::<B, BE>(
 			offchain,
 			keys,
 			current_block_number,
@@ -67,8 +66,7 @@ where
 		);
 	} else {
 		//dkg_worker.dkg_state.listening_for_pub_key = false;
-		perform_storing_of_aggregated_public_keys(
-			dkg_worker,
+		perform_storing_of_aggregated_public_keys::<B, BE>(
 			offchain,
 			keys,
 			current_block_number,
@@ -82,8 +80,7 @@ where
 }
 
 /// stores the aggregated public keys
-fn perform_storing_of_aggregated_public_keys<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+fn perform_storing_of_aggregated_public_keys<B, BE>(
 	mut offchain: <BE as Backend<B>>::OffchainStorage,
 	keys: &AggregatedPublicKeys,
 	current_block_number: NumberFor<B>,
@@ -91,13 +88,11 @@ fn perform_storing_of_aggregated_public_keys<B, C, BE>(
 	submit_keys: &[u8],
 ) where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	BE: Backend<B>
 {
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
 	let submit_at =
-		generate_delayed_submit_at(current_block_number, MAX_SUBMISSION_DELAY);
+		generate_delayed_submit_at::<B>(current_block_number, MAX_SUBMISSION_DELAY);
 	if let Some(submit_at) = submit_at {
 		offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
 	}
