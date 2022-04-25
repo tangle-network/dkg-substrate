@@ -579,11 +579,12 @@ where
 
 		// Check if we've already set up the DKG for this authority set
 		// if the active is currently running, and, the keygen has stalled, create one anew
-		let rounds = self.rounds.as_ref().unwrap();
-		if rounds.is_active() {
-			if !rounds.keygen_has_stalled(latest_block_num) {
-				debug!(target: "dkg", "🕸️  Rounds exists and is active");
-				return
+		if let Some(rounds) = self.rounds.as_ref() {
+			if rounds.is_active() {
+				if !rounds.keygen_has_stalled(latest_block_num) {
+					debug!(target: "dkg", "🕸️  Rounds exists and is active");
+					return
+				}
 			}
 		}
 
