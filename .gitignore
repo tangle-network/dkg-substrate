@@ -22,3 +22,4 @@ para-2074-genesis
 para-2074-wasm
 
 /scripts/seed-arana-testnet.sh
+*.txt

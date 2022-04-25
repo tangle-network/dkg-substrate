@@ -132,6 +132,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
+				log::debug!(target: "dkg", "🔑  (Round: {:?}) Sending Public key gossip message: ({:?} bytes)", msg.round_id, encoded_signed_dkg_message.len());
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
