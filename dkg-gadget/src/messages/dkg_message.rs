@@ -20,7 +20,7 @@ use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
+	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
 	GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
@@ -165,6 +165,32 @@ fn sign_and_send_message<B, C, BE>(
 			let signed_dkg_message =
 				SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
 			let encoded_signed_dkg_message = signed_dkg_message.encode();
+			
+			match dkg_message.payload {
+				DKGMsgPayload::Keygen(_) => {
+					log::debug!(
+						target: "dkg",
+						"📤  (Round: {:?}) Sending signed DKG keygen message: ({:?} bytes)",
+						dkg_message.round_id, encoded_signed_dkg_message.len()
+					);
+				},
+				DKGMsgPayload::Offline(_) => {
+					log::debug!(
+						target: "dkg",
+						"📤  (Round: {:?}) Sending signed DKG offline message: ({:?} bytes)",
+						dkg_message.round_id, encoded_signed_dkg_message.len()
+					);
+				},
+				DKGMsgPayload::Vote(_) => {
+					log::debug!(
+						target: "dkg",
+						"📤  (Round: {:?}) Sending signed DKG vote message: ({:?} bytes)",
+						dkg_message.round_id, encoded_signed_dkg_message.len()
+					);
+				},
+				_ => {}
+			};
+
 			dkg_worker.gossip_engine.lock().gossip_message(
 				dkg_topic::<B>(),
 				encoded_signed_dkg_message,

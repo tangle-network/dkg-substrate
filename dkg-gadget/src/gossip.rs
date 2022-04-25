@@ -58,7 +58,7 @@ impl Seen {
 
 	/// Return true if `hash` has been seen `MAX_LIVE_GOSSIP_ROUNDS` times.
 	fn is_valid(&self, hash: &[u8]) -> bool {
-		self.get_seen_count(hash) >= MAX_LIVE_GOSSIP_ROUNDS
+		self.get_seen_count(hash) <= MAX_LIVE_GOSSIP_ROUNDS
 	}
 
 	/// Check if `hash` is already part of seen messages
@@ -108,6 +108,7 @@ where
 				trace!(target: "dkg", "🕸️  Got a signed dkg message: {:?}, from: {:?}", msg, sender);
 				let hash = keccak_256(&msg.encode());
 				if self.seen.read().is_valid(&hash) {
+					log::debug!(target: "dkg", "🕸️  Seen message: ({:?} times)", self.seen.read().get_seen_count(&hash));
 					self.seen.write().increment(hash);
 					return ValidationResult::ProcessAndKeep(dkg_topic::<B>())
 				} else {
