@@ -20,7 +20,7 @@ use std::{
 };
 
 use curv::elliptic::curves::Secp256k1;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, RoundId, SignedDKGMessage};
 
 use futures::stream::Stream;
 
@@ -33,12 +33,14 @@ use round_based::Msg;
 use crate::async_protocol_handlers::meta_channel::BlockChainIface;
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
 use tokio_stream::wrappers::BroadcastStream;
+use crate::worker::AsyncProtocolParameters;
 
 pub type SignedMessageBroadcastHandle =
 	tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>;
 
 pub struct IncomingAsyncProtocolWrapper<T, B> {
 	pub receiver: BroadcastStream<T>,
+	round_id: RoundId,
 	bc_iface: Arc<B>,
 	ty: ProtocolType,
 }
@@ -47,9 +49,9 @@ impl<T: TransformIncoming, B: BlockChainIface> IncomingAsyncProtocolWrapper<T, B
 	pub fn new(
 		receiver: tokio::sync::broadcast::Receiver<T>,
 		ty: ProtocolType,
-		bc_iface: Arc<B>,
+		params: &AsyncProtocolParameters<B>,
 	) -> Self {
-		Self { receiver: BroadcastStream::new(receiver), bc_iface, ty }
+		Self { receiver: BroadcastStream::new(receiver), round_id: params.round_id, bc_iface: params.blockchain_iface.clone(), ty }
 	}
 }
 
@@ -121,6 +123,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		self,
 		verify: &B,
 		stream_type: &ProtocolType,
+		this_round_id: RoundId
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized;
@@ -132,6 +135,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		self,
 		verify: &B,
 		stream_type: &ProtocolType,
+		this_round_id: RoundId
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized,
@@ -143,9 +147,13 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 				// only clone if the downstream receiver expects this type
 				let sender = self.msg.payload.async_proto_only_get_sender_id().unwrap();
 				if sender != stream_type.get_i() {
-					verify
-						.verify_signature_against_authorities(self)
-						.map(|body| Some(Msg { sender, receiver: None, body }))
+					if self.msg.round_id == this_round_id {
+						verify
+							.verify_signature_against_authorities(self)
+							.map(|body| Some(Msg { sender, receiver: None, body }))
+					} else {
+						Ok(None)
+					}
 				} else {
 					//log::info!(target: "dkg", "Will skip passing message to state machine since
 					// loopback (loopback_id={})", sender);
@@ -170,12 +178,12 @@ where
 	type Item = Msg<T::IncomingMapped>;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, bc_iface } = &mut *self;
+		let Self { receiver, ty, bc_iface, round_id } = &mut *self;
 		let mut receiver = Pin::new(receiver);
 
 		loop {
 			match futures::ready!(receiver.as_mut().poll_next(cx)) {
-				Some(Ok(msg)) => match msg.transform(&**bc_iface, &*ty) {
+				Some(Ok(msg)) => match msg.transform(&**bc_iface, &*ty, *round_id) {
 					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
 
 					Ok(None) => {
@@ -954,7 +962,7 @@ pub mod meta_channel {
 				let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(
 					incoming,
 					ty,
-					params.blockchain_iface.clone(),
+					&params,
 				);
 				let (_, round_id, id) = Self::get_party_round_id(&params);
 				// the first step is to generate the partial sig based on the offline stage
@@ -1153,7 +1161,7 @@ pub mod meta_channel {
 				let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(
 					incoming,
 					channel_type.clone(),
-					params.blockchain_iface,
+					&params
 				);
 
 				while let Some(unsigned_message) = incoming_wrapper.next().await {
