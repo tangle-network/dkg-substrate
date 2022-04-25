@@ -81,6 +81,7 @@ it('should be able to sign anchor update proposal', async () => {
     srcChainId: localChain.chainId,
     merkleRoot: newMerkleRoot1,
     lastLeafIndex,
+    target: anchor.getAddress()
   };
   // register proposal resourceId.
   await registerResourceId(polkadotApi, proposalPayload.header.resourceId);
