@@ -208,7 +208,7 @@ where
 pub mod meta_channel {
 	use async_trait::async_trait;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, KEYGEN_TIMEOUT, Proposal, PublicKeyAndSignature, UnsignedProposal};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, KEYGEN_TIMEOUT, Proposal, UnsignedProposal};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -272,7 +272,6 @@ pub mod meta_channel {
 	use crate::messages::public_key_gossip::gossip_public_key;
 	use crate::proposal::get_signed_proposal;
 	use crate::storage::proposals::save_signed_proposals_in_storage;
-	use crate::storage::public_keys::store_aggregated_public_keys;
 	use crate::worker::KeystoreExt;
 	use futures::FutureExt;
 	use sp_arithmetic::traits::AtLeast32BitUnsigned;
@@ -651,13 +650,9 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId) -> Result<(), DKGError> {
-			let is_genesis_round = self.is_genesis;
-			let header = &(self.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
-			let current_block_number = *header.number();
-			let mut lock = self.aggregated_public_keys.lock();
-			lock.entry(round_id).or_default().keys_and_signatures.push(PublicKeyAndSignature {});
-			store_aggregated_public_keys::<B, C, BE>(&self.backend, &mut *lock, is_genesis_round, round_id, current_block_number)
+		fn store_public_key(&self, _key: LocalKey<Secp256k1>, _round_id: RoundId) -> Result<(), DKGError> {
+			// NOTE: This is already done by gossip_public_key above
+			Ok(())
 		}
 
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {
@@ -716,6 +711,8 @@ pub mod meta_channel {
 			Ok(())
 		}
 
+		fn debug_only_stop_after_first_batch(&self) -> bool { true }
+
 		fn store_public_key(&self, _key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
 			Ok(())
 		}
@@ -727,8 +724,6 @@ pub mod meta_channel {
 		fn get_authority_set(&self) -> &Vec<Public> {
 			&*self.best_authorities
 		}
-
-		fn debug_only_stop_after_first_batch(&self) -> bool { true }
 	}
 
 	impl<'a, Out: Send + Debug + 'a> MetaDKGMessageHandler<'a, Out>

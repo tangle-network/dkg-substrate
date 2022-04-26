@@ -48,7 +48,7 @@ use crate::{
 	persistence::DKGPersistenceState,
 };
 
-use crate::messages::misbehaviour_report::gossip_misbehaviour_report;
+use crate::messages::misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report};
 
 use crate::storage::clear::listen_and_clear_offchain_storage;
 
@@ -78,8 +78,10 @@ use dkg_primitives::{
 	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
+use dkg_primitives::types::DKGMsgPayload;
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 use crate::async_protocol_handlers::meta_channel::{BlockChainIface, MetaAsyncProtocolHandle, MetaDKGMessageHandler};
+use crate::messages::public_key_gossip::handle_public_key_broadcast;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -889,6 +891,50 @@ where
 		}
 	}
 
+	/// Route messages internally where they need to be routed
+	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
+		match &dkg_msg.msg.payload {
+			DKGMsgPayload::Keygen(..) |
+			DKGMsgPayload::Offline(..) |
+			DKGMsgPayload::Vote(..) => {
+				if let Some(rounds) = self.rounds.as_mut() {
+					// route to async proto
+					if let Err(err) = self.to_async_proto.send(Arc::new(dkg_msg)) {
+						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+					}
+				}
+			}
+			DKGMsgPayload::PublicKeyBroadcast(_) => {
+				match self.verify_signature_against_authorities(dkg_msg) {
+					Ok(dkg_msg) => {
+						match handle_public_key_broadcast(self, dkg_msg) {
+							Ok(()) => (),
+							Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+						};
+					}
+
+					Err(err) => {
+						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
+					}
+				}
+			}
+			DKGMsgPayload::MisbehaviourBroadcast(_) => {
+				match self.verify_signature_against_authorities(dkg_msg) {
+					Ok(dkg_msg) => {
+						match handle_misbehaviour_report(self, dkg_msg) {
+							Ok(()) => (),
+							Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+						};
+					}
+
+					Err(err) => {
+						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
+					}
+				}
+			}
+		}
+	}
+
 	fn handle_dkg_report(&mut self, dkg_report: DKGReport) {
 		let (offender, round_id, misbehaviour_type) = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
@@ -1001,7 +1047,6 @@ where
 				},
 			));
 
-		let to_async_proto = &self.to_async_proto.clone();
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		loop {
@@ -1037,17 +1082,13 @@ where
 						if self.to_async_proto.receiver_count() == 0 || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
 						} else {
-							let msgs = self.msg_cache.drain(..);
+							let msgs = self.msg_cache.drain(..).collect::<Vec<_>>();
 							for msg in msgs {
-								if let Err(err) = to_async_proto.send(Arc::new(msg)) {
-									log::error!(target: "dkg", "Unable to send message to async proto: {:?}", err);
-								}
+								self.process_incoming_dkg_message(msg);
 							}
 
 							// send dkg_msg to async_proto
-							if let Err(err) = to_async_proto.send(Arc::new(dkg_msg)) {
-								log::error!(target: "dkg", "Unable to send message to async proto: {:?}", err);
-							}
+							self.process_incoming_dkg_message(dkg_msg);
 						}
 					} else {
 						return;
