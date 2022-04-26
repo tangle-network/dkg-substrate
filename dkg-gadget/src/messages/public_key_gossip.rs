@@ -14,33 +14,36 @@ use std::collections::HashMap;
 // limitations under the License.
 //
 // Handles non-dkg messages
-use crate::{types::dkg_topic, Client, DKGKeystore};
-use codec::Encode;
-use dkg_primitives::{
-	types::{DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage},
+use crate::{
+	storage::public_keys::store_aggregated_public_keys,
+	types::dkg_topic,
+	worker::{DKGWorker, KeystoreExt},
+	Client, DKGKeystore,
 };
-use dkg_runtime_primitives::{crypto::AuthorityId, AggregatedPublicKeys, DKGApi};
+use codec::Encode;
+use dkg_primitives::types::{
+	DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId, SignedDKGMessage,
+};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	AggregatedPublicKeys, DKGApi,
+};
 use log::{debug, error};
 use sc_client_api::Backend;
 use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header};
-use dkg_primitives::types::{DKGError, RoundId};
-use dkg_runtime_primitives::crypto::Public;
-use crate::storage::public_keys::store_aggregated_public_keys;
-use crate::worker::{DKGWorker, KeystoreExt};
 
 pub(crate) fn handle_public_key_broadcast<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
-	where
-		B: Block,
-		BE: Backend<B> + 'static,
-		C: Client<B, BE> + 'static,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+where
+	B: Block,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
-	if dkg_worker.rounds.is_none()
-	{
+	if dkg_worker.rounds.is_none() {
 		return Ok(())
 	}
 
@@ -132,11 +135,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				gossip_engine.gossip_message(
-					dkg_topic::<B>(),
-					encoded_signed_dkg_message,
-					true,
-				);
+				gossip_engine.gossip_message(dkg_topic::<B>(), encoded_signed_dkg_message, true);
 			},
 			Err(e) => error!(
 				target: "dkg",
@@ -145,7 +144,8 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			),
 		}
 
-		aggregated_public_keys.entry(msg.round_id)
+		aggregated_public_keys
+			.entry(msg.round_id)
 			.or_default()
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));

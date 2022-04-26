@@ -28,12 +28,12 @@ use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
-mod async_protocol_handlers;
 mod error;
 mod gossip;
 mod keyring;
 mod keystore;
 pub mod messages;
+mod meta_async_protocol;
 mod metrics;
 mod persistence;
 mod proposal;
@@ -156,7 +156,7 @@ where
 		gossip_engine,
 		metrics,
 		base_path,
-		local_keystore
+		local_keystore,
 	};
 
 	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);

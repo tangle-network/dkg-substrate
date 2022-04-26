@@ -3,8 +3,7 @@
 // Copyright (C) 2021 Webb Technologies Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,10 +15,7 @@ use std::sync::Arc;
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{
-	worker::MAX_SUBMISSION_DELAY,
-	Client,
-};
+use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
 use codec::Encode;
 use dkg_primitives::types::{DKGError, RoundId};
 use dkg_runtime_primitives::{
@@ -33,7 +29,6 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
-use crate::storage::proposals::generate_delayed_submit_at;
 
 /// stores genesis or next aggregated public keys offchain
 pub(crate) fn store_aggregated_public_keys<B, C, BE>(
@@ -54,7 +49,9 @@ where
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
 	let offchain = maybe_offchain.unwrap();
-	let keys = aggregated_public_keys.get(&round_id).ok_or_else(|| DKGError::CriticalError { reason: format!("Aggregated public key for round {} does not exist in map", round_id) })?;
+	let keys = aggregated_public_keys.get(&round_id).ok_or_else(|| DKGError::CriticalError {
+		reason: format!("Aggregated public key for round {} does not exist in map", round_id),
+	})?;
 	if is_genesis_round {
 		//dkg_worker.dkg_state.listening_for_active_pub_key = false;
 		perform_storing_of_aggregated_public_keys::<B, BE>(
@@ -88,11 +85,10 @@ fn perform_storing_of_aggregated_public_keys<B, BE>(
 	submit_keys: &[u8],
 ) where
 	B: Block,
-	BE: Backend<B>
+	BE: Backend<B>,
 {
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
-	let submit_at =
-		generate_delayed_submit_at::<B>(current_block_number, MAX_SUBMISSION_DELAY);
+	let submit_at = generate_delayed_submit_at::<B>(current_block_number, MAX_SUBMISSION_DELAY);
 	if let Some(submit_at) = submit_at {
 		offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
 	}

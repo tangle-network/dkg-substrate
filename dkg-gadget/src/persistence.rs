@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::{
+	worker::{DKGWorker, KeystoreExt},
+	Client,
+};
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::AuthorityId,
 	rounds::LocalKey,
 	serde_json,
 	types::RoundId,
-	utils::{
-		decrypt_data, encrypt_data, StoredLocalKey
-	},
+	utils::{decrypt_data, encrypt_data, StoredLocalKey},
 };
 use dkg_runtime_primitives::{
 	offchain::crypto::{Pair as AppPair, Public},
@@ -36,7 +37,6 @@ use std::{
 	io::{Error, ErrorKind},
 	path::PathBuf,
 };
-use crate::worker::KeystoreExt;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,

@@ -13,8 +13,10 @@
 // limitations under the License.
 //
 use crate::{
-	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, types::dkg_topic,
-	worker::DKGWorker, Client,
+	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports,
+	types::dkg_topic,
+	worker::{DKGWorker, KeystoreExt},
+	Client,
 };
 use codec::Encode;
 use dkg_primitives::types::{
@@ -26,7 +28,6 @@ use dkg_runtime_primitives::{
 use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header};
-use crate::worker::KeystoreExt;
 
 pub(crate) fn handle_misbehaviour_report<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,

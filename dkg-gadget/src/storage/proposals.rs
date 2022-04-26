@@ -21,14 +21,17 @@ use crate::{
 	Client,
 };
 use codec::{Decode, Encode};
-use dkg_runtime_primitives::{crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGApi, OffchainSignedProposals, Proposal, AuthoritySet};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
+	AuthoritySet, DKGApi, OffchainSignedProposals, Proposal,
+};
 use log::debug;
 use parking_lot::RwLock;
 use rand::Rng;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
-use dkg_runtime_primitives::crypto::Public;
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
@@ -49,8 +52,11 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 
 	debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
-	if find_index::<AuthorityId>(&current_validator_set.read().authorities[..], authority_public_key)
-		.is_none()
+	if find_index::<AuthorityId>(
+		&current_validator_set.read().authorities[..],
+		authority_public_key,
+	)
+	.is_none()
 	{
 		return
 	}

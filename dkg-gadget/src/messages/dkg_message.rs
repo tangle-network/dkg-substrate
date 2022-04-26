@@ -14,8 +14,10 @@ use std::sync::Arc;
 // limitations under the License.
 //
 use crate::{
-	persistence::store_localkey, types::dkg_topic,
-	worker::DKGWorker, Client, DKGKeystore,
+	persistence::store_localkey,
+	types::dkg_topic,
+	worker::{DKGWorker, KeystoreExt},
+	Client, DKGKeystore,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -71,14 +73,12 @@ pub(crate) fn sign_and_send_messages<B>(
 	B: Block,
 {
 	let dkg_messages = dkg_messages.into();
-	let sr25519_public = dkg_keystore
-		.sr25519_public_key(&dkg_keystore.sr25519_public_keys().unwrap_or_default())
-		.unwrap_or_else(|| panic!("Could not find sr25519 key in keystore"));
+	let public = dkg_keystore.get_authority_public_key();
 
 	let mut engine_lock = gossip_engine.lock();
 
 	for dkg_message in dkg_messages {
-		match dkg_keystore.sr25519_sign(&sr25519_public, &dkg_message.encode()) {
+		match dkg_keystore.sign(&public, &dkg_message.encode()) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };

@@ -20,9 +20,11 @@ use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
 	path::PathBuf,
-	sync::Arc,
+	sync::{
+		atomic::{AtomicU64, Ordering},
+		Arc,
+	},
 };
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use codec::{Codec, Decode, Encode};
 
@@ -43,12 +45,11 @@ use sp_core::crypto::AccountId32;
 use sp_runtime::traits::{Block, Header, NumberFor};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::{
-	keystore::DKGKeystore,
-	persistence::DKGPersistenceState,
-};
+use crate::{keystore::DKGKeystore, persistence::DKGPersistenceState};
 
-use crate::messages::misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report};
+use crate::messages::misbehaviour_report::{
+	gossip_misbehaviour_report, handle_misbehaviour_report,
+};
 
 use crate::storage::clear::listen_and_clear_offchain_storage;
 
@@ -73,15 +74,18 @@ use crate::{
 	Client,
 };
 
-use crate::async_protocol_handlers::{BatchKey, meta_channel::DKGIface, SignedMessageBroadcastHandle};
+use crate::{
+	messages::public_key_gossip::handle_public_key_broadcast,
+	meta_async_protocol::{
+		meta_channel::{BlockChainIface, DKGIface, MetaAsyncProtocolRemote, MetaAsyncProtocolHandler},
+		BatchKey, SignedMessageBroadcastHandle,
+	},
+};
 use dkg_primitives::{
-	types::{DKGMessage, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
+	types::{DKGMessage, DKGMsgPayload, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
-use dkg_primitives::types::DKGMsgPayload;
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-use crate::async_protocol_handlers::meta_channel::{BlockChainIface, MetaAsyncProtocolHandle, MetaDKGMessageHandler};
-use crate::messages::public_key_gossip::handle_public_key_broadcast;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -99,7 +103,7 @@ where
 	pub gossip_engine: GossipEngine<B>,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
-	pub local_keystore: Option<Arc<LocalKeystore>>
+	pub local_keystore: Option<Arc<LocalKeystore>>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -115,8 +119,8 @@ where
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
 	pub metrics: Option<Metrics>,
-	pub rounds: Option<MetaAsyncProtocolHandle<NumberFor<B>>>,
-	pub next_rounds: Option<MetaAsyncProtocolHandle<NumberFor<B>>>,
+	pub rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
+	pub next_rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	pub votes_sent: u64,
@@ -221,16 +225,13 @@ pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	pub batch_id_gen: Arc<AtomicU64>,
-	pub handle: MetaAsyncProtocolHandle<BCIface::Clock>,
-	pub round_id: RoundId
+	pub handle: MetaAsyncProtocolRemote<BCIface::Clock>,
+	pub round_id: RoundId,
 }
 
 impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
 	pub fn get_next_batch_key(&self, batch: &Vec<UnsignedProposal>) -> BatchKey {
-		BatchKey {
-			id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst),
-			len: batch.len()
-		}
+		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
 	}
 }
 
@@ -246,7 +247,7 @@ impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
 			batch_id_gen: self.batch_id_gen.clone(),
-			handle: self.handle.clone()
+			handle: self.handle.clone(),
 		}
 	}
 }
@@ -254,7 +255,7 @@ impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ProtoStageType {
 	Genesis,
-	Queued
+	Queued,
 }
 
 impl<B, C, BE> DKGWorker<B, C, BE>
@@ -272,13 +273,13 @@ where
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		round_id: RoundId,
-		stage: ProtoStageType
+		stage: ProtoStageType,
 	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let status_handle = MetaAsyncProtocolHandle::new(now, round_id);
+		let status_handle = MetaAsyncProtocolRemote::new(now, round_id);
 
 		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
@@ -302,7 +303,7 @@ where
 			best_authorities,
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
-			handle: status_handle.clone()
+			handle: status_handle.clone(),
 		};
 
 		if stage != ProtoStageType::Queued {
@@ -314,22 +315,34 @@ where
 		params
 	}
 
-	fn spawn_async_protocol(&mut self, best_authorities: Vec<Public>, authority_public_key: Public, round_id: RoundId, threshold: u16, stage: ProtoStageType) {
-		let async_proto_params = self.generate_async_proto_params(best_authorities, authority_public_key, round_id, stage);
+	fn spawn_async_protocol(
+		&mut self,
+		best_authorities: Vec<Public>,
+		authority_public_key: Public,
+		round_id: RoundId,
+		threshold: u16,
+		stage: ProtoStageType,
+	) {
+		let async_proto_params = self.generate_async_proto_params(
+			best_authorities,
+			authority_public_key,
+			round_id,
+			stage,
+		);
 		let err_handler_tx = self.error_handler_tx.clone();
 
-		match MetaDKGMessageHandler::setup(async_proto_params, threshold) {
+		match MetaAsyncProtocolHandler::setup(async_proto_params, threshold) {
 			Ok(meta_handler) => {
 				let task = async move {
 					match meta_handler.await {
 						Ok(_) => {
 							log::info!(target: "dkg", "The meta handler has executed successfully");
-						}
+						},
 
 						Err(err) => {
 							error!(target: "dkg", "Error executing meta handler {:?}", &err);
 							let _ = err_handler_tx.send(err);
-						}
+						},
 					}
 				};
 
@@ -340,7 +353,7 @@ where
 			Err(err) => {
 				error!(target: "dkg", "Error starting meta handler {:?}", &err);
 				self.handle_dkg_error(err);
-			}
+			},
 		}
 	}
 
@@ -496,12 +509,19 @@ where
 		&self,
 		header: &B::Header,
 	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+		Self::validator_set_inner(header, &self.client)
+	}
+
+	fn validator_set_inner(
+		header: &B::Header,
+		client: &Arc<C>,
+	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
 			let at: BlockId<B> = BlockId::hash(header.hash());
-			let current_authority_set = self.client.runtime_api().authority_set(&at).ok();
-			let queued_authority_set = self.client.runtime_api().queued_authority_set(&at).ok();
+			let current_authority_set = client.runtime_api().authority_set(&at).ok();
+			let queued_authority_set = client.runtime_api().queued_authority_set(&at).ok();
 			match (current_authority_set, queued_authority_set) {
 				(Some(current), Some(queued)) => Some((current, queued)),
 				_ => None,
@@ -622,7 +642,13 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, threshold,ProtoStageType::Genesis);
+		self.spawn_async_protocol(
+			best_authorities,
+			authority_public_key,
+			round_id,
+			threshold,
+			ProtoStageType::Genesis,
+		);
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
@@ -632,7 +658,9 @@ where
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() && !self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number()) {
+		if self.next_rounds.is_some() &&
+			!self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number())
+		{
 			return
 		}
 
@@ -671,7 +699,13 @@ where
 		);*/
 
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_async_protocol(best_authorities, authority_public_key, round_id, threshold,ProtoStageType::Queued);
+		self.spawn_async_protocol(
+			best_authorities,
+			authority_public_key,
+			round_id,
+			threshold,
+			ProtoStageType::Queued,
+		);
 	}
 
 	// *** Block notifications ***
@@ -744,7 +778,8 @@ where
 				}
 			}
 
-			let queued_keygen_in_progress = self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
+			let queued_keygen_in_progress =
+				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
@@ -804,31 +839,22 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
-		let signature = signed_dkg_msg.signature.unwrap_or_default();
+		let signature = signed_dkg_msg.signature.unwrap();
 		// Get authority accounts
-		let mut authority_accounts: Option<(Vec<AccountId32>, Vec<AccountId32>)> = None;
-
-		if let Some(ref header) = latest_header.read().clone() {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			let accounts = client.runtime_api().get_authority_accounts(&at).ok();
-
-			if accounts.is_some() {
-				authority_accounts = accounts;
-			}
+		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
+		if let Some(header) = latest_header.read().clone() {
+			authorities = Self::validator_set_inner(&header, client)
+				.map(|a| (a.0.authorities, a.1.authorities));
 		}
 
-		if authority_accounts.is_none() {
+		if authorities.is_none() {
 			return Err(DKGError::GenericError { reason: "No authorities".into() })
 		}
 
-		let check_signers = |xs: Vec<AccountId32>| {
-			return dkg_runtime_primitives::utils::verify_signer_from_set(
+		let check_signers = |xs: &[AuthorityId]| {
+			return dkg_runtime_primitives::utils::verify_signer_from_set_ecdsa(
 				xs.iter()
-					.map(|x| {
-						sr25519::Public(to_slice_32(&x.encode()).unwrap_or_else(|| {
-							panic!("Failed to convert account id to sr25519 public key")
-						}))
-					})
+					.map(|x| ecdsa::Public::from_raw(to_slice_33(&x.encode()).unwrap()))
 					.collect(),
 				&encoded,
 				&signature,
@@ -836,8 +862,7 @@ where
 			.1
 		};
 
-		if check_signers(authority_accounts.clone().unwrap().0) ||
-			check_signers(authority_accounts.unwrap().1)
+		if check_signers(&authorities.clone().unwrap().0) || check_signers(&authorities.unwrap().1)
 		{
 			Ok(dkg_msg)
 		} else {
@@ -894,44 +919,44 @@ where
 	/// Route messages internally where they need to be routed
 	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(..) |
-			DKGMsgPayload::Offline(..) |
-			DKGMsgPayload::Vote(..) => {
+			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				if let Some(rounds) = self.rounds.as_mut() {
 					// route to async proto
 					if let Err(err) = self.to_async_proto.send(Arc::new(dkg_msg)) {
 						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
 					}
 				}
-			}
+			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
 						match handle_public_key_broadcast(self, dkg_msg) {
 							Ok(()) => (),
-							Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+							Err(err) =>
+								error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 						};
-					}
+					},
 
 					Err(err) => {
 						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
-					}
+					},
 				}
-			}
+			},
 			DKGMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
 						match handle_misbehaviour_report(self, dkg_msg) {
 							Ok(()) => (),
-							Err(err) => error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+							Err(err) =>
+								error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
 						};
-					}
+					},
 
 					Err(err) => {
 						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
-					}
+					},
 				}
-			}
+			},
 		}
 	}
 
@@ -1120,10 +1145,11 @@ pub trait KeystoreExt {
 }
 
 impl<B, BE, C> KeystoreExt for DKGWorker<B, C, BE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE> {
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+{
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
 	}
