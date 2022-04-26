@@ -36,3 +36,4 @@ For most effective feedback for debugging, these commands should be used to insp
 - When switching ``next_rounds`` to ``rounds``, call ``shutdown`` on the old ``rounds`` remote to free memory
 - Refactoring
 - Improve internal routing of messages to meta handlers (will speed up performance under heavy loads)
+- Ensure unit test checks signature against the key
