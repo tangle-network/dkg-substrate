@@ -30,15 +30,15 @@ use dkg_runtime_primitives::{
 };
 use log::debug;
 use sc_client_api::Backend;
+use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
 use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
+	sync::Arc,
 };
-use std::sync::Arc;
-use sc_keystore::LocalKeystore;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -55,9 +55,8 @@ pub(crate) fn store_localkey(
 	round_id: RoundId,
 	path: Option<PathBuf>,
 	local_keystore: Option<&Arc<LocalKeystore>>,
-	sr25519_public_key: sp_core::sr25519::Public
-) -> std::io::Result<()>
-{
+	sr25519_public_key: sp_core::sr25519::Public,
+) -> std::io::Result<()> {
 	if let Some(path) = path {
 		if let Some(local_keystore) = local_keystore {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);

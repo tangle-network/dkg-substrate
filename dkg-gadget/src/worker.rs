@@ -15,7 +15,7 @@
 #![allow(clippy::collapsible_match)]
 
 use sc_keystore::LocalKeystore;
-use sp_core::{ecdsa, sr25519};
+use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
@@ -28,7 +28,6 @@ use std::{
 
 use codec::{Codec, Decode, Encode};
 
-use dkg_runtime_primitives::utils::to_slice_32;
 use futures::{future, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 
@@ -41,7 +40,6 @@ use sc_client_api::{
 use sc_network_gossip::GossipEngine;
 
 use sp_api::BlockId;
-use sp_core::crypto::AccountId32;
 use sp_runtime::traits::{Block, Header, NumberFor};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -186,7 +184,7 @@ where
 
 		// we drop the rx handle since we can call tx.subscribe() every time we need to fire up
 		// a new AsyncProto
-		let (to_async_proto, _) = tokio::sync::broadcast::channel(10);
+		let (to_async_proto, _) = tokio::sync::broadcast::channel(1024);
 		let (error_handler_tx, error_handler_rx) = tokio::sync::mpsc::unbounded_channel();
 
 		DKGWorker {
@@ -312,9 +310,9 @@ where
 		};
 
 		if stage != ProtoStageType::Queued {
-			self.rounds = Some(status_handle)
+			self.rounds = Some(status_handle.into_primary_remote())
 		} else {
-			self.next_rounds = Some(status_handle)
+			self.next_rounds = Some(status_handle.into_primary_remote())
 		}
 
 		params
@@ -929,7 +927,7 @@ where
 	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
-				if let Some(rounds) = self.rounds.as_mut() {
+				if let Some(_rounds) = self.rounds.as_mut() {
 					// route to async proto
 					if let Err(err) = self.to_async_proto.send(Arc::new(dkg_msg)) {
 						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })

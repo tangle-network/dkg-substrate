@@ -51,9 +51,9 @@ export const executeBefore = async ({ isVariable, both }: {
 	isVariable?: boolean;
 	both?: boolean;
 }) => {
-	aliceNode = startStandaloneNode('alice', {tmp: true, printLogs: false});
-	bobNode = startStandaloneNode('bob', {tmp: true, printLogs: false});
-	charlieNode = startStandaloneNode('charlie', {tmp: true, printLogs: false});
+	aliceNode = startStandaloneNode('alice', {tmp: true, printLogs: true});
+	bobNode = startStandaloneNode('bob', {tmp: true, printLogs: true});
+	charlieNode = startStandaloneNode('charlie', {tmp: true, printLogs: true});
 	localChain = new LocalChain('local', 5001, [
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),

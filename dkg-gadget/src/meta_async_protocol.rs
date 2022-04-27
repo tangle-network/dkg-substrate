@@ -245,11 +245,11 @@ pub mod meta_channel {
 		fmt::Debug,
 		future::Future,
 		marker::PhantomData,
+		path::PathBuf,
 		pin::Pin,
 		sync::{atomic::Ordering, Arc},
 		task::{Context, Poll},
 	};
-	use std::path::PathBuf;
 	use tokio::sync::{broadcast::Receiver, mpsc::error::SendError};
 
 	use crate::{
@@ -257,6 +257,7 @@ pub mod meta_channel {
 		meta_async_protocol::{
 			BatchKey, IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType, Threshold,
 		},
+		persistence::store_localkey,
 		proposal::{get_signed_proposal, make_signed_proposal},
 		storage::proposals::save_signed_proposals_in_storage,
 		utils::find_index,
@@ -277,7 +278,6 @@ pub mod meta_channel {
 	use sc_keystore::LocalKeystore;
 	use sp_arithmetic::traits::AtLeast32BitUnsigned;
 	use sp_runtime::generic::BlockId;
-	use crate::persistence::store_localkey;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -518,6 +518,7 @@ pub mod meta_channel {
 		stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 		stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
 		started_at: C,
+		is_primary_remote: bool,
 		pub(crate) round_id: RoundId,
 	}
 
@@ -544,6 +545,7 @@ pub mod meta_channel {
 				started_at: at,
 				stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
 				stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
+				is_primary_remote: false,
 				round_id,
 			}
 		}
@@ -594,17 +596,27 @@ pub mod meta_channel {
 				_ => false,
 			}
 		}
+
+		/// Setting this as the primary remote
+		pub fn into_primary_remote(mut self) -> Self {
+			self.is_primary_remote = true;
+			self
+		}
 	}
 
 	impl<C> Drop for MetaAsyncProtocolRemote<C> {
 		fn drop(&mut self) {
-			if Arc::strong_count(&self.status) == 2 {
+			if Arc::strong_count(&self.status) == 2 || self.is_primary_remote {
 				// at this point, the only instances of this arc are this one, and,
 				// presumably the one in the DKG worker. This one is asserted to be the one
 				// belonging to the async proto. Signal as complete to allow the DKG worker to move
 				// forward
-				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
-				self.set_status(MetaHandlerStatus::Complete);
+				if self.get_status() != MetaHandlerStatus::Complete {
+					log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
+					self.set_status(MetaHandlerStatus::Complete);
+				}
+
+				let _ = self.shutdown();
 			}
 		}
 	}
@@ -623,7 +635,7 @@ pub mod meta_channel {
 		pub _pd: PhantomData<BE>,
 		pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 		pub local_keystore: Option<Arc<LocalKeystore>>,
-		pub local_key_path: Option<PathBuf>
+		pub local_key_path: Option<PathBuf>,
 	}
 
 	impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
@@ -678,26 +690,24 @@ pub mod meta_channel {
 			let mut lock = self.vote_results.lock();
 			let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-			let proposal =
-				get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
-					.ok_or_else(|| DKGError::CriticalError {
-						reason: "Unable to map round to proposal (backend missing?)".to_string(),
-					})?;
-			proposals_for_this_batch.push(proposal);
+			if let Some(proposal) =
+			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key) {
+				proposals_for_this_batch.push(proposal);
 
-			if proposals_for_this_batch.len() == batch_key.len {
-				log::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
-				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
-				std::mem::drop(lock);
-				save_signed_proposals_in_storage::<B, C, BE>(
-					&self.get_authority_public_key(),
-					&self.current_validator_set,
-					&self.latest_header,
-					&self.backend,
-					proposals,
-				);
-			} else {
-				log::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				if proposals_for_this_batch.len() == batch_key.len {
+					log::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
+					let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
+					std::mem::drop(lock);
+					save_signed_proposals_in_storage::<B, C, BE>(
+						&self.get_authority_public_key(),
+						&self.current_validator_set,
+						&self.latest_header,
+						&self.backend,
+						proposals,
+					);
+				} else {
+					log::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				}
 			}
 
 			Ok(())
@@ -784,7 +794,7 @@ pub mod meta_channel {
 			message: BigInt,
 		) -> Result<(), DKGError> {
 			let mut lock = self.vote_results.lock();
-			let payload_key = unsigned_proposal.key;
+			let _payload_key = unsigned_proposal.key;
 			let signature = convert_signature(&signature_rec).ok_or_else(|| {
 				DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
 			})?;
