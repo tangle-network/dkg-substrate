@@ -1466,7 +1466,6 @@ mod tests {
 
 		let _ = res?;
 
-		let ref expected_payload = "Webb".encode();
 		// Check the signatures
 		for iface in interfaces {
 			let dkg_public_key = iface.keygen_key.lock().take().unwrap();
@@ -1474,7 +1473,7 @@ mod tests {
 			for (_batch, props) in signed_proposals {
 				for (prop, sig_recid, message) in props {
 					let hash = keccak_256(prop.data());
-					assert!(recover_ecdsa_pub_key(&hash, &prop.signature().unwrap()).map_err(|err| DKGError::CriticalError { reason: "Unable to recover ecdsa key".to_string() }).is_ok());
+					assert!(recover_ecdsa_pub_key(&hash, &prop.signature().unwrap()).is_ok());
 					assert!(verify(&sig_recid, &dkg_public_key.public_key(), &message).is_ok())
 				}
 			}
