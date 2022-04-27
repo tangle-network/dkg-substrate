@@ -249,6 +249,7 @@ pub mod meta_channel {
 		sync::{atomic::Ordering, Arc},
 		task::{Context, Poll},
 	};
+	use std::path::PathBuf;
 	use tokio::sync::{broadcast::Receiver, mpsc::error::SendError};
 
 	use crate::{
@@ -273,8 +274,10 @@ pub mod meta_channel {
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
 	use futures::FutureExt;
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
+	use sc_keystore::LocalKeystore;
 	use sp_arithmetic::traits::AtLeast32BitUnsigned;
 	use sp_runtime::generic::BlockId;
+	use crate::persistence::store_localkey;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -619,6 +622,8 @@ pub mod meta_channel {
 		pub is_genesis: bool,
 		pub _pd: PhantomData<BE>,
 		pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+		pub local_keystore: Option<Arc<LocalKeystore>>,
+		pub local_key_path: Option<PathBuf>
 	}
 
 	impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
@@ -710,11 +715,12 @@ pub mod meta_channel {
 
 		fn store_public_key(
 			&self,
-			_key: LocalKey<Secp256k1>,
-			_round_id: RoundId,
+			key: LocalKey<Secp256k1>,
+			round_id: RoundId,
 		) -> Result<(), DKGError> {
-			// NOTE: This is already done by gossip_public_key above
-			Ok(())
+			let sr_pub = self.get_sr25519_public_key();
+			store_localkey(key, round_id, self.local_key_path.clone(), self.local_keystore.as_ref(), sr_pub)
+				.map_err(|err| DKGError::GenericError { reason: err.to_string() })
 		}
 
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {

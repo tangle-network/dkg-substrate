@@ -275,6 +275,7 @@ where
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		round_id: RoundId,
+		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
 		let best_authorities = Arc::new(best_authorities);
@@ -294,7 +295,9 @@ where
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
 				current_validator_set: self.current_validator_set.clone(),
+				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
+				local_key_path,
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
@@ -323,12 +326,14 @@ where
 		authority_public_key: Public,
 		round_id: RoundId,
 		threshold: u16,
+		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			round_id,
+			local_key_path,
 			stage,
 		);
 		let err_handler_tx = self.error_handler_tx.clone();
@@ -649,6 +654,7 @@ where
 			authority_public_key,
 			round_id,
 			threshold,
+			local_key_path,
 			ProtoStageType::Genesis,
 		);
 	}
@@ -706,6 +712,7 @@ where
 			authority_public_key,
 			round_id,
 			threshold,
+			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
 	}

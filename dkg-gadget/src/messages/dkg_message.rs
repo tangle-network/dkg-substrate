@@ -49,7 +49,8 @@ where
 
 	for result in &results {
 		if let Ok(DKGResult::KeygenFinished { round_id, local_key }) = result.clone() {
-			let _ = store_localkey(*local_key, round_id, rounds.get_local_key_path(), dkg_worker);
+			let sr_pub = dkg_worker.get_sr25519_public_key();
+			let _ = store_localkey(*local_key, round_id, rounds.get_local_key_path(), dkg_worker.local_keystore.as_ref(), sr_pub);
 		}
 	}
 

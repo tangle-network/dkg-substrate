@@ -37,6 +37,8 @@ use std::{
 	io::{Error, ErrorKind},
 	path::PathBuf,
 };
+use std::sync::Arc;
+use sc_keystore::LocalKeystore;
 
 pub struct DKGPersistenceState {
 	pub initial_check: bool,
@@ -48,23 +50,19 @@ impl DKGPersistenceState {
 	}
 }
 
-pub(crate) fn store_localkey<B, C, BE>(
+pub(crate) fn store_localkey(
 	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
 	path: Option<PathBuf>,
-	worker: &mut DKGWorker<B, C, BE>,
+	local_keystore: Option<&Arc<LocalKeystore>>,
+	sr25519_public_key: sp_core::sr25519::Public
 ) -> std::io::Result<()>
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if let Some(path) = path {
-		if let Some(local_keystore) = worker.local_keystore.clone() {
+		if let Some(local_keystore) = local_keystore {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
-			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-				&Public::try_from(&worker.get_sr25519_public_key().0[..])
+			let key_pair = local_keystore.key_pair::<AppPair>(
+				&Public::try_from(&sr25519_public_key.0[..])
 					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 			);
 			if let Ok(Some(key_pair)) = key_pair {
