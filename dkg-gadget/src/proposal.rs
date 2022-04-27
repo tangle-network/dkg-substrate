@@ -87,7 +87,10 @@ where
 }
 
 /// make an unsigned proposal a signed one
-pub(crate) fn make_signed_proposal(kind: ProposalKind, finished_round: DKGSignedPayload) -> Option<Proposal> {
+pub(crate) fn make_signed_proposal(
+	kind: ProposalKind,
+	finished_round: DKGSignedPayload,
+) -> Option<Proposal> {
 	Some(Proposal::Signed {
 		kind,
 		data: finished_round.payload,

@@ -211,7 +211,10 @@ pub mod meta_channel {
 	use atomic::Atomic;
 	use codec::Encode;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, UnsignedProposal, KEYGEN_TIMEOUT, ProposalKind};
+	use dkg_runtime_primitives::{
+		AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, ProposalKind,
+		UnsignedProposal, KEYGEN_TIMEOUT,
+	};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -253,7 +256,7 @@ pub mod meta_channel {
 		meta_async_protocol::{
 			BatchKey, IncomingAsyncProtocolWrapper, PartyIndex, ProtocolType, Threshold,
 		},
-		proposal::get_signed_proposal,
+		proposal::{get_signed_proposal, make_signed_proposal},
 		storage::proposals::save_signed_proposals_in_storage,
 		utils::find_index,
 		worker::{AsyncProtocolParameters, DKGWorker, KeystoreExt},
@@ -272,7 +275,6 @@ pub mod meta_channel {
 	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 	use sp_arithmetic::traits::AtLeast32BitUnsigned;
 	use sp_runtime::generic::BlockId;
-	use crate::proposal::make_signed_proposal;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -466,7 +468,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
-			message: BigInt
+			message: BigInt,
 		) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
 		fn debug_only_stop_after_first_batch(&self) -> bool {
@@ -652,7 +654,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
-			_message: BigInt
+			_message: BigInt,
 		) -> Result<(), DKGError> {
 			// Call worker.rs: handle_finished_round -> Proposal
 			// aggregate Proposal into Vec<Proposal>
@@ -739,7 +741,7 @@ pub mod meta_channel {
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
 		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>,
-		pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>
+		pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 	}
 
 	impl BlockChainIface for TestDummyIface {
@@ -769,7 +771,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
-			message: BigInt
+			message: BigInt,
 		) -> Result<(), DKGError> {
 			let mut lock = self.vote_results.lock();
 			let payload_key = unsigned_proposal.key;
@@ -854,6 +856,7 @@ pub mod meta_channel {
 
 					while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
 						params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
+						let count_in_batch = unsigned_proposals.len();
 						let batch_key = params.get_next_batch_key(&unsigned_proposals);
 						let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
 
@@ -880,7 +883,8 @@ pub mod meta_channel {
 							// each batch of unsigned proposals concurrently
 							futures.try_collect::<()>().await.map(|_| ())?;
 							log::info!(
-								"Concluded all Offline->Voting stages for this batch for this node"
+								"Concluded all Offline->Voting stages ({} total) for this batch for this node",
+								count_in_batch
 							);
 
 							if params.blockchain_iface.debug_only_stop_after_first_batch() {
@@ -939,8 +943,10 @@ pub mod meta_channel {
 			local_key: LocalKey<Secp256k1>,
 			threshold: u16,
 			batch_key: BatchKey,
-		) -> Result<MetaAsyncProtocolHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError>
-		{
+		) -> Result<
+			MetaAsyncProtocolHandler<'a, <OfflineStage as StateMachineIface>::Return>,
+			DKGError,
+		> {
 			let channel_type = ProtocolType::Offline {
 				unsigned_proposal: unsigned_proposal.clone(),
 				i,
@@ -1129,7 +1135,9 @@ pub mod meta_channel {
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 				log::info!("RD2");
-				verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote { reason: "Verification of voting stage failed".to_string() })?;
+				verify(&signature, offline_stage_pub_key, &message).map_err(|_err| {
+					DKGError::Vote { reason: "Verification of voting stage failed".to_string() }
+				})?;
 				log::info!("RD3");
 
 				params.blockchain_iface.process_vote_result(
@@ -1137,7 +1145,7 @@ pub mod meta_channel {
 					unsigned_proposal,
 					round_id,
 					batch_key,
-					message
+					message,
 				)
 			});
 
@@ -1302,23 +1310,25 @@ mod tests {
 	};
 
 	use crate::meta_async_protocol::meta_channel::MetaAsyncProtocolRemote;
+	use codec::Encode;
 	use dkg_primitives::{types::DKGError, ProposalNonce};
-	use dkg_runtime_primitives::{crypto, crypto::AuthorityId, AuthoritySet, DKGPayloadKey, Proposal, ProposalKind, TypedChainId, UnsignedProposal, KEY_TYPE, keccak_256};
+	use dkg_runtime_primitives::{
+		crypto, crypto::AuthorityId, keccak_256, utils::recover_ecdsa_pub_key, AuthoritySet,
+		DKGPayloadKey, Proposal, ProposalKind, TypedChainId, UnsignedProposal, KEY_TYPE,
+	};
 	use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 	use itertools::Itertools;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 	use parking_lot::lock_api::{Mutex, RwLock};
 	use rstest::{fixture, rstest};
 	use sc_keystore::LocalKeystore;
 	use sc_network_test::Block;
+	use sp_core::ByteArray;
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 	use sp_runtime::traits::NumberFor;
 	use std::{collections::HashMap, sync::Arc, time::Duration};
-	use codec::Encode;
-	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
-	use sp_core::ByteArray;
 	use tokio::sync::mpsc::UnboundedReceiver;
 	use tokio_stream::wrappers::IntervalStream;
-	use dkg_runtime_primitives::utils::recover_ecdsa_pub_key;
 
 	// inserts into ks, returns public
 	fn generate_new(ks: &dyn SyncCryptoStore, kr: Keyring) -> crypto::Public {
@@ -1385,7 +1395,7 @@ mod tests {
 				best_authorities: Arc::new(authority_set.clone()),
 				authority_public_key: Arc::new(authority_public_key.clone()),
 				vote_results: Arc::new(Mutex::new(HashMap::new())),
-				keygen_key: Arc::new(Mutex::new(None))
+				keygen_key: Arc::new(Mutex::new(None)),
 			};
 
 			interfaces.push(test_iface.clone());

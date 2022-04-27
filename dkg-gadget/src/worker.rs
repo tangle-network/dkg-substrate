@@ -77,7 +77,9 @@ use crate::{
 use crate::{
 	messages::public_key_gossip::handle_public_key_broadcast,
 	meta_async_protocol::{
-		meta_channel::{BlockChainIface, DKGIface, MetaAsyncProtocolRemote, MetaAsyncProtocolHandler},
+		meta_channel::{
+			BlockChainIface, DKGIface, MetaAsyncProtocolHandler, MetaAsyncProtocolRemote,
+		},
 		BatchKey, SignedMessageBroadcastHandle,
 	},
 };
