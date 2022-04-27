@@ -211,10 +211,7 @@ pub mod meta_channel {
 	use atomic::Atomic;
 	use codec::Encode;
 	use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-	use dkg_runtime_primitives::{
-		AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, UnsignedProposal,
-		KEYGEN_TIMEOUT,
-	};
+	use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, UnsignedProposal, KEYGEN_TIMEOUT, ProposalKind};
 	use futures::{
 		channel::mpsc::{UnboundedReceiver, UnboundedSender},
 		stream::FuturesUnordered,
@@ -272,8 +269,10 @@ pub mod meta_channel {
 	};
 	use dkg_runtime_primitives::crypto::{AuthorityId, Public};
 	use futures::FutureExt;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 	use sp_arithmetic::traits::AtLeast32BitUnsigned;
 	use sp_runtime::generic::BlockId;
+	use crate::proposal::make_signed_proposal;
 
 	pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 	impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -737,7 +736,8 @@ pub mod meta_channel {
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
-		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<SignatureRecid>>>>,
+		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<Proposal>>>>,
+		pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>
 	}
 
 	impl BlockChainIface for TestDummyIface {
@@ -764,12 +764,25 @@ pub mod meta_channel {
 		fn process_vote_result(
 			&self,
 			signature: SignatureRecid,
-			_unsigned_proposal: UnsignedProposal,
-			_round_id: RoundId,
+			unsigned_proposal: UnsignedProposal,
+			round_id: RoundId,
 			batch_key: BatchKey,
 		) -> Result<(), DKGError> {
 			let mut lock = self.vote_results.lock();
-			lock.entry(batch_key).or_default().push(signature);
+			let payload_key = unsigned_proposal.key;
+			let signature = convert_signature(&signature).ok_or_else(|| {
+				DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
+			})?;
+
+			let finished_round = DKGSignedPayload {
+				key: round_id.encode(),
+				payload: "Webb".encode(),
+				signature: signature.encode(),
+			};
+
+			let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
+			lock.entry(batch_key).or_default().push(prop);
+
 			Ok(())
 		}
 
@@ -782,7 +795,8 @@ pub mod meta_channel {
 			true
 		}
 
-		fn store_public_key(&self, _key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
+		fn store_public_key(&self, key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
+			*self.keygen_key.lock() = Some(key);
 			Ok(())
 		}
 
@@ -870,7 +884,7 @@ pub mod meta_channel {
 								return Ok(())
 							}
 						} else {
-							//log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
+							log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
 							return Ok(())
 						}
 					}
@@ -1041,8 +1055,11 @@ pub mod meta_channel {
 					reason: "The unsigned proposal for this stage is invalid".to_string(),
 				})?;
 
+				let message = BigInt::from_bytes(&hash_of_proposal);
+				let ref offline_stage_pub_key = completed_offline_stage.public_key().clone();
+
 				let (signing, partial_signature) =
-					SignManual::new(BigInt::from_bytes(&hash_of_proposal), completed_offline_stage)
+					SignManual::new(message.clone(), completed_offline_stage)
 						.map_err(|err| DKGError::Vote { reason: err.to_string() })?;
 
 				let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
@@ -1109,6 +1126,8 @@ pub mod meta_channel {
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 				log::info!("RD2");
+				verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote { reason: "Verification of voting stage failed".to_string() })?;
+				log::info!("RD3");
 
 				params.blockchain_iface.process_vote_result(
 					signature,
@@ -1121,7 +1140,6 @@ pub mod meta_channel {
 			Ok(MetaAsyncProtocolHandler { protocol })
 		}
 
-		// TODO: consider
 		fn get_party_round_id<B: BlockChainIface + 'a>(
 			params: &AsyncProtocolParameters<B>,
 		) -> (Option<u16>, AuthoritySetId, Public) {
@@ -1281,10 +1299,7 @@ mod tests {
 
 	use crate::meta_async_protocol::meta_channel::MetaAsyncProtocolRemote;
 	use dkg_primitives::{types::DKGError, ProposalNonce};
-	use dkg_runtime_primitives::{
-		crypto, crypto::AuthorityId, AuthoritySet, DKGPayloadKey, Proposal, ProposalKind,
-		TypedChainId, UnsignedProposal, KEY_TYPE,
-	};
+	use dkg_runtime_primitives::{crypto, crypto::AuthorityId, AuthoritySet, DKGPayloadKey, Proposal, ProposalKind, TypedChainId, UnsignedProposal, KEY_TYPE, keccak_256};
 	use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 	use itertools::Itertools;
 	use parking_lot::lock_api::{Mutex, RwLock};
@@ -1294,8 +1309,11 @@ mod tests {
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 	use sp_runtime::traits::NumberFor;
 	use std::{collections::HashMap, sync::Arc, time::Duration};
+	use codec::Encode;
+	use sp_core::ByteArray;
 	use tokio::sync::mpsc::UnboundedReceiver;
 	use tokio_stream::wrappers::IntervalStream;
+	use dkg_runtime_primitives::utils::recover_ecdsa_pub_key;
 
 	// inserts into ks, returns public
 	fn generate_new(ks: &dyn SyncCryptoStore, kr: Keyring) -> crypto::Public {
@@ -1348,6 +1366,7 @@ mod tests {
 		let (to_faux_net_tx, mut to_faux_net_rx) = tokio::sync::broadcast::channel(4096);
 
 		let async_protocols = FuturesUnordered::new();
+		let mut interfaces = vec![];
 
 		for (idx, authority_public_key) in authority_set.iter().enumerate() {
 			let party_ind =
@@ -1361,7 +1380,10 @@ mod tests {
 				best_authorities: Arc::new(authority_set.clone()),
 				authority_public_key: Arc::new(authority_public_key.clone()),
 				vote_results: Arc::new(Mutex::new(HashMap::new())),
+				keygen_key: Arc::new(Mutex::new(None))
 			};
+
+			interfaces.push(test_iface.clone());
 
 			// NumberFor::<Block>::from(0u32)
 			let handle = MetaAsyncProtocolRemote::new(0u32, 0);
@@ -1432,10 +1454,27 @@ mod tests {
 			unsigned_proposal_broadcaster,
 		);
 
-		tokio::select! {
+		let res = tokio::select! {
 			res0 = async_protocols.try_collect::<()>() => res0,
 			res1 = aux_handler => res1.map(|_| ())
+		};
+
+		let _ = res?;
+
+		let ref expected_payload = "Webb".encode();
+		// Check the signatures
+		for iface in interfaces {
+			let signed_proposals = iface.vote_results.lock().clone();
+
+			for (_batch, props) in signed_proposals {
+				for prop in props {
+					let hash = keccak_256(prop.data());
+					assert!(recover_ecdsa_pub_key(&hash, &prop.signature().unwrap()).map_err(|err| DKGError::CriticalError { reason: "Unable to recover ecdsa key".to_string() }).is_ok());
+				}
+			}
 		}
+
+		Ok(())
 	}
 
 	fn create_async_proto_inner<'a, B: BlockChainIface + Clone + 'a>(
