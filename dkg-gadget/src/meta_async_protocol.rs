@@ -466,6 +466,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
+			message: BigInt
 		) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
 		fn debug_only_stop_after_first_batch(&self) -> bool {
@@ -651,6 +652,7 @@ pub mod meta_channel {
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
+			_message: BigInt
 		) -> Result<(), DKGError> {
 			// Call worker.rs: handle_finished_round -> Proposal
 			// aggregate Proposal into Vec<Proposal>
@@ -736,7 +738,7 @@ pub mod meta_channel {
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
-		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<Proposal>>>>,
+		pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>,
 		pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>
 	}
 
@@ -763,14 +765,15 @@ pub mod meta_channel {
 
 		fn process_vote_result(
 			&self,
-			signature: SignatureRecid,
+			signature_rec: SignatureRecid,
 			unsigned_proposal: UnsignedProposal,
 			round_id: RoundId,
 			batch_key: BatchKey,
+			message: BigInt
 		) -> Result<(), DKGError> {
 			let mut lock = self.vote_results.lock();
 			let payload_key = unsigned_proposal.key;
-			let signature = convert_signature(&signature).ok_or_else(|| {
+			let signature = convert_signature(&signature_rec).ok_or_else(|| {
 				DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
 			})?;
 
@@ -781,7 +784,7 @@ pub mod meta_channel {
 			};
 
 			let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
-			lock.entry(batch_key).or_default().push(prop);
+			lock.entry(batch_key).or_default().push((prop, signature_rec, message));
 
 			Ok(())
 		}
@@ -1134,6 +1137,7 @@ pub mod meta_channel {
 					unsigned_proposal,
 					round_id,
 					batch_key,
+					message
 				)
 			});
 
@@ -1310,6 +1314,7 @@ mod tests {
 	use sp_runtime::traits::NumberFor;
 	use std::{collections::HashMap, sync::Arc, time::Duration};
 	use codec::Encode;
+	use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 	use sp_core::ByteArray;
 	use tokio::sync::mpsc::UnboundedReceiver;
 	use tokio_stream::wrappers::IntervalStream;
@@ -1464,12 +1469,13 @@ mod tests {
 		let ref expected_payload = "Webb".encode();
 		// Check the signatures
 		for iface in interfaces {
+			let dkg_public_key = iface.keygen_key.lock().take().unwrap();
 			let signed_proposals = iface.vote_results.lock().clone();
-
 			for (_batch, props) in signed_proposals {
-				for prop in props {
+				for (prop, sig_recid, message) in props {
 					let hash = keccak_256(prop.data());
 					assert!(recover_ecdsa_pub_key(&hash, &prop.signature().unwrap()).map_err(|err| DKGError::CriticalError { reason: "Unable to recover ecdsa key".to_string() }).is_ok());
+					assert!(verify(&sig_recid, &dkg_public_key.public_key(), &message).is_ok())
 				}
 			}
 		}
