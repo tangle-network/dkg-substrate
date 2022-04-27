@@ -719,8 +719,12 @@ pub mod meta_channel {
 			round_id: RoundId,
 		) -> Result<(), DKGError> {
 			let sr_pub = self.get_sr25519_public_key();
-			store_localkey(key, round_id, self.local_key_path.clone(), self.local_keystore.as_ref(), sr_pub)
-				.map_err(|err| DKGError::GenericError { reason: err.to_string() })
+			if let Some(path) = self.local_key_path.clone() {
+				store_localkey(key, round_id, Some(path), self.local_keystore.as_ref(), sr_pub)
+					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+			}
+
+			Ok(())
 		}
 
 		fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {
