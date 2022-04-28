@@ -33,9 +33,6 @@ use crate::{meta_async_protocol::meta_channel::BlockChainIface, worker::AsyncPro
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
 use tokio_stream::wrappers::BroadcastStream;
 
-pub type SignedMessageBroadcastHandle =
-	tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>;
-
 pub struct IncomingAsyncProtocolWrapper<T, B> {
 	pub receiver: BroadcastStream<T>,
 	round_id: RoundId,
@@ -474,9 +471,6 @@ pub mod meta_channel {
 			message: BigInt,
 		) -> Result<(), DKGError>;
 		fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
-		fn debug_only_stop_after_first_batch(&self) -> bool {
-			false
-		}
 		fn store_public_key(
 			&self,
 			key: LocalKey<Secp256k1>,
@@ -512,9 +506,12 @@ pub mod meta_channel {
 	#[derive(Clone)]
 	pub struct MetaAsyncProtocolRemote<C> {
 		status: Arc<Atomic<MetaHandlerStatus>>,
-		unsigned_proposals_tx: tokio::sync::mpsc::UnboundedSender<Vec<UnsignedProposal>>,
+		unsigned_proposals_tx: tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>,
 		unsigned_proposals_rx:
-			Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Vec<UnsignedProposal>>>>>,
+			Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Option<Vec<UnsignedProposal>>>>>>,
+		broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+		start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+		start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 		stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 		stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
 		started_at: C,
@@ -537,12 +534,17 @@ pub mod meta_channel {
 			let (unsigned_proposals_tx, unsigned_proposals_rx) =
 				tokio::sync::mpsc::unbounded_channel();
 			let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
+			let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
+			let (start_tx, start_rx) = tokio::sync::oneshot::channel();
 
 			Self {
 				status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
 				unsigned_proposals_tx,
 				unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
+				broadcaster,
 				started_at: at,
+				start_tx: Arc::new(Mutex::new(Some(start_tx))),
+				start_rx: Arc::new(Mutex::new(Some(start_rx))),
 				stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
 				stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
 				is_primary_remote: false,
@@ -573,8 +575,31 @@ pub mod meta_channel {
 		pub fn submit_unsigned_proposals(
 			&self,
 			unsigned_proposals: Vec<UnsignedProposal>,
-		) -> Result<(), SendError<Vec<UnsignedProposal>>> {
-			self.unsigned_proposals_tx.send(unsigned_proposals)
+		) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
+			self.unsigned_proposals_tx.send(Some(unsigned_proposals))
+		}
+
+		pub fn end_unsigned_proposals(&self) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
+			self.unsigned_proposals_tx.send(None)
+		}
+
+		pub fn deliver_message(&self, msg: Arc<SignedDKGMessage<Public>>) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
+			self.broadcaster.send(msg).map(|_| ())
+		}
+
+		/// Determines if there are any active listeners
+		pub fn is_receiving(&self) -> bool {
+			self.broadcaster.receiver_count() != 0
+		}
+
+		/// Stops the execution of the meta handler, including all internal asynchronous subroutines
+		pub fn start(&self) -> Result<(), DKGError> {
+			let tx = self.start_tx.lock().take().ok_or_else(|| DKGError::GenericError {
+				reason: "Start has already been called".to_string(),
+			})?;
+			tx.send(()).map_err(|_| DKGError::GenericError {
+				reason: "Unable to send start signal (already shut down?)".to_string(),
+			})
 		}
 
 		/// Stops the execution of the meta handler, including all internal asynchronous subroutines
@@ -756,7 +781,7 @@ pub mod meta_channel {
 
 	#[derive(Clone)]
 	pub struct TestDummyIface {
-		pub sender: tokio::sync::broadcast::Sender<SignedDKGMessage<Public>>,
+		pub sender: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
 		pub best_authorities: Arc<Vec<Public>>,
 		pub authority_public_key: Arc<Public>,
 		// key is party_index, hash of data. Needed especially for local unit tests
@@ -816,10 +841,6 @@ pub mod meta_channel {
 			Ok(())
 		}
 
-		fn debug_only_stop_after_first_batch(&self) -> bool {
-			true
-		}
-
 		fn store_public_key(&self, key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
 			*self.keygen_key.lock() = Some(key);
 			Ok(())
@@ -850,6 +871,12 @@ pub mod meta_channel {
 						.to_string(),
 				})?;
 
+			let start_rx =
+				status_handle.start_rx.lock().take().ok_or_else(|| DKGError::GenericError {
+					reason: "execute called twice with the same AsyncProtocol Parameters"
+						.to_string(),
+				})?;
+
 			let protocol = async move {
 				let params = params;
 				let (keygen_id, _b, _c) = Self::get_party_round_id(&params);
@@ -857,6 +884,9 @@ pub mod meta_channel {
 					log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
 					let t = threshold;
 					let n = params.best_authorities.len() as u16;
+					// wait for the start signal
+					start_rx.await.map_err(|err| DKGError::StartKeygen { reason: err.to_string() })?;
+
 					params.handle.set_status(MetaHandlerStatus::Keygen);
 
 					// causal flow: create 1 keygen then, fan-out to unsigned_proposals.len()
@@ -874,7 +904,7 @@ pub mod meta_channel {
 							}
 						})?;
 
-					while let Some(unsigned_proposals) = unsigned_proposals_rx.recv().await {
+					while let Some(Some(unsigned_proposals)) = unsigned_proposals_rx.recv().await {
 						params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 						let count_in_batch = unsigned_proposals.len();
 						let batch_key = params.get_next_batch_key(&unsigned_proposals);
@@ -906,10 +936,6 @@ pub mod meta_channel {
 								"Concluded all Offline->Voting stages ({} total) for this batch for this node",
 								count_in_batch
 							);
-
-							if params.blockchain_iface.debug_only_stop_after_first_batch() {
-								return Ok(())
-							}
 						} else {
 							log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
 							return Ok(())
@@ -973,7 +999,7 @@ pub mod meta_channel {
 				s_l: s_l.clone(),
 				local_key: local_key.clone(),
 			};
-			let early_handle = params.signed_message_broadcast_handle.subscribe();
+			let early_handle = params.handle.broadcaster.subscribe();
 			MetaAsyncProtocolHandler::new_inner(
 				(unsigned_proposal, i, early_handle, threshold, batch_key),
 				OfflineStage::new(i, s_l, local_key)
@@ -1284,7 +1310,7 @@ pub mod meta_channel {
 		{
 			Box::pin(async move {
 				// the below wrapper will map signed messages into unsigned messages
-				let incoming = params.signed_message_broadcast_handle.subscribe();
+				let incoming = params.handle.broadcaster.subscribe();
 				let mut incoming_wrapper =
 					IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
 
@@ -1322,7 +1348,6 @@ mod tests {
 		keyring::Keyring,
 		meta_async_protocol::{
 			meta_channel::{BlockChainIface, MetaAsyncProtocolHandler, TestDummyIface},
-			SignedMessageBroadcastHandle,
 		},
 		utils::find_index,
 		worker::AsyncProtocolParameters,
@@ -1330,7 +1355,7 @@ mod tests {
 	};
 
 	use crate::meta_async_protocol::meta_channel::MetaAsyncProtocolRemote;
-	use codec::Encode;
+
 	use dkg_primitives::{types::DKGError, ProposalNonce};
 	use dkg_runtime_primitives::{
 		crypto, crypto::AuthorityId, keccak_256, utils::recover_ecdsa_pub_key, AuthoritySet,
@@ -1342,12 +1367,12 @@ mod tests {
 	use parking_lot::lock_api::{Mutex, RwLock};
 	use rstest::{fixture, rstest};
 	use sc_keystore::LocalKeystore;
-	use sc_network_test::Block;
-	use sp_core::ByteArray;
+
+
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
-	use sp_runtime::traits::NumberFor;
+
 	use std::{collections::HashMap, sync::Arc, time::Duration};
-	use tokio::sync::mpsc::UnboundedReceiver;
+
 	use tokio_stream::wrappers::IntervalStream;
 
 	// inserts into ks, returns public
@@ -1392,13 +1417,9 @@ mod tests {
 		let mut validators = AuthoritySet::empty();
 		validators.authorities = authority_set.clone();
 
-		let (signed_message_receiver_tx, signed_message_receiver_rx) =
-			tokio::sync::broadcast::channel(4096);
-		std::mem::drop(signed_message_receiver_rx);
+		let ref mut handles = Vec::with_capacity(num_parties as usize);
 
-		let mut handles = Vec::with_capacity(num_parties as usize);
-
-		let (to_faux_net_tx, mut to_faux_net_rx) = tokio::sync::broadcast::channel(4096);
+		let (to_faux_net_tx, mut to_faux_net_rx) = tokio::sync::mpsc::unbounded_channel();
 
 		let async_protocols = FuturesUnordered::new();
 		let mut interfaces = vec![];
@@ -1427,7 +1448,6 @@ mod tests {
 				test_iface.clone(),
 				threshold,
 				dkg_keystore.clone(),
-				signed_message_receiver_tx.clone(),
 				validators.clone(),
 				authority_set.clone(),
 				authority_public_key.clone(),
@@ -1435,23 +1455,30 @@ mod tests {
 			);
 
 			async_protocols.push(async_protocol);
+			// start to immediately begin keygen
+			handle.start().unwrap();
 			handles.push(handle);
 		}
 
+		let handles0 = handles.clone();
 		// forward messages sent from async protocol to rest of network
 		let outbound_to_broadcast_faux_net = async move {
-			while let Ok(outbound_msg) = to_faux_net_rx.recv().await {
+			while let Some(outbound_msg) = to_faux_net_rx.recv().await {
+				let outbound_msg = Arc::new(outbound_msg);
 				log::info!(target: "dkg", "Forwarding packet from {:?} to signed message receiver", outbound_msg.msg.payload.async_proto_only_get_sender_id().unwrap());
-				let count = signed_message_receiver_tx
-					.send(Arc::new(outbound_msg))
-					.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
-				log::info!(target: "dkg", "Forwarded to {} receivers", count);
+				for handle in handles0.iter() {
+					if let Err(err) = handle.deliver_message(outbound_msg.clone()) {
+						log::warn!(target: "dkg", "Error delivering message: {}", err.to_string())
+					}
+				}
 			}
 
 			Err::<(), _>(DKGError::CriticalError { reason: "to_faux_net_rx died".to_string() })
 		};
 
+		let handles1 = handles.clone();
 		let unsigned_proposal_broadcaster = async move {
+
 			let mut ticks =
 				IntervalStream::new(tokio::time::interval(Duration::from_millis(1000))).take(1);
 			while let Some(_v) = ticks.next().await {
@@ -1468,7 +1495,7 @@ mod tests {
 					})
 					.collect::<Vec<UnsignedProposal>>();
 
-				for handle in handles.iter() {
+				for handle in handles1.iter() {
 					handle
 						.submit_unsigned_proposals(unsigned_proposals.clone())
 						.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
@@ -1476,8 +1503,9 @@ mod tests {
 			}
 
 			log::info!(target: "dkg", "Done broadcasting UnsignedProposal batches ...");
-			// drop to allow the meta handler's receiver loop to end
-			std::mem::drop(handles);
+			for handle in handles.iter() {
+				let _ = handle.end_unsigned_proposals();
+			}
 
 			Ok(())
 		};
@@ -1516,7 +1544,6 @@ mod tests {
 		b: B,
 		threshold: u16,
 		keystore: DKGKeystore,
-		signed_message_receiver: SignedMessageBroadcastHandle,
 		validator_set: AuthoritySet<crypto::Public>,
 		best_authorities: Vec<crypto::Public>,
 		authority_public_key: crypto::Public,
@@ -1526,7 +1553,6 @@ mod tests {
 			round_id: 0, // default for unit tests
 			blockchain_iface: Arc::new(b),
 			keystore,
-			signed_message_broadcast_handle: signed_message_receiver,
 			current_validator_set: Arc::new(RwLock::new(validator_set)),
 			best_authorities: Arc::new(best_authorities),
 			authority_public_key: Arc::new(authority_public_key),

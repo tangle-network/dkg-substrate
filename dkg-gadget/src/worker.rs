@@ -53,20 +53,19 @@ use crate::storage::clear::listen_and_clear_offchain_storage;
 
 use dkg_primitives::{
 	types::{DKGError, DKGMisbehaviourMessage, RoundId},
-	AuthoritySetId, DKGReport, MisbehaviourType, Proposal, GOSSIP_MESSAGE_RESENDING_LIMIT,
+	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, TypedChainId, UnsignedProposal,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, UnsignedProposal,
 	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
-	proposal::get_signed_proposal,
 	types::dkg_topic,
 	utils::{find_authorities_change, get_key_path},
 	Client,
@@ -78,11 +77,11 @@ use crate::{
 		meta_channel::{
 			BlockChainIface, DKGIface, MetaAsyncProtocolHandler, MetaAsyncProtocolRemote,
 		},
-		BatchKey, SignedMessageBroadcastHandle,
+		BatchKey
 	},
 };
 use dkg_primitives::{
-	types::{DKGMessage, DKGMsgPayload, DKGPayloadKey, DKGSignedPayload, SignedDKGMessage},
+	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
@@ -114,7 +113,7 @@ where
 	C: Client<B, BE>,
 {
 	pub client: Arc<C>,
-	pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+	//pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
@@ -184,12 +183,11 @@ where
 
 		// we drop the rx handle since we can call tx.subscribe() every time we need to fire up
 		// a new AsyncProto
-		let (to_async_proto, _) = tokio::sync::broadcast::channel(1024);
+		// let (to_async_proto, _) = tokio::sync::broadcast::channel(1024);
 		let (error_handler_tx, error_handler_rx) = tokio::sync::mpsc::unbounded_channel();
 
 		DKGWorker {
 			client: client.clone(),
-			to_async_proto,
 			backend,
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
@@ -220,7 +218,6 @@ where
 pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 	pub blockchain_iface: Arc<BCIface>,
 	pub keystore: DKGKeystore,
-	pub signed_message_broadcast_handle: SignedMessageBroadcastHandle,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
@@ -242,7 +239,6 @@ impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 			round_id: self.round_id,
 			blockchain_iface: self.blockchain_iface.clone(),
 			keystore: self.keystore.clone(),
-			signed_message_broadcast_handle: self.signed_message_broadcast_handle.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
@@ -275,7 +271,7 @@ where
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
-	) -> AsyncProtocolParameters<DKGIface<B, BE, C>> {
+	) -> Result<AsyncProtocolParameters<DKGIface<B, BE, C>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -301,7 +297,6 @@ where
 			}),
 			round_id,
 			keystore: self.key_store.clone(),
-			signed_message_broadcast_handle: self.to_async_proto.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
 			authority_public_key,
@@ -309,13 +304,16 @@ where
 			handle: status_handle.clone(),
 		};
 
+		// allow either type to immediately begin keygen
+		status_handle.start()?;
+
 		if stage != ProtoStageType::Queued {
 			self.rounds = Some(status_handle.into_primary_remote())
 		} else {
 			self.next_rounds = Some(status_handle.into_primary_remote())
 		}
 
-		params
+		Ok(params)
 	}
 
 	fn spawn_async_protocol(
@@ -327,38 +325,43 @@ where
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
-		let async_proto_params = self.generate_async_proto_params(
+		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			round_id,
 			local_key_path,
 			stage,
-		);
-		let err_handler_tx = self.error_handler_tx.clone();
+		) {
+			Ok(async_proto_params) => {
+				let err_handler_tx = self.error_handler_tx.clone();
 
-		match MetaAsyncProtocolHandler::setup(async_proto_params, threshold) {
-			Ok(meta_handler) => {
-				let task = async move {
-					match meta_handler.await {
-						Ok(_) => {
-							log::info!(target: "dkg", "The meta handler has executed successfully");
-						},
+				match MetaAsyncProtocolHandler::setup(async_proto_params, threshold) {
+					Ok(meta_handler) => {
+						let task = async move {
+							match meta_handler.await {
+								Ok(_) => {
+									log::info!(target: "dkg", "The meta handler has executed successfully");
+								},
 
-						Err(err) => {
-							error!(target: "dkg", "Error executing meta handler {:?}", &err);
-							let _ = err_handler_tx.send(err);
-						},
-					}
-				};
+								Err(err) => {
+									error!(target: "dkg", "Error executing meta handler {:?}", &err);
+									let _ = err_handler_tx.send(err);
+								},
+							}
+						};
 
-				// spawn on parallel thread
-				let _handle = tokio::task::spawn(task);
-			},
+						// spawn on parallel thread
+						let _handle = tokio::task::spawn(task);
+					},
 
-			Err(err) => {
-				error!(target: "dkg", "Error starting meta handler {:?}", &err);
-				self.handle_dkg_error(err);
-			},
+					Err(err) => {
+						error!(target: "dkg", "Error starting meta handler {:?}", &err);
+						self.handle_dkg_error(err);
+					},
+				}
+			}
+
+			Err(err) => self.handle_dkg_error(err)
 		}
 	}
 
@@ -927,10 +930,22 @@ where
 	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
-				if let Some(_rounds) = self.rounds.as_mut() {
+				let is_keygen_type = matches!(&dkg_msg.msg.payload, DKGMsgPayload::Keygen(..));
+				let msg = Arc::new(dkg_msg);
+				if let Some(rounds) = self.rounds.as_mut() {
 					// route to async proto
-					if let Err(err) = self.to_async_proto.send(Arc::new(dkg_msg)) {
+					if let Err(err) = rounds.deliver_message(msg.clone()) {
 						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+					}
+				}
+
+				// only route keygen types to the next_rounds
+				if is_keygen_type {
+					if let Some(rounds) = self.next_rounds.as_mut() {
+						// route to async proto
+						if let Err(err) = rounds.deliver_message(msg) {
+							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+						}
 					}
 				}
 			},
@@ -1036,17 +1051,6 @@ where
 		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
-	fn handle_finished_round(&mut self, finished_round: DKGSignedPayload) -> Option<Proposal> {
-		trace!(target: "dkg", "Got finished round {:?}", finished_round);
-		let decoded_key = <(TypedChainId, DKGPayloadKey)>::decode(&mut &finished_round.key[..]);
-		let payload_key = match decoded_key {
-			Ok((_chain_id, key)) => key,
-			Err(_err) => return None,
-		};
-
-		get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
-	}
-
 	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
 		if let Some(rounds) = self.rounds.as_ref() {
 			let at: BlockId<B> = BlockId::hash(header.hash());
@@ -1111,7 +1115,7 @@ where
 
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						if self.to_async_proto.receiver_count() == 0 || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
+						if self.rounds.is_none() || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
 							self.msg_cache.push(dkg_msg);
 						} else {
 							let msgs = self.msg_cache.drain(..).collect::<Vec<_>>();
