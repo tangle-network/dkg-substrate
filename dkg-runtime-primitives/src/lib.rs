@@ -202,6 +202,13 @@ impl UnsignedProposal {
 			None
 		}
 	}
+
+	pub fn data(&self) -> Vec<u8> {
+		match &self.proposal {
+			Proposal::Unsigned { data, .. } => data.clone(),
+			Proposal::Signed { data, .. } => data.clone(),
+		}
+	}
 }
 
 sp_api::decl_runtime_apis! {

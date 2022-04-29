@@ -437,9 +437,11 @@ pub mod meta_channel {
 			unsigned_proposal: Self::AdditionalReturnParam,
 		) -> Result<(), DKGError> {
 			log::info!(target: "dkg", "Completed offline stage successfully!");
-			// take the completed offline stage, and, immediately execute the corresponding voting
+			// Take the completed offline stage and immediately execute the corresponding voting
 			// stage (this will allow parallelism between offline stages executing across the
-			// network) NOTE: we pass the generated offline stage id for the i in voting to keep
+			// network)
+			//
+			// NOTE: we pass the generated offline stage id for the i in voting to keep
 			// consistency
 			MetaAsyncProtocolHandler::new_voting(
 				params,
@@ -579,11 +581,16 @@ pub mod meta_channel {
 			self.unsigned_proposals_tx.send(Some(unsigned_proposals))
 		}
 
-		pub fn end_unsigned_proposals(&self) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
+		pub fn end_unsigned_proposals(
+			&self,
+		) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
 			self.unsigned_proposals_tx.send(None)
 		}
 
-		pub fn deliver_message(&self, msg: Arc<SignedDKGMessage<Public>>) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
+		pub fn deliver_message(
+			&self,
+			msg: Arc<SignedDKGMessage<Public>>,
+		) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
 			self.broadcaster.send(msg).map(|_| ())
 		}
 
@@ -707,8 +714,7 @@ pub mod meta_channel {
 
 			let finished_round = DKGSignedPayload {
 				key: round_id.encode(),
-				payload: vec![], /* the only place in the codebase that uses this is unit
-				                  * testing, and, it is "Webb".encode() */
+				payload: unsigned_proposal.data(),
 				signature: signature.encode(),
 			};
 
@@ -716,7 +722,8 @@ pub mod meta_channel {
 			let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 			if let Some(proposal) =
-			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key) {
+				get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
+			{
 				proposals_for_this_batch.push(proposal);
 
 				if proposals_for_this_batch.len() == batch_key.len {
@@ -1346,8 +1353,8 @@ pub mod meta_channel {
 mod tests {
 	use crate::{
 		keyring::Keyring,
-		meta_async_protocol::{
-			meta_channel::{BlockChainIface, MetaAsyncProtocolHandler, TestDummyIface},
+		meta_async_protocol::meta_channel::{
+			BlockChainIface, MetaAsyncProtocolHandler, TestDummyIface,
 		},
 		utils::find_index,
 		worker::AsyncProtocolParameters,
@@ -1367,7 +1374,6 @@ mod tests {
 	use parking_lot::lock_api::{Mutex, RwLock};
 	use rstest::{fixture, rstest};
 	use sc_keystore::LocalKeystore;
-
 
 	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
@@ -1478,7 +1484,6 @@ mod tests {
 
 		let handles1 = handles.clone();
 		let unsigned_proposal_broadcaster = async move {
-
 			let mut ticks =
 				IntervalStream::new(tokio::time::interval(Duration::from_millis(1000))).take(1);
 			while let Some(_v) = ticks.next().await {

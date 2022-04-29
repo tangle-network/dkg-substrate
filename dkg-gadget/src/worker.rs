@@ -77,7 +77,7 @@ use crate::{
 		meta_channel::{
 			BlockChainIface, DKGIface, MetaAsyncProtocolHandler, MetaAsyncProtocolRemote,
 		},
-		BatchKey
+		BatchKey,
 	},
 };
 use dkg_primitives::{
@@ -359,9 +359,9 @@ where
 						self.handle_dkg_error(err);
 					},
 				}
-			}
+			},
 
-			Err(err) => self.handle_dkg_error(err)
+			Err(err) => self.handle_dkg_error(err),
 		}
 	}
 
@@ -944,7 +944,9 @@ where
 					if let Some(rounds) = self.next_rounds.as_mut() {
 						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg) {
-							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+							self.handle_dkg_error(DKGError::CriticalError {
+								reason: err.to_string(),
+							})
 						}
 					}
 				}

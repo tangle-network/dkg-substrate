@@ -8,7 +8,7 @@ license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 [dependencies]
 fnv = "1.0.6"
 futures = "0.3"
-log = { version = "0.4", features = ["std", "max_level_info", "release_max_level_info"] }
+log = { version = "0.4" }
 parking_lot = "0.11"
 thiserror = "1.0"
 wasm-timer = "0.2.5"
