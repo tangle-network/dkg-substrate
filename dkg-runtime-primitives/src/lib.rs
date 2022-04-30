@@ -203,10 +203,10 @@ impl UnsignedProposal {
 		}
 	}
 
-	pub fn data(&self) -> Vec<u8> {
+	pub fn data(&self) -> &Vec<u8> {
 		match &self.proposal {
-			Proposal::Unsigned { data, .. } => data.clone(),
-			Proposal::Signed { data, .. } => data.clone(),
+			Proposal::Unsigned { data, .. } |
+			Proposal::Signed { data, .. } => data
 		}
 	}
 }

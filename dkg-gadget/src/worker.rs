@@ -43,7 +43,7 @@ use sp_api::BlockId;
 use sp_runtime::traits::{Block, Header, NumberFor};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::{keystore::DKGKeystore, persistence::DKGPersistenceState};
+use crate::keystore::DKGKeystore;
 
 use crate::messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
@@ -73,18 +73,16 @@ use crate::{
 
 use crate::{
 	messages::public_key_gossip::handle_public_key_broadcast,
-	meta_async_protocol::{
-		meta_channel::{
-			BlockChainIface, DKGIface, MetaAsyncProtocolHandler, MetaAsyncProtocolRemote,
-		},
-		BatchKey,
-	},
 };
 use dkg_primitives::{
 	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
+use crate::meta_async_rounds::BatchKey;
+use crate::meta_async_rounds::blockchain_interface::{BlockChainIface, DKGIface};
+use crate::meta_async_rounds::meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler};
+use crate::meta_async_rounds::remote::MetaAsyncProtocolRemote;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -122,7 +120,6 @@ where
 	pub next_rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
-	pub votes_sent: u64,
 	/// Best block a DKG voting round has been concluded for
 	pub best_dkg_block: Option<NumberFor<B>>,
 	/// Latest block header
@@ -143,8 +140,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
-	/// Track DKG Persistence state
-	pub dkg_persistence: DKGPersistenceState,
 	/// Local keystore for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Concrete type that points to the actual local keystore if it exists
@@ -192,7 +187,6 @@ where
 			key_store,
 			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
 			metrics,
-			votes_sent: 0,
 			rounds: None,
 			next_rounds: None,
 			finality_notifications: client.finality_notification_stream(),
@@ -205,45 +199,11 @@ where
 			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
 			aggregated_misbehaviour_reports: HashMap::new(),
 			has_sent_gossip_msg: HashMap::new(),
-			dkg_persistence: DKGPersistenceState::new(),
 			base_path,
 			local_keystore,
 			error_handler_tx,
 			error_handler_rx: Some(error_handler_rx),
 			_backend: PhantomData,
-		}
-	}
-}
-
-pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
-	pub blockchain_iface: Arc<BCIface>,
-	pub keystore: DKGKeystore,
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
-	pub best_authorities: Arc<Vec<Public>>,
-	pub authority_public_key: Arc<Public>,
-	pub batch_id_gen: Arc<AtomicU64>,
-	pub handle: MetaAsyncProtocolRemote<BCIface::Clock>,
-	pub round_id: RoundId,
-}
-
-impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
-	pub fn get_next_batch_key(&self, batch: &Vec<UnsignedProposal>) -> BatchKey {
-		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
-	}
-}
-
-// Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
-impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
-	fn clone(&self) -> Self {
-		Self {
-			round_id: self.round_id,
-			blockchain_iface: self.blockchain_iface.clone(),
-			keystore: self.keystore.clone(),
-			current_validator_set: self.current_validator_set.clone(),
-			best_authorities: self.best_authorities.clone(),
-			authority_public_key: self.authority_public_key.clone(),
-			batch_id_gen: self.batch_id_gen.clone(),
-			handle: self.handle.clone(),
 		}
 	}
 }
@@ -400,22 +360,10 @@ where
 		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
 	}
 
-	/// Get the keygen threshold at a specific block
-	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().keygen_threshold(&at).unwrap_or_default()
-	}
-
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
-	}
-
-	/// Get the next keygen threshold at a specific block
-	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_keygen_threshold(&at).unwrap_or_default()
 	}
 
 	/// Get the active DKG public key
@@ -439,16 +387,6 @@ where
 			.client
 			.runtime_api()
 			.get_keygen_jailed(&at, set.to_vec())
-			.unwrap_or_default()
-	}
-
-	/// Get the jailed signing authorities
-	pub fn get_signing_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self
-			.client
-			.runtime_api()
-			.get_signing_jailed(&at, set.to_vec())
 			.unwrap_or_default()
 	}
 
@@ -566,26 +504,6 @@ where
 		Ok(())
 	}
 
-	/// Gets the best authorities by authority keys using on-chain reputations
-	fn get_best_authority_keys(
-		&self,
-		header: &B::Header,
-		_authority_set: AuthoritySet<Public>,
-		active: bool,
-	) -> Vec<Public> {
-		// Get active threshold or get the next threshold
-		let _threshold = if active {
-			self.get_keygen_threshold(header)
-		} else {
-			self.get_next_keygen_threshold(header)
-		};
-		// Best authorities are taken from the on-chain reputations
-		let best_authorities: Vec<Public> =
-			self.get_best_authorities(header).iter().map(|(_, key)| key.clone()).collect();
-
-		best_authorities
-	}
-
 	fn handle_genesis_dkg_setup(
 		&mut self,
 		header: &B::Header,
@@ -635,17 +553,6 @@ where
 			info!(target: "dkg", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 		}
 
-		/*self.rounds = Some(
-			MultiPartyECDSARounds::builder()
-				.round_id(round_id)
-				.party_index(maybe_party_index.unwrap())
-				.threshold(self.get_signature_threshold(header))
-				.parties(self.get_keygen_threshold(header))
-				.local_key_path(local_key_path)
-				.authorities(best_authorities.clone())
-				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
-				.build(),
-		);*/
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
@@ -695,17 +602,6 @@ where
 		let best_authorities: Vec<Public> =
 			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_next_signature_threshold(header);
-		/*self.next_rounds = Some(
-			MultiPartyECDSARounds::builder()
-				.round_id(round_id)
-				.party_index(maybe_party_index.unwrap())
-				.threshold(self.get_next_signature_threshold(header))
-				.parties(self.get_next_keygen_threshold(header))
-				.local_key_path(queued_local_key_path)
-				.authorities(best_authorities.clone())
-				.jailed_signers(self.get_signing_jailed(header, &best_authorities))
-				.build(),
-		);*/
 
 		let authority_public_key = self.get_authority_public_key();
 		self.spawn_async_protocol(

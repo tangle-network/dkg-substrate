@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+use std::future::Future;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,53 +16,22 @@
 //
 use crate::worker::ENGINE_ID;
 use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId, AuthoritySet, ConsensusLog,
+	crypto::AuthorityId, AuthoritySet, ConsensusLog,
 };
 use sp_api::{BlockT as Block, HeaderT};
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::path::PathBuf;
+use dkg_primitives::types::DKGError;
+
+pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
+impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
+	T: Future<Output = Result<Out, DKGError>> + Send + 'a
+{
+}
 
 /// Finds the index of a value in a vector. Returns None if the value is not found.
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 	queue.iter().position(|v| value == v)
-}
-
-/// Sets up the Multi-party ECDSA rounds struct used to receive, process, and handle
-/// incoming and outgoing DKG related messages for key generation, offline stage creation,
-/// and signing. The rounds struct is used to handle the execution of a single round of the DKG
-/// and should be created for each session.
-///
-/// The rounds are intended to be run only by `best_authorities` that are selected from
-/// an externally provided set of reputations. Rounds are parameterized for a `t-of-n` threshold
-/// - `signature_threshold` represents `t`
-/// - `keygen_threshold` represents `n`
-///
-/// We provide an optional `local_key_path` to this struct so that it may save the generated
-/// DKG public / local key to disk. Caching of this key is critical to persistent storage and
-/// resuming the worker from a machine failure.
-#[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
-	best_authorities: &[AuthorityId],
-	authority_set_id: RoundId,
-	public: &AuthorityId,
-	signature_threshold: u16,
-	keygen_threshold: u16,
-	local_key_path: Option<std::path::PathBuf>,
-	jailed_signers: &[AuthorityId],
-) -> MultiPartyECDSARounds<N> {
-	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
-	// Generate the rounds object
-	MultiPartyECDSARounds::builder()
-		.round_id(authority_set_id)
-		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(signature_threshold)
-		.parties(keygen_threshold)
-		.local_key_path(local_key_path)
-		.authorities(best_authorities.to_vec())
-		.jailed_signers(jailed_signers.to_vec())
-		.build()
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
