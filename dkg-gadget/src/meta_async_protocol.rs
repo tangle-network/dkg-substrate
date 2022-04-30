@@ -527,7 +527,7 @@ pub mod meta_channel {
 		Keygen,
 		AwaitingProposals,
 		OfflineAndVoting,
-		Complete,
+		Complete
 	}
 
 	impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
@@ -591,7 +591,13 @@ pub mod meta_channel {
 			&self,
 			msg: Arc<SignedDKGMessage<Public>>,
 		) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
-			self.broadcaster.send(msg).map(|_| ())
+			if self.broadcaster.receiver_count() != 0 {
+				self.broadcaster.send(msg).map(|_| ())
+			} else {
+				// do not forward the message
+				log::debug!(target: "dkg", "Will not deliver message since there are no receivers");
+				Ok(())
+			}
 		}
 
 		/// Determines if there are any active listeners
@@ -921,6 +927,12 @@ pub mod meta_channel {
 
 						if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
 							log::info!("Offline stage index: {}", offline_i);
+
+							if count_in_batch == 0 {
+								log::debug!(target: "dkg", "Skipping batch since len = 0");
+								continue
+							}
+
 							// create one offline stage for each unsigned proposal
 							let futures = FuturesUnordered::new();
 							for unsigned_proposal in unsigned_proposals {
