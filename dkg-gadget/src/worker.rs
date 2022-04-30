@@ -20,9 +20,7 @@ use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
 	path::PathBuf,
-	sync::{
-		Arc,
-	},
+	sync::Arc,
 };
 
 use codec::{Codec, Decode, Encode};
@@ -58,8 +56,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys,
-	GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -70,18 +67,18 @@ use crate::{
 	Client,
 };
 
-use crate::{
-	messages::public_key_gossip::handle_public_key_broadcast,
-};
+use crate::messages::public_key_gossip::handle_public_key_broadcast;
 use dkg_primitives::{
 	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
-use crate::meta_async_rounds::blockchain_interface::{BlockChainIface, DKGIface};
-use crate::meta_async_rounds::meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler};
-use crate::meta_async_rounds::remote::MetaAsyncProtocolRemote;
+use crate::meta_async_rounds::{
+	blockchain_interface::{BlockChainIface, DKGIface},
+	meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler},
+	remote::MetaAsyncProtocolRemote,
+};
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -526,11 +523,9 @@ where
 		// Check if we've already set up the DKG for this authority set
 		// if the active is currently running, and, the keygen has stalled, create one anew
 		if let Some(rounds) = self.rounds.as_ref() {
-			if rounds.is_active() {
-				if !rounds.keygen_has_stalled(latest_block_num) {
-					debug!(target: "dkg", "🕸️  Rounds exists and is active");
-					return
-				}
+			if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) {
+				debug!(target: "dkg", "🕸️  Rounds exists and is active");
+				return
 			}
 		}
 

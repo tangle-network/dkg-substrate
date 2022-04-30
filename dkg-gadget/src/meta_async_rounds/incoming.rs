@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use futures::Stream;
-use round_based::Msg;
-use tokio_stream::wrappers::BroadcastStream;
+use crate::meta_async_rounds::{
+	blockchain_interface::BlockChainIface, meta_handler::AsyncProtocolParameters, ProtocolType,
+};
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::Public;
-use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
-use crate::meta_async_rounds::meta_handler::AsyncProtocolParameters;
-use crate::meta_async_rounds::ProtocolType;
+use futures::Stream;
+use round_based::Msg;
+use std::{
+	pin::Pin,
+	sync::Arc,
+	task::{Context, Poll},
+};
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Used to filter and transform incoming messages from the DKG worker
 pub struct IncomingAsyncProtocolWrapper<T, B> {
@@ -55,8 +57,8 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		stream_type: &ProtocolType,
 		this_round_id: RoundId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
-		where
-			Self: Sized;
+	where
+		Self: Sized;
 }
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
@@ -67,8 +69,8 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		stream_type: &ProtocolType,
 		this_round_id: RoundId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
-		where
-			Self: Sized,
+	where
+		Self: Sized,
 	{
 		match (stream_type, &self.msg.payload) {
 			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
@@ -100,9 +102,9 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 }
 
 impl<T, B> Stream for IncomingAsyncProtocolWrapper<T, B>
-	where
-		T: TransformIncoming,
-		B: BlockChainIface,
+where
+	T: TransformIncoming,
+	B: BlockChainIface,
 {
 	type Item = Msg<T::IncomingMapped>;
 

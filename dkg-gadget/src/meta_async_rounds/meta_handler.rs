@@ -12,54 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
-
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use dkg_runtime_primitives::{
-	AuthoritySet, AuthoritySetId,
-	UnsignedProposal,
-};
+use dkg_runtime_primitives::{AuthoritySet, AuthoritySetId, UnsignedProposal};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	stream::FuturesUnordered,
 	StreamExt, TryStreamExt,
 };
 
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
-	state_machine::{
-		keygen::{Keygen, LocalKey},
-		sign::{
-			CompletedOfflineStage, OfflineStage, PartialSignature,
-			SignManual,
-		},
-	},
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
+	keygen::{Keygen, LocalKey},
+	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-use parking_lot::{RwLock};
-use round_based::{
-	async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg,
-	StateMachine,
-};
-
+use parking_lot::RwLock;
+use round_based::{async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg, StateMachine};
 
 use serde::Serialize;
 use std::{
 	fmt::Debug,
 	future::Future,
 	pin::Pin,
-	sync::{atomic::Ordering, Arc},
+	sync::{
+		atomic::{AtomicU64, Ordering},
+		Arc,
+	},
 	task::{Context, Poll},
 };
-use std::sync::atomic::AtomicU64;
-use tokio::sync::{broadcast::Receiver};
+use tokio::sync::broadcast::Receiver;
 
-use crate::{
-	utils::find_index,
-	worker::{KeystoreExt}, DKGKeystore,
-};
+use crate::{utils::find_index, worker::KeystoreExt, DKGKeystore};
 use dkg_primitives::{
 	types::{
-		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, RoundId, SignedDKGMessage,
+		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage,
+		RoundId, SignedDKGMessage,
 	},
 	utils::select_random_set,
 };
@@ -67,15 +52,16 @@ use dkg_runtime_primitives::crypto::{AuthorityId, Public};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
 
-
-
-
-use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
-use crate::meta_async_rounds::{BatchKey, PartyIndex, ProtocolType, Threshold};
-use crate::meta_async_rounds::incoming::IncomingAsyncProtocolWrapper;
-use crate::meta_async_rounds::remote::{MetaAsyncProtocolRemote, MetaHandlerStatus};
-use crate::meta_async_rounds::state_machine_interface::StateMachineIface;
-use crate::utils::SendFuture;
+use crate::{
+	meta_async_rounds::{
+		blockchain_interface::BlockChainIface,
+		incoming::IncomingAsyncProtocolWrapper,
+		remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
+		state_machine_interface::StateMachineIface,
+		BatchKey, PartyIndex, ProtocolType, Threshold,
+	},
+	utils::SendFuture,
+};
 
 /// Once created, the MetaDKGProtocolHandler should be .awaited to begin execution
 pub struct MetaAsyncProtocolHandler<'a, Out> {
@@ -94,7 +80,7 @@ pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 }
 
 impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
-	pub fn get_next_batch_key(&self, batch: &Vec<UnsignedProposal>) -> BatchKey {
+	pub fn get_next_batch_key(&self, batch: &[UnsignedProposal]) -> BatchKey {
 		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
 	}
 }
@@ -116,8 +102,8 @@ impl<BCIface: BlockChainIface> Clone for AsyncProtocolParameters<BCIface> {
 }
 
 impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
-	where
-		(): Extend<Out>,
+where
+	(): Extend<Out>,
 {
 	/// Top-level function used to begin the execution of async protocols
 	pub fn setup<B: BlockChainIface + 'a>(
@@ -127,14 +113,12 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
-				reason: "execute called twice with the same AsyncProtocol Parameters"
-					.to_string(),
+				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
 			})?;
 
 		let start_rx =
 			status_handle.start_rx.lock().take().ok_or_else(|| DKGError::GenericError {
-				reason: "execute called twice with the same AsyncProtocol Parameters"
-					.to_string(),
+				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
 			})?;
 
 		let protocol = async move {
@@ -220,12 +204,12 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 
 		let protocol = Box::pin(async move {
 			tokio::select! {
-					res0 = protocol => res0,
-					res1 = stop_rx.recv() => {
-						log::info!(target: "dkg", "Stopper has been called {:?}", res1);
-						Ok(())
-					}
+				res0 = protocol => res0,
+				res1 = stop_rx.recv() => {
+					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
+					Ok(())
 				}
+			}
 		});
 
 		Ok(MetaAsyncProtocolHandler { protocol })
@@ -255,15 +239,13 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
-	) -> Result<
-		MetaAsyncProtocolHandler<'a, <OfflineStage as StateMachineIface>::Return>,
-		DKGError,
-	> {
+	) -> Result<MetaAsyncProtocolHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError>
+	{
 		let channel_type = ProtocolType::Offline {
-			unsigned_proposal: unsigned_proposal.clone(),
+			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 			i,
 			s_l: s_l.clone(),
-			local_key: local_key.clone(),
+			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
 		MetaAsyncProtocolHandler::new_inner(
@@ -281,11 +263,11 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		params: AsyncProtocolParameters<B>,
 		channel_type: ProtocolType,
 	) -> Result<MetaAsyncProtocolHandler<'a, SM::Return>, DKGError>
-		where
-			<SM as StateMachine>::Err: Send + Debug,
-			<SM as StateMachine>::MessageBody: Send,
-			<SM as StateMachine>::MessageBody: Serialize,
-			<SM as StateMachine>::Output: Send,
+	where
+		<SM as StateMachine>::Err: Send + Debug,
+		<SM as StateMachine>::MessageBody: Send,
+		<SM as StateMachine>::MessageBody: Serialize,
+		<SM as StateMachine>::Output: Send,
 	{
 		let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 		let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
@@ -295,7 +277,7 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 			incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>),
 			outgoing_tx,
 		)
-			.set_watcher(StderrWatcher);
+		.set_watcher(StderrWatcher);
 
 		let params_for_end_of_proto = params.clone();
 
@@ -326,21 +308,21 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		// Combine all futures into a concurrent select subroutine
 		let protocol = async move {
 			tokio::select! {
-					proto_res = async_proto => {
-						log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type, proto_res);
-						proto_res
-					},
+				proto_res = async_proto => {
+					log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type, proto_res);
+					proto_res
+				},
 
-					outgoing_res = outgoing_to_wire => {
-						log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
-						Err(DKGError::GenericError { reason: "Outbound sender ended".to_string() })
-					},
+				outgoing_res = outgoing_to_wire => {
+					log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
+					Err(DKGError::GenericError { reason: "Outbound sender ended".to_string() })
+				},
 
-					incoming_res = inbound_signed_message_receiver => {
-						log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
-						Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
-					}
+				incoming_res = inbound_signed_message_receiver => {
+					log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
+					Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
 				}
+			}
 		};
 
 		Ok(MetaAsyncProtocolHandler { protocol: Box::pin(protocol) })
@@ -357,15 +339,14 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 	) -> Result<MetaAsyncProtocolHandler<'a, ()>, DKGError> {
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
-				offline_stage: completed_offline_stage.clone(),
-				unsigned_proposal: unsigned_proposal.clone(),
+				offline_stage: Arc::new(completed_offline_stage.clone()),
+				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 				i: party_ind,
 			};
 
 			// the below wrapper will map signed messages into unsigned messages
 			let incoming = rx;
-			let incoming_wrapper =
-				&mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
+			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
 			let (_, round_id, id) = Self::get_party_round_id(&params);
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
@@ -377,7 +358,7 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 			})?;
 
 			let message = BigInt::from_bytes(&hash_of_proposal);
-			let ref offline_stage_pub_key = completed_offline_stage.public_key().clone();
+			let offline_stage_pub_key = &completed_offline_stage.public_key().clone();
 
 			let (signing, partial_signature) =
 				SignManual::new(message.clone(), completed_offline_stage)
@@ -406,29 +387,23 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 			log::info!(target: "dkg", "Must obtain {} partial sigs to continue ...", number_of_partial_sigs);
 
 			while let Some(msg) = incoming_wrapper.next().await {
-				match msg.body.payload {
-					DKGMsgPayload::Vote(dkg_vote_msg) => {
-						// only process messages which are from the respective proposal
-						if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
-							log::info!(target: "dkg", "Found matching round key!");
-							let partial = serde_json::from_slice::<PartialSignature>(
-								&dkg_vote_msg.partial_signature,
-							)
-								.map_err(|err| DKGError::GenericError {
-									reason: err.to_string(),
-								})?;
-							sigs.push(partial);
-							log::info!(target: "dkg", "There are now {} partial sigs ...", sigs.len());
-							if sigs.len() == number_of_partial_sigs {
-								break
-							}
-						} else {
-							//log::info!(target: "dkg", "Skipping DKG vote message since round
-							// keys did not match");
+				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
+					// only process messages which are from the respective proposal
+					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
+						log::info!(target: "dkg", "Found matching round key!");
+						let partial = serde_json::from_slice::<PartialSignature>(
+							&dkg_vote_msg.partial_signature,
+						)
+						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						sigs.push(partial);
+						log::info!(target: "dkg", "There are now {} partial sigs ...", sigs.len());
+						if sigs.len() == number_of_partial_sigs {
+							break
 						}
-					},
-
-					_ => {},
+					} else {
+						//log::info!(target: "dkg", "Skipping DKG vote message since round
+						// keys did not match");
+					}
 				}
 			}
 
@@ -447,8 +422,8 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 				.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 			log::info!("RD2");
-			verify(&signature, offline_stage_pub_key, &message).map_err(|_err| {
-				DKGError::Vote { reason: "Verification of voting stage failed".to_string() }
+			verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote {
+				reason: "Verification of voting stage failed".to_string(),
 			})?;
 			log::info!("RD3");
 
@@ -480,7 +455,7 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 	/// Returns our party's index in signers vec if any.
 	/// Indexing starts from 1.
 	/// OfflineStage must be created using this index if present (not the original keygen index)
-	fn get_offline_stage_index(s_l: &Vec<u16>, keygen_party_idx: u16) -> Option<u16> {
+	fn get_offline_stage_index(s_l: &[u16], keygen_party_idx: u16) -> Option<u16> {
 		(1..)
 			.zip(s_l)
 			.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
@@ -521,10 +496,10 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 		proto_ty: ProtocolType,
 	) -> impl SendFuture<'a, ()>
-		where
-			<SM as StateMachine>::MessageBody: Serialize,
-			<SM as StateMachine>::MessageBody: Send,
-			<SM as StateMachine>::Output: Send,
+	where
+		<SM as StateMachine>::MessageBody: Serialize,
+		<SM as StateMachine>::MessageBody: Send,
+		<SM as StateMachine>::Output: Send,
 	{
 		Box::pin(async move {
 			// take all unsigned messages, then sign them and send outbound
@@ -536,21 +511,22 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 					.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 				let (_, round_id, id) = Self::get_party_round_id(&params);
 
-				let payload = match &proto_ty {
-					ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
-						round_id: party_id as u64,
-						keygen_msg: serialized_body,
-					}),
-					ProtocolType::Offline { unsigned_proposal, .. } =>
-						DKGMsgPayload::Offline(DKGOfflineMessage {
-							key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
-							signer_set_id: party_id as u64,
-							offline_msg: serialized_body,
+				let payload =
+					match &proto_ty {
+						ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
+							round_id: party_id as u64,
+							keygen_msg: serialized_body,
 						}),
-					_ => {
-						unreachable!("Should not happen since voting is handled with a custom subroutine")
-					},
-				};
+						ProtocolType::Offline { unsigned_proposal, .. } =>
+							DKGMsgPayload::Offline(DKGOfflineMessage {
+								key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
+								signer_set_id: party_id as u64,
+								offline_msg: serialized_body,
+							}),
+						_ => {
+							unreachable!("Should not happen since voting is handled with a custom subroutine")
+						},
+					};
 
 				let unsigned_dkg_message = DKGMessage { id, payload, round_id };
 				params.blockchain_iface.sign_and_send_msg(unsigned_dkg_message)?;
@@ -570,9 +546,9 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 		channel_type: ProtocolType,
 		to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
 	) -> impl SendFuture<'a, ()>
-		where
-			<SM as StateMachine>::MessageBody: Send,
-			<SM as StateMachine>::Output: Send,
+	where
+		<SM as StateMachine>::MessageBody: Send,
+		<SM as StateMachine>::Output: Send,
 	{
 		Box::pin(async move {
 			// the below wrapper will map signed messages into unsigned messages
@@ -581,11 +557,9 @@ impl<'a, Out: Send + Debug + 'a> MetaAsyncProtocolHandler<'a, Out>
 				IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
 
 			while let Some(unsigned_message) = incoming_wrapper.next().await {
-				if let Err(_) = SM::handle_unsigned_message(
-					&to_async_proto,
-					unsigned_message,
-					&channel_type,
-				) {
+				if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type)
+					.is_err()
+				{
 					log::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
 					break
 				}
@@ -609,11 +583,7 @@ impl<Out> Future for MetaAsyncProtocolHandler<'_, Out> {
 
 #[cfg(test)]
 mod tests {
-	use crate::{
-		keyring::Keyring,
-		utils::find_index,
-		DKGKeystore,
-	};
+	use crate::{keyring::Keyring, utils::find_index, DKGKeystore};
 
 	use dkg_primitives::{types::DKGError, ProposalNonce};
 	use dkg_runtime_primitives::{
@@ -631,10 +601,12 @@ mod tests {
 
 	use std::{collections::HashMap, sync::Arc, time::Duration};
 
+	use crate::meta_async_rounds::{
+		blockchain_interface::{BlockChainIface, TestDummyIface},
+		meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler},
+		remote::MetaAsyncProtocolRemote,
+	};
 	use tokio_stream::wrappers::IntervalStream;
-	use crate::meta_async_rounds::blockchain_interface::{BlockChainIface, TestDummyIface};
-	use crate::meta_async_rounds::meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler};
-	use crate::meta_async_rounds::remote::MetaAsyncProtocolRemote;
 
 	// inserts into ks, returns public
 	fn generate_new(ks: &dyn SyncCryptoStore, kr: Keyring) -> crypto::Public {

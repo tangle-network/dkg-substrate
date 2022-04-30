@@ -12,35 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Debug;
-use std::sync::Arc;
+use crate::meta_async_rounds::{
+	blockchain_interface::BlockChainIface,
+	meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler},
+	BatchKey, PartyIndex, ProtocolType, Threshold,
+};
 use async_trait::async_trait;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{Keygen, ProtocolMessage};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{OfflineProtocolMessage, OfflineStage};
-use round_based::{Msg, StateMachine};
-use round_based::containers::StoreErr;
-use tokio::sync::broadcast::Receiver;
+use dkg_primitives::types::{
+	DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage,
+};
+use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SignedDKGMessage};
-use dkg_runtime_primitives::crypto::Public;
-use dkg_runtime_primitives::UnsignedProposal;
-use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
-use crate::meta_async_rounds::meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler};
-use crate::meta_async_rounds::{BatchKey, PartyIndex, ProtocolType, Threshold};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
+	keygen::{Keygen, ProtocolMessage},
+	sign::{OfflineProtocolMessage, OfflineStage},
+};
+use round_based::{containers::StoreErr, Msg, StateMachine};
+use std::{fmt::Debug, sync::Arc};
+use tokio::sync::broadcast::Receiver;
+
+pub(crate) type StateMachineTxRx<T> = (
+	futures::channel::mpsc::UnboundedSender<Msg<T>>,
+	futures::channel::mpsc::UnboundedReceiver<Msg<T>>,
+);
 
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
 pub trait StateMachineIface: StateMachine + Send
-	where
-		<Self as StateMachine>::Output: Send,
+where
+	<Self as StateMachine>::Output: Send,
 {
 	type AdditionalReturnParam: Debug + Send;
 	type Return: Debug + Send;
 
-	fn generate_channel() -> (
-		futures::channel::mpsc::UnboundedSender<Msg<<Self as StateMachine>::MessageBody>>,
-		futures::channel::mpsc::UnboundedReceiver<Msg<<Self as StateMachine>::MessageBody>>,
-	) {
+	fn generate_channel() -> StateMachineTxRx<<Self as StateMachine>::MessageBody> {
 		futures::channel::mpsc::unbounded()
 	}
 
@@ -142,7 +147,7 @@ impl StateMachineIface for OfflineStage {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Offline(msg) => {
-				use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error as Error;
+				use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error;
 				let message: Msg<OfflineProtocolMessage> =
 					serde_json::from_slice(msg.offline_msg.as_slice())
 						.map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
@@ -154,9 +159,7 @@ impl StateMachineIface for OfflineStage {
 					}
 				}
 
-				if &local_ty.get_unsigned_proposal().unwrap().hash().unwrap() !=
-					msg.key.as_slice()
-				{
+				if local_ty.get_unsigned_proposal().unwrap().hash().unwrap() != msg.key.as_slice() {
 					//log::info!("Skipping passing of message to async proto since not correct
 					// unsigned proposal");
 					return Ok(())
@@ -194,7 +197,7 @@ impl StateMachineIface for OfflineStage {
 			unsigned_proposal.3,
 			unsigned_proposal.4,
 		)?
-			.await?;
+		.await?;
 		Ok(())
 	}
 }

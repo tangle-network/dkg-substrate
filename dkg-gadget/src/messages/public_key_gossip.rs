@@ -48,7 +48,7 @@ where
 	}
 
 	// Get authority accounts
-	let ref header = dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
+	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
 	let current_block_number = *header.number();
 	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
 	if authorities.is_none() {

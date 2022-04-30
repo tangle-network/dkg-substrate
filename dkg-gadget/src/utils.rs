@@ -1,5 +1,4 @@
-use std::fmt::Debug;
-use std::future::Future;
+use std::{fmt::Debug, future::Future};
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,10 @@ use std::future::Future;
 // limitations under the License.
 //
 use crate::worker::ENGINE_ID;
-use dkg_primitives::{
-	crypto::AuthorityId, AuthoritySet, ConsensusLog,
-};
+use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog};
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::path::PathBuf;
-use dkg_primitives::types::DKGError;
 
 pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where

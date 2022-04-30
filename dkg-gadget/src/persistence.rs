@@ -28,6 +28,7 @@ use dkg_runtime_primitives::{
 	DKGApi,
 };
 use log::debug;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT as Header};
@@ -38,7 +39,6 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 
 pub(crate) fn store_localkey(
 	key: LocalKey<Secp256k1>,

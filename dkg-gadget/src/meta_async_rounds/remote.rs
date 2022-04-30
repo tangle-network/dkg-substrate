@@ -12,22 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use atomic::Atomic;
+use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
+use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use std::sync::{atomic::Ordering, Arc};
 use tokio::sync::mpsc::error::SendError;
-use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
-use dkg_runtime_primitives::crypto::Public;
-use dkg_runtime_primitives::{KEYGEN_TIMEOUT, UnsignedProposal};
+
+pub(crate) type UnsignedProposalsSender =
+	tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>;
+pub(crate) type UnsignedProposalsReceiver =
+	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Option<Vec<UnsignedProposal>>>>>>;
 
 #[derive(Clone)]
 pub struct MetaAsyncProtocolRemote<C> {
 	status: Arc<Atomic<MetaHandlerStatus>>,
-	unsigned_proposals_tx: tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>,
-	pub(crate) unsigned_proposals_rx:
-	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Option<Vec<UnsignedProposal>>>>>>,
+	unsigned_proposals_tx: UnsignedProposalsSender,
+	pub(crate) unsigned_proposals_rx: UnsignedProposalsReceiver,
 	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
@@ -44,14 +46,13 @@ pub enum MetaHandlerStatus {
 	Keygen,
 	AwaitingProposals,
 	OfflineAndVoting,
-	Complete
+	Complete,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(at: C, round_id: RoundId) -> Self {
-		let (unsigned_proposals_tx, unsigned_proposals_rx) =
-			tokio::sync::mpsc::unbounded_channel();
+		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
@@ -99,9 +100,7 @@ impl<C> MetaAsyncProtocolRemote<C> {
 	}
 
 	#[allow(dead_code)]
-	pub fn end_unsigned_proposals(
-		&self,
-	) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
+	pub fn end_unsigned_proposals(&self) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
 		self.unsigned_proposals_tx.send(None)
 	}
 
@@ -146,12 +145,12 @@ impl<C> MetaAsyncProtocolRemote<C> {
 
 	pub fn is_keygen_finished(&self) -> bool {
 		let state = self.get_status();
-		match state {
+		matches!(
+			state,
 			MetaHandlerStatus::AwaitingProposals |
-			MetaHandlerStatus::OfflineAndVoting |
-			MetaHandlerStatus::Complete => true,
-			_ => false,
-		}
+				MetaHandlerStatus::OfflineAndVoting |
+				MetaHandlerStatus::Complete
+		)
 	}
 
 	/// Setting this as the primary remote

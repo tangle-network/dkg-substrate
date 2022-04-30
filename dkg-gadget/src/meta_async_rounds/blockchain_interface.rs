@@ -12,35 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use std::sync::Arc;
+use crate::{
+	messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
+	meta_async_rounds::BatchKey,
+	persistence::store_localkey,
+	proposal::{get_signed_proposal, make_signed_proposal},
+	storage::proposals::save_signed_proposals_in_storage,
+	worker::{DKGWorker, KeystoreExt},
+	Client, DKGApi, DKGKeystore,
+};
 use codec::Encode;
-use curv::BigInt;
-use curv::elliptic::curves::Secp256k1;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use curv::{elliptic::curves::Secp256k1, BigInt};
+use dkg_primitives::{
+	types::{
+		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, RoundId, SignedDKGMessage,
+	},
+	utils::convert_signature,
+};
+use dkg_runtime_primitives::{
+	crypto::{AuthorityId, Public},
+	AggregatedPublicKeys, AuthoritySet, Proposal, ProposalKind, UnsignedProposal,
+};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
+	party_i::SignatureRecid, state_machine::keygen::LocalKey,
+};
 use parking_lot::{Mutex, RwLock};
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
-use crate::{Client, DKGApi};
 use sc_network_gossip::GossipEngine;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_runtime::generic::BlockId;
-use sp_runtime::traits::{Block, Header, NumberFor};
-use dkg_primitives::types::{DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, RoundId, SignedDKGMessage};
-use dkg_primitives::utils::convert_signature;
-use dkg_runtime_primitives::crypto::{AuthorityId, Public};
-use dkg_runtime_primitives::{AggregatedPublicKeys, AuthoritySet, Proposal, ProposalKind, UnsignedProposal};
-use crate::DKGKeystore;
-use crate::messages::dkg_message::sign_and_send_messages;
-use crate::messages::public_key_gossip::gossip_public_key;
-use crate::meta_async_rounds::BatchKey;
-use crate::persistence::store_localkey;
-use crate::proposal::{get_signed_proposal, make_signed_proposal};
-use crate::storage::proposals::save_signed_proposals_in_storage;
-use crate::worker::{DKGWorker, KeystoreExt};
+use sp_runtime::{
+	generic::BlockId,
+	traits::{Block, Header, NumberFor},
+};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
@@ -58,11 +63,8 @@ pub trait BlockChainIface: Send + Sync {
 		message: BigInt,
 	) -> Result<(), DKGError>;
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
-	fn store_public_key(
-		&self,
-		key: LocalKey<Secp256k1>,
-		round_id: RoundId,
-	) -> Result<(), DKGError>;
+	fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId)
+		-> Result<(), DKGError>;
 	fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError>;
 	fn get_authority_set(&self) -> &Vec<Public>;
 	/// Get the unjailed signers
@@ -108,11 +110,11 @@ pub struct DKGIface<B: Block, BE, C> {
 }
 
 impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
-	where
-		B: Block,
-		BE: Backend<B> + 'static,
-		C: Client<B, BE> + 'static,
-		C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+where
+	B: Block,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	type Clock = NumberFor<B>;
 
@@ -145,8 +147,8 @@ impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
 		let payload_key = unsigned_proposal.key;
-		let signature = convert_signature(&signature).ok_or_else(|| {
-			DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
+		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
+			reason: "Unable to serialize signature".to_string(),
 		})?;
 
 		let finished_round = DKGSignedPayload {
@@ -159,7 +161,7 @@ impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 		if let Some(proposal) =
-		get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
+			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
 		{
 			proposals_for_this_batch.push(proposal);
 
@@ -223,13 +225,16 @@ impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
 	}
 }
 
+pub(crate) type VoteResults =
+	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>;
+
 #[derive(Clone)]
 pub struct TestDummyIface {
 	pub sender: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	// key is party_index, hash of data. Needed especially for local unit tests
-	pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>,
+	pub vote_results: VoteResults,
 	pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 }
 
@@ -244,9 +249,9 @@ impl BlockChainIface for TestDummyIface {
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
 		log::info!(
-				"Sending message through iface id={}",
-				unsigned_msg.payload.async_proto_only_get_sender_id().unwrap()
-			);
+			"Sending message through iface id={}",
+			unsigned_msg.payload.async_proto_only_get_sender_id().unwrap()
+		);
 		let faux_signed_message = SignedDKGMessage { msg: unsigned_msg, signature: None };
 		self.sender
 			.send(faux_signed_message)

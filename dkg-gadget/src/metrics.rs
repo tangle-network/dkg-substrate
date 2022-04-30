@@ -18,7 +18,7 @@ use prometheus::{register, Gauge, PrometheusError, Registry, U64};
 /// DKG metrics exposed through Prometheus
 pub(crate) struct Metrics {
 	/// Current active validator set id
-	pub dkg_validator_set_id: Gauge<U64>
+	pub dkg_validator_set_id: Gauge<U64>,
 }
 
 impl Metrics {

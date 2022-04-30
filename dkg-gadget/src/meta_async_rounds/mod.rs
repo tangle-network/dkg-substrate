@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::{Debug, Formatter};
 use curv::elliptic::curves::Secp256k1;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::CompletedOfflineStage;
 use dkg_runtime_primitives::UnsignedProposal;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
+	keygen::LocalKey, sign::CompletedOfflineStage,
+};
+use std::{
+	fmt::{Debug, Formatter},
+	sync::Arc,
+};
 
-pub mod incoming;
-pub mod state_machine_interface;
 pub mod blockchain_interface;
+pub mod incoming;
 pub mod meta_handler;
 pub mod remote;
+pub mod state_machine_interface;
 
 #[derive(Clone)]
 pub enum ProtocolType {
@@ -32,14 +36,14 @@ pub enum ProtocolType {
 		n: u16,
 	},
 	Offline {
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: Arc<UnsignedProposal>,
 		i: u16,
 		s_l: Vec<u16>,
-		local_key: LocalKey<Secp256k1>,
+		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
-		offline_stage: CompletedOfflineStage,
-		unsigned_proposal: UnsignedProposal,
+		offline_stage: Arc<CompletedOfflineStage>,
+		unsigned_proposal: Arc<UnsignedProposal>,
 		i: u16,
 	},
 }
@@ -54,7 +58,7 @@ impl ProtocolType {
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
-				Some(unsigned_proposal),
+				Some(&*unsigned_proposal),
 			_ => None,
 		}
 	}
