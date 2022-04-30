@@ -612,7 +612,6 @@ mod tests {
 	use crate::{
 		keyring::Keyring,
 		utils::find_index,
-		worker::AsyncProtocolParameters,
 		DKGKeystore,
 	};
 
