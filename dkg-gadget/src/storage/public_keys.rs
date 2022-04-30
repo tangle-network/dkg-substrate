@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashMap, sync::Arc};
 use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
 use codec::Encode;
 use dkg_primitives::types::{DKGError, RoundId};
@@ -27,6 +26,7 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
+use std::{collections::HashMap, sync::Arc};
 
 /// stores genesis or next aggregated public keys offchain
 pub(crate) fn store_aggregated_public_keys<B, C, BE>(

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::sync::Arc;
 use crate::{
 	utils::find_index,
 	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
@@ -29,6 +28,7 @@ use rand::Rng;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
+use std::sync::Arc;
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(

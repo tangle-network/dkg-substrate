@@ -15,8 +15,8 @@
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
-use std::fmt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use std::fmt;
 
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;

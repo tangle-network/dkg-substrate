@@ -205,8 +205,7 @@ impl UnsignedProposal {
 
 	pub fn data(&self) -> &Vec<u8> {
 		match &self.proposal {
-			Proposal::Unsigned { data, .. } |
-			Proposal::Signed { data, .. } => data
+			Proposal::Unsigned { data, .. } | Proposal::Signed { data, .. } => data,
 		}
 	}
 }
