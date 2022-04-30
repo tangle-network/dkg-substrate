@@ -56,7 +56,7 @@ pub mod time {
 	#[cfg(feature = "manual-seal")]
 	pub const MILLISECS_PER_BLOCK: Moment = 1000;
 	#[cfg(not(feature = "manual-seal"))]
-	pub const MILLISECS_PER_BLOCK: Moment = 3000;
+	pub const MILLISECS_PER_BLOCK: Moment = 6000;
 	pub const SECS_PER_BLOCK: Moment = MILLISECS_PER_BLOCK / 1000;
 
 	// NOTE: Currently it is not possible to change the slot duration after the

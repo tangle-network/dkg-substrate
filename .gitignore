@@ -28,3 +28,4 @@ para-2074-wasm
 
 
 /scripts/seed-arana-testnet.sh
+*.txt

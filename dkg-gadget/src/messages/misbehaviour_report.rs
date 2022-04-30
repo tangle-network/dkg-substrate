@@ -133,7 +133,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				debug!(target: "dkg", "Gossiping misbehaviour report");
+				log::debug!(target: "dkg", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
 				dkg_worker.gossip_engine.lock().gossip_message(
 					dkg_topic::<B>(),
 					encoded_signed_dkg_message,
