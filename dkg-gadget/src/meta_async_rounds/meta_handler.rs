@@ -12,75 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_trait::async_trait;
-use atomic::Atomic;
-use codec::Encode;
+
+
+
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use dkg_runtime_primitives::{
-	AggregatedPublicKeys, AuthoritySet, AuthoritySetId, DKGApi, Proposal, ProposalKind,
-	UnsignedProposal, KEYGEN_TIMEOUT,
+	AuthoritySet, AuthoritySetId,
+	UnsignedProposal,
 };
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	stream::FuturesUnordered,
 	StreamExt, TryStreamExt,
 };
-use log::debug;
+
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
-	party_i::SignatureRecid,
 	state_machine::{
-		keygen::{Keygen, LocalKey, ProtocolMessage},
+		keygen::{Keygen, LocalKey},
 		sign::{
-			CompletedOfflineStage, OfflineProtocolMessage, OfflineStage, PartialSignature,
+			CompletedOfflineStage, OfflineStage, PartialSignature,
 			SignManual,
 		},
 	},
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{RwLock};
 use round_based::{
-	async_runtime::watcher::StderrWatcher, containers::StoreErr, AsyncProtocol, Msg,
+	async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg,
 	StateMachine,
 };
-use sc_client_api::Backend;
-use sc_network_gossip::GossipEngine;
+
+
 use serde::Serialize;
-use sp_runtime::traits::{Block, Header, NumberFor};
 use std::{
-	collections::HashMap,
 	fmt::Debug,
 	future::Future,
-	marker::PhantomData,
-	path::PathBuf,
 	pin::Pin,
 	sync::{atomic::Ordering, Arc},
 	task::{Context, Poll},
 };
 use std::sync::atomic::AtomicU64;
-use tokio::sync::{broadcast::Receiver, mpsc::error::SendError};
+use tokio::sync::{broadcast::Receiver};
 
 use crate::{
-	messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
-	persistence::store_localkey,
-	proposal::{get_signed_proposal, make_signed_proposal},
-	storage::proposals::save_signed_proposals_in_storage,
 	utils::find_index,
-	worker::{DKGWorker, KeystoreExt},
-	Client, DKGKeystore,
+	worker::{KeystoreExt}, DKGKeystore,
 };
 use dkg_primitives::{
 	types::{
-		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage,
-		DKGPublicKeyMessage, DKGSignedPayload, DKGVoteMessage, RoundId, SignedDKGMessage,
+		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage, RoundId, SignedDKGMessage,
 	},
 	utils::select_random_set,
 };
 use dkg_runtime_primitives::crypto::{AuthorityId, Public};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
-use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_runtime::generic::BlockId;
-use dkg_primitives::utils::convert_signature;
+
+
+
+
 use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
 use crate::meta_async_rounds::{BatchKey, PartyIndex, ProtocolType, Threshold};
 use crate::meta_async_rounds::incoming::IncomingAsyncProtocolWrapper;
@@ -622,15 +611,10 @@ impl<Out> Future for MetaAsyncProtocolHandler<'_, Out> {
 mod tests {
 	use crate::{
 		keyring::Keyring,
-		meta_async_protocol::meta_channel::{
-			BlockChainIface, MetaAsyncProtocolHandler, TestDummyIface,
-		},
 		utils::find_index,
 		worker::AsyncProtocolParameters,
 		DKGKeystore,
 	};
-
-	use crate::meta_async_protocol::meta_channel::MetaAsyncProtocolRemote;
 
 	use dkg_primitives::{types::DKGError, ProposalNonce};
 	use dkg_runtime_primitives::{

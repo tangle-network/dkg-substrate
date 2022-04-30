@@ -21,7 +21,6 @@ use std::{
 	marker::PhantomData,
 	path::PathBuf,
 	sync::{
-		atomic::{AtomicU64, Ordering},
 		Arc,
 	},
 };
@@ -59,7 +58,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, UnsignedProposal,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys,
 	GENESIS_AUTHORITY_SET_ID,
 };
 
@@ -79,7 +78,7 @@ use dkg_primitives::{
 	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-use crate::meta_async_rounds::BatchKey;
+
 use crate::meta_async_rounds::blockchain_interface::{BlockChainIface, DKGIface};
 use crate::meta_async_rounds::meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler};
 use crate::meta_async_rounds::remote::MetaAsyncProtocolRemote;
