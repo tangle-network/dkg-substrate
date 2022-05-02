@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@ use std::collections::HashMap;
 // limitations under the License.
 //
 // Handles non-dkg messages
+use std::collections::HashMap;
 use crate::{
 	storage::public_keys::store_aggregated_public_keys,
 	types::dkg_topic,
