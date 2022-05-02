@@ -85,6 +85,16 @@ impl DKGMsgPayload {
 			_ => None,
 		}
 	}
+
+	pub fn get_type(&self) -> &'static str {
+		match self {
+			DKGMsgPayload::Keygen(_) => "keygen",
+			DKGMsgPayload::Offline(_) => "offline",
+			DKGMsgPayload::Vote(_) => "vote",
+			DKGMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
+			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour"
+		}
+	}
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

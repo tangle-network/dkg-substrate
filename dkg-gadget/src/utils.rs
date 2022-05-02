@@ -1,4 +1,5 @@
 use std::{fmt::Debug, future::Future};
+use std::collections::HashMap;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,7 @@ use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, Consens
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::path::PathBuf;
+use parking_lot::Mutex;
 
 pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -61,3 +63,35 @@ fn match_consensus_log(
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
 	base_path.as_ref().map(|path| path.join(path_str))
 }
+
+#[cfg(feature="outbound-inspection")]
+pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
+	static MAP: Mutex<Option<HashMap<&'static str, Vec<u32>>>> = parking_lot::const_mutex(None);
+	let mut lock = MAP.lock();
+
+	if lock.is_none() {
+		*lock = Some(HashMap::new())
+	}
+
+	let map = lock.as_mut().unwrap();
+
+	map.entry(ty).or_default().push(serialized_len as u32);
+
+	for (ty, history) in map.iter() {
+		log::debug!(target: "dkg", "History for {}: \
+			total count={}, \
+			first={:?}, \
+			latest={:?}, \
+			lifetime_delta={:?}, \
+			max={:?}",
+		ty,
+		history.len(),
+		history.first(),
+		history.last(),
+		history.last().map(|latest| history.first().map(|first| *latest as i64 - *first as i64)).flatten(),
+		history.iter().max());
+	}
+}
+
+#[cfg(not(feature="outbound-inspection"))]
+pub(crate) fn inspect_outbound(ty: &str, serialized_len: usize) {}

@@ -37,9 +37,13 @@ pub(crate) fn sign_and_send_messages<B>(
 	for dkg_message in dkg_messages {
 		match dkg_keystore.sign(&public, &dkg_message.encode()) {
 			Ok(sig) => {
+				let ty = dkg_message.payload.get_type();
 				let signed_dkg_message =
 					SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
+
+				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
+
 				engine_lock.gossip_message(dkg_topic::<B>(), encoded_signed_dkg_message, true);
 			},
 			Err(e) => trace!(

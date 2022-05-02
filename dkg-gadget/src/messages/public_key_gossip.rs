@@ -129,6 +129,8 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 			DKGMessage::<AuthorityId> { id: public.clone(), round_id: msg.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
+		crate::utils::inspect_outbound("pub_key", encoded_dkg_message.len());
+
 		match key_store.sign(&public, &encoded_dkg_message) {
 			Ok(sig) => {
 				let signed_dkg_message =

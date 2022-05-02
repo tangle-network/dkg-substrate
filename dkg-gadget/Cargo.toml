@@ -5,6 +5,9 @@ authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 
+[features]
+outbound-inspection = []
+
 [dependencies]
 fnv = "1.0.6"
 futures = "0.3"
@@ -59,4 +62,3 @@ rstest = "0.12.0"
 env_logger = "0.9.0"
 itertools = "0.10.3"
 
-[features]

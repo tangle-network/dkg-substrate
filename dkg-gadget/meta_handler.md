@@ -30,9 +30,4 @@ For most effective feedback for debugging, these commands should be used to insp
 ```
 
 ### TODO
-- Discuss the input parameters to the async protocols, and ensure is valid.
-- Continue debugging (this is still a WIP. The keygen works, the others still need inspection and validation)
-- Fix warnings of unused. There are still some unused parameters, such as the local key save path (needs to be implemented still in the meta handlers). Fixing the unused will ensure previous functionality remains the same
-- When switching ``next_rounds`` to ``rounds``, call ``shutdown`` on the old ``rounds`` remote to free memory
-- Refactoring
 - Improve internal routing of messages to meta handlers (will speed up performance under heavy loads)
