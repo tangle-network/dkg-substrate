@@ -92,7 +92,7 @@ impl DKGMsgPayload {
 			DKGMsgPayload::Offline(_) => "offline",
 			DKGMsgPayload::Vote(_) => "vote",
 			DKGMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
-			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour"
+			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
 		}
 	}
 }

@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use std::{fmt::Debug, future::Future};
 use crate::worker::ENGINE_ID;
 use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog};
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
-use std::path::PathBuf;
+use std::{fmt::Debug, future::Future, path::PathBuf};
 
 pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -62,10 +61,10 @@ pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathB
 	base_path.as_ref().map(|path| path.join(path_str))
 }
 
-#[cfg(feature="outbound-inspection")]
+#[cfg(feature = "outbound-inspection")]
 pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
-	use std::collections::HashMap;
 	use parking_lot::Mutex;
+	use std::collections::HashMap;
 
 	static MAP: Mutex<Option<HashMap<&'static str, Vec<u32>>>> = parking_lot::const_mutex(None);
 	let mut lock = MAP.lock();
@@ -94,5 +93,5 @@ pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
 	}
 }
 
-#[cfg(not(feature="outbound-inspection"))]
+#[cfg(not(feature = "outbound-inspection"))]
 pub(crate) fn inspect_outbound(_ty: &str, _serialized_len: usize) {}

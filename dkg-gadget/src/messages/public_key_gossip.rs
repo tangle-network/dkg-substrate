@@ -13,7 +13,6 @@
 // limitations under the License.
 //
 // Handles non-dkg messages
-use std::collections::HashMap;
 use crate::{
 	storage::public_keys::store_aggregated_public_keys,
 	types::dkg_topic,
@@ -32,6 +31,7 @@ use log::{debug, error};
 use sc_client_api::Backend;
 use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::{Block, Header};
+use std::collections::HashMap;
 
 pub(crate) fn handle_public_key_broadcast<B, C, BE>(
 	dkg_worker: &mut DKGWorker<B, C, BE>,
