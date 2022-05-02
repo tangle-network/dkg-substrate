@@ -491,7 +491,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Checks whether a signed proposal exists in the `SignedProposals` storage
-	pub fn is_existing_proposal(prop: &Proposal) -> bool {
+	pub fn is_not_existing_proposal(prop: &Proposal) -> bool {
 		if prop.is_signed() {
 			match decode_proposal_identifier(prop) {
 				Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
@@ -523,13 +523,22 @@ impl<T: Config> Pallet<T> {
 			}
 			match Self::get_next_offchain_signed_proposal(block_number) {
 				Ok(next_proposals) => {
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal_onchain: found {} proposals to submit before filtering\n {:?}",
+						next_proposals.len(), next_proposals
+					);
 					// We filter out all proposals that are already on chain
 					let filtered_proposals = next_proposals
 						.iter()
 						.cloned()
-						.filter(Self::is_existing_proposal)
+						.filter(Self::is_not_existing_proposal)
 						.collect::<Vec<_>>();
-
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal_onchain: found {} proposals to submit after filtering\n {:?}",
+						filtered_proposals.len(), filtered_proposals
+					);
 					// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and
 					// submit those chunks
 					for chunk in
@@ -584,13 +593,13 @@ impl<T: Config> Pallet<T> {
 			match res {
 				Ok(Some(mut prop_wrapper)) => {
 					// log the proposals
-					frame_support::log::trace!(
+					frame_support::log::debug!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals: {:?}",
 						prop_wrapper.proposals
 					);
 					// log how many proposal batches are left
-					frame_support::log::trace!(
+					frame_support::log::debug!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()

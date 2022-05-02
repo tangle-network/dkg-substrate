@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::rounds::LocalKey;
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use std::fmt;
 
 pub type FE = Scalar<Secp256k1>;
@@ -72,6 +72,29 @@ pub enum DKGMsgPayload {
 	Vote(DKGVoteMessage),
 	PublicKeyBroadcast(DKGPublicKeyMessage),
 	MisbehaviourBroadcast(DKGMisbehaviourMessage),
+}
+
+impl DKGMsgPayload {
+	/// NOTE: this is hacky
+	/// TODO: Change enums for keygen, offline, vote
+	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
+		match self {
+			DKGMsgPayload::Keygen(kg) => Some(kg.round_id as u16),
+			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
+			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
+			_ => None,
+		}
+	}
+
+	pub fn get_type(&self) -> &'static str {
+		match self {
+			DKGMsgPayload::Keygen(_) => "keygen",
+			DKGMsgPayload::Offline(_) => "offline",
+			DKGMsgPayload::Vote(_) => "vote",
+			DKGMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
+			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour"
+		}
+	}
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

@@ -12,58 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::{
+	worker::{DKGWorker, KeystoreExt},
+	Client,
+};
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::AuthorityId,
-	rounds::{LocalKey, MultiPartyECDSARounds},
 	serde_json,
 	types::RoundId,
-	utils::{
-		decrypt_data, encrypt_data, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
-	},
+	utils::{decrypt_data, encrypt_data, StoredLocalKey},
 };
 use dkg_runtime_primitives::{
 	offchain::crypto::{Pair as AppPair, Public},
 	DKGApi,
 };
 use log::debug;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_client_api::Backend;
+use sc_keystore::LocalKeystore;
 use sp_api::{BlockT as Block, HeaderT as Header};
 use sp_core::Pair;
 use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
+	sync::Arc,
 };
 
-pub struct DKGPersistenceState {
-	pub initial_check: bool,
-}
-
-impl DKGPersistenceState {
-	pub fn new() -> Self {
-		Self { initial_check: false }
-	}
-}
-
-pub(crate) fn store_localkey<B, C, BE>(
+pub(crate) fn store_localkey(
 	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
 	path: Option<PathBuf>,
-	worker: &mut DKGWorker<B, C, BE>,
-) -> std::io::Result<()>
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
+	local_keystore: Option<&Arc<LocalKeystore>>,
+	sr25519_public_key: sp_core::sr25519::Public,
+) -> std::io::Result<()> {
 	if let Some(path) = path {
-		if let Some(local_keystore) = worker.local_keystore.clone() {
+		if let Some(local_keystore) = local_keystore {
 			debug!(target: "dkg_persistence", "Storing local key for {:?}", &path);
-			let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-				&Public::try_from(&worker.get_sr25519_public_key().0[..])
+			let key_pair = local_keystore.key_pair::<AppPair>(
+				&Public::try_from(&sr25519_public_key.0[..])
 					.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 			);
 			if let Ok(Some(key_pair)) = key_pair {
@@ -99,6 +87,7 @@ where
 ///
 /// Uses the raw keypair as a seed for a secret key input to the XChaCha20Poly1305
 /// encryption cipher.
+#[allow(dead_code)]
 pub(crate) fn load_stored_key<B, C, BE>(
 	path: PathBuf,
 	worker: &mut DKGWorker<B, C, BE>,
@@ -134,156 +123,4 @@ where
 	} else {
 		Err(Error::new(ErrorKind::Other, "Local keystore doesn't exist".to_string()))
 	}
-}
-
-/// We only try to resume the dkg once, if we can find any data for the completed offline stage for
-/// the current round
-pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	// We only try to resume the dkg once even if there is no data to recover
-	if worker.dkg_persistence.initial_check {
-		return
-	}
-	// Set initial check to prevent re-running resuming the dkg
-	worker.dkg_persistence.initial_check = true;
-
-	// If the rounds are already set, we return
-	if worker.rounds.is_some() || worker.next_rounds.is_some() {
-		return
-	}
-
-	// If there is no base path or local keystore then there is no DKG to resume.
-	// We return in this case.
-	if worker.local_keystore.is_none() || worker.base_path.is_none() {
-		return
-	}
-
-	debug!(target: "dkg_persistence", "Trying to restore key gen data");
-	if let Some((active, queued)) = worker.validator_set(header) {
-		worker.current_validator_set = active.clone();
-		worker.queued_validator_set = queued.clone();
-		// Set local key paths
-		let base_path = worker.base_path.as_ref().unwrap();
-		let local_key_path = base_path.join(DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path = base_path.join(QUEUED_DKG_LOCAL_KEY_FILE);
-		// Set round IDs
-		let round_id = active.id;
-		let queued_round_id = queued.id;
-		// Get the stored keys and check whether their rounds match any of the authority set IDs
-		let mut local_key = load_stored_key(local_key_path.clone(), worker).ok();
-		let mut queued_local_key = load_stored_key(queued_local_key_path.clone(), worker).ok();
-		// Check if active key is outdated
-		if let Some(active_key) = local_key.clone() {
-			if active_key.round_id < round_id {
-				local_key = None;
-			}
-		}
-		// Swap the queued local key with the active local key if it matches active round ID
-		if let Some(queued_key) = queued_local_key.clone() {
-			if queued_key.round_id == round_id {
-				local_key = queued_local_key;
-				queued_local_key = None;
-			}
-			if queued_key.round_id < round_id {
-				local_key = None;
-				queued_local_key = None;
-			}
-		}
-		// Get the best active authorities for setting up rounds
-		let maybe_party_index = worker.get_party_index(header);
-		// Create the active rounds only if the authority is selected in the best set
-		if let Some(party_index) = maybe_party_index {
-			let best_authorities: Vec<AuthorityId> =
-				worker.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
-			let jailed_signers = worker.get_signing_jailed(header, &best_authorities);
-			let mut rounds = MultiPartyECDSARounds::builder()
-				.round_id(round_id)
-				.party_index(party_index)
-				.threshold(worker.get_signature_threshold(header))
-				.parties(worker.get_keygen_threshold(header))
-				.local_key_path(Some(local_key_path))
-				.authorities(best_authorities.clone())
-				.jailed_signers(worker.get_signing_jailed(header, &best_authorities))
-				.build();
-
-			if let Some(key) = local_key {
-				debug!(target: "dkg_persistence", "Local key set");
-				// Set the local key
-				rounds.set_local_key(key.local_key);
-				// Once local key is set, we can set the jailed signers which also
-				// generates the next signing set.
-				rounds.set_jailed_signers(jailed_signers);
-				worker.rounds = Some(rounds);
-			}
-		}
-
-		// Get the best queued authorities for setting up next rounds
-		let maybe_next_party_index = worker.get_next_party_index(header);
-		// Create the active rounds only if the authority is selected in the best set
-		if let Some(party_index) = maybe_next_party_index {
-			let best_authorities: Vec<AuthorityId> =
-				worker.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
-			let jailed_signers = worker.get_signing_jailed(header, &best_authorities);
-			let mut rounds = MultiPartyECDSARounds::builder()
-				.round_id(queued_round_id)
-				.party_index(party_index)
-				.threshold(worker.get_next_signature_threshold(header))
-				.parties(worker.get_next_keygen_threshold(header))
-				.local_key_path(Some(queued_local_key_path))
-				.authorities(best_authorities.clone())
-				.jailed_signers(worker.get_signing_jailed(header, &best_authorities))
-				.build();
-
-			if let Some(key) = queued_local_key {
-				debug!(target: "dkg_persistence", "Queued local key set");
-				// Set the local key
-				rounds.set_local_key(key.local_key);
-				// Once local key is set, we can set the jailed signers which also
-				// generates the next signing set.
-				rounds.set_jailed_signers(jailed_signers);
-				worker.next_rounds = Some(rounds);
-			}
-		}
-	}
-}
-
-/// To determine if the protocol should be restarted, we check if the
-/// protocol is stuck at the keygen stage
-#[allow(dead_code)]
-pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
-where
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-{
-	let rounds = worker.rounds.take();
-	let next_rounds = worker.next_rounds.take();
-
-	let should_restart_rounds = {
-		if let Some(rounds) = rounds {
-			let stalled = rounds.has_stalled();
-			worker.rounds = Some(rounds);
-			stalled
-		} else {
-			false
-		}
-	};
-
-	let should_restart_next_rounds = {
-		if let Some(next_round) = next_rounds {
-			let stalled = next_round.has_stalled();
-			worker.next_rounds = Some(next_round);
-			stalled
-		} else {
-			false
-		}
-	};
-
-	(should_restart_rounds, should_restart_next_rounds)
 }

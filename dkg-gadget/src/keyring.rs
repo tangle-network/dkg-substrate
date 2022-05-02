@@ -20,7 +20,7 @@ use dkg_runtime_primitives::crypto;
 
 /// Set of test accounts using [`dkg_primitives::crypto`] types.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum Keyring {
 	Alice,
 	Bob,
@@ -30,6 +30,7 @@ pub enum Keyring {
 	Ferdie,
 	One,
 	Two,
+	Custom(u128),
 }
 
 impl Keyring {
@@ -53,7 +54,7 @@ impl Keyring {
 
 	/// Return seed string.
 	pub fn to_seed(self) -> String {
-		format!("//{}", self)
+		format!("//{:?}", self)
 	}
 
 	/// Iterator over all test accounts
