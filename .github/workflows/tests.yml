@@ -38,11 +38,11 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: wasm32-unknown-unknown
+          target: x86_64-unknown-linux-gnu
           override: true
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Run tests
-        run: cargo nextest run
+        run: cargo nextest run --target=x86_64-unknown-linux-gnu
