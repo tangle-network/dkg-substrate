@@ -48,29 +48,27 @@ async function copyBinary() {
 }
 
 async function bumpVersionAndPush() {
-	execSync(`yarn version --non-interactive --no-git-tag-version --patch`, {
-		stdio: "inherit",
-	});
+	const pkg = await packageJsonInfo();
+	const commitMessage = `[CI Skip] release/${pkg.version.includes("-") ? "beta" : "stable"} ${
+		pkg.name
+	} ${pkg.version} skip-checks: true`;
 	if (isCI) {
 		// setup git
-		execSync("git config push.default simple");
-		execSync("git config merge.ours.driver true");
-		execSync('git config user.name "Github Actions"');
-		execSync('git config user.email "action@github.com"');
-
-		const pkg = await packageJsonInfo();
-		// add and commit
-		execSync("git add --all .");
-		// add the skip checks for GitHub ...
+		execSync("git config --local push.default simple");
+		execSync("git config --local merge.ours.driver true");
+		execSync('git config --local user.name "Github Actions"');
 		execSync(
-			`git commit --no-status --quiet -m "[CI Skip] release/${
-				pkg.version.includes("-") ? "beta" : "stable"
-			} ${pkg.name} ${pkg.version} skip-checks: true"`
+			'git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"'
 		);
-		// get current repo remote url
-		const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
-		execSync(`git push ${remoteUrl} HEAD:${process.env.GITHUB_REF}`);
 	}
+	// add and commit
+	execSync("git add --all .");
+	execSync(
+		`yarn version --non-interactive --no-git-tag-version --patch --message ${commitMessage}`,
+		{
+			stdio: "inherit",
+		}
+	);
 }
 
 async function main() {

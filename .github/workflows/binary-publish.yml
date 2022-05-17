@@ -21,7 +21,8 @@ jobs:
           access_token: ${{ github.token }}
       - uses: actions/checkout@v2
         with:
-          token: ${{ github.token }}
+          persist-credentials: false
+          fetch-depth: 0
       - name: Install Rust toolchain
         id: rust_toolchain
         uses: actions-rs/toolchain@v1
@@ -53,6 +54,12 @@ jobs:
         working-directory: packages/dkg-standalone-binary
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_url: ${{ github.server_url }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
   dummy:
     runs-on: ubuntu-latest
     steps:
