@@ -36,3 +36,9 @@ jobs:
         working-directory: packages/dkg-standalone-binary
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  dummy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: dummy
+        run: |
+          echo "Dummy skip step"
