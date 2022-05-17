@@ -49,9 +49,7 @@ async function copyBinary() {
 
 async function bumpVersionAndPush() {
 	const pkg = await packageJsonInfo();
-	const commitMessage = `[CI Skip] release/${pkg.version.includes("-") ? "beta" : "stable"} ${
-		pkg.name
-	} ${pkg.version} skip-checks: true`;
+	const commitMessage = `"[CI Skip] ${pkg.name} ${pkg.version} skip-checks: true"`;
 	if (isCI) {
 		// setup git
 		execSync("git config --local push.default simple");
