@@ -1,0 +1,38 @@
+{
+	"name": "@webb-tools/dkg-standalone-binary",
+	"version": "0.1.0",
+	"description": "A Shim package that does contain the DKG Standalone Node Binary",
+	"main": "index",
+	"type": "module",
+	"author": "Webb Tools Developers <dev@webb.tools>",
+	"license": "Apache-2.0",
+	"private": false,
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"exports": {
+		"import": "./index.js",
+		"require": "./index.cjs"
+	},
+	"scripts": {
+		"prepublishOnly": "node ./scripts/prePublish.js"
+	},
+	"bin": {
+		"dkg-standalone-node": "./bin/dkg-standalone-node"
+	},
+	"files": [
+		"bin/dkg-standalone-node",
+		"index.cjs",
+		"index.js"
+	],
+	"repository": {
+		"type": "git",
+		"directory": "packages/dkg-standalone-binary",
+		"url": "https://github.com/webb-tools/dkg-substrate.git"
+	},
+	"devDependencies": {
+		"@npmcli/package-json": "^2.0.0",
+		"@types/is-ci": "^3.0.0",
+		"is-ci": "^3.0.1"
+	}
+}
