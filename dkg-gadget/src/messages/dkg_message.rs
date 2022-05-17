@@ -20,7 +20,9 @@ use codec::Encode;
 use dkg_primitives::{
 	crypto::Public,
 	rounds::MultiPartyECDSARounds,
-	types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, SignedDKGMessage},
+	types::{
+		DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, DKGResult, SignedDKGMessage,
+	},
 	GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
@@ -165,7 +167,7 @@ fn sign_and_send_message<B, C, BE>(
 			let signed_dkg_message =
 				SignedDKGMessage { msg: dkg_message.clone(), signature: Some(sig.encode()) };
 			let encoded_signed_dkg_message = signed_dkg_message.encode();
-			
+
 			match dkg_message.payload {
 				DKGMsgPayload::Keygen(_) => {
 					log::debug!(
@@ -188,7 +190,7 @@ fn sign_and_send_message<B, C, BE>(
 						dkg_message.round_id, encoded_signed_dkg_message.len()
 					);
 				},
-				_ => {}
+				_ => {},
 			};
 
 			dkg_worker.gossip_engine.lock().gossip_message(
