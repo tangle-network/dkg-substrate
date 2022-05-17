@@ -2,10 +2,8 @@ name: Publish Binary Packages
 
 on:
   push:
-    # Publish `master` as Container `edge` image.
     branches:
       - master
-    # Publish `v1.2.3` tags as releases.
     tags:
       - v*
 
@@ -22,6 +20,25 @@ jobs:
         with:
           access_token: ${{ github.token }}
       - uses: actions/checkout@v2
+        with:
+          token: ${{ github.token }}
+      - name: Install Rust toolchain
+        id: rust_toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: false
+          components: rustfmt
+      - name: Cache Cargo
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-cargo-${{ steps.rust_toolchain.outputs.rustc_hash }}-cache
       - uses: actions/setup-node@v3
         with:
           node-version: "16.x"
