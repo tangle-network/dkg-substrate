@@ -1,6 +1,6 @@
 {
 	"name": "@webb-tools/dkg-standalone-binary",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "A Shim package that does contain the DKG Standalone Node Binary",
 	"main": "index",
 	"type": "module",
