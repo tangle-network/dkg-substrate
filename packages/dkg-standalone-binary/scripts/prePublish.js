@@ -59,14 +59,16 @@ async function bumpVersionAndPush() {
 			'git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"'
 		);
 	}
-	// add and commit
-	execSync("git add --all .");
 	execSync(
 		`yarn version --non-interactive --no-git-tag-version --patch --message ${commitMessage}`,
 		{
 			stdio: "inherit",
 		}
 	);
+
+	// add and commit
+	execSync("git add --all .");
+	execSync(`git commit -m "${commitMessage}" --allow-empty`);
 }
 
 async function main() {
