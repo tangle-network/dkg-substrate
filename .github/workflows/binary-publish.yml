@@ -60,6 +60,7 @@ jobs:
           github_url: ${{ github.server_url }}
           github_token: ${{ github.token }}
           branch: ${{ github.ref }}
+          force: true
   dummy:
     runs-on: ubuntu-latest
     steps:
