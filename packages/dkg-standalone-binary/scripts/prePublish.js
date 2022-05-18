@@ -35,7 +35,11 @@ async function packageNameWithoutOrgnization() {
 
 /// A function which will start building the dkg-standalone-node binary.
 function build() {
-	spawnSync("cargo", ["build", "--release", "-p", CRATE_NAME], { stdio: "inherit" });
+	spawnSync(
+		"cargo",
+		["build", "--release", "-p", CRATE_NAME, "--features", "integration-tests"],
+		{ stdio: "inherit" }
+	);
 }
 
 /// Copies the CRATE_NAME binary to the bin directory.
