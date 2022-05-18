@@ -68,7 +68,7 @@ async function bumpVersionAndPush() {
 
 	// add and commit
 	execSync("git add --all .");
-	execSync(`git commit -m "${commitMessage}" --allow-empty`);
+	execSync(`git commit -m ${commitMessage} --allow-empty`);
 }
 
 async function main() {
