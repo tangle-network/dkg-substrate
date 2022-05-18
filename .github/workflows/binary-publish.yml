@@ -58,7 +58,7 @@ jobs:
         uses: ad-m/github-push-action@master
         with:
           github_url: ${{ github.server_url }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.DEPLOY_BINARY }}
           branch: ${{ github.ref }}
           force: true
   dummy:
