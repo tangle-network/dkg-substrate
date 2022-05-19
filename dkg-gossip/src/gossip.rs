@@ -22,24 +22,24 @@
 //! - Use [`MessageHandlerPrototype::build`] then [`MessageHandler::run`] to obtain a
 //! `Future` that processes transactions.
 
-use utils::{interval, LruHashSet};
+use crate::utils::{interval, LruHashSet};
 use sc_network::{
 	config::{self, TransactionImport, TransactionImportFuture, TransactionPool},
-	error,
-	Event, ExHashT, ObservedRole,
+	error, Event, ExHashT, ObservedRole,
 };
 
-use sc_network::NetworkService;
-use codec::{Decode, Encode, Codec};
+use codec::{Codec, Decode, Encode};
 use futures::{channel::mpsc, prelude::*, stream::FuturesUnordered};
 use libp2p::{multiaddr, PeerId};
 use log::{debug, trace, warn};
 use prometheus_endpoint::{register, Counter, PrometheusError, Registry, U64};
-use sp_runtime::{traits::Block as BlockT, app_crypto::sp_core::keccak_256};
+use sc_network::{config::ProtocolId, NetworkService};
+use sp_runtime::{app_crypto::sp_core::keccak_256, traits::Block as BlockT};
 use std::{
 	borrow::Cow,
 	collections::{hash_map::Entry, HashMap},
 	iter,
+	marker::PhantomData,
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
@@ -47,9 +47,8 @@ use std::{
 		Arc,
 	},
 	task::Poll,
-	time, marker::PhantomData,
+	time,
 };
-use sc_network::config::ProtocolId;
 
 /// Interval at which we propagate transactions;
 const PROPAGATE_TIMEOUT: time::Duration = time::Duration::from_millis(2900);
@@ -102,14 +101,16 @@ impl Metrics {
 
 #[pin_project::pin_project]
 struct PendingMessage {
-    // TODO: Decide if we want to use this pattern for validating messages
+	// TODO: Decide if we want to use this pattern for validating messages
 	#[pin]
-	validation: TransactionImportFuture,
+	validation: Pin<Box<dyn Future<Output = Result<(), ()>> + Send + 'static>>,
+	// validation: TransactionImportFuture,
 	msg: Vec<u8>,
 }
 
 impl Future for PendingMessage {
-	type Output = (Vec<u8>, TransactionImport);
+	// type Output = (Vec<u8>, TransactionImport);
+	type Output = (Vec<u8>, Result<(), ()>);
 
 	fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
 		let mut this = self.project();
@@ -157,7 +158,7 @@ impl MessageHandlerPrototype {
 		self,
 		service: Arc<NetworkService<B, H>>,
 		local_role: config::Role,
-        message_pool: Arc<dyn TransactionPool<H, B>>,
+		message_pool: Arc<dyn TransactionPool<H, B>>,
 		metrics_registry: Option<&Registry>,
 	) -> error::Result<(MessageHandler<B, H, M>, MessageHandlerController<H>)> {
 		let event_stream = service.event_stream("transactions-handler").boxed();
@@ -173,7 +174,7 @@ impl MessageHandlerPrototype {
 			service,
 			event_stream,
 			peers: HashMap::new(),
-            message_pool,
+			message_pool,
 			local_role,
 			from_controller,
 			metrics: if let Some(r) = metrics_registry {
@@ -181,7 +182,7 @@ impl MessageHandlerPrototype {
 			} else {
 				None
 			},
-            _phantom_message_type: PhantomData::new(),
+			_phantom_message_type: PhantomData::default(),
 		};
 
 		let controller = MessageHandlerController { to_handler, gossip_enabled };
@@ -242,14 +243,14 @@ pub struct MessageHandler<B: BlockT + 'static, H: ExHashT, M> {
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<H>>,
-    // TODO: Remove this and integrate meta handler or channel for polling incoming messages
+	// TODO: Remove this and integrate meta handler or channel for polling incoming messages
 	message_pool: Arc<dyn TransactionPool<H, B>>,
 	gossip_enabled: Arc<AtomicBool>,
 	local_role: config::Role,
 	from_controller: mpsc::UnboundedReceiver<ToHandler<H>>,
 	/// Prometheus metrics.
 	metrics: Option<Metrics>,
-    _phantom_message_type: PhantomData<M>,
+	_phantom_message_type: PhantomData<M>,
 }
 
 /// Peer information
@@ -270,8 +271,11 @@ impl<B: BlockT + 'static, H: ExHashT, M: Codec> MessageHandler<B, H, M> {
 					self.propagate_messages();
 				},
 				(msg, result) = self.pending_messages.select_next_some() => {
-					if let Some(peers) = self.pending_message_peers.remove(&msg) {
-						peers.into_iter().for_each(|p| self.on_handle_transaction_import(p, result));
+					let msg_hash: [u8; 32] = msg.try_into().expect("we only insert valid messages; qed");
+					if let Some(peers) = self.pending_message_peers.remove(&msg_hash) {
+						peers.into_iter().for_each(|p| {
+							// self.on_handle_transaction_import(p, result)
+					});
 					} else {
 						warn!(target: "sub-libp2p", "Inconsistent state, no peers for pending transaction!");
 					}
@@ -316,25 +320,25 @@ impl<B: BlockT + 'static, H: ExHashT, M: Codec> MessageHandler<B, H, M> {
 			},
 
 			Event::NotificationStreamOpened { remote, protocol, role, .. }
-			if protocol == self.protocol_name =>
-				{
-					let _was_in = self.peers.insert(
-						remote,
-						Peer {
-							known_messages: LruHashSet::new(
-								NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
-							),
-							role,
-						},
-					);
-					debug_assert!(_was_in.is_none());
-				},
+				if protocol == self.protocol_name =>
+			{
+				let _was_in = self.peers.insert(
+					remote,
+					Peer {
+						known_messages: LruHashSet::new(
+							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
+						),
+						role,
+					},
+				);
+				debug_assert!(_was_in.is_none());
+			},
 			Event::NotificationStreamClosed { remote, protocol }
-			if protocol == self.protocol_name =>
-				{
-					let _peer = self.peers.remove(&remote);
-					debug_assert!(_peer.is_some());
-				},
+				if protocol == self.protocol_name =>
+			{
+				let _peer = self.peers.remove(&remote);
+				debug_assert!(_peer.is_some());
+			},
 
 			Event::NotificationsReceived { remote, messages } => {
 				for (protocol, message) in messages {
@@ -342,9 +346,7 @@ impl<B: BlockT + 'static, H: ExHashT, M: Codec> MessageHandler<B, H, M> {
 						continue
 					}
 
-					if let Ok(m) = <Vec<M> as Decode>::decode(
-						&mut message.as_ref(),
-					) {
+					if let Ok(m) = <Vec<M> as Decode>::decode(&mut message.as_ref()) {
 						self.on_messages(remote, &m);
 					} else {
 						warn!(target: "sub-libp2p", "Failed to decode transactions list");
@@ -385,15 +387,16 @@ impl<B: BlockT + 'static, H: ExHashT, M: Codec> MessageHandler<B, H, M> {
 					break
 				}
 
-                let hash = keccak_256(&m.encode());
-				peer.known_messages.insert(hash.clone());
+				let hash = keccak_256(&m.encode());
+				// peer.known_messages.insert(hash.clone());
 
 				self.service.report_peer(who, rep::ANY_MESSAGE);
 
 				match self.pending_message_peers.entry(hash.clone()) {
 					Entry::Vacant(entry) => {
 						self.pending_messages.push(PendingMessage {
-							validation: self.message_pool.import(t),
+							// validation: self.message_pool.import(t),
+							validation: futures::future::ready(Ok(())).boxed(),
 							msg: m.encode(),
 						});
 						entry.insert(vec![who]);
@@ -408,10 +411,9 @@ impl<B: BlockT + 'static, H: ExHashT, M: Codec> MessageHandler<B, H, M> {
 
 	fn on_handle_transaction_import(&mut self, who: PeerId, import: TransactionImport) {
 		match import {
-			TransactionImport::KnownGood =>
-				self.service.report_peer(who, rep::ANY_MESSAGE_REFUND),
-			TransactionImport::NewGood => self.service.report_peer(who, rep::GOOD_TRANSACTION),
-			TransactionImport::Bad => self.service.report_peer(who, rep::BAD_TRANSACTION),
+			TransactionImport::KnownGood => self.service.report_peer(who, rep::ANY_MESSAGE_REFUND),
+			TransactionImport::NewGood => self.service.report_peer(who, rep::GOOD_MESSAGE),
+			TransactionImport::Bad => self.service.report_peer(who, rep::BAD_MESSAGE),
 			TransactionImport::None => {},
 		}
 	}
