@@ -1,3 +1,4 @@
+use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +16,6 @@
 // Handles non-dkg messages
 use crate::{
 	storage::public_keys::store_aggregated_public_keys,
-	types::dkg_topic,
 	worker::{DKGWorker, KeystoreExt},
 	Client, DKGKeystore,
 };
@@ -29,19 +29,19 @@ use dkg_runtime_primitives::{
 };
 use log::{debug, error};
 use sc_client_api::Backend;
-use sc_network_gossip::GossipEngine;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::{Block, Header, NumberFor};
 use std::collections::HashMap;
 
-pub(crate) fn handle_public_key_broadcast<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	if dkg_worker.rounds.is_none() {
 		return Ok(())
@@ -105,14 +105,15 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE>(
+pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	key_store: &DKGKeystore,
-	gossip_engine: &mut GossipEngine<B>,
+	gossip_engine: &mut GE,
 	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
 	msg: DKGPublicKeyMessage,
 ) where
 	B: Block,
 	BE: Backend<B>,
+	GE: GossipEngineIface,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
@@ -137,7 +138,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				gossip_engine.gossip_message(dkg_topic::<B>(), encoded_signed_dkg_message, true);
+				gossip_engine.gossip(encoded_signed_dkg_message.as_slice());
 			},
 			Err(e) => error!(
 				target: "dkg",

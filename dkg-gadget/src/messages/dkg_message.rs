@@ -1,3 +1,4 @@
+use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 use std::sync::Arc;
 // Copyright 2022 Webb Technologies Inc.
 //
@@ -13,21 +14,20 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{types::dkg_topic, worker::KeystoreExt, DKGKeystore};
+use crate::{worker::KeystoreExt, DKGKeystore};
 use codec::Encode;
 use dkg_primitives::types::{DKGMessage, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use log::trace;
 use parking_lot::Mutex;
-use sc_network_gossip::GossipEngine;
 use sp_runtime::traits::Block;
 
-pub(crate) fn sign_and_send_messages<B>(
-	gossip_engine: &Arc<Mutex<GossipEngine<B>>>,
+pub(crate) fn sign_and_send_messages<GE>(
+	gossip_engine: &Arc<Mutex<GE>>,
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
 ) where
-	B: Block,
+	GE: GossipEngineIface,
 {
 	let dkg_messages = dkg_messages.into();
 	let public = dkg_keystore.get_authority_public_key();
@@ -44,7 +44,7 @@ pub(crate) fn sign_and_send_messages<B>(
 
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
-				engine_lock.gossip_message(dkg_topic::<B>(), encoded_signed_dkg_message, true);
+				engine_lock.gossip(encoded_signed_dkg_message.as_slice());
 			},
 			Err(e) => trace!(
 				target: "dkg",

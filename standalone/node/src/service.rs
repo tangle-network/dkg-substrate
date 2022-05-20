@@ -278,7 +278,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		task_manager.spawn_essential_handle().spawn_blocking(
 			"dkg-gadget",
 			None,
-			dkg_gadget::start_dkg_gadget::<_, _, _, _>(dkg_params),
+			dkg_gadget::start_dkg_gadget::<_, _, _>(dkg_params),
 		);
 	}
 

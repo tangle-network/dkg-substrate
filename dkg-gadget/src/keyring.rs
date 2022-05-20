@@ -15,6 +15,7 @@
 #![warn(missing_docs)]
 
 use sp_core::{ecdsa, keccak_256, Pair};
+use strum::IntoEnumIterator;
 
 use dkg_runtime_primitives::crypto;
 
