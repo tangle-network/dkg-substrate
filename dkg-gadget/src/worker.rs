@@ -976,20 +976,11 @@ where
 	// *** Main run loop ***
 
 	pub(crate) async fn run(mut self) {
-		// let mut dkg =
-		// 	Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
-		// 		|notification| async move {
-		// 			SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
-		// 		},
-		// 	));
 		let mut dkg = self.gossip_engine.stream();
 
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		loop {
-			// let engine = self.gossip_engine.clone();
-			// let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
-			let gossip_engine = futures::future::pending::<()>().boxed();
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
@@ -1031,10 +1022,6 @@ where
 						return;
 					}
 				},
-				_ = gossip_engine.fuse() => {
-					error!(target: "dkg", "🕸️  Gossip engine has terminated.");
-					return;
-				}
 			}
 		}
 	}
