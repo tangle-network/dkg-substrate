@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate core;
+
 use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use log::debug;
@@ -42,6 +44,7 @@ mod types;
 mod utils;
 mod worker;
 
+use crate::meta_async_rounds::dkg_gossip_engine::NetworkGossipEngine;
 pub use keystore::DKGKeystore;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
@@ -49,10 +52,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	let mut cfg =
-		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
-	cfg.allow_non_reserved(25, 25);
-	cfg
+	NetworkGossipEngine::set_config()
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -130,8 +130,7 @@ where
 		_block,
 	} = dkg_params;
 
-	// TODO(@shekohex): we should create the real gossip engine here
-	let gossip_engine = ();
+	let network_gossip_engine = NetworkGossipEngine::new();
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -146,7 +145,12 @@ where
 				},
 			},
 		);
-
+	let (gossip_handler, gossip_engine) = network_gossip_engine
+		.build(network.clone(), metrics.clone())
+		.expect("Failed to build gossip engine");
+	// enable the gossip
+	gossip_engine.set_gossip_enabled(true);
+	tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
 		client,
 		backend,

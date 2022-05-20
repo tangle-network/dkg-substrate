@@ -115,7 +115,7 @@ where
 	//pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GE>>,
+	pub gossip_engine: Arc<GE>,
 	pub metrics: Option<Metrics>,
 	pub rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
 	pub next_rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
@@ -188,7 +188,7 @@ where
 			client: client.clone(),
 			backend,
 			key_store,
-			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
+			gossip_engine: Arc::new(gossip_engine),
 			metrics,
 			rounds: None,
 			next_rounds: None,
@@ -982,7 +982,7 @@ where
 		// 			SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
 		// 		},
 		// 	));
-		let mut dkg = futures::stream::pending::<SignedDKGMessage<Public>>().boxed();
+		let mut dkg = self.gossip_engine.stream();
 
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 

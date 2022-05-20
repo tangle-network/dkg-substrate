@@ -19,11 +19,9 @@ use codec::Encode;
 use dkg_primitives::types::{DKGMessage, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use log::trace;
-use parking_lot::Mutex;
-use sp_runtime::traits::Block;
 
 pub(crate) fn sign_and_send_messages<GE>(
-	gossip_engine: &Arc<Mutex<GE>>,
+	gossip_engine: Arc<GE>,
 	dkg_keystore: &DKGKeystore,
 	dkg_messages: impl Into<UnsignedMessages>,
 ) where
@@ -31,8 +29,6 @@ pub(crate) fn sign_and_send_messages<GE>(
 {
 	let dkg_messages = dkg_messages.into();
 	let public = dkg_keystore.get_authority_public_key();
-
-	let mut engine_lock = gossip_engine.lock();
 
 	for dkg_message in dkg_messages {
 		match dkg_keystore.sign(&public, &dkg_message.encode()) {
@@ -44,7 +40,7 @@ pub(crate) fn sign_and_send_messages<GE>(
 
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
-				engine_lock.gossip(encoded_signed_dkg_message.as_slice());
+				gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => trace!(
 				target: "dkg",

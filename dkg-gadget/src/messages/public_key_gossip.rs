@@ -30,7 +30,7 @@ use dkg_runtime_primitives::{
 use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
 	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
@@ -107,7 +107,7 @@ where
 
 pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	key_store: &DKGKeystore,
-	gossip_engine: &mut GE,
+	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
 	msg: DKGPublicKeyMessage,
 ) where
@@ -138,7 +138,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				gossip_engine.gossip(encoded_signed_dkg_message.as_slice());
+				gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",

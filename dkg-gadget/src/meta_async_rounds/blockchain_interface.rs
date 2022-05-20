@@ -96,7 +96,7 @@ pub struct DKGIface<B: Block, BE, C, GE> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GE>>,
+	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
@@ -132,7 +132,7 @@ where
 	}
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
-		sign_and_send_messages(&self.gossip_engine, &self.keystore, unsigned_msg);
+		sign_and_send_messages(self.gossip_engine.clone(), &self.keystore, unsigned_msg);
 		Ok(())
 	}
 
@@ -187,7 +187,7 @@ where
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
-			&mut *self.gossip_engine.lock(),
+			self.gossip_engine.clone(),
 			&mut *self.aggregated_public_keys.lock(),
 			key,
 		);
