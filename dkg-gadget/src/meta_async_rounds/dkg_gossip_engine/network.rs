@@ -301,9 +301,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 					}
 				}
 			},
-
-			// Not our concern.
-			Event::NotificationStreamOpened { .. } | Event::NotificationStreamClosed { .. } => {},
+			Event::NotificationStreamOpened { .. } => {},
+			Event::NotificationStreamClosed { .. } => {},
 		}
 	}
 
@@ -370,8 +369,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 			warn!(target: "dkg", "No peers to gossip message {}", message_hash);
 		}
 		for (who, peer) in self.peers.iter_mut() {
-			let already_propagated = peer.known_messages.insert(message_hash.clone());
-			if already_propagated {
+			let new_to_them = peer.known_messages.insert(message_hash.clone());
+			if !new_to_them {
 				continue
 			}
 			self.service.write_notification(
