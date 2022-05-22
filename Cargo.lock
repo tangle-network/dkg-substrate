@@ -2166,24 +2166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkg-gossip"
-version = "0.1.0"
-dependencies = [
- "futures 0.3.21",
- "futures-timer",
- "libp2p",
- "linked_hash_set",
- "log",
- "lru 0.7.5",
- "parity-scale-codec",
- "pin-project 1.0.10",
- "sc-network",
- "sc-peerset",
- "sp-runtime",
- "substrate-prometheus-endpoint",
-]
-
-[[package]]
 name = "dkg-node"
 version = "3.0.0"
 dependencies = [

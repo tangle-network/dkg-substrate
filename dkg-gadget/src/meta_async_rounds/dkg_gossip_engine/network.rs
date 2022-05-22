@@ -226,9 +226,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				},
 				message = incoming_messages.next().fuse() => {
 					match message {
-						Some(Ok(ToHandler::SendMessage { recipient, message })) => self
-						.send_signed_dkg_message
-						(recipient, message),
+						Some(Ok(ToHandler::SendMessage { recipient, message })) => self.send_signed_dkg_message(recipient, message),
 						Some(Ok(ToHandler::Gossip(v))) => self.gossip_message(v),
 						None => {
 							// The broadcast stream has been closed.
@@ -309,6 +307,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Called when peer sends us new signed DKG message.
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
+		// TODO: Fill in with proper check of message
 		let some_check_here = false;
 		if some_check_here {
 			self.service.disconnect_peer(who, self.protocol_name.clone());
