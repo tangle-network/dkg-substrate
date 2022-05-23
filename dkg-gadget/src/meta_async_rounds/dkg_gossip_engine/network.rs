@@ -1,6 +1,6 @@
 //! A DKG Gossip Engine that uses [`sc_network::NetworkService`] as a backend.
 //!
-//! In the nutshell, it works as follows:
+//! In a nutshell, it works as follows:
 //!
 //! 1. You create a new [`NetworkGossipEngineBuilder`] which does not require any setup for now,
 //! 2. You call [`NetworkGossipEngineBuilder::build`] to get two things:
