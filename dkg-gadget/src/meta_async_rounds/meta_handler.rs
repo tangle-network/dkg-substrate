@@ -187,7 +187,7 @@ where
 								count_in_batch
 							);
 					} else {
-						log::info!(target: "dkg", "🕸️  We are not among signers, skipping");
+						log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
 						return Ok(())
 					}
 				}
@@ -199,6 +199,7 @@ where
 			Ok(())
 		}.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
+			log::info!(target: "dkg", "🕸️  MetaAsyncProtocolHandler completed");
 			res
 		});
 
@@ -488,7 +489,11 @@ where
 		select_random_set(seed, final_set, t + 1).map(|set| {
 			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", params.round_id, t, n, set);
 			set
-		}).map_err(|err| DKGError::CreateOfflineStage { reason: err.to_string() })
+		}).map_err(|err| {
+			DKGError::CreateOfflineStage {
+				reason: format!("generate_signers failed, reason: {}", err)
+			}
+		})
 	}
 
 	fn generate_outgoing_to_wire_fn<SM: StateMachineIface + 'a, B: BlockChainIface + 'a>(

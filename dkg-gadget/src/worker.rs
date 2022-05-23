@@ -963,7 +963,9 @@ where
 
 			// Get rid of function that handles unsigned proposals
 			if let Err(err) = rounds.submit_unsigned_proposals(unsigned_proposals) {
-				self.handle_dkg_error(DKGError::CreateOfflineStage { reason: err.to_string() })
+				self.handle_dkg_error(DKGError::CreateOfflineStage {
+					reason: format!("submit_unsigned_proposals failed, reason: {}", err),
+				})
 			}
 		}
 	}
