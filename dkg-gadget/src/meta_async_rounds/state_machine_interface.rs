@@ -85,8 +85,7 @@ impl StateMachineIface for Keygen {
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						//log::info!("Skipping passing of message to async proto since not
-						// intended for local");
+						log::info!("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}

@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{path::PathBuf, sync::Arc};
+extern crate core;
+
+use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use log::debug;
 use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
-use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
-use sp_api::ProvideRuntimeApi;
+use sc_network::{ExHashT, NetworkService};
+use sp_api::{BlockT, NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block, Header};
 
@@ -29,7 +31,7 @@ use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
-mod gossip;
+// mod gossip;
 mod keyring;
 mod keystore;
 pub mod messages;
@@ -42,6 +44,7 @@ mod types;
 mod utils;
 mod worker;
 
+use crate::meta_async_rounds::dkg_gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
@@ -49,10 +52,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	let mut cfg =
-		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
-	cfg.allow_non_reserved(25, 25);
-	cfg
+	NetworkGossipEngineBuilder::set_config()
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -82,13 +82,13 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, N>
+pub struct DKGParams<B, BE, C>
 where
 	B: Block,
+	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -99,26 +99,25 @@ where
 	/// Concrete local key store
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
-	pub network: N,
+	pub network: Arc<NetworkService<B, B::Hash>>,
 
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Path to the persistent keystore directory for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Phantom block type
-	pub _block: std::marker::PhantomData<B>,
+	pub _block: PhantomData<B>,
 }
 
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, N>(dkg_params: DKGParams<B, BE, C, N>)
+pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let DKGParams {
 		client,
@@ -131,9 +130,7 @@ where
 		_block,
 	} = dkg_params;
 
-	let gossip_validator = Arc::new(gossip::GossipValidator::new());
-	let gossip_engine =
-		GossipEngine::new(network, DKG_PROTOCOL_NAME, gossip_validator.clone(), None);
+	let network_gossip_engine = NetworkGossipEngineBuilder::new();
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -148,7 +145,12 @@ where
 				},
 			},
 		);
-
+	let (gossip_handler, gossip_engine) = network_gossip_engine
+		.build(network.clone(), metrics.clone())
+		.expect("Failed to build gossip engine");
+	// enable the gossip
+	gossip_engine.set_gossip_enabled(true);
+	tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
 		client,
 		backend,
@@ -157,9 +159,10 @@ where
 		metrics,
 		base_path,
 		local_keystore,
+		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
 	worker.run().await
 }

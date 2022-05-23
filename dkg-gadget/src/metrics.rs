@@ -13,10 +13,12 @@
 // limitations under the License.
 
 //! DKG Prometheus metrics definition
-use prometheus::{register, Gauge, PrometheusError, Registry, U64};
+use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 
 /// DKG metrics exposed through Prometheus
+#[derive(Clone)]
 pub(crate) struct Metrics {
+	pub propagated_messages: Counter<U64>,
 	/// Current active validator set id
 	pub dkg_validator_set_id: Gauge<U64>,
 }
@@ -26,6 +28,10 @@ impl Metrics {
 		Ok(Self {
 			dkg_validator_set_id: register(
 				Gauge::new("dkg_validator_set_id", "Current DKG active validator set id.")?,
+				registry,
+			)?,
+			propagated_messages: register(
+				Counter::new("dkg_propagated_messages", "Number of DKG messages propagated.")?,
 				registry,
 			)?,
 		})

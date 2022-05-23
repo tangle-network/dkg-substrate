@@ -14,7 +14,7 @@
 
 use crate::{
 	messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
-	meta_async_rounds::BatchKey,
+	meta_async_rounds::{dkg_gossip_engine::GossipEngineIface, BatchKey},
 	persistence::store_localkey,
 	proposal::{get_signed_proposal, make_signed_proposal},
 	storage::proposals::save_signed_proposals_in_storage,
@@ -39,7 +39,6 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 use parking_lot::{Mutex, RwLock};
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
-use sc_network_gossip::GossipEngine;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::{
 	generic::BlockId,
@@ -92,12 +91,12 @@ pub trait BlockChainIface: Send + Sync {
 	}
 }
 
-pub struct DKGIface<B: Block, BE, C> {
+pub struct DKGIface<B: Block, BE, C, GE> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
@@ -109,12 +108,13 @@ pub struct DKGIface<B: Block, BE, C> {
 	pub local_key_path: Option<PathBuf>,
 }
 
-impl<B, BE, C> BlockChainIface for DKGIface<B, BE, C>
+impl<B, BE, C, GE> BlockChainIface for DKGIface<B, BE, C, GE>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
 
@@ -124,7 +124,7 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
-		DKGWorker::verify_signature_against_authorities_inner(
+		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
 			(&*msg).clone(),
 			&self.latest_header,
 			client,
@@ -132,7 +132,7 @@ where
 	}
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
-		sign_and_send_messages(&self.gossip_engine, &self.keystore, unsigned_msg);
+		sign_and_send_messages(self.gossip_engine.clone(), &self.keystore, unsigned_msg);
 		Ok(())
 	}
 
@@ -185,9 +185,9 @@ where
 	}
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
-		gossip_public_key::<B, C, BE>(
+		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
-			&mut *self.gossip_engine.lock(),
+			self.gossip_engine.clone(),
 			&mut *self.aggregated_public_keys.lock(),
 			key,
 		);

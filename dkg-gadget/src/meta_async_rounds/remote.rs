@@ -96,6 +96,11 @@ impl<C> MetaAsyncProtocolRemote<C> {
 		&self,
 		unsigned_proposals: Vec<UnsignedProposal>,
 	) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
+		if unsigned_proposals.is_empty() {
+			log::trace!("[{}] No unsigned proposals to submit", self.round_id);
+			return Ok(())
+		}
+		log::info!(target: "dkg", "Sending unsigned proposals: {:?}", unsigned_proposals);
 		self.unsigned_proposals_tx.send(Some(unsigned_proposals))
 	}
 

@@ -16,6 +16,7 @@ use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
 
 pub type FE = Scalar<Secp256k1>;
@@ -49,6 +50,15 @@ pub struct SignedDKGMessage<AuthorityId> {
 	pub msg: DKGMessage<AuthorityId>,
 	/// ECDSA signature of sha3(concatenated message contents)
 	pub signature: Option<Vec<u8>>,
+}
+
+impl<AuthorityId> SignedDKGMessage<AuthorityId> {
+	pub fn message_hash<B: Block>(&self) -> B::Hash
+	where
+		DKGMessage<AuthorityId>: Encode,
+	{
+		<<B::Header as Header>::Hashing as Hash>::hash_of(&self.msg)
+	}
 }
 
 impl<ID> fmt::Display for DKGMessage<ID> {

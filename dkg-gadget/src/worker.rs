@@ -34,7 +34,6 @@ use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
 	ImportNotifications,
 };
-use sc_network_gossip::GossipEngine;
 
 use sp_api::BlockId;
 use sp_runtime::traits::{Block, Header, NumberFor};
@@ -46,7 +45,10 @@ use crate::messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
 };
 
-use crate::storage::clear::listen_and_clear_offchain_storage;
+use crate::{
+	meta_async_rounds::dkg_gossip_engine::GossipEngineIface,
+	storage::clear::listen_and_clear_offchain_storage,
+};
 
 use dkg_primitives::{
 	types::{DKGError, DKGMisbehaviourMessage, RoundId},
@@ -86,31 +88,34 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub(crate) struct WorkerParams<B, BE, C>
+pub(crate) struct WorkerParams<B, BE, C, GE>
 where
 	B: Block,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: GossipEngine<B>,
+	pub gossip_engine: GE,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
+	pub _marker: PhantomData<B>,
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, C, BE>
+pub(crate) struct DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	//pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub gossip_engine: Arc<GE>,
 	pub metrics: Option<Metrics>,
 	pub rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
 	pub next_rounds: Option<MetaAsyncProtocolRemote<NumberFor<B>>>,
@@ -148,12 +153,13 @@ where
 	_backend: PhantomData<BE>,
 }
 
-impl<B, C, BE> DKGWorker<B, C, BE>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block + Codec,
 	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -161,7 +167,7 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub(crate) fn new(worker_params: WorkerParams<B, BE, C>) -> Self {
+	pub(crate) fn new(worker_params: WorkerParams<B, BE, C, GE>) -> Self {
 		let WorkerParams {
 			client,
 			backend,
@@ -170,6 +176,7 @@ where
 			metrics,
 			base_path,
 			local_keystore,
+			..
 		} = worker_params;
 
 		// we drop the rx handle since we can call tx.subscribe() every time we need to fire up
@@ -181,7 +188,7 @@ where
 			client: client.clone(),
 			backend,
 			key_store,
-			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
+			gossip_engine: Arc::new(gossip_engine),
 			metrics,
 			rounds: None,
 			next_rounds: None,
@@ -210,12 +217,13 @@ enum ProtoStageType {
 	Queued,
 }
 
-impl<B, C, BE> DKGWorker<B, C, BE>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -227,7 +235,7 @@ where
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
-	) -> Result<AsyncProtocolParameters<DKGIface<B, BE, C>>, DKGError> {
+	) -> Result<AsyncProtocolParameters<DKGIface<B, BE, C, GE>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -955,7 +963,9 @@ where
 
 			// Get rid of function that handles unsigned proposals
 			if let Err(err) = rounds.submit_unsigned_proposals(unsigned_proposals) {
-				self.handle_dkg_error(DKGError::CreateOfflineStage { reason: err.to_string() })
+				self.handle_dkg_error(DKGError::CreateOfflineStage {
+					reason: format!("submit_unsigned_proposals failed, reason: {}", err),
+				})
 			}
 		}
 	}
@@ -968,19 +978,11 @@ where
 	// *** Main run loop ***
 
 	pub(crate) async fn run(mut self) {
-		let mut dkg =
-			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
-				|notification| async move {
-					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
-				},
-			));
+		let mut dkg = self.gossip_engine.stream();
 
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		loop {
-			let engine = self.gossip_engine.clone();
-			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
-
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
@@ -1022,10 +1024,6 @@ where
 						return;
 					}
 				},
-				_ = gossip_engine.fuse() => {
-					error!(target: "dkg", "🕸️  Gossip engine has terminated.");
-					return;
-				}
 			}
 		}
 	}
@@ -1047,10 +1045,11 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C> KeystoreExt for DKGWorker<B, C, BE>
+impl<B, BE, C, GE> KeystoreExt for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
+	GE: GossipEngineIface,
 	C: Client<B, BE>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
@@ -1058,7 +1057,7 @@ where
 	}
 }
 
-impl<B: Block, BE, C> KeystoreExt for DKGIface<B, BE, C> {
+impl<B: Block, BE, C, GE> KeystoreExt for DKGIface<B, BE, C, GE> {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
