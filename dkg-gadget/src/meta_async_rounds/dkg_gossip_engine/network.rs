@@ -1,13 +1,38 @@
+//! A DKG Gossip Engine that uses [`sc_network::NetworkService`] as a backend.
+//!
+//! In the nutshell, it works as follows:
+//!
+//! 1. You create a new [`NetworkGossipEngineBuilder`] which does not require any setup for now,
+//! 2. You call [`NetworkGossipEngineBuilder::build`] to get two things:
+//!   - a [`GossipHandler`] that is a simple background task that should run indefinitely, and
+//!   - a [`GossipHandlerController`] that can be used to control that background task.
+//!
+//! The background task ([`GossipHandler`]) role is to listen, and gossip (if enabled) all the
+//! DKG messages.
+//!
+//! From the [`GossipHandlerController`] which implements [`super::GossipEngineIface`], you can:
+//!  - send a DKG message to a specific peer.
+//!  - send a DKG message to all peers.
+//!  - get a stream of DKG messages.
+//!  
+//!
+//! ### The Lifetime of the DKG Message:
+//!
+//! The DKG message is a [`SignedDKGMessage`] that is signed by the DKG authority, first it get
+//! sent to the Gossip Engine either by calling [`GossipHandlerController::send`] or
+//! [`GossipHandlerController::gossip`], depending on the call, the message will be sent to all
+//! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
+//! engine, and it is verified then it will be added to the Engine's internal stream of DKG
+//! messages, later the DKG Gadget will read this stream and process the DKG message.
 use crate::metrics::Metrics;
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{
-	channel::mpsc, stream::StreamExt as _, FutureExt, SinkExt, Stream, StreamExt, TryFutureExt,
-	TryStreamExt,
+	stream::StreamExt as _, FutureExt, SinkExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
 };
 use linked_hash_set::LinkedHashSet;
-use log::{debug, trace, warn};
+use log::{debug, warn};
 use sc_network::{config, error, multiaddr, Event, ExHashT, NetworkService, PeerId};
 use sp_runtime::traits::Block;
 use std::{
@@ -24,9 +49,10 @@ use std::{
 };
 use tokio::sync::broadcast;
 
-pub struct NetworkGossipEngine;
+#[derive(Debug, Clone, Copy)]
+pub struct NetworkGossipEngineBuilder;
 
-impl NetworkGossipEngine {
+impl NetworkGossipEngineBuilder {
 	/// Create a new network gossip engine.
 	pub fn new() -> Self {
 		Self
@@ -47,36 +73,49 @@ impl NetworkGossipEngine {
 		}
 	}
 
-	/// Turns the engine into the actual handler. Returns a controller that allows controlling
+	/// Turns the builder into the actual handler. Returns a controller that allows controlling
 	/// the behaviour of the handler while it's running.
 	///
-	/// Important: the gossip handler is initially disabled and doesn't gossip messages.
+	/// Important: the gossip mechanism is initially disabled and doesn't gossip messages.
 	/// You must call [`GossipHandlerController::set_gossip_enabled`] to enable it.
+	///
+	/// The returned values are:
+	/// - a [`GossipHandler`] that is a simple background task that should run indefinitely, and
+	/// - a [`GossipHandlerController`] that can be used to control that background task.
 	pub(crate) fn build<B: Block>(
 		self,
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController)> {
 		let event_stream = service.event_stream("dkg-handler").boxed();
-		let (to_handler, from_controller) = broadcast::channel(1000);
-		let (to_controller, _) = broadcast::channel(1000);
+		// Here we need to create few channels to communicate back and forth between the
+		// background task and the controller.
+		// since we have two things here we will need two channels:
+		// 1. a channel to send commands to the background task (Controller -> Background).
+		// 2. a channel to send DKG Messages back from the background task to the controller
+		// (Background -> Controller).
+		let (handler_channel, _) = broadcast::channel(1000);
+		let (controller_channel, _) = broadcast::channel(1000);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
 
 		let handler = GossipHandler {
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
-			to_controller: to_controller.clone(),
-			to_handler: to_handler.clone(),
+			my_channel: handler_channel.clone(),
+			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
 			event_stream,
 			peers: HashMap::new(),
-			from_controller,
 			metrics,
 		};
 
-		let controller = GossipHandlerController { to_handler, to_controller, gossip_enabled };
+		let controller = GossipHandlerController {
+			my_channel: controller_channel,
+			handler_channel,
+			gossip_enabled,
+		};
 
 		Ok((handler, controller))
 	}
@@ -110,16 +149,30 @@ mod rep {
 
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 pub struct GossipHandlerController {
-	to_handler: broadcast::Sender<ToHandler>,
-	to_controller: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// a channel to send commands to the background task (Controller -> Background).
+	handler_channel: broadcast::Sender<ToHandler>,
+	/// a channel to send DKG Messages back from the background task to the controller
+	///
+	/// Technically, we do not need to hold a reference to this channel, but we do it to
+	/// here to make this controller (**Clone-able**), meaning that we can clone it and
+	/// still be able to receive messages from the background task.
+	///
+	/// Besides that, in the [`super::GossipEngineIface`] whenever we want to get the stream
+	/// of the DKG messages (which requires the stream is Owned value), here
+	/// we just create a new receiver of this channel, and since it is a broadcast channel,
+	/// we can receive messages from all the clones of this controller.
+	///
+	/// See: [`GossipHandlerController::stream`] below.
+	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
 }
 
 impl Clone for GossipHandlerController {
 	fn clone(&self) -> Self {
 		GossipHandlerController {
-			to_handler: self.to_handler.clone(),
-			to_controller: self.to_controller.clone(),
+			handler_channel: self.handler_channel.clone(),
+			my_channel: self.my_channel.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
 		}
 	}
@@ -132,7 +185,7 @@ impl super::GossipEngineIface for GossipHandlerController {
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
 		debug!(target: "dkg", "Sending message to {}", recipient);
-		self.to_handler
+		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
 			.map_err(|_| DKGError::GenericError {
@@ -142,22 +195,26 @@ impl super::GossipEngineIface for GossipHandlerController {
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
 		debug!(target: "dkg", "Sending message to all peers");
-		self.to_handler.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
+		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
 	}
 
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
-		let stream = self.to_controller.subscribe();
+		// We need to create a new receiver of the channel, so that we can receive messages
+		// from anywhere, without actually fight the rustc borrow checker.
+		let stream = self.my_channel.subscribe();
 		tokio_stream::wrappers::BroadcastStream::new(stream)
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
 	}
 }
-
+/// an Enum Representing the commands that can be sent to the background task.
 #[derive(Clone, Debug)]
 enum ToHandler {
+	/// Send a DKG message to a peer.
 	SendMessage { recipient: PeerId, message: SignedDKGMessage<AuthorityId> },
+	/// Gossip a DKG message to all peers.
 	Gossip(SignedDKGMessage<AuthorityId>),
 }
 
@@ -166,21 +223,18 @@ impl GossipHandlerController {
 	pub fn set_gossip_enabled(&self, enabled: bool) {
 		self.gossip_enabled.store(enabled, Ordering::Relaxed);
 	}
-
-	pub fn send_message(&self, recipient: PeerId, message: SignedDKGMessage<AuthorityId>) {
-		self.to_handler.send(ToHandler::SendMessage { recipient, message }).unwrap();
-	}
-
-	pub fn gossip(&self, message: SignedDKGMessage<AuthorityId>) {
-		self.to_handler.send(ToHandler::Gossip(message)).unwrap();
-	}
 }
 
 /// Handler for gossiping messages. Call [`GossipHandler::run`] to start the processing.
+///
+/// This is a background task that handles all the DKG messages.
 pub struct GossipHandler<B: Block + 'static> {
+	/// The Protocol Name, should be unique.
+	///
+	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
-	/// Pending Messages to be sent to the controller.
-	to_controller: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// Pending Messages to be sent to the [`GossipHandlerController`].
+	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
@@ -192,10 +246,10 @@ pub struct GossipHandler<B: Block + 'static> {
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<B>>,
-	// transaction_pool: Arc<dyn TransactionPool<H, B>>,
+	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-	from_controller: broadcast::Receiver<ToHandler>,
-	to_handler: broadcast::Sender<ToHandler>,
+	/// A Channel to receive commands from the controller.
+	my_channel: broadcast::Sender<ToHandler>,
 	/// Prometheus metrics.
 	metrics: Option<Metrics>,
 }
@@ -211,7 +265,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Turns the [`GossipHandler`] into a future that should run forever and not be
 	/// interrupted.
 	pub async fn run(mut self) {
-		let stream = self.to_handler.subscribe();
+		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
 		debug!(target: "dkg", "Starting the DKG Gossip Handler");
 		loop {
@@ -314,13 +368,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 			self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
 			return
 		}
-
-		// Accept messages only when enabled
-		if !self.gossip_enabled.load(Ordering::Relaxed) {
-			warn!(target: "dkg", "{} Ignoring dkg messages while disabled", who);
-			return
-		}
-
 		debug!(target: "dkg", "Received a signed DKG messages from {}", who);
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
@@ -329,13 +376,18 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					let _ = self.to_controller.send(message);
+					let _ = self.controller_channel.send(message.clone());
 					entry.insert(vec![who]);
 				},
 				Entry::Occupied(mut entry) => {
 					entry.get_mut().push(who);
 				},
 			}
+		}
+
+		// if the gossip is enabled, we send the message to the gossiping peers
+		if self.gossip_enabled.load(Ordering::Relaxed) {
+			self.gossip_message(message);
 		}
 	}
 

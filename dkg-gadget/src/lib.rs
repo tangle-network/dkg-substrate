@@ -44,7 +44,7 @@ mod types;
 mod utils;
 mod worker;
 
-use crate::meta_async_rounds::dkg_gossip_engine::NetworkGossipEngine;
+use crate::meta_async_rounds::dkg_gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
@@ -52,7 +52,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	NetworkGossipEngine::set_config()
+	NetworkGossipEngineBuilder::set_config()
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -130,7 +130,7 @@ where
 		_block,
 	} = dkg_params;
 
-	let network_gossip_engine = NetworkGossipEngine::new();
+	let network_gossip_engine = NetworkGossipEngineBuilder::new();
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
