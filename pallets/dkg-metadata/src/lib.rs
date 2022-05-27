@@ -231,7 +231,9 @@ pub mod pallet {
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
 			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
+			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
+			#[cfg(feature = "std")]
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
