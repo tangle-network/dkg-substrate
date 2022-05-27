@@ -101,6 +101,7 @@ use frame_support::{
 	Parameter,
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
+use sp_std::convert::{TryFrom, TryInto};
 
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{

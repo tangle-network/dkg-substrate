@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use webb_proposals::SetVerifierProposal;
+use webb_proposals::evm::SetVerifierProposal;
 
 use crate::handlers::validate_proposals::ValidationError;
 

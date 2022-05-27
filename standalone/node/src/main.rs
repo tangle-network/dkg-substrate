@@ -20,6 +20,7 @@ mod chain_spec;
 mod service;
 mod cli;
 mod command;
+mod command_helper;
 mod rpc;
 mod testnet_fixtures;
 

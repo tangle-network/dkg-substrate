@@ -79,16 +79,21 @@ pub fn verify_signer_from_set(
 ) -> (Option<sr25519::Public>, bool, Option<usize>) {
 	let mut signer = None;
 	let mut inx: Option<usize> = None;
-	let res = maybe_signers.iter().enumerate().any(|(index, x)| {
-		let decoded_signature = sr25519::Signature::from_slice(signature);
-		let res = sp_io::crypto::sr25519_verify(&decoded_signature, msg, x);
-		if res {
-			inx = Some(index);
-			signer = Some(*x);
-		}
+	let res =
+		maybe_signers.iter().enumerate().any(|(index, x)| {
+			match sr25519::Signature::from_slice(signature) {
+				Some(decoded_signature) => {
+					let res = sp_io::crypto::sr25519_verify(&decoded_signature, msg, x);
+					if res {
+						inx = Some(index);
+						signer = Some(*x);
+					}
 
-		res
-	});
+					res
+				},
+				None => false,
+			}
+		});
 	(signer, res, inx)
 }
 

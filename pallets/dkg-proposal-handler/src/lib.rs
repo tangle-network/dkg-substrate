@@ -109,6 +109,7 @@ use dkg_runtime_primitives::{
 	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
 };
 pub use pallet::*;
+use sp_std::convert::TryInto;
 
 #[cfg(test)]
 mod mock;
