@@ -204,6 +204,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		.network
 		.extra_sets
 		.push(sc_finality_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
+	config.network.extra_sets.push(dkg_gadget::dkg_peers_set_config());
 	let warp_sync = Arc::new(sc_finality_grandpa::warp_proof::NetworkProvider::new(
 		backend.clone(),
 		grandpa_link.shared_authority_set().clone(),
@@ -246,7 +247,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
 
-	config.network.extra_sets.push(dkg_gadget::dkg_peers_set_config());
 	if role.is_authority() {
 		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
 			&config,
