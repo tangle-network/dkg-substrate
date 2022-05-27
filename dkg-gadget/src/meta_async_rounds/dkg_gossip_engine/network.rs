@@ -28,12 +28,10 @@ use crate::metrics::Metrics;
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
-use futures::{
-	stream::StreamExt as _, FutureExt, SinkExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
-};
+use futures::{FutureExt, Stream, StreamExt};
 use linked_hash_set::LinkedHashSet;
 use log::{debug, warn};
-use sc_network::{config, error, multiaddr, Event, ExHashT, NetworkService, PeerId};
+use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
 use sp_runtime::traits::Block;
 use std::{
 	borrow::Cow,
@@ -94,8 +92,8 @@ impl NetworkGossipEngineBuilder {
 		// 1. a channel to send commands to the background task (Controller -> Background).
 		// 2. a channel to send DKG Messages back from the background task to the controller
 		// (Background -> Controller).
-		let (handler_channel, _) = broadcast::channel(1000);
-		let (controller_channel, _) = broadcast::channel(1000);
+		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
+		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
 
@@ -130,6 +128,7 @@ const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
 /// Maximum number of messages request we keep at any moment.
 const MAX_PENDING_MESSAGES: usize = 8192;
 
+#[allow(unused)]
 mod rep {
 	use sc_peerset::ReputationChange as Rep;
 	/// Reputation change when a peer sends us any message.
@@ -398,7 +397,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	) {
 		let message_hash = message.message_hash::<B>();
 		if let Some(ref mut peer) = self.peers.get_mut(&to_who) {
-			let already_propagated = peer.known_messages.insert(message_hash.clone());
+			let already_propagated = peer.known_messages.insert(message_hash);
 			if already_propagated {
 				return
 			}
@@ -420,7 +419,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			warn!(target: "dkg", "No peers to gossip message {}", message_hash);
 		}
 		for (who, peer) in self.peers.iter_mut() {
-			let new_to_them = peer.known_messages.insert(message_hash.clone());
+			let new_to_them = peer.known_messages.insert(message_hash);
 			if !new_to_them {
 				continue
 			}

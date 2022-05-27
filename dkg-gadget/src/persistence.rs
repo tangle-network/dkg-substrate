@@ -32,7 +32,7 @@ use log::debug;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
-use sp_api::{BlockT as Block, HeaderT as Header, NumberFor};
+use sp_api::{BlockT as Block, NumberFor};
 use sp_core::Pair;
 use std::{
 	fs,

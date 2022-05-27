@@ -107,12 +107,12 @@ where
 			Ok(msg) => {
 				trace!(target: "dkg", "🕸️  Got a signed dkg message: {:?}, from: {:?}", msg, sender);
 				let hash = keccak_256(&msg.encode());
-				if self.seen.read().is_valid(&hash) {
+				return if self.seen.read().is_valid(&hash) {
 					log::debug!(target: "dkg", "🕸️  Seen message: ({:?} times)", self.seen.read().get_seen_count(&hash));
 					self.seen.write().increment(hash);
-					return ValidationResult::ProcessAndKeep(dkg_topic::<B>())
+					ValidationResult::ProcessAndKeep(dkg_topic::<B>())
 				} else {
-					return ValidationResult::ProcessAndDiscard(dkg_topic::<B>())
+					ValidationResult::ProcessAndDiscard(dkg_topic::<B>())
 				}
 			},
 			Err(e) => {

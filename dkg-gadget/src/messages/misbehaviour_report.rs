@@ -15,7 +15,6 @@
 use crate::{
 	meta_async_rounds::dkg_gossip_engine::GossipEngineIface,
 	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports,
-	types::dkg_topic,
 	worker::{DKGWorker, KeystoreExt},
 	Client,
 };
@@ -28,7 +27,7 @@ use dkg_runtime_primitives::{
 };
 use log::{debug, error};
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, NumberFor};
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
@@ -137,7 +136,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
-				dkg_worker.gossip_engine.gossip(signed_dkg_message);
+				let _ = dkg_worker.gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",

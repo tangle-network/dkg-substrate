@@ -24,7 +24,7 @@ use dkg_runtime_primitives::{
 use log::trace;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
 pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(

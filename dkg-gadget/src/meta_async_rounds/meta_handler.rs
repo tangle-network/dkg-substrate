@@ -655,7 +655,7 @@ mod tests {
 		let mut validators = AuthoritySet::empty();
 		validators.authorities = authority_set.clone();
 
-		let ref mut handles = Vec::with_capacity(num_parties as usize);
+		let handles = &mut Vec::with_capacity(num_parties as usize);
 
 		let (to_faux_net_tx, mut to_faux_net_rx) = tokio::sync::mpsc::unbounded_channel();
 

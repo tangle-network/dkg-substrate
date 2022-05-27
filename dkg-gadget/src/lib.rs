@@ -22,9 +22,9 @@ use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 
 use sc_network::{ExHashT, NetworkService};
-use sp_api::{BlockT, NumberFor, ProvideRuntimeApi};
+use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::Block;
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
@@ -40,7 +40,6 @@ mod metrics;
 mod persistence;
 mod proposal;
 pub mod storage;
-mod types;
 mod utils;
 mod worker;
 
