@@ -136,9 +136,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
-				let encoded_signed_dkg_message = signed_dkg_message.encode();
-
-				gossip_engine.gossip(signed_dkg_message);
+				let _ = gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",

@@ -23,9 +23,9 @@ use std::{
 	sync::Arc,
 };
 
-use codec::{Codec, Decode, Encode};
+use codec::{Codec, Encode};
 
-use futures::{future, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 
 use parking_lot::{Mutex, RwLock};
@@ -64,7 +64,6 @@ use dkg_runtime_primitives::{
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
-	types::dkg_topic,
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };

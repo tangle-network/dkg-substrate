@@ -54,7 +54,7 @@ pub(crate) fn sign_and_send_messages<GE>(
 
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
-				gossip_engine.gossip(signed_dkg_message);
+				let _ = gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => trace!(
 				target: "dkg",

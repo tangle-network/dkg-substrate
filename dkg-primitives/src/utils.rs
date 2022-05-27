@@ -173,10 +173,10 @@ mod tests {
 		let encrypted_data = encrypt(data.to_vec());
 		let decrypted_data = decrypt(encrypted_data.clone());
 		println!("{:?}", encrypted_data);
-		assert!(encrypted_data != data.to_vec());
+		assert_ne!(encrypted_data, data.to_vec());
 
 		println!("{:?}, {:?}", data, decrypted_data);
-		assert!(decrypted_data == data.to_vec());
+		assert_eq!(decrypted_data, data.to_vec());
 	}
 
 	#[test]
@@ -190,7 +190,7 @@ mod tests {
 		for _ in 0..100 {
 			let new_set = select_random_set(&seed, set.clone(), 10).unwrap();
 			if !random_set.is_empty() {
-				assert!(random_set == new_set);
+				assert_eq!(random_set, new_set);
 			}
 			random_set = new_set;
 		}
