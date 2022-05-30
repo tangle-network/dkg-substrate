@@ -9521,8 +9521,9 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.4.0"
-source = "git+https://github.com/webb-tools/webb-rs?branch=drew/update-version#c0adc7767b905e6757fd116ff467e5597466e7c2"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cf0d38b6b699e619b27df4422f3fe4adfe5e42f4f15f34159aacdfad4b45075"
 dependencies = [
  "num-traits",
  "parity-scale-codec",
