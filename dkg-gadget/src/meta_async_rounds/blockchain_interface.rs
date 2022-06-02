@@ -48,6 +48,8 @@ use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
+	type GossipEngine: GossipEngineIface;
+
 	fn verify_signature_against_authorities(
 		&self,
 		message: Arc<SignedDKGMessage<Public>>,
@@ -89,6 +91,8 @@ pub trait BlockChainIface: Send + Sync {
 			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
 			.collect())
 	}
+
+	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 }
 
 pub struct DKGIface<B: Block, BE, C, GE> {
@@ -117,6 +121,7 @@ where
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
+	type GossipEngine = Arc<GE>;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -223,6 +228,10 @@ where
 	fn get_authority_set(&self) -> &Vec<Public> {
 		&*self.best_authorities
 	}
+
+	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
+		Some(&self.gossip_engine)
+	}
 }
 
 pub(crate) type VoteResults =
@@ -240,6 +249,8 @@ pub struct TestDummyIface {
 
 impl BlockChainIface for TestDummyIface {
 	type Clock = u32;
+	type GossipEngine = ();
+
 	fn verify_signature_against_authorities(
 		&self,
 		message: Arc<SignedDKGMessage<Public>>,
@@ -301,5 +312,9 @@ impl BlockChainIface for TestDummyIface {
 
 	fn get_authority_set(&self) -> &Vec<Public> {
 		&*self.best_authorities
+	}
+
+	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
+		None
 	}
 }

@@ -361,6 +361,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "auto_impl"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b3a3421414432bab4fb6dedc2d88298c4e017d6e70f16af9aa38ac2d97eb9c8"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "autocfg"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1479,6 +1491,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "atomic",
+ "auto_impl",
  "curv-kzen",
  "dkg-primitives",
  "dkg-runtime-primitives",

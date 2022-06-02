@@ -63,6 +63,7 @@ use std::collections::HashSet;
 use std::time::Instant;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
+use crate::meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkGossipEngineBuilder;
@@ -218,6 +219,10 @@ impl super::GossipEngineIface for GossipHandlerController {
 		tokio_stream::wrappers::BroadcastStream::new(stream)
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
+	}
+
+	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp> {
+		Some(&self.rx_timestamps)
 	}
 }
 /// an Enum Representing the commands that can be sent to the background task.

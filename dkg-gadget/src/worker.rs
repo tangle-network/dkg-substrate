@@ -80,6 +80,7 @@ use crate::meta_async_rounds::{
 	meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler},
 	remote::MetaAsyncProtocolRemote,
 };
+use crate::meta_async_rounds::misbehaviour_monitor::MisbehaviourMonitor;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -297,11 +298,17 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
+				let misbehaviour_monitor = MisbehaviourMonitor::new(async_proto_params.handle.clone(), async_proto_params.blockchain_iface.clone());
 
 				match MetaAsyncProtocolHandler::setup(async_proto_params, threshold) {
 					Ok(meta_handler) => {
 						let task = async move {
-							match meta_handler.await {
+							let res = tokio::select! {
+								res0 = meta_handler => res0,
+								res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
+							};
+
+							match res {
 								Ok(_) => {
 									log::info!(target: "dkg", "The meta handler has executed successfully");
 								},
