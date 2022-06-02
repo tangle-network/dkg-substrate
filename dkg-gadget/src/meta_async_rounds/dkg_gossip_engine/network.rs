@@ -28,7 +28,7 @@
 //!  - send a DKG message to a specific peer.
 //!  - send a DKG message to all peers.
 //!  - get a stream of DKG messages.
-//!  
+//!
 //!
 //! ### The Lifetime of the DKG Message:
 //!
@@ -59,6 +59,9 @@ use std::{
 		Arc,
 	},
 };
+use std::collections::HashSet;
+use std::time::Instant;
+use parking_lot::RwLock;
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone, Copy)]
@@ -110,10 +113,12 @@ impl NetworkGossipEngineBuilder {
 		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
+		let rx_timestamps = Arc::new(RwLock::new(HashMap::new()));
 
 		let handler = GossipHandler {
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
+			rx_timestamps: rx_timestamps.clone(),
 			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
@@ -127,6 +132,7 @@ impl NetworkGossipEngineBuilder {
 			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
+			rx_timestamps
 		};
 
 		Ok((handler, controller))
@@ -161,6 +167,7 @@ mod rep {
 }
 
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
+#[derive(Clone)]
 pub struct GossipHandlerController {
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
@@ -179,16 +186,7 @@ pub struct GossipHandlerController {
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-}
-
-impl Clone for GossipHandlerController {
-	fn clone(&self) -> Self {
-		GossipHandlerController {
-			handler_channel: self.handler_channel.clone(),
-			my_channel: self.my_channel.clone(),
-			gossip_enabled: self.gossip_enabled.clone(),
-		}
-	}
+	rx_timestamps: Arc<RwLock<HashMap<PeerId, Instant>>>
 }
 
 impl super::GossipEngineIface for GossipHandlerController {
@@ -257,6 +255,8 @@ pub struct GossipHandler<B: Block + 'static> {
 	service: Arc<NetworkService<B, B::Hash>>,
 	/// Stream of networking events.
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
+	/// A list of instants used to track participation frequency
+	rx_timestamps: Arc<RwLock<HashMap<PeerId, Instant>>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<B>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -314,7 +314,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					.collect::<multiaddr::Multiaddr>();
 				let result = self.service.add_peers_to_reserved_set(
 					self.protocol_name.clone(),
-					iter::once(addr).collect(),
+					HashSet::from([addr]),
 				);
 				if let Err(err) = result {
 					log::error!(target: "dkg-gossip", "Add reserved peer failed: {}", err);

@@ -28,6 +28,7 @@ pub mod incoming;
 pub mod meta_handler;
 pub mod remote;
 pub mod state_machine_interface;
+pub mod misbehaviour_monitor;
 
 #[derive(Clone)]
 pub enum ProtocolType {
