@@ -100,7 +100,8 @@ where
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub _marker: PhantomData<B>,
+	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub _marker: PhantomData<B>
 }
 
 /// A DKG worker plays the DKG protocol
@@ -176,6 +177,7 @@ where
 			metrics,
 			base_path,
 			local_keystore,
+			latest_header,
 			..
 		} = worker_params;
 
@@ -197,7 +199,7 @@ where
 			best_dkg_block: None,
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
-			latest_header: Arc::new(RwLock::new(None)),
+			latest_header,
 			msg_cache: Vec::new(),
 			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
 			aggregated_misbehaviour_reports: HashMap::new(),
@@ -440,15 +442,6 @@ where
 		}
 
 		None
-	}
-
-	/// Gets latest block number from latest block header
-	pub fn get_latest_block_number(&self) -> NumberFor<B> {
-		if let Some(latest_header) = self.latest_header.read().clone() {
-			*latest_header.number()
-		} else {
-			NumberFor::<B>::from(0u32)
-		}
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -1078,5 +1071,41 @@ impl<T: BlockChainIface> KeystoreExt for AsyncProtocolParameters<T> {
 impl KeystoreExt for DKGKeystore {
 	fn get_keystore(&self) -> &DKGKeystore {
 		self
+	}
+}
+
+pub trait LatestHeader<B: Block> {
+	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>>;
+	/// Gets latest block number from latest block header
+	fn get_latest_block_number(&self) -> NumberFor<B> {
+		if let Some(latest_header) = self.get_latest_header().read().clone() {
+			*latest_header.number()
+		} else {
+			NumberFor::<B>::from(0u32)
+		}
+	}
+}
+
+impl<B, BE, C, GE> LatestHeader<B> for DKGWorker<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		GE: GossipEngineIface,
+		C: Client<B, BE>,
+{
+	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>> {
+		&self.latest_header
+	}
+}
+
+impl<B, BE, C, GE> LatestHeader<B> for DKGIface<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		GE: GossipEngineIface,
+		C: Client<B, BE>,
+{
+	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>> {
+		&self.latest_header
 	}
 }

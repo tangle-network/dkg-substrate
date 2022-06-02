@@ -17,6 +17,7 @@ extern crate core;
 use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use log::debug;
+use parking_lot::RwLock;
 use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
@@ -144,13 +145,16 @@ where
 				},
 			},
 		);
+
+	let latest_header =  Arc::new(RwLock::new(None));
 	let (gossip_handler, gossip_engine) = network_gossip_engine
-		.build(network.clone(), metrics.clone())
+		.build(network.clone(), metrics.clone(), latest_header.clone())
 		.expect("Failed to build gossip engine");
 	// enable the gossip
 	gossip_engine.set_gossip_enabled(true);
 	tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
+		latest_header,
 		client,
 		backend,
 		key_store: key_store.into(),

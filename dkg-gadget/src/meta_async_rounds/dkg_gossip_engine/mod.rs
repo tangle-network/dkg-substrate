@@ -21,9 +21,9 @@ use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
 use parking_lot::RwLock;
 use auto_impl::auto_impl;
+use sp_arithmetic::traits::AtLeast32BitUnsigned;
 
 /// A Mock Gossip Engine for DKG.
 mod mock;
@@ -40,6 +40,7 @@ pub use network::{GossipHandler, GossipHandlerController, NetworkGossipEngineBui
 /// - `stream` which will return a stream of DKG messages.
 #[auto_impl(Arc,Box,&)]
 pub trait GossipEngineIface: Send + Sync {
+	type Clock: AtLeast32BitUnsigned + Send + Sync;
 	/// Send a DKG message to a specific peer.
 	fn send(
 		&self,
@@ -51,13 +52,15 @@ pub trait GossipEngineIface: Send + Sync {
 	/// Returns a stream of DKG messages, that are received from the network.
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>>;
 	/// A list of timestamps of the last received message for each peer
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp>;
+	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>>;
 }
 
-pub type ReceiveTimestamp = Arc<RwLock<HashMap<PeerId, Instant>>>;
+pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, C>>>;
 
 /// A Stub implementation of the GossipEngineIface.
 impl GossipEngineIface for () {
+	type Clock = u32;
+
 	fn send(
 		&self,
 		_recipient: PeerId,
@@ -74,7 +77,7 @@ impl GossipEngineIface for () {
 		futures::stream::pending().boxed()
 	}
 
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp> {
+	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>> {
 		None
 	}
 }

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use futures::StreamExt;
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use dkg_primitives::types::DKGError;
 use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
 use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
@@ -20,7 +19,7 @@ pub struct MisbehaviourMonitor {
 pub const MISBEHAVIOUR_MONITOR_CHECK_INTERVAL: Duration = Duration::from_millis(2000);
 
 impl MisbehaviourMonitor {
-	pub fn new<C: AtLeast32BitUnsigned + Copy + Send + 'static, BCIface: BlockChainIface + 'static>(remote: MetaAsyncProtocolRemote<C>, bc_iface: Arc<BCIface>) -> Self {
+	pub fn new<BCIface: BlockChainIface + 'static>(remote: MetaAsyncProtocolRemote<BCIface::Clock>, bc_iface: Arc<BCIface>) -> Self {
 		Self {
 			inner: Box::pin(async move {
 				let mut ticker = tokio_stream::wrappers::IntervalStream::new(tokio::time::interval(MISBEHAVIOUR_MONITOR_CHECK_INTERVAL));
@@ -29,9 +28,12 @@ impl MisbehaviourMonitor {
 						if let Some(ts) = gossip_engine.receive_timestamps() {
 							match remote.get_status() {
 								MetaHandlerStatus::Keygen => {
-									let lock = ts.read();
-									for (peer, last_received_message_instant) in lock.iter() {
+									if remote.keygen_has_stalled(bc_iface.now()) {
+										// figure out who is stalling the keygen
+										let lock = ts.read();
+										for (peer, last_received_message_instant) in lock.iter() {
 
+										}
 									}
 								}
 

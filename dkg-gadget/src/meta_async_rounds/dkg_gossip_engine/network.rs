@@ -46,7 +46,7 @@ use futures::{FutureExt, Stream, StreamExt};
 use linked_hash_set::LinkedHashSet;
 use log::{debug, warn};
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
-use sp_runtime::traits::Block;
+use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	borrow::Cow,
 	collections::{hash_map::Entry, HashMap},
@@ -60,10 +60,10 @@ use std::{
 	},
 };
 use std::collections::HashSet;
-use std::time::Instant;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use crate::meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp;
+use crate::worker::LatestHeader;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkGossipEngineBuilder;
@@ -102,7 +102,8 @@ impl NetworkGossipEngineBuilder {
 		self,
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
-	) -> error::Result<(GossipHandler<B>, GossipHandlerController)> {
+		latest_header: Arc<RwLock<Option<B::Header>>>,
+	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
 		let event_stream = service.event_stream("dkg-handler").boxed();
 		// Here we need to create few channels to communicate back and forth between the
 		// background task and the controller.
@@ -117,6 +118,7 @@ impl NetworkGossipEngineBuilder {
 		let rx_timestamps = Arc::new(RwLock::new(HashMap::new()));
 
 		let handler = GossipHandler {
+			latest_header,
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
 			rx_timestamps: rx_timestamps.clone(),
@@ -169,7 +171,7 @@ mod rep {
 
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
-pub struct GossipHandlerController {
+pub struct GossipHandlerController<B: Block> {
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
 	/// a channel to send DKG Messages back from the background task to the controller
@@ -187,10 +189,12 @@ pub struct GossipHandlerController {
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-	rx_timestamps: Arc<RwLock<HashMap<PeerId, Instant>>>
+	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>
 }
 
-impl super::GossipEngineIface for GossipHandlerController {
+impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
+	type Clock = NumberFor<B>;
+
 	fn send(
 		&self,
 		recipient: PeerId,
@@ -221,7 +225,7 @@ impl super::GossipEngineIface for GossipHandlerController {
 			.boxed()
 	}
 
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp> {
+	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>> {
 		Some(&self.rx_timestamps)
 	}
 }
@@ -234,7 +238,7 @@ enum ToHandler {
 	Gossip(SignedDKGMessage<AuthorityId>),
 }
 
-impl GossipHandlerController {
+impl<B: Block> GossipHandlerController<B> {
 	/// Controls whether messages are being gossiped on the network.
 	pub fn set_gossip_enabled(&self, enabled: bool) {
 		self.gossip_enabled.store(enabled, Ordering::Relaxed);
@@ -249,6 +253,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	///
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
+	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Pending Messages to be sent to the [`GossipHandlerController`].
 	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// As multiple peers can send us the same message, we group
@@ -261,7 +266,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// Stream of networking events.
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
 	/// A list of instants used to track participation frequency
-	rx_timestamps: Arc<RwLock<HashMap<PeerId, Instant>>>,
+	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<B>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -270,6 +275,15 @@ pub struct GossipHandler<B: Block + 'static> {
 	my_channel: broadcast::Sender<ToHandler>,
 	/// Prometheus metrics.
 	metrics: Option<Metrics>,
+}
+
+impl<B> LatestHeader<B> for GossipHandler<B>
+	where
+		B: Block
+{
+	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
+		&self.latest_header
+	}
 }
 
 /// Peer information
@@ -386,7 +400,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 			self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
 			return
 		}
-		debug!(target: "dkg", "Received a signed DKG messages from {}", who);
+
+		let now = self.get_latest_block_number();
+		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
+
+		*self.rx_timestamps.write().entry(who).or_insert(now) = now;
+
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 

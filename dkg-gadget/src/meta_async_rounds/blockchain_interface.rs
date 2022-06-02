@@ -45,6 +45,7 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use crate::worker::LatestHeader;
 
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
@@ -93,6 +94,8 @@ pub trait BlockChainIface: Send + Sync {
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
+	/// Returns the present time
+	fn now(&self) -> Self::Clock;
 }
 
 pub struct DKGIface<B: Block, BE, C, GE> {
@@ -232,6 +235,10 @@ where
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
 		Some(&self.gossip_engine)
 	}
+
+	fn now(&self) -> Self::Clock {
+		self.get_latest_block_number()
+	}
 }
 
 pub(crate) type VoteResults =
@@ -316,5 +323,9 @@ impl BlockChainIface for TestDummyIface {
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
 		None
+	}
+
+	fn now(&self) -> Self::Clock {
+		0
 	}
 }
