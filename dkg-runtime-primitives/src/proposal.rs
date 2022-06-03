@@ -246,7 +246,7 @@ impl ProposalHandlerTrait for () {}
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
 pub struct StoredUnsignedProposal<Timestamp> {
 	/// Proposal data
-	pub proposal : Proposal,
+	pub proposal: Proposal,
 	/// Creation timestamp
 	pub timestamp : Timestamp
 }
