@@ -119,7 +119,7 @@ mod tests;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
-	ProposalKind, TypedChainId,
+	ProposalKind, StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -149,6 +149,10 @@ pub mod pallet {
 	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
+
+	/// Unsigned proposal for this pallet
+	pub type StoredUnsignedProposalOf<T> =
+		StoredUnsignedProposal<<T as frame_system::Config>::BlockNumber>;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -180,7 +184,7 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_128Concat,
 		DKGPayloadKey,
-		Proposal,
+		StoredUnsignedProposalOf<T>,
 	>;
 
 	/// All signed proposals.
@@ -345,7 +349,11 @@ pub mod pallet {
 			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
-						UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, prop);
+						UnsignedProposalQueue::<T>::insert(
+							v.typed_chain_id,
+							v.key,
+							Self::stored_unsigned_proposal_from_unsigned_proposal(prop),
+						);
 						Ok(().into())
 					},
 					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
@@ -361,7 +369,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
-			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
+			UnsignedProposalQueue::<T>::insert(
+				v.typed_chain_id,
+				v.key,
+				Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
+			);
 			return Ok(())
 		}
 
@@ -379,7 +391,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
-			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, unsigned_proposal);
+			UnsignedProposalQueue::<T>::insert(
+				v.typed_chain_id,
+				v.key,
+				Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
+			);
 
 			return Ok(())
 		}
@@ -397,7 +413,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		UnsignedProposalQueue::<T>::insert(
 			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
-			unsigned_proposal,
+			Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
 		);
 
 		Ok(())
@@ -483,10 +499,12 @@ impl<T: Config> Pallet<T> {
 
 	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
 		UnsignedProposalQueue::<T>::iter()
-			.map(|(typed_chain_id, key, proposal)| dkg_runtime_primitives::UnsignedProposal {
-				typed_chain_id,
-				key,
-				proposal,
+			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
+				dkg_runtime_primitives::UnsignedProposal {
+					typed_chain_id,
+					key,
+					proposal: stored_unsigned_proposal.proposal,
+				}
 			})
 			.collect()
 	}
@@ -501,6 +519,13 @@ impl<T: Config> Pallet<T> {
 		} else {
 			false
 		}
+	}
+
+	pub fn stored_unsigned_proposal_from_unsigned_proposal(
+		proposal: Proposal,
+	) -> StoredUnsignedProposalOf<T> {
+		let timestamp = <frame_system::Pallet<T>>::block_number();
+		StoredUnsignedProposalOf::<T> { proposal, timestamp }
 	}
 
 	// *** Offchain worker methods ***

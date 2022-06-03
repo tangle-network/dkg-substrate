@@ -240,3 +240,13 @@ pub trait ProposalHandlerTrait {
 }
 
 impl ProposalHandlerTrait for () {}
+
+/// An unsigned proposal represented in pallet storage
+/// We store the creation timestamp to purge expired proposals
+#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
+pub struct StoredUnsignedProposal<Timestamp> {
+	/// Proposal data
+	pub proposal : Proposal,
+	/// Creation timestamp
+	pub timestamp : Timestamp
+}
