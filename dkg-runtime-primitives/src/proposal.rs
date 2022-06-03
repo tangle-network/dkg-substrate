@@ -248,5 +248,5 @@ pub struct StoredUnsignedProposal<Timestamp> {
 	/// Proposal data
 	pub proposal: Proposal,
 	/// Creation timestamp
-	pub timestamp : Timestamp
+	pub timestamp: Timestamp
 }
