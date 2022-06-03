@@ -116,6 +116,7 @@ mod mock;
 
 #[cfg(test)]
 mod tests;
+
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
@@ -136,7 +137,7 @@ use sp_runtime::{
 use sp_std::vec::Vec;
 
 pub mod weights;
-use weights::WeightInfo;
+pub use weights::WeightInfo;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -149,6 +150,7 @@ pub mod pallet {
 	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
+	use sp_runtime::traits::{CheckedSub, One, Zero};
 
 	/// Unsigned proposal for this pallet
 	pub type StoredUnsignedProposalOf<T> =
@@ -166,6 +168,9 @@ pub mod pallet {
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
 		type MaxSubmissionsPerBatch: Get<u16>;
+		/// Max blocks to store an unsigned proposal
+		#[pallet::constant]
+		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
 	}
@@ -254,6 +259,39 @@ pub mod pallet {
 				"offchain worker result: {:?}",
 				res
 			);
+		}
+
+		/// Hook that execute when there is leftover space in a block
+		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
+		/// and remove storage.
+		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
+			// fetch all unsigned proposals
+			let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
+			let unsigned_proposals_len = unsigned_proposals.len() as u64;
+			remaining_weight =
+				remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+
+			// filter out proposals to delete
+			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
+				|(_, _, StoredUnsignedProposal { timestamp, .. })| {
+					let time_passed = now.checked_sub(&timestamp).unwrap_or_default();
+					time_passed > T::UnsignedProposalExpiry::get()
+				},
+			);
+
+			// remove unsigned proposal until we run out of weight
+			for expired_proposal in unsigned_proposal_past_expiry {
+				remaining_weight =
+					remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
+
+				if remaining_weight.is_zero() {
+					break
+				}
+
+				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
+			}
+
+			remaining_weight
 		}
 	}
 
@@ -521,6 +559,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Returns `StoredUnsignedProposal` from proposal by inserting current BlockNumber
 	pub fn stored_unsigned_proposal_from_unsigned_proposal(
 		proposal: Proposal,
 	) -> StoredUnsignedProposalOf<T> {
