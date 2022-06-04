@@ -75,7 +75,7 @@ Configure the Rust toolchain to default to the latest stable version, add nightl
 rustup default nightly
 rustup update
 rustup update nightly
-rustup target add wasm32-unknown-unknown --toolchain nightly
+rustup target add wasm32-unknown-unknown
 ```
 
 Great! Now your Rust environment is ready! 🚀🚀
