@@ -274,7 +274,7 @@ pub mod pallet {
 			// filter out proposals to delete
 			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
 				|(_, _, StoredUnsignedProposal { timestamp, .. })| {
-					let time_passed = now.checked_sub(&timestamp).unwrap_or_default();
+					let time_passed = now.checked_sub(timestamp).unwrap_or_default();
 					time_passed > T::UnsignedProposalExpiry::get()
 				},
 			);
