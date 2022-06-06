@@ -113,7 +113,6 @@ where
 	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
-	//pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
@@ -135,10 +134,7 @@ where
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports: HashMap<
-		(MisbehaviourType, RoundId, AuthorityId),
-		AggregatedMisbehaviourReports<AuthorityId>,
-	>,
+	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
@@ -153,6 +149,11 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
+
+pub type AggregatedMisbehaviourReportStore = Arc<Mutex<HashMap<
+	(MisbehaviourType, RoundId, AuthorityId),
+	AggregatedMisbehaviourReports<AuthorityId>,
+>>>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
@@ -202,7 +203,7 @@ where
 			latest_header,
 			msg_cache: Vec::new(),
 			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
-			aggregated_misbehaviour_reports: HashMap::new(),
+			aggregated_misbehaviour_reports: Arc::new(Mutex::new(HashMap::new())),
 			has_sent_gossip_msg: HashMap::new(),
 			base_path,
 			local_keystore,
@@ -246,6 +247,7 @@ where
 
 		let params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
+				aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
@@ -364,54 +366,6 @@ where
 				debug!("Successfully copied queued key to current key");
 			}
 		}
-	}
-
-	/// Get the signature threshold at a specific block
-	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
-	}
-
-	/// Get the next signature threshold at a specific block
-	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
-	}
-
-	/// Get the active DKG public key
-	pub fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().dkg_pub_key(&at).ok().unwrap_or_default()
-	}
-
-	/// Get the next DKG public key
-	#[allow(dead_code)]
-	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
-	}
-
-	/// Get the jailed keygen authorities
-	#[allow(dead_code)]
-	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self
-			.client
-			.runtime_api()
-			.get_keygen_jailed(&at, set.to_vec())
-			.unwrap_or_default()
-	}
-
-	/// Get the best authorities for keygen
-	pub fn get_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_best_authorities(&at).unwrap_or_default()
-	}
-
-	/// Get the next best authorities for keygen
-	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
 	}
 
 	/// Get the party index of our worker
@@ -1029,6 +983,7 @@ where
 }
 
 /// Extension trait for any type that contains a keystore
+#[auto_impl::auto_impl(&mut, &)]
 pub trait KeystoreExt {
 	fn get_keystore(&self) -> &DKGKeystore;
 	fn get_authority_public_key(&self) -> Public {
@@ -1074,7 +1029,8 @@ impl KeystoreExt for DKGKeystore {
 	}
 }
 
-pub trait LatestHeader<B: Block> {
+#[auto_impl::auto_impl(&mut, &)]
+pub trait HasLatestHeader<B: Block> {
 	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>>;
 	/// Gets latest block number from latest block header
 	fn get_latest_block_number(&self) -> NumberFor<B> {
@@ -1086,7 +1042,7 @@ pub trait LatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE> LatestHeader<B> for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
 	where
 		B: Block,
 		BE: Backend<B>,
@@ -1098,7 +1054,7 @@ impl<B, BE, C, GE> LatestHeader<B> for DKGWorker<B, BE, C, GE>
 	}
 }
 
-impl<B, BE, C, GE> LatestHeader<B> for DKGIface<B, BE, C, GE>
+impl<B, BE, C, GE> HasLatestHeader<B> for DKGIface<B, BE, C, GE>
 	where
 		B: Block,
 		BE: Backend<B>,
@@ -1107,5 +1063,163 @@ impl<B, BE, C, GE> LatestHeader<B> for DKGIface<B, BE, C, GE>
 {
 	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
+	}
+}
+
+#[auto_impl::auto_impl(&mut, &)]
+pub trait HasClient<B, BE, C>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE> {
+	fn get_client(&self) -> &C;
+	/// Get the signature threshold at a specific block
+	fn get_signature_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().signature_threshold(&at).unwrap_or_default()
+	}
+
+	/// Get the next signature threshold at a specific block
+	fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().next_signature_threshold(&at).unwrap_or_default()
+	}
+
+	/// Get the active DKG public key
+	fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().dkg_pub_key(&at).ok().unwrap_or_default()
+	}
+
+	/// Get the next DKG public key
+	#[allow(dead_code)]
+	fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
+	}
+
+	/// Get the jailed keygen authorities
+	#[allow(dead_code)]
+	fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client()
+			.runtime_api()
+			.get_keygen_jailed(&at, set.to_vec())
+			.unwrap_or_default()
+	}
+
+	/// Get the best authorities for keygen
+	fn get_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().get_best_authorities(&at).unwrap_or_default()
+	}
+
+	/// Get the next best authorities for keygen
+	fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.get_client().runtime_api().get_next_best_authorities(&at).unwrap_or_default()
+	}
+}
+
+impl<B, BE, C, GE> HasClient<B ,BE, C> for DKGWorker<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_client(&self) -> &C {
+		&*self.client
+	}
+}
+
+impl<B, BE, C, GE> HasClient<B, BE, C> for DKGIface<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_client(&self) -> &C {
+		&*self.client
+	}
+}
+
+#[auto_impl::auto_impl(&mut, &)]
+pub trait HasBackend<B: Block, BE: Backend<B>> {
+	fn get_backend(&self) -> &BE;
+}
+
+impl<B, BE, C, GE> HasBackend<B ,BE> for DKGWorker<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_backend(&self) -> &BE {
+		&*self.backend
+	}
+}
+
+impl<B, BE, C, GE> HasBackend<B, BE> for DKGIface<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_backend(&self) -> &BE {
+		&*self.backend
+	}
+}
+
+#[auto_impl::auto_impl(&mut, &)]
+pub trait HasAggregatedMisbehaviourReports {
+	fn get_aggregated_misbehaviour_reports(&self) -> &AggregatedMisbehaviourReportStore;
+}
+
+impl<B, BE, C, GE> HasAggregatedMisbehaviourReports for DKGWorker<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_aggregated_misbehaviour_reports(&self) -> &AggregatedMisbehaviourReportStore {
+		&*self.aggregated_misbehaviour_reports
+	}
+}
+
+impl<B, BE, C, GE> HasAggregatedMisbehaviourReports for DKGIface<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_aggregated_misbehaviour_reports(&self) -> &AggregatedMisbehaviourReportStore {
+		&*self.aggregated_misbehaviour_reports
+	}
+}
+
+#[auto_impl::auto_impl(&mut, &)]
+pub trait HasGossipEngine<GE: GossipEngineIface> {
+	fn get_gossip_engine(&self) -> &GE;
+}
+
+impl<B, BE, C, GE> HasGossipEngine<GE> for DKGWorker<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_gossip_engine(&self) -> &GE {
+		&*self.gossip_engine
+	}
+}
+
+impl<B, BE, C, GE> HasGossipEngine<GE> for DKGIface<B, BE, C, GE>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: Client<B, BE>,
+		GE: GossipEngineIface {
+	fn get_gossip_engine(&self) -> &GE {
+		&*self.gossip_engine
 	}
 }

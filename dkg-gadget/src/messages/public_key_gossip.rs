@@ -1,4 +1,3 @@
-use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,8 @@ use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 // limitations under the License.
 //
 // Handles non-dkg messages
+use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
+use crate::worker::HasClient;
 use crate::{
 	storage::public_keys::store_aggregated_public_keys,
 	worker::{DKGWorker, KeystoreExt},

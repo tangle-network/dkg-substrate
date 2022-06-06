@@ -21,6 +21,7 @@ use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 use parking_lot::RwLock;
 use auto_impl::auto_impl;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
@@ -55,7 +56,7 @@ pub trait GossipEngineIface: Send + Sync {
 	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>>;
 }
 
-pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, C>>>;
+pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, (C, Instant, AuthorityId)>>>;
 
 /// A Stub implementation of the GossipEngineIface.
 impl GossipEngineIface for () {

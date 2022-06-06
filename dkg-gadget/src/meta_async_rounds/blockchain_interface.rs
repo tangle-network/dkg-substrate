@@ -45,7 +45,7 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
-use crate::worker::LatestHeader;
+use crate::worker::{AggregatedMisbehaviourReportStore, HasLatestHeader};
 
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
@@ -113,6 +113,7 @@ pub struct DKGIface<B: Block, BE, C, GE> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub local_key_path: Option<PathBuf>,
+	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore
 }
 
 impl<B, BE, C, GE> BlockChainIface for DKGIface<B, BE, C, GE>
@@ -247,6 +248,7 @@ pub(crate) type VoteResults =
 #[derive(Clone)]
 pub struct TestDummyIface {
 	pub sender: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
+	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	// key is party_index, hash of data. Needed especially for local unit tests

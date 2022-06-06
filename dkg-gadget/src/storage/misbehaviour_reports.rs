@@ -25,20 +25,15 @@ use log::trace;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, NumberFor};
+use crate::worker::{HasAggregatedMisbehaviourReports, HasBackend};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+pub(crate) fn store_aggregated_misbehaviour_reports<B: Block, BE: Backend<B>, BCE: HasBackend<B, BE> + HasAggregatedMisbehaviourReports>(
+	bc_iface: BCE,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
-where
-	B: Block,
-	GE: GossipEngineIface + 'static,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	let maybe_offchain = dkg_worker.backend.offchain_storage();
+	let maybe_offchain = bc_iface.get_backend().offchain_storage();
 	if maybe_offchain.is_none() {
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
@@ -51,7 +46,7 @@ where
 		reports.encode()
 	);
 
-	let _ = dkg_worker.aggregated_misbehaviour_reports.remove(&(
+	let _ = bc_iface.get_aggregated_misbehaviour_reports().lock().remove(&(
 		reports.misbehaviour_type,
 		reports.round_id,
 		reports.offender.clone(),
