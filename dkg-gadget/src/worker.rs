@@ -1182,7 +1182,7 @@ impl<B, BE, C, GE> HasAggregatedMisbehaviourReports for DKGWorker<B, BE, C, GE>
 		C: Client<B, BE>,
 		GE: GossipEngineIface {
 	fn get_aggregated_misbehaviour_reports(&self) -> &AggregatedMisbehaviourReportStore {
-		&*self.aggregated_misbehaviour_reports
+		&self.aggregated_misbehaviour_reports
 	}
 }
 
@@ -1193,7 +1193,7 @@ impl<B, BE, C, GE> HasAggregatedMisbehaviourReports for DKGIface<B, BE, C, GE>
 		C: Client<B, BE>,
 		GE: GossipEngineIface {
 	fn get_aggregated_misbehaviour_reports(&self) -> &AggregatedMisbehaviourReportStore {
-		&*self.aggregated_misbehaviour_reports
+		&self.aggregated_misbehaviour_reports
 	}
 }
 
