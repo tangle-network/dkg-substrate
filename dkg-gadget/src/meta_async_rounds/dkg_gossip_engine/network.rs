@@ -38,18 +38,21 @@
 //! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
-use crate::metrics::Metrics;
+use crate::{
+	meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp, metrics::Metrics, worker::LatestHeader,
+};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{FutureExt, Stream, StreamExt};
 use linked_hash_set::LinkedHashSet;
 use log::{debug, warn};
+use parking_lot::RwLock;
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	borrow::Cow,
-	collections::{hash_map::Entry, HashMap},
+	collections::{hash_map::Entry, HashMap, HashSet},
 	hash::Hash,
 	iter,
 	num::NonZeroUsize,
@@ -59,11 +62,7 @@ use std::{
 		Arc,
 	},
 };
-use std::collections::HashSet;
-use parking_lot::RwLock;
 use tokio::sync::broadcast;
-use crate::meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp;
-use crate::worker::LatestHeader;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkGossipEngineBuilder;
@@ -135,7 +134,7 @@ impl NetworkGossipEngineBuilder {
 			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
-			rx_timestamps
+			rx_timestamps,
 		};
 
 		Ok((handler, controller))
@@ -154,19 +153,12 @@ const MAX_PENDING_MESSAGES: usize = 8192;
 #[allow(unused)]
 mod rep {
 	use sc_peerset::ReputationChange as Rep;
-	/// Reputation change when a peer sends us any message.
-	///
-	/// This forces node to verify it, thus the negative value here. Once message is verified,
-	/// reputation change should be refunded with `ANY_MESSAGE_REFUND`.
-	pub const ANY_MESSAGE: Rep = Rep::new(-(1 << 4), "Any message");
-	/// Reputation change when a peer sends us any message that is not invalid.
-	pub const ANY_MESSAGE_REFUND: Rep = Rep::new(1 << 4, "Any message (refund)");
 	/// Reputation change when a peer sends us a message that we didn't know about.
 	pub const GOOD_MESSAGE: Rep = Rep::new(1 << 7, "Good message");
-	/// Reputation change when a peer sends us a bad message.
-	pub const BAD_MESSAGE: Rep = Rep::new(-(1 << 12), "Bad message");
 	/// We received an unexpected message packet.
 	pub const UNEXPECTED_MESSAGE: Rep = Rep::new_fatal("Unexpected message packet");
+	/// Reputation change when a peer sends us the same message over and over.
+	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
 
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
@@ -189,7 +181,7 @@ pub struct GossipHandlerController<B: Block> {
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>
+	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>,
 }
 
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
@@ -260,7 +252,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
 	/// multiple times concurrently.
-	pending_messages_peers: HashMap<B::Hash, Vec<PeerId>>,
+	pending_messages_peers: HashMap<B::Hash, HashSet<PeerId>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
 	/// Stream of networking events.
@@ -278,8 +270,8 @@ pub struct GossipHandler<B: Block + 'static> {
 }
 
 impl<B> LatestHeader<B> for GossipHandler<B>
-	where
-		B: Block
+where
+	B: Block,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
@@ -331,10 +323,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::SyncConnected { remote } => {
 				let addr = iter::once(multiaddr::Protocol::P2p(remote.into()))
 					.collect::<multiaddr::Multiaddr>();
-				let result = self.service.add_peers_to_reserved_set(
-					self.protocol_name.clone(),
-					HashSet::from([addr]),
-				);
+				let result = self
+					.service
+					.add_peers_to_reserved_set(self.protocol_name.clone(), HashSet::from([addr]));
 				if let Err(err) = result {
 					log::error!(target: "dkg-gossip", "Add reserved peer failed: {}", err);
 				}
@@ -393,31 +384,32 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Called when peer sends us new signed DKG message.
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
-		// TODO: Fill in with proper check of message
-		let some_check_here = false;
-		if some_check_here {
-			self.service.disconnect_peer(who, self.protocol_name.clone());
-			self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
-			return
-		}
-
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
-
 		*self.rx_timestamps.write().entry(who).or_insert(now) = now;
+
+		// Check if we already know this message.
 
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 
-			// self.service.report_peer(who, rep::ANY_MESSAGE);
-
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					let _ = self.controller_channel.send(message.clone());
-					entry.insert(vec![who]);
+					entry.insert(HashSet::from([who]));
+					// This good, this peer is good, they sent us a message we didn't know about.
+					// we should add some good reputation to them.
+					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
-					entry.get_mut().push(who);
+					// if we are here, that means this peer sent us a message we already know.
+					let inserted = entry.get_mut().insert(who);
+					// and if inserted is `false` that means this peer was already in the set
+					// hence this not the first time we received this message from the exact same
+					// peer. in this case we should report this peer as a duplicate.
+					if !inserted {
+						self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
+					}
 				},
 			}
 		}
