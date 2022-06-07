@@ -690,6 +690,7 @@ mod tests {
 				authority_public_key: Arc::new(authority_public_key.clone()),
 				vote_results: Arc::new(Mutex::new(HashMap::new())),
 				keygen_key: Arc::new(Mutex::new(None)),
+				aggregated_misbehaviour_reports: Default::default(),
 			};
 
 			interfaces.push(test_iface.clone());
