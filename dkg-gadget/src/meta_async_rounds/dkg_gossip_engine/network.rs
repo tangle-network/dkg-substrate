@@ -45,7 +45,7 @@ use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{FutureExt, Stream, StreamExt};
-use linked_hash_set::LinkedHashSet;
+use linked_hash_map::LinkedHashMap;
 use log::{debug, warn};
 use parking_lot::RwLock;
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
@@ -149,6 +149,11 @@ const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
 
 /// Maximum number of messages request we keep at any moment.
 const MAX_PENDING_MESSAGES: usize = 8192;
+
+/// Maximum number of duplicate messages that a single peer can send us.
+///
+/// This is to prevent a malicious peer from spamming us with messages.
+const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 5;
 
 #[allow(unused)]
 mod rep {
@@ -283,6 +288,13 @@ where
 struct Peer<B: Block> {
 	/// Holds a set of messages known to this peer.
 	known_messages: LruHashSet<B::Hash>,
+	/// a counter of the messages that are received from this peer.
+	///
+	/// Implemented as a HashMap/LruHashMap with the message hash as the key,
+	/// This is used to track the frequency of the messages received from this peer.
+	/// If the same message is received from this peer more than
+	/// `MAX_DUPLICATED_MESSAGES_PER_PEER`, we will flag this peer as malicious.
+	message_counter: LruHashMap<B::Hash, usize>,
 }
 
 impl<B: Block + 'static> GossipHandler<B> {
@@ -347,6 +359,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 						known_messages: LruHashSet::new(
 							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
 						),
+						message_counter: LruHashMap::new(
+							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
+						),
 					},
 				);
 				debug_assert!(_was_in.is_none());
@@ -406,9 +421,21 @@ impl<B: Block + 'static> GossipHandler<B> {
 					let inserted = entry.get_mut().insert(who);
 					// and if inserted is `false` that means this peer was already in the set
 					// hence this not the first time we received this message from the exact same
-					// peer. in this case we should report this peer as a duplicate.
+					// peer.
 					if !inserted {
-						self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
+						// we will increment the counter for this message.
+						let old = peer
+							.message_counter
+							.get(&message.message_hash::<B>())
+							.cloned()
+							.unwrap_or(0);
+						peer.message_counter.insert(message.message_hash::<B>(), old + 1);
+						// and if we have received this message from the same peer more than
+						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
+						// as malicious.
+						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
+							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
+						}
 					}
 				},
 			}
@@ -468,19 +495,55 @@ impl<B: Block + 'static> GossipHandler<B> {
 	}
 }
 
-/// Wrapper around `LinkedHashSet` with bounded growth.
+/// Wrapper around `LinkedHashMap` with bounded growth.
+///
+/// In the limit, for each element inserted the oldest existing element will be removed.
+#[derive(Debug, Clone)]
+pub struct LruHashMap<K: Hash + Eq, V> {
+	inner: LinkedHashMap<K, V>,
+	limit: NonZeroUsize,
+}
+
+impl<K: Hash + Eq, V> LruHashMap<K, V> {
+	/// Create a new `LruHashMap` with the given (exclusive) limit.
+	pub fn new(limit: NonZeroUsize) -> Self {
+		Self { inner: LinkedHashMap::new(), limit }
+	}
+
+	/// Insert element into the map.
+	///
+	/// Returns `true` if this is a new element to the map, `false` otherwise.
+	/// Maintains the limit of the map by removing the oldest entry if necessary.
+	/// Inserting the same element will update its LRU position.
+	pub fn insert(&mut self, k: K, v: V) -> bool {
+		if self.inner.insert(k, v).is_some() {
+			if self.inner.len() == usize::from(self.limit) {
+				self.inner.pop_front(); // remove oldest entry
+			}
+			return true
+		}
+		false
+	}
+
+	/// Get an element from the map.
+	/// Returns `None` if the element is not in the map.
+	pub fn get(&self, k: &K) -> Option<&V> {
+		self.inner.get(k)
+	}
+}
+
+/// Wrapper around `LruHashMap` with bounded growth.
 ///
 /// In the limit, for each element inserted the oldest existing element will be removed.
 #[derive(Debug, Clone)]
 pub struct LruHashSet<T: Hash + Eq> {
-	set: LinkedHashSet<T>,
-	limit: NonZeroUsize,
+	set: LruHashMap<T, ()>,
 }
 
 impl<T: Hash + Eq> LruHashSet<T> {
 	/// Create a new `LruHashSet` with the given (exclusive) limit.
 	pub fn new(limit: NonZeroUsize) -> Self {
-		Self { set: LinkedHashSet::new(), limit }
+		Self { set: LruHashMap::new(limit) }
 	}
 
 	/// Insert element into the set.
@@ -489,12 +552,6 @@ impl<T: Hash + Eq> LruHashSet<T> {
 	/// Maintains the limit of the set by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, e: T) -> bool {
-		if self.set.insert(e) {
-			if self.set.len() == usize::from(self.limit) {
-				self.set.pop_front(); // remove oldest entry
-			}
-			return true
-		}
-		false
+		self.set.insert(e, ())
 	}
 }

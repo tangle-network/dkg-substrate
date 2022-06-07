@@ -1501,7 +1501,7 @@ dependencies = [
  "hex",
  "itertools 0.10.3",
  "libsecp256k1 0.3.5",
- "linked_hash_set",
+ "linked-hash-map",
  "log",
  "lru",
  "multi-party-ecdsa",
