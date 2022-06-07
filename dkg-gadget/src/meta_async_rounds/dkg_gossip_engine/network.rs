@@ -39,7 +39,8 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 use crate::{
-	meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp, metrics::Metrics, worker::LatestHeader,
+	meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp, metrics::Metrics,
+	worker::HasLatestHeader,
 };
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -61,6 +62,7 @@ use std::{
 		atomic::{AtomicBool, Ordering},
 		Arc,
 	},
+	time::Instant,
 };
 use tokio::sync::broadcast;
 
@@ -186,7 +188,7 @@ pub struct GossipHandlerController<B: Block> {
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>,
+	rx_timestamps: ReceiveTimestamp<NumberFor<B>>,
 }
 
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
@@ -263,7 +265,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// Stream of networking events.
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
 	/// A list of instants used to track participation frequency
-	rx_timestamps: Arc<RwLock<HashMap<PeerId, NumberFor<B>>>>,
+	rx_timestamps: ReceiveTimestamp<NumberFor<B>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<B>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -274,7 +276,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	metrics: Option<Metrics>,
 }
 
-impl<B> LatestHeader<B> for GossipHandler<B>
+impl<B> HasLatestHeader<B> for GossipHandler<B>
 where
 	B: Block,
 {
@@ -401,7 +403,16 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
-		*self.rx_timestamps.write().entry(who).or_insert(now) = now;
+
+		// TODO: consider the security of a user who manages to break through the underlying
+		// libp2p crypto, and, spoofs a message with a false authority ID in order to trick
+		// other nodes that some other node is misbehaving
+		let inst = Instant::now();
+		*self
+			.rx_timestamps
+			.write()
+			.entry(who)
+			.or_insert_with(|| (now, inst, message.msg.id.clone())) = (now, inst, message.msg.id.clone());
 
 		// Check if we already know this message.
 

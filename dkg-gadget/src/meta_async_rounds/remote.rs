@@ -47,6 +47,7 @@ pub enum MetaHandlerStatus {
 	AwaitingProposals,
 	OfflineAndVoting,
 	Complete,
+	Timeout,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
@@ -73,7 +74,8 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.get_status() == MetaHandlerStatus::Keygen &&
+		let status = self.get_status();
+		(status == MetaHandlerStatus::Keygen || status == MetaHandlerStatus::Timeout) &&
 			(now - self.started_at > KEYGEN_TIMEOUT.into())
 	}
 }
@@ -172,7 +174,9 @@ impl<C> Drop for MetaAsyncProtocolRemote<C> {
 			// presumably the one in the DKG worker. This one is asserted to be the one
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
-			if self.get_status() != MetaHandlerStatus::Complete {
+			if self.get_status() != MetaHandlerStatus::Complete &&
+				self.get_status() != MetaHandlerStatus::Timeout
+			{
 				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
 				self.set_status(MetaHandlerStatus::Complete);
 			}
