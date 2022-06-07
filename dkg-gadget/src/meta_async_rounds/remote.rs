@@ -47,7 +47,7 @@ pub enum MetaHandlerStatus {
 	AwaitingProposals,
 	OfflineAndVoting,
 	Complete,
-	Timeout
+	Timeout,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
@@ -174,7 +174,9 @@ impl<C> Drop for MetaAsyncProtocolRemote<C> {
 			// presumably the one in the DKG worker. This one is asserted to be the one
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
-			if self.get_status() != MetaHandlerStatus::Complete && self.get_status() != MetaHandlerStatus::Timeout {
+			if self.get_status() != MetaHandlerStatus::Complete &&
+				self.get_status() != MetaHandlerStatus::Timeout
+			{
 				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
 				self.set_status(MetaHandlerStatus::Complete);
 			}

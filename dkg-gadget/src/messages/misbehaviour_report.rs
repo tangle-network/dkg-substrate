@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{meta_async_rounds::dkg_gossip_engine::GossipEngineIface, storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, worker::{DKGWorker, KeystoreExt}, Client, DKGKeystore};
+use crate::{
+	meta_async_rounds::dkg_gossip_engine::GossipEngineIface,
+	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports,
+	worker::{DKGWorker, KeystoreExt},
+	Client,
+};
 use codec::Encode;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
@@ -23,9 +28,6 @@ use dkg_runtime_primitives::{
 use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
-use dkg_primitives::Public;
-use crate::meta_async_rounds::blockchain_interface::BlockChainIface;
-use crate::worker::*;
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
@@ -70,10 +72,9 @@ where
 			&signed_payload,
 			&msg.signature,
 		)?;
-
-		let mut lock = dkg_worker.aggregated_misbehaviour_reports.lock();
 		// Add new report to the aggregated reports
-		let reports = lock
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
 			.entry((msg.misbehaviour_type, msg.round_id, msg.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: msg.misbehaviour_type,
@@ -90,25 +91,23 @@ where
 
 		// Try to store reports offchain
 		let reports = reports.clone();
-		std::mem::drop(lock);
 		try_store_offchain(dkg_worker, &reports)?;
 	}
 
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<
-	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	GE: GossipEngineIface,
-	BCIface: KeystoreExt + HasBackend<B, BE> + HasLatestHeader<B> + HasClient<B, BE, C> + HasAggregatedMisbehaviourReports + HasGossipEngine<GE>>(
-	bc_iface: &BCIface,
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
-)
+) where
+	B: Block,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	let public = bc_iface.get_authority_public_key();
-	let key_store = bc_iface.get_keystore();
+	let public = dkg_worker.get_authority_public_key();
 
 	// Create packed message
 	let mut payload = Vec::new();
@@ -119,7 +118,7 @@ pub(crate) fn gossip_misbehaviour_report<
 	payload.extend_from_slice(report.round_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(report.offender.as_ref());
 
-	if let Ok(signature) = key_store.sign(&public.clone(), &payload) {
+	if let Ok(signature) = dkg_worker.key_store.sign(&public.clone(), &payload) {
 		let encoded_signature = signature.encode();
 		let payload = DKGMsgPayload::MisbehaviourBroadcast(DKGMisbehaviourMessage {
 			signature: encoded_signature.clone(),
@@ -130,14 +129,14 @@ pub(crate) fn gossip_misbehaviour_report<
 			DKGMessage::<AuthorityId> { id: public.clone(), round_id: report.round_id, payload };
 		let encoded_dkg_message = message.encode();
 
-		match key_store.sign(&public, &encoded_dkg_message) {
+		match dkg_worker.key_store.sign(&public, &encoded_dkg_message) {
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
-				let _ = bc_iface.get_gossip_engine().gossip(signed_dkg_message);
+				let _ = dkg_worker.gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",
@@ -146,8 +145,8 @@ pub(crate) fn gossip_misbehaviour_report<
 			),
 		}
 
-		let mut aggregated_misbehaviour_reports = bc_iface.get_aggregated_misbehaviour_reports().lock();
-		let reports = aggregated_misbehaviour_reports
+		let reports = dkg_worker
+			.aggregated_misbehaviour_reports
 			.entry((report.misbehaviour_type, report.round_id, report.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: report.misbehaviour_type,
@@ -168,31 +167,36 @@ pub(crate) fn gossip_misbehaviour_report<
 
 		// Try to store reports offchain
 		let reports = reports.clone();
-		std::mem::drop(aggregated_misbehaviour_reports);
-		let _ = try_store_offchain(bc_iface, &reports);
+		let _ = try_store_offchain(dkg_worker, &reports);
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}
 }
 
-pub(crate) fn try_store_offchain<B: Block, BE: Backend<B>, C: Client<B, BE>, BCIface: HasBackend<B, BE> + HasLatestHeader<B> + HasClient<B, BE, C> + HasAggregatedMisbehaviourReports>(
-	bc_iface: &BCIface,
+pub(crate) fn try_store_offchain<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
+where
+	B: Block,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	let header = &(bc_iface.get_latest_header().read().clone().ok_or(DKGError::NoHeader)?);
+	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	// Fetch the current threshold for the DKG. We will use the
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.
-	let threshold = bc_iface.get_signature_threshold(header) as usize;
+	let threshold = dkg_worker.get_signature_threshold(header) as usize;
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
 			if reports.reporters.len() > threshold {
-				store_aggregated_misbehaviour_reports(bc_iface, reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 		MisbehaviourType::Sign =>
 			if reports.reporters.len() >= threshold {
-				store_aggregated_misbehaviour_reports(bc_iface, reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 	};
 

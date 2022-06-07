@@ -18,7 +18,7 @@ use crate::{
 	persistence::store_localkey,
 	proposal::{get_signed_proposal, make_signed_proposal},
 	storage::proposals::save_signed_proposals_in_storage,
-	worker::{DKGWorker, KeystoreExt},
+	worker::{AggregatedMisbehaviourReportStore, DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
@@ -45,8 +45,8 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
-use crate::worker::{AggregatedMisbehaviourReportStore, HasLatestHeader};
 
+#[auto_impl::auto_impl(Arc, &mut, &)]
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
@@ -113,7 +113,6 @@ pub struct DKGIface<B: Block, BE, C, GE> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub local_key_path: Option<PathBuf>,
-	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore
 }
 
 impl<B, BE, C, GE> BlockChainIface for DKGIface<B, BE, C, GE>

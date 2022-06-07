@@ -37,8 +37,8 @@ use std::{
 		Arc,
 	},
 	task::{Context, Poll},
+	time::Duration,
 };
-use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 
 use crate::{utils::find_index, worker::KeystoreExt, DKGKeystore};
@@ -137,8 +137,9 @@ where
 				// causal flow: create 1 keygen then, fan-out to unsigned_proposals.len()
 				// offline-stage async subroutines those offline-stages will each automatically
 				// proceed with their corresponding voting stages in parallel
+				let params_keygen = params.clone();
 				let keygen_task = async move {
-					MetaAsyncProtocolHandler::new_keygen(params.clone(), keygen_id, t, n)?.await
+					MetaAsyncProtocolHandler::new_keygen(params_keygen, keygen_id, t, n)?.await
 				};
 
 				match tokio::time::timeout(Duration::from_secs(10), keygen_task).await {
