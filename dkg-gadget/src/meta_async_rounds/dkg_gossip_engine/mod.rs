@@ -14,16 +14,14 @@
 
 //! Webb Custom DKG Gossip Engine.
 
-use std::collections::HashMap;
+use auto_impl::auto_impl;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
-use sc_network::PeerId;
-use std::pin::Pin;
-use std::sync::Arc;
 use parking_lot::RwLock;
-use auto_impl::auto_impl;
+use sc_network::PeerId;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use std::{collections::HashMap, pin::Pin, sync::Arc, time::Instant};
 
 /// A Mock Gossip Engine for DKG.
 mod mock;
@@ -40,7 +38,7 @@ pub use network::{GossipHandler, GossipHandlerController, NetworkGossipEngineBui
 /// - `stream` which will return a stream of DKG messages.
 #[auto_impl(Arc,Box,&)]
 pub trait GossipEngineIface: Send + Sync {
-	type Clock: AtLeast32BitUnsigned + Send + Sync;
+	type Clock: AtLeast32BitUnsigned + Send + Sync + Copy;
 	/// Send a DKG message to a specific peer.
 	fn send(
 		&self,
@@ -55,7 +53,7 @@ pub trait GossipEngineIface: Send + Sync {
 	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>>;
 }
 
-pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, C>>>;
+pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, (C, Instant, AuthorityId)>>>;
 
 /// A Stub implementation of the GossipEngineIface.
 impl GossipEngineIface for () {

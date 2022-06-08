@@ -20,7 +20,7 @@ sha3 = "0.9"
 hex = "0.4"
 rand = "0.8.4"
 strum = { version = "0.21", features = ["derive"] }
-linked_hash_set = "0.1.3"
+linked-hash-map = "0.5.4"
 lru = "0.7.0"
 
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
@@ -54,6 +54,7 @@ tokio-stream = { version = "0.1.8", features = ["sync"] }
 atomic = "0.5.1"
 async-trait = "0.1.53"
 auto_impl = "1.0.0"
+itertools = "0.10.3"
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }
@@ -63,4 +64,3 @@ dkg-primitives = { path = "../dkg-primitives", default-features = false }
 sc-network-test = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22", default-features = false }
 rstest = "0.12.0"
 env_logger = "0.9.0"
-itertools = "0.10.3"

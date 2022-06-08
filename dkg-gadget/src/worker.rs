@@ -78,9 +78,9 @@ use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 use crate::meta_async_rounds::{
 	blockchain_interface::{BlockChainIface, DKGIface},
 	meta_handler::{AsyncProtocolParameters, MetaAsyncProtocolHandler},
+	misbehaviour_monitor::MisbehaviourMonitor,
 	remote::MetaAsyncProtocolRemote,
 };
-use crate::meta_async_rounds::misbehaviour_monitor::MisbehaviourMonitor;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -101,7 +101,7 @@ where
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
-	pub _marker: PhantomData<B>
+	pub _marker: PhantomData<B>,
 }
 
 /// A DKG worker plays the DKG protocol
@@ -113,7 +113,6 @@ where
 	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
-	//pub to_async_proto: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
@@ -135,10 +134,8 @@ where
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports: HashMap<
-		(MisbehaviourType, RoundId, AuthorityId),
-		AggregatedMisbehaviourReports<AuthorityId>,
-	>,
+	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
+	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
@@ -153,6 +150,9 @@ where
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
+
+pub type AggregatedMisbehaviourReportStore =
+	HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
@@ -188,6 +188,7 @@ where
 
 		DKGWorker {
 			client: client.clone(),
+			misbehaviour_tx: None,
 			backend,
 			key_store,
 			gossip_engine: Arc::new(gossip_engine),
@@ -300,11 +301,17 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
-				let misbehaviour_monitor = MisbehaviourMonitor::new(async_proto_params.handle.clone(), async_proto_params.blockchain_iface.clone());
+				let misbehaviour_tx =
+					self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
+				let remote = async_proto_params.handle.clone();
+				let bc_iface = async_proto_params.blockchain_iface.clone();
 
 				match MetaAsyncProtocolHandler::setup(async_proto_params, threshold) {
 					Ok(meta_handler) => {
 						let task = async move {
+							let misbehaviour_monitor =
+								MisbehaviourMonitor::new(remote, bc_iface, misbehaviour_tx);
+
 							let res = tokio::select! {
 								res0 = meta_handler => res0,
 								res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
@@ -366,6 +373,36 @@ where
 		}
 	}
 
+	/// Get the party index of our worker
+	///
+	/// Returns `None` if we are not in the best authority set
+	pub fn get_party_index(&mut self, header: &B::Header) -> Option<u16> {
+		let public = self.get_authority_public_key();
+		let best_authorities = self.get_best_authorities(header);
+		for elt in best_authorities {
+			if elt.1 == public {
+				return Some(elt.0)
+			}
+		}
+
+		None
+	}
+
+	/// Get the next party index of our worker for possible queued keygen
+	///
+	/// Returns `None` if we are not in the next best authority set
+	pub fn get_next_party_index(&mut self, header: &B::Header) -> Option<u16> {
+		let public = self.get_authority_public_key();
+		let next_best_authorities = self.get_next_best_authorities(header);
+		for elt in next_best_authorities {
+			if elt.1 == public {
+				return Some(elt.0)
+			}
+		}
+
+		None
+	}
+
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
 		let at: BlockId<B> = BlockId::hash(header.hash());
@@ -412,36 +449,6 @@ where
 	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
-	}
-
-	/// Get the party index of our worker
-	///
-	/// Returns `None` if we are not in the best authority set
-	pub fn get_party_index(&mut self, header: &B::Header) -> Option<u16> {
-		let public = self.get_authority_public_key();
-		let best_authorities = self.get_best_authorities(header);
-		for elt in best_authorities {
-			if elt.1 == public {
-				return Some(elt.0)
-			}
-		}
-
-		None
-	}
-
-	/// Get the next party index of our worker for possible queued keygen
-	///
-	/// Returns `None` if we are not in the next best authority set
-	pub fn get_next_party_index(&mut self, header: &B::Header) -> Option<u16> {
-		let public = self.get_authority_public_key();
-		let next_best_authorities = self.get_next_best_authorities(header);
-		for elt in next_best_authorities {
-			if elt.1 == public {
-				return Some(elt.0)
-			}
-		}
-
-		None
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -978,6 +985,8 @@ where
 
 	pub(crate) async fn run(mut self) {
 		let mut dkg = self.gossip_engine.stream();
+		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
+		self.misbehaviour_tx = Some(misbehaviour_tx);
 
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
@@ -997,6 +1006,14 @@ where
 						return;
 					}
 				},
+
+				misbehaviour_msg = misbehaviour_rx.recv().fuse() => {
+					if let Some(msg) = misbehaviour_msg {
+						gossip_misbehaviour_report(&mut self, msg)
+					} else {
+						return;
+					}
+				}
 
 				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
@@ -1029,6 +1046,7 @@ where
 }
 
 /// Extension trait for any type that contains a keystore
+#[auto_impl::auto_impl(&mut, &, Arc)]
 pub trait KeystoreExt {
 	fn get_keystore(&self) -> &DKGKeystore;
 	fn get_authority_public_key(&self) -> Public {
@@ -1074,8 +1092,9 @@ impl KeystoreExt for DKGKeystore {
 	}
 }
 
-pub trait LatestHeader<B: Block> {
-	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>>;
+#[auto_impl::auto_impl(&mut, &, Arc)]
+pub trait HasLatestHeader<B: Block> {
+	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>>;
 	/// Gets latest block number from latest block header
 	fn get_latest_block_number(&self) -> NumberFor<B> {
 		if let Some(latest_header) = self.get_latest_header().read().clone() {
@@ -1086,26 +1105,26 @@ pub trait LatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE> LatestHeader<B> for DKGWorker<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		GE: GossipEngineIface,
-		C: Client<B, BE>,
+impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
+where
+	B: Block,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 {
-	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>> {
+	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
 	}
 }
 
-impl<B, BE, C, GE> LatestHeader<B> for DKGIface<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		GE: GossipEngineIface,
-		C: Client<B, BE>,
+impl<B, BE, C, GE> HasLatestHeader<B> for DKGIface<B, BE, C, GE>
+where
+	B: Block,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 {
-	fn get_latest_header(&self) ->&Arc<RwLock<Option<B::Header>>> {
+	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
 	}
 }

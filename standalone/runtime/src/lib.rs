@@ -276,7 +276,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = 2 * MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -588,12 +588,15 @@ parameter_types! {
   pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
   pub const RefreshDelay: Permill = Permill::from_percent(50);
   pub const TimeToRestart: BlockNumber = 3;
+  // 1 hr considering block time of 12sec
+  pub const UnsignedProposalExpiry : BlockNumber = 300;
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type Event = Event;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 

@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::mock::*;
+use crate::{mock::*, UnsignedProposalQueue};
 use codec::Encode;
-use frame_support::{assert_err, assert_ok};
+use frame_support::{
+	assert_err, assert_ok,
+	traits::{Hooks, OnFinalize},
+	weights::{constants::RocksDbWeight, DispatchClass},
+};
 use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
 use sp_std::vec::Vec;
 
@@ -57,6 +61,27 @@ fn check_offchain_proposals_num_eq(num: usize) {
 	assert!(stored_props.is_some(), "{}", true);
 
 	assert_eq!(stored_props.unwrap().proposals.len(), num);
+}
+
+// helper function to skip blocks
+pub fn run_n_blocks(n: u64) -> u64 {
+	// lets leave enough weight to read a queue with length one and remove one item
+	let idle_weight: u64 = RocksDbWeight::get().reads_writes(1, 1);
+	let start_block = System::block_number();
+
+	for block_number in start_block..=n {
+		System::set_block_number(block_number);
+
+		// ensure the on_idle is executed
+		<frame_system::Pallet<Test>>::register_extra_weight_unchecked(
+			DKGProposalHandler::on_idle(block_number, idle_weight),
+			DispatchClass::Mandatory,
+		);
+
+		<frame_system::Pallet<Test> as OnFinalize<u64>>::on_finalize(block_number);
+	}
+
+	System::block_number()
 }
 
 // *** Tests ***
@@ -736,4 +761,40 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 	});
+}
+
+#[test]
+fn expired_unsigned_proposals_are_removed() {
+	execute_test_with(|| {
+		// Submit one unsigned proposal
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<20>(
+				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
+				TypedChainId::Evm(0)
+			)
+		));
+
+		// lets time travel to 5 blocks later and submit another proposal
+		run_n_blocks(5);
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			Origin::root(),
+			make_proposal::<1>(
+				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
+				TypedChainId::Substrate(0)
+			)
+		));
+
+		// sanity check
+		run_n_blocks(10);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 2);
+
+		// lets time travel to a block after expiry period of first unsigned
+		run_n_blocks(11);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 1);
+
+		// lets time travel to a block after expiry period of second unsigned
+		run_n_blocks(16);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 0);
+	})
 }
