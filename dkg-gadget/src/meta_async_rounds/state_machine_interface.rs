@@ -26,10 +26,13 @@ use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::{Keygen, ProtocolMessage},
 	sign::{OfflineProtocolMessage, OfflineStage},
+	traits::RoundBlame,
 };
 use round_based::{containers::StoreErr, Msg, StateMachine};
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
+
+use super::meta_handler::CurrentRoundBlame;
 
 pub(crate) type StateMachineTxRx<T> = (
 	futures::channel::mpsc::UnboundedSender<Msg<T>>,
@@ -62,6 +65,12 @@ where
 		_params: AsyncProtocolParameters<B>,
 		_additional_param: Self::AdditionalReturnParam,
 	) -> Result<Self::Return, DKGError>;
+}
+
+/// A wrapper trait over the [`RoundBlame`].
+pub trait RoundBlameIface: RoundBlame + Send {
+	/// Retrieves a list of uncorporative parties
+	fn current_round_blame(&self) -> CurrentRoundBlame;
 }
 
 #[async_trait]
@@ -122,6 +131,13 @@ impl StateMachineIface for Keygen {
 		params.blockchain_iface.store_public_key(local_key.clone(), round_id)?;
 
 		Ok(local_key)
+	}
+}
+
+impl RoundBlameIface for Keygen {
+	fn current_round_blame(&self) -> CurrentRoundBlame {
+		let (unrecieved_messages, blamed_parties) = self.round_blame();
+		CurrentRoundBlame { unrecieved_messages, blamed_parties }
 	}
 }
 
@@ -198,5 +214,12 @@ impl StateMachineIface for OfflineStage {
 		)?
 		.await?;
 		Ok(())
+	}
+}
+
+impl RoundBlameIface for OfflineStage {
+	fn current_round_blame(&self) -> CurrentRoundBlame {
+		let (unrecieved_messages, blamed_parties) = self.round_blame();
+		CurrentRoundBlame { unrecieved_messages, blamed_parties }
 	}
 }

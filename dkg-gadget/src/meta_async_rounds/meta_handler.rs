@@ -80,6 +80,24 @@ pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 	pub round_id: RoundId,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct CurrentRoundBlame {
+	/// a numbers of messages yet to recieve
+	pub unrecieved_messages: u16,
+	/// a list of uncorporative parties
+	pub blamed_parties: Vec<u16>,
+}
+
+impl CurrentRoundBlame {
+	pub fn empty() -> Self {
+		Self::default()
+	}
+
+	pub fn has_blames(&self) -> bool {
+		self.blamed_parties.is_empty()
+	}
+}
+
 impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
 	pub fn get_next_batch_key(&self, batch: &[UnsignedProposal]) -> BatchKey {
 		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
