@@ -3,19 +3,32 @@ use parking_lot::Mutex;
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 
-pub(crate) struct SharedStateMachine<T: StateMachine> {
+use super::meta_handler::CurrentRoundBlame;
+
+pub(crate) struct StateMachineWrapper<T: StateMachine> {
 	sm: T,
-	blame_vec: Arc<Mutex<(u16, Vec<u16>)>>,
+	current_round_blame: Arc<Mutex<CurrentRoundBlame>>,
 }
 
-impl<T: StateMachine + RoundBlame> SharedStateMachine<T> {
-	fn update(&self) {
-		let blame_vec = self.round_blame();
-		*self.blame_vec.lock() = blame_vec;
+impl<T: StateMachine> StateMachineWrapper<T> {
+	pub fn new(sm: T) -> Self {
+		Self { sm, current_round_blame: Default::default() }
 	}
 }
 
-impl<T> StateMachine for SharedStateMachine<T>
+impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
+	pub fn get_current_round_blame(&self) -> Arc<Mutex<CurrentRoundBlame>> {
+		self.current_round_blame.clone()
+	}
+
+	fn collect_round_blame(&self) {
+		let (unrecieved_messages, blamed_parties) = self.round_blame();
+		*self.current_round_blame.lock() =
+			CurrentRoundBlame { unrecieved_messages, blamed_parties };
+	}
+}
+
+impl<T> StateMachine for StateMachineWrapper<T>
 where
 	T: StateMachine + RoundBlame,
 {
@@ -25,7 +38,7 @@ where
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
 		let result = self.sm.handle_incoming(msg);
-		self.update();
+		self.collect_round_blame();
 		result
 	}
 
@@ -39,7 +52,7 @@ where
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
 		let result = self.sm.proceed();
-		self.update();
+		self.collect_round_blame();
 		result
 	}
 
@@ -48,7 +61,9 @@ where
 	}
 
 	fn round_timeout_reached(&mut self) -> Self::Err {
-		self.sm.round_timeout_reached()
+		let result = self.sm.round_timeout_reached();
+		self.collect_round_blame();
+		result
 	}
 
 	fn is_finished(&self) -> bool {
@@ -76,7 +91,7 @@ where
 	}
 }
 
-impl<T: StateMachine + RoundBlame> RoundBlame for SharedStateMachine<T> {
+impl<T: StateMachine + RoundBlame> RoundBlame for StateMachineWrapper<T> {
 	fn round_blame(&self) -> (u16, Vec<u16>) {
 		self.sm.round_blame()
 	}

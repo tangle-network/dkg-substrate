@@ -3,7 +3,10 @@ use crate::meta_async_rounds::{
 	dkg_gossip_engine::{GossipEngineIface, ReceiveTimestamp},
 	remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
 };
-use dkg_primitives::types::{DKGError, DKGMisbehaviourMessage, RoundId};
+use dkg_primitives::{
+	crypto::Public,
+	types::{DKGError, DKGMisbehaviourMessage, RoundId},
+};
 use dkg_runtime_primitives::MisbehaviourType;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -47,8 +50,9 @@ impl MisbehaviourMonitor {
 							MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
 								if remote.keygen_has_stalled(bc_iface.now()) {
 									on_keygen_timeout::<BCIface>(
+										&remote,
+										bc_iface.get_authority_set().as_slice(),
 										&misbehaviour_tx,
-										ts,
 										remote.round_id,
 									)?
 								}
@@ -79,34 +83,30 @@ impl MisbehaviourMonitor {
 }
 
 pub fn on_keygen_timeout<BCIface: BlockChainIface>(
+	remote: &MetaAsyncProtocolRemote<BCIface::Clock>,
+	authority_set: &[Public],
 	misbehaviour_tx: &UnboundedSender<DKGMisbehaviourMessage>,
-	ts: &ReceiveTimestamp<<<BCIface as BlockChainIface>::GossipEngine as GossipEngineIface>::Clock>,
 	round_id: RoundId,
 ) -> Result<(), DKGError> {
 	log::warn!("[MisbehaviourMonitor] Keygen has stalled! Will determine which authorities are misbehaving ...");
-	// figure out who is stalling the keygen
-	let lock = ts.read();
-	if lock.len() > 0 {
-		// find the bottleneck (the slowest user)
-		let (_slowest_user, (_, _, offender)) = lock
-			.iter()
-			.sorted_by(|(_peer_id, (_, t0, _)), (_peer_id2, (_, t1, _))| t0.cmp(t1))
-			.next()
-			.unwrap();
-
-		let report = DKGMisbehaviourMessage {
-			misbehaviour_type: MisbehaviourType::Keygen,
-			round_id,
-			offender: offender.clone(),
-			signature: vec![],
-		};
-
-		misbehaviour_tx
-			.send(report)
-			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })
-	} else {
-		Ok(())
+	let round_blame = remote.current_round_blame();
+	for party_i in round_blame.blamed_parties {
+		authority_set
+			.get(usize::from(party_i))
+			.cloned()
+			.map(|offender| DKGMisbehaviourMessage {
+				misbehaviour_type: MisbehaviourType::Keygen,
+				round_id,
+				offender,
+				signature: vec![],
+			})
+			.and_then(|report| misbehaviour_tx.send(report).ok())
+			.ok_or_else(|| DKGError::CriticalError {
+				reason: format!("failed to report {party_i}"),
+			})?;
 	}
+
+	Ok(())
 }
 
 impl Future for MisbehaviourMonitor {
