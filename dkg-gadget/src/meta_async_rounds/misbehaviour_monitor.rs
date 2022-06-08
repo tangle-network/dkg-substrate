@@ -1,6 +1,5 @@
 use crate::meta_async_rounds::{
 	blockchain_interface::BlockChainIface,
-	dkg_gossip_engine::{GossipEngineIface, ReceiveTimestamp},
 	remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
 };
 use dkg_primitives::{
@@ -9,7 +8,6 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::MisbehaviourType;
 use futures::StreamExt;
-use itertools::Itertools;
 use std::{
 	future::Future,
 	pin::Pin,
@@ -41,36 +39,33 @@ impl MisbehaviourMonitor {
 				let mut ticker = tokio_stream::wrappers::IntervalStream::new(
 					tokio::time::interval(MISBEHAVIOUR_MONITOR_CHECK_INTERVAL),
 				);
-				let gossip_engine = bc_iface.get_gossip_engine().unwrap();
 
 				while let Some(_) = ticker.next().await {
 					log::info!("[MisbehaviourMonitor] Performing periodic check ...");
-					if let Some(ts) = gossip_engine.receive_timestamps() {
-						match remote.get_status() {
-							MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
-								if remote.keygen_has_stalled(bc_iface.now()) {
-									on_keygen_timeout::<BCIface>(
-										&remote,
-										bc_iface.get_authority_set().as_slice(),
-										&misbehaviour_tx,
-										remote.round_id,
-									)?
-								}
+					match remote.get_status() {
+						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
+							if remote.keygen_has_stalled(bc_iface.now()) {
+								on_keygen_timeout::<BCIface>(
+									&remote,
+									bc_iface.get_authority_set().as_slice(),
+									&misbehaviour_tx,
+									remote.round_id,
+								)?
+							}
 
-								if remote.get_status() == MetaHandlerStatus::Complete {
-									// when the primary remote drops, the status will be flipped to
-									// Complete
-									log::info!("[MisbehaviourMonitor] Ending since the corresponding MetaAsyncProtocolHandler has ended");
-									return Ok(())
-								}
-							},
+							if remote.get_status() == MetaHandlerStatus::Complete {
+								// when the primary remote drops, the status will be flipped to
+								// Complete
+								log::info!("[MisbehaviourMonitor] Ending since the corresponding MetaAsyncProtocolHandler has ended");
+								return Ok(())
+							}
+						},
 
-							MetaHandlerStatus::OfflineAndVoting => {},
+						MetaHandlerStatus::OfflineAndVoting => {},
 
-							_ => {
-								// TODO: handle monitoring other stages
-							},
-						}
+						_ => {
+							// TODO: handle monitoring other stages
+						},
 					}
 				}
 

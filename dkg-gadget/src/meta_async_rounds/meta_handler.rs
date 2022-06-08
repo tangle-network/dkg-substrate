@@ -23,7 +23,6 @@ use futures::{
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::{Keygen, LocalKey},
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
-	traits::RoundBlame,
 };
 use parking_lot::RwLock;
 use round_based::{async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg, StateMachine};
@@ -94,10 +93,6 @@ pub struct CurrentRoundBlame {
 impl CurrentRoundBlame {
 	pub fn empty() -> Self {
 		Self::default()
-	}
-
-	pub fn has_blames(&self) -> bool {
-		self.blamed_parties.is_empty()
 	}
 }
 
