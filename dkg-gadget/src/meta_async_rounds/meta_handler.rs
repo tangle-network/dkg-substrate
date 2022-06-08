@@ -256,13 +256,9 @@ where
 		n: u16,
 	) -> Result<MetaAsyncProtocolHandler<'a, <Keygen as StateMachineIface>::Return>, DKGError> {
 		let channel_type = ProtocolType::Keygen { i, t, n };
-		MetaAsyncProtocolHandler::new_inner(
-			(),
-			Keygen::new(i, t, n)
-				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
-			params,
-			channel_type,
-		)
+		let keygen = Keygen::new(i, t, n)
+			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
+		MetaAsyncProtocolHandler::new_inner((), keygen, params, channel_type)
 	}
 
 	fn new_offline<B: BlockChainIface + 'a>(
@@ -282,10 +278,11 @@ where
 			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
+		let offline_stage = OfflineStage::new(i, s_l, local_key)
+			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
 		MetaAsyncProtocolHandler::new_inner(
 			(unsigned_proposal, i, early_handle, threshold, batch_key),
-			OfflineStage::new(i, s_l, local_key)
-				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+			offline_stage,
 			params,
 			channel_type,
 		)
