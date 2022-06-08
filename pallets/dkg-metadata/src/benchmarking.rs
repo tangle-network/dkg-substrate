@@ -28,7 +28,7 @@ use dkg_runtime_primitives::{
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
 use frame_system::RawOrigin;
 use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign};
-use sp_runtime::{key_types::AURA, traits::TrailingZeroInput, Permill};
+use sp_runtime::{key_types::{AURA, DKG}, traits::TrailingZeroInput, Permill};
 
 const MAX_AUTHORITIES: u32 = 100;
 const MAX_BLOCKNUMBER: u32 = 100;
@@ -48,8 +48,8 @@ fn mock_signature(pub_key: sr25519::Public, dkg_key: ecdsa::Public) -> (Vec<u8>,
 	(msg, signature.encode())
 }
 
-fn mock_pub_key() -> sr25519::Public {
-	sr25519_generate(AURA, None)
+fn mock_pub_key() -> ecdsa::Public {
+	ecdsa_generate(ECDSA, None)
 }
 
 fn mock_misbehaviour_report<T: Config>(
@@ -220,7 +220,7 @@ benchmarks! {
 		let n in 3..MAX_AUTHORITIES;
 		let offender: T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE, None));
 		let mut next_authorities: Vec<T::AccountId> = Vec::new();
-		let mut reporters: Vec<sr25519::Public> = Vec::new();
+		let mut reporters: Vec<T::DKGId> = Vec::new();
 		let mut signatures: Vec<Vec<u8>> = Vec::new();
 		let round_id = 1;
 		let misbehaviour_type = MisbehaviourType::Keygen;
@@ -228,7 +228,8 @@ benchmarks! {
 			let authority_id = mock_pub_key();
 			let sig = mock_misbehaviour_report::<T>(authority_id, offender.clone(), misbehaviour_type);
 			signatures.push(sig);
-			reporters.push(authority_id);
+			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
+			reporters.push(dkg_id);
 			next_authorities.push(mock_account_id::<T>(authority_id));
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
