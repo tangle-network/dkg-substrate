@@ -158,7 +158,7 @@ where
 					MetaAsyncProtocolHandler::new_keygen(params_keygen, keygen_id, t, n)?.await
 				};
 
-				match tokio::time::timeout(Duration::from_secs(10), keygen_task).await {
+				match tokio::time::timeout(Duration::from_secs(20), keygen_task).await {
 					Ok(local_key) => {
 						let local_key = local_key?;
 						log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");

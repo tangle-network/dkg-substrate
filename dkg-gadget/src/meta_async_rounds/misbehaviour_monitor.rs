@@ -43,7 +43,7 @@ impl MisbehaviourMonitor {
 				while let Some(_) = ticker.next().await {
 					log::info!("[MisbehaviourMonitor] Performing periodic check ...");
 					match remote.get_status() {
-						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
+						MetaHandlerStatus::Keygen => {
 							if remote.keygen_has_stalled(bc_iface.now()) {
 								on_keygen_timeout::<BCIface>(
 									&remote,
@@ -86,8 +86,9 @@ pub fn on_keygen_timeout<BCIface: BlockChainIface>(
 	log::warn!("[MisbehaviourMonitor] Keygen has stalled! Will determine which authorities are misbehaving ...");
 	let round_blame = remote.current_round_blame();
 	for party_i in round_blame.blamed_parties {
+		// get the authority from the party index.
 		authority_set
-			.get(usize::from(party_i))
+			.get(usize::from(party_i - 1))
 			.cloned()
 			.map(|offender| DKGMisbehaviourMessage {
 				misbehaviour_type: MisbehaviourType::Keygen,
@@ -99,6 +100,7 @@ pub fn on_keygen_timeout<BCIface: BlockChainIface>(
 			.ok_or_else(|| DKGError::CriticalError {
 				reason: format!("failed to report {party_i}"),
 			})?;
+		log::warn!("Blamed {party_i} for keygen stalled!");
 	}
 
 	Ok(())
