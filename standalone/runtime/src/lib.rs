@@ -447,6 +447,19 @@ impl onchain::BoundedConfig for OnChainSeqPhragmen {
 	type TargetsBound = ConstU32<2_000>;
 }
 
+pub struct WebbMinerConfig;
+impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
+	type AccountId = AccountId;
+	type MaxLength = MinerMaxLength;
+	type MaxWeight = MinerMaxWeight;
+	type MaxVotesPerVoter = MaxNominations;
+	type Solution = NposSolution16;
+
+	fn solution_weight(v: u32, t: u32, a: u32, d: u32) -> Weight {
+		0
+	}
+}
+
 impl pallet_election_provider_multi_phase::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
@@ -455,9 +468,8 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type UnsignedPhase = UnsignedPhase;
 	type BetterUnsignedThreshold = BetterUnsignedThreshold;
 	type BetterSignedThreshold = ();
+	type MinerConfig = WebbMinerConfig;
 	type OffchainRepeat = OffchainRepeat;
-	type MinerMaxWeight = MinerMaxWeight;
-	type MinerMaxLength = MinerMaxLength;
 	type MinerTxPriority = MultiPhaseUnsignedPriority;
 	type SignedMaxSubmissions = ConstU32<10>;
 	type SignedRewardBase = SignedRewardBase;
@@ -469,7 +481,6 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type SlashHandler = (); // burn slashes
 	type RewardHandler = (); // nothing to do upon rewards
 	type DataProvider = Staking;
-	type Solution = NposSolution16;
 	type Fallback = onchain::BoundedExecution<OnChainSeqPhragmen>;
 	type GovernanceFallback = onchain::BoundedExecution<OnChainSeqPhragmen>;
 	type Solver = SequentialPhragmen<AccountId, SolutionAccuracyOf<Self>, OffchainRandomBalancing>;
@@ -491,6 +502,7 @@ impl pallet_bags_list::Config for Runtime {
 parameter_types! {
   pub const PostUnbondPoolsWindow: u32 = 4;
   pub const NominationPoolsPalletId: PalletId = PalletId(*b"py/nopls");
+  pub const MinPointsToBalance: u32 = 10;
 }
 
 use sp_runtime::traits::Convert;
@@ -518,6 +530,7 @@ impl pallet_nomination_pools::Config for Runtime {
 	type MaxMetadataLen = ConstU32<256>;
 	type MaxUnbonding = ConstU32<8>;
 	type PalletId = NominationPoolsPalletId;
+	type MinPointsToBalance = MinPointsToBalance;
 }
 
 parameter_types! {

@@ -25,14 +25,14 @@ curv = { package = "curv-kzen", version = "0.9", default-features = false }
 
 round-based = { version = "0.1.4", features = [] }
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
-sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
-sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
+sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives" }
-sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
+sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
 
 [dev-dependencies]
-sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.22" }
+sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
 
 [features]
