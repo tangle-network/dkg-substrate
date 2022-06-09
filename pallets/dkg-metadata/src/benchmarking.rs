@@ -159,8 +159,7 @@ benchmarks! {
 		let threshold = u16::try_from(current_authorities.len() / 2).unwrap() + 1;
 		SignatureThreshold::<T>::put(threshold);
 		Authorities::<T>::put(&current_authorities);
-		let all_accounts = Pallet::<T>::current_authorities_accounts();
-		let caller:T::AccountId = all_accounts[0].clone();
+		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
 	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
 	verify {
 		let (id, dkg_key) = Pallet::<T>::dkg_public_key();
@@ -184,8 +183,7 @@ benchmarks! {
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
 		NextAuthorities::<T>::put(&next_authorities);
-		let all_accounts = Pallet::<T>::current_authorities_accounts();
-		let caller:T::AccountId = all_accounts[0].clone();
+		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
 	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
 	verify {
 		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
@@ -249,8 +247,7 @@ benchmarks! {
 													reporters:reporters.clone(),
 													signatures,
 												};
-		let all_accounts = Pallet::<T>::current_authorities_accounts();
-		let caller:T::AccountId = all_accounts[0].clone();
+		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
 	}: _(RawOrigin::Signed(caller), aggregated_misbehaviour_reports)
 	verify {
 		assert_last_event::<T>(Event::MisbehaviourReportsSubmitted{
