@@ -665,8 +665,12 @@ pub mod pallet {
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let authorities = Self::authorities();
+			println!("Authoritieis {:?}", authorities);
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
+
+			println!("{:?}", dict);
+			println!("{:?}", threshold);
 
 			let mut accepted = false;
 			for (key, reporters) in dict.iter() {
@@ -1160,8 +1164,12 @@ impl<T: Config> Pallet<T> {
 				})
 				.collect::<Vec<ecdsa::Public>>();
 
+			println!("{:?}", maybe_signers);
+
 			let (maybe_authority, success) =
 				verify_signer_from_set_ecdsa(maybe_signers, &pub_key, &signature);
+
+				println!("{:?}", success);
 
 			if success {
 				let authority = T::DKGId::from(maybe_authority.unwrap());

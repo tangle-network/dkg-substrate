@@ -27,8 +27,8 @@ use dkg_runtime_primitives::{
 
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
 use frame_system::RawOrigin;
-use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign};
-use sp_runtime::{key_types::{AURA, DKG}, traits::TrailingZeroInput, Permill};
+use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign, ecdsa_sign};
+use sp_runtime::{key_types::{AURA}, traits::TrailingZeroInput, Permill};
 
 const MAX_AUTHORITIES: u32 = 100;
 const MAX_BLOCKNUMBER: u32 = 100;
@@ -42,18 +42,19 @@ fn assert_has_event<T: Config>(generic_event: <T as Config>::Event) {
 	frame_system::Pallet::<T>::assert_has_event(generic_event.into());
 }
 
-fn mock_signature(pub_key: sr25519::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
+fn mock_signature(pub_key: ecdsa::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
 	let msg = dkg_key.encode();
-	let signature: sr25519::Signature = sr25519_sign(AURA, &pub_key, &msg).unwrap();
+	let hash = keccak_256(&dkg_key.encode());
+	let signature: ecdsa::Signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 	(msg, signature.encode())
 }
 
 fn mock_pub_key() -> ecdsa::Public {
-	ecdsa_generate(ECDSA, None)
+	ecdsa_generate(KEY_TYPE, None)
 }
 
 fn mock_misbehaviour_report<T: Config>(
-	pub_key: sr25519::Public,
+	pub_key: ecdsa::Public,
 	offender: T::DKGId,
 	misbehaviour_type: MisbehaviourType,
 ) -> Vec<u8> {
@@ -66,12 +67,12 @@ fn mock_misbehaviour_report<T: Config>(
 	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(offender.clone().as_ref());
 
-	let signature = sr25519_sign(AURA, &pub_key, &payload).unwrap();
+	let signature = ecdsa_sign(KEY_TYPE, &pub_key, &payload).unwrap();
 
 	signature.encode()
 }
 
-fn mock_account_id<T: Config>(pub_key: sr25519::Public) -> T::AccountId {
+fn mock_account_id<T: Config>(pub_key: ecdsa::Public) -> T::AccountId {
 	pub_key.using_encoded(|entropy| {
 		T::AccountId::decode(&mut TrailingZeroInput::new(entropy))
 			.expect("infinite input; no invalid input; qed")

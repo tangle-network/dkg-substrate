@@ -58,6 +58,10 @@ pub fn verify_signer_from_set_ecdsa(
 	let res = maybe_signers.iter().any(|x| {
 		if let Ok(data) = recover_ecdsa_pub_key(msg, signature) {
 			let recovered = &data[..32];
+			println!("recoverd : {:?}", recovered.to_vec());
+			println!("X : {:?}", x);
+			println!("X.0 : {:?}", x.0);
+			println!("X.0.1 : {:?}", x.0[1..].to_vec());
 			if x.0[1..].to_vec() == recovered.to_vec() {
 				signer = Some(*x);
 				true
