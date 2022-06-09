@@ -62,7 +62,6 @@ where
 
 	fn round_timeout_reached(&mut self) -> Self::Err {
 		let result = self.sm.round_timeout_reached();
-		self.collect_round_blame();
 		result
 	}
 

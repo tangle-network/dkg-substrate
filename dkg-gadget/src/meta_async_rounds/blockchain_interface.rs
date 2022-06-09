@@ -22,6 +22,7 @@ use crate::{
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
+use core::fmt;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
 	types::{
@@ -48,7 +49,7 @@ use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 #[auto_impl::auto_impl(Arc, &mut, &)]
 pub trait BlockChainIface: Send + Sync {
-	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
+	type Clock: fmt::Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 
 	fn verify_signature_against_authorities(

@@ -157,8 +157,8 @@ where
 				let keygen_task = async move {
 					MetaAsyncProtocolHandler::new_keygen(params_keygen, keygen_id, t, n)?.await
 				};
-
-				match tokio::time::timeout(Duration::from_secs(20), keygen_task).await {
+				let timeout = Duration::from_secs(36);
+				match tokio::time::timeout(timeout, keygen_task).await {
 					Ok(local_key) => {
 						let local_key = local_key?;
 						log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
@@ -302,10 +302,11 @@ where
 	{
 		let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 		let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
-		let sm_wrapper = StateMachineWrapper::new(sm);
-		let round_blame = sm_wrapper.get_current_round_blame();
+		// let sm_wrapper = StateMachineWrapper::new(sm);
+		// let round_blame = sm_wrapper.get_current_round_blame();
 		let mut async_proto = AsyncProtocol::new(
-			sm_wrapper,
+			// sm_wrapper,
+			sm,
 			incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>),
 			outgoing_tx,
 		)
@@ -319,13 +320,16 @@ where
 				.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })
 				.await;
 			match res {
-				Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param).await,
+				Ok(v) => {
+					log::info!(target: "dkg", "🕸️  Protocol complet");
+					SM::on_finish(v, params_for_end_of_proto, additional_param).await
+				},
 				Err(e) => {
 					// report the round blame
 					params_for_end_of_proto
 						.handle
 						.current_round_blame_tx
-						.send_replace((*round_blame.lock()).clone());
+						.send_replace(Default::default());
 					return Err(e)
 				},
 			}

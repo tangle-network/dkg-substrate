@@ -41,9 +41,9 @@ impl MisbehaviourMonitor {
 				);
 
 				while let Some(_) = ticker.next().await {
-					log::info!("[MisbehaviourMonitor] Performing periodic check ...");
+					log::trace!("[MisbehaviourMonitor] Performing periodic check ...");
 					match remote.get_status() {
-						MetaHandlerStatus::Keygen => {
+						MetaHandlerStatus::Keygen | MetaHandlerStatus::Timeout => {
 							if remote.keygen_has_stalled(bc_iface.now()) {
 								on_keygen_timeout::<BCIface>(
 									&remote,
@@ -52,17 +52,8 @@ impl MisbehaviourMonitor {
 									remote.round_id,
 								)?
 							}
-
-							if remote.get_status() == MetaHandlerStatus::Complete {
-								// when the primary remote drops, the status will be flipped to
-								// Complete
-								log::info!("[MisbehaviourMonitor] Ending since the corresponding MetaAsyncProtocolHandler has ended");
-								return Ok(())
-							}
 						},
-
 						MetaHandlerStatus::OfflineAndVoting => {},
-
 						_ => {
 							// TODO: handle monitoring other stages
 						},
@@ -85,6 +76,7 @@ pub fn on_keygen_timeout<BCIface: BlockChainIface>(
 ) -> Result<(), DKGError> {
 	log::warn!("[MisbehaviourMonitor] Keygen has stalled! Will determine which authorities are misbehaving ...");
 	let round_blame = remote.current_round_blame();
+	log::warn!("[MisbehaviourMonitor] Current round blame: {:?}", round_blame);
 	for party_i in round_blame.blamed_parties {
 		// get the authority from the party index.
 		authority_set

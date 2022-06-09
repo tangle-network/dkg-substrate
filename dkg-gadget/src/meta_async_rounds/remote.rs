@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use atomic::Atomic;
+use core::fmt;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
@@ -82,7 +83,10 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 		}
 	}
 
-	pub fn keygen_has_stalled(&self, now: C) -> bool {
+	pub fn keygen_has_stalled(&self, now: C) -> bool
+	where
+		C: fmt::Debug,
+	{
 		let status = self.get_status();
 		(status == MetaHandlerStatus::Keygen || status == MetaHandlerStatus::Timeout) &&
 			(now - self.started_at > KEYGEN_TIMEOUT.into())
