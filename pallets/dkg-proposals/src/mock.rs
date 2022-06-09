@@ -319,7 +319,7 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
 	pub fn build() -> sp_io::TestExternalities {
-		let dkg_id = PalletId(*b"dw/dkgac").into_account();
+		let dkg_id = PalletId(*b"dw/dkgac").into_account_truncating();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
 			.assimilate_storage(&mut t)
