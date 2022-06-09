@@ -27,8 +27,10 @@ use dkg_runtime_primitives::{
 
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
 use frame_system::RawOrigin;
-use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign};
-use sp_runtime::{key_types::{AURA, DKG}, traits::TrailingZeroInput, Permill};
+use sp_io::crypto::{
+	ecdsa_generate, ecdsa_sign, ecdsa_sign_prehashed, sr25519_generate, sr25519_sign,
+};
+use sp_runtime::{key_types::AURA, traits::TrailingZeroInput, Permill};
 
 const MAX_AUTHORITIES: u32 = 100;
 const MAX_BLOCKNUMBER: u32 = 100;
@@ -42,18 +44,19 @@ fn assert_has_event<T: Config>(generic_event: <T as Config>::Event) {
 	frame_system::Pallet::<T>::assert_has_event(generic_event.into());
 }
 
-fn mock_signature(pub_key: sr25519::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
+fn mock_signature(pub_key: ecdsa::Public, dkg_key: ecdsa::Public) -> (Vec<u8>, Vec<u8>) {
 	let msg = dkg_key.encode();
-	let signature: sr25519::Signature = sr25519_sign(AURA, &pub_key, &msg).unwrap();
+	let hash = keccak_256(&msg);
+	let signature: ecdsa::Signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 	(msg, signature.encode())
 }
 
 fn mock_pub_key() -> ecdsa::Public {
-	ecdsa_generate(ECDSA, None)
+	ecdsa_generate(KEY_TYPE, None)
 }
 
 fn mock_misbehaviour_report<T: Config>(
-	pub_key: sr25519::Public,
+	pub_key: ecdsa::Public,
 	offender: T::DKGId,
 	misbehaviour_type: MisbehaviourType,
 ) -> Vec<u8> {
@@ -65,13 +68,13 @@ fn mock_misbehaviour_report<T: Config>(
 	});
 	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(offender.clone().as_ref());
-
-	let signature = sr25519_sign(AURA, &pub_key, &payload).unwrap();
+	let hash = keccak_256(&payload);
+	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 
 	signature.encode()
 }
 
-fn mock_account_id<T: Config>(pub_key: sr25519::Public) -> T::AccountId {
+fn mock_account_id<T: Config>(pub_key: ecdsa::Public) -> T::AccountId {
 	pub_key.using_encoded(|entropy| {
 		T::AccountId::decode(&mut TrailingZeroInput::new(entropy))
 			.expect("infinite input; no invalid input; qed")
@@ -146,16 +149,18 @@ benchmarks! {
 		let n in 3..MAX_AUTHORITIES;
 		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut current_authorities: Vec<T::AccountId> = Vec::new();
+		let mut current_authorities: Vec<T::DKGId> = Vec::new();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
-			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key.clone()));
-			current_authorities.push(mock_account_id::<T>(authority_id));
+			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key));
+			let account_id = T::DKGId::from(authority_id);
+			current_authorities.push(account_id);
 		}
 		let threshold = u16::try_from(current_authorities.len() / 2).unwrap() + 1;
 		SignatureThreshold::<T>::put(threshold);
-		CurrentAuthoritiesAccounts::<T>::put(&current_authorities);
-		let caller = current_authorities[0].clone();
+		Authorities::<T>::put(&current_authorities);
+		let all_accounts = Pallet::<T>::current_authorities_accounts();
+		let caller:T::AccountId = all_accounts[0].clone();
 	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
 	verify {
 		let (id, dkg_key) = Pallet::<T>::dkg_public_key();
@@ -169,16 +174,18 @@ benchmarks! {
 		let n in 3..MAX_AUTHORITIES;
 		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut next_authorities: Vec<T::AccountId> = Vec::new();
+		let mut next_authorities: Vec<T::DKGId> = Vec::new();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
-			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key.clone()));
-			next_authorities.push(mock_account_id::<T>(authority_id));
+			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key));
+			let account_id = T::DKGId::from(authority_id);
+			next_authorities.push(account_id);
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
-		NextAuthoritiesAccounts::<T>::put(&next_authorities);
-		let caller = next_authorities[0].clone();
+		NextAuthorities::<T>::put(&next_authorities);
+		let all_accounts = Pallet::<T>::current_authorities_accounts();
+		let caller:T::AccountId = all_accounts[0].clone();
 	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
 	verify {
 		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
@@ -219,7 +226,7 @@ benchmarks! {
 	submit_misbehaviour_reports {
 		let n in 3..MAX_AUTHORITIES;
 		let offender: T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE, None));
-		let mut next_authorities: Vec<T::AccountId> = Vec::new();
+		let mut next_authorities: Vec<T::DKGId> = Vec::new();
 		let mut reporters: Vec<T::DKGId> = Vec::new();
 		let mut signatures: Vec<Vec<u8>> = Vec::new();
 		let round_id = 1;
@@ -228,13 +235,13 @@ benchmarks! {
 			let authority_id = mock_pub_key();
 			let sig = mock_misbehaviour_report::<T>(authority_id, offender.clone(), misbehaviour_type);
 			signatures.push(sig);
-			let dkg_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
-			reporters.push(dkg_id);
-			next_authorities.push(mock_account_id::<T>(authority_id));
+			let dkg_id = T::DKGId::from(authority_id);
+			reporters.push(dkg_id.clone());
+			next_authorities.push(dkg_id);
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
-		NextAuthoritiesAccounts::<T>::put(&next_authorities);
+		NextAuthorities::<T>::put(&next_authorities);
 		let aggregated_misbehaviour_reports= AggregatedMisbehaviourReports {
 													misbehaviour_type,
 													round_id,
@@ -242,7 +249,8 @@ benchmarks! {
 													reporters:reporters.clone(),
 													signatures,
 												};
-		let caller = next_authorities[0].clone();
+		let all_accounts = Pallet::<T>::current_authorities_accounts();
+		let caller:T::AccountId = all_accounts[0].clone();
 	}: _(RawOrigin::Signed(caller), aggregated_misbehaviour_reports)
 	verify {
 		assert_last_event::<T>(Event::MisbehaviourReportsSubmitted{
