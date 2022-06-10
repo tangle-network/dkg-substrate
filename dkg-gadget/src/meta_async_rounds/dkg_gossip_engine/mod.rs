@@ -14,14 +14,11 @@
 
 //! Webb Custom DKG Gossip Engine.
 
-use std::collections::HashMap;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use std::pin::Pin;
-use std::sync::Arc;
-use parking_lot::RwLock;
 use auto_impl::auto_impl;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 
@@ -51,11 +48,7 @@ pub trait GossipEngineIface: Send + Sync {
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
 	/// Returns a stream of DKG messages, that are received from the network.
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>>;
-	/// A list of timestamps of the last received message for each peer
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>>;
 }
-
-pub type ReceiveTimestamp<C> = Arc<RwLock<HashMap<PeerId, C>>>;
 
 /// A Stub implementation of the GossipEngineIface.
 impl GossipEngineIface for () {
@@ -75,9 +68,5 @@ impl GossipEngineIface for () {
 
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
 		futures::stream::pending().boxed()
-	}
-
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>> {
-		None
 	}
 }
