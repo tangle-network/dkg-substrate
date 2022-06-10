@@ -29,6 +29,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 };
 use round_based::{containers::StoreErr, Msg, StateMachine};
 use std::{fmt::Debug, sync::Arc};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use tokio::sync::broadcast::Receiver;
 
 pub(crate) type StateMachineTxRx<T> = (
@@ -38,7 +39,7 @@ pub(crate) type StateMachineTxRx<T> = (
 
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
-pub trait StateMachineIface: StateMachine + Send
+pub trait StateMachineIface: StateMachine + RoundBlame + Send
 where
 	<Self as StateMachine>::Output: Send,
 {

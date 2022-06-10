@@ -19,6 +19,7 @@ use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 use tokio::sync::mpsc::error::SendError;
+use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
 
 pub(crate) type UnsignedProposalsSender =
 	tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>;
@@ -37,6 +38,8 @@ pub struct MetaAsyncProtocolRemote<C> {
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
 	started_at: C,
 	is_primary_remote: bool,
+	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
+	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) round_id: RoundId,
 }
 
@@ -57,6 +60,9 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
 
+		let (current_round_blame_tx, current_round_blame) =
+			tokio::sync::watch::channel(CurrentRoundBlame::empty());
+
 		Self {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
 			unsigned_proposals_tx,
@@ -67,6 +73,8 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
 			stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
 			stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
+			current_round_blame,
+			current_round_blame_tx: Arc::new(current_round_blame_tx),
 			is_primary_remote: false,
 			round_id,
 		}
@@ -156,6 +164,10 @@ impl<C> MetaAsyncProtocolRemote<C> {
 				MetaHandlerStatus::OfflineAndVoting |
 				MetaHandlerStatus::Complete
 		)
+	}
+
+	pub fn current_round_blame(&self) -> CurrentRoundBlame {
+		self.current_round_blame.borrow().clone()
 	}
 
 	/// Setting this as the primary remote

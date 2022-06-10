@@ -62,6 +62,7 @@ use crate::{
 	},
 	utils::SendFuture,
 };
+use crate::meta_async_rounds::state_machine_wrapper::StateMachineWrapper;
 
 /// Once created, the MetaDKGProtocolHandler should be .awaited to begin execution
 pub struct MetaAsyncProtocolHandler<'a, Out> {
@@ -77,6 +78,20 @@ pub struct AsyncProtocolParameters<BCIface: BlockChainIface> {
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: MetaAsyncProtocolRemote<BCIface::Clock>,
 	pub round_id: RoundId,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CurrentRoundBlame {
+	/// a numbers of messages yet to recieve
+	pub unrecieved_messages: u16,
+	/// a list of uncorporative parties
+	pub blamed_parties: Vec<u16>,
+}
+
+impl CurrentRoundBlame {
+	pub fn empty() -> Self {
+		Self::default()
+	}
 }
 
 impl<BCIface: BlockChainIface> AsyncProtocolParameters<BCIface> {
@@ -272,6 +287,8 @@ where
 	{
 		let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 		let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
+
+		let sm = StateMachineWrapper::new(sm, params.handle.current_round_blame_tx.clone());
 
 		let mut async_proto = AsyncProtocol::new(
 			sm,

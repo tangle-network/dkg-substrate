@@ -45,8 +45,9 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
-use crate::worker::LatestHeader;
+use crate::worker::HasLatestHeader;
 
+#[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockChainIface: Send + Sync {
 	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;

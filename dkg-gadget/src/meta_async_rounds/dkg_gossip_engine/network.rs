@@ -63,7 +63,7 @@ use std::collections::HashSet;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use crate::meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp;
-use crate::worker::LatestHeader;
+use crate::worker::HasLatestHeader;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkGossipEngineBuilder;
@@ -277,7 +277,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	metrics: Option<Metrics>,
 }
 
-impl<B> LatestHeader<B> for GossipHandler<B>
+impl<B> HasLatestHeader<B> for GossipHandler<B>
 	where
 		B: Block
 {
