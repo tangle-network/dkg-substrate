@@ -89,9 +89,9 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub(crate) struct WorkerParams<B, BE, C, GE>
-	where
-		B: Block,
-		GE: GossipEngineIface,
+where
+	B: Block,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -106,11 +106,11 @@ pub(crate) struct WorkerParams<B, BE, C, GE>
 
 /// A DKG worker plays the DKG protocol
 pub(crate) struct DKGWorker<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: Client<B, BE>,
-		GE: GossipEngineIface,
+where
+	B: Block,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -152,15 +152,15 @@ pub(crate) struct DKGWorker<B, BE, C, GE>
 }
 
 pub type AggregatedMisbehaviourReportStore =
-HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+	HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
-	where
-		B: Block + Codec,
-		BE: Backend<B> + 'static,
-		GE: GossipEngineIface + 'static,
-		C: Client<B, BE> + 'static,
-		C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+where
+	B: Block + Codec,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -221,12 +221,12 @@ enum ProtoStageType {
 }
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B> + 'static,
-		GE: GossipEngineIface + 'static,
-		C: Client<B, BE> + 'static,
-		C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+where
+	B: Block,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -773,7 +773,7 @@ impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 				&encoded,
 				&signature,
 			)
-				.1
+			.1
 		};
 
 		if check_signers(&authorities.clone().unwrap().0) || check_signers(&authorities.unwrap().1)
@@ -1063,11 +1063,11 @@ pub trait KeystoreExt {
 }
 
 impl<B, BE, C, GE> KeystoreExt for DKGWorker<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		GE: GossipEngineIface,
-		C: Client<B, BE>,
+where
+	B: Block,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1106,11 +1106,11 @@ pub trait HasLatestHeader<B: Block> {
 }
 
 impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		GE: GossipEngineIface,
-		C: Client<B, BE>,
+where
+	B: Block,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
@@ -1118,11 +1118,11 @@ impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
 }
 
 impl<B, BE, C, GE> HasLatestHeader<B> for DKGIface<B, BE, C, GE>
-	where
-		B: Block,
-		BE: Backend<B>,
-		GE: GossipEngineIface,
-		C: Client<B, BE>,
+where
+	B: Block,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

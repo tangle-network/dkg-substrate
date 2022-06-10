@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
+use std::sync::Arc;
 
 use super::meta_handler::CurrentRoundBlame;
 
@@ -10,19 +10,24 @@ pub(crate) struct StateMachineWrapper<T: StateMachine> {
 }
 
 impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
-	pub fn new(sm: T, current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>) -> Self {
+	pub fn new(
+		sm: T,
+		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
+	) -> Self {
 		Self { sm, current_round_blame }
 	}
 
 	fn collect_round_blame(&self) {
 		let (unrecieved_messages, blamed_parties) = self.round_blame();
-		let _ = self.current_round_blame.send(CurrentRoundBlame { unrecieved_messages, blamed_parties });
+		let _ = self
+			.current_round_blame
+			.send(CurrentRoundBlame { unrecieved_messages, blamed_parties });
 	}
 }
 
 impl<T> StateMachine for StateMachineWrapper<T>
-	where
-		T: StateMachine + RoundBlame,
+where
+	T: StateMachine + RoundBlame,
 {
 	type Err = T::Err;
 	type Output = T::Output;

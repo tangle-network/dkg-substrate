@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
@@ -19,7 +20,6 @@ use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 use tokio::sync::mpsc::error::SendError;
-use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
 
 pub(crate) type UnsignedProposalsSender =
 	tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>;

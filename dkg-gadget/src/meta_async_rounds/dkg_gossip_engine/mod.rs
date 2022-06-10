@@ -14,13 +14,13 @@
 
 //! Webb Custom DKG Gossip Engine.
 
+use auto_impl::auto_impl;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
 use sc_network::PeerId;
-use std::pin::Pin;
-use auto_impl::auto_impl;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use std::pin::Pin;
 
 /// A Mock Gossip Engine for DKG.
 mod mock;

@@ -146,7 +146,7 @@ where
 			},
 		);
 
-	let latest_header =  Arc::new(RwLock::new(None));
+	let latest_header = Arc::new(RwLock::new(None));
 	let (gossip_handler, gossip_engine) = network_gossip_engine
 		.build(network.clone(), metrics.clone(), latest_header.clone())
 		.expect("Failed to build gossip engine");

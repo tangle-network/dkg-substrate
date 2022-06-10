@@ -18,7 +18,7 @@ use crate::{
 	persistence::store_localkey,
 	proposal::{get_signed_proposal, make_signed_proposal},
 	storage::proposals::save_signed_proposals_in_storage,
-	worker::{DKGWorker, KeystoreExt},
+	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
@@ -45,7 +45,6 @@ use sp_runtime::{
 	traits::{Block, Header, NumberFor},
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
-use crate::worker::HasLatestHeader;
 
 #[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockChainIface: Send + Sync {

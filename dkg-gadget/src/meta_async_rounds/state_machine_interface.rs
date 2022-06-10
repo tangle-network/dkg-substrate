@@ -26,10 +26,10 @@ use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::{Keygen, ProtocolMessage},
 	sign::{OfflineProtocolMessage, OfflineStage},
+	traits::RoundBlame,
 };
 use round_based::{containers::StoreErr, Msg, StateMachine};
 use std::{fmt::Debug, sync::Arc};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use tokio::sync::broadcast::Receiver;
 
 pub(crate) type StateMachineTxRx<T> = (

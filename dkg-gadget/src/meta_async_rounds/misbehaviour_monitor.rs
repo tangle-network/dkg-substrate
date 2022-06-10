@@ -31,8 +31,8 @@ impl MisbehaviourMonitor {
 		bc_iface: BCIface,
 		misbehaviour_tx: UnboundedSender<DKGMisbehaviourMessage>,
 	) -> Self
-		where
-			BCIface::Clock: 'static,
+	where
+		BCIface::Clock: 'static,
 	{
 		Self {
 			inner: Box::pin(async move {

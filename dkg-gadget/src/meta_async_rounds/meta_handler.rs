@@ -58,11 +58,11 @@ use crate::{
 		incoming::IncomingAsyncProtocolWrapper,
 		remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
 		state_machine_interface::StateMachineIface,
+		state_machine_wrapper::StateMachineWrapper,
 		BatchKey, PartyIndex, ProtocolType, Threshold,
 	},
 	utils::SendFuture,
 };
-use crate::meta_async_rounds::state_machine_wrapper::StateMachineWrapper;
 
 /// Once created, the MetaDKGProtocolHandler should be .awaited to begin execution
 pub struct MetaAsyncProtocolHandler<'a, Out> {

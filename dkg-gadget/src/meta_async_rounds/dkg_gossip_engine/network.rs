@@ -38,20 +38,22 @@
 //! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
-use crate::metrics::Metrics;
+use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{FutureExt, Stream, StreamExt};
 use linked_hash_set::LinkedHashSet;
 use log::{debug, warn};
+use parking_lot::RwLock;
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	borrow::Cow,
-	collections::{hash_map::Entry, HashMap},
+	collections::{hash_map::Entry, HashMap, HashSet},
 	hash::Hash,
 	iter,
+	marker::PhantomData,
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
@@ -59,11 +61,7 @@ use std::{
 		Arc,
 	},
 };
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use parking_lot::RwLock;
 use tokio::sync::broadcast;
-use crate::worker::HasLatestHeader;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkGossipEngineBuilder;
@@ -133,7 +131,7 @@ impl NetworkGossipEngineBuilder {
 			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
-			_pd: Default::default()
+			_pd: Default::default(),
 		};
 
 		Ok((handler, controller))
@@ -189,7 +187,7 @@ pub struct GossipHandlerController<B: Block> {
 	gossip_enabled: Arc<AtomicBool>,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
-	_pd: PhantomData<B>
+	_pd: PhantomData<B>,
 }
 
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
@@ -272,8 +270,8 @@ pub struct GossipHandler<B: Block + 'static> {
 }
 
 impl<B> HasLatestHeader<B> for GossipHandler<B>
-	where
-		B: Block
+where
+	B: Block,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
@@ -325,10 +323,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::SyncConnected { remote } => {
 				let addr = iter::once(multiaddr::Protocol::P2p(remote.into()))
 					.collect::<multiaddr::Multiaddr>();
-				let result = self.service.add_peers_to_reserved_set(
-					self.protocol_name.clone(),
-					HashSet::from([addr]),
-				);
+				let result = self
+					.service
+					.add_peers_to_reserved_set(self.protocol_name.clone(), HashSet::from([addr]));
 				if let Err(err) = result {
 					log::error!(target: "dkg-gossip", "Add reserved peer failed: {}", err);
 				}
