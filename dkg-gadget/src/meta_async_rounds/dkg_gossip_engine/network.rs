@@ -38,15 +38,12 @@
 //! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
-use crate::{
-	meta_async_rounds::dkg_gossip_engine::ReceiveTimestamp, metrics::Metrics,
-	worker::HasLatestHeader,
-};
+use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{FutureExt, Stream, StreamExt};
-use linked_hash_map::LinkedHashMap;
+use linked_hash_set::LinkedHashSet;
 use log::{debug, warn};
 use parking_lot::RwLock;
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
@@ -56,13 +53,13 @@ use std::{
 	collections::{hash_map::Entry, HashMap, HashSet},
 	hash::Hash,
 	iter,
+	marker::PhantomData,
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
 		atomic::{AtomicBool, Ordering},
 		Arc,
 	},
-	time::Instant,
 };
 use tokio::sync::broadcast;
 
@@ -116,13 +113,11 @@ impl NetworkGossipEngineBuilder {
 		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
-		let rx_timestamps = Arc::new(RwLock::new(HashMap::new()));
 
 		let handler = GossipHandler {
 			latest_header,
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
-			rx_timestamps: rx_timestamps.clone(),
 			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
@@ -136,7 +131,7 @@ impl NetworkGossipEngineBuilder {
 			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
-			rx_timestamps,
+			_pd: Default::default(),
 		};
 
 		Ok((handler, controller))
@@ -152,20 +147,22 @@ const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
 /// Maximum number of messages request we keep at any moment.
 const MAX_PENDING_MESSAGES: usize = 8192;
 
-/// Maximum number of duplicate messages that a single peer can send us.
-///
-/// This is to prevent a malicious peer from spamming us with messages.
-const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 5;
-
 #[allow(unused)]
 mod rep {
 	use sc_peerset::ReputationChange as Rep;
+	/// Reputation change when a peer sends us any message.
+	///
+	/// This forces node to verify it, thus the negative value here. Once message is verified,
+	/// reputation change should be refunded with `ANY_MESSAGE_REFUND`.
+	pub const ANY_MESSAGE: Rep = Rep::new(-(1 << 4), "Any message");
+	/// Reputation change when a peer sends us any message that is not invalid.
+	pub const ANY_MESSAGE_REFUND: Rep = Rep::new(1 << 4, "Any message (refund)");
 	/// Reputation change when a peer sends us a message that we didn't know about.
 	pub const GOOD_MESSAGE: Rep = Rep::new(1 << 7, "Good message");
+	/// Reputation change when a peer sends us a bad message.
+	pub const BAD_MESSAGE: Rep = Rep::new(-(1 << 12), "Bad message");
 	/// We received an unexpected message packet.
 	pub const UNEXPECTED_MESSAGE: Rep = Rep::new_fatal("Unexpected message packet");
-	/// Reputation change when a peer sends us the same message over and over.
-	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
 
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
@@ -188,7 +185,9 @@ pub struct GossipHandlerController<B: Block> {
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
-	rx_timestamps: ReceiveTimestamp<NumberFor<B>>,
+	/// Used to keep type information about the block. May
+	/// be useful for the future, so keeping it here
+	_pd: PhantomData<B>,
 }
 
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
@@ -223,10 +222,6 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
 	}
-
-	fn receive_timestamps(&self) -> Option<&ReceiveTimestamp<Self::Clock>> {
-		Some(&self.rx_timestamps)
-	}
 }
 /// an Enum Representing the commands that can be sent to the background task.
 #[derive(Clone, Debug)]
@@ -259,13 +254,11 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
 	/// multiple times concurrently.
-	pending_messages_peers: HashMap<B::Hash, HashSet<PeerId>>,
+	pending_messages_peers: HashMap<B::Hash, Vec<PeerId>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
 	/// Stream of networking events.
 	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
-	/// A list of instants used to track participation frequency
-	rx_timestamps: ReceiveTimestamp<NumberFor<B>>,
 	// All connected peers
 	peers: HashMap<PeerId, Peer<B>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -290,13 +283,6 @@ where
 struct Peer<B: Block> {
 	/// Holds a set of messages known to this peer.
 	known_messages: LruHashSet<B::Hash>,
-	/// a counter of the messages that are received from this peer.
-	///
-	/// Implemented as a HashMap/LruHashMap with the message hash as the key,
-	/// This is used to track the frequency of the messages received from this peer.
-	/// If the same message is received from this peer more than
-	/// `MAX_DUPLICATED_MESSAGES_PER_PEER`, we will flag this peer as malicious.
-	message_counter: LruHashMap<B::Hash, usize>,
 }
 
 impl<B: Block + 'static> GossipHandler<B> {
@@ -361,9 +347,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 						known_messages: LruHashSet::new(
 							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
 						),
-						message_counter: LruHashMap::new(
-							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
-						),
 					},
 				);
 				debug_assert!(_was_in.is_none());
@@ -401,53 +384,29 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Called when peer sends us new signed DKG message.
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
+		// TODO: Fill in with proper check of message
+		let some_check_here = false;
+		if some_check_here {
+			self.service.disconnect_peer(who, self.protocol_name.clone());
+			self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
+			return
+		}
+
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
-
-		// TODO: consider the security of a user who manages to break through the underlying
-		// libp2p crypto, and, spoofs a message with a false authority ID in order to trick
-		// other nodes that some other node is misbehaving
-		let inst = Instant::now();
-		*self
-			.rx_timestamps
-			.write()
-			.entry(who)
-			.or_insert_with(|| (now, inst, message.msg.id.clone())) = (now, inst, message.msg.id.clone());
-
-		// Check if we already know this message.
 
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 
+			// self.service.report_peer(who, rep::ANY_MESSAGE);
+
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					let _ = self.controller_channel.send(message.clone());
-					entry.insert(HashSet::from([who]));
-					// This good, this peer is good, they sent us a message we didn't know about.
-					// we should add some good reputation to them.
-					self.service.report_peer(who, rep::GOOD_MESSAGE);
+					entry.insert(vec![who]);
 				},
 				Entry::Occupied(mut entry) => {
-					// if we are here, that means this peer sent us a message we already know.
-					let inserted = entry.get_mut().insert(who);
-					// and if inserted is `false` that means this peer was already in the set
-					// hence this not the first time we received this message from the exact same
-					// peer.
-					if !inserted {
-						// we will increment the counter for this message.
-						let old = peer
-							.message_counter
-							.get(&message.message_hash::<B>())
-							.cloned()
-							.unwrap_or(0);
-						peer.message_counter.insert(message.message_hash::<B>(), old + 1);
-						// and if we have received this message from the same peer more than
-						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
-						// as malicious.
-						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
-							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
-						}
-					}
+					entry.get_mut().push(who);
 				},
 			}
 		}
@@ -506,55 +465,19 @@ impl<B: Block + 'static> GossipHandler<B> {
 	}
 }
 
-/// Wrapper around `LinkedHashMap` with bounded growth.
-///
-/// In the limit, for each element inserted the oldest existing element will be removed.
-#[derive(Debug, Clone)]
-pub struct LruHashMap<K: Hash + Eq, V> {
-	inner: LinkedHashMap<K, V>,
-	limit: NonZeroUsize,
-}
-
-impl<K: Hash + Eq, V> LruHashMap<K, V> {
-	/// Create a new `LruHashMap` with the given (exclusive) limit.
-	pub fn new(limit: NonZeroUsize) -> Self {
-		Self { inner: LinkedHashMap::new(), limit }
-	}
-
-	/// Insert element into the map.
-	///
-	/// Returns `true` if this is a new element to the map, `false` otherwise.
-	/// Maintains the limit of the map by removing the oldest entry if necessary.
-	/// Inserting the same element will update its LRU position.
-	pub fn insert(&mut self, k: K, v: V) -> bool {
-		if self.inner.insert(k, v).is_some() {
-			if self.inner.len() == usize::from(self.limit) {
-				self.inner.pop_front(); // remove oldest entry
-			}
-			return true
-		}
-		false
-	}
-
-	/// Get an element from the map.
-	/// Returns `None` if the element is not in the map.
-	pub fn get(&self, k: &K) -> Option<&V> {
-		self.inner.get(k)
-	}
-}
-
-/// Wrapper around `LruHashMap` with bounded growth.
+/// Wrapper around `LinkedHashSet` with bounded growth.
 ///
 /// In the limit, for each element inserted the oldest existing element will be removed.
 #[derive(Debug, Clone)]
 pub struct LruHashSet<T: Hash + Eq> {
-	set: LruHashMap<T, ()>,
+	set: LinkedHashSet<T>,
+	limit: NonZeroUsize,
 }
 
 impl<T: Hash + Eq> LruHashSet<T> {
 	/// Create a new `LruHashSet` with the given (exclusive) limit.
 	pub fn new(limit: NonZeroUsize) -> Self {
-		Self { set: LruHashMap::new(limit) }
+		Self { set: LinkedHashSet::new(), limit }
 	}
 
 	/// Insert element into the set.
@@ -563,6 +486,12 @@ impl<T: Hash + Eq> LruHashSet<T> {
 	/// Maintains the limit of the set by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, e: T) -> bool {
-		self.set.insert(e, ())
+		if self.set.insert(e) {
+			if self.set.len() == usize::from(self.limit) {
+				self.set.pop_front(); // remove oldest entry
+			}
+			return true
+		}
+		false
 	}
 }

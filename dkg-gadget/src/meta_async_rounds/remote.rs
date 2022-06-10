@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
 use atomic::Atomic;
-use core::fmt;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 use tokio::sync::mpsc::error::SendError;
-
-use super::meta_handler::CurrentRoundBlame;
 
 pub(crate) type UnsignedProposalsSender =
 	tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>;
@@ -52,7 +50,6 @@ pub enum MetaHandlerStatus {
 	AwaitingProposals,
 	OfflineAndVoting,
 	Complete,
-	Timeout,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
@@ -83,12 +80,8 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 		}
 	}
 
-	pub fn keygen_has_stalled(&self, now: C) -> bool
-	where
-		C: fmt::Debug,
-	{
-		let status = self.get_status();
-		(status == MetaHandlerStatus::Keygen || status == MetaHandlerStatus::Timeout) &&
+	pub fn keygen_has_stalled(&self, now: C) -> bool {
+		self.get_status() == MetaHandlerStatus::Keygen &&
 			(now - self.started_at > KEYGEN_TIMEOUT.into())
 	}
 }
@@ -173,14 +166,14 @@ impl<C> MetaAsyncProtocolRemote<C> {
 		)
 	}
 
+	pub fn current_round_blame(&self) -> CurrentRoundBlame {
+		self.current_round_blame.borrow().clone()
+	}
+
 	/// Setting this as the primary remote
 	pub fn into_primary_remote(mut self) -> Self {
 		self.is_primary_remote = true;
 		self
-	}
-
-	pub fn current_round_blame(&self) -> CurrentRoundBlame {
-		self.current_round_blame.borrow().clone()
 	}
 }
 
@@ -191,9 +184,7 @@ impl<C> Drop for MetaAsyncProtocolRemote<C> {
 			// presumably the one in the DKG worker. This one is asserted to be the one
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
-			if self.get_status() != MetaHandlerStatus::Complete &&
-				self.get_status() != MetaHandlerStatus::Timeout
-			{
+			if self.get_status() != MetaHandlerStatus::Complete {
 				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
 				self.set_status(MetaHandlerStatus::Complete);
 			}

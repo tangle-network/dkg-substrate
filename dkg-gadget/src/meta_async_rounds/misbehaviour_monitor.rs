@@ -43,7 +43,7 @@ impl MisbehaviourMonitor {
 				while let Some(_) = ticker.next().await {
 					log::trace!("[MisbehaviourMonitor] Performing periodic check ...");
 					match remote.get_status() {
-						MetaHandlerStatus::Keygen | MetaHandlerStatus::Timeout => {
+						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
 							if remote.keygen_has_stalled(bc_iface.now()) {
 								on_keygen_timeout::<BCIface>(
 									&remote,

@@ -18,11 +18,10 @@ use crate::{
 	persistence::store_localkey,
 	proposal::{get_signed_proposal, make_signed_proposal},
 	storage::proposals::save_signed_proposals_in_storage,
-	worker::{AggregatedMisbehaviourReportStore, DKGWorker, HasLatestHeader, KeystoreExt},
+	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
-use core::fmt;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
 	types::{
@@ -47,9 +46,9 @@ use sp_runtime::{
 };
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
-#[auto_impl::auto_impl(Arc, &mut, &)]
+#[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockChainIface: Send + Sync {
-	type Clock: fmt::Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
+	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 
 	fn verify_signature_against_authorities(
@@ -248,7 +247,6 @@ pub(crate) type VoteResults =
 #[derive(Clone)]
 pub struct TestDummyIface {
 	pub sender: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
-	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	// key is party_index, hash of data. Needed especially for local unit tests

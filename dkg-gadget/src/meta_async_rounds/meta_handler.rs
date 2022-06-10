@@ -17,7 +17,7 @@ use dkg_runtime_primitives::{AuthoritySet, AuthoritySetId, UnsignedProposal};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	stream::FuturesUnordered,
-	StreamExt, TryFutureExt, TryStreamExt,
+	StreamExt, TryStreamExt,
 };
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
@@ -37,7 +37,6 @@ use std::{
 		Arc,
 	},
 	task::{Context, Poll},
-	time::Duration,
 };
 use tokio::sync::broadcast::Receiver;
 
@@ -59,12 +58,11 @@ use crate::{
 		incoming::IncomingAsyncProtocolWrapper,
 		remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
 		state_machine_interface::StateMachineIface,
+		state_machine_wrapper::StateMachineWrapper,
 		BatchKey, PartyIndex, ProtocolType, Threshold,
 	},
 	utils::SendFuture,
 };
-
-use super::{state_machine_interface::RoundBlameIface, state_machine_wrapper::StateMachineWrapper};
 
 /// Once created, the MetaDKGProtocolHandler should be .awaited to begin execution
 pub struct MetaAsyncProtocolHandler<'a, Out> {
@@ -153,73 +151,59 @@ where
 				// causal flow: create 1 keygen then, fan-out to unsigned_proposals.len()
 				// offline-stage async subroutines those offline-stages will each automatically
 				// proceed with their corresponding voting stages in parallel
-				let params_keygen = params.clone();
-				let keygen_task = async move {
-					MetaAsyncProtocolHandler::new_keygen(params_keygen, keygen_id, t, n)?.await
-				};
-				let timeout = Duration::from_secs(36);
-				match tokio::time::timeout(timeout, keygen_task).await {
-					Ok(local_key) => {
-						let local_key = local_key?;
-						log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
-						params.handle.set_status(MetaHandlerStatus::AwaitingProposals);
+				let local_key =
+					MetaAsyncProtocolHandler::new_keygen(params.clone(), keygen_id, t, n)?.await?;
+				log::debug!(target: "dkg", "Keygen stage complete! Now running concurrent offline->voting stages ...");
+				params.handle.set_status(MetaHandlerStatus::AwaitingProposals);
 
-						let mut unsigned_proposals_rx =
-							params.handle.unsigned_proposals_rx.lock().take().ok_or_else(|| {
-								DKGError::CriticalError {
-									reason: "unsigned_proposals_rx already taken".to_string(),
-								}
-							})?;
+				let mut unsigned_proposals_rx =
+					params.handle.unsigned_proposals_rx.lock().take().ok_or_else(|| {
+						DKGError::CriticalError {
+							reason: "unsigned_proposals_rx already taken".to_string(),
+						}
+					})?;
 
-						while let Some(Some(unsigned_proposals)) = unsigned_proposals_rx.recv().await {
-							params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
-							let count_in_batch = unsigned_proposals.len();
-							let batch_key = params.get_next_batch_key(&unsigned_proposals);
-							let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
+				while let Some(Some(unsigned_proposals)) = unsigned_proposals_rx.recv().await {
+					params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
+					let count_in_batch = unsigned_proposals.len();
+					let batch_key = params.get_next_batch_key(&unsigned_proposals);
+					let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
 
-							log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
-							if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
-								log::info!("Offline stage index: {}", offline_i);
+					if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
+						log::info!("Offline stage index: {}", offline_i);
 
-								if count_in_batch == 0 {
-									log::debug!(target: "dkg", "Skipping batch since len = 0");
-									continue
-								}
+						if count_in_batch == 0 {
+							log::debug!(target: "dkg", "Skipping batch since len = 0");
+							continue
+						}
 
-								// create one offline stage for each unsigned proposal
-								let futures = FuturesUnordered::new();
-								for unsigned_proposal in unsigned_proposals {
-									futures.push(Box::pin(MetaAsyncProtocolHandler::new_offline(
-										params.clone(),
-										unsigned_proposal,
-										offline_i,
-										s_l.clone(),
-										local_key.clone(),
-										t,
-										batch_key
-									)?));
-								}
+						// create one offline stage for each unsigned proposal
+						let futures = FuturesUnordered::new();
+						for unsigned_proposal in unsigned_proposals {
+							futures.push(Box::pin(MetaAsyncProtocolHandler::new_offline(
+								params.clone(),
+								unsigned_proposal,
+								offline_i,
+								s_l.clone(),
+								local_key.clone(),
+								t,
+								batch_key
+							)?));
+						}
 
-								// NOTE: this will block at each batch of unsigned proposals.
-								// TODO: Consider not blocking here and allowing processing of
-								// each batch of unsigned proposals concurrently
-								futures.try_collect::<()>().await.map(|_| ())?;
-								log::info!(
+						// NOTE: this will block at each batch of unsigned proposals.
+						// TODO: Consider not blocking here and allowing processing of
+						// each batch of unsigned proposals concurrently
+						futures.try_collect::<()>().await.map(|_| ())?;
+						log::info!(
 								"Concluded all Offline->Voting stages ({} total) for this batch for this node",
 								count_in_batch
 							);
-							} else {
-								log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
-								return Ok(())
-							}
-						}
-					}
-
-					Err(_timeout) => {
-						log::warn!("Keygen has timed-out. Exiting metahandler ...");
-						params.handle.set_status(MetaHandlerStatus::Timeout);
-						return Err(DKGError::GenericError { reason: format!("Keygen has timed out. Misbehaviour monitor will submit misbehaviours for this round ...") })
+					} else {
+						log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
+						return Ok(())
 					}
 				}
 			} else {
@@ -254,9 +238,13 @@ where
 		n: u16,
 	) -> Result<MetaAsyncProtocolHandler<'a, <Keygen as StateMachineIface>::Return>, DKGError> {
 		let channel_type = ProtocolType::Keygen { i, t, n };
-		let keygen = Keygen::new(i, t, n)
-			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
-		MetaAsyncProtocolHandler::new_inner((), keygen, params, channel_type)
+		MetaAsyncProtocolHandler::new_inner(
+			(),
+			Keygen::new(i, t, n)
+				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+			params,
+			channel_type,
+		)
 	}
 
 	fn new_offline<B: BlockChainIface + 'a>(
@@ -276,17 +264,16 @@ where
 			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
-		let offline_stage = OfflineStage::new(i, s_l, local_key)
-			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?;
 		MetaAsyncProtocolHandler::new_inner(
 			(unsigned_proposal, i, early_handle, threshold, batch_key),
-			offline_stage,
+			OfflineStage::new(i, s_l, local_key)
+				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
 		)
 	}
 
-	fn new_inner<SM, B>(
+	fn new_inner<SM: StateMachineIface + 'static, B: BlockChainIface + 'a>(
 		additional_param: SM::AdditionalReturnParam,
 		sm: SM,
 		params: AsyncProtocolParameters<B>,
@@ -297,15 +284,13 @@ where
 		<SM as StateMachine>::MessageBody: Send,
 		<SM as StateMachine>::MessageBody: Serialize,
 		<SM as StateMachine>::Output: Send,
-		SM: StateMachineIface + RoundBlameIface + 'static,
-		B: BlockChainIface + 'a,
 	{
 		let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 		let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
-		// let sm_wrapper = StateMachineWrapper::new(sm);
-		// let round_blame = sm_wrapper.get_current_round_blame();
+
+		let sm = StateMachineWrapper::new(sm, params.handle.current_round_blame_tx.clone());
+
 		let mut async_proto = AsyncProtocol::new(
-			// sm_wrapper,
 			sm,
 			incoming_rx_proto.map(Ok::<_, <SM as StateMachine>::Err>),
 			outgoing_tx,
@@ -317,22 +302,10 @@ where
 		let async_proto = Box::pin(async move {
 			let res = async_proto
 				.run()
-				.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })
-				.await;
-			match res {
-				Ok(v) => {
-					log::info!(target: "dkg", "🕸️  Protocol complet");
-					SM::on_finish(v, params_for_end_of_proto, additional_param).await
-				},
-				Err(e) => {
-					// report the round blame
-					params_for_end_of_proto
-						.handle
-						.current_round_blame_tx
-						.send_replace(Default::default());
-					return Err(e)
-				},
-			}
+				.await
+				.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) })?;
+
+			SM::on_finish(res, params_for_end_of_proto, additional_param).await
 		});
 
 		// For taking all unsigned messages generated by the AsyncProtocols, signing them,
@@ -719,7 +692,6 @@ mod tests {
 				authority_public_key: Arc::new(authority_public_key.clone()),
 				vote_results: Arc::new(Mutex::new(HashMap::new())),
 				keygen_key: Arc::new(Mutex::new(None)),
-				aggregated_misbehaviour_reports: Default::default(),
 			};
 
 			interfaces.push(test_iface.clone());
