@@ -662,6 +662,7 @@ pub mod pallet {
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let authorities = Self::authorities();
+
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
 
