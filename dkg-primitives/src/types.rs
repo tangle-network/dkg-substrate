@@ -59,6 +59,14 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 	{
 		<<B::Header as Header>::Hashing as Hash>::hash_of(&self.msg)
 	}
+
+	pub fn identifier(&self) -> [u8; 32] {
+		match &self.msg.payload {
+			DKGMsgPayload::Offline(m) => [0u8; 32],
+			DKGMsgPayload::Vote(m) => [0u8; 32],
+			_ => [0u8; 32],
+		}
+	}
 }
 
 impl<ID> fmt::Display for DKGMessage<ID> {
@@ -125,6 +133,8 @@ pub struct DKGOfflineMessage {
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
+	/// Auxiliary identifier for separating offline messages across concurrent sign rounds
+	pub identifier: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -136,6 +146,8 @@ pub struct DKGVoteMessage {
 	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
+	/// Auxiliary identifier for separating voting messages across concurrent sign rounds
+	pub identifier: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

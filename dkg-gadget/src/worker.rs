@@ -238,14 +238,16 @@ where
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
+		threshold: u16,
 	) -> Result<AsyncProtocolParameters<DKGIface<B, BE, C, GE>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let status_handle = MetaAsyncProtocolRemote::new(now, round_id);
+		let broadcaster_count = (threshold + 1 / 2) as usize + 1;
+		let status_handle = MetaAsyncProtocolRemote::new(now, round_id, broadcaster_count);
 
-		let params = AsyncProtocolParameters {
+		let mut params = AsyncProtocolParameters {
 			blockchain_iface: Arc::new(DKGIface {
 				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
@@ -298,6 +300,7 @@ where
 			round_id,
 			local_key_path,
 			stage,
+			threshold,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
@@ -698,18 +701,6 @@ where
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
-				// Rotate the queued key file contents into the local key file if the next
-				// DKG public key signature has been posted on-chain.
-				let (set_id, _) = self.get_dkg_pub_key(header);
-				if set_id == queued.id - 1 {
-					debug!(target: "dkg", "🕸️  ROTATING LOCAL KEY FILE");
-					self.rotate_local_key_files();
-					// Rotate the rounds since the authority set has changed
-					self.rounds = self.next_rounds.take();
-				} else {
-					debug!(target: "dkg", "🕸️  WAITING FOR NEXT DKG PUBLIC KEY SIG");
-				}
-
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Update the validator sets
@@ -717,8 +708,6 @@ where
 				self.queued_validator_set = queued.clone();
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
-				// Send outgoing messages after processing the queued DKG setup
-				//send_outgoing_dkg_messages(self);
 			}
 		}
 	}

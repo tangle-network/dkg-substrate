@@ -123,7 +123,7 @@ where
 {
 	/// Top-level function used to begin the execution of async protocols
 	pub fn setup<B: BlockChainIface + 'a>(
-		params: AsyncProtocolParameters<B>,
+		mut params: AsyncProtocolParameters<B>,
 		threshold: u16,
 	) -> Result<MetaAsyncProtocolHandler<'a, ()>, DKGError> {
 		let status_handle = params.handle.clone();
@@ -138,7 +138,7 @@ where
 			})?;
 
 		let protocol = async move {
-			let params = params;
+			let mut params = params;
 			let (keygen_id, _b, _c) = Self::get_party_round_id(&params);
 			if let Some(keygen_id) = keygen_id {
 				log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
@@ -195,7 +195,7 @@ where
 					log::debug!(target: "dkg", "Sets {:?}", extra_sets);
 
 					let futures = FuturesUnordered::new();
-					for set in extra_sets {
+					for (index, set) in extra_sets.iter().enumerate() {
 						log::debug!("Signing set: {:?}", set);
 						if let Some(offline_i) = Self::get_offline_stage_index(&set, keygen_id) {
 							log::debug!("Offline stage index: {:?}", offline_i);
@@ -204,7 +204,10 @@ where
 								log::debug!(target: "dkg", "Skipping batch since len = 0");
 								continue
 							}
-
+							// Set the identifier for the handle to switch between broadcasters
+							let buf = set.iter().map(|elt| elt.to_be_bytes()).flatten().collect::<Vec<_>>();
+							let identifier: [u8; 32] = keccak_256(&buf).into();
+							params.handle.set_identifier(identifier, index);
 							// create one offline stage for each unsigned proposal
 							for unsigned_proposal in unsigned_proposals.clone() {
 								futures.push(Box::pin(MetaAsyncProtocolHandler::new_offline(
@@ -214,7 +217,8 @@ where
 									set.clone(),
 									local_key.clone(),
 									t,
-									batch_key
+									batch_key,
+									identifier,
 								)?));
 							}
 						} else {
@@ -269,6 +273,7 @@ where
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
+			[0u8; 32],
 		)
 	}
 
@@ -280,6 +285,7 @@ where
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
+		identifier: [u8; 32],
 	) -> Result<MetaAsyncProtocolHandler<'a, <OfflineStage as StateMachineIface>::Return>, DKGError>
 	{
 		let channel_type = ProtocolType::Offline {
@@ -288,13 +294,15 @@ where
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
 		};
-		let early_handle = params.handle.broadcaster.subscribe();
+		let index = params.handle.unique_broadcaster_identifiers.get(&identifier).unwrap_or(&0);
+		let early_handle = params.handle.broadcasters[*index].subscribe();
 		MetaAsyncProtocolHandler::new_inner(
-			(unsigned_proposal, i, early_handle, threshold, batch_key),
+			(unsigned_proposal, i, early_handle, threshold, batch_key, identifier),
 			OfflineStage::new(i, s_l, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
+			identifier,
 		)
 	}
 
@@ -303,6 +311,7 @@ where
 		sm: SM,
 		params: AsyncProtocolParameters<B>,
 		channel_type: ProtocolType,
+		identifier: [u8; 32],
 	) -> Result<MetaAsyncProtocolHandler<'a, SM::Return>, DKGError>
 	where
 		<SM as StateMachine>::Err: Send + Debug,
@@ -339,14 +348,18 @@ where
 			params.clone(),
 			outgoing_rx,
 			channel_type.clone(),
+			identifier,
 		);
 
 		// For taking raw inbound signed messages, mapping them to unsigned messages, then
 		// sending to the appropriate AsyncProtocol
-		let inbound_signed_message_receiver = Self::generate_inbound_signed_message_receiver_fn::<
-			SM,
-			B,
-		>(params, channel_type.clone(), incoming_tx_proto);
+		let inbound_signed_message_receiver =
+			Self::generate_inbound_signed_message_receiver_fn::<SM, B>(
+				params,
+				channel_type.clone(),
+				incoming_tx_proto,
+				identifier,
+			);
 
 		// Combine all futures into a concurrent select subroutine
 		let protocol = async move {
@@ -379,6 +392,7 @@ where
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
+		identifier: [u8; 32],
 	) -> Result<MetaAsyncProtocolHandler<'a, ()>, DKGError> {
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
@@ -417,6 +431,7 @@ where
 				// are allowing for parallelism now
 				round_key: Vec::from(&hash_of_proposal as &[u8]),
 				partial_signature: partial_sig_bytes,
+				identifier,
 			});
 
 			// now, broadcast the data
@@ -540,6 +555,7 @@ where
 		params: AsyncProtocolParameters<B>,
 		mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 		proto_ty: ProtocolType,
+		identifier: [u8; 32],
 	) -> impl SendFuture<'a, ()>
 	where
 		<SM as StateMachine>::MessageBody: Serialize,
@@ -567,6 +583,7 @@ where
 								key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
 								signer_set_id: party_id as u64,
 								offline_msg: serialized_body,
+								identifier,
 							}),
 						_ => {
 							unreachable!("Should not happen since voting is handled with a custom subroutine")
@@ -590,6 +607,7 @@ where
 		params: AsyncProtocolParameters<B>,
 		channel_type: ProtocolType,
 		to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
+		identifier: [u8; 32],
 	) -> impl SendFuture<'a, ()>
 	where
 		<SM as StateMachine>::MessageBody: Send,
@@ -597,7 +615,8 @@ where
 	{
 		Box::pin(async move {
 			// the below wrapper will map signed messages into unsigned messages
-			let incoming = params.handle.broadcaster.subscribe();
+			let index = params.handle.unique_broadcaster_identifiers.get(&identifier).unwrap_or(&0);
+			let incoming = params.handle.broadcasters[*index].subscribe();
 			let mut incoming_wrapper =
 				IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
 
@@ -719,8 +738,8 @@ mod tests {
 
 			interfaces.push(test_iface.clone());
 
-			// NumberFor::<Block>::from(0u32)
-			let handle = MetaAsyncProtocolRemote::new(0u32, 0);
+			let broadcaster_count = (threshold + 1 / 2) as usize + 1;
+			let handle = MetaAsyncProtocolRemote::new(0u32, 0, broadcaster_count);
 
 			let async_protocol = create_async_proto_inner(
 				test_iface.clone(),

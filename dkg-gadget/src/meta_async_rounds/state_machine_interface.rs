@@ -134,6 +134,7 @@ impl StateMachineIface for OfflineStage {
 		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
 		BatchKey,
+		[u8; 32],
 	);
 	type Return = ();
 
@@ -196,6 +197,7 @@ impl StateMachineIface for OfflineStage {
 			unsigned_proposal.2,
 			unsigned_proposal.3,
 			unsigned_proposal.4,
+			unsigned_proposal.5,
 		)?
 		.await?;
 		Ok(())

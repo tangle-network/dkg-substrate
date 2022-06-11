@@ -18,7 +18,10 @@ use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+	collections::HashMap,
+	sync::{atomic::Ordering, Arc},
+};
 use tokio::sync::mpsc::error::SendError;
 
 pub(crate) type UnsignedProposalsSender =
@@ -31,7 +34,8 @@ pub struct MetaAsyncProtocolRemote<C> {
 	status: Arc<Atomic<MetaHandlerStatus>>,
 	unsigned_proposals_tx: UnsignedProposalsSender,
 	pub(crate) unsigned_proposals_rx: UnsignedProposalsReceiver,
-	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+	pub(crate) unique_broadcaster_identifiers: HashMap<[u8; 32], usize>,
+	pub(crate) broadcasters: Vec<tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>>,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
@@ -54,10 +58,18 @@ pub enum MetaHandlerStatus {
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
-	pub fn new(at: C, round_id: RoundId) -> Self {
+	pub fn new(at: C, round_id: RoundId, broadcaster_count: usize) -> Self {
 		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
-		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
+		let broadcasters = {
+			let mut broadcasters = Vec::new();
+			for _ in 0..broadcaster_count {
+				let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
+				broadcasters.push(broadcaster);
+			}
+
+			broadcasters
+		};
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
 
 		let (current_round_blame_tx, current_round_blame) =
@@ -67,7 +79,8 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
 			unsigned_proposals_tx,
 			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
-			broadcaster,
+			unique_broadcaster_identifiers: HashMap::new(),
+			broadcasters,
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
@@ -78,6 +91,10 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			round_id,
 		}
+	}
+
+	pub fn set_identifier(&mut self, identifier: [u8; 32], index: usize) {
+		self.unique_broadcaster_identifiers.insert(identifier, index);
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
@@ -121,8 +138,9 @@ impl<C> MetaAsyncProtocolRemote<C> {
 		&self,
 		msg: Arc<SignedDKGMessage<Public>>,
 	) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
-		if self.broadcaster.receiver_count() != 0 {
-			self.broadcaster.send(msg).map(|_| ())
+		let index = self.unique_broadcaster_identifiers.get(&msg.identifier()).unwrap();
+		if self.broadcasters[*index].receiver_count() != 0 {
+			self.broadcasters[*index].send(msg).map(|_| ())
 		} else {
 			// do not forward the message
 			log::debug!(target: "dkg", "Will not deliver message since there are no receivers");
@@ -132,8 +150,11 @@ impl<C> MetaAsyncProtocolRemote<C> {
 
 	/// Determines if there are any active listeners
 	#[allow(dead_code)]
-	pub fn is_receiving(&self) -> bool {
-		self.broadcaster.receiver_count() != 0
+	pub fn is_receiving(&self, index: usize) -> bool {
+		if index >= self.broadcasters.len() {
+			return false
+		}
+		self.broadcasters[index].receiver_count() != 0
 	}
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines
