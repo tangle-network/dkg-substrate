@@ -42,6 +42,7 @@ use tokio::sync::broadcast::Receiver;
 
 use crate::{utils::find_index, worker::KeystoreExt, DKGKeystore};
 use dkg_primitives::{
+	keccak_256,
 	types::{
 		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, DKGVoteMessage,
 		RoundId, SignedDKGMessage,
@@ -167,44 +168,69 @@ where
 					params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 					let count_in_batch = unsigned_proposals.len();
 					let batch_key = params.get_next_batch_key(&unsigned_proposals);
-					let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
+
+					// Select the random subset using the local key as a seed
+					let seed = &local_key.public_key().to_bytes(true)[1..];
+					let mut count: usize = 0;
+					let mut extra_sets: Vec<Vec<u16>> = vec![];
+					while extra_sets.len() < ((t + 1) / 2) as usize + 1 {
+						let mut value = seed.to_vec();
+						let hashed_seed = {
+							for _ in 0..count {
+								let hash = keccak_256(&value);
+								value = hash.to_vec();
+							}
+							value
+						};
+
+						let s_l = &Self::generate_signers(&hashed_seed, t, n, &params)?;
+						if !extra_sets.contains(&s_l.to_vec()) {
+							extra_sets.push(s_l.to_vec());
+						}
+
+						count += 1;
+					}
 
 					log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+					log::debug!(target: "dkg", "Sets {:?}", extra_sets);
 
-					if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
-						log::info!("Offline stage index: {}", offline_i);
+					let futures = FuturesUnordered::new();
+					for set in extra_sets {
+						log::debug!("Signing set: {:?}", set);
+						if let Some(offline_i) = Self::get_offline_stage_index(&set, keygen_id) {
+							log::debug!("Offline stage index: {:?}", offline_i);
 
-						if count_in_batch == 0 {
-							log::debug!(target: "dkg", "Skipping batch since len = 0");
-							continue
+							if count_in_batch == 0 {
+								log::debug!(target: "dkg", "Skipping batch since len = 0");
+								continue
+							}
+
+							// create one offline stage for each unsigned proposal
+							for unsigned_proposal in unsigned_proposals.clone() {
+								futures.push(Box::pin(MetaAsyncProtocolHandler::new_offline(
+									params.clone(),
+									unsigned_proposal,
+									offline_i,
+									set.clone(),
+									local_key.clone(),
+									t,
+									batch_key
+								)?));
+							}
+						} else {
+							log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
+							return Ok(())
 						}
-
-						// create one offline stage for each unsigned proposal
-						let futures = FuturesUnordered::new();
-						for unsigned_proposal in unsigned_proposals {
-							futures.push(Box::pin(MetaAsyncProtocolHandler::new_offline(
-								params.clone(),
-								unsigned_proposal,
-								offline_i,
-								s_l.clone(),
-								local_key.clone(),
-								t,
-								batch_key
-							)?));
-						}
-
-						// NOTE: this will block at each batch of unsigned proposals.
-						// TODO: Consider not blocking here and allowing processing of
-						// each batch of unsigned proposals concurrently
-						futures.try_collect::<()>().await.map(|_| ())?;
-						log::info!(
-								"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-								count_in_batch
-							);
-					} else {
-						log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
-						return Ok(())
 					}
+
+					// NOTE: this will block at each batch of unsigned proposals.
+					// TODO: Consider not blocking here and allowing processing of
+					// each batch of unsigned proposals concurrently
+					futures.try_collect::<()>().await.map(|_| ())?;
+					log::info!(
+							"Concluded all Offline->Voting stages ({} total) for this batch for this node",
+							count_in_batch
+						);
 				}
 			} else {
 				log::info!(target: "dkg", "Will skip keygen since local is NOT in best
@@ -484,13 +510,11 @@ where
 	/// NOTE: since the random set is called using a symmetric seed to and RNG,
 	/// the resulting set is symmetric
 	fn generate_signers<B: BlockChainIface + 'a>(
-		local_key: &LocalKey<Secp256k1>,
+		seed: &[u8],
 		t: u16,
 		n: u16,
 		params: &AsyncProtocolParameters<B>,
 	) -> Result<Vec<u16>, DKGError> {
-		// Select the random subset using the local key as a seed
-		let seed = &local_key.public_key().to_bytes(true)[1..];
 		let mut final_set = params.blockchain_iface.get_unjailed_signers()?;
 		// Mutate the final set if we don't have enough unjailed signers
 		if final_set.len() <= t as usize {
