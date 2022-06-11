@@ -219,7 +219,6 @@ where
 							}
 						} else {
 							log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
-							return Ok(())
 						}
 					}
 
@@ -228,9 +227,9 @@ where
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
 					log::info!(
-							"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-							count_in_batch
-						);
+						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
+						count_in_batch
+					);
 				}
 			} else {
 				log::info!(target: "dkg", "Will skip keygen since local is NOT in best
