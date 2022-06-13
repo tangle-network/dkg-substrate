@@ -1,6 +1,19 @@
-use crate::meta_async_rounds::{
-	blockchain_interface::BlockChainIface,
-	remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use crate::async_protocols::{
+	blockchain_interface::BlockchainInterface, remote::MetaHandlerStatus, AsyncProtocolRemote,
 };
 use dkg_primitives::{
 	crypto::Public,
@@ -26,13 +39,13 @@ pub struct MisbehaviourMonitor {
 pub const MISBEHAVIOUR_MONITOR_CHECK_INTERVAL: Duration = Duration::from_millis(2000);
 
 impl MisbehaviourMonitor {
-	pub fn new<BCIface: BlockChainIface + 'static>(
-		remote: MetaAsyncProtocolRemote<BCIface::Clock>,
-		bc_iface: BCIface,
+	pub fn new<BI: BlockchainInterface + 'static>(
+		remote: AsyncProtocolRemote<BI::Clock>,
+		bc_iface: BI,
 		misbehaviour_tx: UnboundedSender<DKGMisbehaviourMessage>,
 	) -> Self
 	where
-		BCIface::Clock: 'static,
+		BI::Clock: 'static,
 	{
 		Self {
 			inner: Box::pin(async move {
@@ -40,12 +53,12 @@ impl MisbehaviourMonitor {
 					tokio::time::interval(MISBEHAVIOUR_MONITOR_CHECK_INTERVAL),
 				);
 
-				while let Some(_) = ticker.next().await {
+				while (ticker.next().await).is_some() {
 					log::trace!("[MisbehaviourMonitor] Performing periodic check ...");
 					match remote.get_status() {
 						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
 							if remote.keygen_has_stalled(bc_iface.now()) {
-								on_keygen_timeout::<BCIface>(
+								on_keygen_timeout::<BI>(
 									&remote,
 									bc_iface.get_authority_set().as_slice(),
 									&misbehaviour_tx,
@@ -68,8 +81,8 @@ impl MisbehaviourMonitor {
 	}
 }
 
-pub fn on_keygen_timeout<BCIface: BlockChainIface>(
-	remote: &MetaAsyncProtocolRemote<BCIface::Clock>,
+pub fn on_keygen_timeout<BI: BlockchainInterface>(
+	remote: &AsyncProtocolRemote<BI::Clock>,
 	authority_set: &[Public],
 	misbehaviour_tx: &UnboundedSender<DKGMisbehaviourMessage>,
 	round_id: RoundId,

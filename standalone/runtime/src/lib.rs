@@ -276,7 +276,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = 2 * MINUTES;
+  pub const Period: BlockNumber = 1 * MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -455,7 +455,7 @@ impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type MaxVotesPerVoter = MaxNominations;
 	type Solution = NposSolution16;
 
-	fn solution_weight(v: u32, t: u32, a: u32, d: u32) -> Weight {
+	fn solution_weight(_v: u32, _t: u32, _a: u32, _d: u32) -> Weight {
 		0
 	}
 }

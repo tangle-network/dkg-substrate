@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
+use crate::gossip_engine::GossipEngineIface;
 use std::sync::Arc;
 // Copyright 2022 Webb Technologies Inc.
 //

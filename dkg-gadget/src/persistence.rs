@@ -1,4 +1,3 @@
-use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,27 +11,19 @@ use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-use crate::{
-	worker::{DKGWorker, KeystoreExt},
-	Client,
-};
+
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
-	crypto::AuthorityId,
 	serde_json,
 	types::RoundId,
 	utils::{decrypt_data, encrypt_data, StoredLocalKey},
 };
 use dkg_runtime_primitives::{
 	offchain::crypto::{Pair as AppPair, Public},
-	DKGApi,
 };
 use log::debug;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
-use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
-use sp_api::{BlockT as Block, NumberFor};
 use sp_core::Pair;
 use std::{
 	fs,
@@ -89,21 +80,15 @@ pub(crate) fn store_localkey(
 /// Uses the raw keypair as a seed for a secret key input to the XChaCha20Poly1305
 /// encryption cipher.
 #[allow(dead_code)]
-pub(crate) fn load_stored_key<B, BE, C, GE>(
+pub(crate) fn load_stored_key(
 	path: PathBuf,
-	worker: &mut DKGWorker<B, BE, C, GE>,
-) -> std::io::Result<StoredLocalKey>
-where
-	B: Block,
-	BE: Backend<B>,
-	GE: GossipEngineIface,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
-{
-	if let Some(local_keystore) = worker.local_keystore.clone() {
+	local_keystore: Option<&Arc<LocalKeystore>>,
+	sr25519_public_key: sp_core::sr25519::Public,
+) -> std::io::Result<StoredLocalKey> {
+	if let Some(local_keystore) = local_keystore {
 		debug!(target: "dkg_persistence", "Loading local key for {:?}", &path);
 		let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
-			&Public::try_from(&worker.get_sr25519_public_key().0[..])
+			&Public::try_from(&sr25519_public_key.0[..])
 				.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),
 		);
 

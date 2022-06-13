@@ -12,25 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
+use crate::async_protocols::CurrentRoundBlame;
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
+use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
-use tokio::sync::mpsc::error::SendError;
-
-pub(crate) type UnsignedProposalsSender =
-	tokio::sync::mpsc::UnboundedSender<Option<Vec<UnsignedProposal>>>;
-pub(crate) type UnsignedProposalsReceiver =
-	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Option<Vec<UnsignedProposal>>>>>>;
 
 #[derive(Clone)]
-pub struct MetaAsyncProtocolRemote<C> {
+pub struct AsyncProtocolRemote<C> {
 	status: Arc<Atomic<MetaHandlerStatus>>,
-	unsigned_proposals_tx: UnsignedProposalsSender,
-	pub(crate) unsigned_proposals_rx: UnsignedProposalsReceiver,
 	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
@@ -52,10 +44,9 @@ pub enum MetaHandlerStatus {
 	Complete,
 }
 
-impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
+impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(at: C, round_id: RoundId) -> Self {
-		let (unsigned_proposals_tx, unsigned_proposals_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
@@ -65,8 +56,6 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 
 		Self {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
-			unsigned_proposals_tx,
-			unsigned_proposals_rx: Arc::new(Mutex::new(Some(unsigned_proposals_rx))),
 			broadcaster,
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
@@ -86,7 +75,7 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 	}
 }
 
-impl<C> MetaAsyncProtocolRemote<C> {
+impl<C> AsyncProtocolRemote<C> {
 	pub fn get_status(&self) -> MetaHandlerStatus {
 		self.status.load(Ordering::SeqCst)
 	}
@@ -100,23 +89,6 @@ impl<C> MetaAsyncProtocolRemote<C> {
 		status != MetaHandlerStatus::Beginning && status != MetaHandlerStatus::Complete
 	}
 
-	pub fn submit_unsigned_proposals(
-		&self,
-		unsigned_proposals: Vec<UnsignedProposal>,
-	) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
-		if unsigned_proposals.is_empty() {
-			log::trace!("[{}] No unsigned proposals to submit", self.round_id);
-			return Ok(())
-		}
-		log::info!(target: "dkg", "Sending unsigned proposals: {:?}", unsigned_proposals);
-		self.unsigned_proposals_tx.send(Some(unsigned_proposals))
-	}
-
-	#[allow(dead_code)]
-	pub fn end_unsigned_proposals(&self) -> Result<(), SendError<Option<Vec<UnsignedProposal>>>> {
-		self.unsigned_proposals_tx.send(None)
-	}
-
 	pub fn deliver_message(
 		&self,
 		msg: Arc<SignedDKGMessage<Public>>,
@@ -125,7 +97,6 @@ impl<C> MetaAsyncProtocolRemote<C> {
 			self.broadcaster.send(msg).map(|_| ())
 		} else {
 			// do not forward the message
-			log::debug!(target: "dkg", "Will not deliver message since there are no receivers");
 			Ok(())
 		}
 	}
@@ -177,7 +148,7 @@ impl<C> MetaAsyncProtocolRemote<C> {
 	}
 }
 
-impl<C> Drop for MetaAsyncProtocolRemote<C> {
+impl<C> Drop for AsyncProtocolRemote<C> {
 	fn drop(&mut self) {
 		if Arc::strong_count(&self.status) == 2 || self.is_primary_remote {
 			// at this point, the only instances of this arc are this one, and,

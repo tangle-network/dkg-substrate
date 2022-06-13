@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::meta_async_rounds::{
-	blockchain_interface::BlockChainIface, meta_handler::AsyncProtocolParameters, ProtocolType,
-};
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::Public;
 use futures::Stream;
@@ -26,24 +23,26 @@ use std::{
 };
 use tokio_stream::wrappers::BroadcastStream;
 
+use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
+
 /// Used to filter and transform incoming messages from the DKG worker
-pub struct IncomingAsyncProtocolWrapper<T, B> {
+pub struct IncomingAsyncProtocolWrapper<T, BI> {
 	pub receiver: BroadcastStream<T>,
 	round_id: RoundId,
-	bc_iface: Arc<B>,
+	engine: Arc<BI>,
 	ty: ProtocolType,
 }
 
-impl<T: TransformIncoming, B: BlockChainIface> IncomingAsyncProtocolWrapper<T, B> {
+impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper<T, BI> {
 	pub fn new(
 		receiver: tokio::sync::broadcast::Receiver<T>,
 		ty: ProtocolType,
-		params: &AsyncProtocolParameters<B>,
+		params: &AsyncProtocolParameters<BI>,
 	) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),
 			round_id: params.round_id,
-			bc_iface: params.blockchain_iface.clone(),
+			engine: params.engine.clone(),
 			ty,
 		}
 	}
@@ -51,9 +50,9 @@ impl<T: TransformIncoming, B: BlockChainIface> IncomingAsyncProtocolWrapper<T, B
 
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped;
-	fn transform<B: BlockChainIface>(
+	fn transform<BI: BlockchainInterface>(
 		self,
-		verify: &B,
+		verify: &BI,
 		stream_type: &ProtocolType,
 		this_round_id: RoundId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
@@ -63,9 +62,9 @@ pub trait TransformIncoming: Clone + Send + 'static {
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	type IncomingMapped = DKGMessage<Public>;
-	fn transform<B: BlockChainIface>(
+	fn transform<BI: BlockchainInterface>(
 		self,
-		verify: &B,
+		verify: &BI,
 		stream_type: &ProtocolType,
 		this_round_id: RoundId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
@@ -101,20 +100,20 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	}
 }
 
-impl<T, B> Stream for IncomingAsyncProtocolWrapper<T, B>
+impl<T, BI> Stream for IncomingAsyncProtocolWrapper<T, BI>
 where
 	T: TransformIncoming,
-	B: BlockChainIface,
+	BI: BlockchainInterface,
 {
 	type Item = Msg<T::IncomingMapped>;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, bc_iface, round_id } = &mut *self;
+		let Self { receiver, ty, engine, round_id } = &mut *self;
 		let mut receiver = Pin::new(receiver);
 
 		loop {
 			match futures::ready!(receiver.as_mut().poll_next(cx)) {
-				Some(Ok(msg)) => match msg.transform(&**bc_iface, &*ty, *round_id) {
+				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *round_id) {
 					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
 
 					Ok(None) => continue,

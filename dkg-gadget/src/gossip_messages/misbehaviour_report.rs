@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use crate::{
-	meta_async_rounds::dkg_gossip_engine::GossipEngineIface,
+	gossip_engine::GossipEngineIface,
 	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports,
 	worker::{DKGWorker, KeystoreExt},
 	Client,

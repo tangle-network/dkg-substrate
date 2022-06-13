@@ -38,6 +38,7 @@
 //! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
+
 use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -172,7 +173,7 @@ pub struct GossipHandlerController<B: Block> {
 	handler_channel: broadcast::Sender<ToHandler>,
 	/// a channel to send DKG Messages back from the background task to the controller
 	///
-	/// Technically, we do not need to hold a reference to this channel, but we do it to
+	/// Technically, we do not need to hold a reference to this channel, but we do it
 	/// here to make this controller (**Clone-able**), meaning that we can clone it and
 	/// still be able to receive messages from the background task.
 	///
@@ -456,9 +457,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				Encode::encode(&message),
 			);
 			propagated_messages += 1;
-			debug!(target: "dkg", "Sending message to {}", who);
 		}
-		debug!(target: "dkg", "Gossiped {} messages", propagated_messages);
 		if let Some(ref metrics) = self.metrics {
 			metrics.propagated_messages.inc_by(propagated_messages as _)
 		}
