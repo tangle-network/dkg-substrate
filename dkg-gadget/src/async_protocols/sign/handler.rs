@@ -46,6 +46,7 @@ where
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
+		async_index: u8,
 	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
 		assert!(
 			threshold + 1 == signing_set.len() as u16,
@@ -93,6 +94,7 @@ where
 							local_key.clone(),
 							t,
 							batch_key,
+							async_index,
 						)?));
 					}
 
@@ -142,6 +144,7 @@ where
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
+		async_index: u8,
 	) -> Result<GenericAsyncHandler<'a, <OfflineStage as StateMachineHandler>::Return>, DKGError> {
 		let channel_type = ProtocolType::Offline {
 			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
@@ -156,6 +159,7 @@ where
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
+			async_index,
 		)
 	}
 
@@ -167,6 +171,7 @@ where
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
+		async_index: u8,
 	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
@@ -205,6 +210,7 @@ where
 				// are allowing for parallelism now
 				round_key: Vec::from(&hash_of_proposal as &[u8]),
 				partial_signature: partial_sig_bytes,
+				async_index,
 			});
 
 			// now, broadcast the data

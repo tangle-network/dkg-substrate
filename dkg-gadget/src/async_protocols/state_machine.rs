@@ -48,8 +48,9 @@ where
 	) -> Result<(), <Self as StateMachine>::Err>;
 
 	async fn on_finish<BI: BlockchainInterface>(
-		_result: <Self as StateMachine>::Output,
-		_params: AsyncProtocolParameters<BI>,
-		_additional_param: Self::AdditionalReturnParam,
+		result: <Self as StateMachine>::Output,
+		params: AsyncProtocolParameters<BI>,
+		additional_param: Self::AdditionalReturnParam,
+		async_index: u8,
 	) -> Result<Self::Return, DKGError>;
 }

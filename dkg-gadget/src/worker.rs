@@ -119,6 +119,7 @@ where
 	pub metrics: Option<Metrics>,
 	pub rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
 	pub next_rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
+	pub signing_rounds: Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	/// Best block a DKG voting round has been concluded for
@@ -195,6 +196,7 @@ where
 			metrics,
 			rounds: None,
 			next_rounds: None,
+			signing_rounds: vec![None; 16],
 			finality_notifications: client.finality_notification_stream(),
 			import_notifications: client.import_notification_stream(),
 			best_dkg_block: None,
@@ -239,6 +241,7 @@ where
 		round_id: RoundId,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
+		async_index: u8,
 	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -281,7 +284,7 @@ where
 			ProtoStageType::Genesis => self.rounds = Some(status_handle.into_primary_remote()),
 			ProtoStageType::Queued => self.next_rounds = Some(status_handle.into_primary_remote()),
 			// When we are at signing stage, it is using the active rounds.
-			ProtoStageType::Signing => self.rounds = Some(status_handle.into_primary_remote()),
+			ProtoStageType::Signing => self.signing_rounds[async_index as usize] = Some(status_handle.into_primary_remote()),
 		}
 
 		Ok(params)
@@ -302,6 +305,7 @@ where
 			round_id,
 			local_key_path,
 			stage,
+			0u8,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
@@ -359,6 +363,7 @@ where
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
+		async_index: u8,
 	) {
 		match self.generate_async_proto_params(
 			best_authorities,
@@ -366,6 +371,7 @@ where
 			round_id,
 			local_key_path,
 			stage,
+			async_index,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
@@ -379,6 +385,7 @@ where
 					threshold,
 					unsigned_proposals,
 					signing_set,
+					async_index,
 				) {
 					Ok(meta_handler) => {
 						let task = async move {
@@ -927,28 +934,38 @@ where
 	/// Route messages internally where they need to be routed
 	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
-				let is_keygen_type = matches!(&dkg_msg.msg.payload, DKGMsgPayload::Keygen(..));
+			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
-					// route to async proto
-					if let Err(err) = rounds.deliver_message(msg.clone()) {
-						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+					if rounds.round_id == msg.msg.round_id.clone() {
+						// route to async proto
+						if let Err(err) = rounds.deliver_message(msg.clone()) {
+							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+						}
 					}
 				}
 
-				// only route keygen types to the next_rounds
-				if is_keygen_type {
-					if let Some(rounds) = self.next_rounds.as_mut() {
+				if let Some(rounds) = self.next_rounds.as_mut() {
+					if rounds.round_id == msg.msg.round_id {
 						// route to async proto
-						if let Err(err) = rounds.deliver_message(msg) {
-							self.handle_dkg_error(DKGError::CriticalError {
-								reason: err.to_string(),
-							})
+						if let Err(err) = rounds.deliver_message(msg.clone()) {
+							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
 						}
 					}
 				}
 			},
+			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
+				let msg = Arc::new(dkg_msg);
+				let async_index = msg.msg.payload.get_async_index();
+				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
+					if rounds.round_id == msg.msg.round_id.clone() {
+						// route to async proto
+						if let Err(err) = rounds.deliver_message(msg.clone()) {
+							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+						}
+					}
+				}
+			}
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
@@ -1106,6 +1123,7 @@ where
 				ProtoStageType::Signing,
 				unsigned_proposals.clone(),
 				signing_sets[i].clone(),
+				i as u8,
 			);
 		}
 	}

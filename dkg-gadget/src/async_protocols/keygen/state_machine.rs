@@ -66,6 +66,7 @@ impl StateMachineHandler for Keygen {
 		local_key: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		_: Self::AdditionalReturnParam,
+		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
 		log::info!(target: "dkg", "Completed keygen stage successfully!");
 		// PublicKeyGossip (we need meta handler to handle this)

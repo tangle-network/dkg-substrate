@@ -81,6 +81,7 @@ impl StateMachineHandler for OfflineStage {
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: Self::AdditionalReturnParam,
+		async_index: u8,
 	) -> Result<(), DKGError> {
 		log::info!(target: "dkg", "Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting
@@ -97,6 +98,7 @@ impl StateMachineHandler for OfflineStage {
 			unsigned_proposal.2,
 			unsigned_proposal.3,
 			unsigned_proposal.4,
+			async_index,
 		)?
 		.await?;
 		Ok(())

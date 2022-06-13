@@ -59,7 +59,7 @@ where
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n)?.await?;
+				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n, 0)?.await?;
 				log::debug!(target: "dkg", "Keygen stage complete!");
 			} else {
 				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
@@ -91,6 +91,7 @@ where
 		i: u16,
 		t: u16,
 		n: u16,
+		async_index: u8,
 	) -> Result<GenericAsyncHandler<'a, <Keygen as StateMachineHandler>::Return>, DKGError> {
 		let channel_type = ProtocolType::Keygen { i, t, n };
 		new_inner(
@@ -99,6 +100,7 @@ where
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
+			async_index,
 		)
 	}
 }
