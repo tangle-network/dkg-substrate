@@ -58,8 +58,7 @@ where
 	}
 
 	fn round_timeout_reached(&mut self) -> Self::Err {
-		let result = self.sm.round_timeout_reached();
-		result
+		self.sm.round_timeout_reached()
 	}
 
 	fn is_finished(&self) -> bool {

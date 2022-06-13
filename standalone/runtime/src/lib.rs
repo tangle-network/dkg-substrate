@@ -455,6 +455,7 @@ impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type MaxVotesPerVoter = MaxNominations;
 	type Solution = NposSolution16;
 
+	#[allow(unused)]
 	fn solution_weight(v: u32, t: u32, a: u32, d: u32) -> Weight {
 		0
 	}

@@ -40,7 +40,7 @@ impl MisbehaviourMonitor {
 					tokio::time::interval(MISBEHAVIOUR_MONITOR_CHECK_INTERVAL),
 				);
 
-				while let Some(_) = ticker.next().await {
+				while let Some(_tick) = ticker.next().await {
 					log::trace!("[MisbehaviourMonitor] Performing periodic check ...");
 					match remote.get_status() {
 						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {

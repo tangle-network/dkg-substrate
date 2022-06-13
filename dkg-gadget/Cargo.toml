@@ -20,7 +20,7 @@ sha3 = "0.9"
 hex = "0.4"
 rand = "0.8.4"
 strum = { version = "0.21", features = ["derive"] }
-linked_hash_set = "0.1.4"
+linked-hash-map = "0.5.4"
 lru = "0.7.0"
 
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
