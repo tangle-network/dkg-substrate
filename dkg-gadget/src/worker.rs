@@ -23,6 +23,7 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
+use itertools::Itertools;
 
 use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
@@ -813,6 +814,7 @@ where
 				let (_, maybe_queued_key) = self.fetch_local_keys();
 				if let Some(queued_key) = maybe_queued_key {
 					if queued_key.round_id == queued.id {
+						debug!(target: "dkg", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
 						return
 					}
 				}
@@ -1103,7 +1105,20 @@ where
 			if active_local_key.is_none() { return } else { active_local_key.unwrap().local_key };
 		let mut count = 0;
 		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
-		while signing_sets.len() < (threshold + 1 / 2) as usize + 1 {
+
+		// Generate multiple signing sets for signing the same unsigned proposals.
+		// The goal is to successfully sign proposals immediately in the event that
+		// some authorities are not present.
+		//
+		// For example, if we have authorities: [1,2,3] and we only generate a single
+		// signing set (1,2), then if either party is absent, we will not be able to sign
+		// until we handle a misbehaviour. Instead, we brute force sign with multiple sets.
+		// For `n` authorities, to cover all signing sets of size `t+1`, we need to generate
+		// (n choose (t+1)) sets.
+		//
+		// Sets with the same values are not unique. We only care about all unique, unordered
+		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
+		while signing_sets.len() < best_authorities.len() {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
