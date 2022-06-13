@@ -26,6 +26,7 @@ use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::{Keygen, ProtocolMessage},
 	sign::{OfflineProtocolMessage, OfflineStage},
+	traits::RoundBlame,
 };
 use round_based::{containers::StoreErr, Msg, StateMachine};
 use std::{fmt::Debug, sync::Arc};
@@ -38,7 +39,7 @@ pub(crate) type StateMachineTxRx<T> = (
 
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
-pub trait StateMachineIface: StateMachine + Send
+pub trait StateMachineIface: StateMachine + RoundBlame + Send
 where
 	<Self as StateMachine>::Output: Send,
 {

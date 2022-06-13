@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::meta_async_rounds::meta_handler::CurrentRoundBlame;
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal, KEYGEN_TIMEOUT};
@@ -37,6 +38,8 @@ pub struct MetaAsyncProtocolRemote<C> {
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
 	started_at: C,
 	is_primary_remote: bool,
+	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
+	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) round_id: RoundId,
 }
 
@@ -47,7 +50,6 @@ pub enum MetaHandlerStatus {
 	AwaitingProposals,
 	OfflineAndVoting,
 	Complete,
-	Timeout,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
@@ -57,6 +59,9 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
+
+		let (current_round_blame_tx, current_round_blame) =
+			tokio::sync::watch::channel(CurrentRoundBlame::empty());
 
 		Self {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
@@ -68,14 +73,15 @@ impl<C: AtLeast32BitUnsigned + Copy> MetaAsyncProtocolRemote<C> {
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
 			stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
 			stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
+			current_round_blame,
+			current_round_blame_tx: Arc::new(current_round_blame_tx),
 			is_primary_remote: false,
 			round_id,
 		}
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		let status = self.get_status();
-		(status == MetaHandlerStatus::Keygen || status == MetaHandlerStatus::Timeout) &&
+		self.get_status() == MetaHandlerStatus::Keygen &&
 			(now - self.started_at > KEYGEN_TIMEOUT.into())
 	}
 }
@@ -160,6 +166,10 @@ impl<C> MetaAsyncProtocolRemote<C> {
 		)
 	}
 
+	pub fn current_round_blame(&self) -> CurrentRoundBlame {
+		self.current_round_blame.borrow().clone()
+	}
+
 	/// Setting this as the primary remote
 	pub fn into_primary_remote(mut self) -> Self {
 		self.is_primary_remote = true;
@@ -174,9 +184,7 @@ impl<C> Drop for MetaAsyncProtocolRemote<C> {
 			// presumably the one in the DKG worker. This one is asserted to be the one
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
-			if self.get_status() != MetaHandlerStatus::Complete &&
-				self.get_status() != MetaHandlerStatus::Timeout
-			{
+			if self.get_status() != MetaHandlerStatus::Complete {
 				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
 				self.set_status(MetaHandlerStatus::Complete);
 			}

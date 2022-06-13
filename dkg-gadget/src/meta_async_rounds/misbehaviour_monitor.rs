@@ -1,12 +1,13 @@
 use crate::meta_async_rounds::{
 	blockchain_interface::BlockChainIface,
-	dkg_gossip_engine::{GossipEngineIface, ReceiveTimestamp},
 	remote::{MetaAsyncProtocolRemote, MetaHandlerStatus},
 };
-use dkg_primitives::types::{DKGError, DKGMisbehaviourMessage, RoundId};
+use dkg_primitives::{
+	crypto::Public,
+	types::{DKGError, DKGMisbehaviourMessage, RoundId},
+};
 use dkg_runtime_primitives::MisbehaviourType;
 use futures::StreamExt;
-use itertools::Itertools;
 use std::{
 	future::Future,
 	pin::Pin,
@@ -38,35 +39,24 @@ impl MisbehaviourMonitor {
 				let mut ticker = tokio_stream::wrappers::IntervalStream::new(
 					tokio::time::interval(MISBEHAVIOUR_MONITOR_CHECK_INTERVAL),
 				);
-				let gossip_engine = bc_iface.get_gossip_engine().unwrap();
 
-				while let Some(_) = ticker.next().await {
-					log::info!("[MisbehaviourMonitor] Performing periodic check ...");
-					if let Some(ts) = gossip_engine.receive_timestamps() {
-						match remote.get_status() {
-							MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
-								if remote.keygen_has_stalled(bc_iface.now()) {
-									on_keygen_timeout::<BCIface>(
-										&misbehaviour_tx,
-										ts,
-										remote.round_id,
-									)?
-								}
-
-								if remote.get_status() == MetaHandlerStatus::Complete {
-									// when the primary remote drops, the status will be flipped to
-									// Complete
-									log::info!("[MisbehaviourMonitor] Ending since the corresponding MetaAsyncProtocolHandler has ended");
-									return Ok(())
-								}
-							},
-
-							MetaHandlerStatus::OfflineAndVoting => {},
-
-							_ => {
-								// TODO: handle monitoring other stages
-							},
-						}
+				while let Some(_tick) = ticker.next().await {
+					log::trace!("[MisbehaviourMonitor] Performing periodic check ...");
+					match remote.get_status() {
+						MetaHandlerStatus::Keygen | MetaHandlerStatus::Complete => {
+							if remote.keygen_has_stalled(bc_iface.now()) {
+								on_keygen_timeout::<BCIface>(
+									&remote,
+									bc_iface.get_authority_set().as_slice(),
+									&misbehaviour_tx,
+									remote.round_id,
+								)?
+							}
+						},
+						MetaHandlerStatus::OfflineAndVoting => {},
+						_ => {
+							// TODO: handle monitoring other stages
+						},
 					}
 				}
 
@@ -79,34 +69,33 @@ impl MisbehaviourMonitor {
 }
 
 pub fn on_keygen_timeout<BCIface: BlockChainIface>(
+	remote: &MetaAsyncProtocolRemote<BCIface::Clock>,
+	authority_set: &[Public],
 	misbehaviour_tx: &UnboundedSender<DKGMisbehaviourMessage>,
-	ts: &ReceiveTimestamp<<<BCIface as BlockChainIface>::GossipEngine as GossipEngineIface>::Clock>,
 	round_id: RoundId,
 ) -> Result<(), DKGError> {
 	log::warn!("[MisbehaviourMonitor] Keygen has stalled! Will determine which authorities are misbehaving ...");
-	// figure out who is stalling the keygen
-	let lock = ts.read();
-	if lock.len() > 0 {
-		// find the bottleneck (the slowest user)
-		let (_slowest_user, (_, _, offender)) = lock
-			.iter()
-			.sorted_by(|(_peer_id, (_, t0, _)), (_peer_id2, (_, t1, _))| t0.cmp(t1))
-			.next()
-			.unwrap();
-
-		let report = DKGMisbehaviourMessage {
-			misbehaviour_type: MisbehaviourType::Keygen,
-			round_id,
-			offender: offender.clone(),
-			signature: vec![],
-		};
-
-		misbehaviour_tx
-			.send(report)
-			.map_err(|err| DKGError::CriticalError { reason: err.to_string() })
-	} else {
-		Ok(())
+	let round_blame = remote.current_round_blame();
+	log::warn!("[MisbehaviourMonitor] Current round blame: {:?}", round_blame);
+	for party_i in round_blame.blamed_parties {
+		// get the authority from the party index.
+		authority_set
+			.get(usize::from(party_i - 1))
+			.cloned()
+			.map(|offender| DKGMisbehaviourMessage {
+				misbehaviour_type: MisbehaviourType::Keygen,
+				round_id,
+				offender,
+				signature: vec![],
+			})
+			.and_then(|report| misbehaviour_tx.send(report).ok())
+			.ok_or_else(|| DKGError::CriticalError {
+				reason: format!("failed to report {party_i}"),
+			})?;
+		log::warn!("Blamed {party_i} for keygen stalled!");
 	}
+
+	Ok(())
 }
 
 impl Future for MisbehaviourMonitor {
