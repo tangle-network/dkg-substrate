@@ -15,6 +15,7 @@
 #![allow(clippy::collapsible_match)]
 
 use dkg_primitives::utils::select_random_set;
+use itertools::Itertools;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
@@ -23,7 +24,6 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
-use itertools::Itertools;
 
 use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
