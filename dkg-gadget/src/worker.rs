@@ -284,7 +284,9 @@ where
 			ProtoStageType::Genesis => self.rounds = Some(status_handle.into_primary_remote()),
 			ProtoStageType::Queued => self.next_rounds = Some(status_handle.into_primary_remote()),
 			// When we are at signing stage, it is using the active rounds.
-			ProtoStageType::Signing => self.signing_rounds[async_index as usize] = Some(status_handle.into_primary_remote()),
+			ProtoStageType::Signing =>
+				self.signing_rounds[async_index as usize] =
+					Some(status_handle.into_primary_remote()),
 		}
 
 		Ok(params)
@@ -940,7 +942,9 @@ where
 					if rounds.round_id == msg.msg.round_id.clone() {
 						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
-							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+							self.handle_dkg_error(DKGError::CriticalError {
+								reason: err.to_string(),
+							})
 						}
 					}
 				}
@@ -949,7 +953,9 @@ where
 					if rounds.round_id == msg.msg.round_id {
 						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
-							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+							self.handle_dkg_error(DKGError::CriticalError {
+								reason: err.to_string(),
+							})
 						}
 					}
 				}
@@ -961,11 +967,13 @@ where
 					if rounds.round_id == msg.msg.round_id.clone() {
 						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
-							self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+							self.handle_dkg_error(DKGError::CriticalError {
+								reason: err.to_string(),
+							})
 						}
 					}
 				}
-			}
+			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
@@ -1091,11 +1099,8 @@ where
 
 		let mut signing_sets = Vec::new();
 		let (active_local_key, _) = self.fetch_local_keys();
-		let local_key = if active_local_key.is_none() {
-			return
-		} else {
-			active_local_key.unwrap().local_key
-		};
+		let local_key =
+			if active_local_key.is_none() { return } else { active_local_key.unwrap().local_key };
 		let mut count = 0;
 		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
 		while signing_sets.len() < (threshold + 1 / 2) as usize + 1 {

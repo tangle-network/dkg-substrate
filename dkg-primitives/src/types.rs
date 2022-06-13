@@ -135,7 +135,6 @@ pub struct DKGOfflineMessage {
 	pub offline_msg: Vec<u8>,
 	/// Index in async protocols
 	pub async_index: u8,
-	
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
