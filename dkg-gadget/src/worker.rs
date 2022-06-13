@@ -695,6 +695,12 @@ where
 			return
 		}
 
+		if self.next_rounds.is_some() &&
+			self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number())
+		{
+			info!(target: "dkg", "🕸️  DKG STALLED: round {:?}", queued.id);
+		}
+
 		let mut queued_local_key_path: Option<PathBuf> = None;
 
 		if self.base_path.is_some() {
@@ -743,9 +749,9 @@ where
 		// Attempt to enact new DKG authorities if sessions have changed
 		if header.number() <= &NumberFor::<B>::from(1u32) {
 			debug!(target: "dkg", "Starting genesis DKG setup");
-			self.enact_genesis_authorities(header);
+			self.maybe_enact_genesis_authorities(header);
 		} else {
-			self.enact_new_authorities(header);
+			self.maybe_enact_new_authorities(header);
 		}
 		// Get all unsigned proposals, create offline stages, attempt voting.
 		// Only do this if the public key is set on-chain.
@@ -756,7 +762,7 @@ where
 		}
 	}
 
-	fn enact_genesis_authorities(&mut self, header: &B::Header) {
+	fn maybe_enact_genesis_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
@@ -773,13 +779,11 @@ where
 				self.handle_genesis_dkg_setup(header, active);
 				// Setting up the queued DKG at genesis
 				self.handle_queued_dkg_setup(header, queued);
-				// Send outgoing messages after processing the queued DKG setup
-				//send_outgoing_dkg_messages(self);
 			}
 		}
 	}
 
-	fn enact_new_authorities(&mut self, header: &B::Header) {
+	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If the active rounds have stalled, it means we haven't
@@ -1118,6 +1122,7 @@ where
 		//
 		// Sets with the same values are not unique. We only care about all unique, unordered
 		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
+		use std::collections::HashSet;
 		while signing_sets.len() < best_authorities.len() {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
@@ -1125,6 +1130,7 @@ where
 			let maybe_set =
 				self.generate_signers(&seed, threshold, round_id, best_authorities.clone()).ok();
 			if let Some(set) = maybe_set {
+				// let hash_set = HashSet::<_, usize>::from_iter(set.clone());
 				if !signing_sets.contains(&set) {
 					signing_sets.push(set);
 				}

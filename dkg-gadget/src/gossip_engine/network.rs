@@ -505,9 +505,10 @@ impl<K: Hash + Eq, V> LruHashMap<K, V> {
 	/// Maintains the limit of the map by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, k: K, v: V) -> bool {
-		if self.inner.insert(k, v).is_some() {
+		if self.inner.insert(k, v).is_none() {
 			if self.inner.len() == usize::from(self.limit) {
-				self.inner.pop_front(); // remove oldest entry
+				// remove oldest entry
+				self.inner.pop_front();
 			}
 			return true
 		}

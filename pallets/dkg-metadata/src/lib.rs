@@ -896,6 +896,11 @@ pub mod pallet {
 						} else {
 							JailedKeygenAuthorities::<T>::insert(offender, now);
 						}
+						// Re-run best authority selection after any updates
+						NextBestAuthorities::<T>::put(Self::get_best_authorities(
+							Self::next_keygen_threshold() as usize,
+							&Self::next_authorities(),
+						));
 					},
 					MisbehaviourType::Sign => {
 						// These are the authorities who underwent keygen.
