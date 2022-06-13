@@ -29,9 +29,8 @@ use crate::async_protocols::{
 	state_machine::StateMachineHandler, AsyncProtocolParameters, BatchKey, GenericAsyncHandler,
 	PartyIndex, ProtocolType, Threshold,
 };
-use dkg_primitives::{
-	types::{DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage},
-	utils::select_random_set,
+use dkg_primitives::types::{
+	DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage,
 };
 use dkg_runtime_primitives::crypto::Public;
 use futures::FutureExt;
@@ -46,7 +45,12 @@ where
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal>,
+		signing_set: Vec<u16>,
 	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
+		assert!(
+			threshold + 1 == signing_set.len() as u16,
+			"Signing set must be of size threshold + 1"
+		);
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
@@ -64,7 +68,6 @@ where
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let (Some(keygen_id), Some(local_key)) = (keygen_id, maybe_local_key) {
 				let t = threshold;
-				let n = params.best_authorities.len() as u16;
 
 				start_rx
 					.await
@@ -73,11 +76,10 @@ where
 				params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 				let count_in_batch = unsigned_proposals.len();
 				let batch_key = params.get_next_batch_key(&unsigned_proposals);
-				let s_l = &Self::generate_signers(&local_key, t, n, &params)?;
 
 				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
-				if let Some(offline_i) = Self::get_offline_stage_index(s_l, keygen_id) {
+				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
 					log::info!("Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
@@ -87,7 +89,7 @@ where
 							params.clone(),
 							unsigned_proposal,
 							offline_i,
-							s_l.clone(),
+							signing_set.clone(),
 							local_key.clone(),
 							t,
 							batch_key,
@@ -276,38 +278,5 @@ where
 			.zip(s_l)
 			.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
 			.map(|r| r.0)
-	}
-
-	/// After keygen, this should be called to generate a random set of signers
-	/// NOTE: since the random set is called using a deterministic seed to and RNG,
-	/// the resulting set is deterministic
-	fn generate_signers<BI: BlockchainInterface + 'a>(
-		local_key: &LocalKey<Secp256k1>,
-		t: u16,
-		n: u16,
-		params: &AsyncProtocolParameters<BI>,
-	) -> Result<Vec<u16>, DKGError> {
-		// Select the random subset using the local key as a seed
-		let seed = &local_key.public_key().to_bytes(true)[1..];
-		let mut final_set = params.engine.get_unjailed_signers()?;
-		// Mutate the final set if we don't have enough unjailed signers
-		if final_set.len() <= t as usize {
-			let jailed_set = params.engine.get_jailed_signers()?;
-			let diff = t as usize + 1 - final_set.len();
-			final_set = final_set
-				.iter()
-				.chain(jailed_set.iter().take(diff))
-				.cloned()
-				.collect::<Vec<u16>>();
-		}
-
-		select_random_set(seed, final_set, t + 1).map(|set| {
-			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", params.round_id, t, n, set);
-			set
-		}).map_err(|err| {
-			DKGError::CreateOfflineStage {
-				reason: format!("generate_signers failed, reason: {}", err)
-			}
-		})
 	}
 }

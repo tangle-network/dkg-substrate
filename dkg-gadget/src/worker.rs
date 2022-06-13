@@ -14,6 +14,7 @@
 
 #![allow(clippy::collapsible_match)]
 
+use dkg_primitives::utils::select_random_set;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
@@ -357,6 +358,7 @@ where
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
+		signing_set: Vec<u16>,
 	) {
 		match self.generate_async_proto_params(
 			best_authorities,
@@ -376,6 +378,7 @@ where
 					async_proto_params,
 					threshold,
 					unsigned_proposals,
+					signing_set,
 				) {
 					Ok(meta_handler) => {
 						let task = async move {
@@ -1069,15 +1072,109 @@ where
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
 
-		self.spawn_signing_protocol(
-			best_authorities,
-			authority_public_key,
-			round_id,
-			threshold,
-			None,
-			ProtoStageType::Signing,
-			unsigned_proposals,
-		);
+		let mut signing_sets = Vec::new();
+		let (active_local_key, _) = self.fetch_local_keys();
+		let local_key = if active_local_key.is_none() {
+			return
+		} else {
+			active_local_key.unwrap().local_key
+		};
+		let mut count = 0;
+		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
+		while signing_sets.len() < (threshold + 1 / 2) as usize + 1 {
+			if count > 0 {
+				seed = sp_core::keccak_256(&seed).to_vec();
+			}
+			let maybe_set =
+				self.generate_signers(&seed, threshold, round_id, best_authorities.clone()).ok();
+			if let Some(set) = maybe_set {
+				if !signing_sets.contains(&set) {
+					signing_sets.push(set);
+				}
+			}
+
+			count += 1;
+		}
+
+		for i in 0..signing_sets.len() {
+			self.spawn_signing_protocol(
+				best_authorities.clone(),
+				authority_public_key.clone(),
+				round_id,
+				threshold,
+				None,
+				ProtoStageType::Signing,
+				unsigned_proposals.clone(),
+				signing_sets[i].clone(),
+			);
+		}
+	}
+
+	/// After keygen, this should be called to generate a random set of signers
+	/// NOTE: since the random set is called using a deterministic seed to and RNG,
+	/// the resulting set is deterministic
+	fn generate_signers(
+		&self,
+		seed: &[u8],
+		t: u16,
+		round_id: RoundId,
+		best_authorities: Vec<Public>,
+	) -> Result<Vec<u16>, DKGError> {
+		let mut final_set = self.get_unjailed_signers(&best_authorities)?;
+		// Mutate the final set if we don't have enough unjailed signers
+		if final_set.len() <= t as usize {
+			let jailed_set = self.get_jailed_signers(&best_authorities)?;
+			let diff = t as usize + 1 - final_set.len();
+			final_set = final_set
+				.iter()
+				.chain(jailed_set.iter().take(diff))
+				.cloned()
+				.collect::<Vec<u16>>();
+		}
+
+		select_random_set(seed, final_set, t + 1).map(|set| {
+			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", round_id, t, best_authorities.len(), set);
+			set
+		}).map_err(|err| {
+			DKGError::CreateOfflineStage {
+				reason: format!("generate_signers failed, reason: {}", err)
+			}
+		})
+	}
+
+	fn get_jailed_signers_inner(
+		&self,
+		best_authorities: &[Public],
+	) -> Result<Vec<Public>, DKGError> {
+		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
+			reason: "latest header does not exist!".to_string(),
+		})?;
+		let at: BlockId<B> = BlockId::hash(now.hash());
+		Ok(self
+			.client
+			.runtime_api()
+			.get_signing_jailed(&at, best_authorities.to_vec())
+			.unwrap_or_default())
+	}
+	fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
+		Ok(best_authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| !jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect())
+	}
+
+	/// Get the jailed signers
+	fn get_jailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
+		Ok(best_authorities
+			.iter()
+			.enumerate()
+			.filter(|(_, key)| jailed_signers.contains(key))
+			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
+			.collect())
 	}
 
 	// *** Main run loop ***

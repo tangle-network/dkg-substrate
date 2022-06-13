@@ -18,9 +18,7 @@ use dkg_primitives::{
 	types::RoundId,
 	utils::{decrypt_data, encrypt_data, StoredLocalKey},
 };
-use dkg_runtime_primitives::{
-	offchain::crypto::{Pair as AppPair, Public},
-};
+use dkg_runtime_primitives::offchain::crypto::{Pair as AppPair, Public};
 use log::debug;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
@@ -86,7 +84,6 @@ pub(crate) fn load_stored_key(
 	sr25519_public_key: sp_core::sr25519::Public,
 ) -> std::io::Result<StoredLocalKey> {
 	if let Some(local_keystore) = local_keystore {
-		debug!(target: "dkg_persistence", "Loading local key for {:?}", &path);
 		let key_pair = local_keystore.as_ref().key_pair::<AppPair>(
 			&Public::try_from(&sr25519_public_key.0[..])
 				.unwrap_or_else(|_| panic!("Could not find keypair in local key store")),

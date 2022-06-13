@@ -41,10 +41,7 @@ use parking_lot::{Mutex, RwLock};
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header, NumberFor},
-};
+use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 #[auto_impl::auto_impl(Arc,&,&mut)]
@@ -68,32 +65,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
 	fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId)
 		-> Result<(), DKGError>;
-	fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError>;
 	fn get_authority_set(&self) -> &Vec<Public>;
-	/// Get the unjailed signers
-	fn get_unjailed_signers(&self) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner()?;
-		Ok(self
-			.get_authority_set()
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| !jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
-	/// Get the jailed signers
-	fn get_jailed_signers(&self) -> Result<Vec<u16>, DKGError> {
-		let jailed_signers = self.get_jailed_signers_inner()?;
-		Ok(self
-			.get_authority_set()
-			.iter()
-			.enumerate()
-			.filter(|(_, key)| jailed_signers.contains(key))
-			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
-			.collect())
-	}
-
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 	/// Returns the present time
 	fn now(&self) -> Self::Clock;
@@ -233,18 +205,6 @@ where
 		}
 
 		Ok(())
-	}
-
-	fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {
-		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
-			reason: "latest header does not exist!".to_string(),
-		})?;
-		let at: BlockId<B> = BlockId::hash(now.hash());
-		Ok(self
-			.client
-			.runtime_api()
-			.get_signing_jailed(&at, (&*self.best_authorities).clone())
-			.unwrap_or_default())
 	}
 
 	fn get_authority_set(&self) -> &Vec<Public> {

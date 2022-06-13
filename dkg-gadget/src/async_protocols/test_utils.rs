@@ -89,10 +89,6 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn get_jailed_signers_inner(&self) -> Result<Vec<Public>, DKGError> {
-		Ok(vec![])
-	}
-
 	fn get_authority_set(&self) -> &Vec<Public> {
 		&*self.best_authorities
 	}
