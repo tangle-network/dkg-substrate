@@ -57,6 +57,7 @@ where
 				false
 			}
 		};
+		debug!(target: "dkg", "Is main round: {}", is_main_round);
 		// Create packed message
 		let mut signed_payload = Vec::new();
 		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
@@ -72,6 +73,7 @@ where
 			&signed_payload,
 			&msg.signature,
 		)?;
+		debug!(target: "dkg", "Reporter: {:?}", reporter);
 		// Add new report to the aggregated reports
 		let reports = dkg_worker
 			.aggregated_misbehaviour_reports
@@ -83,7 +85,7 @@ where
 				reporters: Vec::new(),
 				signatures: Vec::new(),
 			});
-
+		debug!(target: "dkg", "Reports: {:?}", reports);
 		if !reports.reporters.contains(&reporter) {
 			reports.reporters.push(reporter);
 			reports.signatures.push(msg.signature);
@@ -189,6 +191,7 @@ where
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.
 	let threshold = dkg_worker.get_signature_threshold(header) as usize;
+	debug!(target: "dkg", "DKG threshold: {}, reports: {}", threshold, reports.reporters.len());
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
 			if reports.reporters.len() > threshold {

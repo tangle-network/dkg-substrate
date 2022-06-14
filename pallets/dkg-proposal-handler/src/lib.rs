@@ -422,10 +422,6 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> DispatchResult {
-		#[cfg(feature = "std")]
-		println!("handle_unsigned_proposer_set_update_proposal");
-		#[cfg(feature = "std")]
-		println!("proposal: {:?}", proposal);
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {

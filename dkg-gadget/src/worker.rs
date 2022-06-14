@@ -683,6 +683,7 @@ where
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
+		let mut stalled = false;
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
 			return
@@ -699,6 +700,16 @@ where
 			self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number())
 		{
 			info!(target: "dkg", "🕸️  DKG STALLED: round {:?}", queued.id);
+			info!(target: "dkg", "🕸️  Blame {:?}", self.next_rounds.as_ref().unwrap().current_round_blame());
+			stalled = true;
+		}
+
+		if stalled {
+			if let Some(rounds) = self.rounds.clone() {
+				return self.handle_dkg_error(DKGError::KeygenTimeout {
+					bad_actors: rounds.current_round_blame().blamed_parties,
+				})
+			}
 		}
 
 		let mut queued_local_key_path: Option<PathBuf> = None;
@@ -795,9 +806,11 @@ where
 				}
 			}
 			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(rounds) = self.next_rounds.as_mut() {
+			if let Some(rounds) = self.next_rounds.clone() {
 				if rounds.keygen_has_stalled(*header.number()) {
-					self.handle_queued_dkg_setup(header, queued.clone());
+					return self.handle_dkg_error(DKGError::KeygenTimeout {
+						bad_actors: rounds.current_round_blame().blamed_parties,
+					})
 				}
 			}
 
@@ -1122,15 +1135,13 @@ where
 		//
 		// Sets with the same values are not unique. We only care about all unique, unordered
 		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
-		use std::collections::HashSet;
-		while signing_sets.len() < best_authorities.len() {
+		while signing_sets.len() <= best_authorities.len() {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
 			let maybe_set =
 				self.generate_signers(&seed, threshold, round_id, best_authorities.clone()).ok();
 			if let Some(set) = maybe_set {
-				// let hash_set = HashSet::<_, usize>::from_iter(set.clone());
 				if !signing_sets.contains(&set) {
 					signing_sets.push(set);
 				}

@@ -878,28 +878,28 @@ pub mod pallet {
 						// session change
 						let unjailed_authorities = Self::next_best_authorities()
 							.into_iter()
-							.filter(|(_, id)| {
-								!JailedKeygenAuthorities::<T>::contains_key(id) || *id != offender
-							})
+							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
-						if unjailed_authorities.len() < Self::next_keygen_threshold().into() {
-							// Handle edge case properly (shouldn't drop below 2 authorities)
-							if unjailed_authorities.len() > 2 {
-								JailedKeygenAuthorities::<T>::insert(offender, now);
-
-								let new_val =
-									u16::try_from(unjailed_authorities.len()).unwrap_or_default();
-								NextKeygenThreshold::<T>::put(new_val);
-								PendingKeygenThreshold::<T>::put(new_val);
+						if !unjailed_authorities.contains(&offender) {
+							// Jail the offender
+							JailedKeygenAuthorities::<T>::insert(&offender, now);
+							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {
+								// Handle edge case properly (shouldn't drop below 2 authorities)
+								if unjailed_authorities.len() > 2 {
+									let new_val = u16::try_from(unjailed_authorities.len() - 1)
+										.unwrap_or_default();
+									NextKeygenThreshold::<T>::put(new_val);
+									PendingKeygenThreshold::<T>::put(new_val);
+								}
 							}
-						} else {
-							JailedKeygenAuthorities::<T>::insert(offender, now);
 						}
-						// Re-run best authority selection after any updates
 						NextBestAuthorities::<T>::put(Self::get_best_authorities(
 							Self::next_keygen_threshold() as usize,
-							&Self::next_authorities(),
+							&unjailed_authorities
+								.into_iter()
+								.filter(|id| *id != offender)
+								.collect::<Vec<_>>(),
 						));
 					},
 					MisbehaviourType::Sign => {

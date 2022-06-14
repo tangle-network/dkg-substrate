@@ -314,20 +314,6 @@ pub mod pallet {
 		ProposerCountIsZero,
 	}
 
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: T::BlockNumber) -> Weight {
-			if n > T::Period::get() && n % T::Period::get() == T::BlockNumber::from(1u32) {
-				// Create the new proposer set merkle tree and update proposal
-				// Self::create_proposer_set_update();
-
-				return 1
-			}
-
-			0
-		}
-	}
-
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
@@ -879,7 +865,6 @@ impl<T: Config>
 			.iter()
 			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
 			.collect::<Vec<_>>();
-		// TODO: Get difference in list and optimise storage reads/writes
 		// Remove old authorities and their external accounts from the list
 		let old_authority_proposers = Self::authority_proposers();
 		for old_authority_account in old_authority_proposers {
@@ -900,6 +885,8 @@ impl<T: Config>
 		// Update the external accounts of the new authorities
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
+		// Create the new proposer set merkle tree and update proposal
+		Self::create_proposer_set_update();
 	}
 }
 
