@@ -321,6 +321,7 @@ where
 
 			let unsigned_dkg_message = DKGMessage { id, payload, round_id };
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
+			log::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
 		}
 
 		Err(DKGError::CriticalError {
