@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::AuthorityId,
@@ -47,16 +47,17 @@ impl DKGPersistenceState {
 	}
 }
 
-pub(crate) fn store_localkey<B, C, BE>(
+pub(crate) fn store_localkey<B, BE, C, GE>(
 	key: LocalKey<Secp256k1>,
 	round_id: RoundId,
 	path: Option<PathBuf>,
-	worker: &mut DKGWorker<B, C, BE>,
+	worker: &mut DKGWorker<B, BE, C, GE>,
 ) -> std::io::Result<()>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if let Some(path) = path {
@@ -99,14 +100,15 @@ where
 ///
 /// Uses the raw keypair as a seed for a secret key input to the XChaCha20Poly1305
 /// encryption cipher.
-pub(crate) fn load_stored_key<B, C, BE>(
+pub(crate) fn load_stored_key<B, BE, C, GE>(
 	path: PathBuf,
-	worker: &mut DKGWorker<B, C, BE>,
+	worker: &mut DKGWorker<B, BE, C, GE>,
 ) -> std::io::Result<StoredLocalKey>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if let Some(local_keystore) = worker.local_keystore.clone() {
@@ -138,11 +140,12 @@ where
 
 /// We only try to resume the dkg once, if we can find any data for the completed offline stage for
 /// the current round
-pub(crate) fn try_resume_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>, header: &B::Header)
+pub(crate) fn try_resume_dkg<B, BE, C, GE>(worker: &mut DKGWorker<B, BE, C, GE>, header: &B::Header)
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	// We only try to resume the dkg once even if there is no data to recover
@@ -255,11 +258,12 @@ where
 /// To determine if the protocol should be restarted, we check if the
 /// protocol is stuck at the keygen stage
 #[allow(dead_code)]
-pub(crate) fn should_restart_dkg<B, C, BE>(worker: &mut DKGWorker<B, C, BE>) -> (bool, bool)
+pub(crate) fn should_restart_dkg<B, BE, C, GE>(worker: &mut DKGWorker<B, BE, C, GE>) -> (bool, bool)
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let rounds = worker.rounds.take();

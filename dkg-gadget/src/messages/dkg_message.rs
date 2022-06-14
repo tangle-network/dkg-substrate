@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 use crate::{
-	messages::public_key_gossip::gossip_public_key, persistence::store_localkey, types::dkg_topic,
-	worker::DKGWorker, Client,
+	gossip_engine::GossipEngineIface, messages::public_key_gossip::gossip_public_key,
+	persistence::store_localkey, types::dkg_topic, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -31,11 +31,12 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// Sends outgoing dkg messages
-pub(crate) fn send_outgoing_dkg_messages<B, C, BE>(mut dkg_worker: &mut DKGWorker<B, C, BE>)
+pub(crate) fn send_outgoing_dkg_messages<B, BE, C, GE>(mut dkg_worker: &mut DKGWorker<B, BE, C, GE>)
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let mut keys_to_gossip = Vec::new();
@@ -123,8 +124,8 @@ where
 }
 
 /// send actual messages
-fn send_messages<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+fn send_messages<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	rounds: &mut MultiPartyECDSARounds<NumberFor<B>>,
 	authority_id: Public,
 	at: NumberFor<B>,
@@ -133,6 +134,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let results = rounds.proceed(at);
@@ -152,13 +154,14 @@ where
 	results
 }
 
-fn sign_and_send_message<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+fn sign_and_send_message<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	dkg_message: &DKGMessage<AuthorityId>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let public = dkg_worker.get_authority_public_key();
@@ -193,11 +196,7 @@ fn sign_and_send_message<B, C, BE>(
 				_ => {},
 			};
 
-			dkg_worker.gossip_engine.lock().gossip_message(
-				dkg_topic::<B>(),
-				encoded_signed_dkg_message,
-				true,
-			);
+			let _ = dkg_worker.gossip_engine.gossip(signed_dkg_message);
 		},
 		Err(e) => trace!(
 			target: "dkg",

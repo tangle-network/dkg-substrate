@@ -14,6 +14,11 @@
 
 #![allow(clippy::collapsible_match)]
 
+use crate::gossip_engine::GossipEngineIface;
+use codec::{Codec, Decode, Encode};
+use futures::{FutureExt, StreamExt};
+use log::{debug, error, info, trace};
+use parking_lot::{Mutex, RwLock};
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
@@ -23,16 +28,10 @@ use std::{
 	sync::Arc,
 };
 
-use codec::{Codec, Decode, Encode};
-use futures::{future, FutureExt, StreamExt};
-use log::{debug, error, info, trace};
-use parking_lot::Mutex;
-
 use sc_client_api::{
 	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
 	ImportNotifications,
 };
-use sc_network_gossip::GossipEngine;
 
 use rand::Rng;
 use sp_api::BlockId;
@@ -68,7 +67,6 @@ use crate::{
 	error, metric_set,
 	metrics::Metrics,
 	proposal::get_signed_proposal,
-	types::dkg_topic,
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };
@@ -98,6 +96,7 @@ where
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub dkg_state: DKGState<NumberFor<B>>,
 	pub _marker: PhantomData<B>,
 }
 
@@ -115,7 +114,7 @@ where
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: Arc<Mutex<GossipEngine<B>>>,
+	pub gossip_engine: Arc<GE>,
 	pub metrics: Option<Metrics>,
 	pub rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
 	pub next_rounds: Option<MultiPartyECDSARounds<NumberFor<B>>>,
@@ -158,9 +157,9 @@ where
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block + Codec,
-	BE: Backend<B> + 'static,
-	GE: GossipEngineIface + 'static,
-	C: Client<B, BE> + 'static,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// Return a new DKG worker instance.
@@ -179,6 +178,7 @@ where
 			base_path,
 			local_keystore,
 			latest_header,
+			dkg_state,
 			..
 		} = worker_params;
 
@@ -186,7 +186,7 @@ where
 			client: client.clone(),
 			backend,
 			key_store,
-			gossip_engine: Arc::new(Mutex::new(gossip_engine)),
+			gossip_engine: Arc::new(gossip_engine),
 			metrics,
 			votes_sent: 0,
 			rounds: None,
@@ -212,11 +212,12 @@ where
 	}
 }
 
-impl<B, C, BE> DKGWorker<B, C, BE>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
@@ -1112,10 +1113,6 @@ where
 						return;
 					}
 				},
-				_ = gossip_engine.fuse() => {
-					error!(target: "dkg", "🕸️  Gossip engine has terminated.");
-					return;
-				}
 			}
 		}
 	}

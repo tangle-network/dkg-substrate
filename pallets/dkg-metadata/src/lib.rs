@@ -95,13 +95,7 @@
 
 use codec::{Decode, Encode};
 
-use frame_support::{
-	dispatch::DispatchResultWithPostInfo,
-	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
-	Parameter,
-};
-use frame_system::offchain::{SendSignedTransaction, Signer};
-
+use core::convert::TryFrom;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{
 		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK,
@@ -115,6 +109,12 @@ use dkg_runtime_primitives::{
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
 	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
+use frame_support::{
+	dispatch::DispatchResultWithPostInfo,
+	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
+	Parameter,
+};
+use frame_system::offchain::{SendSignedTransaction, Signer};
 use sp_runtime::{
 	generic::DigestItem,
 	offchain::{

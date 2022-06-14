@@ -15,6 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
+	gossip_engine::GossipEngineIface,
 	worker::{DKGWorker, MAX_SUBMISSION_DELAY},
 	Client,
 };
@@ -33,8 +34,8 @@ use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
 
 /// stores genesis or next aggregated public keys offchain
-pub(crate) fn store_aggregated_public_keys<B, C, BE>(
-	mut dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn store_aggregated_public_keys<B, BE, C, GE>(
+	mut dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	is_genesis_round: bool,
 	round_id: RoundId,
 	keys: &AggregatedPublicKeys,
@@ -44,6 +45,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
@@ -78,8 +80,8 @@ where
 }
 
 /// stores the aggregated public keys
-fn perform_storing_of_aggregated_public_keys<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+fn perform_storing_of_aggregated_public_keys<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	mut offchain: <BE as Backend<B>>::OffchainStorage,
 	keys: &AggregatedPublicKeys,
 	current_block_number: NumberFor<B>,
@@ -89,6 +91,7 @@ fn perform_storing_of_aggregated_public_keys<B, C, BE>(
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());

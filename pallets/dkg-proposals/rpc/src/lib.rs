@@ -72,7 +72,7 @@ where
 	Block: BlockT,
 	Proposal: Encode + Decode,
 	ProposalVotes: Encode + Decode,
-	C: HeaderBackend<Block> + ProvideRuntimeApi<Block> + Send + Sync + 'static,
+	C: HeaderBackend<Block> + ProvideRuntimeApi<Block> + Send + Sync,
 	C::Api: DKGProposalsApi<Block, Proposal, ProposalVotes>,
 {
 	fn get_pending_proposals(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<Proposal>> {

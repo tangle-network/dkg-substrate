@@ -14,7 +14,8 @@
 //
 // Handles non-dkg messages
 use crate::{
-	storage::public_keys::store_aggregated_public_keys, types::dkg_topic, worker::DKGWorker, Client,
+	gossip_engine::GossipEngineIface, storage::public_keys::store_aggregated_public_keys,
+	types::dkg_topic, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{
@@ -26,14 +27,15 @@ use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header};
 
-pub(crate) fn handle_public_key_broadcast<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	if !dkg_worker.dkg_state.listening_for_pub_key &&
@@ -105,13 +107,14 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn gossip_public_key<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	msg: DKGPublicKeyMessage,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let public = dkg_worker.get_authority_public_key();
@@ -133,11 +136,7 @@ pub(crate) fn gossip_public_key<B, C, BE>(
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg", "🔑  (Round: {:?}) Sending Public key gossip message: ({:?} bytes)", msg.round_id, encoded_signed_dkg_message.len());
-				dkg_worker.gossip_engine.lock().gossip_message(
-					dkg_topic::<B>(),
-					encoded_signed_dkg_message,
-					true,
-				);
+				let _ = dkg_worker.gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",

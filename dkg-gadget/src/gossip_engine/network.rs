@@ -39,7 +39,7 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{metrics::Metrics, worker::HasLatestHeader};
+use crate::metrics::Metrics;
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
@@ -268,15 +268,6 @@ pub struct GossipHandler<B: Block + 'static> {
 	metrics: Option<Metrics>,
 }
 
-impl<B> HasLatestHeader<B> for GossipHandler<B>
-where
-	B: Block,
-{
-	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
-		&self.latest_header
-	}
-}
-
 /// Peer information
 #[derive(Debug)]
 struct Peer<B: Block> {
@@ -393,9 +384,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Called when peer sends us new signed DKG message.
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
-		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
-
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 

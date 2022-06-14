@@ -55,7 +55,7 @@ impl<C, Block, Proposal> DKGProposalHandlerApi<<Block as BlockT>::Hash, Proposal
 where
 	Block: BlockT,
 	Proposal: Encode + Decode,
-	C: HeaderBackend<Block> + ProvideRuntimeApi<Block> + Send + Sync + 'static,
+	C: HeaderBackend<Block> + ProvideRuntimeApi<Block> + Send + Sync,
 	C::Api: DKGProposalHandlerApi<Block, Proposal>,
 {
 	fn get_unsigned_proposals(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<Element>> {

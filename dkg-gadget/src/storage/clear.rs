@@ -14,7 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{worker::DKGWorker, Client};
+use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
 	offchain::storage_keys::{
@@ -32,13 +32,14 @@ use sp_runtime::{
 };
 
 /// cleans offchain storage at interval
-pub(crate) fn listen_and_clear_offchain_storage<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	header: &B::Header,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let at: BlockId<B> = BlockId::hash(header.hash());

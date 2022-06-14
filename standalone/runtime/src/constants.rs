@@ -36,6 +36,20 @@ pub mod time {
 	pub type BlockNumber = u32;
 	/// Type used for expressing timestamp.
 	pub type Moment = u64;
+
+	use frame_support::weights::{constants::WEIGHT_PER_SECOND, Weight};
+	use sp_runtime::Perbill;
+	/// We assume that ~5% of the block weight is consumed by `on_initialize`
+	/// handlers. This is used to limit the maximal weight of a single
+	/// extrinsic.
+	pub const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(5);
+	/// We allow `Normal` extrinsics to fill up the block up to 75%, the rest
+	/// can be used by Operational  extrinsics.
+	pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
+
+	/// We allow for 0.5 seconds of compute with a 6 second average block time.
+	pub const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND / 2;
+
 	/// Since BABE is probabilistic this is the average expected block time that
 	/// we are targeting. Blocks will be produced at a minimum duration defined
 	/// by `SLOT_DURATION`, but some slots will not be allocated to any

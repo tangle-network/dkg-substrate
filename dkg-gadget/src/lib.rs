@@ -14,12 +14,15 @@
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use crate::gossip_engine::NetworkGossipEngineBuilder;
+use core::marker::PhantomData;
 use dkg_primitives::rounds::DKGState;
 use log::debug;
+use parking_lot::RwLock;
 use prometheus::Registry;
-
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
-use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
+use sc_network::{ExHashT, NetworkService};
+use sp_runtime::traits::NumberFor;
 
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
@@ -30,7 +33,7 @@ use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
-mod gossip;
+mod gossip_engine;
 mod keyring;
 mod keystore;
 pub mod messages;
@@ -40,7 +43,6 @@ mod proposal;
 pub mod storage;
 mod types;
 mod utils;
-mod gossip_engine;
 mod worker;
 
 pub use keystore::DKGKeystore;
@@ -117,8 +119,8 @@ where
 pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
-	BE: Backend<B> + 'static,
-	C: Client<B, BE> + 'static,
+	BE: Backend<B>,
+	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let DKGParams {
@@ -164,6 +166,12 @@ where
 		metrics,
 		base_path,
 		local_keystore,
+		dkg_state: DKGState {
+			accepted: false,
+			listening_for_pub_key: false,
+			listening_for_active_pub_key: false,
+			created_offlinestage_at: HashMap::new(),
+		},
 		_marker: PhantomData::default(),
 	};
 

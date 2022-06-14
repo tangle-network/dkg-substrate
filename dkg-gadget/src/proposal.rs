@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use codec::Encode;
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
@@ -26,8 +26,8 @@ use sp_core::offchain::OffchainStorage;
 use sp_runtime::traits::{Block, Header};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn get_signed_proposal<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
 ) -> Option<Proposal>
@@ -35,6 +35,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
 {
 	let signed_proposal = match payload_key {

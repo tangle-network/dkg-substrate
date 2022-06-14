@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 use crate::{
+	gossip_engine::GossipEngineIface,
 	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, types::dkg_topic,
 	worker::DKGWorker, Client,
 };
@@ -25,7 +26,7 @@ use dkg_runtime_primitives::{
 };
 use log::{debug, error};
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::{Block, Header, NumberFor};
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
@@ -33,9 +34,9 @@ pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
-	GE: GossipEngineIface + 'static,
-	C: Client<B, BE> + 'static,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	// Get authority accounts
@@ -95,7 +96,7 @@ where
 		}
 
 		// Try to store reports offchain
-		try_store_offchain(dkg_worker, reports)?;
+		try_store_offchain(dkg_worker, &reports)?;
 	}
 
 	Ok(())
@@ -106,9 +107,9 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
-	BE: Backend<B> + 'static,
-	GE: GossipEngineIface + 'static,
-	C: Client<B, BE> + 'static,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let public = dkg_worker.get_authority_public_key();
@@ -177,7 +178,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
 
 		// Try to store reports offchain
-		let _ = try_store_offchain(dkg_worker, reports);
+		let _ = try_store_offchain(dkg_worker, &reports);
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}
@@ -189,9 +190,9 @@ pub(crate) fn try_store_offchain<B, BE, C, GE>(
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
-	GE: GossipEngineIface + 'static,
-	C: Client<B, BE> + 'static,
+	BE: Backend<B>,
+	GE: GossipEngineIface,
+	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
