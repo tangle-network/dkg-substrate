@@ -18,7 +18,7 @@ use crate::handlers::{
 use codec::alloc::string::ToString;
 
 pub struct Bytes32UpdateProposal {
-	pub header: webb_proposals::ProposalHeader,
+	pub header: webb_proposals::evm::ProposalHeader,
 	pub target: [u8; 32],
 }
 

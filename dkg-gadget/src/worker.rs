@@ -85,27 +85,32 @@ pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
-
-pub(crate) struct WorkerParams<B, BE, C>
+pub(crate) struct WorkerParams<B, BE, C, GE>
 where
 	B: Block,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: GossipEngine<B>,
+	pub gossip_engine: GE,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub dkg_state: DKGState<NumberFor<B>>,
+	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub _marker: PhantomData<B>,
 }
 
-/// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, C, BE>
+pub type AggregatedMisbehaviourReportStore =
+	HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+
+/// A DKG worker runs the DKG protocol
+pub(crate) struct DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
+	GE: GossipEngineIface,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -130,10 +135,7 @@ where
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: HashMap<RoundId, AggregatedPublicKeys>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports: HashMap<
-		(MisbehaviourType, RoundId, AuthorityId),
-		AggregatedMisbehaviourReports<AuthorityId>,
-	>,
+	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
@@ -153,12 +155,13 @@ where
 	_backend: PhantomData<BE>,
 }
 
-impl<B, C, BE> DKGWorker<B, C, BE>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block + Codec,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -166,16 +169,17 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub(crate) fn new(worker_params: WorkerParams<B, BE, C>) -> Self {
+	pub(crate) fn new(worker_params: WorkerParams<B, BE, C, GE>) -> Self {
 		let WorkerParams {
 			client,
 			backend,
 			key_store,
 			gossip_engine,
 			metrics,
-			dkg_state,
 			base_path,
 			local_keystore,
+			latest_header,
+			..
 		} = worker_params;
 
 		DKGWorker {
@@ -1057,17 +1061,8 @@ where
 	// *** Main run loop ***
 
 	pub(crate) async fn run(mut self) {
-		let mut dkg =
-			Box::pin(self.gossip_engine.lock().messages_for(dkg_topic::<B>()).filter_map(
-				|notification| async move {
-					SignedDKGMessage::<Public>::decode(&mut &notification.message[..]).ok()
-				},
-			));
-
+		let mut dkg = self.gossip_engine.stream();
 		loop {
-			let engine = self.gossip_engine.clone();
-			let gossip_engine = future::poll_fn(|cx| engine.lock().poll_unpin(cx));
-
 			futures::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {

@@ -13,10 +13,10 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 log = "0.4"
-codec = { package = "parity-scale-codec", version = "2.0.0", features = [
+codec = { package = "parity-scale-codec", version = "3.0.0", features = [
 	"derive",
 ], default-features = false }
-scale-info = { version = "1.0", default-features = false, features = [
+scale-info = { version = "2.1.1", default-features = false, features = [
 	"derive",
 ] }
 hex = { version = "0.4", default-features = false }

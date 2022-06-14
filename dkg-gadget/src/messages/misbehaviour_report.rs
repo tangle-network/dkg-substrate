@@ -27,15 +27,16 @@ use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header};
 
-pub(crate) fn handle_misbehaviour_report<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	// Get authority accounts
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
@@ -100,14 +101,15 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let public = dkg_worker.get_authority_public_key();
 
@@ -138,11 +140,7 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
-				dkg_worker.gossip_engine.lock().gossip_message(
-					dkg_topic::<B>(),
-					encoded_signed_dkg_message,
-					true,
-				);
+				let _ = dkg_worker.gossip_engine.gossip(signed_dkg_message);
 			},
 			Err(e) => error!(
 				target: "dkg",
@@ -185,15 +183,16 @@ pub(crate) fn gossip_misbehaviour_report<B, C, BE>(
 	}
 }
 
-pub(crate) fn try_store_offchain<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
-	reports: AggregatedMisbehaviourReports<AuthorityId>,
+pub(crate) fn try_store_offchain<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	BE: Backend<B> + 'static,
+	GE: GossipEngineIface + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let header = dkg_worker.latest_header.as_ref().ok_or(DKGError::NoHeader)?;
 	// Fetch the current threshold for the DKG. We will use the

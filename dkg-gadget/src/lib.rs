@@ -40,6 +40,7 @@ mod proposal;
 pub mod storage;
 mod types;
 mod utils;
+mod gossip_engine;
 mod worker;
 
 pub use keystore::DKGKeystore;
@@ -83,13 +84,13 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, N>
+pub struct DKGParams<B, BE, C>
 where
 	B: Block,
+	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -100,26 +101,25 @@ where
 	/// Concrete local key store
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
-	pub network: N,
+	pub network: Arc<NetworkService<B, B::Hash>>,
 
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Path to the persistent keystore directory for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Phantom block type
-	pub _block: std::marker::PhantomData<B>,
+	pub _block: PhantomData<B>,
 }
 
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, N>(dkg_params: DKGParams<B, BE, C, N>)
+pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let DKGParams {
 		client,
@@ -132,9 +132,7 @@ where
 		_block,
 	} = dkg_params;
 
-	let gossip_validator = Arc::new(gossip::GossipValidator::new());
-	let gossip_engine =
-		GossipEngine::new(network, DKG_PROTOCOL_NAME, gossip_validator.clone(), None);
+	let network_gossip_engine = NetworkGossipEngineBuilder::new();
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -150,7 +148,15 @@ where
 			},
 		);
 
+	let latest_header = Arc::new(RwLock::new(None));
+	let (gossip_handler, gossip_engine) = network_gossip_engine
+		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.expect("Failed to build gossip engine");
+	// enable the gossip
+	gossip_engine.set_gossip_enabled(true);
+	tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
+		latest_header,
 		client,
 		backend,
 		key_store: key_store.into(),
@@ -158,15 +164,10 @@ where
 		metrics,
 		base_path,
 		local_keystore,
-		dkg_state: DKGState {
-			accepted: false,
-			listening_for_pub_key: false,
-			listening_for_active_pub_key: false,
-			created_offlinestage_at: HashMap::new(),
-		},
+		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
 	worker.run().await
 }
