@@ -32,10 +32,10 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	}
 
 	fn collect_round_blame(&self) {
-		let (unrecieved_messages, blamed_parties) = self.round_blame();
+		let (unreceived_messages, blamed_parties) = self.round_blame();
 		let _ = self
 			.current_round_blame
-			.send(CurrentRoundBlame { unrecieved_messages, blamed_parties });
+			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
 	}
 }
 

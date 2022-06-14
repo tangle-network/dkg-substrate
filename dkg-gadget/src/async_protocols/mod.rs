@@ -106,7 +106,7 @@ impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 #[derive(Debug, Clone, Default)]
 pub struct CurrentRoundBlame {
 	/// a numbers of messages yet to recieve
-	pub unrecieved_messages: u16,
+	pub unreceived_messages: u16,
 	/// a list of uncorporative parties
 	pub blamed_parties: Vec<u16>,
 }
