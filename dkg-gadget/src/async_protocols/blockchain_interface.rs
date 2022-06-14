@@ -42,11 +42,11 @@ use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, NumberFor};
-use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, marker::PhantomData, path::PathBuf, sync::Arc};
 
 #[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockchainInterface: Send + Sync {
-	type Clock: AtLeast32BitUnsigned + Copy + Send + Sync;
+	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 
 	fn verify_signature_against_authorities(

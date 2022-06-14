@@ -664,7 +664,8 @@ pub mod pallet {
 			ensure_signed(origin)?;
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let authorities = Self::authorities();
+			let authorities: Vec<T::DKGId> =
+				Self::best_authorities().iter().map(|id| id.1.clone()).collect();
 
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
@@ -718,7 +719,8 @@ pub mod pallet {
 			ensure_signed(origin)?;
 			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let next_authorities = Self::next_authorities();
+			let next_authorities: Vec<T::DKGId> =
+				Self::next_best_authorities().iter().map(|id| id.1.clone()).collect();
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			let threshold = Self::next_signature_threshold();
 
@@ -881,7 +883,7 @@ pub mod pallet {
 							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
-						if !unjailed_authorities.contains(&offender) {
+						if unjailed_authorities.contains(&offender) {
 							// Jail the offender
 							JailedKeygenAuthorities::<T>::insert(&offender, now);
 							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {

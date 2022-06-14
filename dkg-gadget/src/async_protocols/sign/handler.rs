@@ -119,7 +119,7 @@ where
 		}
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg", "🕸️  GenericAsyncHandler completed");
+			log::info!(target: "dkg", "🕸️  Offline GenericAsyncHandler completed");
 			res
 		});
 

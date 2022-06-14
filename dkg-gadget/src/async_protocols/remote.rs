@@ -22,13 +22,13 @@ use std::sync::{atomic::Ordering, Arc};
 
 #[derive(Clone)]
 pub struct AsyncProtocolRemote<C> {
-	status: Arc<Atomic<MetaHandlerStatus>>,
+	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
 	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
-	started_at: C,
+	pub(crate) started_at: C,
 	is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
@@ -42,6 +42,7 @@ pub enum MetaHandlerStatus {
 	AwaitingProposals,
 	OfflineAndVoting,
 	Complete,
+	Terminated,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
@@ -70,8 +71,13 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.get_status() == MetaHandlerStatus::Keygen &&
+		self.get_status() != MetaHandlerStatus::Complete &&
 			(now - self.started_at > KEYGEN_TIMEOUT.into())
+	}
+
+	pub fn keygen_is_not_complete(&self) -> bool {
+		self.get_status() != MetaHandlerStatus::Complete ||
+			self.get_status() == MetaHandlerStatus::Terminated
 	}
 }
 
@@ -86,7 +92,9 @@ impl<C> AsyncProtocolRemote<C> {
 
 	pub fn is_active(&self) -> bool {
 		let status = self.get_status();
-		status != MetaHandlerStatus::Beginning && status != MetaHandlerStatus::Complete
+		status != MetaHandlerStatus::Beginning &&
+			status != MetaHandlerStatus::Complete &&
+			status != MetaHandlerStatus::Terminated
 	}
 
 	pub fn deliver_message(
@@ -129,12 +137,7 @@ impl<C> AsyncProtocolRemote<C> {
 
 	pub fn is_keygen_finished(&self) -> bool {
 		let state = self.get_status();
-		matches!(
-			state,
-			MetaHandlerStatus::AwaitingProposals |
-				MetaHandlerStatus::OfflineAndVoting |
-				MetaHandlerStatus::Complete
-		)
+		matches!(state, MetaHandlerStatus::Complete)
 	}
 
 	pub fn current_round_blame(&self) -> CurrentRoundBlame {
@@ -157,7 +160,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
 				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
-				self.set_status(MetaHandlerStatus::Complete);
+				self.set_status(MetaHandlerStatus::Terminated);
 			}
 
 			let _ = self.shutdown();

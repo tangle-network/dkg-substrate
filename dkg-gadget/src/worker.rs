@@ -14,8 +14,10 @@
 
 #![allow(clippy::collapsible_match)]
 
+use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
+use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
-use itertools::Itertools;
+use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
@@ -24,9 +26,6 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
-
-use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
-use codec::{Codec, Encode};
 
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
@@ -118,13 +117,20 @@ where
 	pub key_store: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
 	pub metrics: Option<Metrics>,
+	// Genesis keygen and rotated round
 	pub rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
+	// Next keygen round, always taken and restarted each session
 	pub next_rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
+	// Signing rounds, created everytime there are unique unsigned proposals
 	pub signing_rounds: Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	/// Best block a DKG voting round has been concluded for
 	pub best_dkg_block: Option<NumberFor<B>>,
+	/// Cached best authorities
+	pub best_authorities: Vec<(u16, Public)>,
+	/// Cached next best authorities
+	pub best_next_authorities: Vec<(u16, Public)>,
 	/// Latest block header
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Current validator set
@@ -201,6 +207,8 @@ where
 			finality_notifications: client.finality_notification_stream(),
 			import_notifications: client.import_notification_stream(),
 			best_dkg_block: None,
+			best_authorities: Vec::new(),
+			best_next_authorities: Vec::new(),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
 			latest_header,
@@ -282,12 +290,20 @@ where
 		status_handle.start()?;
 		// Cache the rounds, respectively
 		match stage {
-			ProtoStageType::Genesis => self.rounds = Some(status_handle.into_primary_remote()),
-			ProtoStageType::Queued => self.next_rounds = Some(status_handle.into_primary_remote()),
+			ProtoStageType::Genesis => {
+				debug!(target: "dkg", "Starting genesis protocol");
+				self.rounds = Some(status_handle.into_primary_remote())
+			},
+			ProtoStageType::Queued => {
+				debug!(target: "dkg", "Starting queued protocol");
+				self.next_rounds = Some(status_handle.into_primary_remote())
+			},
 			// When we are at signing stage, it is using the active rounds.
-			ProtoStageType::Signing =>
+			ProtoStageType::Signing => {
+				debug!(target: "dkg", "Starting signing protocol");
 				self.signing_rounds[async_index as usize] =
-					Some(status_handle.into_primary_remote()),
+					Some(status_handle.into_primary_remote())
+			},
 		}
 
 		Ok(params)
@@ -683,32 +699,22 @@ where
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
-		let mut stalled = false;
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
 			return
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() &&
-			!self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number())
-		{
+		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().is_active() {
+			debug!(target: "dkg", "🕸️  Next rounds exists and is active, returning...");
 			return
 		}
 
-		if self.next_rounds.is_some() &&
-			self.next_rounds.as_ref().unwrap().keygen_has_stalled(*header.number())
-		{
-			info!(target: "dkg", "🕸️  DKG STALLED: round {:?}", queued.id);
-			info!(target: "dkg", "🕸️  Blame {:?}", self.next_rounds.as_ref().unwrap().current_round_blame());
-			stalled = true;
-		}
-
-		if stalled {
-			if let Some(rounds) = self.rounds.clone() {
-				return self.handle_dkg_error(DKGError::KeygenTimeout {
-					bad_actors: rounds.current_round_blame().blamed_parties,
-				})
+		if let Some(rounds) = self.next_rounds.as_ref() {
+			if rounds.keygen_is_not_complete() &&
+				header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
+			{
+				debug!(target: "dkg", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
 
@@ -756,20 +762,12 @@ where
 		*self.latest_header.write() = Some(header.clone());
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
-		// We no longer "resume" the DKG worker since it is running in a parallel thread
 		// Attempt to enact new DKG authorities if sessions have changed
-		if header.number() <= &NumberFor::<B>::from(1u32) {
-			debug!(target: "dkg", "Starting genesis DKG setup");
+		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
 			self.maybe_enact_new_authorities(header);
-		}
-		// Get all unsigned proposals, create offline stages, attempt voting.
-		// Only do this if the public key is set on-chain.
-		if !self.get_dkg_pub_key(header).1.is_empty() {
 			self.submit_unsigned_proposals(header);
-		} else {
-			debug!(target: "dkg", "Public key not set on-chain, not creating offline stages {:?}", self.get_dkg_pub_key(header));
 		}
 	}
 
@@ -786,6 +784,8 @@ where
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				self.best_dkg_block = Some(*header.number());
+				self.best_authorities = self.get_best_authorities(header);
+				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
 				// Setting up the queued DKG at genesis
@@ -797,25 +797,34 @@ where
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
-			// If the active rounds have stalled, it means we haven't
-			// successfully generate a genesis key yet. Therefore, we
-			// continue to re-run keygen.
-			if let Some(rounds) = self.rounds.as_mut() {
-				if rounds.keygen_has_stalled(*header.number()) {
-					self.handle_genesis_dkg_setup(header, active.clone());
-				}
+			let next_best = self.get_next_best_authorities(header);
+			let next_best_has_changed = next_best != self.best_next_authorities;
+			if next_best_has_changed {
+				debug!(target: "dkg", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
+				// Update the next best authorities
+				self.best_next_authorities = next_best;
+				// Start the queued DKG setup for the new queued authorities
+				self.handle_queued_dkg_setup(header, queued);
+				return
 			}
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.clone() {
-				if rounds.keygen_has_stalled(*header.number()) {
+				debug!(target: "dkg", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
+				if rounds.keygen_is_not_complete() &&
+					header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
+				{
+					debug!(target: "dkg", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: rounds.current_round_blame().blamed_parties,
 					})
+				} else {
+					debug!(target: "dkg", "🕸️  QUEUED DKG NOT STALLED: round {:?}", queued.id);
 				}
 			}
 
 			let queued_keygen_in_progress =
 				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
+			debug!(target: "dkg", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
@@ -837,6 +846,9 @@ where
 				}
 				// If we are starting a new queued DKG, we rotate the next rounds
 				self.rounds = self.next_rounds.take();
+				// We also rotate the best authority caches
+				self.best_authorities = self.best_next_authorities.clone();
+				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Rotate the key files
 				self.rotate_local_key_files();
 				// Start the queued DKG setup for the new queued authorities
@@ -1139,8 +1151,7 @@ where
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
-			let maybe_set =
-				self.generate_signers(&seed, threshold, round_id, best_authorities.clone()).ok();
+			let maybe_set = self.generate_signers(&seed, threshold, best_authorities.clone()).ok();
 			if let Some(set) = maybe_set {
 				if !signing_sets.contains(&set) {
 					signing_sets.push(set);
@@ -1151,6 +1162,7 @@ where
 		}
 
 		for i in 0..signing_sets.len() {
+			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", round_id, threshold, best_authorities.len(), signing_sets[i].clone());
 			self.spawn_signing_protocol(
 				best_authorities.clone(),
 				authority_public_key.clone(),
@@ -1172,7 +1184,6 @@ where
 		&self,
 		seed: &[u8],
 		t: u16,
-		round_id: RoundId,
 		best_authorities: Vec<Public>,
 	) -> Result<Vec<u16>, DKGError> {
 		let mut final_set = self.get_unjailed_signers(&best_authorities)?;
@@ -1187,13 +1198,8 @@ where
 				.collect::<Vec<u16>>();
 		}
 
-		select_random_set(seed, final_set, t + 1).map(|set| {
-			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", round_id, t, best_authorities.len(), set);
-			set
-		}).map_err(|err| {
-			DKGError::CreateOfflineStage {
-				reason: format!("generate_signers failed, reason: {}", err)
-			}
+		select_random_set(seed, final_set, t + 1).map_err(|err| DKGError::CreateOfflineStage {
+			reason: format!("generate_signers failed, reason: {}", err),
 		})
 	}
 
