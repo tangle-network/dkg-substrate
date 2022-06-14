@@ -14,7 +14,7 @@
 //
 use crate::{
 	gossip_engine::GossipEngineIface, messages::public_key_gossip::gossip_public_key,
-	persistence::store_localkey, types::dkg_topic, worker::DKGWorker, Client,
+	persistence::store_localkey, worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{

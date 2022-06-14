@@ -46,7 +46,6 @@ use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{FutureExt, Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, warn};
-use parking_lot::RwLock;
 use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
@@ -101,7 +100,6 @@ impl NetworkGossipEngineBuilder {
 		self,
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
-		latest_header: Arc<RwLock<Option<B::Header>>>,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
 		let event_stream = service.event_stream("dkg-handler").boxed();
 		// Here we need to create few channels to communicate back and forth between the
@@ -116,7 +114,6 @@ impl NetworkGossipEngineBuilder {
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
 
 		let handler = GossipHandler {
-			latest_header,
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
 			controller_channel: controller_channel.clone(),
@@ -246,7 +243,6 @@ pub struct GossipHandler<B: Block + 'static> {
 	///
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
-	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Pending Messages to be sent to the [`GossipHandlerController`].
 	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// As multiple peers can send us the same message, we group

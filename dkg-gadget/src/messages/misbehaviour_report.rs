@@ -14,8 +14,8 @@
 //
 use crate::{
 	gossip_engine::GossipEngineIface,
-	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, types::dkg_topic,
-	worker::DKGWorker, Client,
+	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports, worker::DKGWorker,
+	Client,
 };
 use codec::Encode;
 use dkg_primitives::types::{
@@ -26,7 +26,7 @@ use dkg_runtime_primitives::{
 };
 use log::{debug, error};
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, NumberFor};
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
@@ -203,11 +203,11 @@ where
 	match reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
 			if reports.reporters.len() > threshold {
-				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 		MisbehaviourType::Sign =>
 			if reports.reporters.len() >= threshold {
-				store_aggregated_misbehaviour_reports(dkg_worker, &reports)?;
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 	};
 

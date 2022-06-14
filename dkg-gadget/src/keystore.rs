@@ -112,7 +112,7 @@ impl DKGKeystore {
 
 		let pk: Vec<Public> = SyncCryptoStore::ecdsa_public_keys(&*store, KEY_TYPE)
 			.iter()
-			.map(|k| Public::from(k.clone()))
+			.map(|k| Public::from(*k))
 			.collect();
 
 		Ok(pk)
@@ -124,7 +124,7 @@ impl DKGKeystore {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
 		let pk: Vec<sr25519::Public> =
-			SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT).iter().copied().collect();
+			SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT).to_vec();
 
 		Ok(pk)
 	}

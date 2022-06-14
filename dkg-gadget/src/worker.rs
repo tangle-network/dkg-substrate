@@ -18,7 +18,6 @@ use crate::gossip_engine::GossipEngineIface;
 use codec::{Codec, Decode, Encode};
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
-use parking_lot::{Mutex, RwLock};
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
@@ -95,7 +94,6 @@ where
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub dkg_state: DKGState<NumberFor<B>>,
 	pub _marker: PhantomData<B>,
 }
@@ -177,7 +175,6 @@ where
 			metrics,
 			base_path,
 			local_keystore,
-			latest_header,
 			dkg_state,
 			..
 		} = worker_params;

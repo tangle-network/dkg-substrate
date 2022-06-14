@@ -18,7 +18,6 @@ use crate::gossip_engine::NetworkGossipEngineBuilder;
 use core::marker::PhantomData;
 use dkg_primitives::rounds::DKGState;
 use log::debug;
-use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 use sc_network::{ExHashT, NetworkService};
@@ -26,7 +25,7 @@ use sp_runtime::traits::NumberFor;
 
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::Block;
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
@@ -52,10 +51,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	let mut cfg =
-		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
-	cfg.allow_non_reserved(25, 25);
-	cfg
+	NetworkGossipEngineBuilder::set_config()
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -150,15 +146,13 @@ where
 			},
 		);
 
-	let latest_header = Arc::new(RwLock::new(None));
 	let (gossip_handler, gossip_engine) = network_gossip_engine
-		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.build(network.clone(), metrics.clone())
 		.expect("Failed to build gossip engine");
 	// enable the gossip
 	gossip_engine.set_gossip_enabled(true);
 	tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
-		latest_header,
 		client,
 		backend,
 		key_store: key_store.into(),

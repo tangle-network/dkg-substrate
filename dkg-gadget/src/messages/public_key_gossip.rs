@@ -15,7 +15,7 @@
 // Handles non-dkg messages
 use crate::{
 	gossip_engine::GossipEngineIface, storage::public_keys::store_aggregated_public_keys,
-	types::dkg_topic, worker::DKGWorker, Client,
+	worker::DKGWorker, Client,
 };
 use codec::Encode;
 use dkg_primitives::{

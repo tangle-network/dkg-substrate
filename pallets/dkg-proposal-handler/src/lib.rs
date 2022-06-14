@@ -668,8 +668,8 @@ impl<T: Config> Pallet<T> {
 								}
 							},
 						)
-						.cloned()
 						.flatten()
+						.cloned()
 						.collect::<Vec<_>>();
 					// then we need to keep only the batches that are not yet submitted
 					prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);
