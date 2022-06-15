@@ -711,9 +711,7 @@ where
 		}
 
 		if let Some(rounds) = self.next_rounds.as_ref() {
-			if rounds.keygen_is_not_complete() &&
-				header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
-			{
+			if rounds.keygen_has_stalled(*header.number()) {
 				debug!(target: "dkg", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
@@ -1241,7 +1239,7 @@ where
 
 	// *** Main run loop ***
 
-	/// Wait for BEEFY runtime pallet to be available.
+	/// Wait for initial block import
 	async fn initialization(&mut self) {
 		use futures::future;
 		self.client
