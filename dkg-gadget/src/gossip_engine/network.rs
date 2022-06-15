@@ -38,6 +38,7 @@
 //! peers or only to a specific peer. on the other end, the DKG message is received by the DKG
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
+
 use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -170,7 +171,7 @@ pub struct GossipHandlerController<B: Block> {
 	handler_channel: broadcast::Sender<ToHandler>,
 	/// a channel to send DKG Messages back from the background task to the controller
 	///
-	/// Technically, we do not need to hold a reference to this channel, but we do it to
+	/// Technically, we do not need to hold a reference to this channel, but we do it
 	/// here to make this controller (**Clone-able**), meaning that we can clone it and
 	/// still be able to receive messages from the background task.
 	///
@@ -393,7 +394,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "Received a signed DKG messages from {} @ {:?}", who, now);
+		debug!(target: "dkg", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
 
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
@@ -476,9 +477,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				Encode::encode(&message),
 			);
 			propagated_messages += 1;
-			debug!(target: "dkg", "Sending message to {}", who);
 		}
-		debug!(target: "dkg", "Gossiped {} messages", propagated_messages);
 		if let Some(ref metrics) = self.metrics {
 			metrics.propagated_messages.inc_by(propagated_messages as _)
 		}
@@ -506,9 +505,10 @@ impl<K: Hash + Eq, V> LruHashMap<K, V> {
 	/// Maintains the limit of the map by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, k: K, v: V) -> bool {
-		if self.inner.insert(k, v).is_some() {
+		if self.inner.insert(k, v).is_none() {
 			if self.inner.len() == usize::from(self.limit) {
-				self.inner.pop_front(); // remove oldest entry
+				// remove oldest entry
+				self.inner.pop_front();
 			}
 			return true
 		}

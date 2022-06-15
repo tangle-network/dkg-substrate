@@ -314,20 +314,6 @@ pub mod pallet {
 		ProposerCountIsZero,
 	}
 
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: T::BlockNumber) -> Weight {
-			if n % T::Period::get() == T::BlockNumber::from(0u32) {
-				// Create the new proposer set merkle tree and update proposal
-				Self::create_proposer_set_update();
-
-				return 1
-			}
-
-			0
-		}
-	}
-
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
@@ -757,6 +743,7 @@ impl<T: Config> Pallet<T> {
 	/// The signed proposer set update is intended to be used to update the proposer set on
 	/// other blockchains that need a fallback mechanism when the DKG is not available or needs
 	/// to be fixed or changed.
+	#[allow(dead_code)]
 	fn create_proposer_set_update() {
 		// Merkleize the new proposer set
 		let mut proposer_set_merkle_root = Self::get_proposer_set_tree_root();
@@ -878,7 +865,6 @@ impl<T: Config>
 			.iter()
 			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
 			.collect::<Vec<_>>();
-		// TODO: Get difference in list and optimise storage reads/writes
 		// Remove old authorities and their external accounts from the list
 		let old_authority_proposers = Self::authority_proposers();
 		for old_authority_account in old_authority_proposers {
@@ -899,6 +885,8 @@ impl<T: Config>
 		// Update the external accounts of the new authorities
 		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
+		// Create the new proposer set merkle tree and update proposal
+		Self::create_proposer_set_update();
 	}
 }
 
