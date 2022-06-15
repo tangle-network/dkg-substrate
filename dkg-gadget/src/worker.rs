@@ -839,6 +839,7 @@ where
 				// and started up after a previous rotation.
 				let (_, maybe_queued_key) = self.fetch_local_keys();
 				if let Some(queued_key) = maybe_queued_key {
+					debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
 					if queued_key.round_id == queued.id {
 						debug!(target: "dkg", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
 						return
@@ -1240,12 +1241,39 @@ where
 
 	// *** Main run loop ***
 
+	/// Wait for BEEFY runtime pallet to be available.
+	async fn initialization(&mut self) {
+		use futures::future;
+		self.client
+			.import_notification_stream()
+			.take_while(|notif| {
+				if let Some((active, queued)) = self.validator_set(&notif.header) {
+					// TODO: Consider caching this data and loading it here.
+					self.best_authorities = self.get_best_authorities(&notif.header);
+					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
+					*self.current_validator_set.write() = active.clone();
+					self.queued_validator_set = queued.clone();
+					// Route this to the import notification handler
+					self.handle_import_notification(notif.clone());
+					future::ready(false)
+				} else {
+					future::ready(true)
+				}
+			})
+			.for_each(|_| future::ready(()))
+			.await;
+		// get a new stream that provides _new_ notifications (from here on out)
+		self.import_notifications = self.client.import_notification_stream();
+	}
+
 	pub(crate) async fn run(mut self) {
 		let mut dkg = self.gossip_engine.stream();
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
+
+		self.initialization().await;
 
 		loop {
 			futures::select! {

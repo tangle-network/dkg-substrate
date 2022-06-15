@@ -54,8 +54,10 @@ impl MisbehaviourMonitor {
 				);
 
 				while let Some(_tick) = ticker.next().await {
+					log::debug!("[MisbehaviourMonitor] Performing periodic check ...");
+					log::debug!("[MisbehaviourMonitor] Remote status {:?}", remote.get_status());
 					log::debug!(
-						"[MisbehaviourMonitor] Performing periodic check ... {:?}",
+						"[MisbehaviourMonitor] Unreceived messages: {:?}",
 						remote.current_round_blame()
 					);
 					match remote.get_status() {
@@ -91,7 +93,6 @@ pub fn on_keygen_timeout<BI: BlockchainInterface>(
 ) -> Result<(), DKGError> {
 	log::warn!("[MisbehaviourMonitor] Keygen has stalled! Will determine which authorities are misbehaving ...");
 	let round_blame = remote.current_round_blame();
-	log::warn!("[MisbehaviourMonitor] Current round blame: {:?}", round_blame);
 	for party_i in round_blame.blamed_parties {
 		// get the authority from the party index.
 		authority_set

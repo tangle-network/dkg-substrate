@@ -71,8 +71,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.get_status() != MetaHandlerStatus::Complete &&
-			(now - self.started_at > KEYGEN_TIMEOUT.into())
+		self.keygen_is_not_complete() && (now - self.started_at > KEYGEN_TIMEOUT.into())
 	}
 
 	pub fn keygen_is_not_complete(&self) -> bool {
@@ -159,7 +158,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
-				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending");
+				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending: {:?}", self.get_status());
 				self.set_status(MetaHandlerStatus::Terminated);
 			}
 
