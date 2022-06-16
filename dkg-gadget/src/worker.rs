@@ -827,16 +827,11 @@ where
 
 			let queued_keygen_in_progress =
 				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
-			let next_round_status = self.next_rounds.as_ref().map(|r| r.status.clone());
+
 			debug!(target: "dkg", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
 			debug!(target: "dkg", "🕸️  QUEUED DKG ID: {:?}", queued.id);
-			debug!(target: "dkg", "🕸️Q QUEEUD VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
+			debug!(target: "dkg", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
 			debug!(target: "dkg", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.as_ref().map(|r| r.status.clone()));
-			if !queued_keygen_in_progress && next_round_status.is_none() {
-				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(header, queued);
-				return
-			}
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);

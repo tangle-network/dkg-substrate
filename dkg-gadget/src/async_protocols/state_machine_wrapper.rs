@@ -62,7 +62,13 @@ where
 	}
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
+		log::debug!(
+			"Trying to proceed: round {:?}, blame: {:?}",
+			self.current_round(),
+			self.round_blame(),
+		);
 		let result = self.sm.proceed();
+		log::debug!("Proceeded: round {:?}, blame: {:?}", self.current_round(), self.round_blame(),);
 		self.collect_round_blame();
 		result
 	}
