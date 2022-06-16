@@ -1,4 +1,4 @@
-use crate::meta_async_rounds::dkg_gossip_engine::GossipEngineIface;
+use crate::gossip_engine::GossipEngineIface;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -136,7 +136,9 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			Ok(sig) => {
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
-				let _ = gossip_engine.gossip(signed_dkg_message);
+				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
+					error!(target: "dkg", "Failed to gossip DKG public key: {:?}", e);
+				}
 			},
 			Err(e) => error!(
 				target: "dkg",

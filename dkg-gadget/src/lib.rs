@@ -32,19 +32,22 @@ use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
-// mod gossip;
 mod keyring;
 mod keystore;
-pub mod messages;
-mod meta_async_rounds;
+
+mod gossip_engine;
+// mod meta_async_rounds;
 mod metrics;
 mod persistence;
 mod proposal;
-pub mod storage;
 mod utils;
 mod worker;
 
-use crate::meta_async_rounds::dkg_gossip_engine::NetworkGossipEngineBuilder;
+pub mod async_protocols;
+pub mod gossip_messages;
+pub mod storage;
+
+use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";

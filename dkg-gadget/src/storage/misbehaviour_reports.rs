@@ -14,7 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{meta_async_rounds::dkg_gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
+use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use codec::Encode;
 use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{

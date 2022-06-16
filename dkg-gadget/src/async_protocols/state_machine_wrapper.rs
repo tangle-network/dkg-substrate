@@ -1,8 +1,22 @@
+// Copyright 2022 Webb Technologies Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 
-use super::meta_handler::CurrentRoundBlame;
+use super::CurrentRoundBlame;
 
 pub(crate) struct StateMachineWrapper<T: StateMachine> {
 	sm: T,
@@ -18,10 +32,10 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	}
 
 	fn collect_round_blame(&self) {
-		let (unrecieved_messages, blamed_parties) = self.round_blame();
+		let (unreceived_messages, blamed_parties) = self.round_blame();
 		let _ = self
 			.current_round_blame
-			.send(CurrentRoundBlame { unrecieved_messages, blamed_parties });
+			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
 	}
 }
 
@@ -48,7 +62,13 @@ where
 	}
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
+		log::debug!(
+			"Trying to proceed: round {:?}, blame: {:?}",
+			self.current_round(),
+			self.round_blame(),
+		);
 		let result = self.sm.proceed();
+		log::debug!("Proceeded: round {:?}, blame: {:?}", self.current_round(), self.round_blame(),);
 		self.collect_round_blame();
 		result
 	}
