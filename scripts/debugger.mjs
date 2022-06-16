@@ -95,7 +95,7 @@ function startNode(authority) {
 		"-ldkg_metadata=debug",
 		"-lruntime::offchain=debug",
 		"-ldkg_proposal_handler=debug",
-		"--tmp",
+		`--base-path=./tmp/${authority}`,
 		"--rpc-cors",
 		"all",
 		"--rpc-methods=unsafe",
