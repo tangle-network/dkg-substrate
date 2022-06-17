@@ -218,6 +218,9 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		// from anywhere, without actually fight the rustc borrow checker.
 		let stream = self.my_channel.subscribe();
 		tokio_stream::wrappers::BroadcastStream::new(stream)
+			.inspect(
+				|msg| debug!(target: "dkg", "Streaming message from the Gossip Engine (is okay? {})", msg.is_ok()),
+			)
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
 	}
@@ -399,16 +402,23 @@ impl<B: Block + 'static> GossipHandler<B> {
 			peer.known_messages.insert(message.message_hash::<B>());
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					if let Err(e) = self.controller_channel.send(message.clone()) {
-						log::error!(target: "dkg", "Failed to send message to controller: {}", e);
-					} else {
-						entry.insert(HashSet::from([who]));
-						// This good, this peer is good, they sent us a message we didn't know about.
-						// we should add some good reputation to them.
-						self.service.report_peer(who, rep::GOOD_MESSAGE);
+					log::debug!(target: "dkg", "NEW DKG MESSAGE FROM {}", who);
+					let recv_count = self.controller_channel.receiver_count();
+					if recv_count == 0 {
+						log::warn!(target: "dkg", "No one is going to process the message!!!");
 					}
+					if let Err(e) = self.controller_channel.send(message.clone()) {
+						log::error!(target: "dkg", "Failed to send message to DKG controller: {:?}", e);
+					} else {
+						log::debug!(target: "dkg", "Message sent to {recv_count} DKG controller listeners");
+					}
+					entry.insert(HashSet::from([who]));
+					// This good, this peer is good, they sent us a message we didn't know about.
+					// we should add some good reputation to them.
+					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
+					log::debug!(target: "dkg", "OLD DKG MESSAGE FROM {}", who);
 					// if we are here, that means this peer sent us a message we already know.
 					let inserted = entry.get_mut().insert(who);
 					// and if inserted is `false` that means this peer was already in the set

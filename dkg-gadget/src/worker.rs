@@ -1268,6 +1268,7 @@ where
 					self.queued_validator_set = queued.clone();
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
+					log::debug!(target: "dkg", "Initialization complete");
 					future::ready(false)
 				} else {
 					future::ready(true)
@@ -1287,61 +1288,62 @@ where
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		self.initialization().await;
-
+		log::debug!(target: "dkg", "Starting DKG Iteration loop");
 		loop {
-			futures::select! {
+			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
+						log::debug!(target: "dkg", "Going to handle Finality notification");
 						self.handle_finality_notification(notification);
 					} else {
-						return;
+						log::error!("Finality notification stream closed");
+						break;
 					}
 				},
 				notification = self.import_notifications.next().fuse() => {
 					if let Some(notification) = notification {
+						log::debug!(target: "dkg", "Going to handle Import notification");
 						self.handle_import_notification(notification);
 					} else {
-						return;
+						log::error!("Import notification stream closed");
+						break;
 					}
 				},
 
 				misbehaviour_msg = misbehaviour_rx.recv().fuse() => {
 					if let Some(msg) = misbehaviour_msg {
+						log::debug!(target: "dkg", "Going to gossip misbehaviour");
 						gossip_misbehaviour_report(&mut self, msg)
 					} else {
-						return;
+						log::error!("Misbehaviour channel closed");
+						break;
 					}
 				}
 
 				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
+						log::debug!(target: "dkg", "Going to handle dkg error");
 						self.handle_dkg_error(error)
 					} else {
-						return;
+						log::error!("DKG Error channel closed");
+						break;
 					}
 				},
 
 				dkg_msg = dkg.next().fuse() => {
 					debug!("DKG message received {:?}", dkg_msg);
 					if let Some(dkg_msg) = dkg_msg {
-						debug!("DKG message received from gossip engine stream");
-						if self.rounds.is_none() || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
-							self.msg_cache.push(dkg_msg);
-						} else {
-							let msgs = self.msg_cache.drain(..).collect::<Vec<_>>();
-							for msg in msgs {
-								self.process_incoming_dkg_message(msg);
-							}
-
-							// send dkg_msg to async_proto
-							self.process_incoming_dkg_message(dkg_msg);
-						}
+						log::debug!(target: "dkg", "Going to handle dkg message");
+						self.process_incoming_dkg_message(dkg_msg);
 					} else {
-						return;
+						log::error!("DKG stream closed");
+						break;
 					}
 				},
 			}
 		}
+
+		log::info!(target: "dkg", "DKG Iteration loop finished");
 	}
 }
 
