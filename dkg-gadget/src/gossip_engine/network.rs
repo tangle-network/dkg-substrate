@@ -395,17 +395,18 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
-
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
-
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					let _ = self.controller_channel.send(message.clone());
-					entry.insert(HashSet::from([who]));
-					// This good, this peer is good, they sent us a message we didn't know about.
-					// we should add some good reputation to them.
-					self.service.report_peer(who, rep::GOOD_MESSAGE);
+					if let Err(e) = self.controller_channel.send(message.clone()) {
+						log::error!(target: "dkg", "Failed to send message to controller: {}", e);
+					} else {
+						entry.insert(HashSet::from([who]));
+						// This good, this peer is good, they sent us a message we didn't know about.
+						// we should add some good reputation to them.
+						self.service.report_peer(who, rep::GOOD_MESSAGE);
+					}
 				},
 				Entry::Occupied(mut entry) => {
 					// if we are here, that means this peer sent us a message we already know.
