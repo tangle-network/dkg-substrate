@@ -398,10 +398,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
-
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
-
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					log::debug!(target: "dkg", "NEW DKG MESSAGE FROM {}", who);

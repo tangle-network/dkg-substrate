@@ -89,7 +89,7 @@ impl DKGMsgPayload {
 	/// TODO: Change enums for keygen, offline, vote
 	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
 		match self {
-			DKGMsgPayload::Keygen(kg) => Some(kg.round_id as u16),
+			DKGMsgPayload::Keygen(kg) => Some(kg.sender_id as u16),
 			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
 			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
 			_ => None,
@@ -118,8 +118,8 @@ impl DKGMsgPayload {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGKeygenMessage {
-	/// Keygen set epoch id
-	pub round_id: RoundId,
+	/// Sender id / party index
+	pub sender_id: u16,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
 }

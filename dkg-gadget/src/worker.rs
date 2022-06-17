@@ -729,7 +729,6 @@ where
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
-			self.next_rounds = None;
 			return
 		} else {
 			info!(target: "dkg", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -989,7 +988,6 @@ where
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id.clone() {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1000,7 +998,6 @@ where
 
 				if let Some(rounds) = self.next_rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1014,7 +1011,6 @@ where
 				let async_index = msg.msg.payload.get_async_index();
 				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
 					if rounds.round_id == msg.msg.round_id.clone() {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1335,6 +1331,7 @@ where
 				},
 
 				dkg_msg = dkg.next().fuse() => {
+					debug!("DKG message received {:?}", dkg_msg);
 					if let Some(dkg_msg) = dkg_msg {
 						log::debug!(target: "dkg", "Going to handle dkg message");
 						self.process_incoming_dkg_message(dkg_msg);
