@@ -76,8 +76,6 @@ dkg-primitives = { path = "../../dkg-primitives", default-features = false }
 dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
 
 
-console-subscriber = "0.1.6"
-
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
 

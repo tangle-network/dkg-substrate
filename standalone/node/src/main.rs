@@ -25,6 +25,5 @@ mod rpc;
 mod testnet_fixtures;
 
 fn main() -> sc_cli::Result<()> {
-	console_subscriber::init();
 	command::run()
 }
