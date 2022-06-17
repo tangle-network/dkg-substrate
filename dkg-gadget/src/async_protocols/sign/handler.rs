@@ -103,10 +103,10 @@ where
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
 					log::info!(
-							target: "dkg",
-							"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-							count_in_batch
-						);
+						target: "dkg",
+						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
+						count_in_batch
+					);
 				} else {
 					log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
 					return Ok(())

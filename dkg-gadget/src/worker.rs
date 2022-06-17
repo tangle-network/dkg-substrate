@@ -22,12 +22,12 @@ use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap},
+	future::Future,
 	marker::PhantomData,
 	path::PathBuf,
+	pin::Pin,
 	sync::Arc,
 };
-use std::future::Future;
-use std::pin::Pin;
 
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
@@ -385,7 +385,7 @@ where
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
 		async_index: u8,
-	) -> Result<Pin<Box<dyn Future<Output=Result<(), DKGError>> + Send + 'static>>, DKGError> {
+	) -> Result<Pin<Box<dyn Future<Output = Result<(), DKGError>> + Send + 'static>>, DKGError> {
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -396,8 +396,7 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler_tx.clone();
-		let misbehaviour_tx =
-			self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
+		let misbehaviour_tx = self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
 		let remote = async_proto_params.handle.clone();
 		let engine = async_proto_params.engine.clone();
 
@@ -410,13 +409,12 @@ where
 		)?;
 
 		let task = async move {
-			let misbehaviour_monitor =
-				MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
+			let misbehaviour_monitor = MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
 
 			let res = tokio::select! {
-											res0 = meta_handler => res0,
-											res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-										};
+				res0 = meta_handler => res0,
+				res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
+			};
 
 			match res {
 				Ok(_) => {
@@ -1186,14 +1184,12 @@ where
 				signing_sets[i].clone(),
 				i as u8,
 			) {
-				Ok(task) => {
-					futures.push(task)
-				},
+				Ok(task) => futures.push(task),
 
 				Err(err) => {
 					log::error!(target: "dkg", "Error creating signing protocol: {:?}", &err);
 					self.handle_dkg_error(err)
-				}
+				},
 			}
 		}
 
