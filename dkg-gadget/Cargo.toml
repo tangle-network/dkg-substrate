@@ -45,7 +45,7 @@ sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23", default-features = false }
 sc-peerset = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.23" }
 
-round-based = { version = "0.1.4", features = [] }
+round-based = { version = "0.1.7", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.59"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }

@@ -5883,9 +5883,9 @@ dependencies = [
 
 [[package]]
 name = "round-based"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "691944449a819eb32e9db18240a8c0e0d35da3849d2938a4290a21862a42bf07"
+checksum = "61d7da583ffbf4d938fb9dc60871b51769ff47e9836e323668fe2d791ca2fa06"
 dependencies = [
  "async-stream",
  "futures",

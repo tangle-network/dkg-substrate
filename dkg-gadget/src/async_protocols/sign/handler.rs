@@ -245,7 +245,7 @@ where
 				}
 			}
 
-			log::info!(target: "dkg", "RD0 on {} for {:?}", party_ind, hash_of_proposal);
+			log::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
 
 			if sigs.len() != number_of_partial_sigs {
 				log::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
@@ -254,16 +254,16 @@ where
 				})
 			}
 
-			log::info!(target: "dkg", "RD1");
+			log::info!("RD1");
 			let signature = signing
 				.complete(&sigs)
 				.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
-			log::info!(target: "dkg", "RD2");
+			log::info!("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote {
 				reason: "Verification of voting stage failed".to_string(),
 			})?;
-			log::info!(target: "dkg", "RD3");
+			log::info!("RD3");
 
 			params.engine.process_vote_result(
 				signature,

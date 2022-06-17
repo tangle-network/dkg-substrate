@@ -744,12 +744,16 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
+		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
 		if let Some(latest_header) = self.latest_header.read().clone() {
 			if latest_header.number() >= header.number() {
+				// We've already seen this block, ignore it.
+				debug!(target: "dkg", "🕸️  Latest header is greater than or equal to current header, returning...");
 				return
 			}
 		}
 		*self.latest_header.write() = Some(header.clone());
+		debug!(target: "dkg", "🕸️  Latest header is now: {:?}", header.number());
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
@@ -785,6 +789,7 @@ where
 	}
 
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
+		debug!(target: "dkg", "🕸️  maybe_enact_new_authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
@@ -814,7 +819,11 @@ where
 
 			let queued_keygen_in_progress =
 				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
+
 			debug!(target: "dkg", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
+			debug!(target: "dkg", "🕸️  QUEUED DKG ID: {:?}", queued.id);
+			debug!(target: "dkg", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
+			debug!(target: "dkg", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.as_ref().map(|r| r.status.clone()));
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
@@ -828,13 +837,20 @@ where
 				// round ID then we shouldn't rotate since it means we have shut down
 				// and started up after a previous rotation.
 				let (_, maybe_queued_key) = self.fetch_local_keys();
-				if let Some(queued_key) = maybe_queued_key {
-					debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
-					if queued_key.round_id == queued.id {
+				match maybe_queued_key {
+					Some(queued_key) if queued_key.round_id == queued.id => {
+						debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
 						debug!(target: "dkg", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
 						return
-					}
-				}
+					},
+					Some(k) => {
+						debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", k.round_id);
+						debug!(target: "dkg", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
+					},
+					None => {
+						debug!(target: "dkg", "🕸️  QUEUED KEY DOES NOT EXIST");
+					},
+				};
 				// If we are starting a new queued DKG, we rotate the next rounds
 				self.rounds = self.next_rounds.take();
 				// We also rotate the best authority caches
@@ -845,6 +861,9 @@ where
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 			}
+		} else {
+			// no queued validator set, so we don't do anything
+			debug!(target: "dkg", "🕸️  NO QUEUED VALIDATOR SET");
 		}
 	}
 
