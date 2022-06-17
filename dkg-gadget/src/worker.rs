@@ -137,8 +137,6 @@ where
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// Msg cache for startup if authorities aren't set
-	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	/// Tracking for the misbehaviour reports
@@ -1161,7 +1159,17 @@ where
 		//
 		// Sets with the same values are not unique. We only care about all unique, unordered
 		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
-		while signing_sets.len() <= best_authorities.len() {
+		let factorial = |num: u64| match num {
+			0 => 1,
+			1.. => (1..num + 1).product(),
+		};
+
+		let n = factorial(best_authorities.len() as u64);
+		let k = factorial((threshold + 1) as u64);
+		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
+		let num_combinations = n / (k * n_minus_k);
+		debug!(target: "dkg", "Generating {} signing sets", num_combinations);
+		while signing_sets.len() <= num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
@@ -1331,7 +1339,6 @@ where
 				},
 
 				dkg_msg = dkg.next().fuse() => {
-					debug!("DKG message received {:?}", dkg_msg);
 					if let Some(dkg_msg) = dkg_msg {
 						log::debug!(target: "dkg", "Going to handle dkg message");
 						self.process_incoming_dkg_message(dkg_msg);
