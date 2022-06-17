@@ -26,6 +26,8 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
+use std::future::Future;
+use std::pin::Pin;
 
 use futures::{FutureExt, StreamExt};
 use log::{debug, error, info, trace};
@@ -372,7 +374,7 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	fn spawn_signing_protocol(
+	fn create_signing_protocol(
 		&mut self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
@@ -383,64 +385,54 @@ where
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
 		async_index: u8,
-	) {
-		match self.generate_async_proto_params(
+	) -> Result<Pin<Box<dyn Future<Output=Result<(), DKGError>> + Send + 'static>>, DKGError> {
+		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			round_id,
 			local_key_path,
 			stage,
 			async_index,
-		) {
-			Ok(async_proto_params) => {
-				let err_handler_tx = self.error_handler_tx.clone();
-				let misbehaviour_tx =
-					self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
-				let remote = async_proto_params.handle.clone();
-				let engine = async_proto_params.engine.clone();
+		)?;
 
-				match GenericAsyncHandler::setup_signing(
-					async_proto_params,
-					threshold,
-					unsigned_proposals,
-					signing_set,
-					async_index,
-				) {
-					Ok(meta_handler) => {
-						let task = async move {
-							let misbehaviour_monitor =
-								MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
+		let err_handler_tx = self.error_handler_tx.clone();
+		let misbehaviour_tx =
+			self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
+		let remote = async_proto_params.handle.clone();
+		let engine = async_proto_params.engine.clone();
 
-							let res = tokio::select! {
-								res0 = meta_handler => res0,
-								res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-							};
+		let meta_handler = GenericAsyncHandler::setup_signing(
+			async_proto_params,
+			threshold,
+			unsigned_proposals,
+			signing_set,
+			async_index,
+		)?;
 
-							match res {
-								Ok(_) => {
-									log::info!(target: "dkg", "The meta handler has executed successfully");
-								},
+		let task = async move {
+			let misbehaviour_monitor =
+				MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
 
-								Err(err) => {
-									error!(target: "dkg", "Error executing meta handler {:?}", &err);
-									let _ = err_handler_tx.send(err);
-								},
-							}
-						};
+			let res = tokio::select! {
+											res0 = meta_handler => res0,
+											res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
+										};
 
-						// spawn on parallel thread
-						let _handle = tokio::task::spawn(task);
-					},
+			match res {
+				Ok(_) => {
+					log::info!(target: "dkg", "The meta handler has executed successfully");
+					Ok(())
+				},
 
-					Err(err) => {
-						error!(target: "dkg", "Error starting meta handler {:?}", &err);
-						self.handle_dkg_error(err);
-					},
-				}
-			},
+				Err(err) => {
+					error!(target: "dkg", "Error executing meta handler {:?}", &err);
+					let _ = err_handler_tx.send(err.clone());
+					Err(err)
+				},
+			}
+		};
 
-			Err(err) => self.handle_dkg_error(err),
-		}
+		Ok(Box::pin(task))
 	}
 
 	/// Rotates the contents of the DKG local key files from the queued file to the active file.
@@ -1160,9 +1152,11 @@ where
 			count += 1;
 		}
 
+		let mut futures = Vec::with_capacity(signing_sets.len());
+
 		for i in 0..signing_sets.len() {
 			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", round_id, threshold, best_authorities.len(), signing_sets[i].clone());
-			self.spawn_signing_protocol(
+			match self.create_signing_protocol(
 				best_authorities.clone(),
 				authority_public_key.clone(),
 				round_id,
@@ -1172,7 +1166,36 @@ where
 				unsigned_proposals.clone(),
 				signing_sets[i].clone(),
 				i as u8,
-			);
+			) {
+				Ok(task) => {
+					futures.push(task)
+				},
+
+				Err(err) => {
+					log::error!(target: "dkg", "Error creating signing protocol: {:?}", &err);
+					self.handle_dkg_error(err)
+				}
+			}
+		}
+
+		if futures.is_empty() {
+			log::error!(target: "dkg", "While creating the signing protocol, 0 were created");
+		} else {
+			// the goal of the meta task is to select the first winner
+			let meta_signing_protocol = async move {
+				// select the first future to return Ok(()), ignoring every failure
+				// (note: the errors are not truly ignored since each individual future
+				// has logic to handle errors internally, including misbehaviour monitors
+				let mut results = futures::future::select_ok(futures).await.into_iter();
+				if let Some((_success, _losing_futures)) = results.next() {
+					log::info!(target: "dkg", "*** SUCCESSFULLY EXECUTED meta signing protocol ***");
+				} else {
+					log::warn!(target: "dkg", "*** UNSUCCESSFULLY EXECUTED meta signing protocol");
+				}
+			};
+
+			// spawn in parallel
+			let _handle = tokio::task::spawn(meta_signing_protocol);
 		}
 	}
 

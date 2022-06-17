@@ -81,7 +81,7 @@ where
 				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
-					log::info!("Offline stage index: {}", offline_i);
+					log::info!(target: "dkg", "Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -103,6 +103,7 @@ where
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
 					log::info!(
+							target: "dkg",
 							"Concluded all Offline->Voting stages ({} total) for this batch for this node",
 							count_in_batch
 						);
@@ -244,7 +245,7 @@ where
 				}
 			}
 
-			log::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
+			log::info!(target: "dkg", "RD0 on {} for {:?}", party_ind, hash_of_proposal);
 
 			if sigs.len() != number_of_partial_sigs {
 				log::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
@@ -253,16 +254,16 @@ where
 				})
 			}
 
-			log::info!("RD1");
+			log::info!(target: "dkg", "RD1");
 			let signature = signing
 				.complete(&sigs)
 				.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
-			log::info!("RD2");
+			log::info!(target: "dkg", "RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote {
 				reason: "Verification of voting stage failed".to_string(),
 			})?;
-			log::info!("RD3");
+			log::info!(target: "dkg", "RD3");
 
 			params.engine.process_vote_result(
 				signature,
