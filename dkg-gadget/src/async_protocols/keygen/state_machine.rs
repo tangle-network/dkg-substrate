@@ -39,7 +39,7 @@ impl StateMachineHandler for Keygen {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				log::info!(target: "dkg", "Handling Keygen inbound message from id={}", msg.round_id);
+				log::info!(target: "dkg", "Handling Keygen inbound message from id={}", msg.sender_id);
 				use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error as Error;
 				let message: Msg<ProtocolMessage> =
 					serde_json::from_slice(msg.keygen_msg.as_slice())
