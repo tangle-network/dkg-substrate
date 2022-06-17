@@ -155,7 +155,7 @@ where
 		.expect("Failed to build gossip engine");
 	// enable the gossip
 	gossip_engine.set_gossip_enabled(true);
-	tokio::spawn(gossip_handler.run());
+	let handle = tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,
@@ -170,5 +170,6 @@ where
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
-	worker.run().await
+	worker.run().await;
+	handle.abort();
 }
