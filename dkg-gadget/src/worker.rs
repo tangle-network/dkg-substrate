@@ -139,8 +139,6 @@ where
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	/// Queued validator set
 	pub queued_validator_set: AuthoritySet<Public>,
-	/// Msg cache for startup if authorities aren't set
-	pub msg_cache: Vec<SignedDKGMessage<AuthorityId>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
 	/// Tracking for the misbehaviour reports
@@ -214,7 +212,6 @@ where
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: AuthoritySet::empty(),
 			latest_header,
-			msg_cache: Vec::new(),
 			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
 			aggregated_misbehaviour_reports: HashMap::new(),
 			has_sent_gossip_msg: HashMap::new(),
@@ -719,7 +716,6 @@ where
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
-			self.next_rounds = None;
 			return
 		} else {
 			info!(target: "dkg", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -979,7 +975,6 @@ where
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id.clone() {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -990,7 +985,6 @@ where
 
 				if let Some(rounds) = self.next_rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1004,7 +998,6 @@ where
 				let async_index = msg.msg.payload.get_async_index();
 				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
 					if rounds.round_id == msg.msg.round_id.clone() {
-						// route to async proto
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1155,7 +1148,17 @@ where
 		//
 		// Sets with the same values are not unique. We only care about all unique, unordered
 		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
-		while signing_sets.len() <= best_authorities.len() {
+		let factorial = |num: u64| match num {
+			0 => 1,
+			1.. => (1..num + 1).product(),
+		};
+
+		let n = factorial(best_authorities.len() as u64);
+		let k = factorial((threshold + 1) as u64);
+		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
+		let num_combinations = n / (k * n_minus_k);
+		debug!(target: "dkg", "Generating {} signing sets", num_combinations);
+		while signing_sets.len() <= num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
@@ -1291,6 +1294,7 @@ where
 					self.queued_validator_set = queued.clone();
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
+					log::debug!(target: "dkg", "Initialization complete");
 					future::ready(false)
 				} else {
 					future::ready(true)
@@ -1310,59 +1314,61 @@ where
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		self.initialization().await;
-
+		log::debug!(target: "dkg", "Starting DKG Iteration loop");
 		loop {
-			futures::select! {
+			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
+						log::debug!(target: "dkg", "Going to handle Finality notification");
 						self.handle_finality_notification(notification);
 					} else {
-						return;
+						log::error!("Finality notification stream closed");
+						break;
 					}
 				},
 				notification = self.import_notifications.next().fuse() => {
 					if let Some(notification) = notification {
+						log::debug!(target: "dkg", "Going to handle Import notification");
 						self.handle_import_notification(notification);
 					} else {
-						return;
+						log::error!("Import notification stream closed");
+						break;
 					}
 				},
 
 				misbehaviour_msg = misbehaviour_rx.recv().fuse() => {
 					if let Some(msg) = misbehaviour_msg {
+						log::debug!(target: "dkg", "Going to gossip misbehaviour");
 						gossip_misbehaviour_report(&mut self, msg)
 					} else {
-						return;
+						log::error!("Misbehaviour channel closed");
+						break;
 					}
 				}
 
 				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
+						log::debug!(target: "dkg", "Going to handle dkg error");
 						self.handle_dkg_error(error)
 					} else {
-						return;
+						log::error!("DKG Error channel closed");
+						break;
 					}
 				},
 
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						if self.rounds.is_none() || self.current_validator_set.read().authorities.is_empty() || self.queued_validator_set.authorities.is_empty() {
-							self.msg_cache.push(dkg_msg);
-						} else {
-							let msgs = self.msg_cache.drain(..).collect::<Vec<_>>();
-							for msg in msgs {
-								self.process_incoming_dkg_message(msg);
-							}
-
-							// send dkg_msg to async_proto
-							self.process_incoming_dkg_message(dkg_msg);
-						}
+						log::debug!(target: "dkg", "Going to handle dkg message");
+						self.process_incoming_dkg_message(dkg_msg);
 					} else {
-						return;
+						log::error!("DKG stream closed");
+						break;
 					}
 				},
 			}
 		}
+
+		log::info!(target: "dkg", "DKG Iteration loop finished");
 	}
 }
 

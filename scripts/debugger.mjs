@@ -11,18 +11,21 @@ const authorityMap = {
 		http: 9933,
 		p2p: 30333,
 		color: "green",
+		consoleBind: "127.0.0.1:9988",
 	},
 	bob: {
 		ws: 9945,
 		http: 9934,
 		p2p: 30334,
 		color: "blue",
+		consoleBind: "127.0.0.1:9989",
 	},
 	charlie: {
 		ws: 9946,
 		http: 9935,
 		p2p: 30335,
 		color: "yellow",
+		consoleBind: "127.0.0.1:9990",
 	},
 };
 
@@ -109,14 +112,22 @@ function startNode(authority) {
 	// get git root
 	const gitRoot = execSync("git rev-parse --show-toplevel").toString().trim();
 	const nodePath = `${gitRoot}/target/release/dkg-standalone-node`;
-	const proc = spawn(nodePath, startArgs, { env: { RUST_LOG_STYLE: "always" } });
+	const proc = spawn(nodePath, startArgs, { env: { RUST_LOG_STYLE: "always", TOKIO_CONSOLE_BIND: opts.consoleBind } });
 	const printData = function(/** @type {Buffer} */ data) {
 		for (const line of data.toString().trim().split("\n")) {
 			// skip empty lines
 			if (line.length === 0) {
 				return;
 			}
-			print(`${colorText(opts.color, authority.toUpperCase())}: ${line}\n`);
+			const coloredLine = line
+				.replace("ERROR", colorText("red", "ERROR"))
+				.replace("WARN", colorText("yellow", "WARN"))
+				.replace("INFO", colorText("green", "INFO"))
+				.replace("DEBUG", colorText("blue", "DEBUG"))
+				.replace("TRACE", colorText("magenta", "TRACE"));
+			// remove unnecessary prefixes
+			const finalLine = coloredLine.replace("tokio-runtime-worker", "");
+			print(`${colorText(opts.color, authority.toUpperCase())}: ${finalLine}\n`);
 		}
 	};
 	proc.stdout.on("data", (data) => {
@@ -133,7 +144,7 @@ const handles = [];
 // we need to close all processes when we exit
 process.on("exit", () => {
 	handles.forEach((handle) => {
-		handle.proc.kill();
+		handle.proc.kill(9);
 	});
 });
 rl.prompt(true);
@@ -164,7 +175,7 @@ rl.on("line", (line) => {
 		// @ts-ignore
 		handles.forEach((handle) => {
 			if (handle.authority === authority) {
-				handle.proc.kill();
+				handle.proc.kill(9);
 				print(`DKG: Stopped ${authority}`);
 			}
 		});
@@ -183,7 +194,7 @@ rl.on("line", (line) => {
 	const stopAllRegex = /^stop all$/i;
 	if (cmd.match(stopAllRegex)) {
 		handles.forEach((handle) => {
-			handle.proc.kill();
+			handle.proc.kill(9);
 		});
 		return;
 	}

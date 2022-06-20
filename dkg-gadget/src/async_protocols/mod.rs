@@ -302,7 +302,7 @@ where
 
 			let payload = match &proto_ty {
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
-					round_id: party_id as u64,
+					sender_id: party_id,
 					keygen_msg: serialized_body,
 				}),
 				ProtocolType::Offline { unsigned_proposal, .. } =>
