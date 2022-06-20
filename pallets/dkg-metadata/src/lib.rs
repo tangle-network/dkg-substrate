@@ -1255,6 +1255,8 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
+		let next_keygen_threshold = NextKeygenThreshold::<T>::get();
+		let next_signature_threshold = NextSignatureThreshold::<T>::get();
 		// Update the next thresholds for the next session
 		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
 		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
@@ -1285,8 +1287,8 @@ impl<T: Config> Pallet<T> {
 		// Rotate the authority set if a next pub key and next signature exist
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Update the active thresholds for the next session
-			SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
-			KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
+			SignatureThreshold::<T>::put(next_signature_threshold);
+			KeygenThreshold::<T>::put(next_keygen_threshold);
 			// Ensure next/pending thresholds remain valid across authority set changes that may
 			// break. We update the pending thresholds because we call `refresh_keys` below, which
 			// rotates all the thresholds into the current / next sets. Pending becomes the next,

@@ -1123,6 +1123,15 @@ where
 			if let Some(rounds) = self.rounds.as_ref() { rounds.round_id } else { return };
 
 		let at: BlockId<B> = BlockId::hash(header.hash());
+
+		let maybe_party_index = self.get_party_index(header);
+		// Check whether the worker is in the best set or return
+		if maybe_party_index.is_none() {
+			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			return
+		} else {
+			info!(target: "dkg", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+		}
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
 			Err(_) => return,
