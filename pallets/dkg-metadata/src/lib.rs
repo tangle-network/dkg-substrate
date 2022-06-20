@@ -475,7 +475,8 @@ pub mod pallet {
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
-		pub threshold: u32,
+		pub keygen_threshold: u16,
+		pub signature_threshold: u16,
 		pub authority_ids: Vec<T::AccountId>,
 	}
 
@@ -539,27 +540,34 @@ pub mod pallet {
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { authorities: Vec::new(), threshold: 0, authority_ids: Vec::new() }
+			Self {
+				authorities: Vec::new(),
+				signature_threshold: 1,
+				keygen_threshold: 3,
+				authority_ids: Vec::new(),
+			}
 		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let mut signature_threshold = 1u16;
-			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
-
-			if keygen_threshold <= signature_threshold {
-				signature_threshold = keygen_threshold - 1;
-			}
-
+			assert!(
+				self.signature_threshold < self.keygen_threshold,
+				"Signature threshold must be less than keygen threshold"
+			);
+			assert!(self.keygen_threshold > 1, "Keygen threshold must be greater than 1");
+			assert!(
+				self.authority_ids.len() >= self.keygen_threshold as usize,
+				"Not enough authority ids specified"
+			);
 			// Set thresholds to be the same
-			SignatureThreshold::<T>::put(signature_threshold);
-			KeygenThreshold::<T>::put(keygen_threshold);
-			NextSignatureThreshold::<T>::put(signature_threshold);
-			NextKeygenThreshold::<T>::put(keygen_threshold);
-			PendingSignatureThreshold::<T>::put(signature_threshold);
-			PendingKeygenThreshold::<T>::put(keygen_threshold);
+			SignatureThreshold::<T>::put(self.signature_threshold);
+			KeygenThreshold::<T>::put(self.keygen_threshold);
+			NextSignatureThreshold::<T>::put(self.signature_threshold);
+			NextKeygenThreshold::<T>::put(self.keygen_threshold);
+			PendingSignatureThreshold::<T>::put(self.signature_threshold);
+			PendingKeygenThreshold::<T>::put(self.keygen_threshold);
 			// Set refresh parameters
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
@@ -1348,9 +1356,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthorities::<T>::put(authorities);
 		NextAuthoritySetId::<T>::put(1);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
-		let best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		let best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		BestAuthorities::<T>::put(best_authorities);
-		let next_best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		let next_best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		NextBestAuthorities::<T>::put(next_best_authorities);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
