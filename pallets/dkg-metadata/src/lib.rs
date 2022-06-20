@@ -565,14 +565,6 @@ pub mod pallet {
 			// Set refresh parameters
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
-			#[cfg(feature = "std")] {
-				println!("Keygen threshold: {}", KeygenThreshold::<T>::get());
-				println!("Signature threshold: {}", SignatureThreshold::<T>::get());
-				println!("Next keygen threshold: {}", NextKeygenThreshold::<T>::get());
-				println!("Next signature threshold: {}", NextSignatureThreshold::<T>::get());
-				println!("Pending keygen threshold: {}", PendingKeygenThreshold::<T>::get());
-				println!("Pending signature threshold: {}", PendingSignatureThreshold::<T>::get());
-			}
 		}
 	}
 
@@ -1348,14 +1340,6 @@ impl<T: Config> Pallet<T> {
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
 			return
-		}
-		#[cfg(feature = "std")] {
-			println!("Keygen threshold: {}", KeygenThreshold::<T>::get());
-			println!("Signature threshold: {}", SignatureThreshold::<T>::get());
-			println!("Next keygen threshold: {}", NextKeygenThreshold::<T>::get());
-			println!("Next signature threshold: {}", NextSignatureThreshold::<T>::get());
-			println!("Pending keygen threshold: {}", PendingKeygenThreshold::<T>::get());
-			println!("Pending signature threshold: {}", PendingSignatureThreshold::<T>::get());
 		}
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 		// Initialize current authorities
