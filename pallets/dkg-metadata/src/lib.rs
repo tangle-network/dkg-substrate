@@ -544,7 +544,7 @@ pub mod pallet {
 				authorities: Vec::new(),
 				signature_threshold: 1,
 				keygen_threshold: 3,
-				authority_ids: Vec::new()
+				authority_ids: Vec::new(),
 			}
 		}
 	}
@@ -552,9 +552,15 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			assert!(self.signature_threshold < self.keygen_threshold, "Signature threshold must be less than keygen threshold");
+			assert!(
+				self.signature_threshold < self.keygen_threshold,
+				"Signature threshold must be less than keygen threshold"
+			);
 			assert!(self.keygen_threshold > 1, "Keygen threshold must be greater than 1");
-			assert!(self.authority_ids.len() >= self.keygen_threshold as usize, "Not enough authority ids specified");
+			assert!(
+				self.authority_ids.len() >= self.keygen_threshold as usize,
+				"Not enough authority ids specified"
+			);
 			// Set thresholds to be the same
 			SignatureThreshold::<T>::put(self.signature_threshold);
 			KeygenThreshold::<T>::put(self.keygen_threshold);
@@ -1350,15 +1356,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthorities::<T>::put(authorities);
 		NextAuthoritySetId::<T>::put(1);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
-		let best_authorities = Self::get_best_authorities(
-			Self::keygen_threshold() as usize,
-			authorities
-		);
+		let best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		BestAuthorities::<T>::put(best_authorities);
-		let next_best_authorities = Self::get_best_authorities(
-			Self::keygen_threshold() as usize,
-			authorities
-		);
+		let next_best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		NextBestAuthorities::<T>::put(next_best_authorities);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
