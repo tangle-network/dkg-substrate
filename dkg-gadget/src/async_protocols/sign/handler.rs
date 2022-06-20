@@ -109,11 +109,12 @@ where
 					);
 				} else {
 					log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
-					return Ok(())
+					return Err(DKGError::GenericError {
+						reason: "We are not among signers, skipping".to_string(),
+					})
 				}
 			} else {
-				log::info!(target: "dkg", "Will skip keygen since local is NOT in best
-					 authority set");
+				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())

@@ -18,19 +18,19 @@ use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
+use futures::{FutureExt, StreamExt};
+use itertools::Itertools;
+use log::{debug, error, info, trace};
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
-	collections::{BTreeSet, HashMap},
+	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
 	marker::PhantomData,
 	path::PathBuf,
 	pin::Pin,
 	sync::Arc,
 };
-
-use futures::{FutureExt, StreamExt};
-use log::{debug, error, info, trace};
 
 use parking_lot::{Mutex, RwLock};
 
@@ -382,7 +382,7 @@ where
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
 		async_index: u8,
-	) -> Result<Pin<Box<dyn Future<Output = Result<(), DKGError>> + Send + 'static>>, DKGError> {
+	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -416,7 +416,7 @@ where
 			match res {
 				Ok(_) => {
 					log::info!(target: "dkg", "The meta handler has executed successfully");
-					Ok(())
+					Ok(async_index)
 				},
 
 				Err(err) => {
@@ -1113,6 +1113,16 @@ where
 			if let Some(rounds) = self.rounds.as_ref() { rounds.round_id } else { return };
 
 		let at: BlockId<B> = BlockId::hash(header.hash());
+
+		let maybe_party_index = self.get_party_index(header);
+		// Check whether the worker is in the best set or return
+		if maybe_party_index.is_none() {
+			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			return
+		} else {
+			info!(target: "dkg", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+		}
+
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
 			Ok(res) => res,
 			Err(_) => return,
@@ -1129,7 +1139,6 @@ where
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
 
-		let mut signing_sets = Vec::new();
 		let (active_local_key, _) = self.fetch_local_keys();
 		let local_key =
 			if active_local_key.is_none() { return } else { active_local_key.unwrap().local_key };
@@ -1152,18 +1161,21 @@ where
 			0 => 1,
 			1.. => (1..num + 1).product(),
 		};
-
+		// TODO: Modify this to not blow up as n, t grow.
+		let mut signing_sets = Vec::new();
 		let n = factorial(best_authorities.len() as u64);
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
-		let num_combinations = n / (k * n_minus_k);
+		let MAX_SIGNING_SETS = 10;
+		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
 		debug!(target: "dkg", "Generating {} signing sets", num_combinations);
-		while signing_sets.len() <= num_combinations as usize {
+		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
 			}
 			let maybe_set = self.generate_signers(&seed, threshold, best_authorities.clone()).ok();
 			if let Some(set) = maybe_set {
+				let set = HashSet::<u16>::from_iter(set.iter().cloned());
 				if !signing_sets.contains(&set) {
 					signing_sets.push(set);
 				}
@@ -1173,26 +1185,27 @@ where
 		}
 
 		let mut futures = Vec::with_capacity(signing_sets.len());
-
 		for i in 0..signing_sets.len() {
-			log::info!(target: "dkg", "🕸️  Round Id {:?} | {}-out-of-{} signers: ({:?})", round_id, threshold, best_authorities.len(), signing_sets[i].clone());
-			match self.create_signing_protocol(
-				best_authorities.clone(),
-				authority_public_key.clone(),
-				round_id,
-				threshold,
-				None,
-				ProtoStageType::Signing,
-				unsigned_proposals.clone(),
-				signing_sets[i].clone(),
-				i as u8,
-			) {
-				Ok(task) => futures.push(task),
-
-				Err(err) => {
-					log::error!(target: "dkg", "Error creating signing protocol: {:?}", &err);
-					self.handle_dkg_error(err)
-				},
+			// Filter for only the signing sets that contain our party index.
+			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
+				log::info!(target: "dkg", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", round_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				match self.create_signing_protocol(
+					best_authorities.clone(),
+					authority_public_key.clone(),
+					round_id,
+					threshold,
+					None,
+					ProtoStageType::Signing,
+					unsigned_proposals.clone(),
+					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),
+					i as u8,
+				) {
+					Ok(task) => futures.push(task),
+					Err(err) => {
+						log::error!(target: "dkg", "Error creating signing protocol: {:?}", &err);
+						self.handle_dkg_error(err)
+					},
+				}
 			}
 		}
 
@@ -1206,7 +1219,7 @@ where
 				// has logic to handle errors internally, including misbehaviour monitors
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
-					log::info!(target: "dkg", "*** SUCCESSFULLY EXECUTED meta signing protocol ***");
+					log::info!(target: "dkg", "*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***", _success);
 				} else {
 					log::warn!(target: "dkg", "*** UNSUCCESSFULLY EXECUTED meta signing protocol");
 				}
