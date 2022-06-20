@@ -973,8 +973,8 @@ pub mod pallet {
 			if now > unjail_signing_block {
 				JailedSigningAuthorities::<T>::remove(&authority);
 				// increment the next threshold if the authority was jailed for Signing
-				// let new_val = NextSignatureThreshold::<T>::get().saturating_add(1);
-				// PendingSignatureThreshold::<T>::put(new_val);
+				let new_val = NextSignatureThreshold::<T>::get().saturating_add(1);
+				PendingSignatureThreshold::<T>::put(new_val);
 			}
 			Ok(().into())
 		}
