@@ -890,7 +890,7 @@ pub mod pallet {
 								// Handle edge case properly (shouldn't drop below 2 authorities)
 								if unjailed_authorities.len() > 2 {
 									let new_val = u16::try_from(unjailed_authorities.len() - 1)
-										.unwrap_or_default();
+										.unwrap_or(2u16);
 									NextKeygenThreshold::<T>::put(new_val);
 									PendingKeygenThreshold::<T>::put(new_val);
 								}
@@ -957,18 +957,24 @@ pub mod pallet {
 			let authority =
 				T::AuthorityIdOf::convert(origin).ok_or(Error::<T>::InvalidControllerAccount)?;
 			// TODO: Consider adding a payment to unjail similar to a slash
-			if frame_system::Pallet::<T>::block_number() >
-				JailedKeygenAuthorities::<T>::get(authority.clone())
-					.saturating_add(T::KeygenJailSentence::get())
-			{
-				JailedKeygenAuthorities::<T>::remove(authority.clone());
+			let now = frame_system::Pallet::<T>::block_number();
+			let unjail_keygen_block = JailedKeygenAuthorities::<T>::get(&authority)
+				.saturating_add(T::KeygenJailSentence::get());
+			let unjail_signing_block = JailedSigningAuthorities::<T>::get(&authority)
+				.saturating_add(T::SigningJailSentence::get());
+
+			if now > unjail_keygen_block {
+				JailedKeygenAuthorities::<T>::remove(&authority);
+				// increment the next threshold if the authority was jailed for Keygen
+				let new_val = NextKeygenThreshold::<T>::get().saturating_add(1);
+				PendingKeygenThreshold::<T>::put(new_val);
 			}
 
-			if frame_system::Pallet::<T>::block_number() >
-				JailedSigningAuthorities::<T>::get(authority.clone())
-					.saturating_add(T::SigningJailSentence::get())
-			{
-				JailedSigningAuthorities::<T>::remove(authority);
+			if now > unjail_signing_block {
+				JailedSigningAuthorities::<T>::remove(&authority);
+				// increment the next threshold if the authority was jailed for Signing
+				// let new_val = NextSignatureThreshold::<T>::get().saturating_add(1);
+				// PendingSignatureThreshold::<T>::put(new_val);
 			}
 			Ok(().into())
 		}
