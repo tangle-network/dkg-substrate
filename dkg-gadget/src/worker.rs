@@ -90,6 +90,8 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
+pub const MAX_SIGNING_SETS: u64 = 10;
+
 pub(crate) struct WorkerParams<B, BE, C, GE>
 where
 	B: Block,
@@ -1166,7 +1168,6 @@ where
 		let n = factorial(best_authorities.len() as u64);
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
-		let MAX_SIGNING_SETS = 10;
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
 		debug!(target: "dkg", "Generating {} signing sets", num_combinations);
 		while signing_sets.len() < num_combinations as usize {
