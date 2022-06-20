@@ -700,7 +700,7 @@ construct_runtime!(
 	Balances: pallet_balances,
 	DKG: pallet_dkg_metadata,
 	DKGProposals: pallet_dkg_proposals,
-	DKGProposalHandler: pallet_dkg_proposal_handler
+	DKGProposalHandler: pallet_dkg_proposal_handler,
 	TransactionPayment: pallet_transaction_payment,
 	Sudo: pallet_sudo,
 	ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
