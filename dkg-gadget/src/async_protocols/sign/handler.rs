@@ -81,7 +81,7 @@ where
 				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
-					log::info!("Offline stage index: {}", offline_i);
+					log::info!(target: "dkg", "Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -103,16 +103,18 @@ where
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
 					log::info!(
-							"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-							count_in_batch
-						);
+						target: "dkg",
+						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
+						count_in_batch
+					);
 				} else {
 					log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
-					return Ok(())
+					return Err(DKGError::GenericError {
+						reason: "We are not among signers, skipping".to_string(),
+					})
 				}
 			} else {
-				log::info!(target: "dkg", "Will skip keygen since local is NOT in best
-					 authority set");
+				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())
