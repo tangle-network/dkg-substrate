@@ -22,8 +22,6 @@ use sc_network::PeerId;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::pin::Pin;
 
-/// A Mock Gossip Engine for DKG.
-mod mock;
 /// A Gossip Engine for DKG, that uses [`sc_network::NetworkService`] as a backend.
 mod network;
 

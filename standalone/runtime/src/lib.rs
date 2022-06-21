@@ -276,7 +276,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = 1 * MINUTES;
+  pub const Period: BlockNumber = MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -698,6 +698,9 @@ construct_runtime!(
 	Aura: pallet_aura,
 	Grandpa: pallet_grandpa,
 	Balances: pallet_balances,
+	DKG: pallet_dkg_metadata,
+	DKGProposals: pallet_dkg_proposals,
+	DKGProposalHandler: pallet_dkg_proposal_handler,
 	TransactionPayment: pallet_transaction_payment,
 	Sudo: pallet_sudo,
 	ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
@@ -706,9 +709,6 @@ construct_runtime!(
 	Staking: pallet_staking,
 	Session: pallet_session,
 	Historical: pallet_session_historical,
-	DKG: pallet_dkg_metadata,
-	DKGProposals: pallet_dkg_proposals,
-	DKGProposalHandler: pallet_dkg_proposal_handler
   }
 );
 
