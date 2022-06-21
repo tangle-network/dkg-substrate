@@ -130,6 +130,22 @@ pub enum SignatureError {
 	InvalidECDSASignature(BadOrigin),
 }
 
+impl SignatureError {
+	pub fn expected_public_key(&self) -> Option<Vec<u8>> {
+		match self {
+			Self::InvalidRecovery(v) => Some(v.expected.clone()),
+			_ => None,
+		}
+	}
+
+	pub fn actual_public_key(&self) -> Option<Vec<u8>> {
+		match self {
+			Self::InvalidRecovery(v) => Some(v.actual.clone()),
+			_ => None,
+		}
+	}
+}
+
 /// This function takes the ecdsa signature and the unhashed data
 pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	signature: &[u8],
