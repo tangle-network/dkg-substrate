@@ -1153,6 +1153,7 @@ where
 			// the queued key?
 			let local_next_public_key =
 				queued_local_key.map(|v| v.local_key.public_key().to_bytes(true).to_vec());
+			log::debug!(target: "dkg", "LocalNextPublicKey: {:?}", local_next_public_key.as_ref().map(|v| hex::encode(v)));
 			if local_next_public_key == Some(on_chain_dkg_public_key) {
 				log::warn!(target: "dkg", "Local PublicKey is not the same as the one stored on-chain, but equal to the next one; rotating...");
 				self.rotate_local_key_files();
