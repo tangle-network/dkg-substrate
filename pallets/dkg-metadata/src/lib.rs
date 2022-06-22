@@ -1306,8 +1306,9 @@ impl<T: Config> Pallet<T> {
 				PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 			}
 			if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-				NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-				PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+				let new_val = next_authority_ids.len().saturating_sub(1) as u16;
+				NextSignatureThreshold::<T>::put(new_val);
+				PendingSignatureThreshold::<T>::put(new_val);
 			}
 
 			// Update the new and next authorities

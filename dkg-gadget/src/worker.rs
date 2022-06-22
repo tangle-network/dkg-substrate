@@ -1140,12 +1140,31 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-
-		let (active_local_key, _) = self.fetch_local_keys();
+		let (_, on_chain_dkg_public_key) = self.get_dkg_pub_key(header);
+		let (active_local_key, queued_local_key) = self.fetch_local_keys();
 		let local_key =
 			if active_local_key.is_none() { return } else { active_local_key.unwrap().local_key };
+		let local_public_key = local_key.public_key().to_bytes(true).to_vec();
+		log::debug!(target: "dkg", "LocalPublicKey: 0x{}", hex::encode(&local_public_key));
+		log::debug!(target: "dkg", "OnChainPublicKey: 0x{}", hex::encode(&on_chain_dkg_public_key));
+		if local_public_key != on_chain_dkg_public_key {
+			// That's a bug!
+			// FIXME(@shekohex): Shall we rotate the local keys if the public key on chain equal to
+			// the queued key?
+			let local_next_public_key =
+				queued_local_key.map(|v| v.local_key.public_key().to_bytes(true).to_vec());
+			if local_next_public_key == Some(on_chain_dkg_public_key) {
+				log::warn!(target: "dkg", "Local PublicKey is not the same as the one stored on-chain, but equal to the next one; rotating...");
+				self.rotate_local_key_files();
+				return
+			} else {
+				log::warn!(target: "dkg", "Local PublicKey is not the same as the one stored on-chain, returing ...");
+				// returing here, since any signing would result it an invalid signature on-chain.
+				return
+			}
+		}
 		let mut count = 0;
-		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
+		let mut seed = local_public_key[1..].to_vec();
 
 		// Generate multiple signing sets for signing the same unsigned proposals.
 		// The goal is to successfully sign proposals immediately in the event that
