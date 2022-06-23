@@ -527,6 +527,18 @@ where
 		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
 	}
 
+	/// Get the keygen threshold at a specific block
+	pub fn get_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().keygen_threshold(&at).unwrap_or(1)
+	}
+
+	/// Get the next keygen threshold at a specific block
+	pub fn get_next_keygen_threshold(&self, header: &B::Header) -> u16 {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self.client.runtime_api().next_keygen_threshold(&at).unwrap_or(2)
+	}
+
 	/// Get the active DKG public key
 	pub fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
 		let at: BlockId<B> = BlockId::hash(header.hash());

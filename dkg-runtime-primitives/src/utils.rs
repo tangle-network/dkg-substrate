@@ -152,6 +152,7 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	data: &[u8],
 ) -> Result<(), SignatureError> {
 	let dkg_key = T::dkg_key();
+	let prev_dkg_key = T::previous_dkg_key();
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature)
 		.map_err(|_| SignatureError::InvalidECDSASignature(BadOrigin))?;
@@ -162,6 +163,8 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	}
 
 	let current_dkg = &dkg_key[1..];
+	let prev_dkg = &prev_dkg_key[1..];
+
 	if_std! {
 		frame_support::log::debug!(
 			target: "dkg",
@@ -180,9 +183,10 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	// portion of the key.
 	let signer = &recovered_key[..32];
 	// Check if the signer is the current DKG or the previous DKG to buffer for timing issues
-	let is_not_current_dkg = signer != current_dkg;
+	let is_current_dkg = signer == current_dkg;
+	let is_prev_dkg = signer == prev_dkg;
 
-	if !is_not_current_dkg {
+	if is_current_dkg || is_prev_dkg {
 		Ok(())
 	} else {
 		Err(SignatureError::InvalidRecovery(SignatureResult {
