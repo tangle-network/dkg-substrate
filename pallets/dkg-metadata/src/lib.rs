@@ -1263,8 +1263,6 @@ impl<T: Config> Pallet<T> {
 		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
-		let next_keygen_threshold = NextKeygenThreshold::<T>::get();
-		let next_signature_threshold = NextSignatureThreshold::<T>::get();
 		// Update the next thresholds for the next session
 		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
 		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
@@ -1277,7 +1275,7 @@ impl<T: Config> Pallet<T> {
 		NextAuthoritySetId::<T>::put(next_id.saturating_add(1));
 		let next_best_authorities = Self::next_best_authorities();
 		NextBestAuthorities::<T>::put(Self::get_best_authorities(
-			next_keygen_threshold as usize,
+			Self::next_keygen_threshold() as usize,
 			&next_authority_ids,
 		));
 		// Update the keys for the next authorities
@@ -1295,8 +1293,8 @@ impl<T: Config> Pallet<T> {
 		// Rotate the authority set if a next pub key and next signature exist
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Update the active thresholds for the next session
-			SignatureThreshold::<T>::put(next_signature_threshold);
-			KeygenThreshold::<T>::put(next_keygen_threshold);
+			SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
+			KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
 			// Ensure next/pending thresholds remain valid across authority set changes that may
 			// break. We update the pending thresholds because we call `refresh_keys` below, which
 			// rotates all the thresholds into the current / next sets. Pending becomes the next,
@@ -1306,15 +1304,15 @@ impl<T: Config> Pallet<T> {
 				PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 			}
 			if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-				let new_val = next_authority_ids.len().saturating_sub(1) as u16;
-				NextSignatureThreshold::<T>::put(new_val);
-				PendingSignatureThreshold::<T>::put(new_val);
+				NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+				PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
 			}
 
 			// Update the new and next authorities
 			Authorities::<T>::put(&new_authority_ids);
 			CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
 			BestAuthorities::<T>::put(next_best_authorities);
+			let next_id = Self::authority_set_id().saturating_add(1);
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
 			// Deposit a consensus log about the authority set change
