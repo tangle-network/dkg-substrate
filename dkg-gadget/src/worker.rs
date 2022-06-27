@@ -90,7 +90,7 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 10;
+pub const MAX_SIGNING_SETS: u64 = 16;
 
 pub(crate) struct WorkerParams<B, BE, C, GE>
 where
