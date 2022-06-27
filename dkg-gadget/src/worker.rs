@@ -90,7 +90,7 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 10;
+pub const MAX_SIGNING_SETS: u64 = 16;
 
 pub(crate) struct WorkerParams<B, BE, C, GE>
 where
@@ -443,7 +443,7 @@ where
 	///
 	/// This should never execute unless we are certain that the rotation will succeed, i.e.
 	/// that the signature of the next DKG public key has been created and stored on-chain.
-	fn rotate_local_key_files(&mut self) {
+	fn rotate_local_key_files(&mut self) -> bool {
 		let mut local_key_path: Option<PathBuf> = None;
 		let mut queued_local_key_path: Option<PathBuf> = None;
 
@@ -451,14 +451,20 @@ where
 			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
 			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 		}
-
+		debug!(target: "dkg", "Rotating local key files");
+		debug!(target: "dkg", "Local key path: {:?}", local_key_path);
+		debug!(target: "dkg", "Queued local key path: {:?}", queued_local_key_path);
 		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
 			if let Err(err) = std::fs::copy(queued_path, path) {
 				error!("Error copying queued key {:?}", &err);
+				return false
 			} else {
 				debug!("Successfully copied queued key to current key");
+				return true
 			}
 		}
+
+		false
 	}
 
 	/// Fetch the local stored keys if they exist.
@@ -790,7 +796,7 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
 			let next_best_has_changed = next_best != self.best_next_authorities;
-			if next_best_has_changed {
+			if next_best_has_changed && self.queued_validator_set.id == queued.id {
 				debug!(target: "dkg", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
 				// Update the next best authorities
 				self.best_next_authorities = next_best;
@@ -853,7 +859,8 @@ where
 				self.best_authorities = self.best_next_authorities.clone();
 				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Rotate the key files
-				self.rotate_local_key_files();
+				let success = self.rotate_local_key_files();
+				debug!(target: "dkg", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 			}

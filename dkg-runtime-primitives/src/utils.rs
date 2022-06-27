@@ -130,6 +130,22 @@ pub enum SignatureError {
 	InvalidECDSASignature(BadOrigin),
 }
 
+impl SignatureError {
+	pub fn expected_public_key(&self) -> Option<Vec<u8>> {
+		match self {
+			Self::InvalidRecovery(v) => Some(v.expected.clone()),
+			_ => None,
+		}
+	}
+
+	pub fn actual_public_key(&self) -> Option<Vec<u8>> {
+		match self {
+			Self::InvalidRecovery(v) => Some(v.actual.clone()),
+			_ => None,
+		}
+	}
+}
+
 /// This function takes the ecdsa signature and the unhashed data
 pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	signature: &[u8],
@@ -145,28 +161,15 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 		return Err(SignatureError::InvalidDKGKey(BadOrigin))
 	}
 
-	let current_dkg = &dkg_key[1..];
-
-	#[cfg(feature = "std")]
-	frame_support::log::debug!(
-		target: "dkg",
-		"Recovered:
-		**********************************************************
-		public key: {}
-		curr_key: {}
-		**********************************************************",
-		hex::encode(recovered_key.clone()),
-		hex::encode(current_dkg),
-	);
-
+	let current_dkg: Vec<_> = dkg_key.iter().skip(1).cloned().collect();
 	// The stored_key public key is 33 bytes compressed.
 	// The recovered key is 64 bytes uncompressed. The first 32 bytes represent the compressed
 	// portion of the key.
 	let signer = &recovered_key[..32];
 	// Check if the signer is the current DKG or the previous DKG to buffer for timing issues
-	let is_not_current_dkg = signer != current_dkg;
+	let is_current_dkg = signer == current_dkg;
 
-	if !is_not_current_dkg {
+	if is_current_dkg {
 		Ok(())
 	} else {
 		Err(SignatureError::InvalidRecovery(SignatureResult {

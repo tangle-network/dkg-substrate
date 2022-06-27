@@ -215,6 +215,10 @@ pub mod pallet {
 			data: Vec<u8>,
 			/// The Invalid Signature.
 			invalid_signature: Vec<u8>,
+			/// Expected DKG Public Key (the one currently stored on chain).
+			expected_public_key: Option<Vec<u8>>,
+			/// The actual one we recovered from the data and signature.
+			actual_public_key: Option<Vec<u8>>,
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -323,18 +327,19 @@ pub mod pallet {
 					let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
 						signature,
 						&data[..],
-					)
-					.map_err(|_| Error::<T>::ProposalSignatureInvalid);
+					);
 					match result {
 						Ok(_) => {
 							// Do nothing, it is all good.
 						},
-						Err(_e) => {
+						Err(e) => {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
 								kind: kind.clone(),
 								data: data.clone(),
+								expected_public_key: e.expected_public_key(),
+								actual_public_key: e.actual_public_key(),
 								invalid_signature: signature.clone(),
 							});
 							frame_support::log::error!(
