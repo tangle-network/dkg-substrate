@@ -863,7 +863,7 @@ impl_runtime_apis! {
 
 	fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
 	  let queued_authorities = DKG::next_authorities();
-	  let queued_authority_set_id = DKG::next_authority_set_id();
+	  let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 
 	  dkg_runtime_primitives::AuthoritySet {
 		authorities: queued_authorities,
