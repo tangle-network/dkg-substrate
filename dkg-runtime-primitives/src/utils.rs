@@ -152,7 +152,6 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	data: &[u8],
 ) -> Result<(), SignatureError> {
 	let dkg_key = T::dkg_key();
-	let prev_dkg_key = T::previous_dkg_key();
 
 	let recovered_key = recover_ecdsa_pub_key(data, signature)
 		.map_err(|_| SignatureError::InvalidECDSASignature(BadOrigin))?;
@@ -163,16 +162,14 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 	}
 
 	let current_dkg: Vec<_> = dkg_key.iter().skip(1).cloned().collect();
-	let prev_dkg: Vec<_> = prev_dkg_key.into_iter().skip(1).collect();
 	// The stored_key public key is 33 bytes compressed.
 	// The recovered key is 64 bytes uncompressed. The first 32 bytes represent the compressed
 	// portion of the key.
 	let signer = &recovered_key[..32];
 	// Check if the signer is the current DKG or the previous DKG to buffer for timing issues
 	let is_current_dkg = signer == current_dkg;
-	let is_prev_dkg = signer == prev_dkg;
 
-	if is_current_dkg || is_prev_dkg {
+	if is_current_dkg {
 		Ok(())
 	} else {
 		Err(SignatureError::InvalidRecovery(SignatureResult {

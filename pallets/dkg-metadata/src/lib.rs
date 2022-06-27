@@ -1255,12 +1255,6 @@ impl<T: Config> Pallet<T> {
 		next_authorities_accounts: Vec<T::AccountId>,
 		forced: bool,
 	) {
-		// Call set change handler to trigger the other pallet implementing this hook
-		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
-			T::AccountId,
-			dkg_runtime_primitives::AuthoritySetId,
-			T::DKGId,
-		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
 		// Update the next thresholds for the next session
@@ -1317,7 +1311,11 @@ impl<T: Config> Pallet<T> {
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
 			// Deposit a consensus log about the authority set change
-			Self::store_consensus_log(new_authority_ids, next_authority_ids, next_id);
+			Self::store_consensus_log(
+				new_authority_ids.clone(),
+				next_authority_ids.clone(),
+				next_id,
+			);
 			// Delete next records
 			NextDKGPublicKey::<T>::kill();
 			NextPublicKeySignature::<T>::kill();
@@ -1338,7 +1336,13 @@ impl<T: Config> Pallet<T> {
 			});
 			Self::deposit_event(Event::PublicKeySignatureChanged {
 				pub_key_sig: next_pub_key_signature,
-			})
+			});
+			// Call set change handler to trigger the other pallet implementing this hook
+			<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
+				T::AccountId,
+				dkg_runtime_primitives::AuthoritySetId,
+				T::DKGId,
+			>>::on_authority_set_changed(new_authorities_accounts, new_authority_ids);
 		}
 	}
 
