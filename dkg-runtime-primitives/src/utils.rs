@@ -15,7 +15,7 @@
 pub use sp_core::{ecdsa, sr25519};
 use sp_io::{hashing::keccak_256, EcdsaVerifyError};
 use sp_runtime::traits::BadOrigin;
-use sp_std::{if_std, vec::Vec};
+use sp_std::vec::Vec;
 
 use crate::traits::GetDKGPublicKey;
 
@@ -162,22 +162,8 @@ pub fn ensure_signed_by_dkg<T: GetDKGPublicKey>(
 		return Err(SignatureError::InvalidDKGKey(BadOrigin))
 	}
 
-	let current_dkg = &dkg_key[1..];
-	let prev_dkg = &prev_dkg_key[1..];
-
-	if_std! {
-		frame_support::log::debug!(
-			target: "dkg",
-			"Recovered:
-			**********************************************************
-			public key: {}
-			curr_key: {}
-			**********************************************************",
-			hex::encode(recovered_key.clone()),
-			hex::encode(current_dkg),
-		);
-	}
-
+	let current_dkg: Vec<_> = dkg_key.iter().skip(1).cloned().collect();
+	let prev_dkg: Vec<_> = prev_dkg_key.into_iter().skip(1).collect();
 	// The stored_key public key is 33 bytes compressed.
 	// The recovered key is 64 bytes uncompressed. The first 32 bytes represent the compressed
 	// portion of the key.
