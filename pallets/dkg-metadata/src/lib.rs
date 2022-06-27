@@ -1264,6 +1264,8 @@ impl<T: Config> Pallet<T> {
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
 		// Update the next thresholds for the next session
+		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
+		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
 		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
 		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
@@ -1273,16 +1275,29 @@ impl<T: Config> Pallet<T> {
 		NextAuthorities::<T>::put(&next_authority_ids);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 		NextAuthoritySetId::<T>::put(next_id.saturating_add(1));
-		let next_best_authorities = Self::next_best_authorities();
-		NextBestAuthorities::<T>::put(Self::get_best_authorities(
-			Self::next_keygen_threshold() as usize,
-			&next_authority_ids,
-		));
+		let new_best_authorities = Self::next_best_authorities();
 		// Update the keys for the next authorities
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
 		let dkg_pub_key = Self::dkg_public_key();
 		let pub_key_signature = Self::public_key_signature();
+		// Ensure next/pending thresholds remain valid across authority set changes that may
+		// break. We update the pending thresholds because we call `refresh_keys` below, which
+		// rotates all the thresholds into the current / next sets. Pending becomes the next,
+		// next becomes the current.
+		if next_authority_ids.len() < Self::next_keygen_threshold().into() {
+			NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+		}
+		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
+			NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+		}
+		// Update the next best authorities after any and all changes to the thresholds.
+		NextBestAuthorities::<T>::put(Self::get_best_authorities(
+			Self::next_keygen_threshold() as usize,
+			&next_authority_ids,
+		));
 		// Switch on forced for forceful rotations
 		let v = if forced {
 			// If forced we supply an empty signature
@@ -1293,26 +1308,12 @@ impl<T: Config> Pallet<T> {
 		// Rotate the authority set if a next pub key and next signature exist
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Update the active thresholds for the next session
-			SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
-			KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
-			// Ensure next/pending thresholds remain valid across authority set changes that may
-			// break. We update the pending thresholds because we call `refresh_keys` below, which
-			// rotates all the thresholds into the current / next sets. Pending becomes the next,
-			// next becomes the current.
-			if next_authority_ids.len() < Self::next_keygen_threshold().into() {
-				NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
-				PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
-			}
-			if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-				NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-				PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-			}
-
+			SignatureThreshold::<T>::put(new_current_signature_threshold);
+			KeygenThreshold::<T>::put(new_current_keygen_threshold);
 			// Update the new and next authorities
 			Authorities::<T>::put(&new_authority_ids);
 			CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
-			BestAuthorities::<T>::put(next_best_authorities);
-			let next_id = Self::authority_set_id().saturating_add(1);
+			BestAuthorities::<T>::put(new_best_authorities);
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
 			// Deposit a consensus log about the authority set change
