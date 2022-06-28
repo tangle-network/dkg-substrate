@@ -22,7 +22,8 @@
 		"wrapping-fee-update-proposal-evm": "ts-node ./src/evm/testWrappingFeeUpdateProposal.ts",
 		"wrapping-fee-update-proposal-substrate": "ts-node ./src/substrate/testWrappingFeeUpdateProposal.ts",
 		"script": "ts-node",
-		"test": "ts-mocha tests/proposals.test.ts"
+		"test:e2e": "ts-mocha ./tests/e2e/**/*.test.ts",
+		"test:proposals": "ts-mocha tests/proposals.test.ts"
 	},
 	"author": "",
 	"license": "ISC",
