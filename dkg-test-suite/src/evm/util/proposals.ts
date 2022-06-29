@@ -39,7 +39,8 @@ export const anchorUpdateProposal: AnchorUpdateProposal = {
 	},
 	srcChainId: 5001,
 	lastLeafIndex: 0,
-	merkleRoot: '0x0000000000000000000000000000000000000000000000000000000000000000',
+	merkleRoot:
+		'0x0000000000000000000000000000000000000000000000000000000000000000',
 };
 
 export const tokenAddProposal: TokenAddProposal = {

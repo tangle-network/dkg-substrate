@@ -1,6 +1,6 @@
 {
 	"singleQuote": true,
-	"maxLength": 80,
+	"printWidth": 80,
 	"semi": true,
 	"tabWidth": 2
 }

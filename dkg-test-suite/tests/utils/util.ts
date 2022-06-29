@@ -76,15 +76,18 @@ export const executeBefore = async ({
 		},
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),
-			secretKey: '0x79c3b7fc0b7697b9414cb87adcb37317d1cab32818ae18c0e97ad76395d1fdcf',
+			secretKey:
+				'0x79c3b7fc0b7697b9414cb87adcb37317d1cab32818ae18c0e97ad76395d1fdcf',
 		},
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),
-			secretKey: '0xf8d74108dbe199c4a6e4ef457046db37c325ba3f709b14cabfa1885663e4c589',
+			secretKey:
+				'0xf8d74108dbe199c4a6e4ef457046db37c325ba3f709b14cabfa1885663e4c589',
 		},
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),
-			secretKey: '0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854',
+			secretKey:
+				'0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854',
 		},
 	]);
 	localChain2 = new LocalChain('local2', 5002, [
@@ -100,8 +103,16 @@ export const executeBefore = async ({
 	wallet1 = new ethers.Wallet(ACC1_PK, localChain.provider());
 	wallet2 = new ethers.Wallet(ACC2_PK, localChain2.provider());
 	// Deploy the token.
-	const localToken = await localChain.deployToken('Webb Token', 'WEBB', wallet1);
-	const localToken2 = await localChain2.deployToken('Webb Token', 'WEBB', wallet2);
+	const localToken = await localChain.deployToken(
+		'Webb Token',
+		'WEBB',
+		wallet1
+	);
+	const localToken2 = await localChain2.deployToken(
+		'Webb Token',
+		'WEBB',
+		wallet2
+	);
 
 	polkadotApi = await ApiPromise.create({
 		provider,
@@ -177,7 +188,10 @@ export const handleSetup = async (isVariable: boolean, governor: string) => {
 	// get the anchor on localchain1
 	const anchor = isVariable
 		? signatureVBridge.getVAnchor(localChain.chainId)!
-		: signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
+		: signatureBridge.getAnchor(
+				localChain.chainId,
+				ethers.utils.parseEther('1')
+		  )!;
 
 	await anchor.setSigner(wallet1);
 
@@ -190,9 +204,14 @@ export const handleSetup = async (isVariable: boolean, governor: string) => {
 	// do the same but on localchain2
 	const anchor2 = isVariable
 		? signatureVBridge.getVAnchor(localChain2.chainId)!
-		: signatureBridge.getAnchor(localChain2.chainId, ethers.utils.parseEther('1'))!;
+		: signatureBridge.getAnchor(
+				localChain2.chainId,
+				ethers.utils.parseEther('1')
+		  )!;
 	await anchor2.setSigner(wallet2);
-	const tokenAddress2 = signatureBridge.getWebbTokenAddress(localChain2.chainId)!;
+	const tokenAddress2 = signatureBridge.getWebbTokenAddress(
+		localChain2.chainId
+	)!;
 	const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
 	await token2.approveSpending(anchor2.contract.address);
 	await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
@@ -230,7 +249,9 @@ export const waitForAndExecuteNthRotation = async (n: number) => {
 		const contract = bridgeSide.contract;
 		contract.connect(localChain.provider());
 		const governor = await contract.governor();
-		let nextGovernorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey!);
+		let nextGovernorAddress = ethAddressFromUncompressedPublicKey(
+			dkgPublicKey!
+		);
 		// sanity check
 		expect(nextGovernorAddress).not.to.eq(governor);
 		let tx = await contract.transferOwnershipWithSignaturePubKey(

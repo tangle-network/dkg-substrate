@@ -37,11 +37,23 @@ describe('E2E Test Runner', function () {
 		console.log(`Start - ${start} | End - ${end} | Took - ${end - start} ms`);
 	});
 
-	importTest('Proposer Set Update Proposal', './proposerSetUpdateProposal.test');
-	importTest('Maximum Deposit Limit Update Proposal', './maxDepositLimitProposal.test');
-	importTest('Minimum Withdrawal Limit Update Proposal', './minWithdrawalLimit.test');
+	importTest(
+		'Proposer Set Update Proposal',
+		'./proposerSetUpdateProposal.test'
+	);
+	importTest(
+		'Maximum Deposit Limit Update Proposal',
+		'./maxDepositLimitProposal.test'
+	);
+	importTest(
+		'Minimum Withdrawal Limit Update Proposal',
+		'./minWithdrawalLimit.test'
+	);
 	importTest('Rescue Tokens Proposal', './rescueTokensProposal.test');
-	importTest('Wrapping Fee Update Proposal', './wrappingFeeUpdateProposal.test');
+	importTest(
+		'Wrapping Fee Update Proposal',
+		'./wrappingFeeUpdateProposal.test'
+	);
 	importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
 	importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
 	importTest('Anchor Update Proposal', './updateAnchorProposal.test');

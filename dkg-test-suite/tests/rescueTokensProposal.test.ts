@@ -16,7 +16,11 @@
  */
 import { encodeFunctionSignature, waitForEvent, sleep } from '../src/utils';
 import { ethers, BigNumber } from 'ethers';
-import { Treasury, GovernedTokenWrapper, MintableToken } from '@webb-tools/tokens';
+import {
+	Treasury,
+	GovernedTokenWrapper,
+	MintableToken,
+} from '@webb-tools/tokens';
 import { Keyring } from '@polkadot/api';
 import { u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
@@ -29,7 +33,12 @@ import {
 	WrappingFeeUpdateProposal,
 	encodeWrappingFeeUpdateProposal,
 } from '../src/evm/util/utils';
-import { localChain, polkadotApi, signatureBridge, wallet1 } from './utils/util';
+import {
+	localChain,
+	polkadotApi,
+	signatureBridge,
+	wallet1,
+} from './utils/util';
 import { BLOCK_TIME } from '../src/constants';
 import { Anchors, Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
@@ -40,16 +49,25 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		ethers.utils.parseEther('1')
 	)! as Anchors.Anchor;
 	const governedTokenAddress = anchor.token!;
-	const governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
+	const governedToken = GovernedTokenWrapper.connect(
+		governedTokenAddress,
+		wallet1
+	);
 	const mintableTokenAddress = (await governedToken.contract.getTokens())[0];
-	const mintableToken = await MintableToken.tokenFromAddress(mintableTokenAddress, wallet1);
+	const mintableToken = await MintableToken.tokenFromAddress(
+		mintableTokenAddress,
+		wallet1
+	);
 	const treasuryAddress = await governedToken.getFeeRecipientAddress();
 	const treasury = Treasury.connect(treasuryAddress, wallet1);
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain.chainId,
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain.chainId,
+		}
+	);
 	// First, we will execute the update wrapping fee proposal to change the fee to be greater than 0
 	// This will allow tokens to accumulate to the treasury
 	{
@@ -60,7 +78,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			header: {
 				resourceId: governedTokenResourceId,
 				functionSignature: encodeFunctionSignature(
-					governedToken.contract.interface.functions['setFee(uint8,uint256)'].format()
+					governedToken.contract.interface.functions[
+						'setFee(uint8,uint256)'
+					].format()
 				),
 				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
 				chainIdType: ChainIdType.EVM,
@@ -75,14 +95,19 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			'DkgRuntimePrimitivesProposalProposalKind',
 			'WrappingFeeUpdate'
 		);
-		const wrappingFeeUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-			Unsigned: {
-				kind: kind,
-				data: prop,
-			},
-		});
+		const wrappingFeeUpdateProposal = polkadotApi.createType(
+			'DkgRuntimePrimitivesProposal',
+			{
+				Unsigned: {
+					kind: kind,
+					data: prop,
+				},
+			}
+		);
 		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(wrappingFeeUpdateProposal);
+			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+				wrappingFeeUpdateProposal
+			);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -94,8 +119,15 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		const key = {
 			WrappingFeeUpdateProposal: proposalPayload.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+			chainIdType,
+			key
+		);
+		const value = new Option(
+			polkadotApi.registry,
+			'DkgRuntimePrimitivesProposal',
+			proposal
+		);
 		expect(value.isSome).to.eq(true);
 		const dkgProposal = value.unwrap().toJSON() as {
 			signed: {
@@ -135,21 +167,27 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		await anchor.wrapAndDeposit(mintableToken.contract.address, wrappingFee);
 
 		// Anchor Denomination amount should go to TokenWrapper
-		expect((await mintableToken.getBalance(governedToken.contract.address)).toString()).to.eq(
-			anchor.denomination!
-		);
+		expect(
+			(
+				await mintableToken.getBalance(governedToken.contract.address)
+			).toString()
+		).to.eq(anchor.denomination!);
 
 		// The wrapping fee should be transferred to the treasury
-		expect((await mintableToken.getBalance(treasury.contract.address)).toString()).to.eq(
+		expect(
+			(await mintableToken.getBalance(treasury.contract.address)).toString()
+		).to.eq(
 			BigNumber.from(anchor.denomination!)
 				.mul(wrappingFee)
 				.div(100 - wrappingFee)
 				.toString()
 		);
 
-		expect((await governedToken.contract.balanceOf(anchor.contract.address)).toString()).to.eq(
-			anchor.denomination!
-		);
+		expect(
+			(
+				await governedToken.contract.balanceOf(anchor.contract.address)
+			).toString()
+		).to.eq(anchor.denomination!);
 	}
 
 	await sleep(5 * BLOCK_TIME); // wait for a few blocks
@@ -158,7 +196,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 	{
 		const treasuryResourceId = await treasury.createResourceId();
 		const to = wallet1.address;
-		let balTreasuryBeforeRescue = await mintableToken.getBalance(treasury.contract.address);
+		let balTreasuryBeforeRescue = await mintableToken.getBalance(
+			treasury.contract.address
+		);
 		let balToBeforeRescue = await mintableToken.getBalance(to);
 		const proposalPayload: RescueTokensProposal = {
 			header: {
@@ -178,15 +218,23 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		};
 		const proposalBytes = encodeRescueTokensProposal(proposalPayload);
 		const prop = u8aToHex(proposalBytes);
-		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'RescueTokens');
-		const rescueTokensProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-			Unsigned: {
-				kind: kind,
-				data: prop,
-			},
-		});
+		const kind = polkadotApi.createType(
+			'DkgRuntimePrimitivesProposalProposalKind',
+			'RescueTokens'
+		);
+		const rescueTokensProposal = polkadotApi.createType(
+			'DkgRuntimePrimitivesProposal',
+			{
+				Unsigned: {
+					kind: kind,
+					data: prop,
+				},
+			}
+		);
 		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(rescueTokensProposal);
+			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+				rescueTokensProposal
+			);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -198,8 +246,15 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		const key = {
 			RescueTokensProposal: proposalPayload.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+			chainIdType,
+			key
+		);
+		const value = new Option(
+			polkadotApi.registry,
+			'DkgRuntimePrimitivesProposal',
+			proposal
+		);
 		expect(value.isSome).to.eq(true);
 		const dkgProposal = value.unwrap().toJSON() as {
 			signed: {
@@ -227,13 +282,17 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		await tx2.wait();
 
 		// We check that the address that the tokens were rescued to contain the rescued tokens
-		let balTreasuryAfterRescue = await mintableToken.getBalance(treasury.contract.address);
+		let balTreasuryAfterRescue = await mintableToken.getBalance(
+			treasury.contract.address
+		);
 		let balToAfterRescue = await mintableToken.getBalance(to);
 
 		const diffTreasuryBalance = parseInt(
 			balTreasuryBeforeRescue.sub(balTreasuryAfterRescue).toString()
 		);
-		const diffToBalance = parseInt(balToAfterRescue.sub(balToBeforeRescue).toString());
+		const diffToBalance = parseInt(
+			balToAfterRescue.sub(balToBeforeRescue).toString()
+		);
 
 		expect(500 == diffTreasuryBalance).to.eq(true);
 		expect(500 == diffToBalance).to.eq(true);

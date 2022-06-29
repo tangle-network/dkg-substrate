@@ -14,7 +14,12 @@
  * limitations under the License.
  *
  */
-import { encodeFunctionSignature, registerResourceId, sleep, waitForEvent } from '../src/utils';
+import {
+	encodeFunctionSignature,
+	registerResourceId,
+	sleep,
+	waitForEvent,
+} from '../src/utils';
 import { ethers } from 'ethers';
 import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { Keyring } from '@polkadot/api';
@@ -42,19 +47,31 @@ import { expect } from 'chai';
 import { BLOCK_TIME } from '../src/constants';
 
 it('should be able to sign token add & remove proposal', async () => {
-	const anchor = signatureBridge.getAnchor(localChain.chainId, ethers.utils.parseEther('1'))!;
+	const anchor = signatureBridge.getAnchor(
+		localChain.chainId,
+		ethers.utils.parseEther('1')
+	)!;
 	const governedTokenAddress = anchor.token!;
-	let governedToken = GovernedTokenWrapper.connect(governedTokenAddress, wallet1);
+	let governedToken = GovernedTokenWrapper.connect(
+		governedTokenAddress,
+		wallet1
+	);
 	const resourceId = await governedToken.createResourceId();
 	// Create Mintable Token to add to GovernedTokenWrapper
 	//Create an ERC20 Token
-	const tokenToAdd = await MintableToken.createToken('testToken', 'TEST', wallet1);
+	const tokenToAdd = await MintableToken.createToken(
+		'testToken',
+		'TEST',
+		wallet1
+	);
 	{
 		const proposalPayload: TokenAddProposal = {
 			header: {
 				resourceId,
 				functionSignature: encodeFunctionSignature(
-					governedToken.contract.interface.functions['add(address,uint256)'].format()
+					governedToken.contract.interface.functions[
+						'add(address,uint256)'
+					].format()
 				),
 				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
 				chainIdType: ChainIdType.EVM,
@@ -69,18 +86,29 @@ it('should be able to sign token add & remove proposal', async () => {
 		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
 		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-			Evm: localChain.chainId,
-		});
-		const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
-		const tokenAddProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-			Unsigned: {
-				kind: kind,
-				data: prop,
-			},
-		});
+		const chainIdType = polkadotApi.createType(
+			'WebbProposalsHeaderTypedChainId',
+			{
+				Evm: localChain.chainId,
+			}
+		);
+		const kind = polkadotApi.createType(
+			'DkgRuntimePrimitivesProposalProposalKind',
+			'TokenAdd'
+		);
+		const tokenAddProposal = polkadotApi.createType(
+			'DkgRuntimePrimitivesProposal',
+			{
+				Unsigned: {
+					kind: kind,
+					data: prop,
+				},
+			}
+		);
 		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenAddProposal);
+			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+				tokenAddProposal
+			);
 
 		await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -92,8 +120,15 @@ it('should be able to sign token add & remove proposal', async () => {
 		const key = {
 			TokenAddProposal: proposalPayload.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-		const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+			chainIdType,
+			key
+		);
+		const value = new Option(
+			polkadotApi.registry,
+			'DkgRuntimePrimitivesProposal',
+			proposal
+		);
 		expect(value.isSome).to.eq(true);
 		const dkgProposal = value.unwrap().toJSON() as {
 			signed: {
@@ -119,16 +154,20 @@ it('should be able to sign token add & remove proposal', async () => {
 		);
 		await tx2.wait();
 		// Want to check that token was actually added
-		expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).to.eq(
-			true
-		);
+		expect(
+			(await governedToken.contract.getTokens()).includes(
+				tokenToAdd.contract.address
+			)
+		).to.eq(true);
 	}
 	await sleep(5 * BLOCK_TIME);
 	const proposalPayload: TokenRemoveProposal = {
 		header: {
 			resourceId,
 			functionSignature: encodeFunctionSignature(
-				governedToken.contract.interface.functions['remove(address,uint256)'].format()
+				governedToken.contract.interface.functions[
+					'remove(address,uint256)'
+				].format()
 			),
 			nonce: Number(await governedToken.contract.proposalNonce()) + 1,
 			chainIdType: ChainIdType.EVM,
@@ -143,18 +182,29 @@ it('should be able to sign token add & remove proposal', async () => {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain.chainId,
-	});
-	const kind = polkadotApi.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenRemove');
-	const tokenRemoveProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-		Unsigned: {
-			kind: kind,
-			data: prop,
-		},
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain.chainId,
+		}
+	);
+	const kind = polkadotApi.createType(
+		'DkgRuntimePrimitivesProposalProposalKind',
+		'TokenRemove'
+	);
+	const tokenRemoveProposal = polkadotApi.createType(
+		'DkgRuntimePrimitivesProposal',
+		{
+			Unsigned: {
+				kind: kind,
+				data: prop,
+			},
+		}
+	);
 	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(tokenRemoveProposal);
+		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+			tokenRemoveProposal
+		);
 
 	await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -166,8 +216,15 @@ it('should be able to sign token add & remove proposal', async () => {
 	const key = {
 		TokenRemoveProposal: proposalPayload.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
@@ -194,7 +251,9 @@ it('should be able to sign token add & remove proposal', async () => {
 	);
 	await tx2.wait();
 	// Want to check that token was actually added
-	expect((await governedToken.contract.getTokens()).includes(tokenToAdd.contract.address)).to.eq(
-		false
-	);
+	expect(
+		(await governedToken.contract.getTokens()).includes(
+			tokenToAdd.contract.address
+		)
+	).to.eq(false);
 });

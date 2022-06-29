@@ -22,6 +22,7 @@
 		"wrapping-fee-update-proposal-evm": "ts-node ./src/evm/testWrappingFeeUpdateProposal.ts",
 		"wrapping-fee-update-proposal-substrate": "ts-node ./src/substrate/testWrappingFeeUpdateProposal.ts",
 		"script": "ts-node",
+		"format": "prettier --write '**/*.{ts,js,json,yml}'",
 		"test:e2e": "ts-mocha ./tests/e2e/**/*.test.ts || true",
 		"test:proposals": "ts-mocha tests/proposals.test.ts"
 	},

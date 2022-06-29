@@ -14,7 +14,11 @@
  * limitations under the License.
  *
  */
-import { encodeFunctionSignature, registerResourceId, waitForEvent } from '../src/utils';
+import {
+	encodeFunctionSignature,
+	registerResourceId,
+	waitForEvent,
+} from '../src/utils';
 import { Keyring } from '@polkadot/api';
 import { hexToNumber, u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
@@ -46,7 +50,9 @@ it('should be able to update min withdrawal limit', async () => {
 		header: {
 			resourceId,
 			functionSignature: encodeFunctionSignature(
-				vAnchor.contract.interface.functions['configureMinimalWithdrawalLimit(uint256)'].format()
+				vAnchor.contract.interface.functions[
+					'configureMinimalWithdrawalLimit(uint256)'
+				].format()
 			),
 			nonce: Number(await vAnchor.contract.getProposalNonce()) + 1,
 			chainId: localChain.chainId,
@@ -61,22 +67,29 @@ it('should be able to update min withdrawal limit', async () => {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain.chainId,
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain.chainId,
+		}
+	);
 	const kind = polkadotApi.createType(
 		'DkgRuntimePrimitivesProposalProposalKind',
 		'MinWithdrawalLimitUpdate'
 	);
-	const minWithdrawalLimitProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-		Unsigned: {
-			kind: kind,
-			data: prop,
-		},
-	});
-	const proposalCall = polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-		minWithdrawalLimitProposal
+	const minWithdrawalLimitProposal = polkadotApi.createType(
+		'DkgRuntimePrimitivesProposal',
+		{
+			Unsigned: {
+				kind: kind,
+				data: prop,
+			},
+		}
 	);
+	const proposalCall =
+		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+			minWithdrawalLimitProposal
+		);
 
 	await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -88,8 +101,15 @@ it('should be able to update min withdrawal limit', async () => {
 	const key = {
 		MinWithdrawalLimitUpdateProposal: proposalPayload.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
 		signed: {
@@ -114,11 +134,17 @@ it('should be able to update min withdrawal limit', async () => {
 	// }
 
 	// 66 byte string, which represents 32 bytes of data
-	let messageHash = ethers.utils.solidityKeccak256(['bytes'], [dkgProposal.signed.data]);
+	let messageHash = ethers.utils.solidityKeccak256(
+		['bytes'],
+		[dkgProposal.signed.data]
+	);
 
 	// 32 bytes of data in Uint8Array
 	let messageHashBytes = ethers.utils.arrayify(messageHash);
-	let recovered = ethers.utils.verifyMessage(messageHashBytes, dkgProposal.signed.signature);
+	let recovered = ethers.utils.verifyMessage(
+		messageHashBytes,
+		dkgProposal.signed.signature
+	);
 	console.log(recovered);
 
 	// sanity check.

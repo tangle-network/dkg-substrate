@@ -14,7 +14,11 @@
  * limitations under the License.
  *
  */
-import { encodeFunctionSignature, registerResourceId, waitForEvent } from '../src/utils';
+import {
+	encodeFunctionSignature,
+	registerResourceId,
+	waitForEvent,
+} from '../src/utils';
 import { GovernedTokenWrapper } from '@webb-tools/tokens';
 import { Keyring } from '@polkadot/api';
 import { u8aToHex } from '@polkadot/util';
@@ -84,21 +88,29 @@ it('should be able to sign resource id update proposal', async () => {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain.chainId,
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain.chainId,
+		}
+	);
 	const kind = polkadotApi.createType(
 		'DkgRuntimePrimitivesProposalProposalKind',
 		'ResourceIdUpdate'
 	);
-	const resourceIdUpdateProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-		Unsigned: {
-			kind: kind,
-			data: prop,
-		},
-	});
+	const resourceIdUpdateProposal = polkadotApi.createType(
+		'DkgRuntimePrimitivesProposal',
+		{
+			Unsigned: {
+				kind: kind,
+				data: prop,
+			},
+		}
+	);
 	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(resourceIdUpdateProposal);
+		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+			resourceIdUpdateProposal
+		);
 
 	await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -110,8 +122,15 @@ it('should be able to sign resource id update proposal', async () => {
 	const key = {
 		ResourceIdUpdateProposal: proposalPayload.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
 		signed: {
@@ -141,7 +160,7 @@ it('should be able to sign resource id update proposal', async () => {
 	);
 	await tx2.wait();
 
-	expect(await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId)).to.eq(
-		handlerAddress
-	);
+	expect(
+		await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId)
+	).to.eq(handlerAddress);
 });

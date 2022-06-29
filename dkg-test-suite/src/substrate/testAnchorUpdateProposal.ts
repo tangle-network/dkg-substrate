@@ -44,10 +44,16 @@ async function testAnchorUpdateProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { SUBSTRATE: 5002 });
-	const propHash = keccak256(encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000));
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		SUBSTRATE: 5002,
+	});
+	const propHash = keccak256(
+		encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000)
+	);
 
-	const proposalType = { anchorupdateproposal: getAnchorUpdateProposal(api).header.nonce };
+	const proposalType = {
+		anchorupdateproposal: getAnchorUpdateProposal(api).header.nonce,
+	};
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(
 		api,
@@ -71,20 +77,28 @@ async function sendAnchorUpdateProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000));
+	const prop = u8aToHex(
+		encodeSubstrateProposal(getAnchorUpdateProposal(api), 3000)
+	);
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${substratePalletResourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { SUBSTRATE: 5001 });
-	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'AnchorUpdate');
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		SUBSTRATE: 5001,
+	});
+	const kind = api.createType(
+		'DkgRuntimePrimitivesProposalProposalKind',
+		'AnchorUpdate'
+	);
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
 			data: prop,
 		},
 	});
-	const proposalCall = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
+	const proposalCall =
+		api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
 
 	await signAndSendUtil(api, proposalCall, alice);
 }

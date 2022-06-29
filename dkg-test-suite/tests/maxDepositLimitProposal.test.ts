@@ -14,7 +14,11 @@
  * limitations under the License.
  *
  */
-import { encodeFunctionSignature, registerResourceId, waitForEvent } from '../src/utils';
+import {
+	encodeFunctionSignature,
+	registerResourceId,
+	waitForEvent,
+} from '../src/utils';
 import { Keyring } from '@polkadot/api';
 import { hexToNumber, u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
@@ -39,7 +43,9 @@ it('should be able to update max deposit limit', async () => {
 		header: {
 			resourceId,
 			functionSignature: encodeFunctionSignature(
-				vAnchor.contract.interface.functions['configureMaximumDepositLimit(uint256)'].format()
+				vAnchor.contract.interface.functions[
+					'configureMaximumDepositLimit(uint256)'
+				].format()
 			),
 			nonce: Number(await vAnchor.contract.getProposalNonce()) + 1,
 			chainId: localChain.chainId,
@@ -54,21 +60,29 @@ it('should be able to update max deposit limit', async () => {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain.chainId,
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain.chainId,
+		}
+	);
 	const kind = polkadotApi.createType(
 		'DkgRuntimePrimitivesProposalProposalKind',
 		'MaxDepositLimitUpdate'
 	);
-	const maxDepositLimitProposal = polkadotApi.createType('DkgRuntimePrimitivesProposal', {
-		Unsigned: {
-			kind: kind,
-			data: prop,
-		},
-	});
+	const maxDepositLimitProposal = polkadotApi.createType(
+		'DkgRuntimePrimitivesProposal',
+		{
+			Unsigned: {
+				kind: kind,
+				data: prop,
+			},
+		}
+	);
 	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(maxDepositLimitProposal);
+		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+			maxDepositLimitProposal
+		);
 
 	await signAndSendUtil(polkadotApi, proposalCall, alice);
 
@@ -80,8 +94,15 @@ it('should be able to update max deposit limit', async () => {
 	const key = {
 		MaxDepositLimitUpdateProposal: proposalPayload.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
 		signed: {
@@ -108,5 +129,7 @@ it('should be able to update max deposit limit', async () => {
 	await tx2.wait();
 	// Want to check that fee was updated
 	const maxDepositLimit = await vAnchor.contract.maximumDepositAmount();
-	expect(hexToNumber('0x50000000').toString()).to.eq(maxDepositLimit.toString());
+	expect(hexToNumber('0x50000000').toString()).to.eq(
+		maxDepositLimit.toString()
+	);
 });

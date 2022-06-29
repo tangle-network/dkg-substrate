@@ -43,10 +43,20 @@ it.skip('proposer set update test', async () => {
 	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
 		key: 'ProposerSetUpdateProposal',
 	});
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', { None: 0 });
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{ None: 0 }
+	);
 	const key = { ProposerSetUpdateProposal: 1 };
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
 		signed: {
@@ -67,7 +77,9 @@ it.skip('proposer set update test', async () => {
 
 	const proposalData = dkgProposal.signed.data.slice(2);
 	const proposerSetRoot = `0x${proposalData.slice(0, 64)}`;
-	const averageSessionLength = BigNumber.from(`0x${proposalData.slice(64, 80)}`);
+	const averageSessionLength = BigNumber.from(
+		`0x${proposalData.slice(64, 80)}`
+	);
 	const numOfProposers = BigNumber.from(`0x${proposalData.slice(80, 88)}`);
 	const proposalNonce = BigNumber.from(`0x${proposalData.slice(88, 96)}`);
 
@@ -83,20 +95,27 @@ it.skip('proposer set update test', async () => {
 	const contractProposerSetRoot = await bridgeSide.contract.proposerSetRoot();
 	expect(proposerSetRoot).to.eq(contractProposerSetRoot);
 
-	const contractAverageSessionLength = await bridgeSide.contract.averageSessionLengthInMillisecs();
+	const contractAverageSessionLength =
+		await bridgeSide.contract.averageSessionLengthInMillisecs();
 	expect(averageSessionLength.toString()).to.eq(
 		BigNumber.from(contractAverageSessionLength).toString()
 	);
 
 	const contractNumOfProposers = await bridgeSide.contract.numOfProposers();
-	expect(numOfProposers.toString()).to.eq(BigNumber.from(contractNumOfProposers).toString());
+	expect(numOfProposers.toString()).to.eq(
+		BigNumber.from(contractNumOfProposers).toString()
+	);
 
-	const contractProposalNonce = await bridgeSide.contract.proposerSetUpdateNonce();
-	expect(proposalNonce.toString()).to.eq(BigNumber.from(contractProposalNonce).toString());
+	const contractProposalNonce =
+		await bridgeSide.contract.proposerSetUpdateNonce();
+	expect(proposalNonce.toString()).to.eq(
+		BigNumber.from(contractProposalNonce).toString()
+	);
 
 	// // Now the proposer set root on the contract has been updated
 
-	let proposerAccounts = await polkadotApi.query.dKGProposals.externalProposerAccounts.entries();
+	let proposerAccounts =
+		await polkadotApi.query.dKGProposals.externalProposerAccounts.entries();
 	let accounts = new Array();
 	for (let i = 0; i < proposerAccounts.length; i++) {
 		let account = proposerAccounts[i][1];

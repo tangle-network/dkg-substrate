@@ -14,7 +14,11 @@
  * limitations under the License.
  *
  */
-import { SubstrateProposal, substratePalletResourceId, ResourceIdUpdateProposal } from './utils';
+import {
+	SubstrateProposal,
+	substratePalletResourceId,
+	ResourceIdUpdateProposal,
+} from './utils';
 import { ApiPromise } from '@polkadot/api';
 
 let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
@@ -27,7 +31,9 @@ export const getWrappingFeeUpdateProposal = (api: ApiPromise) => {
 			nonce,
 		},
 		// TODO: this is a dummy call, should replace with actual call
-		call: api.tx.system.remark('execute wrapping fee update proposal').toString(),
+		call: api.tx.system
+			.remark('execute wrapping fee update proposal')
+			.toString(),
 	};
 	return wrappingFeeUpdateProposal;
 };

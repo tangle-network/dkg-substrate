@@ -73,7 +73,9 @@ it('should be able to sign anchor update proposal', async () => {
 		header: {
 			resourceId,
 			functionSignature: encodeFunctionSignature(
-				anchor.contract.interface.functions['updateEdge(uint256,bytes32,uint256)'].format()
+				anchor.contract.interface.functions[
+					'updateEdge(uint256,bytes32,uint256)'
+				].format()
 			),
 			nonce: 1,
 			chainId: localChain2.chainId,
@@ -92,9 +94,12 @@ it('should be able to sign anchor update proposal', async () => {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType('WebbProposalsHeaderTypedChainId', {
-		Evm: localChain2.chainId,
-	});
+	const chainIdType = polkadotApi.createType(
+		'WebbProposalsHeaderTypedChainId',
+		{
+			Evm: localChain2.chainId,
+		}
+	);
 	const proposalCall = polkadotApi.tx.dKGProposals.acknowledgeProposal(
 		proposalPayload.header.nonce,
 		chainIdType,
@@ -102,19 +107,22 @@ it('should be able to sign anchor update proposal', async () => {
 		prop
 	);
 	const tx = new Promise<void>(async (resolve, reject) => {
-		const unsub = await proposalCall.signAndSend(alice, ({ events, status }) => {
-			if (status.isFinalized) {
-				unsub();
-				const success = events.find(({ event }) =>
-					polkadotApi.events.system.ExtrinsicSuccess.is(event)
-				);
-				if (success) {
-					resolve();
-				} else {
-					reject(new Error('Proposal failed'));
+		const unsub = await proposalCall.signAndSend(
+			alice,
+			({ events, status }) => {
+				if (status.isFinalized) {
+					unsub();
+					const success = events.find(({ event }) =>
+						polkadotApi.events.system.ExtrinsicSuccess.is(event)
+					);
+					if (success) {
+						resolve();
+					} else {
+						reject(new Error('Proposal failed'));
+					}
 				}
 			}
-		});
+		);
 	});
 	await tx;
 	// now we need to wait until the proposal to be signed on chain.
@@ -125,8 +133,15 @@ it('should be able to sign anchor update proposal', async () => {
 	const key = {
 		AnchorUpdateProposal: proposalPayload.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(chainIdType, key);
-	const value = new Option(polkadotApi.registry, 'DkgRuntimePrimitivesProposal', proposal);
+	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+		chainIdType,
+		key
+	);
+	const value = new Option(
+		polkadotApi.registry,
+		'DkgRuntimePrimitivesProposal',
+		proposal
+	);
 	expect(value.isSome).to.eq(true);
 	const dkgProposal = value.unwrap().toJSON() as {
 		signed: {
@@ -144,7 +159,9 @@ it('should be able to sign anchor update proposal', async () => {
 	const contract = bridgeSide.contract.connect(wallet2_);
 	const currentGovernor = await contract.governor();
 	const currentDkgPublicKey = await fetchDkgPublicKey(polkadotApi);
-	const currentDkgAddress = ethAddressFromUncompressedPublicKey(currentDkgPublicKey!);
+	const currentDkgAddress = ethAddressFromUncompressedPublicKey(
+		currentDkgPublicKey!
+	);
 	expect(currentGovernor).to.eq(currentDkgAddress);
 	// now we log the proposal data, signature, and if it is signed by the current governor or not.
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
