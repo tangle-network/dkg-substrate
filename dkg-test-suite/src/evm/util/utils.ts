@@ -15,11 +15,11 @@
  *
  */
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
-import {ApiPromise} from "@polkadot/api";
-import {Bytes, Option} from "@polkadot/types";
-import {KeyringPair} from "@polkadot/keyring/types";
-import {Keyring} from "@polkadot/keyring";
-import {ethers} from "ethers";
+import { ApiPromise } from '@polkadot/api';
+import { Bytes, Option } from '@polkadot/types';
+import { KeyringPair } from '@polkadot/keyring/types';
+import { Keyring } from '@polkadot/keyring';
+import { ethers } from 'ethers';
 
 const LE = true;
 const BE = false;
@@ -122,7 +122,7 @@ function castToChainIdType(v: number): ChainIdType {
  * - last leaf index (4 bytes).
  * - merkle root (32 bytes).
  */
- export interface AnchorUpdateProposal {
+export interface AnchorUpdateProposal {
 	/**
 	 * The Anchor Proposal Header.
 	 * This is the first 40 bytes of the proposal.
@@ -223,7 +223,7 @@ export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
 	const newTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newTokenAddress
+		newTokenAddress,
 	};
 }
 
@@ -285,10 +285,9 @@ export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUp
 	const newFee = u8aToHex(data.slice(40, 41)); // 40 -> 41
 	return {
 		header,
-		newFee
+		newFee,
 	};
 }
-
 
 export interface MinWithdrawalLimitProposal {
 	/**
@@ -317,7 +316,7 @@ export function decodeMinWithDrawalLimitProposal(data: Uint8Array): MinWithdrawa
 	const minWithdrawalLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		minWithdrawalLimitBytes
+		minWithdrawalLimitBytes,
 	};
 }
 
@@ -348,18 +347,18 @@ export function decodeMaxDepositLimitProposal(data: Uint8Array): MaxDepositLimit
 	const maxDepositLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		maxDepositLimitBytes
+		maxDepositLimitBytes,
 	};
 }
 
 export interface ResourceIdUpdateProposal {
 	/**
 	 * The ResourceIdUpdateProposal Header.
-	* This is the first 40 bytes of the proposal.
-	* See `encodeProposalHeader` for more details.
-	*/
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
 	readonly header: ProposalHeader;
-	/** 
+	/**
 	 * 32 bytes Hex-encoded string.
 	 */
 	readonly newResourceId: string;
@@ -393,7 +392,7 @@ export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpda
 		header,
 		newResourceId,
 		handlerAddress,
-		executionAddress
+		executionAddress,
 	};
 }
 
@@ -424,7 +423,7 @@ export function decodeSetTreasuryHandlerProposal(data: Uint8Array): SetTreasuryH
 	const newTreasuryHandler = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newTreasuryHandler
+		newTreasuryHandler,
 	};
 }
 
@@ -455,7 +454,7 @@ export function decodeSetVerifierProposal(data: Uint8Array): SetVerifierProposal
 	const newVerifier = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newVerifier
+		newVerifier,
 	};
 }
 
@@ -486,17 +485,17 @@ export function decodeFeeRecipientUpdateProposal(data: Uint8Array): FeeRecipient
 	const newFeeRecipient = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newFeeRecipient
+		newFeeRecipient,
 	};
 }
 
 export interface RescueTokensProposal {
 	/**
 	 * The Rescue Token Proposals Header.
-	**/
+	 **/
 	readonly header: ProposalHeader;
 
-	/** 
+	/**
 	 * 20 bytes Hex-encoded string.
 	 */
 	readonly tokenAddress: string;
@@ -534,8 +533,8 @@ export function decodeRescueTokensProposal(data: Uint8Array): RescueTokensPropos
 		header,
 		tokenAddress,
 		toAddress,
-		amount
-	}
+		amount,
+	};
 }
 
 /**
@@ -607,22 +606,30 @@ export const newResourceId = makeResourceId(
 );
 
 export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
-	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
-		// console.log(`Current status is: ${status.type}`);
+	const unsub = await api.tx.sudo
+		.sudo(proposalCall)
+		.signAndSend(alice, ({ events = [], status }) => {
+			// console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			// console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				// console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
-				// console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					// console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }
 
-export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dkgPubKey: any, proposalType: any, propHash: any) {
+export async function unsubSignedPropsUtil(
+	api: ApiPromise,
+	chainIdType: any,
+	dkgPubKey: any,
+	proposalType: any,
+	propHash: any
+) {
 	return await api.query.dKGProposalHandler.signedProposals(
 		chainIdType,
 		proposalType,
@@ -661,18 +668,18 @@ export async function registerResourceId(api: ApiPromise) {
 		console.log(`Resource id ${resourceId} is already registered, skipping`);
 		return;
 	}
-	const keyring = new Keyring({type: 'sr25519'});
+	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
 	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
 	console.log('Registering resource id');
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({events = [], status}) => {
+	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
 		console.log(`Current status is: ${status.type}`);
 
 		if (status.isFinalized) {
 			console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
+			events.forEach(({ phase, event: { data, method, section } }) => {
 				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
 			});
 

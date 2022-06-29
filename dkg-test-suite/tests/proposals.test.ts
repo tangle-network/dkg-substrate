@@ -16,39 +16,39 @@
  */
 // just a blueprint test using jest
 
-import { BLOCK_TIME } from "../src/constants";
-import { executeAfter, executeBefore } from "./utils/util";
+import { BLOCK_TIME } from '../src/constants';
+import { executeAfter, executeBefore } from './utils/util';
 
 function importTest(name: string, path: string) {
-  describe(name, function () {
-      require(path);
-  });
+	describe(name, function () {
+		require(path);
+	});
 }
 
 describe('E2E Test Runner', function () {
-  this.timeout(100 * BLOCK_TIME);
-  before(async () => {
-    let start = performance.now();
-    await executeBefore({
-      both: true,
-    });
-    let end = performance.now();
-    console.log(`Start - ${start} | End - ${end}`);
-  });
+	this.timeout(100 * BLOCK_TIME);
+	this.slow(30 * BLOCK_TIME);
+	before(async () => {
+		let start = performance.now();
+		await executeBefore({
+			both: true,
+		});
+		let end = performance.now();
+		console.log(`Start - ${start} | End - ${end} | Took - ${end - start} ms`);
+	});
 
-  importTest('Proposer Set Update Proposal', './proposerSetUpdateProposal.test');
-  importTest('Maximum Deposit Limit Update Proposal', './maxDepositLimitProposal.test');
-  importTest('Minimum Withdrawal Limit Update Proposal', './minWithdrawalLimit.test');
-  importTest('Rescue Tokens Proposal', './rescueTokensProposal.test');
-  importTest('Wrapping Fee Update Proposal', './wrappingFeeUpdateProposal.test');
-  importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
-  importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
-  importTest('Anchor Update Proposal', './updateAnchorProposal.test');
-  importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
-  // importTest('Threshold Update (Staking Chill)', './threshold.test');
-  
-  after(async () => {
-    await executeAfter();
-  });
+	importTest('Proposer Set Update Proposal', './proposerSetUpdateProposal.test');
+	importTest('Maximum Deposit Limit Update Proposal', './maxDepositLimitProposal.test');
+	importTest('Minimum Withdrawal Limit Update Proposal', './minWithdrawalLimit.test');
+	importTest('Rescue Tokens Proposal', './rescueTokensProposal.test');
+	importTest('Wrapping Fee Update Proposal', './wrappingFeeUpdateProposal.test');
+	importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
+	importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
+	importTest('Anchor Update Proposal', './updateAnchorProposal.test');
+	importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
+	// importTest('Threshold Update (Staking Chill)', './threshold.test');
+
+	after(async () => {
+		await executeAfter();
+	});
 });
-  

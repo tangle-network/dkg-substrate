@@ -182,14 +182,17 @@ export interface ResourceIdUpdateProposal {
 	readonly methodName: string;
 }
 
-export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal, lengthOfMethodName: number): Uint8Array {
+export function encodeResourceIdUpdateProposal(
+	proposal: ResourceIdUpdateProposal,
+	lengthOfMethodName: number
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const resourceIdToRegister = hexToU8a(proposal.resourceIdToRegister);
-	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + lengthOfMethodName); 
+	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + lengthOfMethodName);
 	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
 	resourceIdUpdateProposal.set(resourceIdToRegister, 40); // 40 -> 72
 	const hexifiedMethodName = new Buffer(proposal.methodName).toString('hex');
-	const methodName = hexToU8a(hexifiedMethodName).slice(0,);
+	const methodName = hexToU8a(hexifiedMethodName).slice(0);
 	resourceIdUpdateProposal.set(methodName, 72); // 72 -> END
 	return resourceIdUpdateProposal;
 }
@@ -197,12 +200,12 @@ export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposa
 export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const resourceIdToRegister = u8aToHex(data.slice(40, 72)); // 40 -> 72
-	const hexifiedMethodName = u8aToHex(data.slice(72, )); // 72 -> END
-	const decodedMethodName = new Buffer(hexifiedMethodName, 'hex').toString(); 
+	const hexifiedMethodName = u8aToHex(data.slice(72)); // 72 -> END
+	const decodedMethodName = new Buffer(hexifiedMethodName, 'hex').toString();
 	return {
 		header,
 		resourceIdToRegister,
-		methodName: decodedMethodName
+		methodName: decodedMethodName,
 	};
 }
 

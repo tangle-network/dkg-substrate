@@ -147,20 +147,20 @@ export class LocalChain {
 		webbTokens1.set(otherChain.chainId, null!);
 		// create the config for the bridge
 		const vBridgeInput = {
-		  vAnchorInputs: {
-			asset: {
-				[this.chainId]: [localToken.contract.address],
-				[otherChain.chainId]: [otherToken.contract.address],
-			}
-		  },
-		  chainIDs: [this.chainId, otherChain.chainId],
-		  webbTokens: webbTokens1
-	  }
+			vAnchorInputs: {
+				asset: {
+					[this.chainId]: [localToken.contract.address],
+					[otherChain.chainId]: [otherToken.contract.address],
+				},
+			},
+			chainIDs: [this.chainId, otherChain.chainId],
+			webbTokens: webbTokens1,
+		};
 
 		const deployerConfig: DeployerConfig = {
 			[this.chainId]: localWallet,
 			[otherChain.chainId]: otherWallet,
-		}
+		};
 
 		const smallCircuitZkComponents = await fetchComponentsFromFilePaths(
 			path.resolve(

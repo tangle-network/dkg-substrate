@@ -146,7 +146,7 @@ export function startStandaloneNode(
 		[
 			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
-			options.tmp ? '--tmp' : '',
+			options.tmp ? `--base-path=./tmp/${authority}` : '',
 			`--ws-port=${ports[authority].ws}`,
 			`--rpc-port=${ports[authority].http}`,
 			`--port=${ports[authority].p2p}`,
@@ -237,8 +237,7 @@ export async function waitForEvent(
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
-						const dataKeys = (event.toHuman() as any).data
-							.map((elt: any) => Object.keys(elt)[0]);
+						const dataKeys = (event.toHuman() as any).data.map((elt: any) => Object.keys(elt)[0]);
 						if (dataKeys.includes(dataQuery.key)) {
 							handleUnsub();
 						}

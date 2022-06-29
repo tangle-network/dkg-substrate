@@ -14,27 +14,24 @@
  * limitations under the License.
  *
  */
-import {ApiPromise} from '@polkadot/api';
-import {Keyring} from '@polkadot/keyring';
-import {
-	provider,
-	waitNfinalizedBlocks,
-} from '../../utils';
+import { ApiPromise } from '@polkadot/api';
+import { Keyring } from '@polkadot/keyring';
+import { provider, waitNfinalizedBlocks } from '../../utils';
 import {
 	encodeTokenAddProposal,
-	registerResourceId, 
-	resourceId, 
-	signAndSendUtil, 
-	unsubSignedPropsUtil
+	registerResourceId,
+	resourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
 } from '../util/utils';
-import {ethers} from 'ethers';
-import {keccak256} from '@ethersproject/keccak256';
-import {ECPair} from 'ecpair';
-import {assert, u8aToHex} from '@polkadot/util';
-import {tokenAddProposal} from "../util/proposals";
+import { ethers } from 'ethers';
+import { keccak256 } from '@ethersproject/keccak256';
+import { ECPair } from 'ecpair';
+import { assert, u8aToHex } from '@polkadot/util';
+import { tokenAddProposal } from '../util/proposals';
 
 async function testTokenAddProposal() {
-	const api = await ApiPromise.create({provider});
+	const api = await ApiPromise.create({ provider });
 	await registerResourceId(api);
 	await sendTokenAddProposal(api);
 	console.log('Waiting for the DKG to Sign the proposal');
@@ -43,14 +40,20 @@ async function testTokenAddProposal() {
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
-		{compressed: false}
+		{ compressed: false }
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5002});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { Evm: 5002 });
 	const propHash = keccak256(encodeTokenAddProposal(tokenAddProposal));
 
-	const proposalType = {tokenaddproposal: tokenAddProposal.header.nonce}
+	const proposalType = { tokenaddproposal: tokenAddProposal.header.nonce };
 
-	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
+	const unsubSignedProps: any = await unsubSignedPropsUtil(
+		api,
+		chainIdType,
+		dkgPubKey,
+		proposalType,
+		propHash
+	);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
@@ -58,7 +61,7 @@ async function testTokenAddProposal() {
 }
 
 async function sendTokenAddProposal(api: ApiPromise) {
-	const keyring = new Keyring({type: 'sr25519'});
+	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
 	const [authoritySetId, dkgPubKey] = await Promise.all([
@@ -71,13 +74,13 @@ async function sendTokenAddProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5001});
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { Evm: 5001 });
 	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'TokenAdd');
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
-			data: prop
-		}
+			data: prop,
+		},
 	});
 	const proposalCall = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
 
