@@ -14,10 +14,9 @@
  * limitations under the License.
  *
  */
-import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
+import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { Bytes, Option } from '@polkadot/types';
-import { Call } from '@polkadot/types/interfaces';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
@@ -25,7 +24,7 @@ import { ethers } from 'ethers';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-export const provider = new WsProvider('ws://127.0.0.1:9944');
+export const endpoint = 'ws://127.0.0.1:9944';
 
 export async function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));

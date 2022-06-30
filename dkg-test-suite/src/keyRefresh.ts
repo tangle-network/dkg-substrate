@@ -70,7 +70,7 @@ async function dkg_refresh() {
 
 	await waitNfinalizedBlocks(api, 150, 150 * 5);
 
-	// Three Key refreshes should have occured by now and the length of used signatures should be two
+	// Three Key refreshes should have occurred by now and the length of used signatures should be two
 	let usedSignatures = await api.query.dkg.usedSignatures();
 	let parsedSignatures: string[] = (usedSignatures.toHuman() as string[]).slice(
 		1
