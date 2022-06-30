@@ -15,7 +15,9 @@
  *
  */
 import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
+import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { Bytes, Option } from '@polkadot/types';
+import { Call } from '@polkadot/types/interfaces';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
@@ -337,16 +339,26 @@ export async function fetchDkgRefreshNonce(api: ApiPromise): Promise<number> {
 }
 
 export async function triggerDkgManualRefresh(api: ApiPromise): Promise<void> {
+	const call = api.tx.dkg.manualRefresh();
+	return sudoTx(api, call);
+}
+
+export async function sudoTx(
+	api: ApiPromise,
+	call: SubmittableExtrinsic<'promise'>
+): Promise<void> {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
-	const call = api.tx.dkg.manualRefresh();
-	const unsub = await api.tx.sudo
-		.sudo(call)
-		.signAndSend(alice, ({ status }) => {
-			if (status.isFinalized) {
-				unsub();
-			}
-		});
+	return new Promise(async (resolve, _reject) => {
+		const unsub = await api.tx.sudo
+			.sudo(call)
+			.signAndSend(alice, ({ status }) => {
+				if (status.isFinalized) {
+					unsub();
+					resolve();
+				}
+			});
+	});
 }
 
 export async function triggerDkgManuaIncrementNonce(
