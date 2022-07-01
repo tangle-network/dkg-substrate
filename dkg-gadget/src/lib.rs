@@ -122,6 +122,9 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
+	
+	println!("Started DKG Gadget!!");
+
 	let DKGParams {
 		client,
 		backend,
