@@ -253,6 +253,9 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
+
+		println!("Generate async proto params");
+
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -319,6 +322,7 @@ where
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
+		println!("Spawn keygen protocol");
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -385,6 +389,7 @@ where
 		signing_set: Vec<u16>,
 		async_index: u8,
 	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
+		println!("Create signing protocol");
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -590,6 +595,7 @@ where
 		header: &B::Header,
 		client: &Arc<C>,
 	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+		println!("Validator set inner");
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
@@ -637,6 +643,10 @@ where
 		header: &B::Header,
 		genesis_authority_set: AuthoritySet<Public>,
 	) {
+
+		println!("Handle DKG Genesis");
+
+
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
 		if genesis_authority_set.authorities.is_empty() {
@@ -694,6 +704,7 @@ where
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
+		println!("Handle queued dkg setup");
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
 			return
@@ -768,6 +779,7 @@ where
 	}
 
 	fn maybe_enact_genesis_authorities(&mut self, header: &B::Header) {
+		println!("Maybe enact genesis authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
@@ -791,6 +803,7 @@ where
 	}
 
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
+		println!("Maybe enact new authorities");
 		debug!(target: "dkg", "🕸️  maybe_enact_new_authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
@@ -898,6 +911,7 @@ where
 		latest_header: &Arc<RwLock<Option<B::Header>>>,
 		client: &Arc<C>,
 	) -> Result<DKGMessage<Public>, DKGError> {
+		println!("Verify signature against authorities");
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
 		let signature = signed_dkg_msg.signature.unwrap();
@@ -1118,6 +1132,7 @@ where
 	}
 
 	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
+		println!("Submit unsigned proposals!!");
 		let round_id =
 			if let Some(rounds) = self.rounds.as_ref() { rounds.round_id } else { return };
 

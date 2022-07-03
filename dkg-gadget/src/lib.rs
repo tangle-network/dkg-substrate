@@ -152,6 +152,8 @@ where
 			},
 		);
 
+	println!("Register Metrics Done!!");
+
 	let latest_header = Arc::new(RwLock::new(None));
 	let (gossip_handler, gossip_engine) = network_gossip_engine
 		.build(network.clone(), metrics.clone(), latest_header.clone())
@@ -172,6 +174,8 @@ where
 	};
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
+
+	println!("Worker enabled")
 
 	worker.run().await;
 	handle.abort();
