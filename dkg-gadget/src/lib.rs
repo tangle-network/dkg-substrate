@@ -175,7 +175,7 @@ where
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
-	println!("Worker enabled")
+	println!("Worker enabled");
 
 	worker.run().await;
 	handle.abort();
