@@ -1318,6 +1318,7 @@ where
 
 	/// Wait for initial block import
 	async fn initialization(&mut self) {
+		println!("Initialization");
 		use futures::future;
 		self.client
 			.import_notification_stream()
@@ -1343,6 +1344,7 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
+		println!("RUN!!");
 		let mut dkg = self.gossip_engine.stream();
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
