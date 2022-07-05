@@ -14,7 +14,8 @@
  * limitations under the License.
  *
  */
-import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
+import { ApiPromise, Keyring } from '@polkadot/api';
+import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { Bytes, Option } from '@polkadot/types';
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
@@ -23,7 +24,7 @@ import { ethers } from 'ethers';
 
 export const ALICE = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-export const provider = new WsProvider('ws://127.0.0.1:9944');
+export const endpoint = 'ws://127.0.0.1:9944';
 
 export async function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,7 +44,11 @@ export const listenOneBlock = async function (api: ApiPromise) {
 	});
 };
 
-export const waitNfinalizedBlocks = async function (api: ApiPromise, n: number, timeout: number) {
+export const waitNfinalizedBlocks = async function (
+	api: ApiPromise,
+	n: number,
+	timeout: number
+) {
 	return new Promise<void>(async (resolve, _reject) => {
 		let count = 0;
 		const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
@@ -66,7 +71,9 @@ export const waitNfinalizedBlocks = async function (api: ApiPromise, n: number, 
 export async function fastForward(
 	api: ApiPromise,
 	n: number,
-	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = { delayBetweenBlocks: 5 }
+	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = {
+		delayBetweenBlocks: 5,
+	}
 ): Promise<void> {
 	for (let i = 0; i < n; i++) {
 		const createEmpty = true;
@@ -80,7 +87,9 @@ export async function fastForward(
 export async function fastForwardTo(
 	api: ApiPromise,
 	blockNumber: number,
-	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = { delayBetweenBlocks: 0 }
+	{ delayBetweenBlocks }: { delayBetweenBlocks?: number } = {
+		delayBetweenBlocks: 0,
+	}
 ): Promise<void> {
 	const currentBlockNumber = await api.rpc.chain.getHeader();
 	const diff = blockNumber - currentBlockNumber.number.toNumber();
@@ -129,12 +138,18 @@ const __NODE_STATE: {
 };
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie',
-	options: { tmp: boolean; printLogs: boolean } = { tmp: true, printLogs: false }
+	options: { tmp: boolean; printLogs: boolean } = {
+		tmp: true,
+		printLogs: false,
+	}
 ): child.ChildProcess {
 	if (__NODE_STATE[authority].isRunning) {
 		return __NODE_STATE[authority].process!;
 	}
-	const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+	const gitRoot = child
+		.execSync('git rev-parse --show-toplevel')
+		.toString()
+		.trim();
 	const nodePath = `${gitRoot}/target/release/dkg-standalone-node`;
 	const ports = {
 		alice: { ws: 9944, http: 9933, p2p: 30333 },
@@ -146,12 +161,15 @@ export function startStandaloneNode(
 		[
 			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
-			options.tmp ? '--tmp' : '',
+			options.tmp ? `--base-path=./tmp/${authority}` : '',
 			`--ws-port=${ports[authority].ws}`,
 			`--rpc-port=${ports[authority].http}`,
 			`--port=${ports[authority].p2p}`,
 			...(authority == 'alice'
-				? ['--node-key', '0000000000000000000000000000000000000000000000000000000000000001']
+				? [
+						'--node-key',
+						'0000000000000000000000000000000000000000000000000000000000000001',
+				  ]
 				: [
 						'--bootnodes',
 						`/ip4/127.0.0.1/tcp/${ports['alice'].p2p}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp`,
@@ -200,11 +218,15 @@ export async function waitForTheNextSession(api: ApiPromise): Promise<void> {
 	return waitForEvent(api, 'session', 'NewSession');
 }
 
-export async function waitForTheNextDkgPublicKey(api: ApiPromise): Promise<void> {
+export async function waitForTheNextDkgPublicKey(
+	api: ApiPromise
+): Promise<void> {
 	return waitForEvent(api, 'dkg', 'NextPublicKeySubmitted');
 }
 
-export async function waitForTheNextDkgPublicKeySignature(api: ApiPromise): Promise<void> {
+export async function waitForTheNextDkgPublicKeySignature(
+	api: ApiPromise
+): Promise<void> {
 	return waitForEvent(api, 'dkg', 'NextPublicKeySignatureSubmitted');
 }
 
@@ -212,7 +234,9 @@ export async function waitForPublicKeyToChange(api: ApiPromise): Promise<void> {
 	return waitForEvent(api, 'dkg', 'PublicKeyChanged');
 }
 
-export async function waitForPublicKeySignatureToChange(api: ApiPromise): Promise<void> {
+export async function waitForPublicKeySignatureToChange(
+	api: ApiPromise
+): Promise<void> {
 	return waitForEvent(api, 'dkg', 'PublicKeySignatureChanged');
 }
 
@@ -237,8 +261,9 @@ export async function waitForEvent(
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
-						const dataKeys = (event.toHuman() as any).data
-							.map((elt: any) => Object.keys(elt)[0]);
+						const dataKeys = (event.toHuman() as any).data.map(
+							(elt: any) => Object.keys(elt)[0]
+						);
 						if (dataKeys.includes(dataQuery.key)) {
 							handleUnsub();
 						}
@@ -255,7 +280,9 @@ export async function waitForEvent(
  * Wait until the DKG Public Key is available and return it uncompressed without the `04` prefix byte.
  * @param api the current connected api.
  */
-export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promise<`0x${string}`> {
+export async function waitUntilDKGPublicKeyStoredOnChain(
+	api: ApiPromise
+): Promise<`0x${string}`> {
 	return new Promise(async (resolve, _reject) => {
 		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async () => {
 			const dkgKey = await fetchDkgPublicKey(api);
@@ -272,7 +299,9 @@ export async function waitUntilDKGPublicKeyStoredOnChain(api: ApiPromise): Promi
  * returns `null` if the key is not yet available.
  * @param api the current connected api.
  */
-export async function fetchDkgPublicKey(api: ApiPromise): Promise<`0x${string}` | null> {
+export async function fetchDkgPublicKey(
+	api: ApiPromise
+): Promise<`0x${string}` | null> {
 	const res = await api.query.dkg.dKGPublicKey();
 	const json = res.toJSON() as [number, string];
 	if (json && json[1] !== '0x') {
@@ -292,7 +321,9 @@ export async function fetchDkgPublicKey(api: ApiPromise): Promise<`0x${string}` 
  * returns `null` if the key is not yet available.
  * @param api the current connected api.
  */
-export async function fetchDkgPublicKeySignature(api: ApiPromise): Promise<`0x${string}` | null> {
+export async function fetchDkgPublicKeySignature(
+	api: ApiPromise
+): Promise<`0x${string}` | null> {
 	const sig = await api.query.dkg.dKGPublicKeySignature();
 	if (!sig.isEmpty) {
 		return sig.toHex();
@@ -307,34 +338,55 @@ export async function fetchDkgRefreshNonce(api: ApiPromise): Promise<number> {
 }
 
 export async function triggerDkgManualRefresh(api: ApiPromise): Promise<void> {
+	const call = api.tx.dkg.manualRefresh();
+	return sudoTx(api, call);
+}
+
+export async function sudoTx(
+	api: ApiPromise,
+	call: SubmittableExtrinsic<'promise'>
+): Promise<void> {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
-	const call = api.tx.dkg.manualRefresh();
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status }) => {
-		if (status.isFinalized) {
-			unsub();
-		}
+	return new Promise(async (resolve, _reject) => {
+		const unsub = await api.tx.sudo
+			.sudo(call)
+			.signAndSend(alice, ({ status }) => {
+				if (status.isFinalized) {
+					unsub();
+					resolve();
+				}
+			});
 	});
 }
 
-export async function triggerDkgManuaIncrementNonce(api: ApiPromise): Promise<void> {
+export async function triggerDkgManuaIncrementNonce(
+	api: ApiPromise
+): Promise<void> {
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 	const call = api.tx.dkg.manualIncrementNonce();
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status }) => {
-		if (status.isFinalized) {
-			unsub();
-		}
-	});
+	const unsub = await api.tx.sudo
+		.sudo(call)
+		.signAndSend(alice, ({ status }) => {
+			if (status.isFinalized) {
+				unsub();
+			}
+		});
 }
 
-export function ethAddressFromUncompressedPublicKey(publicKey: `0x${string}`): `0x${string}` {
+export function ethAddressFromUncompressedPublicKey(
+	publicKey: `0x${string}`
+): `0x${string}` {
 	const pubKeyHash = ethers.utils.keccak256(publicKey); // we hash it.
 	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
 	return address as `0x${string}`;
 }
 
-export async function registerResourceId(api: ApiPromise, resourceId: string): Promise<void> {
+export async function registerResourceId(
+	api: ApiPromise,
+	resourceId: string
+): Promise<void> {
 	// quick check if the resourceId is already registered
 	const res = await api.query.dKGProposals.resources(resourceId);
 	const val = new Option(api.registry, Bytes, res);
@@ -346,24 +398,30 @@ export async function registerResourceId(api: ApiPromise, resourceId: string): P
 
 	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
 	return new Promise(async (resolve, reject) => {
-		const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ status, events }) => {
-			if (status.isFinalized) {
-				unsub();
-				const success = events.find(({ event }) => api.events.system.ExtrinsicSuccess.is(event));
-				if (success) {
-					resolve();
-				} else {
-					reject(new Error('Failed to register resourceId'));
+		const unsub = await api.tx.sudo
+			.sudo(call)
+			.signAndSend(alice, ({ status, events }) => {
+				if (status.isFinalized) {
+					unsub();
+					const success = events.find(({ event }) =>
+						api.events.system.ExtrinsicSuccess.is(event)
+					);
+					if (success) {
+						resolve();
+					} else {
+						reject(new Error('Failed to register resourceId'));
+					}
 				}
-			}
-		});
+			});
 	});
 }
 /**
  * Encode function Signature in the Solidity format.
  */
 export function encodeFunctionSignature(func: string): `0x${string}` {
-	return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(func)).slice(0, 10) as `0x${string}`;
+	return ethers.utils
+		.keccak256(ethers.utils.toUtf8Bytes(func))
+		.slice(0, 10) as `0x${string}`;
 }
 
 const LE = true;
@@ -467,7 +525,11 @@ function castToChainIdType(v: number): ChainIdType {
  * - 2 bytes of the `chainIdType` encoded as the last 2 bytes just before the `chainId`.
  * - 4 bytes of the `chainId` which is the last 4 bytes.
  */
-export function makeResourceId(addr: string, chainIdType: ChainIdType, chainId: number): string {
+export function makeResourceId(
+	addr: string,
+	chainIdType: ChainIdType,
+	chainId: number
+): string {
 	const rId = new Uint8Array(32);
 	const address = hexToU8a(addr).slice(0, 20);
 	rId.set(address, 6); // 6 -> 26

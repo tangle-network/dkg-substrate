@@ -19,7 +19,11 @@ import { ethers } from 'ethers';
 import { Server } from 'ganache';
 import { Bridges, VBridge } from '@webb-tools/protocol-solidity';
 import { VBridgeInput } from '@webb-tools/vbridge';
-import { BridgeInput, DeployerConfig, GovernorConfig } from '@webb-tools/interfaces';
+import {
+	BridgeInput,
+	DeployerConfig,
+	GovernorConfig,
+} from '@webb-tools/interfaces';
 import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { fetchComponentsFromFilePaths } from '@webb-tools/utils';
 import path from 'path';
@@ -88,7 +92,10 @@ export class LocalChain {
 		otherWallet: ethers.Signer,
 		initialGovernors: GovernorConfig
 	): Promise<Bridges.SignatureBridge> {
-		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+		const gitRoot = child
+			.execSync('git rev-parse --show-toplevel')
+			.toString()
+			.trim();
 		localWallet.connect(this.provider());
 		otherWallet.connect(otherChain.provider());
 		const bridgeInput: BridgeInput = {
@@ -139,7 +146,10 @@ export class LocalChain {
 		otherWallet: ethers.Signer,
 		initialGovernors: GovernorConfig
 	): Promise<VBridge.VBridge> {
-		const gitRoot = child.execSync('git rev-parse --show-toplevel').toString().trim();
+		const gitRoot = child
+			.execSync('git rev-parse --show-toplevel')
+			.toString()
+			.trim();
 		localWallet.connect(this.provider());
 		otherWallet.connect(otherChain.provider());
 		let webbTokens1 = new Map<number, GovernedTokenWrapper | undefined>();
@@ -147,20 +157,20 @@ export class LocalChain {
 		webbTokens1.set(otherChain.chainId, null!);
 		// create the config for the bridge
 		const vBridgeInput = {
-		  vAnchorInputs: {
-			asset: {
-				[this.chainId]: [localToken.contract.address],
-				[otherChain.chainId]: [otherToken.contract.address],
-			}
-		  },
-		  chainIDs: [this.chainId, otherChain.chainId],
-		  webbTokens: webbTokens1
-	  }
+			vAnchorInputs: {
+				asset: {
+					[this.chainId]: [localToken.contract.address],
+					[otherChain.chainId]: [otherToken.contract.address],
+				},
+			},
+			chainIDs: [this.chainId, otherChain.chainId],
+			webbTokens: webbTokens1,
+		};
 
 		const deployerConfig: DeployerConfig = {
 			[this.chainId]: localWallet,
 			[otherChain.chainId]: otherWallet,
-		}
+		};
 
 		const smallCircuitZkComponents = await fetchComponentsFromFilePaths(
 			path.resolve(

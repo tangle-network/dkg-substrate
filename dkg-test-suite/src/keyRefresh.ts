@@ -39,8 +39,14 @@ async function dkg_refresh() {
 	await waitNfinalizedBlocks(api, 10, 120);
 	const nextKey = await api.query.dkg.nextDKGPublicKey();
 	const dkgPublicKey = await api.query.dkg.dKGPublicKey();
-	assert(JSON.parse(nextKey.toString() as any)[1], 'Next public key should be on chain');
-	assert(JSON.parse(dkgPublicKey.toString() as any)[1], 'DKG public key should be on chain');
+	assert(
+		JSON.parse(nextKey.toString() as any)[1],
+		'Next public key should be on chain'
+	);
+	assert(
+		JSON.parse(dkgPublicKey.toString() as any)[1],
+		'DKG public key should be on chain'
+	);
 	await waitNfinalizedBlocks(api, 37, 37 * 12);
 	const nextPublicKeySignature = await api.query.dkg.nextPublicKeySignature();
 	assert(
@@ -57,17 +63,23 @@ async function dkg_refresh() {
 	// Queued authority should have changed because we chilled Charlie and forced a new era
 	const nextKey1 = await api.query.dkg.nextDKGPublicKey();
 	assert(
-		JSON.parse(nextKey.toString() as any)[1] !== JSON.parse(nextKey1.toString() as any)[1],
+		JSON.parse(nextKey.toString() as any)[1] !==
+			JSON.parse(nextKey1.toString() as any)[1],
 		'Next public key should be different'
 	);
 
 	await waitNfinalizedBlocks(api, 150, 150 * 5);
 
-	// Three Key refreshes should have occured by now and the length of used signatures should be two
+	// Three Key refreshes should have occurred by now and the length of used signatures should be two
 	let usedSignatures = await api.query.dkg.usedSignatures();
-	let parsedSignatures: string[] = (usedSignatures.toHuman() as string[]).slice(1);
+	let parsedSignatures: string[] = (usedSignatures.toHuman() as string[]).slice(
+		1
+	);
 
-	assert(parsedSignatures.length == 2, 'There should be two used signatures on chain');
+	assert(
+		parsedSignatures.length == 2,
+		'There should be two used signatures on chain'
+	);
 }
 
 // Run

@@ -43,35 +43,38 @@ async function testDirectProposal() {
 		{ compressed: false }
 	).publicKey.toString('hex');
 
-	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
-		1,
-		{ tokenupdateproposal: 1 },
-		(res: any) => {
-			if (res) {
-				const parsedResult = JSON.parse(JSON.stringify(res));
-				console.log(`Signed prop: ${parsedResult}`);
-				assert(parsedResult, 'Signed proposal should be on chain');
+	const unsubSignedProps: any =
+		await api.query.dKGProposalHandler.signedProposals(
+			1,
+			{ tokenupdateproposal: 1 },
+			(res: any) => {
+				if (res) {
+					const parsedResult = JSON.parse(JSON.stringify(res));
+					console.log(`Signed prop: ${parsedResult}`);
+					assert(parsedResult, 'Signed proposal should be on chain');
 
-				if (parsedResult) {
-					const sig = parsedResult.tokenUpdateSigned.signature;
-					console.log(`Signature: ${sig}`);
+					if (parsedResult) {
+						const sig = parsedResult.tokenUpdateSigned.signature;
+						console.log(`Signature: ${sig}`);
 
-					const propHash = keccak256(tokenUpdateProp);
-					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
-					console.log(`Recovered public key: ${recoveredPubKey}`);
-					console.log(`DKG public key: ${dkgPubKey}`);
+						const propHash = keccak256(tokenUpdateProp);
+						const recoveredPubKey = ethers.utils
+							.recoverPublicKey(propHash, sig)
+							.substr(2);
+						console.log(`Recovered public key: ${recoveredPubKey}`);
+						console.log(`DKG public key: ${dkgPubKey}`);
 
-					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
-					if (recoveredPubKey == dkgPubKey) {
-						console.log(`Public keys match`);
-					} else {
-						console.error(`Public keys do not match`);
-						process.exit();
+						assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
+						if (recoveredPubKey == dkgPubKey) {
+							console.log(`Public keys match`);
+						} else {
+							console.error(`Public keys do not match`);
+							process.exit();
+						}
 					}
 				}
 			}
-		}
-	);
+		);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
@@ -92,11 +95,12 @@ async function sendSudoProposal(api: ApiPromise) {
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 
-	const callMaxDepositLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		MaxDepositLimitUpdate: {
-			data: `0x${raw_data}`,
-		},
-	});
+	const callMaxDepositLimit =
+		api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+			MaxDepositLimitUpdate: {
+				data: `0x${raw_data}`,
+			},
+		});
 	const unsubMaxDeposit = await api.tx.sudo
 		.sudo(callMaxDepositLimit)
 		.signAndSend(alice, ({ events = [], status }) => {
@@ -113,11 +117,12 @@ async function sendSudoProposal(api: ApiPromise) {
 			}
 		});
 
-	const callMinWithdrawalLimit = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
-		MinWithdrawalLimitUpdate: {
-			data: `0x${raw_data}`,
-		},
-	});
+	const callMinWithdrawalLimit =
+		api.tx.dKGProposalHandler.forceSubmitUnsignedProposal({
+			MinWithdrawalLimitUpdate: {
+				data: `0x${raw_data}`,
+			},
+		});
 	const unsubMinWithdrawalLimit = await api.tx.sudo
 		.sudo(callMinWithdrawalLimit)
 		.signAndSend(alice, ({ events = [], status }) => {

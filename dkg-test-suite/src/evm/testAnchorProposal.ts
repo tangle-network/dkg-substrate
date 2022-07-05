@@ -43,11 +43,15 @@ async function testAnchorProposal() {
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
 		{ compressed: false }
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { Evm: 5002 });
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		Evm: 5002,
+	});
 
 	const propHash = keccak256(encodeUpdateAnchorProposal(anchorUpdateProposal));
 
-	const proposalType = { anchorupdateproposal: anchorUpdateProposal.header.nonce };
+	const proposalType = {
+		anchorupdateproposal: anchorUpdateProposal.header.nonce,
+	};
 
 	const unsubSignedProps: any = await unsubSignedPropsUtil(
 		api,
@@ -76,8 +80,15 @@ async function sendAnchorProposal(api: ApiPromise) {
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', { Evm: 5001 });
-	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(0, chainIdType, resourceId, prop);
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		Evm: 5001,
+	});
+	const proposalCall = api.tx.dKGProposals.acknowledgeProposal(
+		0,
+		chainIdType,
+		resourceId,
+		prop
+	);
 
 	await signAndSendUtil(api, proposalCall, alice);
 }

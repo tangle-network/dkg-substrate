@@ -14,27 +14,24 @@
  * limitations under the License.
  *
  */
-import {ApiPromise} from '@polkadot/api';
-import {Keyring} from '@polkadot/keyring';
-import {
-	provider,
-	waitNfinalizedBlocks,
-} from '../utils';
+import { ApiPromise } from '@polkadot/api';
+import { Keyring } from '@polkadot/keyring';
+import { provider, waitNfinalizedBlocks } from '../utils';
 import {
 	encodeSetTreasuryHandlerProposal,
-	registerResourceId, 
-	resourceId, 
-	signAndSendUtil, 
-	unsubSignedPropsUtil
+	registerResourceId,
+	resourceId,
+	signAndSendUtil,
+	unsubSignedPropsUtil,
 } from './util/utils';
-import {ethers} from 'ethers';
-import {keccak256} from '@ethersproject/keccak256';
-import {ECPair} from 'ecpair';
-import {assert, u8aToHex} from '@polkadot/util';
-import {setTreasuryHandlerProposal} from "./util/proposals";
+import { ethers } from 'ethers';
+import { keccak256 } from '@ethersproject/keccak256';
+import { ECPair } from 'ecpair';
+import { assert, u8aToHex } from '@polkadot/util';
+import { setTreasuryHandlerProposal } from './util/proposals';
 
 async function testSetTreasuryHandlerProposal() {
-	const api = await ApiPromise.create({provider});
+	const api = await ApiPromise.create({ provider });
 	await registerResourceId(api);
 	await sendSetTreasuryHandlerProposal(api);
 	console.log('Waiting for the DKG to Sign the proposal');
@@ -43,14 +40,26 @@ async function testSetTreasuryHandlerProposal() {
 	const dkgPubKeyCompressed: any = await api.query.dkg.dKGPublicKey();
 	const dkgPubKey = ECPair.fromPublicKey(
 		Buffer.from(dkgPubKeyCompressed[1].toHex().substr(2), 'hex'),
-		{compressed: false}
+		{ compressed: false }
 	).publicKey.toString('hex');
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5002});
-	const propHash = keccak256(encodeSetTreasuryHandlerProposal(setTreasuryHandlerProposal));
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		Evm: 5002,
+	});
+	const propHash = keccak256(
+		encodeSetTreasuryHandlerProposal(setTreasuryHandlerProposal)
+	);
 
-	const proposalType = {settreasuryhandlerproposal: setTreasuryHandlerProposal.header.nonce}
+	const proposalType = {
+		settreasuryhandlerproposal: setTreasuryHandlerProposal.header.nonce,
+	};
 
-	const unsubSignedProps: any = await unsubSignedPropsUtil(api, chainIdType, dkgPubKey, proposalType, propHash);
+	const unsubSignedProps: any = await unsubSignedPropsUtil(
+		api,
+		chainIdType,
+		dkgPubKey,
+		proposalType,
+		propHash
+	);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
@@ -58,7 +67,7 @@ async function testSetTreasuryHandlerProposal() {
 }
 
 async function sendSetTreasuryHandlerProposal(api: ApiPromise) {
-	const keyring = new Keyring({type: 'sr25519'});
+	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
 	const [authoritySetId, dkgPubKey] = await Promise.all([
@@ -66,20 +75,28 @@ async function sendSetTreasuryHandlerProposal(api: ApiPromise) {
 		api.query.dkg.dKGPublicKey(),
 	]);
 
-	const prop = u8aToHex(encodeSetTreasuryHandlerProposal(setTreasuryHandlerProposal));
+	const prop = u8aToHex(
+		encodeSetTreasuryHandlerProposal(setTreasuryHandlerProposal)
+	);
 	console.log(`DKG authority set id: ${authoritySetId}`);
 	console.log(`DKG pub key: ${dkgPubKey}`);
 	console.log(`Resource id is: ${resourceId}`);
 	console.log(`Proposal is: ${prop}`);
-	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {Evm: 5001});
-	const kind = api.createType('DkgRuntimePrimitivesProposalProposalKind', 'SetTreasuryHandler');
+	const chainIdType = api.createType('WebbProposalsHeaderTypedChainId', {
+		Evm: 5001,
+	});
+	const kind = api.createType(
+		'DkgRuntimePrimitivesProposalProposalKind',
+		'SetTreasuryHandler'
+	);
 	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
 		Unsigned: {
 			kind: kind,
-			data: prop
-		}
+			data: prop,
+		},
 	});
-	const proposalCall = api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
+	const proposalCall =
+		api.tx.dKGProposalHandler.forceSubmitUnsignedProposal(proposal);
 
 	await signAndSendUtil(api, proposalCall, alice);
 }

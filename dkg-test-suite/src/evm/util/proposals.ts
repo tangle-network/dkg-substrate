@@ -27,7 +27,7 @@ import {
 	SetTreasuryHandlerProposal,
 	SetVerifierProposal,
 	FeeRecipientUpdateProposal,
-} from "./utils";
+} from './utils';
 
 let nonce = Math.floor(Math.random() * 100); // Returns a random integer from 0 to 99;
 
@@ -39,7 +39,8 @@ export const anchorUpdateProposal: AnchorUpdateProposal = {
 	},
 	srcChainId: 5001,
 	lastLeafIndex: 0,
-	merkleRoot: '0x0000000000000000000000000000000000000000000000000000000000000000',
+	merkleRoot:
+		'0x0000000000000000000000000000000000000000000000000000000000000000',
 };
 
 export const tokenAddProposal: TokenAddProposal = {
@@ -68,7 +69,6 @@ export const wrappingFeeUpdateProposal: WrappingFeeUpdateProposal = {
 	},
 	newFee: '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 };
-
 
 export const minWithdrawalLimitProposal: MinWithdrawalLimitProposal = {
 	header: {
