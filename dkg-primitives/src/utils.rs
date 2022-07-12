@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{rounds::LocalKey, types::RoundId};
+use crate::types::RoundId;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
 };
 use codec::Encode;
-use curv::elliptic::curves::Secp256k1;
+use curv::{arithmetic::Converter, elliptic::curves::Secp256k1};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
+	party_i::SignatureRecid, state_machine::keygen::LocalKey,
+};
 use sc_service::{ChainType, Configuration};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
@@ -27,6 +30,7 @@ use sp_runtime::key_types::ACCOUNT;
 use std::{fs, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use sp_core::ecdsa::Signature;
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -169,10 +173,10 @@ mod tests {
 		let encrypted_data = encrypt(data.to_vec());
 		let decrypted_data = decrypt(encrypted_data.clone());
 		println!("{:?}", encrypted_data);
-		assert!(encrypted_data != data.to_vec());
+		assert_ne!(encrypted_data, data.to_vec());
 
 		println!("{:?}, {:?}", data, decrypted_data);
-		assert!(decrypted_data == data.to_vec());
+		assert_eq!(decrypted_data, data.to_vec());
 	}
 
 	#[test]
@@ -186,9 +190,39 @@ mod tests {
 		for _ in 0..100 {
 			let new_set = select_random_set(&seed, set.clone(), 10).unwrap();
 			if !random_set.is_empty() {
-				assert!(random_set == new_set);
+				assert_eq!(random_set, new_set);
 			}
 			random_set = new_set;
 		}
 	}
+}
+
+pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
+	let r = sig_recid.r.to_bigint().to_bytes();
+	let s = sig_recid.s.to_bigint().to_bytes();
+	let v = sig_recid.recid + 27u8;
+
+	let mut sig_vec: Vec<u8> = Vec::new();
+
+	for _ in 0..(32 - r.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&r);
+
+	for _ in 0..(32 - s.len()) {
+		sig_vec.extend(&[0]);
+	}
+	sig_vec.extend_from_slice(&s);
+
+	sig_vec.extend(&[v]);
+
+	if 65 != sig_vec.len() {
+		log::warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+		return None
+	}
+
+	let mut dkg_sig_arr: [u8; 65] = [0; 65];
+	dkg_sig_arr.copy_from_slice(&sig_vec[0..65]);
+
+	Some(Signature(dkg_sig_arr))
 }

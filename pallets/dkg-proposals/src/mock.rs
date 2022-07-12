@@ -240,6 +240,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type Event = Event;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type WeightInfo = ();
 }
 
@@ -318,7 +319,7 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
 	pub fn build() -> sp_io::TestExternalities {
-		let dkg_id = PalletId(*b"dw/dkgac").into_account();
+		let dkg_id = PalletId(*b"dw/dkgac").into_account_truncating();
 		let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		pallet_balances::GenesisConfig::<Test> { balances: vec![(dkg_id, ENDOWED_BALANCE)] }
 			.assimilate_storage(&mut t)

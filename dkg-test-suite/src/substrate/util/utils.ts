@@ -123,7 +123,10 @@ function castToChainIdType(v: number): ChainIdType {
  * - 2 bytes of the `chainIdType` encoded as the last 2 bytes just before the `chainId`.
  * - 4 bytes of the `chainId` which is the last 4 bytes.
  */
-export function makeResourceId(chainIdType: ChainIdType, chainId: number): string {
+export function makeResourceId(
+	chainIdType: ChainIdType,
+	chainId: number
+): string {
 	const rId = new Uint8Array(32);
 	const view = new DataView(rId.buffer);
 	view.setUint16(26, chainIdType, BE); // 26 -> 28
@@ -182,31 +185,40 @@ export interface ResourceIdUpdateProposal {
 	readonly methodName: string;
 }
 
-export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal, lengthOfMethodName: number): Uint8Array {
+export function encodeResourceIdUpdateProposal(
+	proposal: ResourceIdUpdateProposal,
+	lengthOfMethodName: number
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const resourceIdToRegister = hexToU8a(proposal.resourceIdToRegister);
-	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + lengthOfMethodName); 
+	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + lengthOfMethodName);
 	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
 	resourceIdUpdateProposal.set(resourceIdToRegister, 40); // 40 -> 72
 	const hexifiedMethodName = new Buffer(proposal.methodName).toString('hex');
-	const methodName = hexToU8a(hexifiedMethodName).slice(0,);
+	const methodName = hexToU8a(hexifiedMethodName).slice(0);
 	resourceIdUpdateProposal.set(methodName, 72); // 72 -> END
 	return resourceIdUpdateProposal;
 }
 
-export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
+export function decodeResourceIdUpdateProposal(
+	data: Uint8Array
+): ResourceIdUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const resourceIdToRegister = u8aToHex(data.slice(40, 72)); // 40 -> 72
-	const hexifiedMethodName = u8aToHex(data.slice(72, )); // 72 -> END
-	const decodedMethodName = new Buffer(hexifiedMethodName, 'hex').toString(); 
+	const hexifiedMethodName = u8aToHex(data.slice(72)); // 72 -> END
+	const decodedMethodName = new Buffer(hexifiedMethodName, 'hex').toString();
 	return {
 		header,
 		resourceIdToRegister,
-		methodName: decodedMethodName
+		methodName: decodedMethodName,
 	};
 }
 
-export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
+export async function signAndSendUtil(
+	api: ApiPromise,
+	proposalCall: any,
+	alice: KeyringPair
+) {
 	const unsub = await api.tx.sudo
 		.sudo(proposalCall)
 		.signAndSend(alice, ({ events = [], status }) => {
@@ -237,13 +249,19 @@ export async function unsubSignedPropsUtil(
 		(res: any) => {
 			if (res) {
 				const parsedResult = JSON.parse(JSON.stringify(res));
-				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
+				console.log(
+					`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(
+						parsedResult
+					)}`
+				);
 
 				if (parsedResult) {
 					const sig = parsedResult.signed.signature;
 					console.log(`Signature: ${sig}`);
 
-					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
+					const recoveredPubKey = ethers.utils
+						.recoverPublicKey(propHash, sig)
+						.substr(2);
 					console.log(`Recovered public key: ${recoveredPubKey}`);
 					console.log(`DKG public key: ${dkgPubKey}`);
 
@@ -260,32 +278,42 @@ export async function unsubSignedPropsUtil(
 		}
 	);
 }
-export const substratePalletResourceId = makeResourceId(ChainIdType.SUBSTRATE, 5002);
+export const substratePalletResourceId = makeResourceId(
+	ChainIdType.SUBSTRATE,
+	5002
+);
 
 export async function registerResourceId(api: ApiPromise) {
 	// quick check if the resourceId is already registered
 	const res = await api.query.dKGProposals.resources(substratePalletResourceId);
 	const val = new Option(api.registry, Bytes, res);
 	if (val.isSome) {
-		console.log(`Resource id ${substratePalletResourceId} is already registered, skipping`);
+		console.log(
+			`Resource id ${substratePalletResourceId} is already registered, skipping`
+		);
 		return;
 	}
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
-	const call = api.tx.dKGProposals.setResource(substratePalletResourceId, '0x00');
+	const call = api.tx.dKGProposals.setResource(
+		substratePalletResourceId,
+		'0x00'
+	);
 	console.log('Registering resource id');
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
-		console.log(`Current status is: ${status.type}`);
+	const unsub = await api.tx.sudo
+		.sudo(call)
+		.signAndSend(alice, ({ events = [], status }) => {
+			console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({ phase, event: { data, method, section } }) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }

@@ -13,16 +13,14 @@
 // limitations under the License.
 
 //! DKG Prometheus metrics definition
-use prometheus::{register, Gauge, PrometheusError, Registry, U64};
+use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 
 /// DKG metrics exposed through Prometheus
+#[derive(Clone)]
 pub(crate) struct Metrics {
+	pub propagated_messages: Counter<U64>,
 	/// Current active validator set id
 	pub dkg_validator_set_id: Gauge<U64>,
-	/// Total number of votes sent by this node
-	pub dkg_votes_sent: Gauge<U64>,
-	/// Most recent concluded voting round
-	pub dkg_round_concluded: Gauge<U64>,
 }
 
 impl Metrics {
@@ -32,12 +30,8 @@ impl Metrics {
 				Gauge::new("dkg_validator_set_id", "Current DKG active validator set id.")?,
 				registry,
 			)?,
-			dkg_votes_sent: register(
-				Gauge::new("dkg_votes_sent", "Number of votes sent by this node")?,
-				registry,
-			)?,
-			dkg_round_concluded: register(
-				Gauge::new("dkg_round_concluded", "Voting round, that has been concluded")?,
+			propagated_messages: register(
+				Counter::new("dkg_propagated_messages", "Number of DKG messages propagated.")?,
 				registry,
 			)?,
 		})

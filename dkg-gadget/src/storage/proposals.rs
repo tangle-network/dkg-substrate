@@ -1,13 +1,10 @@
-// This file is part of Webb.
-
-// Copyright (C) 2021 Webb Technologies Inc.
-// SPDX-License-Identifier: Apache-2.0
-
+// Copyright 2022 Webb Technologies Inc.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,22 +13,29 @@
 // limitations under the License.
 use crate::{
 	utils::find_index,
-	worker::{DKGWorker, MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
+	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
 	Client,
 };
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGApi,
-	OffchainSignedProposals, Proposal,
+	crypto::{AuthorityId, Public},
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
+	AuthoritySet, DKGApi, OffchainSignedProposals, Proposal,
 };
 use log::debug;
+use parking_lot::RwLock;
+use rand::Rng;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
+use std::sync::Arc;
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+	authority_public_key: &Public,
+	current_validator_set: &Arc<RwLock<AuthoritySet<Public>>>,
+	latest_header: &Arc<RwLock<Option<B::Header>>>,
+	backend: &Arc<BE>,
 	signed_proposals: Vec<Proposal>,
 ) where
 	B: Block,
@@ -45,25 +49,28 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 
 	debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
 
-	let public = dkg_worker.get_authority_public_key();
-
-	if find_index::<AuthorityId>(&dkg_worker.current_validator_set.authorities[..], &public)
-		.is_none()
+	if find_index::<AuthorityId>(
+		&current_validator_set.read().authorities[..],
+		authority_public_key,
+	)
+	.is_none()
 	{
 		return
 	}
 
+	let latest_header = latest_header.read().clone();
+
 	// If the header is none, it means no block has been imported yet, so we can exit
-	if dkg_worker.latest_header.is_none() {
+	if latest_header.is_none() {
 		return
 	}
 
 	let current_block_number = {
-		let header = dkg_worker.latest_header.as_ref().unwrap();
+		let header = latest_header.as_ref().unwrap();
 		header.number()
 	};
 
-	if let Some(mut offchain) = dkg_worker.backend.offchain_storage() {
+	if let Some(mut offchain) = backend.offchain_storage() {
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut prop_wrapper = match old_val.clone() {
@@ -76,7 +83,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		// duplicate submissions as much as we can, we add a random submission delay to each
 		// batch stored in offchain storage
 		let submit_at =
-			dkg_worker.generate_delayed_submit_at(*current_block_number, MAX_SUBMISSION_DELAY);
+			generate_delayed_submit_at::<B>(*current_block_number, MAX_SUBMISSION_DELAY);
 
 		if let Some(submit_at) = submit_at {
 			prop_wrapper.proposals.push((signed_proposals, submit_at))
@@ -94,4 +101,15 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 			}
 		}
 	}
+}
+
+/// Generate a random delay to wait before taking an action.
+/// The delay is generated from a random number between 0 and `max_delay`.
+pub fn generate_delayed_submit_at<B: Block>(
+	start: NumberFor<B>,
+	max_delay: u32,
+) -> Option<<B::Header as Header>::Number> {
+	let mut rng = rand::thread_rng();
+	let submit_at = start + rng.gen_range(0u32..=max_delay).into();
+	Some(submit_at)
 }

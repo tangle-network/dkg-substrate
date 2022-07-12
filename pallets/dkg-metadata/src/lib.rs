@@ -101,6 +101,7 @@ use frame_support::{
 	Parameter,
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
+use sp_std::convert::{TryFrom, TryInto};
 
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{
@@ -230,7 +231,9 @@ pub mod pallet {
 			let _res = Self::submit_next_public_key_onchain(block_number);
 			let _res = Self::submit_public_key_signature_onchain(block_number);
 			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
+			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
+			#[cfg(feature = "std")]
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
@@ -472,7 +475,8 @@ pub mod pallet {
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
-		pub threshold: u32,
+		pub keygen_threshold: u16,
+		pub signature_threshold: u16,
 		pub authority_ids: Vec<T::AccountId>,
 	}
 
@@ -536,27 +540,34 @@ pub mod pallet {
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { authorities: Vec::new(), threshold: 0, authority_ids: Vec::new() }
+			Self {
+				authorities: Vec::new(),
+				signature_threshold: 1,
+				keygen_threshold: 3,
+				authority_ids: Vec::new(),
+			}
 		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			let mut signature_threshold = 1u16;
-			let keygen_threshold = u16::try_from(self.authorities.len()).unwrap();
-
-			if keygen_threshold <= signature_threshold {
-				signature_threshold = keygen_threshold - 1;
-			}
-
+			assert!(
+				self.signature_threshold < self.keygen_threshold,
+				"Signature threshold must be less than keygen threshold"
+			);
+			assert!(self.keygen_threshold > 1, "Keygen threshold must be greater than 1");
+			assert!(
+				self.authority_ids.len() >= self.keygen_threshold as usize,
+				"Not enough authority ids specified"
+			);
 			// Set thresholds to be the same
-			SignatureThreshold::<T>::put(signature_threshold);
-			KeygenThreshold::<T>::put(keygen_threshold);
-			NextSignatureThreshold::<T>::put(signature_threshold);
-			NextKeygenThreshold::<T>::put(keygen_threshold);
-			PendingSignatureThreshold::<T>::put(signature_threshold);
-			PendingKeygenThreshold::<T>::put(keygen_threshold);
+			SignatureThreshold::<T>::put(self.signature_threshold);
+			KeygenThreshold::<T>::put(self.keygen_threshold);
+			NextSignatureThreshold::<T>::put(self.signature_threshold);
+			NextKeygenThreshold::<T>::put(self.keygen_threshold);
+			PendingSignatureThreshold::<T>::put(self.signature_threshold);
+			PendingKeygenThreshold::<T>::put(self.keygen_threshold);
 			// Set refresh parameters
 			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
@@ -661,7 +672,9 @@ pub mod pallet {
 			ensure_signed(origin)?;
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let authorities = Self::authorities();
+			let authorities: Vec<T::DKGId> =
+				Self::best_authorities().iter().map(|id| id.1.clone()).collect();
+
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
 
@@ -714,7 +727,8 @@ pub mod pallet {
 			ensure_signed(origin)?;
 			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
-			let next_authorities = Self::next_authorities();
+			let next_authorities: Vec<T::DKGId> =
+				Self::next_best_authorities().iter().map(|id| id.1.clone()).collect();
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			let threshold = Self::next_signature_threshold();
 
@@ -874,24 +888,29 @@ pub mod pallet {
 						// session change
 						let unjailed_authorities = Self::next_best_authorities()
 							.into_iter()
-							.filter(|(_, id)| {
-								!JailedKeygenAuthorities::<T>::contains_key(id) || *id != offender
-							})
+							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
-						if unjailed_authorities.len() < Self::next_keygen_threshold().into() {
-							// Handle edge case properly (shouldn't drop below 2 authorities)
-							if unjailed_authorities.len() > 2 {
-								JailedKeygenAuthorities::<T>::insert(offender, now);
-
-								let new_val =
-									u16::try_from(unjailed_authorities.len()).unwrap_or_default();
-								NextKeygenThreshold::<T>::put(new_val);
-								PendingKeygenThreshold::<T>::put(new_val);
+						if unjailed_authorities.contains(&offender) {
+							// Jail the offender
+							JailedKeygenAuthorities::<T>::insert(&offender, now);
+							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {
+								// Handle edge case properly (shouldn't drop below 2 authorities)
+								if unjailed_authorities.len() > 2 {
+									let new_val = u16::try_from(unjailed_authorities.len() - 1)
+										.unwrap_or_default();
+									NextKeygenThreshold::<T>::put(new_val);
+									PendingKeygenThreshold::<T>::put(new_val);
+								}
 							}
-						} else {
-							JailedKeygenAuthorities::<T>::insert(offender, now);
 						}
+						NextBestAuthorities::<T>::put(Self::get_best_authorities(
+							Self::next_keygen_threshold() as usize,
+							&unjailed_authorities
+								.into_iter()
+								.filter(|id| *id != offender)
+								.collect::<Vec<_>>(),
+						));
 					},
 					MisbehaviourType::Sign => {
 						// These are the authorities who underwent keygen.
@@ -1245,6 +1264,8 @@ impl<T: Config> Pallet<T> {
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
 		// Update the next thresholds for the next session
+		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
+		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
 		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
 		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
@@ -1254,16 +1275,29 @@ impl<T: Config> Pallet<T> {
 		NextAuthorities::<T>::put(&next_authority_ids);
 		NextAuthoritiesAccounts::<T>::put(&next_authorities_accounts);
 		NextAuthoritySetId::<T>::put(next_id.saturating_add(1));
-		let next_best_authorities = Self::next_best_authorities();
-		NextBestAuthorities::<T>::put(Self::get_best_authorities(
-			Self::next_keygen_threshold() as usize,
-			&next_authority_ids,
-		));
+		let new_best_authorities = Self::next_best_authorities();
 		// Update the keys for the next authorities
 		let next_pub_key = Self::next_dkg_public_key();
 		let next_pub_key_signature = Self::next_public_key_signature();
 		let dkg_pub_key = Self::dkg_public_key();
 		let pub_key_signature = Self::public_key_signature();
+		// Ensure next/pending thresholds remain valid across authority set changes that may
+		// break. We update the pending thresholds because we call `refresh_keys` below, which
+		// rotates all the thresholds into the current / next sets. Pending becomes the next,
+		// next becomes the current.
+		if next_authority_ids.len() < Self::next_keygen_threshold().into() {
+			NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+		}
+		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
+			NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+		}
+		// Update the next best authorities after any and all changes to the thresholds.
+		NextBestAuthorities::<T>::put(Self::get_best_authorities(
+			Self::next_keygen_threshold() as usize,
+			&next_authority_ids,
+		));
 		// Switch on forced for forceful rotations
 		let v = if forced {
 			// If forced we supply an empty signature
@@ -1274,26 +1308,12 @@ impl<T: Config> Pallet<T> {
 		// Rotate the authority set if a next pub key and next signature exist
 		if let Some((next_pub_key, next_pub_key_signature)) = v {
 			// Update the active thresholds for the next session
-			SignatureThreshold::<T>::put(NextSignatureThreshold::<T>::get());
-			KeygenThreshold::<T>::put(NextKeygenThreshold::<T>::get());
-			// Ensure next/pending thresholds remain valid across authority set changes that may
-			// break. We update the pending thresholds because we call `refresh_keys` below, which
-			// rotates all the thresholds into the current / next sets. Pending becomes the next,
-			// next becomes the current.
-			if next_authority_ids.len() < Self::next_keygen_threshold().into() {
-				NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
-				PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
-			}
-			if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-				NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-				PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
-			}
-
+			SignatureThreshold::<T>::put(new_current_signature_threshold);
+			KeygenThreshold::<T>::put(new_current_keygen_threshold);
 			// Update the new and next authorities
 			Authorities::<T>::put(&new_authority_ids);
 			CurrentAuthoritiesAccounts::<T>::put(&new_authorities_accounts);
-			BestAuthorities::<T>::put(next_best_authorities);
-			let next_id = Self::authority_set_id().saturating_add(1);
+			BestAuthorities::<T>::put(new_best_authorities);
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
 			// Deposit a consensus log about the authority set change
@@ -1318,7 +1338,7 @@ impl<T: Config> Pallet<T> {
 			});
 			Self::deposit_event(Event::PublicKeySignatureChanged {
 				pub_key_sig: next_pub_key_signature,
-			})
+			});
 		}
 	}
 
@@ -1337,9 +1357,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthorities::<T>::put(authorities);
 		NextAuthoritySetId::<T>::put(1);
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
-		let best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		let best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		BestAuthorities::<T>::put(best_authorities);
-		let next_best_authorities = Self::get_best_authorities(authorities.len(), authorities);
+		let next_best_authorities =
+			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
 		NextBestAuthorities::<T>::put(next_best_authorities);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<

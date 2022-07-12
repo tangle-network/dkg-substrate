@@ -15,11 +15,11 @@
  *
  */
 import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
-import {ApiPromise} from "@polkadot/api";
-import {Bytes, Option} from "@polkadot/types";
-import {KeyringPair} from "@polkadot/keyring/types";
-import {Keyring} from "@polkadot/keyring";
-import {ethers} from "ethers";
+import { ApiPromise } from '@polkadot/api';
+import { Bytes, Option } from '@polkadot/types';
+import { KeyringPair } from '@polkadot/keyring/types';
+import { Keyring } from '@polkadot/keyring';
+import { ethers } from 'ethers';
 
 const LE = true;
 const BE = false;
@@ -122,7 +122,7 @@ function castToChainIdType(v: number): ChainIdType {
  * - last leaf index (4 bytes).
  * - merkle root (32 bytes).
  */
- export interface AnchorUpdateProposal {
+export interface AnchorUpdateProposal {
 	/**
 	 * The Anchor Proposal Header.
 	 * This is the first 40 bytes of the proposal.
@@ -151,7 +151,9 @@ function castToChainIdType(v: number): ChainIdType {
 	 */
 	readonly target: string;
 }
-export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint8Array {
+export function encodeUpdateAnchorProposal(
+	proposal: AnchorUpdateProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const updateProposal = new Uint8Array(40 + 42 + 32);
 	updateProposal.set(header, 0); // 0 -> 40
@@ -165,7 +167,9 @@ export function encodeUpdateAnchorProposal(proposal: AnchorUpdateProposal): Uint
 	updateProposal.set(target, 82); // 82 -> 114
 	return updateProposal;
 }
-export function decodeUpdateAnchorProposal(data: Uint8Array): AnchorUpdateProposal {
+export function decodeUpdateAnchorProposal(
+	data: Uint8Array
+): AnchorUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const chainIdTypeInt = new DataView(data.buffer).getUint16(40, false); // 40 -> 42
 	const chainIdType = castToChainIdType(chainIdTypeInt);
@@ -223,11 +227,13 @@ export function decodeTokenAddProposal(data: Uint8Array): TokenAddProposal {
 	const newTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newTokenAddress
+		newTokenAddress,
 	};
 }
 
-export function encodeTokenRemoveProposal(proposal: TokenRemoveProposal): Uint8Array {
+export function encodeTokenRemoveProposal(
+	proposal: TokenRemoveProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const tokenRemoveProposal = new Uint8Array(40 + 20);
 	tokenRemoveProposal.set(header, 0); // 0 -> 40
@@ -236,7 +242,9 @@ export function encodeTokenRemoveProposal(proposal: TokenRemoveProposal): Uint8A
 	return tokenRemoveProposal;
 }
 
-export function decodeTokenRemoveProposal(data: Uint8Array): TokenRemoveProposal {
+export function decodeTokenRemoveProposal(
+	data: Uint8Array
+): TokenRemoveProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const removeTokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
@@ -271,7 +279,9 @@ export interface WrappingFeeUpdateProposal {
 	readonly newFee: string;
 }
 
-export function encodeWrappingFeeUpdateProposal(proposal: WrappingFeeUpdateProposal): Uint8Array {
+export function encodeWrappingFeeUpdateProposal(
+	proposal: WrappingFeeUpdateProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const wrappingFeeUpdateProposal = new Uint8Array(40 + 1);
 	wrappingFeeUpdateProposal.set(header, 0); // 0 -> 40
@@ -280,15 +290,16 @@ export function encodeWrappingFeeUpdateProposal(proposal: WrappingFeeUpdatePropo
 	return wrappingFeeUpdateProposal;
 }
 
-export function decodeWrappingFeeUpdateProposal(data: Uint8Array): WrappingFeeUpdateProposal {
+export function decodeWrappingFeeUpdateProposal(
+	data: Uint8Array
+): WrappingFeeUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newFee = u8aToHex(data.slice(40, 41)); // 40 -> 41
 	return {
 		header,
-		newFee
+		newFee,
 	};
 }
-
 
 export interface MinWithdrawalLimitProposal {
 	/**
@@ -303,7 +314,9 @@ export interface MinWithdrawalLimitProposal {
 	readonly minWithdrawalLimitBytes: string;
 }
 
-export function encodeMinWithdrawalLimitProposal(proposal: MinWithdrawalLimitProposal): Uint8Array {
+export function encodeMinWithdrawalLimitProposal(
+	proposal: MinWithdrawalLimitProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const minWithdrawalLimitProposal = new Uint8Array(40 + 32);
 	minWithdrawalLimitProposal.set(header, 0); // 0 -> 40
@@ -312,12 +325,14 @@ export function encodeMinWithdrawalLimitProposal(proposal: MinWithdrawalLimitPro
 	return minWithdrawalLimitProposal;
 }
 
-export function decodeMinWithDrawalLimitProposal(data: Uint8Array): MinWithdrawalLimitProposal {
+export function decodeMinWithDrawalLimitProposal(
+	data: Uint8Array
+): MinWithdrawalLimitProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const minWithdrawalLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		minWithdrawalLimitBytes
+		minWithdrawalLimitBytes,
 	};
 }
 
@@ -334,7 +349,9 @@ export interface MaxDepositLimitProposal {
 	readonly maxDepositLimitBytes: string;
 }
 
-export function encodeMaxDepositLimitProposal(proposal: MaxDepositLimitProposal): Uint8Array {
+export function encodeMaxDepositLimitProposal(
+	proposal: MaxDepositLimitProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const maxDepositLimitProposal = new Uint8Array(40 + 32);
 	maxDepositLimitProposal.set(header, 0); // 0 -> 40
@@ -343,23 +360,25 @@ export function encodeMaxDepositLimitProposal(proposal: MaxDepositLimitProposal)
 	return maxDepositLimitProposal;
 }
 
-export function decodeMaxDepositLimitProposal(data: Uint8Array): MaxDepositLimitProposal {
+export function decodeMaxDepositLimitProposal(
+	data: Uint8Array
+): MaxDepositLimitProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const maxDepositLimitBytes = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	return {
 		header,
-		maxDepositLimitBytes
+		maxDepositLimitBytes,
 	};
 }
 
 export interface ResourceIdUpdateProposal {
 	/**
 	 * The ResourceIdUpdateProposal Header.
-	* This is the first 40 bytes of the proposal.
-	* See `encodeProposalHeader` for more details.
-	*/
+	 * This is the first 40 bytes of the proposal.
+	 * See `encodeProposalHeader` for more details.
+	 */
 	readonly header: ProposalHeader;
-	/** 
+	/**
 	 * 32 bytes Hex-encoded string.
 	 */
 	readonly newResourceId: string;
@@ -372,7 +391,9 @@ export interface ResourceIdUpdateProposal {
 	 */
 	readonly executionAddress: string;
 }
-export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposal): Uint8Array {
+export function encodeResourceIdUpdateProposal(
+	proposal: ResourceIdUpdateProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const resourceIdUpdateProposal = new Uint8Array(40 + 32 + 20 + 20);
 	resourceIdUpdateProposal.set(header, 0); // 0 -> 40
@@ -384,7 +405,9 @@ export function encodeResourceIdUpdateProposal(proposal: ResourceIdUpdateProposa
 	resourceIdUpdateProposal.set(executionAddress, 92); // 72 -> 112
 	return resourceIdUpdateProposal;
 }
-export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpdateProposal {
+export function decodeResourceIdUpdateProposal(
+	data: Uint8Array
+): ResourceIdUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newResourceId = u8aToHex(data.slice(40, 72)); // 40 -> 72
 	const handlerAddress = u8aToHex(data.slice(72, 92)); // 72 -> 92
@@ -393,7 +416,7 @@ export function decodeResourceIdUpdateProposal(data: Uint8Array): ResourceIdUpda
 		header,
 		newResourceId,
 		handlerAddress,
-		executionAddress
+		executionAddress,
 	};
 }
 
@@ -410,7 +433,9 @@ export interface SetTreasuryHandlerProposal {
 	readonly newTreasuryHandler: string;
 }
 
-export function encodeSetTreasuryHandlerProposal(proposal: SetTreasuryHandlerProposal): Uint8Array {
+export function encodeSetTreasuryHandlerProposal(
+	proposal: SetTreasuryHandlerProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const setTreasuryHandlerProposal = new Uint8Array(40 + 20);
 	setTreasuryHandlerProposal.set(header, 0); // 0 -> 40
@@ -419,12 +444,14 @@ export function encodeSetTreasuryHandlerProposal(proposal: SetTreasuryHandlerPro
 	return setTreasuryHandlerProposal;
 }
 
-export function decodeSetTreasuryHandlerProposal(data: Uint8Array): SetTreasuryHandlerProposal {
+export function decodeSetTreasuryHandlerProposal(
+	data: Uint8Array
+): SetTreasuryHandlerProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newTreasuryHandler = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newTreasuryHandler
+		newTreasuryHandler,
 	};
 }
 
@@ -441,7 +468,9 @@ export interface SetVerifierProposal {
 	readonly newVerifier: string;
 }
 
-export function encodeSetVerifierProposal(proposal: SetVerifierProposal): Uint8Array {
+export function encodeSetVerifierProposal(
+	proposal: SetVerifierProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const setVerifierProposal = new Uint8Array(40 + 20);
 	setVerifierProposal.set(header, 0); // 0 -> 40
@@ -450,12 +479,14 @@ export function encodeSetVerifierProposal(proposal: SetVerifierProposal): Uint8A
 	return setVerifierProposal;
 }
 
-export function decodeSetVerifierProposal(data: Uint8Array): SetVerifierProposal {
+export function decodeSetVerifierProposal(
+	data: Uint8Array
+): SetVerifierProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newVerifier = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newVerifier
+		newVerifier,
 	};
 }
 
@@ -472,7 +503,9 @@ export interface FeeRecipientUpdateProposal {
 	readonly newFeeRecipient: string;
 }
 
-export function encodeFeeRecipientUpdateProposal(proposal: FeeRecipientUpdateProposal): Uint8Array {
+export function encodeFeeRecipientUpdateProposal(
+	proposal: FeeRecipientUpdateProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const feeRecipientUpdateProposal = new Uint8Array(40 + 20);
 	feeRecipientUpdateProposal.set(header, 0); // 0 -> 40
@@ -481,22 +514,24 @@ export function encodeFeeRecipientUpdateProposal(proposal: FeeRecipientUpdatePro
 	return feeRecipientUpdateProposal;
 }
 
-export function decodeFeeRecipientUpdateProposal(data: Uint8Array): FeeRecipientUpdateProposal {
+export function decodeFeeRecipientUpdateProposal(
+	data: Uint8Array
+): FeeRecipientUpdateProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const newFeeRecipient = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	return {
 		header,
-		newFeeRecipient
+		newFeeRecipient,
 	};
 }
 
 export interface RescueTokensProposal {
 	/**
 	 * The Rescue Token Proposals Header.
-	**/
+	 **/
 	readonly header: ProposalHeader;
 
-	/** 
+	/**
 	 * 20 bytes Hex-encoded string.
 	 */
 	readonly tokenAddress: string;
@@ -510,7 +545,9 @@ export interface RescueTokensProposal {
 	readonly amount: string;
 }
 
-export function encodeRescueTokensProposal(proposal: RescueTokensProposal): Uint8Array {
+export function encodeRescueTokensProposal(
+	proposal: RescueTokensProposal
+): Uint8Array {
 	const header = encodeProposalHeader(proposal.header);
 	const rescueTokensProposal = new Uint8Array(40 + 20 + 20 + 32);
 	rescueTokensProposal.set(header, 0); // 0 -> 40
@@ -525,7 +562,9 @@ export function encodeRescueTokensProposal(proposal: RescueTokensProposal): Uint
 	return rescueTokensProposal;
 }
 
-export function decodeRescueTokensProposal(data: Uint8Array): RescueTokensProposal {
+export function decodeRescueTokensProposal(
+	data: Uint8Array
+): RescueTokensProposal {
 	const header = decodeProposalHeader(data.slice(0, 40)); // 0 -> 40
 	const tokenAddress = u8aToHex(data.slice(40, 60)); // 40 -> 60
 	const toAddress = u8aToHex(data.slice(60, 80)); // 60 -> 80
@@ -534,8 +573,8 @@ export function decodeRescueTokensProposal(data: Uint8Array): RescueTokensPropos
 		header,
 		tokenAddress,
 		toAddress,
-		amount
-	}
+		amount,
+	};
 }
 
 /**
@@ -545,7 +584,11 @@ export function decodeRescueTokensProposal(data: Uint8Array): RescueTokensPropos
  * - 2 bytes of the `chainIdType` encoded as the last 2 bytes just before the `chainId`.
  * - 4 bytes of the `chainId` which is the last 4 bytes.
  */
-export function makeResourceId(addr: string, chainIdType: ChainIdType, chainId: number): string {
+export function makeResourceId(
+	addr: string,
+	chainIdType: ChainIdType,
+	chainId: number
+): string {
 	const rId = new Uint8Array(32);
 	const address = hexToU8a(addr).slice(0, 20);
 	rId.set(address, 6); // 6 -> 26
@@ -569,28 +612,41 @@ function _testEncodeDecode() {
 	};
 	const srcChainId = 0xbabe;
 	const lastLeafIndex = 0xfeed;
-	const merkleRoot = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+	const merkleRoot =
+		'0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 	const updateProposal: AnchorUpdateProposal = {
 		header,
 		chainIdType,
 		srcChainId,
 		lastLeafIndex,
 		merkleRoot,
-		target: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000',
+		target:
+			'0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000',
 	};
 	const headerEncoded = encodeProposalHeader(header);
 	const headerDecoded = decodeProposalHeader(headerEncoded);
 	assert(headerDecoded.resourceId === resourceId, 'resourceId');
-	assert(headerDecoded.functionSignature === functionSignature, 'functionSignature');
+	assert(
+		headerDecoded.functionSignature === functionSignature,
+		'functionSignature'
+	);
 	assert(headerDecoded.nonce === nonce, 'nonce');
 
 	const updateProposalEncoded = encodeUpdateAnchorProposal(updateProposal);
-	const updateProposalDecoded = decodeUpdateAnchorProposal(updateProposalEncoded);
+	const updateProposalDecoded = decodeUpdateAnchorProposal(
+		updateProposalEncoded
+	);
 	assert(updateProposalDecoded.header.resourceId === resourceId, 'resourceId');
-	assert(updateProposalDecoded.header.functionSignature === functionSignature, 'functionSignature');
+	assert(
+		updateProposalDecoded.header.functionSignature === functionSignature,
+		'functionSignature'
+	);
 	assert(updateProposalDecoded.header.nonce === nonce, 'nonce');
 	assert(updateProposalDecoded.srcChainId === srcChainId, 'srcChainId');
-	assert(updateProposalDecoded.lastLeafIndex === lastLeafIndex, 'lastLeafIndex');
+	assert(
+		updateProposalDecoded.lastLeafIndex === lastLeafIndex,
+		'lastLeafIndex'
+	);
 	assert(updateProposalDecoded.merkleRoot === merkleRoot, 'merkleRoot');
 }
 
@@ -606,36 +662,54 @@ export const newResourceId = makeResourceId(
 	5002
 );
 
-export async function signAndSendUtil(api: ApiPromise, proposalCall: any, alice: KeyringPair) {
-	const unsub = await api.tx.sudo.sudo(proposalCall).signAndSend(alice, ({events = [], status}) => {
-		// console.log(`Current status is: ${status.type}`);
+export async function signAndSendUtil(
+	api: ApiPromise,
+	proposalCall: any,
+	alice: KeyringPair
+) {
+	const unsub = await api.tx.sudo
+		.sudo(proposalCall)
+		.signAndSend(alice, ({ events = [], status }) => {
+			// console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			// console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				// console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
-				// console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					// console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }
 
-export async function unsubSignedPropsUtil(api: ApiPromise, chainIdType: any, dkgPubKey: any, proposalType: any, propHash: any) {
+export async function unsubSignedPropsUtil(
+	api: ApiPromise,
+	chainIdType: any,
+	dkgPubKey: any,
+	proposalType: any,
+	propHash: any
+) {
 	return await api.query.dKGProposalHandler.signedProposals(
 		chainIdType,
 		proposalType,
 		(res: any) => {
 			if (res) {
 				const parsedResult = JSON.parse(JSON.stringify(res));
-				console.log(`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(parsedResult)}`);
+				console.log(
+					`Signed ${JSON.stringify(proposalType)} prop: ${JSON.stringify(
+						parsedResult
+					)}`
+				);
 
 				if (parsedResult) {
 					const sig = parsedResult.signed.signature;
 					console.log(`Signature: ${sig}`);
 
-					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
+					const recoveredPubKey = ethers.utils
+						.recoverPublicKey(propHash, sig)
+						.substr(2);
 					console.log(`Recovered public key: ${recoveredPubKey}`);
 					console.log(`DKG public key: ${dkgPubKey}`);
 
@@ -661,22 +735,24 @@ export async function registerResourceId(api: ApiPromise) {
 		console.log(`Resource id ${resourceId} is already registered, skipping`);
 		return;
 	}
-	const keyring = new Keyring({type: 'sr25519'});
+	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
 
 	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
 	console.log('Registering resource id');
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({events = [], status}) => {
-		console.log(`Current status is: ${status.type}`);
+	const unsub = await api.tx.sudo
+		.sudo(call)
+		.signAndSend(alice, ({ events = [], status }) => {
+			console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({phase, event: {data, method, section}}) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }

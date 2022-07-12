@@ -14,7 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{worker::DKGWorker, Client};
+use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use codec::Encode;
 use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{
@@ -24,18 +24,19 @@ use dkg_runtime_primitives::{
 use log::trace;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::{Block, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
+	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
+	GE: GossipEngineIface + 'static,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
 	if maybe_offchain.is_none() {

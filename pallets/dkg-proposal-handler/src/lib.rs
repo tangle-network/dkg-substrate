@@ -109,16 +109,18 @@ use dkg_runtime_primitives::{
 	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
 };
 pub use pallet::*;
+use sp_std::convert::TryInto;
 
 #[cfg(test)]
 mod mock;
 
 #[cfg(test)]
 mod tests;
+
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
-	ProposalKind, TypedChainId,
+	ProposalKind, StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -135,7 +137,7 @@ use sp_runtime::{
 use sp_std::vec::Vec;
 
 pub mod weights;
-use weights::WeightInfo;
+pub use weights::WeightInfo;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -148,6 +150,11 @@ pub mod pallet {
 	};
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
+	use sp_runtime::traits::{CheckedSub, One, Zero};
+
+	/// Unsigned proposal for this pallet
+	pub type StoredUnsignedProposalOf<T> =
+		StoredUnsignedProposal<<T as frame_system::Config>::BlockNumber>;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -161,6 +168,9 @@ pub mod pallet {
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
 		type MaxSubmissionsPerBatch: Get<u16>;
+		/// Max blocks to store an unsigned proposal
+		#[pallet::constant]
+		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
 	}
@@ -179,7 +189,7 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_128Concat,
 		DKGPayloadKey,
-		Proposal,
+		StoredUnsignedProposalOf<T>,
 	>;
 
 	/// All signed proposals.
@@ -205,6 +215,10 @@ pub mod pallet {
 			data: Vec<u8>,
 			/// The Invalid Signature.
 			invalid_signature: Vec<u8>,
+			/// Expected DKG Public Key (the one currently stored on chain).
+			expected_public_key: Option<Vec<u8>>,
+			/// The actual one we recovered from the data and signature.
+			actual_public_key: Option<Vec<u8>>,
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -250,6 +264,39 @@ pub mod pallet {
 				res
 			);
 		}
+
+		/// Hook that execute when there is leftover space in a block
+		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
+		/// and remove storage.
+		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
+			// fetch all unsigned proposals
+			let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
+			let unsigned_proposals_len = unsigned_proposals.len() as u64;
+			remaining_weight =
+				remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+
+			// filter out proposals to delete
+			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
+				|(_, _, StoredUnsignedProposal { timestamp, .. })| {
+					let time_passed = now.checked_sub(timestamp).unwrap_or_default();
+					time_passed > T::UnsignedProposalExpiry::get()
+				},
+			);
+
+			// remove unsigned proposal until we run out of weight
+			for expired_proposal in unsigned_proposal_past_expiry {
+				remaining_weight =
+					remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
+
+				if remaining_weight.is_zero() {
+					break
+				}
+
+				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
+			}
+
+			remaining_weight
+		}
 	}
 
 	#[pallet::call]
@@ -280,18 +327,19 @@ pub mod pallet {
 					let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
 						signature,
 						&data[..],
-					)
-					.map_err(|_| Error::<T>::ProposalSignatureInvalid);
+					);
 					match result {
 						Ok(_) => {
 							// Do nothing, it is all good.
 						},
-						Err(_e) => {
+						Err(e) => {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
 								kind: kind.clone(),
 								data: data.clone(),
+								expected_public_key: e.expected_public_key(),
+								actual_public_key: e.actual_public_key(),
 								invalid_signature: signature.clone(),
 							});
 							frame_support::log::error!(
@@ -344,7 +392,11 @@ pub mod pallet {
 			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
-						UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, prop);
+						UnsignedProposalQueue::<T>::insert(
+							v.typed_chain_id,
+							v.key,
+							Self::stored_unsigned_proposal_from_unsigned_proposal(prop),
+						);
 						Ok(().into())
 					},
 					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
@@ -360,7 +412,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
-			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, proposal);
+			UnsignedProposalQueue::<T>::insert(
+				v.typed_chain_id,
+				v.key,
+				Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
+			);
 			return Ok(())
 		}
 
@@ -371,14 +427,14 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		proposal: Vec<u8>,
 		_action: ProposalAction,
 	) -> DispatchResult {
-		#[cfg(feature = "std")]
-		println!("handle_unsigned_proposer_set_update_proposal");
-		#[cfg(feature = "std")]
-		println!("proposal: {:?}", proposal);
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
-			UnsignedProposalQueue::<T>::insert(v.typed_chain_id, v.key, unsigned_proposal);
+			UnsignedProposalQueue::<T>::insert(
+				v.typed_chain_id,
+				v.key,
+				Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
+			);
 
 			return Ok(())
 		}
@@ -396,7 +452,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		UnsignedProposalQueue::<T>::insert(
 			TypedChainId::None,
 			DKGPayloadKey::RefreshVote(proposal.nonce),
-			unsigned_proposal,
+			Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
 		);
 
 		Ok(())
@@ -482,16 +538,18 @@ impl<T: Config> Pallet<T> {
 
 	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
 		UnsignedProposalQueue::<T>::iter()
-			.map(|(typed_chain_id, key, proposal)| dkg_runtime_primitives::UnsignedProposal {
-				typed_chain_id,
-				key,
-				proposal,
+			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
+				dkg_runtime_primitives::UnsignedProposal {
+					typed_chain_id,
+					key,
+					proposal: stored_unsigned_proposal.proposal,
+				}
 			})
 			.collect()
 	}
 
 	/// Checks whether a signed proposal exists in the `SignedProposals` storage
-	pub fn is_existing_proposal(prop: &Proposal) -> bool {
+	pub fn is_not_existing_proposal(prop: &Proposal) -> bool {
 		if prop.is_signed() {
 			match decode_proposal_identifier(prop) {
 				Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
@@ -500,6 +558,14 @@ impl<T: Config> Pallet<T> {
 		} else {
 			false
 		}
+	}
+
+	/// Returns `StoredUnsignedProposal` from proposal by inserting current BlockNumber
+	pub fn stored_unsigned_proposal_from_unsigned_proposal(
+		proposal: Proposal,
+	) -> StoredUnsignedProposalOf<T> {
+		let timestamp = <frame_system::Pallet<T>>::block_number();
+		StoredUnsignedProposalOf::<T> { proposal, timestamp }
 	}
 
 	// *** Offchain worker methods ***
@@ -523,13 +589,22 @@ impl<T: Config> Pallet<T> {
 			}
 			match Self::get_next_offchain_signed_proposal(block_number) {
 				Ok(next_proposals) => {
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal_onchain: found {} proposals to submit before filtering\n {:?}",
+						next_proposals.len(), next_proposals
+					);
 					// We filter out all proposals that are already on chain
 					let filtered_proposals = next_proposals
 						.iter()
 						.cloned()
-						.filter(Self::is_existing_proposal)
+						.filter(Self::is_not_existing_proposal)
 						.collect::<Vec<_>>();
-
+					frame_support::log::debug!(
+						target: "dkg_proposal_handler",
+						"submit_signed_proposal_onchain: found {} proposals to submit after filtering\n {:?}",
+						filtered_proposals.len(), filtered_proposals
+					);
 					// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and
 					// submit those chunks
 					for chunk in
@@ -584,13 +659,13 @@ impl<T: Config> Pallet<T> {
 			match res {
 				Ok(Some(mut prop_wrapper)) => {
 					// log the proposals
-					frame_support::log::trace!(
+					frame_support::log::debug!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals: {:?}",
 						prop_wrapper.proposals
 					);
 					// log how many proposal batches are left
-					frame_support::log::trace!(
+					frame_support::log::debug!(
 						target: "dkg_proposal_handler",
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()
@@ -608,8 +683,8 @@ impl<T: Config> Pallet<T> {
 								}
 							},
 						)
-						.cloned()
 						.flatten()
+						.cloned()
 						.collect::<Vec<_>>();
 					// then we need to keep only the batches that are not yet submitted
 					prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);

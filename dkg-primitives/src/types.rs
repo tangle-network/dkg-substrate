@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::rounds::LocalKey;
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
 
 pub type FE = Scalar<Secp256k1>;
@@ -51,6 +52,15 @@ pub struct SignedDKGMessage<AuthorityId> {
 	pub signature: Option<Vec<u8>>,
 }
 
+impl<AuthorityId> SignedDKGMessage<AuthorityId> {
+	pub fn message_hash<B: Block>(&self) -> B::Hash
+	where
+		DKGMessage<AuthorityId>: Encode,
+	{
+		<<B::Header as Header>::Hashing as Hash>::hash_of(&self.msg)
+	}
+}
+
 impl<ID> fmt::Display for DKGMessage<ID> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let label = match self.payload {
@@ -74,11 +84,42 @@ pub enum DKGMsgPayload {
 	MisbehaviourBroadcast(DKGMisbehaviourMessage),
 }
 
+impl DKGMsgPayload {
+	/// NOTE: this is hacky
+	/// TODO: Change enums for keygen, offline, vote
+	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
+		match self {
+			DKGMsgPayload::Keygen(kg) => Some(kg.sender_id as u16),
+			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
+			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
+			_ => None,
+		}
+	}
+
+	pub fn get_type(&self) -> &'static str {
+		match self {
+			DKGMsgPayload::Keygen(_) => "keygen",
+			DKGMsgPayload::Offline(_) => "offline",
+			DKGMsgPayload::Vote(_) => "vote",
+			DKGMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
+			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
+		}
+	}
+
+	pub fn get_async_index(&self) -> u8 {
+		match self {
+			DKGMsgPayload::Offline(m) => m.async_index,
+			DKGMsgPayload::Vote(m) => m.async_index,
+			_ => 0,
+		}
+	}
+}
+
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGKeygenMessage {
-	/// Keygen set epoch id
-	pub round_id: RoundId,
+	/// Sender id / party index
+	pub sender_id: u16,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
 }
@@ -92,6 +133,8 @@ pub struct DKGOfflineMessage {
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
+	/// Index in async protocols
+	pub async_index: u8,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -103,6 +146,8 @@ pub struct DKGVoteMessage {
 	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
+	/// Index in async protocols
+	pub async_index: u8,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -191,6 +236,7 @@ pub enum DKGError {
 	SignMisbehaviour { bad_actors: Vec<u16> },
 	SignTimeout { bad_actors: Vec<u16> },
 	StartKeygen { reason: String },
+	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
 	Vote { reason: String },
 	CriticalError { reason: String },

@@ -36,9 +36,6 @@ jobs:
           profile: minimal
           toolchain: nightly
 
-      - name: Build Standalone Node for Integration Tests (Release)
-        run: cargo build --release -p dkg-standalone-node --features integration-tests
-
       - name: Install Nodejs
         uses: actions/setup-node@v2
         with:
@@ -49,6 +46,14 @@ jobs:
       - name: Install Packages
         run: cd dkg-test-suite && yarn
 
-      - name: Run E2E Tests
-        run: cd dkg-test-suite && yarn test
+      - name: Build Standalone Node for E2E Tests (Release)
+        run: cargo build --release -p dkg-standalone-node
 
+      - name: Run E2E Tests
+        run: cd dkg-test-suite && yarn test:e2e
+
+      - name: Build Standalone Node for Integration Tests (Release)
+        run: cargo build --release -p dkg-standalone-node --features integration-tests
+
+      - name: Run Proposals E2E Tests
+        run: cd dkg-test-suite && yarn test:proposals

@@ -16,8 +16,10 @@
  */
 // just a blueprint test using jest
 
+import { expect } from 'chai';
+
 describe('Blueprint test', () => {
-  it('should pass', () => {
-    expect(true).toBe(true);
-  });
+	it('should pass', () => {
+		expect(true).to.be.true;
+	});
 });

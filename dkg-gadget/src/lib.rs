@@ -12,36 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+extern crate core;
 
-use dkg_primitives::rounds::DKGState;
+use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+
 use log::debug;
+use parking_lot::RwLock;
 use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
-use sc_network_gossip::{GossipEngine, Network as GossipNetwork};
 
-use sp_api::ProvideRuntimeApi;
+use sc_network::{ExHashT, NetworkService};
+use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::Block;
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
 use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
-mod gossip;
 mod keyring;
 mod keystore;
-pub mod messages;
+
+mod gossip_engine;
+// mod meta_async_rounds;
 mod metrics;
 mod persistence;
 mod proposal;
-pub mod storage;
-mod types;
 mod utils;
 mod worker;
 
+pub mod async_protocols;
+pub mod gossip_messages;
+pub mod storage;
+
+use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
 pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
@@ -49,10 +55,7 @@ pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	let mut cfg =
-		sc_network::config::NonDefaultSetConfig::new(DKG_PROTOCOL_NAME.into(), 1024 * 1024);
-	cfg.allow_non_reserved(25, 25);
-	cfg
+	NetworkGossipEngineBuilder::set_config()
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -65,7 +68,6 @@ where
 	B: Block,
 	BE: Backend<B>,
 {
-	// empty
 }
 
 impl<B, BE, T> Client<B, BE> for T
@@ -83,13 +85,13 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, N>
+pub struct DKGParams<B, BE, C>
 where
 	B: Block,
+	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -100,26 +102,25 @@ where
 	/// Concrete local key store
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
-	pub network: N,
+	pub network: Arc<NetworkService<B, B::Hash>>,
 
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Path to the persistent keystore directory for DKG data
 	pub base_path: Option<PathBuf>,
 	/// Phantom block type
-	pub _block: std::marker::PhantomData<B>,
+	pub _block: PhantomData<B>,
 }
 
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, N>(dkg_params: DKGParams<B, BE, C, N>)
+pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
-	N: GossipNetwork<B> + Clone + Send + 'static,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let DKGParams {
 		client,
@@ -132,9 +133,7 @@ where
 		_block,
 	} = dkg_params;
 
-	let gossip_validator = Arc::new(gossip::GossipValidator::new());
-	let gossip_engine =
-		GossipEngine::new(network, DKG_PROTOCOL_NAME, gossip_validator.clone(), None);
+	let network_gossip_engine = NetworkGossipEngineBuilder::new();
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -150,7 +149,15 @@ where
 			},
 		);
 
+	let latest_header = Arc::new(RwLock::new(None));
+	let (gossip_handler, gossip_engine) = network_gossip_engine
+		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.expect("Failed to build gossip engine");
+	// enable the gossip
+	gossip_engine.set_gossip_enabled(true);
+	let handle = tokio::spawn(gossip_handler.run());
 	let worker_params = worker::WorkerParams {
+		latest_header,
 		client,
 		backend,
 		key_store: key_store.into(),
@@ -158,15 +165,11 @@ where
 		metrics,
 		base_path,
 		local_keystore,
-		dkg_state: DKGState {
-			accepted: false,
-			listening_for_pub_key: false,
-			listening_for_active_pub_key: false,
-			created_offlinestage_at: HashMap::new(),
-		},
+		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
-	worker.run().await
+	worker.run().await;
+	handle.abort();
 }

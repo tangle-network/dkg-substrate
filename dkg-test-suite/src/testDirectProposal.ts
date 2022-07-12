@@ -43,35 +43,38 @@ async function testDirectProposal() {
 		{ compressed: false }
 	).publicKey.toString('hex');
 
-	const unsubSignedProps: any = await api.query.dKGProposalHandler.signedProposals(
-		1,
-		{ tokenupdateproposal: 1 },
-		(res: any) => {
-			if (res) {
-				const parsedResult = JSON.parse(JSON.stringify(res));
-				console.log(`Signed prop: ${parsedResult}`);
-				assert(parsedResult, 'Signed proposal should be on chain');
+	const unsubSignedProps: any =
+		await api.query.dKGProposalHandler.signedProposals(
+			1,
+			{ tokenupdateproposal: 1 },
+			(res: any) => {
+				if (res) {
+					const parsedResult = JSON.parse(JSON.stringify(res));
+					console.log(`Signed prop: ${parsedResult}`);
+					assert(parsedResult, 'Signed proposal should be on chain');
 
-				if (parsedResult) {
-					const sig = parsedResult.tokenUpdateSigned.signature;
-					console.log(`Signature: ${sig}`);
+					if (parsedResult) {
+						const sig = parsedResult.tokenUpdateSigned.signature;
+						console.log(`Signature: ${sig}`);
 
-					const propHash = keccak256(tokenUpdateProp);
-					const recoveredPubKey = ethers.utils.recoverPublicKey(propHash, sig).substr(2);
-					console.log(`Recovered public key: ${recoveredPubKey}`);
-					console.log(`DKG public key: ${dkgPubKey}`);
+						const propHash = keccak256(tokenUpdateProp);
+						const recoveredPubKey = ethers.utils
+							.recoverPublicKey(propHash, sig)
+							.substr(2);
+						console.log(`Recovered public key: ${recoveredPubKey}`);
+						console.log(`DKG public key: ${dkgPubKey}`);
 
-					assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
-					if (recoveredPubKey == dkgPubKey) {
-						console.log(`Public keys match`);
-					} else {
-						console.error(`Public keys do not match`);
-						process.exit();
+						assert(recoveredPubKey == dkgPubKey, 'Public keys should match');
+						if (recoveredPubKey == dkgPubKey) {
+							console.log(`Public keys match`);
+						} else {
+							console.error(`Public keys do not match`);
+							process.exit();
+						}
 					}
 				}
 			}
-		}
-	);
+		);
 
 	await new Promise((resolve) => setTimeout(resolve, 20000));
 
@@ -97,19 +100,21 @@ async function sendSudoProposal(api: ApiPromise) {
 			data: `0x${raw_data}`,
 		},
 	});
-	const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, ({ events = [], status }) => {
-		console.log(`Current status is: ${status.type}`);
+	const unsub = await api.tx.sudo
+		.sudo(call)
+		.signAndSend(alice, ({ events = [], status }) => {
+			console.log(`Current status is: ${status.type}`);
 
-		if (status.isFinalized) {
-			console.log(`Transaction included at blockHash ${status.asFinalized}`);
+			if (status.isFinalized) {
+				console.log(`Transaction included at blockHash ${status.asFinalized}`);
 
-			events.forEach(({ phase, event: { data, method, section } }) => {
-				console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
-			});
+				events.forEach(({ phase, event: { data, method, section } }) => {
+					console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+				});
 
-			unsub();
-		}
-	});
+				unsub();
+			}
+		});
 }
 
 // Run

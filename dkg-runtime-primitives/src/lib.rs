@@ -25,7 +25,7 @@ pub mod utils;
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::RuntimeDebug;
+use frame_support::{log, RuntimeDebug};
 pub use proposal::*;
 
 pub use crate::proposal::DKGPayloadKey;
@@ -58,13 +58,13 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
 
 /// The keygen timeout limit in blocks before we consider misbehaviours
-pub const KEYGEN_TIMEOUT: u32 = 5;
+pub const KEYGEN_TIMEOUT: u32 = 2;
 
 /// The offline timeout limit in blocks before we consider misbehaviours
-pub const OFFLINE_TIMEOUT: u32 = 5;
+pub const OFFLINE_TIMEOUT: u32 = 2;
 
 /// The sign timeout limit in blocks before we consider misbehaviours
-pub const SIGN_TIMEOUT: u32 = 3;
+pub const SIGN_TIMEOUT: u32 = 2;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -184,11 +184,30 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct UnsignedProposal {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
 	pub proposal: Proposal,
+}
+
+impl UnsignedProposal {
+	pub fn hash(&self) -> Option<[u8; 32]> {
+		let key = (self.typed_chain_id, self.key);
+		log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
+		if let Proposal::Unsigned { data, .. } = &self.proposal {
+			log::debug!(target: "dkg", "Adding unsigned proposal to hash vec");
+			Some(keccak_256(data))
+		} else {
+			None
+		}
+	}
+
+	pub fn data(&self) -> &Vec<u8> {
+		match &self.proposal {
+			Proposal::Unsigned { data, .. } | Proposal::Signed { data, .. } => data,
+		}
+	}
 }
 
 sp_api::decl_runtime_apis! {

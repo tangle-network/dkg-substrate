@@ -19,14 +19,14 @@ jobs:
         uses: styfle/cancel-workflow-action@0.9.1
         with:
           access_token: ${{ github.token }}
- 
+
       - name: Checkout Sources
         uses: actions/checkout@v2
 
       - name: Clear up disk space
         run: |
           sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" 
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
 
       - name: Install cargo-nextest
@@ -38,9 +38,11 @@ jobs:
       - name: Install Toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly-2022-04-20
+          components: rustfmt, clippy
           target: wasm32-unknown-unknown
           override: true
+          default: true
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0

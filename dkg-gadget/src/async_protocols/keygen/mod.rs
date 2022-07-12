@@ -11,13 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-use sp_runtime::traits::{Block, Hash, Header};
 
-/// Gossip engine dkg messages topic
-pub(crate) fn dkg_topic<B: Block>() -> B::Hash
-where
-	B: Block,
-{
-	<<B::Header as Header>::Hashing as Hash>::hash(b"dkg")
-}
+pub mod handler;
+pub mod state_machine;

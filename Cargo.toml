@@ -3,9 +3,7 @@ panic = 'unwind'
 
 [workspace]
 members = [
-	'node',
 	'pallets/*',
-	'runtime',
 	'standalone/*',
 	'dkg-primitives',
 	'dkg-runtime-primitives',

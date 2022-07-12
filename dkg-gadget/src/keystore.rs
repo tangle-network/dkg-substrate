@@ -112,7 +112,7 @@ impl DKGKeystore {
 
 		let pk: Vec<Public> = SyncCryptoStore::ecdsa_public_keys(&*store, KEY_TYPE)
 			.iter()
-			.map(|k| Public::from(k.clone()))
+			.map(|k| Public::from(*k))
 			.collect();
 
 		Ok(pk)
@@ -123,8 +123,7 @@ impl DKGKeystore {
 	pub fn sr25519_public_keys(&self) -> Result<Vec<sr25519::Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let pk: Vec<sr25519::Public> =
-			SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT).iter().copied().collect();
+		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT);
 
 		Ok(pk)
 	}
@@ -322,7 +321,7 @@ mod tests {
 
 		let keys = store.public_keys().ok().unwrap();
 
-		assert!(keys.len() == 4);
+		assert_eq!(keys.len(), 4);
 		assert!(keys.contains(&Keyring::Dave.public()));
 		assert!(keys.contains(&Keyring::Eve.public()));
 		assert!(keys.contains(&key1));

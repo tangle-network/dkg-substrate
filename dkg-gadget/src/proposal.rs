@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{worker::DKGWorker, Client};
+use crate::Client;
 use codec::Encode;
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
@@ -27,7 +28,7 @@ use sp_runtime::traits::{Block, Header};
 
 /// Get signed proposal
 pub(crate) fn get_signed_proposal<B, C, BE>(
-	dkg_worker: &mut DKGWorker<B, C, BE>,
+	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
 ) -> Option<Proposal>
@@ -40,7 +41,7 @@ where
 	let signed_proposal = match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
 			info!(target: "dkg", "🕸️  Refresh vote with nonce {:?} received", nonce);
-			let offchain = dkg_worker.backend.offchain_storage();
+			let offchain = backend.offchain_storage();
 
 			if let Some(mut offchain) = offchain {
 				let refresh_proposal =
@@ -86,7 +87,10 @@ where
 }
 
 /// make an unsigned proposal a signed one
-fn make_signed_proposal(kind: ProposalKind, finished_round: DKGSignedPayload) -> Option<Proposal> {
+pub(crate) fn make_signed_proposal(
+	kind: ProposalKind,
+	finished_round: DKGSignedPayload,
+) -> Option<Proposal> {
 	Some(Proposal::Signed {
 		kind,
 		data: finished_round.payload,

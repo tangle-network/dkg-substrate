@@ -13,59 +13,20 @@
 // limitations under the License.
 //
 use crate::worker::ENGINE_ID;
-use dkg_primitives::{
-	crypto::AuthorityId, rounds::MultiPartyECDSARounds, types::RoundId, AuthoritySet, ConsensusLog,
-};
+use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog};
 use sp_api::{BlockT as Block, HeaderT};
-use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::generic::OpaqueDigestItemId;
-use std::path::PathBuf;
+use std::{fmt::Debug, future::Future, path::PathBuf};
+
+pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
+impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
+	T: Future<Output = Result<Out, DKGError>> + Send + 'a
+{
+}
 
 /// Finds the index of a value in a vector. Returns None if the value is not found.
 pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
-	for (i, v) in queue.iter().enumerate() {
-		if value == v {
-			return Some(i)
-		}
-	}
-	None
-}
-
-/// Sets up the Multi-party ECDSA rounds struct used to receive, process, and handle
-/// incoming and outgoing DKG related messages for key generation, offline stage creation,
-/// and signing. The rounds struct is used to handle the execution of a single round of the DKG
-/// and should be created for each session.
-///
-/// The rounds are intended to be run only by `best_authorities` that are selected from
-/// an externally provided set of reputations. Rounds are parameterized for a `t-of-n` threshold
-/// - `signature_threshold` represents `t`
-/// - `keygen_threshold` represents `n`
-///
-/// We provide an optional `local_key_path` to this struct so that it may save the generated
-/// DKG public / local key to disk. Caching of this key is critical to persistent storage and
-/// resuming the worker from a machine failure.
-#[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-pub fn set_up_rounds<N: AtLeast32BitUnsigned + Copy>(
-	best_authorities: &[AuthorityId],
-	authority_set_id: RoundId,
-	public: &AuthorityId,
-	signature_threshold: u16,
-	keygen_threshold: u16,
-	local_key_path: Option<std::path::PathBuf>,
-	jailed_signers: &[AuthorityId],
-) -> MultiPartyECDSARounds<N> {
-	let party_inx = find_index::<AuthorityId>(best_authorities, public).unwrap() + 1;
-	// Generate the rounds object
-	MultiPartyECDSARounds::builder()
-		.round_id(authority_set_id)
-		.party_index(u16::try_from(party_inx).unwrap())
-		.threshold(signature_threshold)
-		.parties(keygen_threshold)
-		.local_key_path(local_key_path)
-		.authorities(best_authorities.to_vec())
-		.jailed_signers(jailed_signers.to_vec())
-		.build()
+	queue.iter().position(|v| value == v)
 }
 
 /// Scan the `header` digest log for a DKG validator set change. Return either the new
@@ -99,3 +60,38 @@ fn match_consensus_log(
 pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
 	base_path.as_ref().map(|path| path.join(path_str))
 }
+
+#[cfg(feature = "outbound-inspection")]
+pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
+	use parking_lot::Mutex;
+	use std::collections::HashMap;
+
+	static MAP: Mutex<Option<HashMap<&'static str, Vec<u32>>>> = parking_lot::const_mutex(None);
+	let mut lock = MAP.lock();
+
+	if lock.is_none() {
+		*lock = Some(HashMap::new())
+	}
+
+	let map = lock.as_mut().unwrap();
+
+	map.entry(ty).or_default().push(serialized_len as u32);
+
+	for (ty, history) in map.iter() {
+		log::debug!(target: "dkg", "History for {}: \
+			total count={}, \
+			first={:?}, \
+			latest={:?}, \
+			lifetime_delta={:?}, \
+			max={:?}",
+		ty,
+		history.len(),
+		history.first(),
+		history.last(),
+		history.last().and_then(|latest| history.first().map(|first| *latest as i64 - *first as i64)),
+		history.iter().max());
+	}
+}
+
+#[cfg(not(feature = "outbound-inspection"))]
+pub(crate) fn inspect_outbound(_ty: &str, _serialized_len: usize) {}
