@@ -372,7 +372,7 @@ where
 		}
 	}
 
-	#[allow(clippy::too_many_arguments)]
+	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 	fn create_signing_protocol(
 		&mut self,
 		best_authorities: Vec<Public>,
@@ -983,7 +983,7 @@ where
 			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
-					if rounds.round_id == msg.msg.round_id.clone() {
+					if rounds.round_id == msg.msg.round_id {
 						if let Err(err) = rounds.deliver_message(msg.clone()) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -994,7 +994,7 @@ where
 
 				if let Some(rounds) = self.next_rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id {
-						if let Err(err) = rounds.deliver_message(msg.clone()) {
+						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1006,8 +1006,8 @@ where
 				let msg = Arc::new(dkg_msg);
 				let async_index = msg.msg.payload.get_async_index();
 				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
-					if rounds.round_id == msg.msg.round_id.clone() {
-						if let Err(err) = rounds.deliver_message(msg.clone()) {
+					if rounds.round_id == msg.msg.round_id {
+						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1149,8 +1149,12 @@ where
 		let authority_public_key = self.get_authority_public_key();
 
 		let (active_local_key, _) = self.fetch_local_keys();
-		let local_key =
-			if active_local_key.is_none() { return } else { active_local_key.unwrap().local_key };
+		let local_key = if let Some(active_local_key) = active_local_key {
+			active_local_key.local_key
+		} else {
+			return
+		};
+
 		let mut count = 0;
 		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
 
@@ -1193,6 +1197,7 @@ where
 		}
 
 		let mut futures = Vec::with_capacity(signing_sets.len());
+		#[allow(clippy::needless_range_loop)]
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
@@ -1311,8 +1316,8 @@ where
 					// TODO: Consider caching this data and loading it here.
 					self.best_authorities = self.get_best_authorities(&notif.header);
 					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
-					*self.current_validator_set.write() = active.clone();
-					self.queued_validator_set = queued.clone();
+					*self.current_validator_set.write() = active;
+					self.queued_validator_set = queued;
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg", "Initialization complete");

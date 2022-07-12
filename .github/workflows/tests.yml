@@ -38,12 +38,14 @@ jobs:
       - name: Install Toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
-          target: x86_64-unknown-linux-gnu
+          toolchain: nightly-2022-04-20
+          components: rustfmt, clippy
+          target: wasm32-unknown-unknown
           override: true
+          default: true
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Run tests
-        run: cargo nextest run --target=x86_64-unknown-linux-gnu
+        run: cargo nextest run
