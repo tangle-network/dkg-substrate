@@ -138,6 +138,7 @@ where
 		Ok(GenericAsyncHandler { protocol })
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	fn new_offline<BI: BlockchainInterface + 'a>(
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal,
@@ -165,6 +166,7 @@ where
 		)
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn new_voting<BI: BlockchainInterface + 'a>(
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
