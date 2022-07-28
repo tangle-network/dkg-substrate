@@ -29,11 +29,11 @@ use crate::mock::{
 use codec::Encode;
 use core::panic;
 use dkg_runtime_primitives::{
-	DKGPayloadKey, FunctionSignature, Proposal, ProposalHeader, ProposalKind, ProposalNonce,
-	TypedChainId,
+	DKGPayloadKey, FunctionSignature, ProposalHeader, ProposalNonce, TypedChainId,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
 use std::vec;
+use webb_proposals::{Proposal, ProposalKind};
 
 use crate as pallet_dkg_proposals;
 

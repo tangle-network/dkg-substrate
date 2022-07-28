@@ -338,7 +338,7 @@ pub mod pallet {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
-								kind: kind.clone(),
+								kind: *kind,
 								data: data.clone(),
 								expected_public_key: e.expected_public_key(),
 								actual_public_key: e.actual_public_key(),
