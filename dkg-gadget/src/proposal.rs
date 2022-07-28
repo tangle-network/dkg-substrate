@@ -18,13 +18,14 @@ use codec::Encode;
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
-	Proposal, ProposalKind, RefreshProposalSigned,
+	RefreshProposalSigned,
 };
 use log::{info, trace};
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
 use sp_runtime::traits::{Block, Header};
+use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
 pub(crate) fn get_signed_proposal<B, C, BE>(

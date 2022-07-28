@@ -56,6 +56,8 @@ async-trait = "0.1.53"
 auto_impl = "1.0.0"
 itertools = "0.10.3"
 
+webb-proposals = { version = "0.4.3", default-features = false, features = ["scale", "evm", "substrate"] }
+
 # Local dependencies
 dkg-runtime-primitives = { path = "../dkg-runtime-primitives", default-features = false }
 dkg-primitives = { path = "../dkg-primitives", default-features = false }

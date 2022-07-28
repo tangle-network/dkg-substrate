@@ -32,7 +32,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, Proposal, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -43,6 +43,7 @@ use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, path::PathBuf, sync::Arc};
+use webb_proposals::Proposal;
 
 #[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockchainInterface: Send + Sync {

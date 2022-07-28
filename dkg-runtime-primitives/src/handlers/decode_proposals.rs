@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+use super::substrate;
 use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
-	DKGPayloadKey, Proposal, ProposalKind,
+	DKGPayloadKey,
 };
-
-use super::substrate;
+use webb_proposals::{Proposal, ProposalKind};
 
 pub fn decode_proposal_header(
 	data: &[u8],
