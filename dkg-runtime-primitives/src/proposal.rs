@@ -17,12 +17,12 @@ use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
-use webb_proposals::Proposal;
 
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub use webb_proposals::{
 	FunctionSignature, Nonce as ProposalNonce, ProposalHeader, ResourceId, TypedChainId,
+	Proposal, ProposalKind,
 };
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
