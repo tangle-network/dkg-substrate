@@ -119,8 +119,8 @@ mod tests;
 
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	DKGPayloadKey, OffchainSignedProposals, Proposal, ProposalAction, ProposalHandlerTrait,
-	ProposalKind, StoredUnsignedProposal, TypedChainId,
+	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait,
+	StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::{
@@ -135,6 +135,7 @@ use sp_runtime::{
 	traits::Saturating,
 };
 use sp_std::vec::Vec;
+use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
 
 pub mod weights;
 pub use weights::WeightInfo;
@@ -145,12 +146,11 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use dkg_runtime_primitives::{
-		utils::ensure_signed_by_dkg, DKGPayloadKey, Proposal, ProposalKind,
-	};
-	use frame_support::dispatch::DispatchResultWithPostInfo;
+	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
+	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::{CheckedSub, One, Zero};
+	use webb_proposals::{Proposal, ProposalKind};
 
 	/// Unsigned proposal for this pallet
 	pub type StoredUnsignedProposalOf<T> =
@@ -165,6 +165,8 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
+		/// The signed proposal handler trait
+		type SignedProposalHandler: OnSignedProposal<DispatchError>;
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
 		type MaxSubmissionsPerBatch: Get<u16>;
@@ -336,7 +338,7 @@ pub mod pallet {
 							// this is a bad signature.
 							// we emit it as an event.
 							Self::deposit_event(Event::InvalidProposalSignature {
-								kind: kind.clone(),
+								kind: *kind,
 								data: data.clone(),
 								expected_public_key: e.expected_public_key(),
 								actual_public_key: e.actual_public_key(),
@@ -519,7 +521,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			"submit_signed_proposal: signature is valid"
 		);
 		// Update storage
-		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop);
+		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
 		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
 		// Emit event so frontend can react to it.
 		Self::deposit_event(Event::<T>::ProposalSigned {
@@ -528,7 +530,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			data: data.to_vec(),
 			signature: sig.to_vec(),
 		});
-
+		// Finally let any handlers handle the signed proposal
+		T::SignedProposalHandler::on_signed_proposal(prop)?;
 		Ok(())
 	}
 }

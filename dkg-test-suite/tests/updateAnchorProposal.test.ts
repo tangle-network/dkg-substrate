@@ -139,7 +139,7 @@ it('should be able to sign anchor update proposal', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 	expect(value.isSome).to.eq(true);

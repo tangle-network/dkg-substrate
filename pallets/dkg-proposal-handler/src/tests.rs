@@ -25,11 +25,11 @@ use sp_std::vec::Vec;
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, OffchainSignedProposals,
-	Proposal, ProposalAction, ProposalHandlerTrait, ProposalHeader, ProposalKind, TransactionV2,
-	TypedChainId,
+	ProposalAction, ProposalHandlerTrait, ProposalHeader, TransactionV2, TypedChainId,
 };
 use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
+use webb_proposals::{Proposal, ProposalKind};
 
 // *** Utility ***
 

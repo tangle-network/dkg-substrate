@@ -25,9 +25,8 @@ use sp_core::{ecdsa, H256, U256};
 use sp_io::crypto::{ecdsa_generate, ecdsa_sign_prehashed};
 use sp_std::vec::Vec;
 
-use dkg_runtime_primitives::{
-	keccak_256, EIP2930Transaction, Proposal, ProposalKind, TransactionAction, TransactionV2,
-};
+use dkg_runtime_primitives::{keccak_256, EIP2930Transaction, TransactionAction, TransactionV2};
+use webb_proposals::{Proposal, ProposalKind};
 
 pub fn mock_eth_tx_eip2930(nonce: u8) -> EIP2930Transaction {
 	EIP2930Transaction {

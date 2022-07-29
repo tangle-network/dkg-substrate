@@ -38,6 +38,7 @@ use sp_runtime::{
 };
 use sp_std::{prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
+use webb_proposals::Proposal;
 
 /// Utility fn to calculate keccak 256 has
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {

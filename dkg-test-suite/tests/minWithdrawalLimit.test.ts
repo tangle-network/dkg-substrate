@@ -73,15 +73,11 @@ it('should be able to update min withdrawal limit', async () => {
 			Evm: localChain.chainId,
 		}
 	);
-	const kind = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
-		'MinWithdrawalLimitUpdate'
-	);
 	const minWithdrawalLimitProposal = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		{
 			Unsigned: {
-				kind: kind,
+				kind: 'MinWithdrawalLimitUpdate',
 				data: prop,
 			},
 		}
@@ -107,7 +103,7 @@ it('should be able to update min withdrawal limit', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 	expect(value.isSome).to.eq(true);

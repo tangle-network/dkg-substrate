@@ -21,7 +21,8 @@ use sp_std::vec::Vec;
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub use webb_proposals::{
-	FunctionSignature, Nonce as ProposalNonce, ProposalHeader, ResourceId, TypedChainId,
+	FunctionSignature, Nonce as ProposalNonce, Proposal, ProposalHeader, ProposalKind, ResourceId,
+	TypedChainId,
 };
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
@@ -130,83 +131,6 @@ pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
 }
-
-#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub enum Proposal {
-	Signed { kind: ProposalKind, data: Vec<u8>, signature: Vec<u8> },
-	Unsigned { kind: ProposalKind, data: Vec<u8> },
-}
-
-#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub enum ProposalKind {
-	Refresh,
-	ProposerSetUpdate,
-	EVM,
-	AnchorCreate,
-	AnchorUpdate,
-	TokenAdd,
-	TokenRemove,
-	WrappingFeeUpdate,
-	ResourceIdUpdate,
-	RescueTokens,
-	MaxDepositLimitUpdate,
-	MinWithdrawalLimitUpdate,
-	SetVerifier,
-	SetTreasuryHandler,
-	FeeRecipientUpdate,
-}
-
-impl Proposal {
-	pub fn data(&self) -> &Vec<u8> {
-		match self {
-			Proposal::Signed { data, .. } | Proposal::Unsigned { data, .. } => data,
-		}
-	}
-
-	pub fn signature(&self) -> Option<Vec<u8>> {
-		match self {
-			Proposal::Signed { signature, .. } => Some(signature.clone()),
-			Proposal::Unsigned { .. } => None,
-		}
-	}
-
-	pub fn kind(&self) -> ProposalKind {
-		match self {
-			Proposal::Signed { kind, .. } | Proposal::Unsigned { kind, .. } => kind.clone(),
-		}
-	}
-
-	pub fn is_signed(&self) -> bool {
-		matches!(self, Proposal::Signed { .. })
-	}
-
-	pub fn is_unsigned(&self) -> bool {
-		matches!(self, Proposal::Unsigned { .. })
-	}
-
-	pub fn get_payload_key(&self, nonce: ProposalNonce) -> DKGPayloadKey {
-		match self.kind() {
-			ProposalKind::EVM => DKGPayloadKey::EVMProposal(nonce),
-			ProposalKind::AnchorCreate => DKGPayloadKey::AnchorCreateProposal(nonce),
-			ProposalKind::AnchorUpdate => DKGPayloadKey::AnchorUpdateProposal(nonce),
-			ProposalKind::TokenAdd => DKGPayloadKey::TokenAddProposal(nonce),
-			ProposalKind::TokenRemove => DKGPayloadKey::TokenRemoveProposal(nonce),
-			ProposalKind::WrappingFeeUpdate => DKGPayloadKey::WrappingFeeUpdateProposal(nonce),
-			ProposalKind::ResourceIdUpdate => DKGPayloadKey::ResourceIdUpdateProposal(nonce),
-			ProposalKind::RescueTokens => DKGPayloadKey::RescueTokensProposal(nonce),
-			ProposalKind::MaxDepositLimitUpdate =>
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(nonce),
-			ProposalKind::MinWithdrawalLimitUpdate =>
-				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(nonce),
-			ProposalKind::SetVerifier => DKGPayloadKey::SetVerifierProposal(nonce),
-			ProposalKind::SetTreasuryHandler => DKGPayloadKey::SetTreasuryHandlerProposal(nonce),
-			ProposalKind::FeeRecipientUpdate => DKGPayloadKey::FeeRecipientUpdateProposal(nonce),
-			ProposalKind::Refresh => DKGPayloadKey::RefreshVote(nonce),
-			ProposalKind::ProposerSetUpdate => DKGPayloadKey::ProposerSetUpdateProposal(nonce),
-		}
-	}
-}
-
 pub trait ProposalHandlerTrait {
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,

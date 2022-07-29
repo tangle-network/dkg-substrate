@@ -92,15 +92,11 @@ it('should be able to sign token add & remove proposal', async () => {
 				Evm: localChain.chainId,
 			}
 		);
-		const kind = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposalProposalKind',
-			'TokenAdd'
-		);
 		const tokenAddProposal = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			{
 				Unsigned: {
-					kind: kind,
+					kind: 'TokenAdd',
 					data: prop,
 				},
 			}
@@ -126,7 +122,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		);
 		const value = new Option(
 			polkadotApi.registry,
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			proposal
 		);
 		expect(value.isSome).to.eq(true);
@@ -188,15 +184,11 @@ it('should be able to sign token add & remove proposal', async () => {
 			Evm: localChain.chainId,
 		}
 	);
-	const kind = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
-		'TokenRemove'
-	);
 	const tokenRemoveProposal = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		{
 			Unsigned: {
-				kind: kind,
+				kind: 'TokenRemove',
 				data: prop,
 			},
 		}
@@ -222,7 +214,7 @@ it('should be able to sign token add & remove proposal', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 

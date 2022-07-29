@@ -1504,6 +1504,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "wasm-timer",
+ "webb-proposals",
 ]
 
 [[package]]
@@ -4690,6 +4691,7 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+ "webb-proposals",
 ]
 
 [[package]]
@@ -4718,6 +4720,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "webb-proposals",
 ]
 
 [[package]]
@@ -7154,6 +7157,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1847b767a3d62d95cbf3d8a9f0e421cf57a0d8aa4f411d4b16525afb0284d4ed"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af4d7e1b012cb3d9129567661a63755ea4b8a7386d339dc945ae187e403c6743"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn",
+]
+
+[[package]]
 name = "schnorrkel"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7317,6 +7344,17 @@ name = "serde_derive"
 version = "1.0.139"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc1d3230c1de7932af58ad8ffbe1d784bd55efd5a9d84ac24f69c72d83543dfb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9521,13 +9559,16 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.3.7"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf68d775c25b9b31e4b83e12971b7bcacaec28541a8944b7d7e4fc987f8691e2"
+checksum = "7b9869641d13a639c137fd1b54b9e3b6d80b5cb0b10caac6dc00d6a9c1228590"
 dependencies = [
  "num-traits",
  "parity-scale-codec",
  "scale-info",
+ "schemars",
+ "serde",
+ "tiny-keccak",
  "typed-builder 0.10.0",
 ]
 

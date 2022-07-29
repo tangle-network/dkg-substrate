@@ -20,7 +20,7 @@ use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposals, Proposal,
+	AuthoritySet, DKGApi, OffchainSignedProposals,
 };
 use log::debug;
 use parking_lot::RwLock;
@@ -29,6 +29,7 @@ use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Header, NumberFor};
 use std::sync::Arc;
+use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(

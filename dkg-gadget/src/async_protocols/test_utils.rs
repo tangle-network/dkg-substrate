@@ -10,12 +10,13 @@ use dkg_primitives::{
 	},
 	utils::convert_signature,
 };
-use dkg_runtime_primitives::{crypto::Public, Proposal, ProposalKind, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
 use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
+use webb_proposals::{Proposal, ProposalKind};
 
 pub(crate) type VoteResults =
 	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>;

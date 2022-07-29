@@ -91,15 +91,11 @@ it('should be able to sign and execute rescue token proposal', async () => {
 
 		const proposalBytes = encodeWrappingFeeUpdateProposal(proposalPayload);
 		const prop = u8aToHex(proposalBytes);
-		const kind = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposalProposalKind',
-			'WrappingFeeUpdate'
-		);
 		const wrappingFeeUpdateProposal = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			{
 				Unsigned: {
-					kind: kind,
+					kind: 'WrappingFeeUpdate',
 					data: prop,
 				},
 			}
@@ -125,7 +121,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		);
 		const value = new Option(
 			polkadotApi.registry,
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			proposal
 		);
 		expect(value.isSome).to.eq(true);
@@ -218,15 +214,11 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		};
 		const proposalBytes = encodeRescueTokensProposal(proposalPayload);
 		const prop = u8aToHex(proposalBytes);
-		const kind = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposalProposalKind',
-			'RescueTokens'
-		);
 		const rescueTokensProposal = polkadotApi.createType(
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			{
 				Unsigned: {
-					kind: kind,
+					kind: 'RescueTokens',
 					data: prop,
 				},
 			}
@@ -252,7 +244,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		);
 		const value = new Option(
 			polkadotApi.registry,
-			'DkgRuntimePrimitivesProposal',
+			'WebbProposalsProposal',
 			proposal
 		);
 		expect(value.isSome).to.eq(true);

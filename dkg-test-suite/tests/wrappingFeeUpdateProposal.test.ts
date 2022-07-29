@@ -79,15 +79,11 @@ it('should be able to sign wrapping fee update proposal', async () => {
 			Evm: localChain.chainId,
 		}
 	);
-	const kind = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
-		'WrappingFeeUpdate'
-	);
 	const wrappingFeeUpdateProposal = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		{
 			Unsigned: {
-				kind: kind,
+				kind: 'WrappingFeeUpdate',
 				data: prop,
 			},
 		}
@@ -111,7 +107,7 @@ it('should be able to sign wrapping fee update proposal', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 	expect(value.isSome).to.eq(true);

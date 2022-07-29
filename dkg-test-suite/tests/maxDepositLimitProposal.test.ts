@@ -67,11 +67,11 @@ it('should be able to update max deposit limit', async () => {
 		}
 	);
 	const kind = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
+		'WebbProposalsProposalProposalKind',
 		'MaxDepositLimitUpdate'
 	);
 	const maxDepositLimitProposal = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		{
 			Unsigned: {
 				kind: kind,
@@ -100,7 +100,7 @@ it('should be able to update max deposit limit', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 	expect(value.isSome).to.eq(true);

@@ -37,10 +37,10 @@ use sp_runtime::RuntimeAppPublic;
 use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
 
 use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, EIP2930Transaction, Proposal, ProposalKind, TransactionAction,
-	U256,
+	crypto::AuthorityId as DKGId, EIP2930Transaction, TransactionAction, U256,
 };
 use std::sync::Arc;
+use webb_proposals::{Proposal, ProposalKind};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -167,6 +167,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
+	type SignedProposalHandler = ();
 	type WeightInfo = ();
 }
 

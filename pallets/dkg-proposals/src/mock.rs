@@ -241,6 +241,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
+	type SignedProposalHandler = ();
 	type WeightInfo = ();
 }
 

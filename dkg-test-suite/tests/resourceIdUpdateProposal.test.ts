@@ -94,15 +94,11 @@ it('should be able to sign resource id update proposal', async () => {
 			Evm: localChain.chainId,
 		}
 	);
-	const kind = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
-		'ResourceIdUpdate'
-	);
 	const resourceIdUpdateProposal = polkadotApi.createType(
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		{
 			Unsigned: {
-				kind: kind,
+				kind: 'ResourceIdUpdate',
 				data: prop,
 			},
 		}
@@ -128,7 +124,7 @@ it('should be able to sign resource id update proposal', async () => {
 	);
 	const value = new Option(
 		polkadotApi.registry,
-		'DkgRuntimePrimitivesProposal',
+		'WebbProposalsProposal',
 		proposal
 	);
 	expect(value.isSome).to.eq(true);

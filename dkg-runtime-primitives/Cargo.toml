@@ -18,7 +18,7 @@ ethereum = { version = "0.12.0", default-features = false, features = [
 	"with-codec",
 ] }
 ethereum-types = { version = "0.13.1", default-features = false }
-webb-proposals = { version = "0.3.2", default-features = false, features = ["scale", "evm", "substrate"] }
+webb-proposals = { version = "0.4.4", default-features = false, features = ["scale", "evm", "substrate"] }
 
 hex = { version = "0.4", default-features = false }
 sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
@@ -45,4 +45,5 @@ std = [
 	"sp-application-crypto/std",
 	"frame-system/std",
 	"frame-support/std",
+	"webb-proposals/std",
 ]

@@ -85,10 +85,10 @@ async function sendResourceIdUpdateProposal(api: ApiPromise) {
 		Evm: 5001,
 	});
 	const kind = api.createType(
-		'DkgRuntimePrimitivesProposalProposalKind',
+		'WebbProposalsProposalProposalKind',
 		'ResourceIdUpdate'
 	);
-	const proposal = api.createType('DkgRuntimePrimitivesProposal', {
+	const proposal = api.createType('WebbProposalsProposal', {
 		Unsigned: {
 			kind: kind,
 			data: prop,
