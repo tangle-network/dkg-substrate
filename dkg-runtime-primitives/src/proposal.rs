@@ -21,8 +21,8 @@ use sp_std::vec::Vec;
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub use webb_proposals::{
-	FunctionSignature, Nonce as ProposalNonce, ProposalHeader, ResourceId, TypedChainId,
-	Proposal, ProposalKind,
+	FunctionSignature, Nonce as ProposalNonce, Proposal, ProposalHeader, ProposalKind, ResourceId,
+	TypedChainId,
 };
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
