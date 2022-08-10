@@ -292,16 +292,16 @@ where
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
-				debug!(target: "dkg", "Starting genesis protocol");
+				debug!(target: "dkg_gadget::worker", "Starting genesis protocol");
 				self.rounds = Some(status_handle.into_primary_remote())
 			},
 			ProtoStageType::Queued => {
-				debug!(target: "dkg", "Starting queued protocol");
+				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
 				self.next_rounds = Some(status_handle.into_primary_remote())
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
-				debug!(target: "dkg", "Starting signing protocol");
+				debug!(target: "dkg_gadget::worker", "Starting signing protocol");
 				self.signing_rounds[async_index as usize] =
 					Some(status_handle.into_primary_remote())
 			},
@@ -347,11 +347,11 @@ where
 
 							match res {
 								Ok(_) => {
-									log::info!(target: "dkg", "The meta handler has executed successfully");
+									log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 								},
 
 								Err(err) => {
-									error!(target: "dkg", "Error executing meta handler {:?}", &err);
+									error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 									let _ = err_handler_tx.send(err);
 								},
 							}
@@ -362,7 +362,7 @@ where
 					},
 
 					Err(err) => {
-						error!(target: "dkg", "Error starting meta handler {:?}", &err);
+						error!(target: "dkg_gadget::worker", "Error starting meta handler {:?}", &err);
 						self.handle_dkg_error(err);
 					},
 				}
@@ -417,12 +417,12 @@ where
 
 			match res {
 				Ok(_) => {
-					log::info!(target: "dkg", "The meta handler has executed successfully");
+					log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 					Ok(async_index)
 				},
 
 				Err(err) => {
-					error!(target: "dkg", "Error executing meta handler {:?}", &err);
+					error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 					let _ = err_handler_tx.send(err.clone());
 					Err(err)
 				},
@@ -451,9 +451,9 @@ where
 			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
 			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
 		}
-		debug!(target: "dkg", "Rotating local key files");
-		debug!(target: "dkg", "Local key path: {:?}", local_key_path);
-		debug!(target: "dkg", "Queued local key path: {:?}", queued_local_key_path);
+		debug!(target: "dkg_gadget::worker", "Rotating local key files");
+		debug!(target: "dkg_gadget::worker", "Local key path: {:?}", local_key_path);
+		debug!(target: "dkg_gadget::worker", "Queued local key path: {:?}", queued_local_key_path);
 		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
 			if let Err(err) = std::fs::copy(queued_path, path) {
 				error!("Error copying queued key {:?}", &err);
@@ -602,7 +602,7 @@ where
 			}
 		};
 
-		trace!(target: "dkg", "🕸️  active validator set: {:?}", new);
+		trace!(target: "dkg_gadget::worker", "🕸️  active validator set: {:?}", new);
 
 		new
 	}
@@ -626,7 +626,7 @@ where
 		let missing: Vec<_> = store.difference(&active).cloned().collect();
 
 		if !missing.is_empty() {
-			debug!(target: "dkg", "🕸️  for block {:?}, public key missing in validator set is: {:?}", block, missing);
+			debug!(target: "dkg_gadget::worker", "🕸️  for block {:?}, public key missing in validator set is: {:?}", block, missing);
 		}
 
 		Ok(())
@@ -646,7 +646,7 @@ where
 		// there is a critical error. I'm not sure how this can happen but it should
 		// prevent an edge case.
 		if self.rounds.is_none() && genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
-			error!(target: "dkg", "🕸️  Rounds is not and authority set is not genesis set ID 0");
+			error!(target: "dkg_gadget::worker", "🕸️  Rounds is not and authority set is not genesis set ID 0");
 			return
 		}
 
@@ -656,7 +656,7 @@ where
 		// if the active is currently running, and, the keygen has stalled, create one anew
 		if let Some(rounds) = self.rounds.as_ref() {
 			if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) {
-				debug!(target: "dkg", "🕸️  Rounds exists and is active");
+				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is active");
 				return
 			}
 		}
@@ -672,11 +672,11 @@ where
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 			self.rounds = None;
 			return
 		} else {
-			info!(target: "dkg", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -701,13 +701,13 @@ where
 
 		// Check if the next rounds exists and has processed for this next queued round id
 		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().is_active() {
-			debug!(target: "dkg", "🕸️  Next rounds exists and is active, returning...");
+			debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
 			return
 		}
 
 		if let Some(rounds) = self.next_rounds.as_ref() {
 			if rounds.keygen_has_stalled(*header.number()) {
-				debug!(target: "dkg", "🕸️  Next rounds keygen has stalled, creating new rounds...");
+				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
 
@@ -723,10 +723,10 @@ where
 		let maybe_party_index = self.get_next_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 			return
 		} else {
-			info!(target: "dkg", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -746,16 +746,16 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
-		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
+		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
 		if let Some(latest_header) = self.latest_header.read().clone() {
 			if latest_header.number() >= header.number() {
 				// We've already seen this block, ignore it.
-				debug!(target: "dkg", "🕸️  Latest header is greater than or equal to current header, returning...");
+				debug!(target: "dkg_gadget::worker", "🕸️  Latest header is greater than or equal to current header, returning...");
 				return
 			}
 		}
 		*self.latest_header.write() = Some(header.clone());
-		debug!(target: "dkg", "🕸️  Latest header is now: {:?}", header.number());
+		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
@@ -772,7 +772,7 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
-				debug!(target: "dkg", "🕸️  GENESIS ROUND_ID {:?}", active.id);
+				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
@@ -791,13 +791,13 @@ where
 	}
 
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
-		debug!(target: "dkg", "🕸️  maybe_enact_new_authorities");
+		debug!(target: "dkg_gadget::worker", "🕸️  maybe_enact_new_authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
 			let next_best_has_changed = next_best != self.best_next_authorities;
 			if next_best_has_changed && self.queued_validator_set.id == queued.id {
-				debug!(target: "dkg", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
+				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
 				// Update the next best authorities
 				self.best_next_authorities = next_best;
 				// Start the queued DKG setup for the new queued authorities
@@ -806,29 +806,29 @@ where
 			}
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.clone() {
-				debug!(target: "dkg", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
+				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				if rounds.keygen_is_not_complete() &&
 					header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
 				{
-					debug!(target: "dkg", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
+					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: rounds.current_round_blame().blamed_parties,
 					})
 				} else {
-					debug!(target: "dkg", "🕸️  QUEUED DKG NOT STALLED: round {:?}", queued.id);
+					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG NOT STALLED: round {:?}", queued.id);
 				}
 			}
 
 			let queued_keygen_in_progress =
 				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
 
-			debug!(target: "dkg", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
-			debug!(target: "dkg", "🕸️  QUEUED DKG ID: {:?}", queued.id);
-			debug!(target: "dkg", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
-			debug!(target: "dkg", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.as_ref().map(|r| r.status.clone()));
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG ID: {:?}", queued.id);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.as_ref().map(|r| r.status.clone()));
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
-				debug!(target: "dkg", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
+				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
@@ -841,16 +841,16 @@ where
 				let (_, maybe_queued_key) = self.fetch_local_keys();
 				match maybe_queued_key {
 					Some(queued_key) if queued_key.round_id == queued.id => {
-						debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
-						debug!(target: "dkg", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
+						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
+						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
 						return
 					},
 					Some(k) => {
-						debug!(target: "dkg", "🕸️  QUEUED KEY EXISTS: {:?}", k.round_id);
-						debug!(target: "dkg", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
+						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.round_id);
+						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
 					},
 					None => {
-						debug!(target: "dkg", "🕸️  QUEUED KEY DOES NOT EXIST");
+						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY DOES NOT EXIST");
 					},
 				};
 				// If we are starting a new queued DKG, we rotate the next rounds
@@ -860,24 +860,24 @@ where
 				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Rotate the key files
 				let success = self.rotate_local_key_files();
-				debug!(target: "dkg", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
+				debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 			}
 		} else {
 			// no queued validator set, so we don't do anything
-			debug!(target: "dkg", "🕸️  NO QUEUED VALIDATOR SET");
+			debug!(target: "dkg_gadget::worker", "🕸️  NO QUEUED VALIDATOR SET");
 		}
 	}
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
-		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		trace!(target: "dkg_gadget::worker", "🕸️  Finality notification: {:?}", notification);
 		// Handle import notifications
 		self.process_block_notification(&notification.header);
 	}
 
 	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		trace!(target: "dkg_gadget::worker", "🕸️  Finality notification: {:?}", notification);
 		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
@@ -935,7 +935,7 @@ where
 	}
 
 	pub fn handle_dkg_error(&mut self, dkg_error: DKGError) {
-		log::error!(target: "dkg", "Received error: {:?}", dkg_error);
+		log::error!(target: "dkg_gadget::worker", "Received error: {:?}", dkg_error);
 		let authorities = self.current_validator_set.read().authorities.clone();
 
 		let bad_actors = match dkg_error {
@@ -1021,12 +1021,12 @@ where
 						match handle_public_key_broadcast(self, dkg_msg) {
 							Ok(()) => (),
 							Err(err) =>
-								error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+								error!(target: "dkg_gadget::worker", "🕸️  Error while handling DKG message {:?}", err),
 						};
 					},
 
 					Err(err) => {
-						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
+						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
 			},
@@ -1036,12 +1036,12 @@ where
 						match handle_misbehaviour_report(self, dkg_msg) {
 							Ok(()) => (),
 							Err(err) =>
-								error!(target: "dkg", "🕸️  Error while handling DKG message {:?}", err),
+								error!(target: "dkg_gadget::worker", "🕸️  Error while handling DKG message {:?}", err),
 						};
 					},
 
 					Err(err) => {
-						log::error!(target: "dkg", "Error while verifying signature against authorities: {:?}", err)
+						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
 			},
@@ -1053,7 +1053,7 @@ where
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender } => {
-				info!(target: "dkg", "🕸️  DKG Keygen misbehaviour by {}", offender);
+				info!(target: "dkg_gadget::worker", "🕸️  DKG Keygen misbehaviour by {}", offender);
 				if let Some(rounds) = self.next_rounds.as_mut() {
 					(offender, rounds.round_id, MisbehaviourType::Keygen)
 				} else {
@@ -1061,7 +1061,7 @@ where
 				}
 			},
 			DKGReport::SigningMisbehaviour { offender } => {
-				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
+				info!(target: "dkg_gadget::worker", "🕸️  DKG Signing misbehaviour by {}", offender);
 				if let Some(rounds) = self.rounds.as_mut() {
 					(offender, rounds.round_id, MisbehaviourType::Sign)
 				} else {
@@ -1126,10 +1126,10 @@ where
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
 			return
 		} else {
-			info!(target: "dkg", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
@@ -1140,7 +1140,7 @@ where
 		if unsigned_proposals.is_empty() {
 			return
 		} else {
-			debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+			debug!(target: "dkg_gadget::worker", "Got unsigned proposals count {}", unsigned_proposals.len());
 		}
 
 		let best_authorities: Vec<Public> =
@@ -1180,7 +1180,7 @@ where
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
-		debug!(target: "dkg", "Generating {} signing sets", num_combinations);
+		debug!(target: "dkg_gadget::worker", "Generating {} signing sets", num_combinations);
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
@@ -1201,7 +1201,7 @@ where
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
-				log::info!(target: "dkg", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", round_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				log::info!(target: "dkg_gadget::worker", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", round_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
@@ -1215,7 +1215,7 @@ where
 				) {
 					Ok(task) => futures.push(task),
 					Err(err) => {
-						log::error!(target: "dkg", "Error creating signing protocol: {:?}", &err);
+						log::error!(target: "dkg_gadget::worker", "Error creating signing protocol: {:?}", &err);
 						self.handle_dkg_error(err)
 					},
 				}
@@ -1223,7 +1223,7 @@ where
 		}
 
 		if futures.is_empty() {
-			log::error!(target: "dkg", "While creating the signing protocol, 0 were created");
+			log::error!(target: "dkg_gadget::worker", "While creating the signing protocol, 0 were created");
 		} else {
 			// the goal of the meta task is to select the first winner
 			let meta_signing_protocol = async move {
@@ -1232,9 +1232,9 @@ where
 				// has logic to handle errors internally, including misbehaviour monitors
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
-					log::info!(target: "dkg", "*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***", _success);
+					log::info!(target: "dkg_gadget::worker", "*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***", _success);
 				} else {
-					log::warn!(target: "dkg", "*** UNSUCCESSFULLY EXECUTED meta signing protocol");
+					log::warn!(target: "dkg_gadget::worker", "*** UNSUCCESSFULLY EXECUTED meta signing protocol");
 				}
 			};
 
@@ -1320,7 +1320,7 @@ where
 					self.queued_validator_set = queued;
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
-					log::debug!(target: "dkg", "Initialization complete");
+					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
 					future::ready(false)
 				} else {
 					future::ready(true)
@@ -1340,12 +1340,12 @@ where
 		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
 
 		self.initialization().await;
-		log::debug!(target: "dkg", "Starting DKG Iteration loop");
+		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
 		loop {
 			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
-						log::debug!(target: "dkg", "Going to handle Finality notification");
+						log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
 						self.handle_finality_notification(notification);
 					} else {
 						log::error!("Finality notification stream closed");
@@ -1354,7 +1354,7 @@ where
 				},
 				notification = self.import_notifications.next().fuse() => {
 					if let Some(notification) = notification {
-						log::debug!(target: "dkg", "Going to handle Import notification");
+						log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
 						self.handle_import_notification(notification);
 					} else {
 						log::error!("Import notification stream closed");
@@ -1364,7 +1364,7 @@ where
 
 				misbehaviour_msg = misbehaviour_rx.recv().fuse() => {
 					if let Some(msg) = misbehaviour_msg {
-						log::debug!(target: "dkg", "Going to gossip misbehaviour");
+						log::debug!(target: "dkg_gadget::worker", "Going to gossip misbehaviour");
 						gossip_misbehaviour_report(&mut self, msg)
 					} else {
 						log::error!("Misbehaviour channel closed");
@@ -1374,7 +1374,7 @@ where
 
 				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
-						log::debug!(target: "dkg", "Going to handle dkg error");
+						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg error");
 						self.handle_dkg_error(error)
 					} else {
 						log::error!("DKG Error channel closed");
@@ -1384,7 +1384,7 @@ where
 
 				dkg_msg = dkg.next().fuse() => {
 					if let Some(dkg_msg) = dkg_msg {
-						log::debug!(target: "dkg", "Going to handle dkg message");
+						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
 						self.process_incoming_dkg_message(dkg_msg);
 					} else {
 						log::error!("DKG stream closed");
@@ -1394,7 +1394,7 @@ where
 			}
 		}
 
-		log::info!(target: "dkg", "DKG Iteration loop finished");
+		log::info!(target: "dkg_gadget::worker", "DKG Iteration loop finished");
 	}
 }
 

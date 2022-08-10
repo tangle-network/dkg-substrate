@@ -35,11 +35,11 @@ impl StateMachineHandler for Keygen {
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType,
 	) -> Result<(), <Self as StateMachine>::Err> {
-		let DKGMessage { payload, .. } = msg.body;
+		let DKGMessage { payload, round_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				log::info!(target: "dkg", "Handling Keygen inbound message from id={}", msg.sender_id);
+				log::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, round={}", msg.sender_id, round_id);
 				use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error as Error;
 				let message: Msg<ProtocolMessage> =
 					serde_json::from_slice(msg.keygen_msg.as_slice())
@@ -56,7 +56,8 @@ impl StateMachineHandler for Keygen {
 					.map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
 			},
 
-			err => log::debug!(target: "dkg", "Invalid payload received: {:?}", err),
+			err =>
+				log::debug!(target: "dkg_gadget::async_protocol::keygen", "Invalid payload received: {:?}", err),
 		}
 
 		Ok(())
@@ -68,7 +69,7 @@ impl StateMachineHandler for Keygen {
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		log::info!(target: "dkg", "Completed keygen stage successfully!");
+		log::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in
