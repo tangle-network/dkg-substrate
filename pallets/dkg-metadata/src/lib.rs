@@ -237,7 +237,7 @@ pub mod pallet {
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
 			frame_support::log::debug!(
-				target: "dkg",
+				target: "runtime::dkg_metadata",
 				"Current Authority({}) DKG PublicKey:
 				**********************************************************
 				compressed: 0x{}
@@ -250,7 +250,7 @@ pub mod pallet {
 			#[cfg(feature = "std")] // required since we use hex and strings
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
 				frame_support::log::debug!(
-					target: "dkg",
+					target: "runtime::dkg_metadata",
 					"Next Authority({}) DKG PublicKey:
 					**********************************************************
 					compressed: 0x{}
@@ -800,7 +800,7 @@ pub mod pallet {
 				.map_err(|_| {
 					#[cfg(feature = "std")]
 					log::error!(
-						target: "dkg",
+						target: "runtime::dkg_metadata",
 						"Invalid signature for RefreshProposal
 						**********************************************************
 						signature: {:?}
@@ -1389,7 +1389,7 @@ impl<T: Config> Pallet<T> {
 
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					frame_support::log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1443,7 +1443,7 @@ impl<T: Config> Pallet<T> {
 
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping next public key submmission");
+					frame_support::log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping next public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1508,7 +1508,7 @@ impl<T: Config> Pallet<T> {
 					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
 					});
-				frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+				frame_support::log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
 
 				pub_key_sig_ref.clear();
 			}
@@ -1554,7 +1554,7 @@ impl<T: Config> Pallet<T> {
 					Call::submit_misbehaviour_reports { reports: reports.clone() }
 				});
 
-				frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+				frame_support::log::debug!(target: "runtime::dkg_metadata", "Offchain submitting reports onchain {:?}", reports);
 
 				agg_reports_ref.clear();
 			}
