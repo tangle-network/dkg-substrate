@@ -197,7 +197,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		recipient: PeerId,
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
-		debug!(target: "dkg", "Sending message to {}", recipient);
+		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to {}", recipient);
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
@@ -207,7 +207,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		debug!(target: "dkg", "Sending message to all peers");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to all peers");
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
@@ -219,7 +219,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		let stream = self.my_channel.subscribe();
 		tokio_stream::wrappers::BroadcastStream::new(stream)
 			.inspect(
-				|msg| debug!(target: "dkg", "Streaming message from the Gossip Engine (is okay? {})", msg.is_ok()),
+				|msg| debug!(target: "dkg_gadget::gossip_engine::network", "Streaming message from the Gossip Engine (is okay? {})", msg.is_ok()),
 			)
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
@@ -300,7 +300,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	pub async fn run(mut self) {
 		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
-		debug!(target: "dkg", "Starting the DKG Gossip Handler");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
 		loop {
 			futures::select! {
 				network_event = self.event_stream.next().fuse() => {
@@ -349,7 +349,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{
-				debug!(target: "dkg", "Peer {} connected to gossip protocol", remote);
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
 				let _was_in = self.peers.insert(
 					remote,
 					Peer {
@@ -367,7 +367,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if protocol == self.protocol_name =>
 			{
 				let _peer = self.peers.remove(&remote);
-				debug!(target: "dkg", "Peer {} disconnected from gossip protocol", remote);
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} disconnected from gossip protocol", remote);
 				debug_assert!(_peer.is_some());
 			},
 
@@ -376,14 +376,14 @@ impl<B: Block + 'static> GossipHandler<B> {
 					if protocol != self.protocol_name {
 						continue
 					}
-					debug!(target: "dkg", "Received message from {} from gossiping", remote);
+					debug!(target: "dkg_gadget::gossip_engine::network", "Received message from {} from gossiping", remote);
 
 					if let Ok(m) =
 						<SignedDKGMessage<AuthorityId> as Decode>::decode(&mut message.as_ref())
 					{
 						self.on_signed_dkg_message(remote, m).await;
 					} else {
-						warn!(target: "dkg", "Failed to decode signed DKG message");
+						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to decode signed DKG message");
 						self.service.report_peer(remote, rep::UNEXPECTED_MESSAGE);
 					}
 				}
@@ -397,20 +397,20 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
+		debug!(target: "dkg_gadget::gossip_engine::network", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					log::debug!(target: "dkg", "NEW DKG MESSAGE FROM {}", who);
+					log::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
 					let recv_count = self.controller_channel.receiver_count();
 					if recv_count == 0 {
-						log::warn!(target: "dkg", "No one is going to process the message!!!");
+						log::warn!(target: "dkg_gadget::gossip_engine::network", "No one is going to process the message!!!");
 					}
 					if let Err(e) = self.controller_channel.send(message.clone()) {
-						log::error!(target: "dkg", "Failed to send message to DKG controller: {:?}", e);
+						log::error!(target: "dkg_gadget::gossip_engine::network", "Failed to send message to DKG controller: {:?}", e);
 					} else {
-						log::debug!(target: "dkg", "Message sent to {recv_count} DKG controller listeners");
+						log::debug!(target: "dkg_gadget::gossip_engine::network", "Message sent to {recv_count} DKG controller listeners");
 					}
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
@@ -418,7 +418,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
-					log::debug!(target: "dkg", "OLD DKG MESSAGE FROM {}", who);
+					log::debug!(target: "dkg_gadget::gossip_engine::network", "OLD DKG MESSAGE FROM {}", who);
 					// if we are here, that means this peer sent us a message we already know.
 					let inserted = entry.get_mut().insert(who);
 					// and if inserted is `false` that means this peer was already in the set
@@ -465,9 +465,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 				self.protocol_name.clone(),
 				Encode::encode(&message),
 			);
-			debug!(target: "dkg", "Sending a signed DKG messages to {}", to_who);
+			debug!(target: "dkg_gadget::gossip_engine::network", "Sending a signed DKG messages to {}", to_who);
 		} else {
-			debug!(target: "dkg", "Peer {} does not exist in known peers", to_who);
+			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
@@ -475,7 +475,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		let mut propagated_messages = 0;
 		let message_hash = message.message_hash::<B>();
 		if self.peers.is_empty() {
-			warn!(target: "dkg", "No peers to gossip message {}", message_hash);
+			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
 		}
 		for (who, peer) in self.peers.iter_mut() {
 			let new_to_them = peer.known_messages.insert(message_hash);
