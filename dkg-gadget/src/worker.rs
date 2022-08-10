@@ -877,7 +877,7 @@ where
 	}
 
 	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg_gadget::worker", "🕸️  Finality notification: {:?}", notification);
+		trace!(target: "dkg_gadget::worker", "🕸️  Import notification: {:?}", notification);
 		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
