@@ -1416,7 +1416,6 @@ impl<T: Config> Pallet<T> {
 				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
 					keys_and_signatures: agg_keys.clone(),
 				});
-
 				agg_key_ref.clear();
 			}
 
