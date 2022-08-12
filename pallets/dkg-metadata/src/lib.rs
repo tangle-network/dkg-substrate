@@ -227,10 +227,30 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_genesis_public_key_onchain(block_number);
-			let _res = Self::submit_next_public_key_onchain(block_number);
-			let _res = Self::submit_public_key_signature_onchain(block_number);
-			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
+			let res = Self::submit_genesis_public_key_onchain(block_number);
+			frame_support::log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_genesis_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_next_public_key_onchain(block_number);
+			frame_support::log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_next_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_public_key_signature_onchain(block_number);
+			frame_support::log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_public_key_signature_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_misbehaviour_reports_onchain(block_number);
+			frame_support::log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_misbehaviour_reports_onchain : {:?}",
+				res,
+			);
 			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
 			#[cfg(feature = "std")]
@@ -1413,9 +1433,23 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+				let res = signer.send_signed_transaction(|_account| Call::submit_public_key {
 					keys_and_signatures: agg_keys.clone(),
 				});
+				// frame_support::log::debug!(
+				// 	target: "runtime::dkg_metadata",
+				// 	"submit_genesis_public_key_onchain : {:?}",
+				// 	"This transaction failed",
+				// );
+				for item in res {
+					frame_support::log::debug!(
+						target: "runtime::dkg_metadata",
+						"submit_genesis_public_key_onchain : {:?} {:?}",
+						item.0.public,
+						item.1
+					);
+					//return Err("send_signed_transaction failed");
+				}
 				agg_key_ref.clear();
 			}
 
