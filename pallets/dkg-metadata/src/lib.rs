@@ -227,6 +227,10 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
+			frame_support::log::debug!(
+				target: "runtime::dkg_metadata",
+				"offchain worker triggered",
+			);
 			let res = Self::submit_genesis_public_key_onchain(block_number);
 			frame_support::log::debug!(
 				target: "runtime::dkg_metadata",
