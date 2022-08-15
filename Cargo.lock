@@ -4675,6 +4675,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "hex-literal",
+ "log",
  "pallet-aura",
  "pallet-balances",
  "pallet-dkg-metadata",

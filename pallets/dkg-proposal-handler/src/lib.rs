@@ -149,6 +149,7 @@ pub mod pallet {
 	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
 	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
+	use log;
 	use sp_runtime::traits::{CheckedSub, One, Zero};
 	use webb_proposals::{Proposal, ProposalKind};
 
@@ -260,7 +261,7 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
 			let res = Self::submit_signed_proposal_onchain(block_number);
-			frame_support::log::debug!(
+			log::debug!(
 				target: "runtime::dkg_proposal_handler",
 				"offchain worker result: {:?}",
 				res
@@ -317,7 +318,7 @@ pub mod pallet {
 			);
 
 			// log the caller, and the props.
-			frame_support::log::debug!(
+			log::debug!(
 				target: "runtime::dkg_proposal_handler",
 				"submit_signed_proposal: props: {:?} by {:?}",
 				&props,
@@ -344,7 +345,7 @@ pub mod pallet {
 								actual_public_key: e.actual_public_key(),
 								invalid_signature: signature.clone(),
 							});
-							frame_support::log::error!(
+							log::error!(
 								target: "runtime::dkg_proposal_handler",
 								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",
 								kind,
@@ -357,7 +358,7 @@ pub mod pallet {
 					}
 
 					// now we need to log the data and signature
-					frame_support::log::debug!(
+					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"submit_signed_proposal: data: {:?}, signature: {:?}",
 						data,
@@ -491,7 +492,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let id =
 			decode_proposal_identifier(&prop).map_err(|_e| Error::<T>::ProposalFormatInvalid)?;
 		// Log the chain id and nonce
-		frame_support::log::debug!(
+		log::debug!(
 			target: "runtime::dkg_proposal_handler",
 			"submit_signed_proposal: chain: {:?}, payload_key: {:?}",
 			id.typed_chain_id,
@@ -503,7 +504,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Error::<T>::ProposalDoesNotExists
 		);
 		// Log that proposal exist in the unsigned queue
-		frame_support::log::debug!(
+		log::debug!(
 			target: "runtime::dkg_proposal_handler",
 			"submit_signed_proposal: proposal exist in the unsigned queue"
 		);
@@ -516,7 +517,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Error::<T>::ProposalSignatureInvalid
 		);
 		// Log that the signature is valid
-		frame_support::log::debug!(
+		log::debug!(
 			target: "runtime::dkg_proposal_handler",
 			"submit_signed_proposal: signature is valid"
 		);
@@ -592,7 +593,7 @@ impl<T: Config> Pallet<T> {
 			}
 			match Self::get_next_offchain_signed_proposal(block_number) {
 				Ok(next_proposals) => {
-					frame_support::log::debug!(
+					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"submit_signed_proposal_onchain: found {} proposals to submit before filtering\n {:?}",
 						next_proposals.len(), next_proposals
@@ -603,7 +604,7 @@ impl<T: Config> Pallet<T> {
 						.cloned()
 						.filter(Self::is_not_existing_proposal)
 						.collect::<Vec<_>>();
-					frame_support::log::debug!(
+					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"submit_signed_proposal_onchain: found {} proposals to submit after filtering\n {:?}",
 						filtered_proposals.len(), filtered_proposals
@@ -622,14 +623,14 @@ impl<T: Config> Pallet<T> {
 							.map_err(|()| "Unable to submit unsigned transaction.");
 						// Display error if the signed tx fails.
 						if result.is_err() {
-							frame_support::log::error!(
+							log::error!(
 								target: "runtime::dkg_proposal_handler",
 								"failure: failed to send unsigned transaction to chain: {:?}",
 								call,
 							);
 						} else {
 							// log the result of the transaction submission
-							frame_support::log::debug!(
+							log::debug!(
 								target: "runtime::dkg_proposal_handler",
 								"Submitted unsigned transaction for signed proposal: {:?}",
 								call,
@@ -639,7 +640,7 @@ impl<T: Config> Pallet<T> {
 				},
 				Err(e) => {
 					// log the error
-					frame_support::log::warn!(
+					log::warn!(
 						target: "runtime::dkg_proposal_handler",
 						"Failed to get next signed proposal: {}",
 						e
@@ -662,13 +663,13 @@ impl<T: Config> Pallet<T> {
 			match res {
 				Ok(Some(mut prop_wrapper)) => {
 					// log the proposals
-					frame_support::log::debug!(
+					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"Offchain signed proposals: {:?}",
 						prop_wrapper.proposals
 					);
 					// log how many proposal batches are left
-					frame_support::log::debug!(
+					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"Offchain signed proposals left: {}",
 						prop_wrapper.proposals.len()
@@ -696,7 +697,7 @@ impl<T: Config> Pallet<T> {
 				Ok(None) => Err("No signed proposals key stored"),
 				Err(e) => {
 					// log the error
-					frame_support::log::warn!(
+					log::warn!(
 						target: "runtime::dkg_proposal_handler",
 						"Failed to read offchain signed proposals: {:?}",
 						e
