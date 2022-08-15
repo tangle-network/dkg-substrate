@@ -228,6 +228,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
+			log::info!("DKG Metadata : Hello World from offchain workers!");
 			log::debug!(
 				target: "runtime::dkg_metadata",
 				"offchain worker triggered",
