@@ -201,7 +201,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 				resourceId: treasuryResourceId,
 				functionSignature: encodeFunctionSignature(
 					treasury.contract.interface.functions[
-						'rescueTokens(address,address,uint256,uint256)'
+						'rescueTokens(address,address,uint256,uint32)'
 					].format()
 				),
 				nonce: Number(await treasury.contract.proposalNonce()) + 1,
