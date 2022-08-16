@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # DKG Proposals Module
+//! # Block Header Governance Module
 //!
 //! A pallet to manage proposals that are submitted for signing by the DKG.
 //!
@@ -97,7 +97,7 @@ pub mod types;
 pub mod utils;
 use codec::{EncodeAppend, EncodeLike};
 use dkg_runtime_primitives::{
-	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
+	traits::OnAuthoritySetChangeHandler, BlockHeaderHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
 };
 use frame_support::{
@@ -174,7 +174,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type Period: Get<Self::BlockNumber>;
 
-		type ProposalHandler: ProposalHandlerTrait;
+		type BlockHeaderHandler: BlockHeaderHandlerTrait;
 
 		type WeightInfo: WeightInfo;
 	}
@@ -290,8 +290,6 @@ pub mod pallet {
 		ChainNotWhitelisted,
 		/// Chain has already been enabled
 		ChainAlreadyWhitelisted,
-		/// Resource ID provided isn't mapped to anything
-		ResourceDoesNotExist,
 		/// Proposer already in set
 		ProposerAlreadyExists,
 		/// Provided accountId is not a proposer
@@ -428,7 +426,7 @@ pub mod pallet {
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
 
-			Self::vote_for(who, nonce, src_chain_id, &prop)
+			Self::vote_for(who, nonce, src_chain_id, &header)
 		}
 
 		/// Commits a vote against a provided proposal.
@@ -449,7 +447,7 @@ pub mod pallet {
 			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
 			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
 
-			Self::vote_against(who, nonce, src_chain_id, &prop)
+			Self::vote_against(who, nonce, src_chain_id, &header)
 		}
 
 		/// Evaluate the state of a proposal given the current vote threshold.
@@ -469,7 +467,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
 
-			Self::try_resolve_proposal(nonce, src_chain_id, &prop)
+			Self::try_resolve_proposal(nonce, src_chain_id, &header)
 		}
 	}
 }
@@ -567,7 +565,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		header: &T::Header
 		in_favour: bool,
 	) -> DispatchResultWithPostInfo {
 		let now = <frame_system::Pallet<T>>::block_number();
@@ -612,7 +610,7 @@ impl<T: Config> Pallet<T> {
 	fn try_resolve_proposal(
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		header: &T::Header
 	) -> DispatchResultWithPostInfo {
 		if let Some(mut votes) = Votes::<T>::get(src_chain_id, (nonce, prop.clone())) {
 			let now = <frame_system::Pallet<T>>::block_number();
@@ -624,7 +622,7 @@ impl<T: Config> Pallet<T> {
 			Votes::<T>::insert(src_chain_id, (nonce, prop.clone()), votes.clone());
 
 			match status {
-				ProposalStatus::Approved => Self::finalize_execution(src_chain_id, nonce, prop),
+				ProposalStatus::Approved => Self::finalize_execution(src_chain_id, nonce, header),
 				ProposalStatus::Rejected => Self::cancel_execution(src_chain_id, nonce),
 				_ => Ok(().into()),
 			}
@@ -639,10 +637,10 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		header: &T::Header
 	) -> DispatchResultWithPostInfo {
-		Self::commit_vote(who, nonce, src_chain_id, prop, true)?;
-		Self::try_resolve_proposal(nonce, src_chain_id, prop)
+		Self::commit_vote(who, nonce, src_chain_id, header, true)?;
+		Self::try_resolve_proposal(nonce, src_chain_id, header)
 	}
 
 	/// Commits a vote against the proposal and cancels it if more than
@@ -651,25 +649,25 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		header: &T::Header
 	) -> DispatchResultWithPostInfo {
-		Self::commit_vote(who, nonce, src_chain_id, prop, false)?;
-		Self::try_resolve_proposal(nonce, src_chain_id, prop)
+		Self::commit_vote(who, nonce, src_chain_id, header, false)?;
+		Self::try_resolve_proposal(nonce, src_chain_id, header)
 	}
 
 	/// Execute the proposal and signals the result as an event
 	fn finalize_execution(
 		src_chain_id: TypedChainId,
 		nonce: ProposalNonce,
-		prop: &T::Proposal,
+		header: &T::Header,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved {
 			chain_id: src_chain_id,
 			proposal_nonce: nonce,
 		});
-		T::ProposalHandler::handle_unsigned_proposal(
-			prop.clone().into(),
-			dkg_runtime_primitives::ProposalAction::Sign(0),
+		T::BlockHeaderHandler::on_block_header(
+			header,
+			false,
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded {
 			chain_id: src_chain_id,

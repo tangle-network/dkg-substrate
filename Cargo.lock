@@ -4624,7 +4624,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-block-hash-registry"
+name = "pallet-block-hash-governance"
 version = "1.0.0"
 dependencies = [
  "dkg-runtime-primitives",

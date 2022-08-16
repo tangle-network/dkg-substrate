@@ -1,10 +1,10 @@
 [package]
 authors = ["Webb Technologies Inc."]
-description = "FRAME pallet for proposing and reporting signed transaction blobs."
+description = "FRAME pallet for proposing and voting on block headers of bridged chains."
 edition = "2021"
 homepage = "https://substrate.dev"
 license = "Unlicense"
-name = "pallet-block-hash-registry"
+name = "pallet-block-header-governance"
 repository = "https://github.com/substrate-developer-hub/substrate-darkwebb-node/"
 version = "1.0.0"
 
