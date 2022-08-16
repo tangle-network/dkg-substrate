@@ -1,0 +1,68 @@
+[package]
+authors = ["Webb Technologies Inc."]
+description = "FRAME pallet for proposing and reporting signed transaction blobs."
+edition = "2021"
+homepage = "https://substrate.dev"
+license = "Unlicense"
+name = "pallet-block-hash-registry"
+repository = "https://github.com/substrate-developer-hub/substrate-darkwebb-node/"
+version = "1.0.0"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# primitives
+codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
+scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
+k256 = { version = "0.10.2", default-features = false, features = ["arithmetic", "ecdsa"] }
+log = { version = "0.4.13", default-features = false }
+
+dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
+
+sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-io = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+
+# frame dependencies
+frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+pallet-balances = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
+frame-system-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26", optional = true }
+frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26", optional = true }
+
+[dev-dependencies]
+webb-proposals = { version = "0.4.4", default-features = false, features = ["scale", "evm", "substrate"] }
+pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
+pallet-dkg-metadata = { path = "../dkg-metadata" }
+pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.26" }
+pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+hex = { version = "0.4", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"k256/std",
+	"log/std",
+	"scale-info/std",
+	"sp-std/std",
+	"sp-runtime/std",
+	"sp-io/std",
+	"sp-core/std",
+	"frame-support/std",
+	"frame-system/std",
+	"frame-benchmarking/std",
+	"pallet-balances/std",
+	"dkg-runtime-primitives/std",
+]
+runtime-benchmarks = [
+  "frame-benchmarking",
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+]
