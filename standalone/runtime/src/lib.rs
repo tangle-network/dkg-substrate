@@ -665,6 +665,21 @@ where
 	type Extrinsic = UncheckedExtrinsic;
 }
 
+parameter_types! {
+	pub const MaxAdditionalFields: u32 = 5;
+	pub const MaxResources: u32 = 32;
+}
+
+type BridgeRegistryInstance = pallet_bridge_registry::Instance1;
+impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
+	type Event = Event;
+	type BridgeIndex = u32;
+	type MaxAdditionalFields = MaxAdditionalFields;
+	type MaxResources = MaxResources;
+	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+	type WeightInfo = ();
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
   pub enum Runtime where
@@ -690,6 +705,7 @@ construct_runtime!(
 	Staking: pallet_staking,
 	Session: pallet_session,
 	Historical: pallet_session_historical,
+	BridgeRegistry: pallet_bridge_registry::<Instance1>,
   }
 );
 
@@ -961,7 +977,7 @@ impl_runtime_apis! {
 	  list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
 	  list_benchmark!(list, extra, pallet_dkg_proposals, DKGProposals);
 	  list_benchmark!(list, extra, pallet_dkg_metadata, DKG);
-
+	  list_benchmark!(list, extra, pallet_bridge_registry, BridgeRegistry);
 
 	  let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -1001,6 +1017,7 @@ impl_runtime_apis! {
 	  add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);
 	  add_benchmark!(params, batches, pallet_dkg_proposals, DKGProposals);
 	  add_benchmark!(params, batches, pallet_dkg_metadata, DKG);
+	  add_benchmark!(params, batches, pallet_bridge_registry, BridgeRegistry);
 
 	  if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 	  Ok(batches)

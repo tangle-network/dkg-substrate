@@ -58,6 +58,7 @@ dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-featur
 pallet-dkg-metadata = { path = '../../pallets/dkg-metadata', default-features = false }
 pallet-dkg-proposals = { path = '../../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../../pallets/dkg-proposal-handler', default-features = false }
+pallet-bridge-registry = { path = "../../pallets/bridge-registry", default-features = false }
 
 # Used for the node template's RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
@@ -108,6 +109,7 @@ std = [
 	'pallet-dkg-metadata/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
+	"pallet-bridge-registry/std",
 	'pallet-election-provider-multi-phase/std',
 	'sp-npos-elections/std',
 	'frame-election-provider-support/std',
@@ -126,6 +128,7 @@ runtime-benchmarks = [
 	"pallet-dkg-proposal-handler/runtime-benchmarks",
 	"pallet-dkg-proposals/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
+	"pallet-bridge-registry/runtime-benchmarks",
 ]
 
 integration-tests = []
