@@ -1378,7 +1378,7 @@ impl<T: Config> Pallet<T> {
 			);
 			return
 		}
-		log::warn!(
+		log::debug!(
 			target: "runtime::dkg_metadata",
 			"intializing the authorities with: {:?} and account ids: {:?}",
 			authorities,
@@ -1395,7 +1395,7 @@ impl<T: Config> Pallet<T> {
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 		let best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
-		log::warn!(
+		log::debug!(
 			target: "runtime::dkg_metadata",
 			"best_authorities: {:?}",
 			best_authorities,
@@ -1724,6 +1724,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
+		log::debug!(target: "runtime::dkg_metadata", "on_genesis_session");
 		let mut authority_account_ids = Vec::new();
 		let authorities = validators
 			.map(|(l, k)| {
