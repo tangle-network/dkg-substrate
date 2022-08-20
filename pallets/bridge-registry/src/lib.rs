@@ -58,7 +58,6 @@ use sp_std::{convert::TryInto, prelude::*};
 
 use frame_support::{
 	pallet_prelude::{ensure, DispatchError},
-	storage::bounded_vec,
 };
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
@@ -187,7 +186,7 @@ pub mod pallet {
 		pub fn set_metadata(
 			origin: OriginFor<T>,
 			bridge_index: T::BridgeIndex,
-			info: Box<BridgeInfo<T::MaxAdditionalFields>>,
+			info: BridgeInfo<T::MaxAdditionalFields>,
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			let extra_fields = info.additional.len() as u32;
@@ -195,10 +194,10 @@ pub mod pallet {
 
 			let metadata = match <Bridges<T, I>>::get(&bridge_index) {
 				Some(mut id) => {
-					id.info = *info;
+					id.info = info;
 					id
 				},
-				None => BridgeMetadata { info: *info, resource_ids: BoundedVec::default() },
+				None => BridgeMetadata { info, resource_ids: BoundedVec::default() },
 			};
 
 			<Bridges<T, I>>::insert(&bridge_index, metadata);
@@ -235,71 +234,68 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 	fn on_signed_proposal(proposal: Proposal) -> Result<(), DispatchError> {
 		ensure!(proposal.is_signed(), Error::<T, I>::ProposalNotSigned);
 
-		match proposal.kind() {
-			ProposalKind::AnchorUpdate => {
-				// Decode the anchor update
-				let data = proposal.data();
-				let mut buf = [0u8; AnchorUpdateProposal::LENGTH];
-				buf.clone_from_slice(data.as_slice());
-				let anchor_update_proposal = AnchorUpdateProposal::from(buf);
-				// Get the source and target resource IDs to check existence of
-				let src_resource_id = anchor_update_proposal.header().resource_id();
-				let dest_resource_id = anchor_update_proposal.src_resource_id();
-				// Get the respective bridge indices
-				let src_bridge_index =
-					ResourceToBridgeIndex::<T, I>::get(src_resource_id).unwrap_or_default();
-				let dest_bridge_index =
-					ResourceToBridgeIndex::<T, I>::get(dest_resource_id).unwrap_or_default();
-				// Ensure constraints on the bridge indices. If we are linking two anchors then:
-				// 1. If we haven't assigned these resources, at least one of them must be zero.
-				// 2. If we have assigned both resources, they must be the same.
-				if src_bridge_index == T::BridgeIndex::zero() ||
+		if proposal.kind() == ProposalKind::AnchorUpdate {
+			// Decode the anchor update
+			let data = proposal.data();
+			let mut buf = [0u8; AnchorUpdateProposal::LENGTH];
+			buf.clone_from_slice(data.as_slice());
+			let anchor_update_proposal = AnchorUpdateProposal::from(buf);
+			// Get the source and target resource IDs to check existence of
+			let src_resource_id = anchor_update_proposal.header().resource_id();
+			let dest_resource_id = anchor_update_proposal.src_resource_id();
+			// Get the respective bridge indices
+			let src_bridge_index =
+				ResourceToBridgeIndex::<T, I>::get(src_resource_id).unwrap_or_default();
+			let dest_bridge_index =
+				ResourceToBridgeIndex::<T, I>::get(dest_resource_id).unwrap_or_default();
+			// Ensure constraints on the bridge indices. If we are linking two anchors then:
+			// 1. If we haven't assigned these resources, at least one of them must be zero.
+			// 2. If we have assigned both resources, they must be the same.
+			if src_bridge_index == T::BridgeIndex::zero() ||
+				dest_bridge_index == T::BridgeIndex::zero()
+			{
+				// If both are zero, then we haven't assigned either resource.
+				// We must create a new bridge index for these resources.
+				if src_bridge_index == T::BridgeIndex::zero() &&
 					dest_bridge_index == T::BridgeIndex::zero()
 				{
-					// If both are zero, then we haven't assigned either resource.
-					// We must create a new bridge index for these resources.
-					if src_bridge_index == T::BridgeIndex::zero() &&
-						dest_bridge_index == T::BridgeIndex::zero()
-					{
-						// Get the next bridge index
-						let next_bridge_index = NextBridgeIndex::<T, I>::get();
-						// Assign the bridge index to the source resource
-						ResourceToBridgeIndex::<T, I>::insert(src_resource_id, next_bridge_index);
-						// Assign the bridge index to the destination resource
-						ResourceToBridgeIndex::<T, I>::insert(dest_resource_id, next_bridge_index);
-						// Create the bridge record
-						let bridge_metadata = BridgeMetadata {
-							info: Default::default(),
-							resource_ids: vec![src_resource_id, dest_resource_id]
-								.try_into()
-								.unwrap(),
-						};
-						Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
-						// Increment the next bridge index
-						NextBridgeIndex::<T, I>::mutate(|next_bridge_index| {
-							*next_bridge_index += T::BridgeIndex::one();
-						});
-					} else {
-						// We must connect the two resources to the same bridge.
-						let (r_id, bridge_index) = if src_bridge_index == T::BridgeIndex::zero() {
-							(src_resource_id, dest_bridge_index)
-						} else {
-							(dest_resource_id, src_bridge_index)
-						};
-						ResourceToBridgeIndex::<T, I>::insert(r_id, bridge_index);
-						let mut metadata = Bridges::<T, I>::get(bridge_index)
-							.ok_or(Error::<T, I>::BridgeNotFound)?;
-						metadata
-							.resource_ids
-							.try_push(r_id)
-							.map_err(|_| Error::<T, I>::TooManyResources)?;
-						Bridges::<T, I>::insert(bridge_index, metadata);
-					}
+					// Get the next bridge index
+					let next_bridge_index = NextBridgeIndex::<T, I>::get();
+					// Assign the bridge index to the source resource
+					ResourceToBridgeIndex::<T, I>::insert(src_resource_id, next_bridge_index);
+					// Assign the bridge index to the destination resource
+					ResourceToBridgeIndex::<T, I>::insert(dest_resource_id, next_bridge_index);
+					// Create the bridge record
+					let bridge_metadata = BridgeMetadata {
+						info: Default::default(),
+						resource_ids: vec![src_resource_id, dest_resource_id]
+							.try_into()
+							.unwrap(),
+					};
+					Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
+					// Increment the next bridge index
+					NextBridgeIndex::<T, I>::mutate(|next_bridge_index| {
+						*next_bridge_index += T::BridgeIndex::one();
+					});
 				} else {
-					ensure!(src_bridge_index == dest_bridge_index, Error::<T, I>::BridgeIndexError);
+					// We must connect the two resources to the same bridge.
+					let (r_id, bridge_index) = if src_bridge_index == T::BridgeIndex::zero() {
+						(src_resource_id, dest_bridge_index)
+					} else {
+						(dest_resource_id, src_bridge_index)
+					};
+					ResourceToBridgeIndex::<T, I>::insert(r_id, bridge_index);
+					let mut metadata = Bridges::<T, I>::get(bridge_index)
+						.ok_or(Error::<T, I>::BridgeNotFound)?;
+					metadata
+						.resource_ids
+						.try_push(r_id)
+						.map_err(|_| Error::<T, I>::TooManyResources)?;
+					Bridges::<T, I>::insert(bridge_index, metadata);
 				}
-			},
-			_ => (),
+			} else {
+				ensure!(src_bridge_index == dest_bridge_index, Error::<T, I>::BridgeIndexError);
+			}
 		};
 
 		Ok(())
