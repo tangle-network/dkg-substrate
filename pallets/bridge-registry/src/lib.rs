@@ -56,9 +56,7 @@ use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
-use frame_support::{
-	pallet_prelude::{ensure, DispatchError},
-};
+use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
 	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
@@ -268,9 +266,7 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 					// Create the bridge record
 					let bridge_metadata = BridgeMetadata {
 						info: Default::default(),
-						resource_ids: vec![src_resource_id, dest_resource_id]
-							.try_into()
-							.unwrap(),
+						resource_ids: vec![src_resource_id, dest_resource_id].try_into().unwrap(),
 					};
 					Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
 					// Increment the next bridge index
@@ -285,8 +281,8 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 						(dest_resource_id, src_bridge_index)
 					};
 					ResourceToBridgeIndex::<T, I>::insert(r_id, bridge_index);
-					let mut metadata = Bridges::<T, I>::get(bridge_index)
-						.ok_or(Error::<T, I>::BridgeNotFound)?;
+					let mut metadata =
+						Bridges::<T, I>::get(bridge_index).ok_or(Error::<T, I>::BridgeNotFound)?;
 					metadata
 						.resource_ids
 						.try_push(r_id)
