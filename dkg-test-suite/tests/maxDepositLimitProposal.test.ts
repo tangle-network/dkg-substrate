@@ -15,21 +15,13 @@
  *
  */
 import {
-	encodeFunctionSignature,
-	registerResourceId,
 	waitForEvent,
-} from '../src/utils';
+} from './utils/setup';
 import { Keyring } from '@polkadot/api';
 import { hexToNumber, u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
-import {
-	MaxDepositLimitProposal,
-	signAndSendUtil,
-	ChainIdType,
-	encodeMaxDepositLimitProposal,
-} from '../src/evm/util/utils';
-import { BLOCK_TIME } from '../src/constants';
+import { BLOCK_TIME } from './utils/constants';
 import { localChain, polkadotApi, signatureVBridge } from './utils/util';
 import { expect } from 'chai';
 import { ethers } from 'ethers';
