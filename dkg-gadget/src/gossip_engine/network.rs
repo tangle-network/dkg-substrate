@@ -80,8 +80,8 @@ impl NetworkGossipEngineBuilder {
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,
 			set_config: config::SetConfig {
-				in_peers: 0,
-				out_peers: 0,
+				in_peers: 256,
+				out_peers: 256,
 				reserved_nodes: Vec::new(),
 				non_reserved_mode: config::NonReservedPeerMode::Deny,
 			},
@@ -151,7 +151,7 @@ const MAX_PENDING_MESSAGES: usize = 8192;
 /// Maximum number of duplicate messages that a single peer can send us.
 ///
 /// This is to prevent a malicious peer from spamming us with messages.
-const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 5;
+const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 8;
 
 #[allow(unused)]
 mod rep {

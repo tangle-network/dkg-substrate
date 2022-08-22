@@ -696,6 +696,7 @@ where
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
+			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
 			return
 		}
 
