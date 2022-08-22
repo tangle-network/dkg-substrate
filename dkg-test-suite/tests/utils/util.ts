@@ -14,11 +14,11 @@
  * limitations under the License.
  *
  */
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../../src/constants';
+import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from './constants';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { ChildProcess, execSync } from 'child_process';
 import fs from 'fs';
-import { LocalChain } from '../../src/localEvm';
+import { LocalChain } from './localEvm';
 import { ethers } from 'ethers';
 import { Bridges, VBridge } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
@@ -33,7 +33,7 @@ import {
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
 	waitUntilDKGPublicKeyStoredOnChain,
-} from '../../src/utils';
+} from './setup';
 import { expect } from 'chai';
 
 export let polkadotApi: ApiPromise;
