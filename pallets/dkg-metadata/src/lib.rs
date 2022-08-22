@@ -1372,8 +1372,18 @@ impl<T: Config> Pallet<T> {
 	/// on a genesis session and triggers the first authority set change.
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
+			log::warn!(
+				target: "runtime::dkg_metadata",
+				"trying to intialize the autorities with empty list!",
+			);
 			return
 		}
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"intializing the authorities with: {:?} and account ids: {:?}",
+			authorities,
+			authority_account_ids,
+		);
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 		// Initialize current authorities
 		Authorities::<T>::put(authorities);
@@ -1385,6 +1395,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 		let best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"best_authorities: {:?}",
+			best_authorities,
+		);
 		BestAuthorities::<T>::put(best_authorities);
 		let next_best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
@@ -1709,6 +1724,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
+		log::debug!(target: "runtime::dkg_metadata", "on_genesis_session");
 		let mut authority_account_ids = Vec::new();
 		let authorities = validators
 			.map(|(l, k)| {
