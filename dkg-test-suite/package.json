@@ -1,58 +1,41 @@
 {
-	"name": "dkg-test-suite",
-	"version": "0.0.1",
-	"description": "e2e testing utilities for dkg-substrate",
-	"main": "index.js",
-	"scripts": {
-		"dkg-refresh": "ts-node ./src/keyRefresh.ts",
-		"anchor-proposals-evm": "ts-node ./src/evm/testAnchorProposal.ts",
-		"anchor-create-proposal-substrate": "ts-node ./src/substrate/testAnchorCreateProposal.ts",
-		"anchor-update-proposal-substrate": "ts-node ./src/substrate/testAnchorUpdateProposal.ts",
-		"fee-recipient-update-proposal-evm": "ts-node ./src/evm/testFeeRecipientUpdateProposal.ts",
-		"max-deposit-limit-update-proposal-evm": "ts-node ./src/evm/v-anchor-configurable-limit/testMaxDepositLimitUpdateProposal.ts",
-		"min-withdrawal-limit-update-proposal-evm": "ts-node ./src/evm/v-anchor-configurable-limit/testMinWithdrawalLimitUpdateProposal.ts",
-		"resource-id-update-proposal-evm": "ts-node ./src/evm/testResourceIdUpdateProposal.ts",
-		"resource-id-update-proposal-substrate": "ts-node ./src/substrate/testResourceIdUpdateProposal.ts",
-		"set-treasury-handler-proposal-evm": "ts-node ./src/evm/testSetTreasuryHandlerProposal.ts",
-		"set-verifier-proposal-evm": "ts-node ./src/evm/testSetVerifierProposal.ts",
-		"token-add-proposal-evm": "ts-node ./src/evm/token/testTokenAddProposal.ts",
-		"token-add-proposal-substrate": "ts-node ./src/substrate/token/testTokenAddProposal.ts",
-		"token-remove-proposal-evm": "ts-node ./src/evm/token/testTokenRemoveProposal.ts",
-		"token-remove-proposal-substrate": "ts-node ./src/substrate/token/testTokenRemoveProposal.ts",
-		"wrapping-fee-update-proposal-evm": "ts-node ./src/evm/testWrappingFeeUpdateProposal.ts",
-		"wrapping-fee-update-proposal-substrate": "ts-node ./src/substrate/testWrappingFeeUpdateProposal.ts",
-		"script": "ts-node",
-		"format": "prettier --write '**/*.{ts,js,json,yml}'",
-		"test:e2e": "ts-mocha tests/e2e/**/*.test.ts",
-		"test:proposals": "ts-mocha tests/proposals.test.ts"
-	},
-	"author": "",
-	"license": "ISC",
-	"dependencies": {
-		"@polkadot/api": "^6.11.1",
-		"@polkadot/util": "^8.1.2",
-		"@types/chai": "^4.3.0",
-		"@types/mocha": "^9.1.0",
-		"@webb-tools/protocol-solidity": "^0.1.10",
-		"chai": "^4.3.6",
-		"ecpair": "^1.0.0",
-		"ethers": "^5.5.4",
-		"ganache": "^7.0.2",
-		"mocha": "^9.2.2",
-		"ora": "5",
-		"ts-mocha": "^9.0.2",
-		"ts-node": "^10.4.0",
-		"typescript": "4.5.4"
-	},
-	"engines": {
-		"node": "17.x.x"
-	},
-	"devDependencies": {
-		"husky": "^7.0.4",
-		"lint-staged": "^12.1.7",
-		"prettier": "2.5.1"
-	},
-	"lint-staged": {
-		"**/*": "prettier --write --ignore-unknown"
-	}
+  "name": "dkg-test-suite",
+  "version": "0.0.1",
+  "description": "e2e testing utilities for dkg-substrate",
+  "main": "index.js",
+  "scripts": {
+    "script": "ts-node",
+    "format": "prettier --write '**/*.{ts,js,json,yml}'",
+    "test:e2e": "ts-mocha tests/e2e/**/*.test.ts",
+    "test:proposals": "ts-mocha tests/proposals.test.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@polkadot/api": "^6.11.1",
+    "@polkadot/util": "^8.1.2",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^9.1.0",
+    "@webb-tools/protocol-solidity": "^0.1.10",
+    "chai": "^4.3.6",
+    "ecpair": "^1.0.0",
+    "ethers": "^5.5.4",
+    "ganache": "^7.0.2",
+    "mocha": "^9.2.2",
+    "ora": "5",
+    "ts-mocha": "^9.0.2",
+    "ts-node": "^10.4.0",
+    "typescript": "4.5.4"
+  },
+  "engines": {
+    "node": "17.x.x"
+  },
+  "devDependencies": {
+    "husky": "^7.0.4",
+    "lint-staged": "^12.1.7",
+    "prettier": "2.5.1"
+  },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  }
 }

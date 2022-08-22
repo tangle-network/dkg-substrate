@@ -29,7 +29,7 @@ benchmarks_instance_pallet! {
 	set_metadata {
 		let bridge_index = 0_u32;
 		let metadata : BridgeInfo<T::MaxAdditionalFields> = Default::default();
-	}: _(RawOrigin::Root, bridge_index.into(), Box::new(metadata))
+	}: _(RawOrigin::Root, bridge_index.into(), metadata)
 	verify {
 		assert_eq!(
 			Bridges::<T, I>::get::<T::BridgeIndex>(bridge_index.into()).unwrap(),

@@ -79,7 +79,6 @@ it('should be able to sign resource id update proposal', async () => {
 		},
 		newResourceId: newResourceId,
 		handlerAddress: handlerAddress,
-		executionAddress: executionContextAddress,
 	};
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, proposalPayload.header.resourceId);

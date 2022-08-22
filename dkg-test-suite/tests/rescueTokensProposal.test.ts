@@ -79,7 +79,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 				resourceId: governedTokenResourceId,
 				functionSignature: encodeFunctionSignature(
 					governedToken.contract.interface.functions[
-						'setFee(uint8,uint256)'
+						'setFee(uint8,uint32)'
 					].format()
 				),
 				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
