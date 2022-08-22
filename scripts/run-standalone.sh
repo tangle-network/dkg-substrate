@@ -1,7 +1,29 @@
 #!/usr/bin/env bash
 set -e
 
+CLEAN=${CLEAN:-false}
+# Parse arguments for the script
+
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+        -c|--clean)
+            CLEAN=true
+            shift # past argument
+            ;;
+        *)    # unknown option
+            shift # past argument
+            ;;
+    esac
+done
+
 pushd .
+
+# Check if we should clean the tmp directory
+if [ "$CLEAN" = true ]; then
+  echo "Cleaning tmp directory"
+  rm -rf ./tmp
+fi
 
 # The following line ensure we run from the project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
@@ -22,7 +44,10 @@ echo "*** Start Webb DKG Node ***"
     --ws-external \
     --port 30306 \
     -ldkg=debug \
+    -ldkg_gadget::worker=debug \
+    -lruntime::dkg_metadata=debug \
     -ldkg_metadata=debug \
+    -lruntime::dkg_proposal_handler=debug \
     -lruntime::offchain=debug \
     -ldkg_proposal_handler=debug \
     --charlie

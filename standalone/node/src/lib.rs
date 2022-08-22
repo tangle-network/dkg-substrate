@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+pub mod benchmarking;
 pub mod chain_spec;
-pub mod command_helper;
 pub mod rpc;
 pub mod service;
 pub mod testnet_fixtures;
