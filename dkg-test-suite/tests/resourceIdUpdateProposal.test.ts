@@ -15,35 +15,40 @@
  *
  */
 import {
-	encodeFunctionSignature,
-	registerResourceId,
+	sudoTx,
 	waitForEvent,
-} from '../src/utils';
+} from './utils/setup';
 import { GovernedTokenWrapper } from '@webb-tools/tokens';
 import { Keyring } from '@polkadot/api';
-import { u8aToHex } from '@polkadot/util';
+import { hexToU8a, u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 import {
-	signAndSendUtil,
 	ResourceIdUpdateProposal,
-	encodeResourceIdUpdateProposal,
-	ChainIdType,
-} from '../src/evm/util/utils';
+	ChainType,
+	ResourceId,
+	ProposalHeader,
+} from '@webb-tools/sdk-core';
 import {
 	localChain,
 	polkadotApi,
-	signatureBridge,
+	signatureVBridge,
 	wallet1,
 	executeAfter,
 	executeBefore,
 } from './utils/util';
-import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
+import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to sign resource id update proposal', async () => {
-	const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
-	const resourceId = await bridgeSide.createResourceId();
+	const bridgeSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const resourceId = ResourceId.newFromContractAddress(bridgeSide.contract.address, ChainType.EVM, localChain.evmId);
+	const proposalFunctionSignature = hexToU8a(
+		bridgeSide.contract.interface.functions['adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,bytes)'].format()
+	);
+
+	const proposalNonce = Number(await bridgeSide.contract.proposalNonce()) + 1;
+	const proposalHeader = new ProposalHeader(resourceId, proposalFunctionSignature, proposalNonce);
 
 	// Let's create a new GovernedTokenWrapper and set the resourceId for it via
 	// the ResourceIdUpdate Proposal
@@ -58,31 +63,15 @@ it('should be able to sign resource id update proposal', async () => {
 		wallet1
 	);
 
-	const newResourceId = await governedToken.createResourceId();
+	const newResourceId = ResourceId.newFromContractAddress(governedToken.contract.address, ChainType.EVM, localChain.evmId);
 	const handlerAddress = bridgeSide.tokenHandler.contract.address;
 	const executionContextAddress = governedToken.contract.address;
 
-	const proposalFunctionSignature = encodeFunctionSignature(
-		bridgeSide.contract.interface.functions[
-			'adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,address,bytes)'
-		].format()
-	);
+	const resourceUpdateProposal = new ResourceIdUpdateProposal(proposalHeader, newResourceId.toString(), handlerAddress)
 
-	const proposalNonce = Number(await bridgeSide.contract.proposalNonce()) + 1;
-	const proposalPayload: ResourceIdUpdateProposal = {
-		header: {
-			resourceId,
-			functionSignature: proposalFunctionSignature,
-			nonce: proposalNonce,
-			chainIdType: ChainIdType.EVM,
-			chainId: localChain.chainId,
-		},
-		newResourceId: newResourceId,
-		handlerAddress: handlerAddress,
-	};
 	// register proposal resourceId.
-	await registerResourceId(polkadotApi, proposalPayload.header.resourceId);
-	const proposalBytes = encodeResourceIdUpdateProposal(proposalPayload);
+	await registerResourceId(polkadotApi, resourceUpdateProposal.header.resourceId);
+	const proposalBytes = resourceUpdateProposal.toU8a();
 	// get alice account to send the transaction to the dkg node.
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
@@ -90,7 +79,7 @@ it('should be able to sign resource id update proposal', async () => {
 	const chainIdType = polkadotApi.createType(
 		'WebbProposalsHeaderTypedChainId',
 		{
-			Evm: localChain.chainId,
+			Evm: localChain.evmId,
 		}
 	);
 	const resourceIdUpdateProposal = polkadotApi.createType(
@@ -107,7 +96,7 @@ it('should be able to sign resource id update proposal', async () => {
 			resourceIdUpdateProposal
 		);
 
-	await signAndSendUtil(polkadotApi, proposalCall, alice);
+	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
@@ -115,7 +104,7 @@ it('should be able to sign resource id update proposal', async () => {
 	});
 	// now we need to query the proposal and its signature.
 	const key = {
-		ResourceIdUpdateProposal: proposalPayload.header.nonce,
+		ResourceIdUpdateProposal: resourceUpdateProposal.header.nonce,
 	};
 	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
 		chainIdType,
@@ -145,10 +134,10 @@ it('should be able to sign resource id update proposal', async () => {
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
 	const tx2 = await contract.adminSetResourceWithSignature(
-		resourceId,
+		resourceId.toString(),
 		proposalFunctionSignature,
 		proposalNonce,
-		newResourceId,
+		newResourceId.toString(),
 		handlerAddress,
 		executionContextAddress,
 		dkgProposal.signed.signature
@@ -156,6 +145,6 @@ it('should be able to sign resource id update proposal', async () => {
 	await tx2.wait();
 
 	expect(
-		await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId)
+		await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId.toString())
 	).to.eq(handlerAddress);
 });

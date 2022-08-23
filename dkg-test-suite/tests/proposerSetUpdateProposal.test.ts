@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import { BLOCK_TIME } from '../src/constants';
 import {
 	localChain,
 	polkadotApi,
 	executeAfter,
-	signatureBridge,
+	signatureVBridge,
 	executeBefore,
 } from './utils/util';
 import { Option } from '@polkadot/types';
@@ -36,7 +35,7 @@ import {
 	waitForEvent,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
-} from '../src/utils';
+} from './utils/setup';
 
 it.skip('proposer set update test', async () => {
 	const provider = localChain.provider();
@@ -66,7 +65,7 @@ it.skip('proposer set update test', async () => {
 		};
 	};
 	// now we can transfer ownership.
-	const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
+	const bridgeSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = bridgeSide.contract;
 
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(

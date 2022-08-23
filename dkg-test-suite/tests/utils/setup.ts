@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  */
+import '@webb-tools/types';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import child from 'child_process';
@@ -255,7 +256,7 @@ export async function waitForEvent(
 			};
 
 			// Loop through the Vec<EventRecord>
-			events.forEach((record) => {
+			events.forEach((record: any) => {
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {

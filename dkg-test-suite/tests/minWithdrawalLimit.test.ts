@@ -15,54 +15,39 @@
  *
  */
 import {
-	encodeFunctionSignature,
-	registerResourceId,
 	waitForEvent,
-} from '../src/utils';
+	sudoTx,
+} from './utils/setup';
 import { Keyring } from '@polkadot/api';
-import { hexToNumber, u8aToHex } from '@polkadot/util';
+import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 import {
 	MinWithdrawalLimitProposal,
-	signAndSendUtil,
-	ChainIdType,
-	encodeMinWithdrawalLimitProposal,
-} from '../src/evm/util/utils';
-import { VBridge } from '@webb-tools/protocol-solidity';
+	ChainType,
+	ResourceId,
+	ProposalHeader,
+} from '@webb-tools/sdk-core';
 import {
-	executeAfter,
-	executeBefore,
 	localChain,
 	polkadotApi,
 	signatureVBridge,
 } from './utils/util';
 import { expect } from 'chai';
 import { ethers } from 'ethers';
-import { hexlify } from 'ethers/lib/utils';
+import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to update min withdrawal limit', async () => {
-	const vAnchor = signatureVBridge.getVAnchor(localChain.chainId)!;
-	const resourceId = await vAnchor.createResourceId();
-	// Create Mintable Token to add to GovernedTokenWrapper
-	//Create an ERC20 Token
-	const proposalPayload: MinWithdrawalLimitProposal = {
-		header: {
-			resourceId,
-			functionSignature: encodeFunctionSignature(
-				vAnchor.contract.interface.functions[
-					'configureMinimalWithdrawalLimit(uint256)'
-				].format()
-			),
-			nonce: Number(await vAnchor.contract.getProposalNonce()) + 1,
-			chainId: localChain.chainId,
-			chainIdType: ChainIdType.EVM,
-		},
-		minWithdrawalLimitBytes: '0x50',
-	};
+	const vAnchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
+	const resourceId = ResourceId.newFromContractAddress(vAnchor.contract.address, ChainType.EVM, localChain.evmId);
+	const functionSignature = hexToU8a(vAnchor.contract.interface.functions['configureMinimalWithdrawalLimit(uint256,uint32)'].format());
+	const nonce = Number(await vAnchor.contract.getProposalNonce()) + 1;
+	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
+	const minLimitProposal = new MinWithdrawalLimitProposal(proposalHeader, '0x50');
+
 	// register proposal resourceId.
-	await registerResourceId(polkadotApi, proposalPayload.header.resourceId);
-	const proposalBytes = encodeMinWithdrawalLimitProposal(proposalPayload);
+	await registerResourceId(polkadotApi, minLimitProposal.header.resourceId);
+	const proposalBytes = minLimitProposal.toU8a();
 	// get alice account to send the transaction to the dkg node.
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
@@ -70,7 +55,7 @@ it('should be able to update min withdrawal limit', async () => {
 	const chainIdType = polkadotApi.createType(
 		'WebbProposalsHeaderTypedChainId',
 		{
-			Evm: localChain.chainId,
+			Evm: localChain.evmId,
 		}
 	);
 	const minWithdrawalLimitProposal = polkadotApi.createType(
@@ -87,7 +72,7 @@ it('should be able to update min withdrawal limit', async () => {
 			minWithdrawalLimitProposal
 		);
 
-	await signAndSendUtil(polkadotApi, proposalCall, alice);
+	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
@@ -95,7 +80,7 @@ it('should be able to update min withdrawal limit', async () => {
 	});
 	// now we need to query the proposal and its signature.
 	const key = {
-		MinWithdrawalLimitUpdateProposal: proposalPayload.header.nonce,
+		MinWithdrawalLimitUpdateProposal: minLimitProposal.header.nonce,
 	};
 	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
 		chainIdType,
@@ -146,7 +131,7 @@ it('should be able to update min withdrawal limit', async () => {
 	// sanity check.
 	expect(dkgProposal.signed.data).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.chainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
 		dkgProposal.signed.data,

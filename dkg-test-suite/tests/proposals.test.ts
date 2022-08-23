@@ -16,7 +16,7 @@
  */
 // just a blueprint test using jest
 
-import { BLOCK_TIME } from '../src/constants';
+import { BLOCK_TIME } from './utils/constants';
 import { executeAfter, executeBefore } from './utils/util';
 
 function importTest(name: string, path: string) {
@@ -30,9 +30,7 @@ describe('E2E Test Runner', function () {
 	this.slow(30 * BLOCK_TIME);
 	before(async () => {
 		let start = performance.now();
-		await executeBefore({
-			both: true,
-		});
+		await executeBefore();
 		let end = performance.now();
 		console.log(`Start - ${start} | End - ${end} | Took - ${end - start} ms`);
 	});

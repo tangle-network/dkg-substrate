@@ -15,48 +15,49 @@
  *
  */
 import {
-	encodeFunctionSignature,
-	registerResourceId,
 	sleep,
 	waitForEvent,
-} from '../src/utils';
+	sudoTx,
+} from './utils/setup';
 import { ethers } from 'ethers';
 import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { Keyring } from '@polkadot/api';
-import { u8aToHex } from '@polkadot/util';
+import { hexToU8a, u8aToHex } from '@polkadot/util';
 import { Option } from '@polkadot/types';
 import { HexString } from '@polkadot/util/types';
 import {
-	signAndSendUtil,
 	TokenAddProposal,
-	encodeTokenAddProposal,
-	ChainIdType,
-	encodeTokenRemoveProposal,
+	ChainType,
 	TokenRemoveProposal,
-} from '../src/evm/util/utils';
+	ResourceId,
+	ProposalHeader,
+} from '@webb-tools/sdk-core';
 import {
 	localChain,
 	polkadotApi,
-	signatureBridge,
+	signatureVBridge,
 	wallet1,
 	executeAfter,
 	executeBefore,
 } from './utils/util';
 import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
-import { BLOCK_TIME } from '../src/constants';
+import { BLOCK_TIME } from './utils/constants';
+import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to sign token add & remove proposal', async () => {
-	const anchor = signatureBridge.getAnchor(
-		localChain.chainId,
-		ethers.utils.parseEther('1')
+	const anchor = signatureVBridge.getVAnchor(
+		localChain.typedChainId,
 	)!;
 	const governedTokenAddress = anchor.token!;
 	let governedToken = GovernedTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);
-	const resourceId = await governedToken.createResourceId();
+	const resourceId = ResourceId.newFromContractAddress(governedTokenAddress, ChainType.EVM, localChain.evmId);
+	const functionSignature = hexToU8a(governedToken.contract.interface.functions['add(address,uint32)'].format())
+	const nonce = await Number(governedToken.contract.proposalNonce()) + 1
+	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
 	// Create Mintable Token to add to GovernedTokenWrapper
 	//Create an ERC20 Token
 	const tokenToAdd = await MintableToken.createToken(
@@ -65,23 +66,11 @@ it('should be able to sign token add & remove proposal', async () => {
 		wallet1
 	);
 	{
-		const proposalPayload: TokenAddProposal = {
-			header: {
-				resourceId,
-				functionSignature: encodeFunctionSignature(
-					governedToken.contract.interface.functions[
-						'add(address,uint256)'
-					].format()
-				),
-				nonce: Number(await governedToken.contract.proposalNonce()) + 1,
-				chainIdType: ChainIdType.EVM,
-				chainId: localChain.chainId,
-			},
-			newTokenAddress: tokenToAdd.contract.address,
-		};
+		const tokenAddProposal = new TokenAddProposal(proposalHeader, tokenToAdd.contract.address);
+		
 		// register proposal resourceId.
-		await registerResourceId(polkadotApi, proposalPayload.header.resourceId);
-		const proposalBytes = encodeTokenAddProposal(proposalPayload);
+		await registerResourceId(polkadotApi, tokenAddProposal.header.resourceId);
+		const proposalBytes = tokenAddProposal.toU8a();
 		// get alice account to send the transaction to the dkg node.
 		const keyring = new Keyring({ type: 'sr25519' });
 		const alice = keyring.addFromUri('//Alice');
@@ -89,10 +78,10 @@ it('should be able to sign token add & remove proposal', async () => {
 		const chainIdType = polkadotApi.createType(
 			'WebbProposalsHeaderTypedChainId',
 			{
-				Evm: localChain.chainId,
+				Evm: localChain.evmId,
 			}
 		);
-		const tokenAddProposal = polkadotApi.createType(
+		const tokenAddProposalType = polkadotApi.createType(
 			'WebbProposalsProposal',
 			{
 				Unsigned: {
@@ -103,10 +92,10 @@ it('should be able to sign token add & remove proposal', async () => {
 		);
 		const proposalCall =
 			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-				tokenAddProposal
+				tokenAddProposalType
 			);
 
-		await signAndSendUtil(polkadotApi, proposalCall, alice);
+		await sudoTx(polkadotApi, proposalCall);
 
 		// now we need to wait until the proposal to be signed on chain.
 		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
@@ -114,7 +103,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		});
 		// now we need to query the proposal and its signature.
 		const key = {
-			TokenAddProposal: proposalPayload.header.nonce,
+			TokenAddProposal: tokenAddProposal.header.nonce,
 		};
 		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
 			chainIdType,
@@ -136,7 +125,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		// sanity check.
 		expect(dkgProposal.signed.data).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
-		const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
+		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.signed.data,
@@ -157,23 +146,14 @@ it('should be able to sign token add & remove proposal', async () => {
 		).to.eq(true);
 	}
 	await sleep(5 * BLOCK_TIME);
-	const proposalPayload: TokenRemoveProposal = {
-		header: {
-			resourceId,
-			functionSignature: encodeFunctionSignature(
-				governedToken.contract.interface.functions[
-					'remove(address,uint256)'
-				].format()
-			),
-			nonce: Number(await governedToken.contract.proposalNonce()) + 1,
-			chainIdType: ChainIdType.EVM,
-			chainId: localChain.chainId,
-		},
-		removeTokenAddress: tokenToAdd.contract.address,
-	};
+	const removeSignature = hexToU8a(governedToken.contract.interface.functions['remove(address,uint32)'].format());
+	const proposalNonce = Number(await governedToken.contract.proposalNonce()) + 1;
+	const removeProposalHeader = new ProposalHeader(resourceId, removeSignature, proposalNonce);
+	const tokenRemoveProposal = new TokenRemoveProposal(removeProposalHeader, tokenToAdd.contract.address);
+
 	// register proposal resourceId.
-	await registerResourceId(polkadotApi, proposalPayload.header.resourceId);
-	const proposalBytes = encodeTokenRemoveProposal(proposalPayload);
+	await registerResourceId(polkadotApi, tokenRemoveProposal.header.resourceId);
+	const proposalBytes = tokenRemoveProposal.toU8a();
 	// get alice account to send the transaction to the dkg node.
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
@@ -181,10 +161,10 @@ it('should be able to sign token add & remove proposal', async () => {
 	const chainIdType = polkadotApi.createType(
 		'WebbProposalsHeaderTypedChainId',
 		{
-			Evm: localChain.chainId,
+			Evm: localChain.evmId,
 		}
 	);
-	const tokenRemoveProposal = polkadotApi.createType(
+	const tokenRemoveProposalType = polkadotApi.createType(
 		'WebbProposalsProposal',
 		{
 			Unsigned: {
@@ -198,7 +178,7 @@ it('should be able to sign token add & remove proposal', async () => {
 			tokenRemoveProposal
 		);
 
-	await signAndSendUtil(polkadotApi, proposalCall, alice);
+	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
@@ -206,7 +186,7 @@ it('should be able to sign token add & remove proposal', async () => {
 	});
 	// now we need to query the proposal and its signature.
 	const key = {
-		TokenRemoveProposal: proposalPayload.header.nonce,
+		TokenRemoveProposal: tokenRemoveProposal.header.nonce,
 	};
 	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
 		chainIdType,
@@ -229,7 +209,7 @@ it('should be able to sign token add & remove proposal', async () => {
 	// sanity check.
 	expect(dkgProposal.signed.data).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureBridge.getBridgeSide(localChain.chainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.evmId);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
 		dkgProposal.signed.data,
