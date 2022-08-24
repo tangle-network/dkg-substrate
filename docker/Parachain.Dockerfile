@@ -27,7 +27,7 @@ ARG BUILD_ARGS
 
 COPY . .
 # Build DKG Parachain Node
-RUN cargo build --release -p dkg-node
+RUN cargo build --release -p dkg-collator
 
 # =============
 
@@ -35,11 +35,11 @@ FROM phusion/baseimage:bionic-1.0.0
 
 RUN useradd -m -u 1000 -U -s /bin/sh -d /dkg dkg
 
-COPY --from=builder /app/target/release/dkg-node /usr/local/bin
+COPY --from=builder /app/target/release/dkg-collator /usr/local/bin
 
 # checks
-RUN ldd /usr/local/bin/dkg-node && \
-  /usr/local/bin/dkg-node --version
+RUN ldd /usr/local/bin/dkg-collator && \
+  /usr/local/bin/dkg-collator --version
 
 # Shrinking
 RUN rm -rf /usr/lib/python* && \
@@ -53,4 +53,4 @@ RUN chown -R dkg:dkg /dkg/data
 
 VOLUME ["/dkg/data"]
 
-ENTRYPOINT [ "/usr/local/bin/dkg-node" ]
+ENTRYPOINT [ "/usr/local/bin/dkg-collator" ]
