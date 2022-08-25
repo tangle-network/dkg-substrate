@@ -21,6 +21,7 @@ use crate::{
 use codec::Encode;
 use cumulus_client_cli::generate_genesis_block;
 use cumulus_primitives_core::ParaId;
+use dkg_rococo_runtime::{Block, RuntimeApi};
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use log::info;
 use sc_cli::{
@@ -34,7 +35,6 @@ use sc_service::{
 use sp_core::hexdisplay::HexDisplay;
 use sp_runtime::traits::{AccountIdConversion, Block as BlockT};
 use std::net::SocketAddr;
-use dkg_rococo_runtime::{Block, RuntimeApi};
 
 pub enum Runtime {
 	Rococo,
@@ -58,7 +58,8 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, St
 	Ok(match id {
 		"dev" => Box::new(chain_spec::development_config(2000.into())),
 		"template-rococo" => Box::new(chain_spec::local_testnet_config(2000.into())),
-		"dkg-rococo" => Box::new(chain_spec::rococo::dkg_config(4006.into())), /* Rococo para-id 4006 */
+		"dkg-rococo" => Box::new(chain_spec::rococo::dkg_config(4006.into())), /* Rococo para-id
+		                                                                         * 4006 */
 		"" | "local" => Box::new(chain_spec::local_testnet_config(2000.into())),
 		path => Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 	})

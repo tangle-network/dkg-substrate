@@ -15,14 +15,13 @@
 use crate::chain_spec::*;
 use arkworks_setups::{common::setup_params, Curve};
 use cumulus_primitives_core::ParaId;
+use dkg_rococo_runtime::{
+	AccountId, AssetRegistryConfig, AuraId, DKGId, HasherBn254Config, MerkleTreeBn254Config,
+	MixerBn254Config, MixerVerifierBn254Config, EXISTENTIAL_DEPOSIT, MILLIUNIT, UNIT,
+};
 use hex_literal::hex;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519};
-use dkg_rococo_runtime::{
-	AccountId, AssetRegistryConfig, AuraId, DKGId, HasherBn254Config,
-	MerkleTreeBn254Config, MixerBn254Config, MixerVerifierBn254Config, EXISTENTIAL_DEPOSIT,
-	MILLIUNIT, UNIT,
-};
 
 pub fn dkg_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
