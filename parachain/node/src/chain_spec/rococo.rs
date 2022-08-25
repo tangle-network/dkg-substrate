@@ -13,12 +13,8 @@
 // limitations under the License.
 
 use crate::chain_spec::*;
-use arkworks_setups::{common::setup_params, Curve};
 use cumulus_primitives_core::ParaId;
-use dkg_rococo_runtime::{
-	AccountId, AssetRegistryConfig, AuraId, DKGId, HasherBn254Config, MerkleTreeBn254Config,
-	MixerBn254Config, MixerVerifierBn254Config, EXISTENTIAL_DEPOSIT, MILLIUNIT, UNIT,
-};
+use dkg_rococo_runtime::{AccountId, AuraId, DKGId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
 use hex_literal::hex;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519};
@@ -26,7 +22,7 @@ use sp_core::{crypto::UncheckedInto, sr25519};
 pub fn dkg_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
-	properties.insert("tokenSymbol".into(), "TNT".into());
+	properties.insert("tokenSymbol".into(), "tTNT".into());
 	properties.insert("tokenDecimals".into(), 12u32.into());
 	properties.insert("ss58Format".into(), 42.into());
 
@@ -99,17 +95,6 @@ fn rococo_genesis(
 	endowed_accounts: Vec<AccountId>,
 	id: ParaId,
 ) -> dkg_rococo_runtime::GenesisConfig {
-	let curve_bn254 = Curve::Bn254;
-
-	log::info!("Bn254 x5 w3 params");
-	let bn254_x5_3_params = setup_params::<ark_bn254::Fr>(curve_bn254, 5, 3);
-
-	log::info!("Verifier params for mixer");
-	let mixer_verifier_bn254_params = {
-		let vk_bytes = include_bytes!("../../../../verifying_keys/mixer/bn254/verifying_key.bin");
-		vk_bytes.to_vec()
-	};
-
 	dkg_rococo_runtime::GenesisConfig {
 		system: dkg_rococo_runtime::SystemConfig {
 			code: dkg_rococo_runtime::WASM_BINARY
@@ -156,26 +141,6 @@ fn rococo_genesis(
 			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
 		},
 		dkg_proposals: Default::default(),
-		asset_registry: AssetRegistryConfig {
-			asset_names: vec![],
-			native_asset_name: b"TNT".to_vec(),
-			native_existential_deposit: dkg_rococo_runtime::EXISTENTIAL_DEPOSIT,
-		},
-		hasher_bn_254: HasherBn254Config {
-			parameters: Some(bn254_x5_3_params.to_bytes()),
-			phantom: Default::default(),
-		},
-		mixer_verifier_bn_254: MixerVerifierBn254Config {
-			parameters: Some(mixer_verifier_bn254_params),
-			phantom: Default::default(),
-		},
-		merkle_tree_bn_254: MerkleTreeBn254Config {
-			phantom: Default::default(),
-			default_hashes: None,
-		},
-		mixer_bn_254: MixerBn254Config {
-			mixers: vec![(0, 10 * UNIT), (0, 100 * UNIT), (0, 1000 * UNIT)],
-		},
 		treasury: Default::default(),
 		vesting: Default::default(),
 	}

@@ -21,7 +21,6 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod impls;
-pub mod protocol_substrate_config;
 pub mod weights;
 pub mod xcm_config;
 
@@ -42,18 +41,13 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-#[cfg(feature = "runtime-benchmarks")]
-pub mod benchmarking;
-
 use frame_support::weights::{
 	ConstantMultiplier, WeightToFeeCoefficient, WeightToFeeCoefficients, WeightToFeePolynomial,
 };
-use pallet_linkable_tree::types::EdgeMetadata;
 use pallet_transaction_payment::{CurrencyAdapter, Multiplier, TargetedFeeAdjustment};
 use sp_runtime::{FixedPointNumber, Perquintill};
-use webb_primitives::{
-	linkable_tree::LinkableTreeInspector, runtime::Element, AccountIndex, ChainId, LeafIndex,
-};
+
+pub type AccountIndex = u32;
 
 // A few exports that help ease life for downstream crates.
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
@@ -804,23 +798,6 @@ construct_runtime!(
 		CumulusXcm: cumulus_pallet_xcm::{Pallet, Event<T>, Origin} = 42,
 		DmpQueue: cumulus_pallet_dmp_queue::{Pallet, Call, Storage, Event<T>} = 43,
 
-		// Asset helpers
-		AssetRegistry: pallet_asset_registry::{Pallet, Call, Storage, Event<T>, Config<T>} = 50,
-		Currencies: orml_currencies::{Pallet, Call} = 51,
-		Tokens: orml_tokens::{Pallet, Storage, Call, Event<T>} = 52,
-		TokenWrapper: pallet_token_wrapper::{Pallet, Storage, Call, Event<T>} = 53,
-
-		// Privacy pallets
-		HasherBn254: pallet_hasher::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 60,
-		MixerVerifierBn254: pallet_verifier::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 61,
-		MerkleTreeBn254: pallet_mt::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 63,
-		LinkableTreeBn254: pallet_linkable_tree::<Instance1>::{Pallet, Call, Storage, Event<T>} = 64,
-		MixerBn254: pallet_mixer::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 65,
-
-		// Bridge
-		SignatureBridge: pallet_signature_bridge::<Instance1>::{Pallet, Call, Storage, Event<T>} = 70,
-		TokenWrapperHandler: pallet_token_wrapper_handler::{Pallet, Storage, Call, Event<T>} = 71,
-
 		// Substrate utility pallets
 		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 80,
 		Utility: pallet_utility::{Pallet, Call, Event} = 81,
@@ -1031,27 +1008,6 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl pallet_linkable_tree_rpc_runtime_api::LinkableTreeApi<Block, ChainId, Element, LeafIndex> for Runtime {
-		fn get_neighbor_roots(tree_id: u32) -> Vec<Element> {
-			LinkableTreeBn254::get_neighbor_roots(tree_id).ok().unwrap_or_default()
-		}
-
-		fn get_neighbor_edges(tree_id: u32) -> Vec<EdgeMetadata<ChainId, Element, LeafIndex>> {
-			LinkableTreeBn254::get_neighbor_edges(tree_id).ok().unwrap_or_default()
-		}
-	}
-
-	impl pallet_mt_rpc_runtime_api::MerkleTreeApi<Block, Element> for Runtime {
-		fn get_leaf(tree_id: u32, index: u32) -> Option<Element> {
-			let v = MerkleTreeBn254::leaves(tree_id, index);
-			if v == Element::default() {
-				None
-			} else {
-				Some(v)
-			}
-		}
-	}
-
 	#[cfg(feature = "runtime-benchmarks")]
 	impl frame_benchmarking::Benchmark<Block> for Runtime {
 		fn benchmark_metadata(extra: bool) -> (
@@ -1059,7 +1015,6 @@ impl_runtime_apis! {
 			Vec<frame_support::traits::StorageInfo>,
 		) {
 			use frame_benchmarking::{list_benchmark, Benchmarking, BenchmarkList};
-			use orml_benchmarking::list_benchmark as list_orml_benchmark;
 			use frame_support::traits::StorageInfoTrait;
 
 			use frame_system_benchmarking::Pallet as SystemBench;
@@ -1070,13 +1025,6 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 			list_benchmark!(list, extra, pallet_timestamp, Timestamp);
 			list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
-			list_benchmark!(list, extra, pallet_signature_bridge, SignatureBridge);
-			list_benchmark!(list, extra, pallet_hasher, HasherBn254);
-			list_benchmark!(list, extra, pallet_mt, MerkleTreeBn254);
-			list_benchmark!(list, extra, pallet_asset_registry, AssetRegistry);
-			list_benchmark!(list, extra, pallet_mixer, MixerBn254);
-			list_orml_benchmark!(list, extra, orml_tokens, benchmarking::orml_tokens);
-			list_orml_benchmark!(list, extra, orml_currencies, benchmarking::orml_currencies);
 
 			let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -1087,7 +1035,6 @@ impl_runtime_apis! {
 			config: frame_benchmarking::BenchmarkConfig
 		) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
 			use frame_benchmarking::{Benchmarking, BenchmarkBatch, add_benchmark, TrackedStorageKey};
-			use orml_benchmarking::{add_benchmark as add_orml_benchmark};
 			use frame_system_benchmarking::Pallet as SystemBench;
 			impl frame_system_benchmarking::Config for Runtime {}
 
@@ -1111,13 +1058,6 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
 			add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);
-			add_benchmark!(params, batches, pallet_signature_bridge, SignatureBridge);
-			add_benchmark!(params, batches, pallet_hasher, HasherBn254);
-			add_benchmark!(params, batches, pallet_mt, MerkleTreeBn254);
-			add_benchmark!(params, batches, pallet_asset_registry, AssetRegistry);
-			add_benchmark!(params, batches, pallet_mixer, MixerBn254);
-			add_orml_benchmark!(params, batches, orml_tokens, benchmarking::orml_tokens);
-			add_orml_benchmark!(params, batches, orml_currencies, benchmarking::orml_currencies);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 			Ok(batches)

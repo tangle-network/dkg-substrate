@@ -27,26 +27,6 @@ dkg-runtime-primitives = { path = "../../../dkg-runtime-primitives", default-fea
 pallet-dkg-proposals = { path = "../../../pallets/dkg-proposals", default-features = false }
 pallet-dkg-proposal-handler = { path = "../../../pallets/dkg-proposal-handler", default-features = false }
 
-# Protocol Substrate Dependencies
-webb-primitives = { git = "https://github.com/webb-tools/protocol-substrate.git",  default-features = false, features = ["hashing", "verifying"] }
-pallet-hasher = { git = "https://github.com/webb-tools/protocol-substrate.git", default-features = false }
-pallet-mt = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-linkable-tree = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-mt-rpc-runtime-api = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-linkable-tree-rpc-runtime-api = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-verifier = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-asset-registry = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-signature-bridge = { git = "https://github.com/webb-tools/protocol-substrate.git", default-features = false }
-pallet-mixer = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-token-wrapper = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-pallet-token-wrapper-handler = { git = "https://github.com/webb-tools/protocol-substrate.git",default-features = false }
-
-# Orml depedencies
-orml-currencies = { git = "https://github.com/open-web3-stack/open-runtime-module-library.git", default-features = false, branch = "polkadot-v0.9.27"}
-orml-tokens = { git = "https://github.com/open-web3-stack/open-runtime-module-library.git", default-features = false, branch = "polkadot-v0.9.27" }
-orml-traits = { git = "https://github.com/open-web3-stack/open-runtime-module-library.git", default-features = false, branch = "polkadot-v0.9.27" }
-orml-benchmarking = { git = "https://github.com/open-web3-stack/open-runtime-module-library.git", default-features = false, optional = true, branch = "polkadot-v0.9.27" }
-
 # Substrate Dependencies
 ## Substrate Primitive Dependencies
 sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.27", default-features = false }
@@ -175,25 +155,6 @@ std = [
 	"dkg-runtime-primitives/std",
 	"pallet-dkg-proposals/std",
 	"pallet-dkg-proposal-handler/std",
-
-	# Protocol Substrate
-	"webb-primitives/std",
-	"pallet-hasher/std",
-	"pallet-mt/std",
-	"pallet-linkable-tree/std",
-	"pallet-mt-rpc-runtime-api/std",
-	"pallet-linkable-tree-rpc-runtime-api/std",
-	"pallet-verifier/std",
-	"orml-currencies/std",
-	"orml-tokens/std",
-	"orml-traits/std",
-	"pallet-asset-registry/std",
-	"pallet-signature-bridge/std",
-	"pallet-mixer/std",
-	"pallet-token-wrapper/std",
-	"pallet-token-wrapper-handler/std",
-	"orml-benchmarking/std",
-	"pallet-society/std",
 ]
 runtime-benchmarks = [
 	"hex-literal",
@@ -208,17 +169,7 @@ runtime-benchmarks = [
 	"xcm-builder/runtime-benchmarks",
 	"pallet-society/runtime-benchmarks",
 	"pallet-collective/runtime-benchmarks",
-	
-	# protocol-substrate deps
-	"pallet-signature-bridge/runtime-benchmarks",
-	"pallet-mt/runtime-benchmarks",
-	"pallet-mixer/runtime-benchmarks",
-	"pallet-linkable-tree/runtime-benchmarks",
-	"pallet-hasher/runtime-benchmarks",
-	"pallet-verifier/runtime-benchmarks",
-	"pallet-asset-registry/runtime-benchmarks",
-	"pallet-token-wrapper/runtime-benchmarks",
-		
+
 	# dkg deps
 	"pallet-dkg-metadata/runtime-benchmarks",
 	"pallet-dkg-proposals/runtime-benchmarks",
