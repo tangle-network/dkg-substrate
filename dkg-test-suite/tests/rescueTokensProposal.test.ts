@@ -15,22 +15,20 @@
  *
  */
 import { waitForEvent, sudoTx, sleep } from './utils/setup';
-import { ethers, BigNumber } from 'ethers';
+import { BigNumber } from 'ethers';
 import {
 	Treasury,
 	GovernedTokenWrapper,
 	MintableToken,
 } from '@webb-tools/tokens';
-import { Keyring } from '@polkadot/api';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
 import {
 	RescueTokensProposal,
 	ChainType,
 	WrappingFeeUpdateProposal,
 	ResourceId,
 	ProposalHeader,
+	CircomUtxo,
 } from '@webb-tools/sdk-core';
 import {
 	localChain,
@@ -57,26 +55,19 @@ it('should be able to sign and execute rescue token proposal', async () => {
 	);
 	const treasuryAddress = await governedToken.getFeeRecipientAddress();
 	const treasury = Treasury.connect(treasuryAddress, wallet1);
-	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
-	const chainIdType = polkadotApi.createType(
-		'WebbProposalsHeaderTypedChainId',
-		{
-			Evm: localChain.evmId,
-		}
-	);
+
 	// First, we will execute the update wrapping fee proposal to change the fee to be greater than 0
 	// This will allow tokens to accumulate to the treasury
 	{
 		const governedTokenResourceId = ResourceId.newFromContractAddress(governedToken.contract.address, ChainType.EVM, localChain.evmId);
-		const functionSignature = hexToU8a(governedToken.contract.interface.functions['setFee(uint16,uint32)'].format());
+		const functionSignature = hexToU8a(governedToken.contract.interface.getSighash('setFee(uint16,uint32)'));
 		const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
 		const proposalHeader = new ProposalHeader(governedTokenResourceId, functionSignature, nonce);
 		const wrappingFeeProposal = new WrappingFeeUpdateProposal(proposalHeader, '0x0A');
 
-		const proposalBytes = wrappingFeeProposal.toU8a();
-		const prop = u8aToHex(proposalBytes);
-		const wrappingFeeUpdateProposal = polkadotApi.createType(
+		const prop = u8aToHex(wrappingFeeProposal.toU8a());
+
+		const wrappingFeeProposalType = polkadotApi.createType(
 			'WebbProposalsProposal',
 			{
 				Unsigned: {
@@ -85,52 +76,42 @@ it('should be able to sign and execute rescue token proposal', async () => {
 				},
 			}
 		);
-		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-				wrappingFeeUpdateProposal
-			);
+
+		const proposalCall = polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(wrappingFeeProposalType.toU8a());
 
 		await sudoTx(polkadotApi, proposalCall);
 
 		// now we need to wait until the proposal to be signed on chain.
-		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-			key: 'WrappingFeeUpdateProposal',
+		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+			key: 'wrappingFeeUpdateProposal',
 		});
+
 		// now we need to query the proposal and its signature.
 		const key = {
 			WrappingFeeUpdateProposal: wrappingFeeProposal.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-			chainIdType,
+		const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+			{
+				Evm: localChain.evmId,
+			},
 			key
 		);
-		const value = new Option(
-			polkadotApi.registry,
-			'WebbProposalsProposal',
-			proposal
-		);
-		expect(value.isSome).to.eq(true);
-		const dkgProposal = value.unwrap().toJSON() as {
-			signed: {
-				kind: 'WrappingFeeUpdate';
-				data: HexString;
-				signature: HexString;
-			};
-		};
+
+		const dkgProposal = proposal.unwrap().asSigned;
 		// sanity check.
-		expect(dkgProposal.signed.data).to.eq(prop);
+		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		expect(isSignedByGovernor).to.eq(true);
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.executeProposalWithSignature(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		await tx2.wait();
 		// Want to check that fee was updated
@@ -142,25 +123,41 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		// Now we wrap and deposit, the wrapping fee should accumulate to the treasury
 		const wrappingFee = await governedToken.contract.getFee();
 		await governedToken.grantMinterRole(anchor.contract.address);
-		await mintableToken.approveSpending(anchor.contract.address);
-		await mintableToken.approveSpending(governedToken.contract.address);
+		let tx = await mintableToken.approveSpending(anchor.contract.address);
+		await tx.wait();
+		tx = await mintableToken.approveSpending(governedToken.contract.address);
+		await tx.wait();
 		await mintableToken.mintTokens(wallet1.address, '100000000000000000000000');
-		await anchor.wrapAndDeposit(mintableToken.contract.address, wrappingFee);
+		const outputUtxo = await CircomUtxo.generateUtxo({
+			amount: '100000000000000',
+			backend: 'Circom',
+			chainId: localChain.typedChainId.toString(),
+			curve: 'Bn254',
+		});
+		await anchor.transactWrap(
+			mintableToken.contract.address,
+			[],
+			[outputUtxo],
+			0,
+			wallet1.address,
+			wallet1.address,
+			{}
+		);
 
 		// Anchor Denomination amount should go to TokenWrapper
 		expect(
 			(
 				await mintableToken.getBalance(governedToken.contract.address)
 			).toString()
-		).to.eq(anchor.denomination!);
+		).to.eq(outputUtxo.amount);
 
 		// The wrapping fee should be transferred to the treasury
 		expect(
 			(await mintableToken.getBalance(treasury.contract.address)).toString()
 		).to.eq(
-			BigNumber.from(anchor.denomination!)
+			BigNumber.from(outputUtxo.amount)
 				.mul(wrappingFee)
-				.div(100 - wrappingFee)
+				.div(10000 - wrappingFee)
 				.toString()
 		);
 
@@ -168,7 +165,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			(
 				await governedToken.contract.balanceOf(anchor.contract.address)
 			).toString()
-		).to.eq(anchor.denomination!);
+		).to.eq(outputUtxo.amount);
 	}
 
 	await sleep(5 * BLOCK_TIME); // wait for a few blocks
@@ -182,13 +179,12 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		let balToBeforeRescue = await mintableToken.getBalance(to);
 
 		const treasuryResourceId =  ResourceId.newFromContractAddress(treasury.contract.address, ChainType.EVM, localChain.evmId);
-		const functionSignature = hexToU8a(treasury.contract.interface.functions['rescueTokens(address,address,uint256,uint32)'].format())
-		const nonce = await Number(treasury.contract.proposalNonce()) + 1
+		const functionSignature = hexToU8a(treasury.contract.interface.getSighash('rescueTokens(address,address,uint256,uint32)'));
+		const nonce = Number(await treasury.contract.proposalNonce()) + 1
 		const proposalHeader = new ProposalHeader(treasuryResourceId, functionSignature, nonce);
 		const rescueTokensProposal = new RescueTokensProposal(proposalHeader, mintableTokenAddress, to, '0x01F4');
 
-		const proposalBytes = rescueTokensProposal.toU8a();
-		const prop = u8aToHex(proposalBytes);
+		const prop = u8aToHex(rescueTokensProposal.toU8a());
 		const rescueTokensProposalType = polkadotApi.createType(
 			'WebbProposalsProposal',
 			{
@@ -199,52 +195,44 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			}
 		);
 		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-				rescueTokensProposalType
+			polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+				rescueTokensProposalType.toU8a()
 			);
 
 		await sudoTx(polkadotApi, proposalCall);
 
+		console.log('after rescue sudo tx');
 		// now we need to wait until the proposal to be signed on chain.
-		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-			key: 'RescueTokensProposal',
+		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+			key: 'rescueTokensProposal',
 		});
 		// now we need to query the proposal and its signature.
 		const key = {
 			RescueTokensProposal: rescueTokensProposal.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-			chainIdType,
+		const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+			{
+				Evm: localChain.evmId,
+			},
 			key
 		);
-		const value = new Option(
-			polkadotApi.registry,
-			'WebbProposalsProposal',
-			proposal
-		);
-		expect(value.isSome).to.eq(true);
-		const dkgProposal = value.unwrap().toJSON() as {
-			signed: {
-				kind: 'RescueTokens';
-				data: HexString;
-				signature: HexString;
-			};
-		};
+		const dkgProposal = proposal.unwrap().asSigned;
+
 		// sanity check.
-		expect(dkgProposal.signed.data).to.eq(prop);
+		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
 		console.log(await contract.governor());
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		expect(isSignedByGovernor).to.eq(true);
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.executeProposalWithSignature(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		await tx2.wait();
 

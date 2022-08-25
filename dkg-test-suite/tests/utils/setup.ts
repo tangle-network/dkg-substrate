@@ -246,6 +246,7 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
+
 		// Subscribe to system events via storage
 		const unsub = await api.query.system.events((events) => {
 			const handleUnsub = () => {
@@ -256,16 +257,21 @@ export async function waitForEvent(
 			};
 
 			// Loop through the Vec<EventRecord>
-			events.forEach((record: any) => {
+			events.forEach((record) => {
 				const { event } = record;
+				console.log(event.toHuman());
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
-						const dataKeys = (event.toHuman() as any).data.map(
-							(elt: any) => Object.keys(elt)[0]
-						);
-						if (dataKeys.includes(dataQuery.key)) {
-							handleUnsub();
-						}
+						event.data.forEach((value, index) => {
+							const jsonData = value.toJSON();
+							if (jsonData instanceof Object) {
+								Object.keys(jsonData).map((key) => {
+									if (key === dataQuery.key) {
+										handleUnsub();
+									}
+								})
+							}
+						})
 					} else {
 						handleUnsub();
 					}
@@ -283,12 +289,13 @@ export async function waitUntilDKGPublicKeyStoredOnChain(
 	api: ApiPromise
 ): Promise<`0x${string}`> {
 	return new Promise(async (resolve, _reject) => {
-		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async () => {
-			const dkgKey = await fetchDkgPublicKey(api);
-			if (dkgKey) {
-				unsubscribe();
-				resolve(dkgKey);
-			}
+		const unsubscribe = await api.rpc.chain.subscribeNewHeads(() => {
+			fetchDkgPublicKey(api).then((value) => {
+				if (value) {
+					unsubscribe();
+					resolve(value);
+				}
+			});
 		});
 	});
 }
@@ -301,7 +308,7 @@ export async function waitUntilDKGPublicKeyStoredOnChain(
 export async function fetchDkgPublicKey(
 	api: ApiPromise
 ): Promise<`0x${string}` | null> {
-	const res = await api.query.dkg.dKGPublicKey();
+	const res = await api.query.dkg.dkgPublicKey();
 	const json = res.toJSON() as [number, string];
 	if (json && json[1] !== '0x') {
 		const key = json[1];

@@ -34,10 +34,10 @@ import {
 	sleep,
 	waitForTheNextDkgPublicKey,
 	endpoint,
-} from '../../src/utils';
+} from '../utils/setup';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Vec } from '@polkadot/types';
-import { BLOCK_TIME } from '../../src/constants';
+import { BLOCK_TIME } from '../utils/constants';
 
 describe('Keygen Changes Flow', function () {
 	// 8 sessions should be more than enough for the test to complete
@@ -73,7 +73,7 @@ describe('Keygen Changes Flow', function () {
 
 	// This test requires at least 3 sessions.
 	// 3 sessions = 3 * 10 blocks = 30 blocks = 30 * 6 seconds = 180 seconds.
-	it('should be able to increase the Keygen Threshold', async () => {
+	it.only('should be able to increase the Keygen Threshold', async () => {
 		// first query the current keygen threshold value.
 		const currentKeygenThreshold = await api.query.dkg.keygenThreshold();
 		expect(currentKeygenThreshold.toHex()).to.equal(
@@ -81,12 +81,7 @@ describe('Keygen Changes Flow', function () {
 			'Keygen threshold at the start should be 2'
 		);
 		// then, we shall query the current best authorities.
-		const currentBestAuthoritiesValue = await api.query.dkg.bestAuthorities();
-		const currentBestAuthorities = new Vec(
-			api.registry,
-			'(u16,DkgRuntimePrimitivesCryptoPublic)',
-			currentBestAuthoritiesValue.toU8a()
-		);
+		const currentBestAuthorities = await api.query.dkg.bestAuthorities();
 		expect(currentBestAuthorities.length).to.equal(
 			2,
 			'Current best authorities should be 2'
@@ -112,12 +107,7 @@ describe('Keygen Changes Flow', function () {
 			'0x0003',
 			'Next keygen threshold should be 3'
 		);
-		const nextBestAuthoritiesValue = await api.query.dkg.nextBestAuthorities();
-		const nextBestAuthorities = new Vec(
-			api.registry,
-			'(u16,DkgRuntimePrimitivesCryptoPublic)',
-			nextBestAuthoritiesValue.toU8a()
-		);
+		const nextBestAuthorities = await api.query.dkg.nextBestAuthorities();
 		expect(nextBestAuthorities.length).to.equal(
 			3,
 			'Next best authorities should be 3'
@@ -133,12 +123,7 @@ describe('Keygen Changes Flow', function () {
 			'0x0003',
 			'Keygen threshold should be now equal to 3'
 		);
-		const bestAuthoritiesValue = await api.query.dkg.bestAuthorities();
-		const bestAuthorities = new Vec(
-			api.registry,
-			'(u16,DkgRuntimePrimitivesCryptoPublic)',
-			bestAuthoritiesValue.toU8a()
-		);
+		const bestAuthorities = await api.query.dkg.bestAuthorities();
 		expect(bestAuthorities.length).to.equal(3, 'Best authorities should be 3');
 		// query the current DKG public key.
 		const currentDkgPublicKey = await fetchDkgPublicKey(api);

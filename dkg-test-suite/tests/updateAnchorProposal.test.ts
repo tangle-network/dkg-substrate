@@ -17,18 +17,16 @@
 import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
+	sudoTx,
 	waitForEvent,
 } from './utils/setup';
-import { ethers } from 'ethers';
-import { Keyring } from '@polkadot/api';
 import { u8aToHex, hexToU8a } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
 import {
 	ChainType,
 	ResourceId,
 	ProposalHeader,
-	AnchorUpdateProposal
+	AnchorUpdateProposal,
+	CircomUtxo
 } from '@webb-tools/sdk-core';
 import { 
 	registerResourceId
@@ -58,15 +56,31 @@ it('should be able to sign anchor update proposal', async () => {
 	await anchor2.setSigner(wallet2);
 
 	// create a deposit on localchain1
-	const deposit = await anchor.deposit(localChain2.typedChainId);
+	const outputUtxo = await CircomUtxo.generateUtxo({
+		amount: '100000000000000',
+		backend: 'Circom',
+		chainId: localChain.typedChainId.toString(),
+		curve: 'Bn254',
+	});
+	await anchor.transact(
+		[],
+		[outputUtxo],
+		{},
+		0,
+		wallet1.address,
+		wallet1.address,
+	);
+
 	// now check the new merkel root.
 	const newMerkleRoot1 = await anchor.contract.getLastRoot();
 	expect(newMerkleRoot1).not.to.eq(merkleRoot1);
 	// create anchor update proposal to be sent to the dkg.
-	const resourceId = ResourceId.newFromContractAddress(anchor2.contract.address, ChainType.EVM, localChain2.typedChainId);
-	const functionSignature = hexToU8a(anchor.contract.interface.functions['updateEdge(bytes32,uint32,bytes32)'].format());
-	const proposalHeader = new ProposalHeader(resourceId, functionSignature, 1);
-	const srcResourceId = ResourceId.newFromContractAddress(anchor.contract.address, ChainType.EVM, localChain.typedChainId);
+	const resourceId = ResourceId.newFromContractAddress(anchor2.contract.address, ChainType.EVM, localChain2.evmId);
+	const functionSignature = hexToU8a(anchor.contract.interface.getSighash('updateEdge(bytes32,uint32,bytes32)'));
+	const nonce = Number(await anchor.contract.getProposalNonce()) + 1
+	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
+
+	const srcResourceId = ResourceId.newFromContractAddress(anchor.contract.address, ChainType.EVM, localChain.evmId);
 
 	const anchorProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
 		proposalHeader,
@@ -75,69 +89,42 @@ it('should be able to sign anchor update proposal', async () => {
 	);
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, anchorProposal.header.resourceId);
-	const proposalBytes = anchorProposal.toU8a();
 	// get alice account to send the transaction to the dkg node.
-	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
-	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType(
-		'WebbProposalsHeaderTypedChainId',
+	const prop = u8aToHex(anchorProposal.toU8a());
+	const proposalCall = polkadotApi.tx.dkgProposals.acknowledgeProposal(
+		anchorProposal.header.nonce,
 		{
 			Evm: localChain2.evmId,
-		}
-	);
-	const proposalCall = polkadotApi.tx.dKGProposals.acknowledgeProposal(
-		anchorProposal.header.nonce,
-		chainIdType,
-		resourceId,
+		},
+		resourceId.toU8a(),
 		prop
 	);
-	const tx = new Promise<void>(async (resolve, reject) => {
-		const unsub = await proposalCall.signAndSend(
-			alice,
-			({ events, status }) => {
-				if (status.isFinalized) {
-					unsub();
-					const success = events.find(({ event }) =>
-						polkadotApi.events.system.ExtrinsicSuccess.is(event)
-					);
-					if (success) {
-						resolve();
-					} else {
-						reject(new Error('Proposal failed'));
-					}
-				}
-			}
-		);
-	});
-	await tx;
+
+	await sudoTx(polkadotApi, proposalCall);
+
+	console.log('after sudo tx');
+
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-		key: 'AnchorUpdateProposal',
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+		key: 'anchorUpdateProposal',
 	});
+
+	console.log('after wait for Event');
+
 	// now we need to query the proposal and its signature.
 	const key = {
 		AnchorUpdateProposal: anchorProposal.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-		chainIdType,
+	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+		{
+			Evm: localChain2.evmId,
+		},
 		key
 	);
-	const value = new Option(
-		polkadotApi.registry,
-		'WebbProposalsProposal',
-		proposal
-	);
-	expect(value.isSome).to.eq(true);
-	const dkgProposal = value.unwrap().toJSON() as {
-		signed: {
-			kind: 'AnchorUpdate';
-			data: HexString;
-			signature: HexString;
-		};
-	};
+
+	const dkgProposal = proposal.unwrap().asSigned;
 	// sanity check.
-	expect(dkgProposal.signed.data).to.eq(prop);
+	expect(dkgProposal.data).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = signatureVBridge.getVBridgeSide(localChain2.typedChainId)!;
 	// but first, we need to log few things to help us to debug.
@@ -151,8 +138,8 @@ it('should be able to sign anchor update proposal', async () => {
 	expect(currentGovernor).to.eq(currentDkgAddress);
 	// now we log the proposal data, signature, and if it is signed by the current governor or not.
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
@@ -160,8 +147,8 @@ it('should be able to sign anchor update proposal', async () => {
 	const anchorHandlerAddress = await anchor2.getHandler();
 	expect(val).to.eq(anchorHandlerAddress);
 	const tx2 = await contract.executeProposalWithSignature(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	await tx2.wait();
 	// now we shall check the new merkle root on the other chain.

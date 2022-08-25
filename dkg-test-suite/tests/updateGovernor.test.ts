@@ -14,7 +14,6 @@
  * limitations under the License.
  *
  */
-import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
 import { BLOCK_TIME } from './utils/constants';
 import {
@@ -33,8 +32,6 @@ import {
 	localChain,
 	polkadotApi,
 	signatureVBridge,
-	executeAfter,
-	executeBefore,
 } from './utils/util';
 
 it.skip('should be able to transfer ownership to new Governor with Signature', async () => {

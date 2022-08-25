@@ -19,12 +19,8 @@ import {
 	waitForEvent,
 	sudoTx,
 } from './utils/setup';
-import { ethers } from 'ethers';
 import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
-import { Keyring } from '@polkadot/api';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
 import {
 	TokenAddProposal,
 	ChainType,
@@ -37,10 +33,7 @@ import {
 	polkadotApi,
 	signatureVBridge,
 	wallet1,
-	executeAfter,
-	executeBefore,
 } from './utils/util';
-import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
 import { BLOCK_TIME } from './utils/constants';
 import { registerResourceId } from '@webb-tools/test-utils';
@@ -55,8 +48,8 @@ it('should be able to sign token add & remove proposal', async () => {
 		wallet1
 	);
 	const resourceId = ResourceId.newFromContractAddress(governedTokenAddress, ChainType.EVM, localChain.evmId);
-	const functionSignature = hexToU8a(governedToken.contract.interface.functions['add(address,uint32)'].format())
-	const nonce = await Number(governedToken.contract.proposalNonce()) + 1
+	const functionSignature = hexToU8a(governedToken.contract.interface.getSighash('add(address,uint32)'));
+	const nonce = Number(await governedToken.contract.proposalNonce()) + 1
 	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
 	// Create Mintable Token to add to GovernedTokenWrapper
 	//Create an ERC20 Token
@@ -70,17 +63,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		
 		// register proposal resourceId.
 		await registerResourceId(polkadotApi, tokenAddProposal.header.resourceId);
-		const proposalBytes = tokenAddProposal.toU8a();
-		// get alice account to send the transaction to the dkg node.
-		const keyring = new Keyring({ type: 'sr25519' });
-		const alice = keyring.addFromUri('//Alice');
-		const prop = u8aToHex(proposalBytes);
-		const chainIdType = polkadotApi.createType(
-			'WebbProposalsHeaderTypedChainId',
-			{
-				Evm: localChain.evmId,
-			}
-		);
+		const prop = u8aToHex(tokenAddProposal.toU8a());
 		const tokenAddProposalType = polkadotApi.createType(
 			'WebbProposalsProposal',
 			{
@@ -91,51 +74,42 @@ it('should be able to sign token add & remove proposal', async () => {
 			}
 		);
 		const proposalCall =
-			polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-				tokenAddProposalType
+			polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+				tokenAddProposalType.toU8a()
 			);
 
 		await sudoTx(polkadotApi, proposalCall);
 
 		// now we need to wait until the proposal to be signed on chain.
-		await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-			key: 'TokenAddProposal',
+		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+			key: 'tokenAddProposal',
 		});
 		// now we need to query the proposal and its signature.
 		const key = {
 			TokenAddProposal: tokenAddProposal.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-			chainIdType,
+		const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+			{
+				Evm: localChain.evmId,
+			},
 			key
 		);
-		const value = new Option(
-			polkadotApi.registry,
-			'WebbProposalsProposal',
-			proposal
-		);
-		expect(value.isSome).to.eq(true);
-		const dkgProposal = value.unwrap().toJSON() as {
-			signed: {
-				kind: 'TokenAdd';
-				data: HexString;
-				signature: HexString;
-			};
-		};
+
+		const dkgProposal = proposal.unwrap().asSigned;
 		// sanity check.
-		expect(dkgProposal.signed.data).to.eq(prop);
+		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		expect(isSignedByGovernor).to.eq(true);
 		// check that we have the resouceId mapping.
 		const tx2 = await contract.executeProposalWithSignature(
-			dkgProposal.signed.data,
-			dkgProposal.signed.signature
+			dkgProposal.data,
+			dkgProposal.signature
 		);
 		await tx2.wait();
 		// Want to check that token was actually added
@@ -146,7 +120,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		).to.eq(true);
 	}
 	await sleep(5 * BLOCK_TIME);
-	const removeSignature = hexToU8a(governedToken.contract.interface.functions['remove(address,uint32)'].format());
+	const removeSignature = hexToU8a(governedToken.contract.interface.getSighash('remove(address,uint32)'));
 	const proposalNonce = Number(await governedToken.contract.proposalNonce()) + 1;
 	const removeProposalHeader = new ProposalHeader(resourceId, removeSignature, proposalNonce);
 	const tokenRemoveProposal = new TokenRemoveProposal(removeProposalHeader, tokenToAdd.contract.address);
@@ -155,15 +129,8 @@ it('should be able to sign token add & remove proposal', async () => {
 	await registerResourceId(polkadotApi, tokenRemoveProposal.header.resourceId);
 	const proposalBytes = tokenRemoveProposal.toU8a();
 	// get alice account to send the transaction to the dkg node.
-	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
 	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType(
-		'WebbProposalsHeaderTypedChainId',
-		{
-			Evm: localChain.evmId,
-		}
-	);
+
 	const tokenRemoveProposalType = polkadotApi.createType(
 		'WebbProposalsProposal',
 		{
@@ -174,52 +141,42 @@ it('should be able to sign token add & remove proposal', async () => {
 		}
 	);
 	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-			tokenRemoveProposal
+		polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+			tokenRemoveProposalType.toU8a()
 		);
 
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-		key: 'TokenRemoveProposal',
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+		key: 'tokenRemoveProposal',
 	});
 	// now we need to query the proposal and its signature.
 	const key = {
 		TokenRemoveProposal: tokenRemoveProposal.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-		chainIdType,
+	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+		{
+			Evm: localChain.evmId,
+		},
 		key
 	);
-	const value = new Option(
-		polkadotApi.registry,
-		'WebbProposalsProposal',
-		proposal
-	);
 
-	expect(value.isSome).to.eq(true);
-	const dkgProposal = value.unwrap().toJSON() as {
-		signed: {
-			kind: 'TokenRemove';
-			data: HexString;
-			signature: HexString;
-		};
-	};
+	const dkgProposal = proposal.unwrap().asSigned;
 	// sanity check.
-	expect(dkgProposal.signed.data).to.eq(prop);
+	expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.evmId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
 	const tx2 = await contract.executeProposalWithSignature(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	await tx2.wait();
 	// Want to check that token was actually added

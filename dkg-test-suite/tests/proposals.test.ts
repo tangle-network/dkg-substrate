@@ -30,33 +30,35 @@ describe('E2E Test Runner', function () {
 	this.slow(30 * BLOCK_TIME);
 	before(async () => {
 		let start = performance.now();
-		await executeBefore();
+		const successfulExecution = await executeBefore();
 		let end = performance.now();
 		console.log(`Start - ${start} | End - ${end} | Took - ${end - start} ms`);
+		return successfulExecution;
 	});
 
-	importTest(
-		'Proposer Set Update Proposal',
-		'./proposerSetUpdateProposal.test'
-	);
-	importTest(
-		'Maximum Deposit Limit Update Proposal',
-		'./maxDepositLimitProposal.test'
-	);
-	importTest(
-		'Minimum Withdrawal Limit Update Proposal',
-		'./minWithdrawalLimit.test'
-	);
-	importTest('Rescue Tokens Proposal', './rescueTokensProposal.test');
-	importTest(
-		'Wrapping Fee Update Proposal',
-		'./wrappingFeeUpdateProposal.test'
-	);
-	importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
-	importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
-	importTest('Anchor Update Proposal', './updateAnchorProposal.test');
-	importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
-	// importTest('Threshold Update (Staking Chill)', './threshold.test');
+	describe('Test Suite: ', () => {
+		importTest(
+			'Proposer Set Update Proposal',
+			'./proposerSetUpdateProposal.test'
+		);
+		importTest(
+			'Maximum Deposit Limit Update Proposal',
+			'./maxDepositLimitProposal.test'
+		);
+		importTest(
+			'Minimum Withdrawal Limit Update Proposal',
+			'./minWithdrawalLimit.test'
+		);
+		importTest('Rescue Tokens Proposal', './rescueTokensProposal.test');
+		importTest(
+			'Wrapping Fee Update Proposal',
+			'./wrappingFeeUpdateProposal.test'
+		);
+		importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
+		importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
+		importTest('Anchor Update Proposal', './updateAnchorProposal.test');
+		importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
+	})
 
 	after(async () => {
 		await executeAfter();

@@ -18,10 +18,7 @@ import {
 	waitForEvent,
 	sudoTx,
 } from './utils/setup';
-import { Keyring } from '@polkadot/api';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
-import { Option } from '@polkadot/types';
-import { HexString } from '@polkadot/util/types';
 import {
 	MinWithdrawalLimitProposal,
 	ChainType,
@@ -34,30 +31,21 @@ import {
 	signatureVBridge,
 } from './utils/util';
 import { expect } from 'chai';
-import { ethers } from 'ethers';
 import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to update min withdrawal limit', async () => {
 	const vAnchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const resourceId = ResourceId.newFromContractAddress(vAnchor.contract.address, ChainType.EVM, localChain.evmId);
-	const functionSignature = hexToU8a(vAnchor.contract.interface.functions['configureMinimalWithdrawalLimit(uint256,uint32)'].format());
+	const functionSignature = hexToU8a(vAnchor.contract.interface.getSighash('configureMinimalWithdrawalLimit(uint256,uint32)'));
 	const nonce = Number(await vAnchor.contract.getProposalNonce()) + 1;
 	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
 	const minLimitProposal = new MinWithdrawalLimitProposal(proposalHeader, '0x50');
 
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, minLimitProposal.header.resourceId);
-	const proposalBytes = minLimitProposal.toU8a();
+
 	// get alice account to send the transaction to the dkg node.
-	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
-	const prop = u8aToHex(proposalBytes);
-	const chainIdType = polkadotApi.createType(
-		'WebbProposalsHeaderTypedChainId',
-		{
-			Evm: localChain.evmId,
-		}
-	);
+	const prop = u8aToHex(minLimitProposal.toU8a());
 	const minWithdrawalLimitProposal = polkadotApi.createType(
 		'WebbProposalsProposal',
 		{
@@ -67,81 +55,46 @@ it('should be able to update min withdrawal limit', async () => {
 			},
 		}
 	);
-	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
-			minWithdrawalLimitProposal
-		);
 
+	const proposalCall =
+		polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+			minWithdrawalLimitProposal.toU8a()
+		);
+	
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
-		key: 'MinWithdrawalLimitUpdateProposal',
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
+		key: 'minWithdrawalLimitUpdateProposal',
 	});
+
 	// now we need to query the proposal and its signature.
 	const key = {
 		MinWithdrawalLimitUpdateProposal: minLimitProposal.header.nonce,
 	};
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
-		chainIdType,
+	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+		{
+			Evm: localChain.evmId
+		},
 		key
 	);
-	const value = new Option(
-		polkadotApi.registry,
-		'WebbProposalsProposal',
-		proposal
-	);
-	expect(value.isSome).to.eq(true);
-	const dkgProposal = value.unwrap().toJSON() as {
-		signed: {
-			kind: 'MinWithdrawalLimitUpdate';
-			data: HexString;
-			signature: HexString;
-		};
-	};
 
-	let signature = dkgProposal.signed.signature.slice(2);
-	let r = `0x${signature.slice(0, 32)}`;
-	let s = `0x${signature.slice(32, 64)}`;
-	let v = parseInt(`0x${signature[64]}`);
-	let expandedSig = { r, s, v };
-	ethers.utils.joinSignature(expandedSig);
-	// try {
-	//   sig = ethers.utils.joinSignature(expandedSig)
-	// } catch (e) {
-	//   expandedSig.s = '0x' + (new BN(ec.curve.n).sub(signature.s)).toString('hex');
-	//   expandedSig.v = (expandedSig.v === 27) ? 28 : 27;
-	//   sig = ethers.utils.joinSignature(expandedSig)
-	// }
-
-	// 66 byte string, which represents 32 bytes of data
-	let messageHash = ethers.utils.solidityKeccak256(
-		['bytes'],
-		[dkgProposal.signed.data]
-	);
-
-	// 32 bytes of data in Uint8Array
-	let messageHashBytes = ethers.utils.arrayify(messageHash);
-	let recovered = ethers.utils.verifyMessage(
-		messageHashBytes,
-		dkgProposal.signed.signature
-	);
-	console.log(recovered);
+	const dkgProposal = proposal.unwrap().asSigned;
 
 	// sanity check.
-	expect(dkgProposal.signed.data).to.eq(prop);
+	expect(dkgProposal.data.toString()).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
 	const tx2 = await contract.executeProposalWithSignature(
-		dkgProposal.signed.data,
-		dkgProposal.signed.signature
+		dkgProposal.data,
+		dkgProposal.signature
 	);
 	await tx2.wait();
 	// Want to check that fee was updated
