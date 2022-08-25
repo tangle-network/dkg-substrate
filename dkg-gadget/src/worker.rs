@@ -80,7 +80,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	misbehaviour_monitor::MisbehaviourMonitor, remote::AsyncProtocolRemote,
+	remote::AsyncProtocolRemote,
 	AsyncProtocolParameters, GenericAsyncHandler,
 };
 
@@ -329,23 +329,10 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
-				let misbehaviour_tx =
-					self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
-				let remote = async_proto_params.handle.clone();
-				let engine = async_proto_params.engine.clone();
-
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold) {
 					Ok(meta_handler) => {
 						let task = async move {
-							let misbehaviour_monitor =
-								MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
-
-							let res = tokio::select! {
-								res0 = meta_handler => res0,
-								res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-							};
-
-							match res {
+							match meta_handler.await {
 								Ok(_) => {
 									log::info!(target: "dkg", "The meta handler has executed successfully");
 								},
@@ -395,10 +382,6 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler_tx.clone();
-		let misbehaviour_tx = self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
-		let remote = async_proto_params.handle.clone();
-		let engine = async_proto_params.engine.clone();
-
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -408,14 +391,7 @@ where
 		)?;
 
 		let task = async move {
-			let misbehaviour_monitor = MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
-
-			let res = tokio::select! {
-				res0 = meta_handler => res0,
-				res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-			};
-
-			match res {
+			match meta_handler.await {
 				Ok(_) => {
 					log::info!(target: "dkg", "The meta handler has executed successfully");
 					Ok(async_index)
