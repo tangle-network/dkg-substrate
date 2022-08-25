@@ -15,14 +15,14 @@
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, get_party_round_id, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	GenericAsyncHandler, ProtocolType,
+	GenericAsyncHandler, KeygenRound, ProtocolType,
 };
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Keygen;
 
 use std::fmt::Debug;
 
-use dkg_primitives::types::DKGError;
+use dkg_primitives::types::{DKGError, DKGMsgStatus};
 use futures::FutureExt;
 
 impl<'a, Out: Send + Debug + 'a> GenericAsyncHandler<'a, Out>
@@ -33,6 +33,7 @@ where
 	pub fn setup_keygen<BI: BlockchainInterface + 'a>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
+		status: DKGMsgStatus,
 	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
@@ -59,7 +60,8 @@ where
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n, 0)?.await?;
+				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n, 0, status)?
+					.await?;
 				log::debug!(target: "dkg", "Keygen stage complete!");
 			} else {
 				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
@@ -92,8 +94,14 @@ where
 		t: u16,
 		n: u16,
 		async_index: u8,
+		status: DKGMsgStatus,
 	) -> Result<GenericAsyncHandler<'a, <Keygen as StateMachineHandler>::Return>, DKGError> {
-		let channel_type = ProtocolType::Keygen { i, t, n };
+		let ty = match status {
+			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
+			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
+			DKGMsgStatus::UNKNOWN => KeygenRound::UNKNOWN,
+		};
+		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
 			Keygen::new(i, t, n)
@@ -101,6 +109,7 @@ where
 			params,
 			channel_type,
 			async_index,
+			status,
 		)
 	}
 }

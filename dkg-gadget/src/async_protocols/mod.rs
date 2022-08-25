@@ -27,7 +27,10 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::{AuthorityId, Public},
-	types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, RoundId},
+	types::{
+		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
+		RoundId,
+	},
 	AuthoritySet, AuthoritySetId,
 };
 use dkg_runtime_primitives::UnsignedProposal;
@@ -117,9 +120,20 @@ impl CurrentRoundBlame {
 	}
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum KeygenRound {
+	/// Keygen round is active
+	ACTIVE,
+	/// Keygen round is queued
+	QUEUED,
+	/// UNKNOWN
+	UNKNOWN,
+}
+
 #[derive(Clone)]
 pub enum ProtocolType {
 	Keygen {
+		ty: KeygenRound,
 		i: u16,
 		t: u16,
 		n: u16,
@@ -156,8 +170,13 @@ impl ProtocolType {
 impl Debug for ProtocolType {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ProtocolType::Keygen { i, t, n } => {
-				write!(f, "Keygen: (i, t, n) = ({}, {}, {})", i, t, n)
+			ProtocolType::Keygen { ty, i, t, n } => {
+				let ty = match ty {
+					KeygenRound::ACTIVE => "ACTIVE",
+					KeygenRound::QUEUED => "QUEUED",
+					KeygenRound::UNKNOWN => "UNKNOWN",
+				};
+				write!(f, "{} | Keygen: (i, t, n) = ({}, {}, {})", ty, i, t, n)
 			},
 			ProtocolType::Offline { i, unsigned_proposal, .. } => {
 				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
@@ -198,6 +217,7 @@ pub fn new_inner<'a, SM: StateMachineHandler + 'static, BI: BlockchainInterface 
 	params: AsyncProtocolParameters<BI>,
 	channel_type: ProtocolType,
 	async_index: u8,
+	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'a, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
@@ -208,7 +228,11 @@ where
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 	let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
 
-	let sm = StateMachineWrapper::new(sm, params.handle.current_round_blame_tx.clone());
+	let sm = StateMachineWrapper::new(
+		sm,
+		channel_type.clone(),
+		params.handle.current_round_blame_tx.clone(),
+	);
 
 	let mut async_proto = AsyncProtocol::new(
 		sm,
@@ -235,6 +259,7 @@ where
 		outgoing_rx,
 		channel_type.clone(),
 		async_index,
+		status,
 	);
 
 	// For taking raw inbound signed messages, mapping them to unsigned messages, then
@@ -285,6 +310,7 @@ fn generate_outgoing_to_wire_fn<'a, SM: StateMachineHandler + 'a, BI: Blockchain
 	mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType,
 	async_index: u8,
+	status: DKGMsgStatus,
 ) -> impl SendFuture<'a, ()>
 where
 	<SM as StateMachine>::MessageBody: Serialize,
@@ -319,7 +345,7 @@ where
 				},
 			};
 
-			let unsigned_dkg_message = DKGMessage { id, payload, round_id };
+			let unsigned_dkg_message = DKGMessage { id, status, payload, round_id };
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 			log::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
 		}

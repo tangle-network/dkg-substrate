@@ -20,7 +20,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
@@ -127,8 +127,13 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			..report.clone()
 		});
 
-		let message =
-			DKGMessage::<AuthorityId> { id: public.clone(), round_id: report.round_id, payload };
+		let status = if report.round_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
+		let message = DKGMessage::<AuthorityId> {
+			id: public.clone(),
+			status,
+			round_id: report.round_id,
+			payload,
+		};
 		let encoded_dkg_message = message.encode();
 
 		match dkg_worker.key_store.sign(&public, &encoded_dkg_message) {

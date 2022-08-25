@@ -16,19 +16,21 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::tra
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 
-use super::CurrentRoundBlame;
+use super::{CurrentRoundBlame, ProtocolType};
 
 pub(crate) struct StateMachineWrapper<T: StateMachine> {
 	sm: T,
+	channel_type: ProtocolType,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 }
 
 impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	pub fn new(
 		sm: T,
+		channel_type: ProtocolType,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	) -> Self {
-		Self { sm, current_round_blame }
+		Self { sm, channel_type, current_round_blame }
 	}
 
 	fn collect_round_blame(&self) {
@@ -68,7 +70,12 @@ where
 			self.round_blame(),
 		);
 		let result = self.sm.proceed();
-		log::debug!("Proceeded: round {:?}, blame: {:?}", self.current_round(), self.round_blame(),);
+		log::debug!(
+			"Proceeded {:?}: round {:?}, blame: {:?}",
+			self.channel_type,
+			self.current_round(),
+			self.round_blame(),
+		);
 		self.collect_round_blame();
 		result
 	}

@@ -52,7 +52,7 @@ use crate::gossip_messages::misbehaviour_report::{
 use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
 
 use dkg_primitives::{
-	types::{DKGError, DKGMisbehaviourMessage, RoundId},
+	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, RoundId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
@@ -328,7 +328,16 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
-				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold) {
+				let status = if let Some(rounds) = self.rounds.as_mut() {
+					if rounds.round_id == round_id {
+						DKGMsgStatus::ACTIVE
+					} else {
+						DKGMsgStatus::QUEUED
+					}
+				} else {
+					DKGMsgStatus::UNKNOWN
+				};
+				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let task = async move {
 							match meta_handler.await {
@@ -766,7 +775,6 @@ where
 	}
 
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
-		debug!(target: "dkg", "🕸️  maybe_enact_new_authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
