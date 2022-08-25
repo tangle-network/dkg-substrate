@@ -80,8 +80,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	remote::AsyncProtocolRemote,
-	AsyncProtocolParameters, GenericAsyncHandler,
+	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
