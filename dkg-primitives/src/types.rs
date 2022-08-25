@@ -29,6 +29,18 @@ pub type SignerSetId = u64;
 
 pub use dkg_runtime_primitives::DKGPayloadKey;
 
+/// DKGMsgStatus Enum identifies if a message is for an active or queued round
+#[derive(Debug, Copy, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub enum DKGMsgStatus {
+	/// Active round
+	ACTIVE,
+	/// Queued round,
+	QUEUED,
+	/// Unknown
+	UNKNOWN,
+}
+
 /// Gossip message struct for all DKG + Webb Protocol messages.
 ///
 /// A message wrapper intended to be passed between the nodes
@@ -41,6 +53,8 @@ pub struct DKGMessage<AuthorityId> {
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
 	pub round_id: RoundId,
+	/// enum for active or queued
+	pub status: DKGMsgStatus,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

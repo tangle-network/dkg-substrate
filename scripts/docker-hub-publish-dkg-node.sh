@@ -7,8 +7,8 @@ PROJECT_ROOT=`git rev-parse --show-toplevel`
 cd $PROJECT_ROOT
 
 VERSION=`grep "^version" ./node/Cargo.toml | egrep -o "([0-9\.]+)"`
-NODE_NAME=ghcr.io/webb-tools/dkg-node
-BUILD_ARGS="cargo build --release -p dkg-node"
+NODE_NAME=ghcr.io/webb-tools/dkg-collator
+BUILD_ARGS="cargo build --release -p dkg-collator"
 
 docker build -f ./docker/Parachain.Dockerfile . -t $NODE_NAME:$VERSION --build-arg GIT_COMMIT=${VERSION} --build-arg BUILD_ARGS="$BUILD_ARGS"
 docker push $NODE_NAME:$VERSION
