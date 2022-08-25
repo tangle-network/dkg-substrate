@@ -45,7 +45,7 @@ it('should be able to sign wrapping fee update proposal', async () => {
 		wallet1
 	);
 	const resourceId = ResourceId.newFromContractAddress(governedTokenAddress, ChainType.EVM, localChain.evmId);
-	const functionSig = hexToU8a(governedToken.contract.interface.functions['setFee(uint16,uint32)'].format());
+	const functionSig = hexToU8a(governedToken.contract.interface.getSighash('setFee(uint16,uint32)'));
 	const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
 	const proposalHeader = new ProposalHeader(resourceId, functionSig, nonce);
 
@@ -63,7 +63,7 @@ it('should be able to sign wrapping fee update proposal', async () => {
 		}
 	);
 	const proposalCall =
-		polkadotApi.tx.dKGProposalHandler.forceSubmitUnsignedProposal(
+		polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
 			wrappingFeeUpdateProposal.toU8a()
 		);
 

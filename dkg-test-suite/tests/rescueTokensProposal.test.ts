@@ -77,7 +77,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			}
 		);
 
-		const proposalCall = polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(wrappingFeeProposalType.toU8a());
+		const proposalCall = polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+			wrappingFeeProposalType.toU8a()
+		);
 
 		await sudoTx(polkadotApi, proposalCall);
 
@@ -129,7 +131,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		await tx.wait();
 		await mintableToken.mintTokens(wallet1.address, '100000000000000000000000');
 		const outputUtxo = await CircomUtxo.generateUtxo({
-			amount: '100000000000000',
+			amount: '10000000',
 			backend: 'Circom',
 			chainId: localChain.typedChainId.toString(),
 			curve: 'Bn254',
@@ -201,7 +203,6 @@ it('should be able to sign and execute rescue token proposal', async () => {
 
 		await sudoTx(polkadotApi, proposalCall);
 
-		console.log('after rescue sudo tx');
 		// now we need to wait until the proposal to be signed on chain.
 		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
 			key: 'rescueTokensProposal',
@@ -223,7 +224,6 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
-		console.log(await contract.governor());
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.data,
 			dkgProposal.signature

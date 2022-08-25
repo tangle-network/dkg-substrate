@@ -40,6 +40,7 @@ import {
 	localChain2,
 } from './utils/util';
 import { expect } from 'chai';
+import { Keyring } from '@polkadot/api';
 
 it('should be able to sign anchor update proposal', async () => {
 	// get the anhor on localchain1
@@ -57,7 +58,7 @@ it('should be able to sign anchor update proposal', async () => {
 
 	// create a deposit on localchain1
 	const outputUtxo = await CircomUtxo.generateUtxo({
-		amount: '100000000000000',
+		amount: '10000000',
 		backend: 'Circom',
 		chainId: localChain.typedChainId.toString(),
 		curve: 'Bn254',
@@ -94,15 +95,34 @@ it('should be able to sign anchor update proposal', async () => {
 	const proposalCall = polkadotApi.tx.dkgProposals.acknowledgeProposal(
 		anchorProposal.header.nonce,
 		{
-			Evm: localChain2.evmId,
+			Evm: localChain.evmId,
 		},
 		resourceId.toU8a(),
 		prop
 	);
-
-	await sudoTx(polkadotApi, proposalCall);
-
-	console.log('after sudo tx');
+	
+	// The acknowledgeProposal call should come from someone in the proposer set
+	const keyring = new Keyring({ type: 'sr25519' });
+	const alice = keyring.addFromUri('//Alice');
+	const tx = new Promise<void>(async (resolve, reject) => {
+		const unsub = await proposalCall.signAndSend(
+			alice,
+			({ events, status }) => {
+				if (status.isFinalized) {
+					unsub();
+					const success = events.find(({ event }) =>
+						polkadotApi.events.system.ExtrinsicSuccess.is(event)
+					);
+					if (success) {
+						resolve();
+					} else {
+						reject(new Error('Proposal failed'));
+					}
+				}
+			}
+		);
+	});
+	await tx;
 
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
@@ -124,7 +144,7 @@ it('should be able to sign anchor update proposal', async () => {
 
 	const dkgProposal = proposal.unwrap().asSigned;
 	// sanity check.
-	expect(dkgProposal.data).to.eq(prop);
+	expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = signatureVBridge.getVBridgeSide(localChain2.typedChainId)!;
 	// but first, we need to log few things to help us to debug.
