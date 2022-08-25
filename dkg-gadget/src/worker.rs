@@ -746,7 +746,6 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
-		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
 		if let Some(latest_header) = self.latest_header.read().clone() {
 			if latest_header.number() >= header.number() {
 				// We've already seen this block, ignore it.
@@ -754,6 +753,7 @@ where
 				return
 			}
 		}
+		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg", "🕸️  Latest header is now: {:?}", header.number());
 		// Clear offchain storage
@@ -877,7 +877,7 @@ where
 	}
 
 	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Finality notification: {:?}", notification);
+		trace!(target: "dkg", "🕸️  Import notification: {:?}", notification);
 		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}

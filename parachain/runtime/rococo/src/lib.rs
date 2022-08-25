@@ -175,8 +175,6 @@ pub const MILLISECS_PER_BLOCK: u64 = 6_000;
 
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
-pub const EPOCH_DURATION_IN_BLOCKS: u32 = 10 * MINUTES;
-
 // Time is measured by number of blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
@@ -510,7 +508,7 @@ parameter_types! {
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(90);
 	pub const TimeToRestart: BlockNumber = 3;
-	 // 1 hr considering block time of 12sec
+	 // 1 hr considering block time of 12 sec
 	 pub const UnsignedProposalExpiry : BlockNumber = 300;
 }
 
