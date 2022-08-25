@@ -16,11 +16,13 @@ tmp
 *.log
 
 local-test
+genesis-state-local
+genesis-wasm-local
+para/
+template-local-raw.json
 
 # NodeJS
 **/node_modules/
-para-2074-genesis
-para-2074-wasm
 **/.idea/
 /.idea/
 /dkg-gadget/.idea/
