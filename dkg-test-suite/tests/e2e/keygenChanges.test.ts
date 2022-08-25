@@ -87,7 +87,9 @@ describe('Keygen Changes Flow', function () {
 			'Current best authorities should be 2'
 		);
 		// and we wait for the first keygen to be completed.
+		console.log('before wait for next dkg public key');
 		await waitForTheNextDkgPublicKey(api);
+		console.log('after wait for next dkg public key');
 		// next, is to increase the keygen threshold.
 		const increaseKeygenThreshold = api.tx.dkg.setKeygenThreshold(3);
 		await sudoTx(api, increaseKeygenThreshold);
@@ -100,7 +102,9 @@ describe('Keygen Changes Flow', function () {
 		);
 		// now we wait for the next session, we expect the next keygen threshold to be 3.
 		// we also expect the next best authorities to be 3.
+		console.log('before the next session');
 		await waitForTheNextSession(api);
+		console.log('after the next session');
 		await sleep(BLOCK_TIME * 2);
 		const nextKeygenThreshold = await api.query.dkg.nextKeygenThreshold();
 		expect(nextKeygenThreshold.toHex()).to.equal(
@@ -116,7 +120,9 @@ describe('Keygen Changes Flow', function () {
 		// now, wait for the next session, we expect the keygen threshold to be 3.
 		// and we expect the best authorities to be 3.
 		// Also, the DKG rotation should still working as expected.
+		console.log('before the next session');
 		await waitForTheNextSession(api);
+		console.log('after the next session');
 		await sleep(BLOCK_TIME * 2);
 		const keygenThreshold = await api.query.dkg.keygenThreshold();
 		expect(keygenThreshold.toHex()).to.equal(
