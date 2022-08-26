@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { waitForEvent, waitForTheNextSession } from '../src/utils';
+import '@webb-tools/types';
+import { waitForEvent, waitForTheNextSession } from './utils/setup';
 
 import { Keyring } from '@polkadot/api';
 import { expect } from 'chai';
@@ -30,16 +31,11 @@ it('should be able to remove validator node and update thresholds', async () => 
 
 	// check and expect next authorities count to be 3
 	let nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
-	// @ts-ignore
 	expect(nextAuthorities.length.toString()).to.be.eq('3');
 
 	// force new era for staking elections
 	let forceNewEra = polkadotApi.tx.staking.forceNewEraAlways();
-	const forceNewEraAlwayCall = polkadotApi.tx.sudo.sudo({
-		callIndex: forceNewEra.callIndex,
-		args: forceNewEra.args,
-	});
-	await forceNewEraAlwayCall.signAndSend(alice);
+	await forceNewEra.signAndSend(alice);
 
 	// chill(remove) charlie as validator
 	let call = polkadotApi.tx.staking.chill();
@@ -59,6 +55,5 @@ it('should be able to remove validator node and update thresholds', async () => 
 
 	// check and expect next authorities count to be 2
 	nextAuthorities = await polkadotApi.query.dkg.nextAuthorities();
-	// @ts-ignore
 	expect(nextAuthorities.length.toString()).to.eq('2');
 });

@@ -34,7 +34,7 @@ frame-system-benchmarking = { default-features = false, git = "https://github.co
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27", optional = true }
 
 [dev-dependencies]
-webb-proposals = { version = "0.4.4", default-features = false, features = ["scale", "evm", "substrate"] }
+webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
 pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
 pallet-dkg-metadata = { path = "../dkg-metadata" }
 pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.27" }

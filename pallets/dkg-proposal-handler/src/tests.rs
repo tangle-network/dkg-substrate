@@ -127,13 +127,13 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 #[test]
 fn handle_anchor_update_proposal_success() {
 	execute_test_with(|| {
-		let proposal_raw: [u8; 114] = [
+		let proposal_raw: [u8; 104] = [
 			0, 0, 0, 0, 0, 0, 223, 22, 158, 136, 193, 21, 177, 236, 107, 47, 234, 158, 193, 108,
 			153, 64, 171, 132, 14, 7, 1, 0, 0, 0, 5, 57, 68, 52, 123, 169, 0, 0, 0, 1, 1, 0, 0, 0,
 			122, 105, 0, 0, 0, 0, 37, 168, 34, 127, 179, 164, 10, 49, 149, 165, 172, 173, 194, 178,
-			58, 98, 176, 16, 209, 39, 221, 166, 75, 249, 181, 131, 238, 94, 88, 214, 203, 31, 58,
-			98, 176, 16, 209, 39, 221, 166, 75, 249, 181, 131, 238, 94, 88, 214, 203, 31, 58, 98,
-			176, 16, 209, 39, 221, 166, 75, 249, 181, 131, 238, 94,
+			181, 131, 238, 94, 88, 214, 203, 31, 58, 98, 176, 16, 209, 39, 221, 166, 75, 249, 181,
+			131, 238, 94, 88, 214, 203, 31, 58, 98, 176, 16, 209, 39, 221, 166, 75, 249, 181, 131,
+			238, 94,
 		];
 
 		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
@@ -531,7 +531,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<1>(
+			make_proposal::<2>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
 				TypedChainId::Evm(0)
 			)
@@ -563,7 +563,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			Origin::root(),
-			make_proposal::<72>(
+			make_proposal::<52>(
 				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
 				TypedChainId::Evm(0)
 			)

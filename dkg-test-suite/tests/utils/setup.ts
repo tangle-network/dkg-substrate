@@ -14,10 +14,9 @@
  * limitations under the License.
  *
  */
+import '@webb-tools/types';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
-import { Bytes, Option } from '@polkadot/types';
-import { u8aToHex, hexToU8a, assert } from '@polkadot/util';
 import child from 'child_process';
 import { ECPair } from 'ecpair';
 import { ethers } from 'ethers';
@@ -247,6 +246,7 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
+
 		// Subscribe to system events via storage
 		const unsub = await api.query.system.events((events) => {
 			const handleUnsub = () => {
@@ -261,12 +261,16 @@ export async function waitForEvent(
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
-						const dataKeys = (event.toHuman() as any).data.map(
-							(elt: any) => Object.keys(elt)[0]
-						);
-						if (dataKeys.includes(dataQuery.key)) {
-							handleUnsub();
-						}
+						event.data.forEach((value, index) => {
+							const jsonData = value.toJSON();
+							if (jsonData instanceof Object) {
+								Object.keys(jsonData).map((key) => {
+									if (key === dataQuery.key) {
+										handleUnsub();
+									}
+								})
+							}
+						})
 					} else {
 						handleUnsub();
 					}
@@ -284,12 +288,13 @@ export async function waitUntilDKGPublicKeyStoredOnChain(
 	api: ApiPromise
 ): Promise<`0x${string}`> {
 	return new Promise(async (resolve, _reject) => {
-		const unsubscribe = await api.rpc.chain.subscribeNewHeads(async () => {
-			const dkgKey = await fetchDkgPublicKey(api);
-			if (dkgKey) {
-				unsubscribe();
-				resolve(dkgKey);
-			}
+		const unsubscribe = await api.rpc.chain.subscribeNewHeads(() => {
+			fetchDkgPublicKey(api).then((value) => {
+				if (value) {
+					unsubscribe();
+					resolve(value);
+				}
+			});
 		});
 	});
 }
@@ -302,7 +307,7 @@ export async function waitUntilDKGPublicKeyStoredOnChain(
 export async function fetchDkgPublicKey(
 	api: ApiPromise
 ): Promise<`0x${string}` | null> {
-	const res = await api.query.dkg.dKGPublicKey();
+	const res = await api.query.dkg.dkgPublicKey();
 	const json = res.toJSON() as [number, string];
 	if (json && json[1] !== '0x') {
 		const key = json[1];
@@ -381,160 +386,4 @@ export function ethAddressFromUncompressedPublicKey(
 	const pubKeyHash = ethers.utils.keccak256(publicKey); // we hash it.
 	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
 	return address as `0x${string}`;
-}
-
-export async function registerResourceId(
-	api: ApiPromise,
-	resourceId: string
-): Promise<void> {
-	// quick check if the resourceId is already registered
-	const res = await api.query.dKGProposals.resources(resourceId);
-	const val = new Option(api.registry, Bytes, res);
-	if (val.isSome) {
-		return;
-	}
-	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
-
-	const call = api.tx.dKGProposals.setResource(resourceId, '0x00');
-	return new Promise(async (resolve, reject) => {
-		const unsub = await api.tx.sudo
-			.sudo(call)
-			.signAndSend(alice, ({ status, events }) => {
-				if (status.isFinalized) {
-					unsub();
-					const success = events.find(({ event }) =>
-						api.events.system.ExtrinsicSuccess.is(event)
-					);
-					if (success) {
-						resolve();
-					} else {
-						reject(new Error('Failed to register resourceId'));
-					}
-				}
-			});
-	});
-}
-/**
- * Encode function Signature in the Solidity format.
- */
-export function encodeFunctionSignature(func: string): `0x${string}` {
-	return ethers.utils
-		.keccak256(ethers.utils.toUtf8Bytes(func))
-		.slice(0, 10) as `0x${string}`;
-}
-
-const LE = true;
-const BE = false;
-export const enum ChainIdType {
-	UNKNOWN = 0x0000,
-	EVM = 0x0100,
-	SUBSTRATE = 0x0200,
-	POLKADOT_RELAYCHAIN = 0x0301,
-	KUSAMA_RELAYCHAIN = 0x0302,
-	COSMOS = 0x0400,
-	SOLANA = 0x0500,
-}
-
-/**
- * Proposal Header is the first 40 bytes of any proposal and it contains the following information:
- * - resource id (32 bytes)
- * - target chain id (4 bytes) encoded as the last 4 bytes of the resource id.
- * - target function signature (4 bytes)
- * - nonce (4 bytes).
- */
-export interface ProposalHeader {
-	/**
-	 * 32 bytes Hex-encoded string of the `ResourceID` for this proposal.
-	 */
-	readonly resourceId: string;
-	/**
-	 * 2 bytes (u16) encoded as the last 2 bytes of the resource id **just** before the chainId.
-	 *
-	 * **Note**: this value is optional here since we can read it from the `ResourceID`, but would be provided for you if
-	 * you want to decode the proposal header from bytes.
-	 **/
-	chainIdType?: ChainIdType;
-	/**
-	 * 4 bytes number (u32) of the `chainId` this also encoded in the last 4 bytes of the `ResourceID`.
-	 *
-	 * **Note**: this value is optional here since we can read it from the `ResourceID`, but would be provided for you if
-	 * you want to decode the proposal header from bytes.
-	 */
-	chainId?: number;
-	/**
-	 * 4 bytes Hex-encoded string of the `functionSig` for this proposal.
-	 */
-	readonly functionSignature: string;
-	/**
-	 * 4 bytes Hex-encoded string of the `nonce` for this proposal.
-	 */
-	readonly nonce: number;
-}
-
-export function encodeProposalHeader(data: ProposalHeader): Uint8Array {
-	const header = new Uint8Array(40);
-	const resourceId = hexToU8a(data.resourceId).slice(0, 32);
-	const functionSignature = hexToU8a(data.functionSignature).slice(0, 4);
-	header.set(resourceId, 0); // 0 -> 32
-	header.set(functionSignature, 32); // 32 -> 36
-	const view = new DataView(header.buffer);
-	view.setUint32(36, data.nonce, false); // 36 -> 40
-	return header;
-}
-
-export function decodeProposalHeader(header: Uint8Array): ProposalHeader {
-	const resourceId = u8aToHex(header.slice(0, 32));
-	const chainIdTypeInt = new DataView(header.buffer).getUint16(32 - 6, BE);
-	const chainIdType = castToChainIdType(chainIdTypeInt);
-	const chainId = new DataView(header.buffer).getUint32(32 - 4, BE);
-	const functionSignature = u8aToHex(header.slice(32, 36));
-	const nonce = new DataView(header.buffer).getUint32(36, BE);
-	return {
-		resourceId,
-		chainId,
-		chainIdType,
-		functionSignature,
-		nonce,
-	};
-}
-
-function castToChainIdType(v: number): ChainIdType {
-	switch (v) {
-		case 0x0100:
-			return ChainIdType.EVM;
-		case 0x0200:
-			return ChainIdType.SUBSTRATE;
-		case 0x0301:
-			return ChainIdType.POLKADOT_RELAYCHAIN;
-		case 0x0302:
-			return ChainIdType.KUSAMA_RELAYCHAIN;
-		case 0x0400:
-			return ChainIdType.COSMOS;
-		case 0x0500:
-			return ChainIdType.SOLANA;
-		default:
-			return ChainIdType.UNKNOWN;
-	}
-}
-
-/**
- * A ResourceID is a 32 bytes hex-encoded string of the following format:
- * - 26 bytes of the `anchorHandlerContractAddress` which is usually is just 20 bytes, but we pad it with zeros
- * to make it 26 bytes.
- * - 2 bytes of the `chainIdType` encoded as the last 2 bytes just before the `chainId`.
- * - 4 bytes of the `chainId` which is the last 4 bytes.
- */
-export function makeResourceId(
-	addr: string,
-	chainIdType: ChainIdType,
-	chainId: number
-): string {
-	const rId = new Uint8Array(32);
-	const address = hexToU8a(addr).slice(0, 20);
-	rId.set(address, 6); // 6 -> 26
-	const view = new DataView(rId.buffer);
-	view.setUint16(26, chainIdType, BE); // 26 -> 28
-	view.setUint32(28, chainId, BE); // 28 -> 32
-	return u8aToHex(rId);
 }

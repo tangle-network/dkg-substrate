@@ -38,10 +38,10 @@ import {
 	waitForEvent,
 	fetchDkgPublicKey,
 	endpoint,
-} from '../../src/utils';
+} from '../utils/setup';
 import { ApiPromise, Keyring, WsProvider } from '@polkadot/api';
 import { Vec } from '@polkadot/types';
-import { BLOCK_TIME } from '../../src/constants';
+import { BLOCK_TIME } from '../utils/constants';
 
 // Requires total of 8 sessions to complete.
 describe('Misbehavior Flow', function () {

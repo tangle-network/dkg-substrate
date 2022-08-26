@@ -14,9 +14,8 @@
  * limitations under the License.
  *
  */
-import { Bridges } from '@webb-tools/protocol-solidity';
 import { expect } from 'chai';
-import { BLOCK_TIME } from '../src/constants';
+import { BLOCK_TIME } from './utils/constants';
 import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
@@ -27,14 +26,12 @@ import {
 	triggerDkgManualRefresh,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
-} from '../src/utils';
+} from './utils/setup';
 
 import {
 	localChain,
 	polkadotApi,
-	signatureBridge,
-	executeAfter,
-	executeBefore,
+	signatureVBridge,
 } from './utils/util';
 
 it.skip('should be able to transfer ownership to new Governor with Signature', async () => {
@@ -57,7 +54,7 @@ it.skip('should be able to transfer ownership to new Governor with Signature', a
 	expect(dkgPublicKeySignature).to.be.length.greaterThan(0);
 	expect(refreshNonce).to.be.greaterThan(0);
 	// now we can transfer ownership.
-	const signatureSide = signatureBridge.getBridgeSide(localChain.chainId);
+	const signatureSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = signatureSide.contract;
 	contract.connect(localChain.provider());
 	const governor = await contract.governor();
