@@ -21,7 +21,8 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, RoundId, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, RoundId,
+	SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
@@ -126,8 +127,13 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			..msg.clone()
 		});
 
-		let message =
-			DKGMessage::<AuthorityId> { id: public.clone(), round_id: msg.round_id, payload };
+		let status = if msg.round_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
+		let message = DKGMessage::<AuthorityId> {
+			id: public.clone(),
+			status,
+			round_id: msg.round_id,
+			payload,
+		};
 		let encoded_dkg_message = message.encode();
 
 		crate::utils::inspect_outbound("pub_key", encoded_dkg_message.len());

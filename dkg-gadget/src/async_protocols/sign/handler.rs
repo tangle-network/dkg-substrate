@@ -30,7 +30,7 @@ use crate::async_protocols::{
 	PartyIndex, ProtocolType, Threshold,
 };
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
 };
 use dkg_runtime_primitives::crypto::Public;
 use futures::FutureExt;
@@ -163,6 +163,7 @@ where
 			params,
 			channel_type,
 			async_index,
+			DKGMsgStatus::ACTIVE,
 		)
 	}
 
@@ -218,7 +219,8 @@ where
 			});
 
 			// now, broadcast the data
-			let unsigned_dkg_message = DKGMessage { id, payload, round_id };
+			let unsigned_dkg_message =
+				DKGMessage { id, status: DKGMsgStatus::ACTIVE, payload, round_id };
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 
 			// we only need a threshold count of sigs

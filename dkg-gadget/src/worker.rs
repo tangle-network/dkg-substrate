@@ -52,7 +52,7 @@ use crate::gossip_messages::misbehaviour_report::{
 use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
 
 use dkg_primitives::{
-	types::{DKGError, DKGMisbehaviourMessage, RoundId},
+	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, RoundId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
@@ -80,8 +80,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	misbehaviour_monitor::MisbehaviourMonitor, remote::AsyncProtocolRemote,
-	AsyncProtocolParameters, GenericAsyncHandler,
+	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -329,23 +328,19 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
-				let misbehaviour_tx =
-					self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
-				let remote = async_proto_params.handle.clone();
-				let engine = async_proto_params.engine.clone();
-
-				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold) {
+				let status = if let Some(rounds) = self.rounds.as_mut() {
+					if rounds.round_id == round_id {
+						DKGMsgStatus::ACTIVE
+					} else {
+						DKGMsgStatus::QUEUED
+					}
+				} else {
+					DKGMsgStatus::UNKNOWN
+				};
+				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let task = async move {
-							let misbehaviour_monitor =
-								MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
-
-							let res = tokio::select! {
-								res0 = meta_handler => res0,
-								res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-							};
-
-							match res {
+							match meta_handler.await {
 								Ok(_) => {
 									log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 								},
@@ -395,10 +390,6 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler_tx.clone();
-		let misbehaviour_tx = self.misbehaviour_tx.clone().expect("Misbehaviour TX not loaded");
-		let remote = async_proto_params.handle.clone();
-		let engine = async_proto_params.engine.clone();
-
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -408,14 +399,7 @@ where
 		)?;
 
 		let task = async move {
-			let misbehaviour_monitor = MisbehaviourMonitor::new(remote, engine, misbehaviour_tx);
-
-			let res = tokio::select! {
-				res0 = meta_handler => res0,
-				res1 = misbehaviour_monitor => Err(DKGError::CriticalError { reason: format!("Misbehaviour monitor should not finish before meta handler. Reason for exit: {:?}", res1)})
-			};
-
-			match res {
+			match meta_handler.await {
 				Ok(_) => {
 					log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 					Ok(async_index)
@@ -747,7 +731,6 @@ where
 
 	// *** Block notifications ***
 	fn process_block_notification(&mut self, header: &B::Header) {
-		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
 		if let Some(latest_header) = self.latest_header.read().clone() {
 			if latest_header.number() >= header.number() {
 				// We've already seen this block, ignore it.
@@ -755,6 +738,7 @@ where
 				return
 			}
 		}
+		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 		// Clear offchain storage
@@ -792,7 +776,6 @@ where
 	}
 
 	fn maybe_enact_new_authorities(&mut self, header: &B::Header) {
-		debug!(target: "dkg_gadget::worker", "🕸️  maybe_enact_new_authorities");
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
@@ -878,7 +861,7 @@ where
 	}
 
 	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg_gadget::worker", "🕸️  Import notification: {:?}", notification);
+		trace!(target: "dkg", "🕸️  Import notification: {:?}", notification);
 		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
