@@ -61,6 +61,9 @@ pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 
+/// The keygen protocol task timeout in ms before we consider it timed out.
+pub const KEYGEN_PROTO_TIMEOUT: u64 = 24_000;
+
 /// The offline timeout limit in blocks before we consider misbehaviours
 pub const OFFLINE_TIMEOUT: u32 = 2;
 

@@ -17,7 +17,7 @@
 use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::KEYGEN_TIMEOUT;
+use dkg_runtime_primitives::{KEYGEN_PROTO_TIMEOUT, KEYGEN_TIMEOUT};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use log::{debug, error, info, trace};
@@ -29,7 +29,11 @@ use std::{
 	marker::PhantomData,
 	path::PathBuf,
 	pin::Pin,
-	sync::Arc,
+	sync::{
+		mpsc::{self, Receiver},
+		Arc,
+	},
+	time::Duration,
 };
 
 use parking_lot::{Mutex, RwLock};
@@ -317,7 +321,7 @@ where
 		threshold: u16,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
-	) {
+	) -> Result<Receiver<bool>, ()> {
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -337,33 +341,43 @@ where
 				} else {
 					DKGMsgStatus::UNKNOWN
 				};
+				// create channel that will notify us when the task finishes.
+				let (tx, rx) = mpsc::channel();
+
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
 									log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
+									let _ = tx.send(true);
 								},
 
 								Err(err) => {
 									error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 									let _ = err_handler_tx.send(err);
+									let _ = tx.send(false);
 								},
 							}
 						};
 
 						// spawn on parallel thread
 						let _handle = tokio::task::spawn(task);
+						Ok(rx)
 					},
 
 					Err(err) => {
 						error!(target: "dkg_gadget::worker", "Error starting meta handler {:?}", &err);
 						self.handle_dkg_error(err);
+						Err(())
 					},
 				}
 			},
 
-			Err(err) => self.handle_dkg_error(err),
+			Err(err) => {
+				self.handle_dkg_error(err);
+				Err(())
+			},
 		}
 	}
 
@@ -667,7 +681,7 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_keygen_protocol(
+		let result = self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
 			round_id,
@@ -675,6 +689,15 @@ where
 			local_key_path,
 			ProtoStageType::Genesis,
 		);
+		match result {
+			Ok(rx) => {
+				let timeout = Duration::from_millis(KEYGEN_PROTO_TIMEOUT);
+				let _r = rx.recv_timeout(timeout);
+			},
+			Err(_) => {
+				error!(target: "dkg_gadget::worker", "🕸️  Error spawning keygen protocol");
+			},
+		};
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
@@ -719,7 +742,7 @@ where
 		let threshold = self.get_next_signature_threshold(header);
 
 		let authority_public_key = self.get_authority_public_key();
-		self.spawn_keygen_protocol(
+		let result = self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
 			round_id,
@@ -727,6 +750,16 @@ where
 			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
+
+		match result {
+			Ok(rx) => {
+				let timeout = Duration::from_millis(KEYGEN_PROTO_TIMEOUT);
+				let _r = rx.recv_timeout(timeout);
+			},
+			Err(_) => {
+				error!(target: "dkg_gadget::worker", "🕸️  Error spawning keygen protocol");
+			},
+		};
 	}
 
 	// *** Block notifications ***
@@ -744,6 +777,12 @@ where
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
+
+		// The Steps for enacting new DKG authorities are:
+		// 1. Check if the DKG Public Key are not yet set on chain (or not yet generated)
+		// 2. if yes, we start enacting authorities on genesis flow.
+		// 3. if no, we start enacting authorities on queued flow and submit any unsigned
+		//          proposals.
 		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
