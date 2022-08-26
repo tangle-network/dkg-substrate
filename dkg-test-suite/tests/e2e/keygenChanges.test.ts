@@ -73,7 +73,7 @@ describe('Keygen Changes Flow', function () {
 
 	// This test requires at least 3 sessions.
 	// 3 sessions = 3 * 10 blocks = 30 blocks = 30 * 6 seconds = 180 seconds.
-	it.only('should be able to increase the Keygen Threshold', async () => {
+	it('should be able to increase the Keygen Threshold', async () => {
 		// first query the current keygen threshold value.
 		const currentKeygenThreshold = await api.query.dkg.keygenThreshold();
 		expect(currentKeygenThreshold.toHex()).to.equal(

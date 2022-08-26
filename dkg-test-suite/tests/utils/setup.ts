@@ -259,7 +259,6 @@ export async function waitForEvent(
 			// Loop through the Vec<EventRecord>
 			events.forEach((record) => {
 				const { event } = record;
-				console.log(event.toHuman());
 				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
 						event.data.forEach((value, index) => {
