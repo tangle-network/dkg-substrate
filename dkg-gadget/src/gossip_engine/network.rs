@@ -397,7 +397,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "Received a signed DKG messages from {} @ block {:?}, round {:?}", who, now, message.msg.round_id);
+		debug!(target: "dkg", "{:?} round {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.round_id, who, now);
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
