@@ -228,11 +228,6 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			log::info!("DKG Metadata : Hello World from offchain workers!");
-			log::debug!(
-				target: "runtime::dkg_metadata",
-				"offchain worker triggered",
-			);
 			let res = Self::submit_genesis_public_key_onchain(block_number);
 			log::debug!(
 				target: "runtime::dkg_metadata",
@@ -1454,23 +1449,9 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let res = signer.send_signed_transaction(|_account| Call::submit_public_key {
+				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
 					keys_and_signatures: agg_keys.clone(),
 				});
-				// log::debug!(
-				// 	target: "runtime::dkg_metadata",
-				// 	"submit_genesis_public_key_onchain : {:?}",
-				// 	"This transaction failed",
-				// );
-				for item in res {
-					log::debug!(
-						target: "runtime::dkg_metadata",
-						"submit_genesis_public_key_onchain : {:?} {:?}",
-						item.0.public,
-						item.1
-					);
-					//return Err("send_signed_transaction failed");
-				}
 				agg_key_ref.clear();
 			}
 
