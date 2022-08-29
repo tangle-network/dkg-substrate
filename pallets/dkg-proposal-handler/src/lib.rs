@@ -108,18 +108,9 @@
 use dkg_runtime_primitives::{
 	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
 };
-pub use pallet::*;
-use sp_std::convert::TryInto;
-
-#[cfg(test)]
-mod mock;
-
-#[cfg(test)]
-mod tests;
-
 use dkg_runtime_primitives::{
-	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait,
+	DKGPayloadKey,
+	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK}, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait,
 	StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
@@ -127,6 +118,7 @@ use frame_system::{
 	offchain::{AppCrypto, SendSignedTransaction, Signer},
 	pallet_prelude::OriginFor,
 };
+pub use pallet::*;
 use sp_runtime::{
 	offchain::{
 		storage::StorageValueRef,
@@ -134,23 +126,30 @@ use sp_runtime::{
 	},
 	traits::Saturating,
 };
+use sp_std::convert::TryInto;
 use sp_std::vec::Vec;
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
-
-pub mod weights;
 pub use weights::WeightInfo;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
+pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use super::*;
-	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
+	use dkg_runtime_primitives::{DKGPayloadKey, utils::ensure_signed_by_dkg};
 	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::{CheckedSub, One, Zero};
 	use webb_proposals::{Proposal, ProposalKind};
+
+	use super::*;
 
 	/// Unsigned proposal for this pallet
 	pub type StoredUnsignedProposalOf<T> =
@@ -221,6 +220,24 @@ pub mod pallet {
 			expected_public_key: Option<Vec<u8>>,
 			/// The actual one we recovered from the data and signature.
 			actual_public_key: Option<Vec<u8>>,
+		},
+		/// Event When a Proposal is added to UnsignedProposalQueue.
+		ProposalAdded{
+			/// The Payload Type or the Key.
+			key: DKGPayloadKey,
+			/// The Target Chain.
+			target_chain: TypedChainId,
+			/// The Proposal Data.
+			data: Vec<u8>,
+
+		},
+		/// Event When a Proposal is added to UnsignedProposalQueue.
+		ProposalRemoved{
+			/// The Payload Type or the Key.
+			key: DKGPayloadKey,
+			/// The Target Chain.
+			target_chain: TypedChainId,
+
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -394,6 +411,11 @@ pub mod pallet {
 			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
+						Self::deposit_event(Event::<T>::ProposalAdded {
+							key: v.key.clone(),
+							target_chain: v.target_chain_id.clone(),
+							data: prop.data().clone(),
+						});
 						UnsignedProposalQueue::<T>::insert(
 							v.typed_chain_id,
 							v.key,
@@ -414,6 +436,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
+			Self::depoist_event(Event::<T>::ProposalAdded {
+				key: v.key.clone(),
+				target_chain: v.target_chain_id.clone(),
+				data: proposal.data().clone(),
+			});
 			UnsignedProposalQueue::<T>::insert(
 				v.typed_chain_id,
 				v.key,
@@ -432,6 +459,13 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
+
+			Self::deposit_event(Event::<T>::ProposalAdded {
+				key: v.key.clone(),
+				target_chain: v.target_chain_id.clone(),
+				data: unsigned_proposal.data().clone(),
+			});
+
 			UnsignedProposalQueue::<T>::insert(
 				v.typed_chain_id,
 				v.key,
@@ -449,6 +483,12 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	) -> DispatchResult {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
+
+		Self::depoist_event(Event::<T>::ProposalAdded {
+			key: DKGPayloadKey::RefreshVote(proposal.nonce),
+			target_chain: None,
+			data: unsigned_proposal.data().clone(),
+		});
 
 		// Add new refresh proposal to the queue
 		UnsignedProposalQueue::<T>::insert(
