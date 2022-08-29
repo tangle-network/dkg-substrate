@@ -231,7 +231,7 @@ pub mod pallet {
 			data: Vec<u8>,
 
 		},
-		/// Event When a Proposal is added to UnsignedProposalQueue.
+		/// Event When a Proposal is removed to UnsignedProposalQueue.
 		ProposalRemoved{
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
