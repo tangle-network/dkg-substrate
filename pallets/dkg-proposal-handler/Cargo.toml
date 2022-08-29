@@ -27,7 +27,7 @@ sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-
 pallet-dkg-metadata = { path = "../dkg-metadata", default-features = false }
 hex-literal = { version = "0.3", optional = true }
 
-webb-proposals = { version = "0.4.4", default-features = false }
+webb-proposals = { version = "0.5.4", default-features = false }
 
 [dev-dependencies]
 pallet-dkg-proposals = { path = "../dkg-proposals"}

@@ -14,16 +14,17 @@
  * limitations under the License.
  *
  */
-import { ACC1_PK, ACC2_PK, BLOCK_TIME, SECONDS } from '../../src/constants';
-import { ApiPromise, WsProvider } from '@polkadot/api';
+import { options } from '@webb-tools/api';
+import { ACC1_PK, ACC2_PK, SECONDS } from './constants';
+import { ApiPromise } from '@polkadot/api';
 import { ChildProcess, execSync } from 'child_process';
 import fs from 'fs';
-import { LocalChain } from '../../src/localEvm';
+import path from 'path';
 import { ethers } from 'ethers';
-import { Bridges, VBridge } from '@webb-tools/protocol-solidity';
+import { LocalEvmChain } from '@webb-tools/test-utils';
+import { VBridge, Utility } from '@webb-tools/protocol-solidity';
 import { MintableToken } from '@webb-tools/tokens';
 import {
-	endpoint,
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	fetchDkgPublicKeySignature,
@@ -33,7 +34,7 @@ import {
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
 	waitUntilDKGPublicKeyStoredOnChain,
-} from '../../src/utils';
+} from './setup';
 import { expect } from 'chai';
 
 export let polkadotApi: ApiPromise;
@@ -41,21 +42,16 @@ export let aliceNode: ChildProcess;
 export let bobNode: ChildProcess;
 export let charlieNode: ChildProcess;
 
-export let localChain: LocalChain;
-export let localChain2: LocalChain;
+export let localChain: LocalEvmChain;
+export let localChain2: LocalEvmChain;
 export let wallet1: ethers.Wallet;
 export let wallet2: ethers.Wallet;
+export let smallZkComponents: Utility.ZkComponents;
+export let largeZkComponents: Utility.ZkComponents;
 
-export let signatureBridge: Bridges.SignatureBridge;
 export let signatureVBridge: VBridge.VBridge;
 
-export const executeBefore = async ({
-	isVariable,
-	both,
-}: {
-	isVariable?: boolean;
-	both?: boolean;
-}) => {
+export const executeBefore = async () => {
 	// delete the tmp directory if it exists.
 	const gitRoot = execSync('git rev-parse --show-toplevel').toString().trim();
 	const tmpDir = `${gitRoot}/tmp`;
@@ -65,7 +61,9 @@ export const executeBefore = async ({
 	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
 	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
 	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
-	localChain = new LocalChain('local', 5001, [
+	console.log('started alice, bob, charlie');
+
+	localChain = await LocalEvmChain.init('local', 5001, [
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),
 			secretKey: ACC1_PK,
@@ -90,7 +88,7 @@ export const executeBefore = async ({
 				'0xcb6df9de1efca7a3998a8ead4e02159d5fa99c3e0d4fd6432667390bb4726854',
 		},
 	]);
-	localChain2 = new LocalChain('local2', 5002, [
+	localChain2 = await LocalEvmChain.init('local2', 5002, [
 		{
 			balance: ethers.utils.parseEther('1000').toHexString(),
 			secretKey: ACC1_PK,
@@ -114,64 +112,63 @@ export const executeBefore = async ({
 		wallet2
 	);
 
-	polkadotApi = await ApiPromise.create({
-		provider: new WsProvider(endpoint),
-	});
+	smallZkComponents = await Utility.fetchComponentsFromFilePaths(
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_2/2/poseidon_vanchor_2_2.wasm'
+		),
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_2/2/witness_calculator.cjs'
+		),
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_2/2/circuit_final.zkey'
+		)
+	);
 
-	// Update the signature bridge governor.
+	largeZkComponents = await Utility.fetchComponentsFromFilePaths(
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_16/2/poseidon_vanchor_16_2.wasm'
+		),
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_16/2/witness_calculator.cjs'
+		),
+		path.resolve(
+			gitRoot,
+			'dkg-test-suite',
+			'protocol-solidity-fixtures/fixtures/vanchor_16/2/circuit_final.zkey'
+		)
+	);
+
+	console.log('deploying the VBridge...');
+
+	signatureVBridge = await LocalEvmChain.deployVBridge(
+		[localChain, localChain2],
+		[localToken, localToken2],
+		[wallet1, wallet2],
+		smallZkComponents,
+		largeZkComponents
+	);
+	console.log('deployed the VBridge');
+
+	polkadotApi = await ApiPromise.create(options());
+
+	// Get the dkg public key
 	const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
 	expect(dkgPublicKey).to.have.length.greaterThan(0);
 	const governorAddress = ethAddressFromUncompressedPublicKey(dkgPublicKey);
-	console.log('Initial Governor:', governorAddress);
-	let initialGovernors = {
-		[localChain.chainId]: wallet1,
-		[localChain2.chainId]: wallet2,
-	};
 
-	if (both) {
-		signatureVBridge = await localChain.deploySignatureVBridge(
-			localChain2,
-			localToken,
-			localToken2,
-			wallet1,
-			wallet2,
-			initialGovernors
-		);
-		signatureBridge = await localChain.deploySignatureBridge(
-			localChain2,
-			localToken,
-			localToken2,
-			wallet1,
-			wallet2,
-			initialGovernors
-		);
+	await handleSetup(governorAddress);
 
-		await handleSetup(!!isVariable, governorAddress);
-		await handleSetup(!isVariable, governorAddress);
-	} else {
-		// Deploy the signature bridge.
-		if (isVariable) {
-			signatureVBridge = await localChain.deploySignatureVBridge(
-				localChain2,
-				localToken,
-				localToken2,
-				wallet1,
-				wallet2,
-				initialGovernors
-			);
-		} else {
-			signatureBridge = await localChain.deploySignatureBridge(
-				localChain2,
-				localToken,
-				localToken2,
-				wallet1,
-				wallet2,
-				initialGovernors
-			);
-		}
-
-		await handleSetup(!!isVariable, governorAddress);
-	}
+	return true;
 };
 
 export async function executeAfter() {
@@ -184,46 +181,36 @@ export async function executeAfter() {
 	await sleep(5 * SECONDS);
 }
 
-export const handleSetup = async (isVariable: boolean, governor: string) => {
+export const handleSetup = async (governor: string) => {
 	// get the anchor on localchain1
-	const anchor = isVariable
-		? signatureVBridge.getVAnchor(localChain.chainId)!
-		: signatureBridge.getAnchor(
-				localChain.chainId,
-				ethers.utils.parseEther('1')
-		  )!;
-
+	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	await anchor.setSigner(wallet1);
 
 	// approve token spending
-	const tokenAddress = signatureBridge.getWebbTokenAddress(localChain.chainId)!;
+	const tokenAddress = signatureVBridge.getWebbTokenAddress(localChain.typedChainId)!;
 	const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
-	await token.approveSpending(anchor.contract.address);
+	let tx = await token.approveSpending(anchor.contract.address);
+	await tx.wait();
 	await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
 
 	// do the same but on localchain2
-	const anchor2 = isVariable
-		? signatureVBridge.getVAnchor(localChain2.chainId)!
-		: signatureBridge.getAnchor(
-				localChain2.chainId,
-				ethers.utils.parseEther('1')
-		  )!;
+	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!
+
 	await anchor2.setSigner(wallet2);
-	const tokenAddress2 = signatureBridge.getWebbTokenAddress(
-		localChain2.chainId
+	const tokenAddress2 = signatureVBridge.getWebbTokenAddress(
+		localChain2.typedChainId
 	)!;
 	const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
-	await token2.approveSpending(anchor2.contract.address);
+	tx = await token2.approveSpending(anchor2.contract.address);
+	await tx.wait();
 	await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
 
 	// update the signature bridge governor on both chains.
-	const sides = isVariable
-		? signatureVBridge.vBridgeSides.values()
-		: signatureBridge.bridgeSides.values();
+	const sides = signatureVBridge.vBridgeSides.values();
 	for (const signatureSide of sides) {
 		const contract = signatureSide.contract;
 		// now we transferOwnership, forcefully.
-		const tx = await contract.transferOwnership(governor, 1);
+		tx = await contract.transferOwnership(governor, 1);
 		await tx.wait();
 		// check that the new governor is the same as the one we just set.
 		const currentGovernor = await contract.governor();
@@ -245,7 +232,7 @@ export const waitForAndExecuteNthRotation = async (n: number) => {
 		expect(dkgPublicKeySignature).to.be.length.greaterThan(0);
 		expect(refreshNonce).to.be.greaterThan(1);
 		// now we can transfer ownership.
-		const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
+		const bridgeSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
 		const contract = bridgeSide.contract;
 		contract.connect(localChain.provider());
 		const governor = await contract.governor();

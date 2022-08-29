@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import { BLOCK_TIME } from '../src/constants';
 import {
 	localChain,
 	polkadotApi,
 	executeAfter,
-	signatureBridge,
+	signatureVBridge,
 	executeBefore,
 } from './utils/util';
 import { Option } from '@polkadot/types';
@@ -36,11 +35,11 @@ import {
 	waitForEvent,
 	waitForPublicKeySignatureToChange,
 	waitForPublicKeyToChange,
-} from '../src/utils';
+} from './utils/setup';
 
 it.skip('proposer set update test', async () => {
 	const provider = localChain.provider();
-	await waitForEvent(polkadotApi, 'dKGProposalHandler', 'ProposalSigned', {
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
 		key: 'ProposerSetUpdateProposal',
 	});
 	const chainIdType = polkadotApi.createType(
@@ -48,7 +47,7 @@ it.skip('proposer set update test', async () => {
 		{ None: 0 }
 	);
 	const key = { ProposerSetUpdateProposal: 1 };
-	const proposal = await polkadotApi.query.dKGProposalHandler.signedProposals(
+	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
 		chainIdType,
 		key
 	);
@@ -66,7 +65,7 @@ it.skip('proposer set update test', async () => {
 		};
 	};
 	// now we can transfer ownership.
-	const bridgeSide = signatureBridge.getBridgeSide(localChain.chainId);
+	const bridgeSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
 	const contract = bridgeSide.contract;
 
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
@@ -115,7 +114,7 @@ it.skip('proposer set update test', async () => {
 	// // Now the proposer set root on the contract has been updated
 
 	let proposerAccounts =
-		await polkadotApi.query.dKGProposals.externalProposerAccounts.entries();
+		await polkadotApi.query.dkgProposals.externalProposerAccounts.entries();
 	let accounts = new Array();
 	for (let i = 0; i < proposerAccounts.length; i++) {
 		let account = proposerAccounts[i][1];
