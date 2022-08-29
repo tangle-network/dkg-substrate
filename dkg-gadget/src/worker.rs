@@ -17,7 +17,7 @@
 use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::{KEYGEN_PROTO_TIMEOUT, KEYGEN_TIMEOUT};
+use dkg_runtime_primitives::{KEYGEN_TIMEOUT};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use log::{debug, error, info, trace};
@@ -29,11 +29,7 @@ use std::{
 	marker::PhantomData,
 	path::PathBuf,
 	pin::Pin,
-	sync::{
-		mpsc::{self, Receiver},
-		Arc,
-	},
-	time::Duration,
+	sync::Arc,
 };
 
 use parking_lot::{Mutex, RwLock};
@@ -321,7 +317,7 @@ where
 		threshold: u16,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
-	) -> Result<Receiver<bool>, ()> {
+	) {
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -341,42 +337,34 @@ where
 				} else {
 					DKGMsgStatus::UNKNOWN
 				};
-				// create channel that will notify us when the task finishes.
-				let (tx, rx) = mpsc::channel();
-
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
 									log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
-									let _ = tx.send(true);
 								},
 
 								Err(err) => {
 									error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 									let _ = err_handler_tx.send(err);
-									let _ = tx.send(false);
 								},
 							}
 						};
 
 						// spawn on parallel thread
 						let _handle = tokio::task::spawn(task);
-						Ok(rx)
 					},
 
 					Err(err) => {
 						error!(target: "dkg_gadget::worker", "Error starting meta handler {:?}", &err);
 						self.handle_dkg_error(err);
-						Err(())
 					},
 				}
 			},
 
 			Err(err) => {
 				self.handle_dkg_error(err);
-				Err(())
 			},
 		}
 	}
@@ -681,7 +669,7 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-		let result = self.spawn_keygen_protocol(
+		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
 			round_id,
@@ -689,15 +677,6 @@ where
 			local_key_path,
 			ProtoStageType::Genesis,
 		);
-		match result {
-			Ok(rx) => {
-				let timeout = Duration::from_millis(KEYGEN_PROTO_TIMEOUT);
-				let _r = rx.recv_timeout(timeout);
-			},
-			Err(_) => {
-				error!(target: "dkg_gadget::worker", "🕸️  Error spawning keygen protocol");
-			},
-		};
 	}
 
 	fn handle_queued_dkg_setup(&mut self, header: &B::Header, queued: AuthoritySet<Public>) {
@@ -742,7 +721,7 @@ where
 		let threshold = self.get_next_signature_threshold(header);
 
 		let authority_public_key = self.get_authority_public_key();
-		let result = self.spawn_keygen_protocol(
+		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
 			round_id,
@@ -750,16 +729,6 @@ where
 			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
-
-		match result {
-			Ok(rx) => {
-				let timeout = Duration::from_millis(KEYGEN_PROTO_TIMEOUT);
-				let _r = rx.recv_timeout(timeout);
-			},
-			Err(_) => {
-				error!(target: "dkg_gadget::worker", "🕸️  Error spawning keygen protocol");
-			},
-		};
 	}
 
 	// *** Block notifications ***
@@ -786,6 +755,7 @@ where
 		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
+			// self.maybe_enact_genesis_next_authorities(header);
 			self.maybe_enact_new_authorities(header);
 			self.submit_unsigned_proposals(header);
 		}
@@ -800,7 +770,7 @@ where
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
-				self.queued_validator_set = queued.clone();
+				self.queued_validator_set = queued;
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				self.best_dkg_block = Some(*header.number());
@@ -808,7 +778,16 @@ where
 				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
-				// Setting up the queued DKG at genesis
+			}
+		}
+	}
+
+	fn maybe_enact_genesis_next_authorities(&mut self, header: &B::Header) {
+		// Get the active and queued validators to check for updates
+		if let Some((active, queued)) = self.validator_set(header) {
+			// If we are in the genesis state, we need to enact the genesis authorities
+			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_some() {
+				debug!(target: "dkg_gadget::worker", "🕸️ QUEUED GENESIS ROUND_ID {:?}", queued.id);
 				self.handle_queued_dkg_setup(header, queued);
 			}
 		}
