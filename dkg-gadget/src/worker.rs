@@ -17,7 +17,7 @@
 use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::{KEYGEN_TIMEOUT};
+use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use log::{debug, error, info, trace};

@@ -1445,7 +1445,6 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
 				return Err(
