@@ -755,7 +755,6 @@ where
 		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
-			// self.maybe_enact_genesis_next_authorities(header);
 			self.maybe_enact_new_authorities(header);
 			self.submit_unsigned_proposals(header);
 		}
@@ -770,7 +769,7 @@ where
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
-				self.queued_validator_set = queued;
+				self.queued_validator_set = queued.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				self.best_dkg_block = Some(*header.number());
@@ -778,16 +777,6 @@ where
 				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
-			}
-		}
-	}
-
-	fn maybe_enact_genesis_next_authorities(&mut self, header: &B::Header) {
-		// Get the active and queued validators to check for updates
-		if let Some((active, queued)) = self.validator_set(header) {
-			// If we are in the genesis state, we need to enact the genesis authorities
-			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_some() {
-				debug!(target: "dkg_gadget::worker", "🕸️ QUEUED GENESIS ROUND_ID {:?}", queued.id);
 				self.handle_queued_dkg_setup(header, queued);
 			}
 		}
