@@ -15,7 +15,6 @@
 pub mod blockchain_interface;
 pub mod incoming;
 pub mod keygen;
-pub mod misbehaviour_monitor;
 pub mod remote;
 pub mod sign;
 pub mod state_machine;
