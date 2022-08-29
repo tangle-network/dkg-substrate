@@ -874,12 +874,12 @@ where
 
 	fn handle_finality_notification(&mut self, notification: FinalityNotification<B>) {
 		trace!(target: "dkg_gadget::worker", "🕸️  Finality notification: {:?}", notification);
-		// Handle import notifications
+		// Handle finality notifications
 		self.process_block_notification(&notification.header);
 	}
 
 	fn handle_import_notification(&mut self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg", "🕸️  Import notification: {:?}", notification);
+		trace!(target: "dkg_gadget::worker", "🕸️  Import notification: {:?}", notification);
 		// Handle import notification
 		self.process_block_notification(&notification.header);
 	}
@@ -962,17 +962,17 @@ where
 
 		for offender in offenders {
 			match dkg_error {
-				DKGError::KeygenMisbehaviour { bad_actors: _ } =>
+				DKGError::KeygenMisbehaviour { .. } =>
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
-				DKGError::KeygenTimeout { bad_actors: _ } =>
+				DKGError::KeygenTimeout { .. } =>
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
-				DKGError::OfflineMisbehaviour { bad_actors: _ } =>
+				DKGError::OfflineMisbehaviour { .. } =>
 					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
-				DKGError::OfflineTimeout { bad_actors: _ } =>
+				DKGError::OfflineTimeout { .. } =>
 					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
-				DKGError::SignMisbehaviour { bad_actors: _ } =>
+				DKGError::SignMisbehaviour { .. } =>
 					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
-				DKGError::SignTimeout { bad_actors: _ } =>
+				DKGError::SignTimeout { .. } =>
 					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
 				_ => (),
 			}
