@@ -416,7 +416,7 @@ pub mod pallet {
 					Ok(v) => {
 						Self::deposit_event(Event::<T>::ProposalAdded {
 							key: v.key.clone(),
-							target_chain: v.target_chain_id.clone(),
+							target_chain: v.typed_chain_id.clone(),
 							data: prop.data().clone(),
 						});
 						UnsignedProposalQueue::<T>::insert(
@@ -439,9 +439,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
-			Self::depoist_event(Event::<T>::ProposalAdded {
+			Self::deposit_event(Event::<T>::ProposalAdded {
 				key: v.key.clone(),
-				target_chain: v.target_chain_id.clone(),
+				target_chain: v.typed_chain_id.clone(),
 				data: proposal.data().clone(),
 			});
 			UnsignedProposalQueue::<T>::insert(
@@ -465,7 +465,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			Self::deposit_event(Event::<T>::ProposalAdded {
 				key: v.key.clone(),
-				target_chain: v.target_chain_id.clone(),
+				target_chain: v.typed_chain_id.clone(),
 				data: unsigned_proposal.data().clone(),
 			});
 
@@ -487,9 +487,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal.encode(), kind: ProposalKind::Refresh };
 
-		Self::depoist_event(Event::<T>::ProposalAdded {
+		Self::deposit_event(Event::<T>::ProposalAdded {
 			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: None,
+			target_chain: TypedChainId::None,
 			data: unsigned_proposal.data().clone(),
 		});
 
@@ -528,7 +528,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 			Self::deposit_event(Event::<T>::ProposalRemoved {
 				key: DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
-				target_chain: None,
+				target_chain: TypedChainId::None,
 			});
 		}
 
