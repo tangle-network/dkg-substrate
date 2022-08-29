@@ -106,11 +106,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal_identifier, ProposalNonce,
-};
-use dkg_runtime_primitives::{
-	DKGPayloadKey,
-	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK}, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait,
+	handlers::decode_proposals::decode_proposal_identifier,
+	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
+	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce,
 	StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
@@ -126,8 +124,7 @@ use sp_runtime::{
 	},
 	traits::Saturating,
 };
-use sp_std::convert::TryInto;
-use sp_std::vec::Vec;
+use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
 pub use weights::WeightInfo;
 
@@ -137,13 +134,13 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use dkg_runtime_primitives::{DKGPayloadKey, utils::ensure_signed_by_dkg};
+	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
 	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use sp_runtime::traits::{CheckedSub, One, Zero};
@@ -222,22 +219,20 @@ pub mod pallet {
 			actual_public_key: Option<Vec<u8>>,
 		},
 		/// Event When a Proposal is added to UnsignedProposalQueue.
-		ProposalAdded{
+		ProposalAdded {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
 			/// The Target Chain.
 			target_chain: TypedChainId,
 			/// The Proposal Data.
 			data: Vec<u8>,
-
 		},
 		/// Event When a Proposal is removed to UnsignedProposalQueue.
-		ProposalRemoved{
+		ProposalRemoved {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
 			/// The Target Chain.
 			target_chain: TypedChainId,
-
 		},
 		/// Event When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -462,7 +457,6 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
-
 			Self::deposit_event(Event::<T>::ProposalAdded {
 				key: v.key.clone(),
 				target_chain: v.typed_chain_id.clone(),
@@ -527,7 +521,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			);
 
 			Self::deposit_event(Event::<T>::ProposalRemoved {
-				key: DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
+				key: DKGPayloadKey::RefreshVote(
+					proposal.nonce.saturating_sub(ProposalNonce(index)),
+				),
 				target_chain: TypedChainId::None,
 			});
 		}
