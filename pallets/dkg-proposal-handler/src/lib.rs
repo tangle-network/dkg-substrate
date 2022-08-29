@@ -310,7 +310,10 @@ pub mod pallet {
 				if remaining_weight.is_zero() {
 					break
 				}
-
+				Self::deposit_event(Event::<T>::ProposalRemoved {
+					target_chain: expired_proposal.0.clone(),
+					key: expired_proposal.1.clone(),
+				});
 				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
 			}
 
@@ -522,6 +525,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				TypedChainId::None,
 				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
 			);
+
+			Self::deposit_event(Event::<T>::ProposalRemoved {
+				key: DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
+				target_chain: None,
+			});
 		}
 
 		Ok(())
