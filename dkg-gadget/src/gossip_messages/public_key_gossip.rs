@@ -143,11 +143,11 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					error!(target: "dkg", "Failed to gossip DKG public key: {:?}", e);
+					error!(target: "dkg_gadget::gossip", "Failed to gossip DKG public key: {:?}", e);
 				}
 			},
 			Err(e) => error!(
-				target: "dkg",
+				target: "dkg_gadget::gossip",
 				"🕸️  Error signing DKG message: {:?}",
 				e
 			),
@@ -159,8 +159,8 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));
 
-		debug!(target: "dkg", "Gossiping local node {} public key and signature", public)
+		debug!(target: "dkg_gadget::gossip", "Gossiping local node {} public key and signature", public)
 	} else {
-		error!(target: "dkg", "Could not sign public key");
+		error!(target: "dkg_gadget::gossip", "Could not sign public key");
 	}
 }

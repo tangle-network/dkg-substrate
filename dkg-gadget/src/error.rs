@@ -18,24 +18,10 @@
 
 use std::fmt::Debug;
 
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen;
-
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum Error {
 	#[error("Keystore error: {0}")]
 	Keystore(String),
 	#[error("Signature error: {0}")]
 	Signature(String),
-}
-
-#[derive(Debug, thiserror::Error, PartialEq)]
-pub enum MPCError {
-	#[error("Party creation error: {0}")]
-	CryptoOperation(String),
-}
-
-impl From<keygen::Error> for MPCError {
-	fn from(e: keygen::Error) -> Self {
-		MPCError::CryptoOperation(e.to_string())
-	}
 }

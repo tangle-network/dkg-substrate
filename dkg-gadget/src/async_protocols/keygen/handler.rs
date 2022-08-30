@@ -18,7 +18,9 @@ use crate::async_protocols::{
 	GenericAsyncHandler, KeygenRound, ProtocolType,
 };
 
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Keygen;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
+	Error::ProceedRound, Keygen, ProceedError,
+};
 
 use std::fmt::Debug;
 
@@ -49,7 +51,7 @@ where
 		let protocol = async move {
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let Some(keygen_id) = keygen_id {
-				log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
+				log::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;
 				let n = params.best_authorities.len() as u16;
 				// wait for the start signal
@@ -60,16 +62,16 @@ where
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
 				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, 0, status)?.await?;
-				log::debug!(target: "dkg", "Keygen stage complete!");
+				log::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
 			} else {
-				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
+				log::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())
 		}
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg", "🕸️  Keygen GenericAsyncHandler completed");
+			log::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
 			res
 		});
 
@@ -77,7 +79,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
+					log::info!(target: "dkg_gadget::keygen", "Stopper has been called {:?}", res1);
 					Ok(())
 				}
 			}
@@ -102,12 +104,34 @@ where
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
-			Keygen::new(i, t, n)
-				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
 			params,
 			channel_type,
 			async_index,
 			status,
 		)
+	}
+
+	fn map_keygen_error_to_dkg_error(
+		error : multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error,
+	) -> DKGError {
+		match error {
+			// extract the bad actors from error messages
+			ProceedRound(ProceedError::Round2VerifyCommitments(e)) =>
+				DKGError::KeygenMisbehaviour {
+					reason: e.error_type.to_string(),
+					bad_actors: e.bad_actors,
+				},
+			ProceedRound(ProceedError::Round3VerifyVssConstruct(e)) =>
+				DKGError::KeygenMisbehaviour {
+					reason: e.error_type.to_string(),
+					bad_actors: e.bad_actors,
+				},
+			ProceedRound(ProceedError::Round4VerifyDLogProof(e)) => DKGError::KeygenMisbehaviour {
+				reason: e.error_type.to_string(),
+				bad_actors: e.bad_actors,
+			},
+			_ => DKGError::KeygenMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+		}
 	}
 }
