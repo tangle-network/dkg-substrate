@@ -294,15 +294,21 @@ where
 		match stage {
 			ProtoStageType::Genesis => {
 				debug!(target: "dkg_gadget::worker", "Starting genesis protocol");
+				if self.rounds.is_some() {
+					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
+				}
 				self.rounds = Some(status_handle.into_primary_remote())
 			},
 			ProtoStageType::Queued => {
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
+				if self.next_rounds.is_some() {
+					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
+				}
 				self.next_rounds = Some(status_handle.into_primary_remote())
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
-				debug!(target: "dkg_gadget::worker", "Starting signing protocol");
+				debug!(target: "dkg_gadget::worker", "Starting signing protocol: async_index #{}", async_index);
 				self.signing_rounds[async_index as usize] =
 					Some(status_handle.into_primary_remote())
 			},
@@ -713,6 +719,7 @@ where
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			self.next_rounds = None;
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -757,6 +764,7 @@ where
 		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
+			// self.maybe_enact_genesis_queued_authorities(header);
 			self.maybe_enact_new_authorities(header);
 			self.submit_unsigned_proposals(header);
 		}
@@ -779,6 +787,20 @@ where
 				self.best_next_authorities = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
+				self.handle_queued_dkg_setup(header, queued);
+			}
+		}
+	}
+
+	fn maybe_enact_genesis_queued_authorities(&mut self, header: &B::Header) {
+		if self.get_next_dkg_pub_key(header).is_some() {
+			return
+		}
+		// Get the active and queued validators to check for updates
+		if let Some((active, queued)) = self.validator_set(header) {
+			// If we are in the genesis state, we need to enact the genesis authorities
+			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_some() {
+				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS Queued ROUND_ID {:?}", queued.id);
 				self.handle_queued_dkg_setup(header, queued);
 			}
 		}
@@ -849,6 +871,15 @@ where
 					},
 				};
 				// If we are starting a new queued DKG, we rotate the next rounds
+				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!s");
+				match self.rounds.as_ref() {
+					Some(r) if r.is_active() => {
+						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
+					},
+					Some(_) | None => {
+						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is not active, rotating next rounds is okay");
+					},
+				};
 				self.rounds = self.next_rounds.take();
 				// We also rotate the best authority caches
 				self.best_authorities = self.best_next_authorities.clone();
