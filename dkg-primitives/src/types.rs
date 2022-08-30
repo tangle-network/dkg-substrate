@@ -243,8 +243,8 @@ pub enum DKGResult {
 
 #[derive(Debug, Clone)]
 pub enum DKGError {
-	KeygenMisbehaviour { bad_actors: Vec<u16> },
-	KeygenTimeout { bad_actors: Vec<u16> },
+	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	KeygenTimeout { bad_actors: Vec<usize> },
 	StartKeygen { reason: String },
 	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
@@ -260,8 +260,8 @@ impl fmt::Display for DKGError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use DKGError::*;
 		let label = match self {
-			KeygenMisbehaviour { bad_actors } =>
-				format!("Keygen misbehaviour: bad actors: {:?}", bad_actors),
+			KeygenMisbehaviour { reason, bad_actors } =>
+				format!("Keygen misbehaviour: reason : {:?} bad actors: {:?}", reason, bad_actors),
 			KeygenTimeout { bad_actors } => format!("Keygen timeout: bad actors: {:?}", bad_actors),
 			Vote { reason } => format!("Vote: {}", reason),
 			StartKeygen { reason } => format!("Start keygen: {}", reason),

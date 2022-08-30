@@ -18,7 +18,9 @@ use crate::async_protocols::{
 	GenericAsyncHandler, KeygenRound, ProtocolType,
 };
 
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Keygen;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
+	Error::ProceedRound, Keygen, ProceedError,
+};
 
 use std::fmt::Debug;
 
@@ -104,12 +106,34 @@ where
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
-			Keygen::new(i, t, n)
-				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
+			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
 			params,
 			channel_type,
 			async_index,
 			status,
 		)
+	}
+
+	fn map_keygen_error_to_dkg_error(
+		error : multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error,
+	) -> DKGError {
+		match error {
+			// extract the bad actors from error messages
+			ProceedRound(ProceedError::Round2VerifyCommitments(e)) =>
+				DKGError::KeygenMisbehaviour {
+					reason: e.error_type.to_string(),
+					bad_actors: e.bad_actors,
+				},
+			ProceedRound(ProceedError::Round3VerifyVssConstruct(e)) =>
+				DKGError::KeygenMisbehaviour {
+					reason: e.error_type.to_string(),
+					bad_actors: e.bad_actors,
+				},
+			ProceedRound(ProceedError::Round4VerifyDLogProof(e)) => DKGError::KeygenMisbehaviour {
+				reason: e.error_type.to_string(),
+				bad_actors: e.bad_actors,
+			},
+			_ => DKGError::KeygenMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+		}
 	}
 }

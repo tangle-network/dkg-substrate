@@ -14,7 +14,9 @@
 
 #![allow(clippy::collapsible_match)]
 
-use crate::async_protocols::blockchain_interface::DKGProtocolEngine;
+use crate::{
+	async_protocols::blockchain_interface::DKGProtocolEngine, utils::convert_u16_vec_to_usize_vec,
+};
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
@@ -795,7 +797,9 @@ where
 				{
 					debug!(target: "dkg", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
-						bad_actors: rounds.current_round_blame().blamed_parties,
+						bad_actors: convert_u16_vec_to_usize_vec(
+							rounds.current_round_blame().blamed_parties,
+						),
 					})
 				} else {
 					debug!(target: "dkg", "🕸️  QUEUED DKG NOT STALLED: round {:?}", queued.id);
@@ -922,9 +926,9 @@ where
 		let authorities: Vec<Public> = self.best_authorities.iter().map(|x| x.1.clone()).collect();
 
 		let bad_actors = match dkg_error {
-			DKGError::KeygenMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => bad_actors.clone(),
 			DKGError::KeygenTimeout { ref bad_actors } => bad_actors.clone(),
-			DKGError::SignMisbehaviour { ref bad_actors } => bad_actors.clone(),
+			DKGError::SignMisbehaviour { ref bad_actors, .. } => bad_actors.clone(),
 			_ => Default::default(),
 		};
 
@@ -940,12 +944,12 @@ where
 
 		for offender in offenders {
 			match dkg_error {
-				DKGError::KeygenMisbehaviour { bad_actors: _ } =>
+				DKGError::KeygenMisbehaviour { bad_actors: _, .. } =>
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
 				DKGError::KeygenTimeout { bad_actors: _ } =>
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
-				DKGError::SignMisbehaviour { bad_actors: _ } =>
-					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
+				DKGError::SignMisbehaviour { bad_actors: _, .. } =>
+					self.handle_dkg_report(DKGReport::SignMisbehaviour { offender }),
 				_ => (),
 			}
 		}
