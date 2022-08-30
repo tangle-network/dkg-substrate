@@ -47,7 +47,6 @@ where
 			})?;
 
 		let protocol = async move {
-			let params = params;
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let Some(keygen_id) = keygen_id {
 				log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
@@ -60,8 +59,7 @@ where
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n, 0, status)?
-					.await?;
+				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, 0, status)?.await?;
 				log::debug!(target: "dkg", "Keygen stage complete!");
 			} else {
 				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
