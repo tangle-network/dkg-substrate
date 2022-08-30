@@ -259,6 +259,7 @@ pub enum DKGError {
 	NotListeningForPublicKey,
 	NoAuthorityAccounts,
 	NoHeader,
+	MPCSignError { reason: String, bad_actors: Vec<usize> },
 }
 
 impl fmt::Display for DKGError {
@@ -282,6 +283,8 @@ impl fmt::Display for DKGError {
 			DKGError::CriticalError { reason } => format!("Critical error: {}", reason),
 			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
 			DKGError::SMNotFinished => "SM not finished".to_string(),
+			DKGError::MPCSignError { reason, bad_actors } =>
+				format!("MPC Sign error : reason: {:?},  bad actors: {:?}", reason, bad_actors),
 			_ => "Unknown error".to_string(),
 		};
 		write!(f, "DKGError of type {}", label)

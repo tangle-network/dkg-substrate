@@ -50,7 +50,7 @@ where
 			let params = params;
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let Some(keygen_id) = keygen_id {
-				log::info!(target: "dkg", "Will execute keygen since local is in best authority set");
+				log::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;
 				let n = params.best_authorities.len() as u16;
 				// wait for the start signal
@@ -62,16 +62,16 @@ where
 				// Execute the keygen
 				GenericAsyncHandler::new_keygen(params.clone(), keygen_id, t, n, 0, status)?
 					.await?;
-				log::debug!(target: "dkg", "Keygen stage complete!");
+				log::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
 			} else {
-				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
+				log::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())
 		}
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg", "🕸️  Keygen GenericAsyncHandler completed");
+			log::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
 			res
 		});
 
@@ -79,7 +79,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
+					log::info!(target: "dkg_gadget::keygen", "Stopper has been called {:?}", res1);
 					Ok(())
 				}
 			}

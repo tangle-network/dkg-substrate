@@ -918,8 +918,8 @@ where
 	}
 
 	pub fn handle_dkg_error(&mut self, dkg_error: DKGError) {
-		log::error!(target: "dkg", "Received error: {:?}", dkg_error);
-		let authorities = self.current_validator_set.read().authorities.clone();
+		log::error!(target: "dkg_gadget", "Received error: {:?}", dkg_error);
+		let authorities: Vec<Public> = self.best_authorities.iter().map(|x| x.1.clone()).collect();
 
 		let bad_actors = match dkg_error {
 			DKGError::KeygenMisbehaviour { ref bad_actors } => bad_actors.clone(),
