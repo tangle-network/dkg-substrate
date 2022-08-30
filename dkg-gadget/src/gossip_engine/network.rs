@@ -58,7 +58,7 @@ use std::{
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
-		atomic::{AtomicBool, Ordering},
+		atomic::{AtomicBool, AtomicUsize, Ordering},
 		Arc,
 	},
 };
@@ -460,37 +460,82 @@ impl<B: Block + 'static> GossipHandler<B> {
 			if already_propagated {
 				return
 			}
-			self.service.write_notification(
-				to_who,
-				self.protocol_name.clone(),
-				Encode::encode(&message),
-			);
-			debug!(target: "dkg_gadget::gossip_engine::network", "Sending a signed DKG messages to {}", to_who);
+
+			let notification_sender =
+				self.service.notification_sender(to_who, self.protocol_name.clone());
+			let tx = match notification_sender {
+				Ok(tx) => tx,
+				Err(e) => {
+					// TODO(@shekohex): we should enqueue the message and try again later.
+					warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {}: {:?}", to_who, e);
+					return
+				},
+			};
+
+			let msg = Encode::encode(&message);
+			let task = async move {
+				match tx.ready().await {
+					Ok(handle) => {
+						let _ = handle.send(msg);
+						debug!(target: "dkg_gadget::gossip_engine::network", "Sending a signed DKG messages to {}", to_who);
+					},
+					Err(e) => {
+						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {:?}", e);
+					},
+				};
+			};
+			// FIXME(@shekohex): this is a temporary workaround, we should add timeouts for the
+			// tasks.
+			tokio::spawn(task);
 		} else {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
 	fn gossip_message(&mut self, message: SignedDKGMessage<AuthorityId>) {
-		let mut propagated_messages = 0;
+		let propagated_messages = Arc::new(AtomicUsize::new(0));
 		let message_hash = message.message_hash::<B>();
 		if self.peers.is_empty() {
 			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
 		}
+		let msg = Encode::encode(&message);
 		for (who, peer) in self.peers.iter_mut() {
 			let new_to_them = peer.known_messages.insert(message_hash);
 			if !new_to_them {
 				continue
 			}
-			self.service.write_notification(
-				*who,
-				self.protocol_name.clone(),
-				Encode::encode(&message),
-			);
-			propagated_messages += 1;
+			let notification_sender =
+				self.service.notification_sender(*who, self.protocol_name.clone());
+			let tx = match notification_sender {
+				Ok(tx) => tx,
+				Err(e) => {
+					// TODO(@shekohex): we should enqueue the message and try again later.
+					warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {}: {:?}", who, e);
+					continue
+				},
+			};
+			let local_propagated_messages = propagated_messages.clone();
+			let msg = msg.clone();
+			let task = async move {
+				match tx.ready().await {
+					Ok(handle) => {
+						let _ = handle.send(msg);
+						local_propagated_messages.fetch_add(1, Ordering::Relaxed);
+					},
+					Err(e) => {
+						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {:?}", e);
+					},
+				};
+			};
+			// FIXME(@shekohex): this is a temporary workaround, we should add timeouts for the
+			// tasks.
+			tokio::spawn(task);
 		}
+		// FIXME(@shekohex): we should handle metrics at the end of each task, not in the function.
 		if let Some(ref metrics) = self.metrics {
-			metrics.propagated_messages.inc_by(propagated_messages as _)
+			metrics
+				.propagated_messages
+				.inc_by(propagated_messages.load(Ordering::Relaxed) as _);
 		}
 	}
 }

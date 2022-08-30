@@ -1423,6 +1423,12 @@ impl<T: Config> Pallet<T> {
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
 			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			if let Ok(None) = agg_keys {
+				return Ok(())
+			}
+
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
 					log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping public key submmission");
@@ -1438,8 +1444,6 @@ impl<T: Config> Pallet<T> {
 				agg_key_ref.clear();
 				return Ok(())
 			}
-
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
@@ -1479,7 +1483,6 @@ impl<T: Config> Pallet<T> {
 			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 			if let Ok(None) = agg_keys {
-				log::debug!(target: "runtime::dkg_metadata", "agg_keys is None");
 				return Ok(())
 			}
 
