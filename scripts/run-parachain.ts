@@ -233,6 +233,7 @@ const cmds = [1, 2, 3].map((n) =>
   -ldkg_gadget::async_protocol::keygen=debug \\
   -ldkg_gadget::gossip_engine::network=debug \\
   -ldkg_gadget::storage::public_keys=debug \\
+  -ldkg_gadget::worker=debug \\
   --log info \\
   --rpc-methods=unsafe -- --execution wasm \\
   --chain ${relaychainSpecPath}`
