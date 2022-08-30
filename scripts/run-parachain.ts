@@ -14,7 +14,7 @@ import {
   KeyPressEvent,
 } from "https://deno.land/x/cliffy@v0.24.3/keypress/mod.ts";
 
-type ScrtipState = {
+type ScriptState = {
   relayChainPath: string;
   relayChain: {
     alice?: Deno.Process;
@@ -24,7 +24,7 @@ type ScrtipState = {
   rootDir: string;
 };
 
-const defaultState: ScrtipState = {
+const defaultState: ScriptState = {
   relayChainPath: Deno.realPathSync(
     localStorage.getItem("relayChainPath") ??
       "../../paritytech/polkadot/target/release/polkadot",
@@ -39,7 +39,7 @@ const defaultState: ScrtipState = {
   relayChain: {},
 };
 
-let state: ScrtipState = defaultState;
+let state: ScriptState = defaultState;
 
 localStorage.setItem("relayChainPath", state.relayChainPath);
 
