@@ -304,31 +304,31 @@ where
 		use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::ProceedError::*;
 		match error {
 			LocalSigning(Round1(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 			CompleteSigning(Round1(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 
 			LocalSigning(Round2Stage4(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 			CompleteSigning(Round2Stage4(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 
 			LocalSigning(Round3(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 			CompleteSigning(Round3(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 
 			LocalSigning(Round5(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 			CompleteSigning(Round5(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 
 			LocalSigning(Round6VerifyProof(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 			CompleteSigning(Round6VerifyProof(e)) =>
-				DKGError::MPCSignError { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
 
-			_ => DKGError::MPCSignError { reason: error.to_string(), bad_actors: vec![] },
+			_ => DKGError::SignMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
 		}
 	}
 }

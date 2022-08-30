@@ -924,10 +924,7 @@ where
 		let bad_actors = match dkg_error {
 			DKGError::KeygenMisbehaviour { ref bad_actors } => bad_actors.clone(),
 			DKGError::KeygenTimeout { ref bad_actors } => bad_actors.clone(),
-			DKGError::OfflineMisbehaviour { ref bad_actors } => bad_actors.clone(),
-			DKGError::OfflineTimeout { ref bad_actors } => bad_actors.clone(),
 			DKGError::SignMisbehaviour { ref bad_actors } => bad_actors.clone(),
-			DKGError::SignTimeout { ref bad_actors } => bad_actors.clone(),
 			_ => Default::default(),
 		};
 
@@ -947,13 +944,7 @@ where
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
 				DKGError::KeygenTimeout { bad_actors: _ } =>
 					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender }),
-				DKGError::OfflineMisbehaviour { bad_actors: _ } =>
-					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
-				DKGError::OfflineTimeout { bad_actors: _ } =>
-					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
 				DKGError::SignMisbehaviour { bad_actors: _ } =>
-					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
-				DKGError::SignTimeout { bad_actors: _ } =>
 					self.handle_dkg_report(DKGReport::SigningMisbehaviour { offender }),
 				_ => (),
 			}
@@ -1043,7 +1034,7 @@ where
 					(offender, 0, MisbehaviourType::Keygen)
 				}
 			},
-			DKGReport::SigningMisbehaviour { offender } => {
+			DKGReport::SignMisbehaviour { offender } => {
 				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
 				if let Some(rounds) = self.rounds.as_mut() {
 					(offender, rounds.round_id, MisbehaviourType::Sign)
