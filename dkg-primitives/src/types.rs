@@ -269,8 +269,8 @@ impl fmt::Display for DKGError {
 			CriticalError { reason } => format!("Critical error: {}", reason),
 			GenericError { reason } => format!("Generic error: {}", reason),
 			StartOffline { reason } => format!("Unable to start Offline Signing: {}", reason),
-			NoAuthorityAccounts => format!("No Authority accounts found!"),
-			NoHeader => format!("No Header!"),
+			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
+			NoHeader => "No Header!".to_string(),
 			SignMisbehaviour { reason, bad_actors } =>
 				format!("SignMisbehaviour : reason: {:?},  bad actors: {:?}", reason, bad_actors),
 		};
