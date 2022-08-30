@@ -34,7 +34,10 @@ use dkg_primitives::types::{
 };
 use dkg_runtime_primitives::crypto::Public;
 use futures::FutureExt;
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::verify;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
+	party_i::verify,
+	state_machine::sign::SignError::{CompleteSigning, LocalSigning},
+};
 
 impl<'a, Out: Send + Debug + 'a> GenericAsyncHandler<'a, Out>
 where
@@ -203,7 +206,7 @@ where
 
 			let (signing, partial_signature) =
 				SignManual::new(message.clone(), completed_offline_stage)
-					.map_err(|err| DKGError::Vote { reason: err.to_string() })?;
+					.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
 
 			let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
 
@@ -262,14 +265,14 @@ where
 			log::info!("RD1");
 			let signature = signing
 				.complete(&sigs)
-				.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
 
 			log::info!("RD2");
-			verify(&signature, offline_stage_pub_key, &message).map_err(|_err| DKGError::Vote {
-				reason: "Verification of voting stage failed".to_string(),
+			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
+				reason: format!("Verification of voting stage failed with error : {:?}", err),
 			})?;
-			log::info!("RD3");
 
+			log::info!("RD3");
 			params.engine.process_vote_result(
 				signature,
 				unsigned_proposal,
@@ -290,5 +293,42 @@ where
 			.zip(s_l)
 			.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
 			.map(|r| r.0)
+	}
+
+	/// Converts the multi_party_ecdsa SignError to DKG error
+	/// The aim of the function is to filter out the bad_actors from the mp_ecdsa errors that
+	/// contain them
+	fn convert_mpc_sign_error_to_dkg_error(
+		error: multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::SignError,
+	) -> DKGError {
+		use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::ProceedError::*;
+		match error {
+			LocalSigning(Round1(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			CompleteSigning(Round1(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+
+			LocalSigning(Round2Stage4(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			CompleteSigning(Round2Stage4(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+
+			LocalSigning(Round3(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			CompleteSigning(Round3(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+
+			LocalSigning(Round5(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			CompleteSigning(Round5(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+
+			LocalSigning(Round6VerifyProof(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+			CompleteSigning(Round6VerifyProof(e)) =>
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+
+			_ => DKGError::SignMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+		}
 	}
 }
