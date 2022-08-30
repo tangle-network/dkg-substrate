@@ -742,7 +742,7 @@ where
 				return
 			}
 		}
-		debug!(target: "dkg", "🕸️  Processing block notification for block {}", header.number());
+		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 		// Clear offchain storage
@@ -1047,7 +1047,7 @@ where
 				}
 			},
 			DKGReport::SignMisbehaviour { offender } => {
-				info!(target: "dkg", "🕸️  DKG Signing misbehaviour by {}", offender);
+				info!(target: "dkg_gadget::worker", "🕸️  DKG Signing misbehaviour by {}", offender);
 				if let Some(rounds) = self.rounds.as_mut() {
 					(offender, rounds.round_id, MisbehaviourType::Sign)
 				} else {
