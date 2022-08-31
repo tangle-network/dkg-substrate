@@ -292,6 +292,11 @@ where
 		.network
 		.extra_sets
 		.push(dkg_gadget::dkg_peers_set_config(keygen_network_protocol_name.into()));
+	
+	parachain_config
+		.network
+		.extra_sets
+		.push(dkg_gadget::dkg_peers_set_config(signing_network_protocol_name.into()));
 
 	let params = new_partial::<RuntimeApi, Executor, BIQ>(&parachain_config, build_import_queue)?;
 	let (mut telemetry, telemetry_worker_handle) = params.other;
