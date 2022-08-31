@@ -45,7 +45,18 @@ pub trait GossipEngineIface: Send + Sync {
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
 	/// Returns a stream of DKG messages, that are received from the network.
+	#[deprecated(note = "Use `Self::dequeue_message` instead.")]
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>>;
+	/// Dequeue a message from the Gossip Engine Queue.
+	///
+	/// Note that this will not remove the message from the queue, it will only return it. For
+	/// removing the message from the queue, use `acknowledge_message`.
+	///
+	/// Returns `None` if there are no messages in the queue.
+	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
+	/// Acknowledge the last dequeued message and mark it as processed, then removes it from the
+	/// queue.
+	fn acknowledge_last_message(&self);
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -67,4 +78,10 @@ impl GossipEngineIface for () {
 	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
 		futures::stream::pending().boxed()
 	}
+
+	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		None
+	}
+
+	fn acknowledge_last_message(&self) {}
 }

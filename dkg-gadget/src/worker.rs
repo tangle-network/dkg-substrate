@@ -980,7 +980,10 @@ where
 	}
 
 	/// Route messages internally where they need to be routed
-	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
+	fn process_incoming_dkg_message(
+		&mut self,
+		dkg_msg: SignedDKGMessage<Public>,
+	) -> Result<(), DKGError> {
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
@@ -991,6 +994,7 @@ where
 								reason: err.to_string(),
 							})
 						}
+						return Ok(())
 					}
 				}
 
@@ -1001,8 +1005,14 @@ where
 								reason: err.to_string(),
 							})
 						}
+						return Ok(())
 					}
 				}
+
+				Err(DKGError::GenericError {
+					reason: "Message is not for this DKG round or DKG rounds are not ready yet"
+						.into(),
+				})
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
@@ -1014,7 +1024,15 @@ where
 								reason: err.to_string(),
 							})
 						}
+
+						Ok(())
+					} else {
+						Err(DKGError::GenericError {
+							reason: "Message is not for this DKG round".into(),
+						})
 					}
+				} else {
+					Err(DKGError::GenericError { reason: "DKG rounds are not ready yet".into() })
 				}
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
@@ -1031,6 +1049,8 @@ where
 						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
+
+				Ok(())
 			},
 			DKGMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
@@ -1046,6 +1066,8 @@ where
 						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
+
+				Ok(())
 			},
 		}
 	}
@@ -1335,7 +1357,6 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let mut dkg = self.gossip_engine.stream();
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 
@@ -1344,6 +1365,7 @@ where
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
 		loop {
+			let next_dkg_message = self.gossip_engine.dequeue_message();
 			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
@@ -1383,16 +1405,18 @@ where
 						break;
 					}
 				},
-
-				dkg_msg = dkg.next().fuse() => {
-					if let Some(dkg_msg) = dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
-						self.process_incoming_dkg_message(dkg_msg);
-					} else {
-						log::error!("DKG stream closed");
-						break;
-					}
-				},
+			}
+			// Finally, Dequeue a message from the dkg message queue.
+			if let Some(dkg_msg) = next_dkg_message {
+				log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
+				match self.process_incoming_dkg_message(dkg_msg) {
+					Ok(_) => {
+						self.gossip_engine.acknowledge_last_message();
+					},
+					Err(e) => {
+						log::error!(target: "dkg_gadget::worker", "Error processing dkg message: {:?}", e);
+					},
+				}
 			}
 		}
 

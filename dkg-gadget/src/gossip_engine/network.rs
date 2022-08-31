@@ -51,7 +51,7 @@ use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	borrow::Cow,
-	collections::{hash_map::Entry, HashMap, HashSet},
+	collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
 	hash::Hash,
 	iter,
 	marker::PhantomData,
@@ -114,11 +114,12 @@ impl NetworkGossipEngineBuilder {
 		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
-
+		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
+			message_queue: message_queue.clone(),
 			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
@@ -132,6 +133,7 @@ impl NetworkGossipEngineBuilder {
 			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
+			message_queue,
 			_pd: Default::default(),
 		};
 
@@ -179,9 +181,9 @@ pub struct GossipHandlerController<B: Block> {
 	/// of the DKG messages (which requires the stream is Owned value), here
 	/// we just create a new receiver of this channel, and since it is a broadcast channel,
 	/// we can receive messages from all the clones of this controller.
-	///
-	/// See: [`GossipHandlerController::stream`] below.
 	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
 	/// Used to keep type information about the block. May
@@ -224,6 +226,16 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
 	}
+
+	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		let lock = self.message_queue.read();
+		lock.front().cloned()
+	}
+
+	fn acknowledge_last_message(&self) {
+		let mut lock = self.message_queue.write();
+		let _ = lock.pop_front();
+	}
 }
 /// an Enum Representing the commands that can be sent to the background task.
 #[derive(Clone, Debug)]
@@ -251,7 +263,14 @@ pub struct GossipHandler<B: Block + 'static> {
 	protocol_name: Cow<'static, str>,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// Pending Messages to be sent to the [`GossipHandlerController`].
+	/// Note that this channel will be deprecated once we done testing the new message queue.
+	#[deprecated(note = "use `message_queue` instead")]
 	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	/// The Difference between this and the controller channel is that this channel is a broadcast
+	/// and does not buffer messages, but this a message queue where it will hold them until
+	/// the controller decides to process them.
+	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
@@ -403,15 +422,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					log::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
-					let recv_count = self.controller_channel.receiver_count();
-					if recv_count == 0 {
-						log::warn!(target: "dkg_gadget::gossip_engine::network", "No one is going to process the message!!!");
-					}
-					if let Err(e) = self.controller_channel.send(message.clone()) {
-						log::error!(target: "dkg_gadget::gossip_engine::network", "Failed to send message to DKG controller: {:?}", e);
-					} else {
-						log::debug!(target: "dkg_gadget::gossip_engine::network", "Message sent to {recv_count} DKG controller listeners");
-					}
+					let mut queue_lock = self.message_queue.write();
+					queue_lock.push_back(message.clone());
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
 					// we should add some good reputation to them.
