@@ -112,10 +112,7 @@ use dkg_runtime_primitives::{
 	StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
-use frame_system::{
-	offchain::{AppCrypto, SendSignedTransaction, Signer},
-	pallet_prelude::OriginFor,
-};
+use frame_system::offchain::{AppCrypto, SendSignedTransaction, Signer};
 pub use pallet::*;
 use sp_runtime::{
 	offchain::{
@@ -306,8 +303,8 @@ pub mod pallet {
 					break
 				}
 				Self::deposit_event(Event::<T>::ProposalRemoved {
-					target_chain: expired_proposal.0.clone(),
-					key: expired_proposal.1.clone(),
+					target_chain: expired_proposal.0,
+					key: expired_proposal.1,
 				});
 				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
 			}
@@ -410,8 +407,8 @@ pub mod pallet {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
 						Self::deposit_event(Event::<T>::ProposalAdded {
-							key: v.key.clone(),
-							target_chain: v.typed_chain_id.clone(),
+							key: v.key,
+							target_chain: v.typed_chain_id,
 							data: prop.data().clone(),
 						});
 						UnsignedProposalQueue::<T>::insert(
@@ -435,8 +432,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
 		if let Ok(v) = decode_proposal_identifier(&proposal) {
 			Self::deposit_event(Event::<T>::ProposalAdded {
-				key: v.key.clone(),
-				target_chain: v.typed_chain_id.clone(),
+				key: v.key,
+				target_chain: v.typed_chain_id,
 				data: proposal.data().clone(),
 			});
 			UnsignedProposalQueue::<T>::insert(
@@ -458,8 +455,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
 		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
 			Self::deposit_event(Event::<T>::ProposalAdded {
-				key: v.key.clone(),
-				target_chain: v.typed_chain_id.clone(),
+				key: v.key,
+				target_chain: v.typed_chain_id,
 				data: unsigned_proposal.data().clone(),
 			});
 
