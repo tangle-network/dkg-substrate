@@ -257,7 +257,7 @@ where
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
-		protocol_name: &str
+		protocol_name: &str,
 	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -276,7 +276,7 @@ where
 				gossip_engine: match protocol_name {
 					crate::DKG_KEYGEN_PROTOCOL_NAME => self.keygen_gossip_engine.clone(),
 					crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
-					_ => panic!("Protocol name not found!")
+					_ => panic!("Protocol name not found!"),
 				},
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
@@ -336,7 +336,7 @@ where
 			local_key_path,
 			stage,
 			0u8,
-			crate::DKG_KEYGEN_PROTOCOL_NAME
+			crate::DKG_KEYGEN_PROTOCOL_NAME,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
@@ -401,7 +401,7 @@ where
 			local_key_path,
 			stage,
 			async_index,
-			crate::DKG_SIGNING_PROTOCOL_NAME
+			crate::DKG_SIGNING_PROTOCOL_NAME,
 		)?;
 
 		let err_handler_tx = self.error_handler_tx.clone();

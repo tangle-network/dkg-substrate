@@ -139,7 +139,8 @@ where
 	let keygen_gossip_protocol =
 		NetworkGossipEngineBuilder::new(DKG_KEYGEN_PROTOCOL_NAME.to_string().into());
 
-	let signing_gossip_protocol = NetworkGossipEngineBuilder::new(DKG_SIGNING_PROTOCOL_NAME.to_string().into());
+	let signing_gossip_protocol =
+		NetworkGossipEngineBuilder::new(DKG_SIGNING_PROTOCOL_NAME.to_string().into());
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -160,18 +161,16 @@ where
 		.build(network.clone(), metrics.clone(), latest_header.clone())
 		.expect("Keygen : Failed to build gossip engine");
 
-		let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
+	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
 		.build(network.clone(), metrics.clone(), latest_header.clone())
 		.expect("Signing : Failed to build gossip engine");
-	
-	
+
 	// enable the gossip
 	keygen_gossip_engine.set_gossip_enabled(true);
 	signing_gossip_engine.set_gossip_enabled(true);
 
 	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
 	let signing_handle = tokio::spawn(signing_gossip_handler.run());
-
 
 	let worker_params = worker::WorkerParams {
 		latest_header,

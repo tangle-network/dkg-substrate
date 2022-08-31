@@ -292,7 +292,7 @@ where
 		.network
 		.extra_sets
 		.push(dkg_gadget::dkg_peers_set_config(keygen_network_protocol_name.into()));
-	
+
 	parachain_config
 		.network
 		.extra_sets

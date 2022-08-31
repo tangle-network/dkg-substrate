@@ -218,7 +218,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		.extra_sets
 		.push(dkg_gadget::dkg_peers_set_config(signing_network_protocol_name.into()));
 
-
 	let warp_sync = Arc::new(sc_finality_grandpa::warp_proof::NetworkProvider::new(
 		backend.clone(),
 		grandpa_link.shared_authority_set().clone(),
