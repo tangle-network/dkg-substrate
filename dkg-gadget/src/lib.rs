@@ -50,12 +50,15 @@ pub mod storage;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
-pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
+pub const DKG_KEYGEN_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
+pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
-pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	NetworkGossipEngineBuilder::set_config()
+pub fn dkg_peers_set_config(
+	protocol_name: std::borrow::Cow<'static, str>,
+) -> sc_network::config::NonDefaultSetConfig {
+	NetworkGossipEngineBuilder::set_config(protocol_name)
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -133,7 +136,8 @@ where
 		_block,
 	} = dkg_params;
 
-	let network_gossip_engine = NetworkGossipEngineBuilder::new();
+	let network_gossip_engine =
+		NetworkGossipEngineBuilder::new(DKG_KEYGEN_PROTOCOL_NAME.to_string().into());
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(

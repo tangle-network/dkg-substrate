@@ -64,19 +64,23 @@ use std::{
 };
 use tokio::sync::broadcast;
 
-#[derive(Debug, Clone, Copy)]
-pub struct NetworkGossipEngineBuilder;
+#[derive(Debug, Clone)]
+pub struct NetworkGossipEngineBuilder {
+	protocol_name: Cow<'static, str>,
+}
 
 impl NetworkGossipEngineBuilder {
 	/// Create a new network gossip engine.
-	pub fn new() -> Self {
-		Self
+	pub fn new(protocol_name: Cow<'static, str>) -> Self {
+		Self { protocol_name }
 	}
 
 	/// Returns the configuration of the set to put in the network configuration.
-	pub fn set_config() -> config::NonDefaultSetConfig {
+	pub fn set_config(
+		protocol_name: std::borrow::Cow<'static, str>,
+	) -> config::NonDefaultSetConfig {
 		config::NonDefaultSetConfig {
-			notifications_protocol: crate::DKG_PROTOCOL_NAME.into(),
+			notifications_protocol: protocol_name.clone(),
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,
 			set_config: config::SetConfig {
@@ -117,7 +121,7 @@ impl NetworkGossipEngineBuilder {
 
 		let handler = GossipHandler {
 			latest_header,
-			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
+			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
 			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
