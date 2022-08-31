@@ -54,9 +54,9 @@ pub trait GossipEngineIface: Send + Sync {
 	///
 	/// Returns `None` if there are no messages in the queue.
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
-	/// Acknowledge the last dequeued message and mark it as processed, then removes it from the
+	/// Acknowledge a dequeued message and mark it as processed, then removes it from the
 	/// queue.
-	fn acknowledge_last_message(&self);
+	fn acknowledge_message(&self, message: &SignedDKGMessage<AuthorityId>);
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -83,5 +83,7 @@ impl GossipEngineIface for () {
 		None
 	}
 
-	fn acknowledge_last_message(&self) {}
+	fn acknowledge_message(&self, _message: &SignedDKGMessage<AuthorityId>) {
+		// do nothing
+	}
 }

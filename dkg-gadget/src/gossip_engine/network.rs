@@ -232,9 +232,11 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		lock.front().cloned()
 	}
 
-	fn acknowledge_last_message(&self) {
+	fn acknowledge_message(&self, message: &SignedDKGMessage<AuthorityId>) {
+		// retain other messages and only remove the one we are acknowledging using
+		// the message hash.
 		let mut lock = self.message_queue.write();
-		let _ = lock.pop_front();
+		let _ = lock.retain(|msg| msg.message_hash::<B>() != message.message_hash::<B>());
 	}
 }
 /// an Enum Representing the commands that can be sent to the background task.

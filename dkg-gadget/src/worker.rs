@@ -989,7 +989,7 @@ where
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id {
-						if let Err(err) = rounds.deliver_message(msg.clone()) {
+						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1409,9 +1409,9 @@ where
 			// Finally, Dequeue a message from the dkg message queue.
 			if let Some(dkg_msg) = next_dkg_message {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
-				match self.process_incoming_dkg_message(dkg_msg) {
+				match self.process_incoming_dkg_message(dkg_msg.clone()) {
 					Ok(_) => {
-						self.gossip_engine.acknowledge_last_message();
+						self.gossip_engine.acknowledge_message(&dkg_msg);
 					},
 					Err(e) => {
 						log::error!(target: "dkg_gadget::worker", "Error processing dkg message: {:?}", e);
