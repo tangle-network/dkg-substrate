@@ -1567,17 +1567,17 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn update_next_keygen_threshold(next_threshold:u16){
+	pub fn update_next_keygen_threshold(next_threshold: u16) {
 		NextKeygenThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextKeygenThresholdUpdated{
-			next_keygen_threshold:next_threshold
+		Self::deposit_event(Event::NextKeygenThresholdUpdated {
+			next_keygen_threshold: next_threshold,
 		});
 	}
 
-	pub fn update_signature_keygen_threshold(next_threshold:u16){
+	pub fn update_signature_keygen_threshold(next_threshold: u16) {
 		NextSignatureThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextSignatureThresholdUpdated{
-			next_signature_threshold:next_threshold
+		Self::deposit_event(Event::NextSignatureThresholdUpdated {
+			next_signature_threshold: next_threshold,
 		});
 	}
 

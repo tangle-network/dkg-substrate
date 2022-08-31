@@ -37,7 +37,6 @@ use webb_proposals::{Proposal, ProposalKind};
 
 use crate as pallet_dkg_proposals;
 
-
 use crate::utils::derive_resource_id;
 
 #[test]
@@ -491,8 +490,8 @@ fn execute_after_threshold_change() {
 				proposal_nonce: prop_id,
 			}),
 			Event::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
-				key:DKGPayloadKey::AnchorUpdateProposal(prop_id),
-				target_chain:typed_chain_id,
+				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
+				target_chain: typed_chain_id,
 				data: proposal.clone(),
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
