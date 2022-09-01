@@ -273,11 +273,7 @@ where
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
-				gossip_engine: match protocol_name {
-					crate::DKG_KEYGEN_PROTOCOL_NAME => self.keygen_gossip_engine.clone(),
-					crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
-					_ => panic!("Protocol name not found!"),
-				},
+				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
@@ -318,6 +314,15 @@ where
 		}
 
 		Ok(params)
+	}
+
+	/// Returns the gossip engine based on the protocol_name
+	fn get_gossip_engine_from_protocol_name(&self, protocol_name: &str) -> Arc<GE> {
+		match protocol_name {
+			crate::DKG_KEYGEN_PROTOCOL_NAME => self.keygen_gossip_engine.clone(),
+			crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
+			_ => panic!("Protocol name not found!"),
+		}
 	}
 
 	fn spawn_keygen_protocol(
@@ -975,7 +980,7 @@ where
 	}
 
 	/// Route messages internally where they need to be routed
-	fn process_incoming_keygen_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
+	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
@@ -1382,8 +1387,8 @@ where
 
 				keygen_dkg_msg = keygen_dkg_stream.next().fuse() => {
 					if let Some(keygen_dkg_msg) = keygen_dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg KEYGEN message for round {}", keygen_dkg_msg.msg.round_id);
-						self.process_incoming_keygen_dkg_message(keygen_dkg_msg);
+						log::debug!(target: "dkg_gadget::worker", "KEYGEN : Going to handle dkg message for round {}", keygen_dkg_msg.msg.round_id);
+						self.process_incoming_dkg_message(keygen_dkg_msg);
 					} else {
 						log::error!("DKG stream closed");
 						break;
@@ -1392,8 +1397,8 @@ where
 
 				signing_dkg_msg = signing_dkg_stream.next().fuse() => {
 					if let Some(signing_dkg_msg) = signing_dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg SIGN message for round {}", signing_dkg_msg.msg.round_id);
-						self.process_incoming_keygen_dkg_message(signing_dkg_msg);
+						log::debug!(target: "dkg_gadget::worker", "SIGN : Going to handle dkg message for round {}", signing_dkg_msg.msg.round_id);
+						self.process_incoming_dkg_message(signing_dkg_msg);
 					} else {
 						log::error!("DKG stream closed");
 						break;
