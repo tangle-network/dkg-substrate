@@ -20,7 +20,6 @@ use parking_lot::Mutex;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 
-#[derive(Clone)]
 pub struct AsyncProtocolRemote<C> {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
 	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
@@ -29,10 +28,30 @@ pub struct AsyncProtocolRemote<C> {
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
 	pub(crate) started_at: C,
-	is_primary_remote: bool,
+	pub(crate) is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) round_id: RoundId,
+	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
+}
+
+impl<C: Clone> Clone for AsyncProtocolRemote<C> {
+	fn clone(&self) -> Self {
+		Self {
+			status: self.status.clone(),
+			broadcaster: self.broadcaster.clone(),
+			start_tx: self.start_tx.clone(),
+			start_rx: self.start_rx.clone(),
+			stop_tx: self.stop_tx.clone(),
+			stop_rx: self.stop_rx.clone(),
+			started_at: self.started_at.clone(),
+			is_primary_remote: false,
+			current_round_blame: self.current_round_blame.clone(),
+			current_round_blame_tx: self.current_round_blame_tx.clone(),
+			round_id: self.round_id,
+			status_history: self.status_history.clone(),
+		}
+	}
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -57,6 +76,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 
 		Self {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
+			status_history: Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning])),
 			broadcaster,
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
@@ -86,6 +106,7 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	pub fn set_status(&self, status: MetaHandlerStatus) {
+		self.status_history.lock().push(status);
 		self.status.store(status, Ordering::SeqCst)
 	}
 
@@ -125,10 +146,11 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines
-	pub fn shutdown(&self) -> Result<(), DKGError> {
+	pub fn shutdown<R: AsRef<str>>(&self, reason: R) -> Result<(), DKGError> {
 		let tx = self.stop_tx.lock().take().ok_or_else(|| DKGError::GenericError {
 			reason: "Shutdown has already been called".to_string(),
 		})?;
+		log::info!("Shutting down meta handler: {}", reason.as_ref());
 		tx.send(()).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
@@ -158,11 +180,16 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
-				log::info!(target: "dkg", "[drop code] MetaAsyncProtocol is ending: {:?}", self.get_status());
+				log::info!(
+					target: "dkg",
+					"[drop code] MetaAsyncProtocol is ending: {:?}, History: {:?}",
+					self.get_status(),
+					self.status_history.lock(),
+				);
 				self.set_status(MetaHandlerStatus::Terminated);
 			}
 
-			let _ = self.shutdown();
+			let _ = self.shutdown("drop code");
 		}
 	}
 }
