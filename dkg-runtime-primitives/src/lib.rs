@@ -153,7 +153,7 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
 	KeygenMisbehaviour { offender: AuthorityId },
-	SigningMisbehaviour { offender: AuthorityId },
+	SignMisbehaviour { offender: AuthorityId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
