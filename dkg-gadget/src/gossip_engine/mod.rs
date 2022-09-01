@@ -17,10 +17,8 @@
 use auto_impl::auto_impl;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
-use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use std::pin::Pin;
 
 /// A Gossip Engine for DKG, that uses [`sc_network::NetworkService`] as a backend.
 mod network;
@@ -44,19 +42,19 @@ pub trait GossipEngineIface: Send + Sync {
 	) -> Result<(), DKGError>;
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
-	/// Returns a stream of DKG messages, that are received from the network.
-	#[deprecated(note = "Use `Self::dequeue_message` instead.")]
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>>;
 	/// Dequeue a message from the Gossip Engine Queue.
 	///
 	/// Note that this will not remove the message from the queue, it will only return it. For
-	/// removing the message from the queue, use `acknowledge_message`.
+	/// removing the message from the queue, use `acknowledge_last_dequeued_message`.
 	///
 	/// Returns `None` if there are no messages in the queue.
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
-	/// Acknowledge a dequeued message and mark it as processed, then removes it from the
+	/// Acknowledge the last dequeued message and mark it as processed, then removes it from the
 	/// queue.
-	fn acknowledge_message(&self, message: &SignedDKGMessage<AuthorityId>);
+	fn acknowledge_last_dequeued_message(&self);
+
+	/// Clears the Message Queue.
+	fn clear_queue(&self);
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -75,15 +73,11 @@ impl GossipEngineIface for () {
 		Ok(())
 	}
 
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
-		futures::stream::pending().boxed()
-	}
-
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
 		None
 	}
 
-	fn acknowledge_message(&self, _message: &SignedDKGMessage<AuthorityId>) {
-		// do nothing
-	}
+	fn acknowledge_last_dequeued_message(&self) {}
+
+	fn clear_queue(&self) {}
 }

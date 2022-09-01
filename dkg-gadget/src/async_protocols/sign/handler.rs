@@ -67,7 +67,6 @@ where
 			})?;
 
 		let protocol = async move {
-			let params = params;
 			let maybe_local_key = params.local_key.clone();
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let (Some(keygen_id), Some(local_key)) = (keygen_id, maybe_local_key) {

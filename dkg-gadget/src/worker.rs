@@ -668,6 +668,7 @@ where
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
 			self.rounds = None;
+			self.gossip_engine.clear_queue();
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
@@ -720,6 +721,7 @@ where
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
 			self.next_rounds = None;
+			self.gossip_engine.clear_queue();
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -1017,23 +1019,23 @@ where
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
 				let async_index = msg.msg.payload.get_async_index();
+				log::debug!(target: "dkg_gadget::worker", "Received message for async index {}", async_index);
 				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
+					log::debug!(target: "dkg_gadget::worker", "Message is for signing round {}", rounds.round_id);
 					if rounds.round_id == msg.msg.round_id {
+						log::debug!(target: "dkg_gadget::worker", "Message is for this signing round: {}", rounds.round_id);
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
 						}
-
-						Ok(())
 					} else {
-						Err(DKGError::GenericError {
-							reason: "Message is not for this DKG round".into(),
-						})
+						log::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.round_id);
 					}
 				} else {
-					Err(DKGError::GenericError { reason: "DKG rounds are not ready yet".into() })
+					log::warn!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
 				}
+				Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
@@ -1049,7 +1051,6 @@ where
 						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
-
 				Ok(())
 			},
 			DKGMsgPayload::MisbehaviourBroadcast(_) => {
@@ -1365,7 +1366,6 @@ where
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
 		loop {
-			let next_dkg_message = self.gossip_engine.dequeue_message();
 			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
 					if let Some(notification) = notification {
@@ -1407,11 +1407,12 @@ where
 				},
 			}
 			// Finally, Dequeue a message from the dkg message queue.
+			let next_dkg_message = self.gossip_engine.dequeue_message();
 			if let Some(dkg_msg) = next_dkg_message {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
-				match self.process_incoming_dkg_message(dkg_msg.clone()) {
+				match self.process_incoming_dkg_message(dkg_msg) {
 					Ok(_) => {
-						self.gossip_engine.acknowledge_message(&dkg_msg);
+						self.gossip_engine.acknowledge_last_dequeued_message();
 					},
 					Err(e) => {
 						log::error!(target: "dkg_gadget::worker", "Error processing dkg message: {:?}", e);

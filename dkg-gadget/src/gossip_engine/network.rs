@@ -108,10 +108,7 @@ impl NetworkGossipEngineBuilder {
 		// background task and the controller.
 		// since we have two things here we will need two channels:
 		// 1. a channel to send commands to the background task (Controller -> Background).
-		// 2. a channel to send DKG Messages back from the background task to the controller
-		// (Background -> Controller).
 		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
-		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
@@ -120,7 +117,6 @@ impl NetworkGossipEngineBuilder {
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
-			controller_channel: controller_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
@@ -130,7 +126,6 @@ impl NetworkGossipEngineBuilder {
 		};
 
 		let controller = GossipHandlerController {
-			my_channel: controller_channel,
 			handler_channel,
 			gossip_enabled,
 			message_queue,
@@ -171,17 +166,6 @@ mod rep {
 pub struct GossipHandlerController<B: Block> {
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
-	/// a channel to send DKG Messages back from the background task to the controller
-	///
-	/// Technically, we do not need to hold a reference to this channel, but we do it
-	/// here to make this controller (**Clone-able**), meaning that we can clone it and
-	/// still be able to receive messages from the background task.
-	///
-	/// Besides that, in the [`super::GossipEngineIface`] whenever we want to get the stream
-	/// of the DKG messages (which requires the stream is Owned value), here
-	/// we just create a new receiver of this channel, and since it is a broadcast channel,
-	/// we can receive messages from all the clones of this controller.
-	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -215,28 +199,38 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		})
 	}
 
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
-		// We need to create a new receiver of the channel, so that we can receive messages
-		// from anywhere, without actually fight the rustc borrow checker.
-		let stream = self.my_channel.subscribe();
-		tokio_stream::wrappers::BroadcastStream::new(stream)
-			.inspect(
-				|msg| debug!(target: "dkg_gadget::gossip_engine::network", "Streaming message from the Gossip Engine (is okay? {})", msg.is_ok()),
-			)
-			.filter_map(|m| futures::future::ready(m.ok()))
-			.boxed()
-	}
-
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
 		let lock = self.message_queue.read();
-		lock.front().cloned()
+		let msg = lock.front().cloned();
+		match msg {
+			Some(msg) => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "Dequeuing message: {}", msg.message_hash::<B>());
+				Some(msg)
+			},
+			None => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to dequeue");
+				None
+			},
+		}
 	}
 
-	fn acknowledge_message(&self, message: &SignedDKGMessage<AuthorityId>) {
-		// retain other messages and only remove the one we are acknowledging using
-		// the message hash.
+	fn acknowledge_last_dequeued_message(&self) {
 		let mut lock = self.message_queue.write();
-		let _ = lock.retain(|msg| msg.message_hash::<B>() != message.message_hash::<B>());
+		let msg = lock.pop_front();
+		match msg {
+			Some(msg) => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "Acknowledging message: {}", msg.message_hash::<B>());
+			},
+			None => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to acknowledge");
+			},
+		}
+	}
+
+	fn clear_queue(&self) {
+		log::debug!(target: "dkg_gadget::gossip_engine::network", "Clearing message queue");
+		let mut lock = self.message_queue.write();
+		lock.clear();
 	}
 }
 /// an Enum Representing the commands that can be sent to the background task.
@@ -264,10 +258,6 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
-	/// Pending Messages to be sent to the [`GossipHandlerController`].
-	/// Note that this channel will be deprecated once we done testing the new message queue.
-	#[deprecated(note = "use `message_queue` instead")]
-	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	/// The Difference between this and the controller channel is that this channel is a broadcast
 	/// and does not buffer messages, but this a message queue where it will hold them until
