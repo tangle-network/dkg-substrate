@@ -1365,6 +1365,11 @@ where
 
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
+		// create a stream from the gossip engine queue.
+		let gossip_engine = self.gossip_engine.clone();
+		let mut dkg_stream = gossip_engine
+			.message_available_notification()
+			.filter_map(|_| futures::future::ready(gossip_engine.dequeue_message()));
 		loop {
 			tokio::select! {
 				notification = self.finality_notifications.next().fuse() => {
@@ -1405,18 +1410,21 @@ where
 						break;
 					}
 				},
-			}
-			// Finally, Dequeue a message from the dkg message queue.
-			let next_dkg_message = self.gossip_engine.dequeue_message();
-			if let Some(dkg_msg) = next_dkg_message {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
-				match self.process_incoming_dkg_message(dkg_msg) {
-					Ok(_) => {
-						self.gossip_engine.acknowledge_last_dequeued_message();
-					},
-					Err(e) => {
-						log::error!(target: "dkg_gadget::worker", "Error processing dkg message: {:?}", e);
-					},
+				dkg_message = dkg_stream.next().fuse() => {
+					if let Some(dkg_msg) = dkg_message {
+						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
+						match self.process_incoming_dkg_message(dkg_msg) {
+							Ok(_) => {
+								self.gossip_engine.acknowledge_last_dequeued_message();
+							},
+							Err(e) => {
+								log::error!(target: "dkg_gadget::worker", "Error processing dkg message: {:?}", e);
+							},
+						}
+					} else {
+						log::error!("DKG message stream closed");
+						break;
+					}
 				}
 			}
 		}

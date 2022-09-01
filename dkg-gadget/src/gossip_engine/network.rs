@@ -109,7 +109,7 @@ impl NetworkGossipEngineBuilder {
 		// since we have two things here we will need two channels:
 		// 1. a channel to send commands to the background task (Controller -> Background).
 		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
-
+		let (message_notifications_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
@@ -117,6 +117,7 @@ impl NetworkGossipEngineBuilder {
 			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
+			message_notifications_channel: message_notifications_channel.clone(),
 			pending_messages_peers: HashMap::new(),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
@@ -127,6 +128,7 @@ impl NetworkGossipEngineBuilder {
 
 		let controller = GossipHandlerController {
 			handler_channel,
+			message_notifications_channel,
 			gossip_enabled,
 			message_queue,
 			_pd: Default::default(),
@@ -166,6 +168,8 @@ mod rep {
 pub struct GossipHandlerController<B: Block> {
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
+	/// A simple channel to send notifications whenever we receive a message from a peer.
+	message_notifications_channel: broadcast::Sender<()>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -197,6 +201,15 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
+	}
+
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
+		// We need to create a new receiver of the channel, so that we can receive messages
+		// from anywhere, without actually fight the rustc borrow checker.
+		let stream = self.message_notifications_channel.subscribe();
+		tokio_stream::wrappers::BroadcastStream::new(stream)
+			.filter_map(|m| futures::future::ready(m.ok()))
+			.boxed()
 	}
 
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
@@ -263,6 +276,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// and does not buffer messages, but this a message queue where it will hold them until
 	/// the controller decides to process them.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
+	message_notifications_channel: broadcast::Sender<()>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
@@ -416,6 +430,16 @@ impl<B: Block + 'static> GossipHandler<B> {
 					log::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
 					let mut queue_lock = self.message_queue.write();
 					queue_lock.push_back(message.clone());
+					drop(queue_lock);
+					let recv_count = self.message_notifications_channel.receiver_count();
+					if recv_count == 0 {
+						log::warn!(target: "dkg", "No one is going to process the message notification!!!");
+					}
+					if let Err(e) = self.message_notifications_channel.send(()) {
+						log::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
+					} else {
+						log::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
+					}
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
 					// we should add some good reputation to them.

@@ -14,9 +14,12 @@
 
 //! Webb Custom DKG Gossip Engine.
 
+use std::pin::Pin;
+
 use auto_impl::auto_impl;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
+use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 
@@ -42,6 +45,9 @@ pub trait GossipEngineIface: Send + Sync {
 	) -> Result<(), DKGError>;
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
+	/// A Stream that notifies about a new message is available to be polled
+	/// from the queue, thats it.
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>>;
 	/// Dequeue a message from the Gossip Engine Queue.
 	///
 	/// Note that this will not remove the message from the queue, it will only return it. For
@@ -71,6 +77,10 @@ impl GossipEngineIface for () {
 
 	fn gossip(&self, _message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
 		Ok(())
+	}
+
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
+		futures::stream::pending().boxed()
 	}
 
 	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
