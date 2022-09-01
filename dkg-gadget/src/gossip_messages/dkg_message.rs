@@ -55,17 +55,17 @@ pub(crate) fn sign_and_send_messages<GE>(
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					log::error!(target: "dkg", "Error sending message: {:?}", e);
+					log::error!(target: "dkg_gadget::gossip", "Error sending message: {:?}", e);
 				}
 			},
 			Err(e) => trace!(
-				target: "dkg",
+				target: "dkg_gadget::gossip",
 				"🕸️  Error signing DKG message: {:?}",
 				e
 			),
 		};
 
-		trace!(target: "dkg", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
+		trace!(target: "dkg_gadget::gossip", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
 	}
 }
 

@@ -243,46 +243,36 @@ pub enum DKGResult {
 
 #[derive(Debug, Clone)]
 pub enum DKGError {
-	KeygenMisbehaviour { bad_actors: Vec<u16> },
-	KeygenTimeout { bad_actors: Vec<u16> },
-	OfflineMisbehaviour { bad_actors: Vec<u16> },
-	OfflineTimeout { bad_actors: Vec<u16> },
-	SignMisbehaviour { bad_actors: Vec<u16> },
-	SignTimeout { bad_actors: Vec<u16> },
+	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	KeygenTimeout { bad_actors: Vec<usize> },
 	StartKeygen { reason: String },
 	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
 	Vote { reason: String },
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
-	SMNotFinished,
-	NotListeningForPublicKey,
 	NoAuthorityAccounts,
 	NoHeader,
+	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
 }
 
 impl fmt::Display for DKGError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		use DKGError::*;
 		let label = match self {
-			DKGError::KeygenMisbehaviour { bad_actors } =>
-				format!("Keygen misbehaviour: bad actors: {:?}", bad_actors),
-			DKGError::KeygenTimeout { bad_actors } =>
-				format!("Keygen timeout: bad actors: {:?}", bad_actors),
-			DKGError::OfflineMisbehaviour { bad_actors } =>
-				format!("Offline misbehaviour: bad actors: {:?}", bad_actors),
-			DKGError::OfflineTimeout { bad_actors } =>
-				format!("Offline timeout: bad actors: {:?}", bad_actors),
-			DKGError::SignMisbehaviour { bad_actors } =>
-				format!("Sign misbehaviour: bad actors: {:?}", bad_actors),
-			DKGError::SignTimeout { bad_actors } =>
-				format!("Sign timeout: bad actors: {:?}", bad_actors),
-			DKGError::Vote { reason } => format!("Vote: {}", reason),
-			DKGError::StartKeygen { reason } => format!("Start keygen: {}", reason),
-			DKGError::CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
-			DKGError::CriticalError { reason } => format!("Critical error: {}", reason),
-			DKGError::GenericError { reason } => format!("Generic error: {}", reason),
-			DKGError::SMNotFinished => "SM not finished".to_string(),
-			_ => "Unknown error".to_string(),
+			KeygenMisbehaviour { reason, bad_actors } =>
+				format!("Keygen misbehaviour: reason : {:?} bad actors: {:?}", reason, bad_actors),
+			KeygenTimeout { bad_actors } => format!("Keygen timeout: bad actors: {:?}", bad_actors),
+			Vote { reason } => format!("Vote: {}", reason),
+			StartKeygen { reason } => format!("Start keygen: {}", reason),
+			CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
+			CriticalError { reason } => format!("Critical error: {}", reason),
+			GenericError { reason } => format!("Generic error: {}", reason),
+			StartOffline { reason } => format!("Unable to start Offline Signing: {}", reason),
+			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
+			NoHeader => "No Header!".to_string(),
+			SignMisbehaviour { reason, bad_actors } =>
+				format!("SignMisbehaviour : reason: {:?},  bad actors: {:?}", reason, bad_actors),
 		};
 		write!(f, "DKGError of type {}", label)
 	}
