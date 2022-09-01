@@ -24,8 +24,6 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@v2
-        with:
-          submodules: "recursive"
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
@@ -45,6 +43,12 @@ jobs:
 
       - name: Install Packages
         run: cd dkg-test-suite && yarn
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate Fixtures
+        run: dvc pull
 
       - name: Build Standalone Node for E2E Tests (Release)
         run: cargo build --release -p dkg-standalone-node
