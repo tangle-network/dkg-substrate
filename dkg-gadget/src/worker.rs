@@ -300,15 +300,21 @@ where
 		match stage {
 			ProtoStageType::Genesis => {
 				debug!(target: "dkg_gadget::worker", "Starting genesis protocol");
+				if self.rounds.is_some() {
+					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
+				}
 				self.rounds = Some(status_handle.into_primary_remote())
 			},
 			ProtoStageType::Queued => {
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
+				if self.next_rounds.is_some() {
+					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
+				}
 				self.next_rounds = Some(status_handle.into_primary_remote())
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
-				debug!(target: "dkg_gadget::worker", "Starting signing protocol");
+				debug!(target: "dkg_gadget::worker", "Starting signing protocol: async_index #{}", async_index);
 				self.signing_rounds[async_index as usize] =
 					Some(status_handle.into_primary_remote())
 			},
@@ -730,6 +736,7 @@ where
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			self.next_rounds = None;
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -866,6 +873,15 @@ where
 					},
 				};
 				// If we are starting a new queued DKG, we rotate the next rounds
+				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!s");
+				match self.rounds.as_ref() {
+					Some(r) if r.is_active() => {
+						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
+					},
+					Some(_) | None => {
+						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is not active, rotating next rounds is okay");
+					},
+				};
 				self.rounds = self.next_rounds.take();
 				// We also rotate the best authority caches
 				self.best_authorities = self.best_next_authorities.clone();

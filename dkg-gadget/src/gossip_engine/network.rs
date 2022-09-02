@@ -84,8 +84,8 @@ impl NetworkGossipEngineBuilder {
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,
 			set_config: config::SetConfig {
-				in_peers: 256,
-				out_peers: 256,
+				in_peers: 0,
+				out_peers: 0,
 				reserved_nodes: Vec::new(),
 				non_reserved_mode: config::NonReservedPeerMode::Deny,
 			},
