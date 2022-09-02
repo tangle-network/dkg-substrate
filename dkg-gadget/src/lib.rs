@@ -50,12 +50,15 @@ pub mod storage;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
-pub const DKG_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
+pub const DKG_KEYGEN_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
+pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/2";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
-pub fn dkg_peers_set_config() -> sc_network::config::NonDefaultSetConfig {
-	NetworkGossipEngineBuilder::set_config()
+pub fn dkg_peers_set_config(
+	protocol_name: std::borrow::Cow<'static, str>,
+) -> sc_network::config::NonDefaultSetConfig {
+	NetworkGossipEngineBuilder::set_config(protocol_name)
 }
 
 /// A convenience DKG client trait that defines all the type bounds a DKG client
@@ -133,7 +136,11 @@ where
 		_block,
 	} = dkg_params;
 
-	let network_gossip_engine = NetworkGossipEngineBuilder::new();
+	let keygen_gossip_protocol =
+		NetworkGossipEngineBuilder::new(DKG_KEYGEN_PROTOCOL_NAME.to_string().into());
+
+	let signing_gossip_protocol =
+		NetworkGossipEngineBuilder::new(DKG_SIGNING_PROTOCOL_NAME.to_string().into());
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -150,18 +157,28 @@ where
 		);
 
 	let latest_header = Arc::new(RwLock::new(None));
-	let (gossip_handler, gossip_engine) = network_gossip_engine
+	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
 		.build(network.clone(), metrics.clone(), latest_header.clone())
-		.expect("Failed to build gossip engine");
+		.expect("Keygen : Failed to build gossip engine");
+
+	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
+		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.expect("Signing : Failed to build gossip engine");
+
 	// enable the gossip
-	gossip_engine.set_gossip_enabled(true);
-	let handle = tokio::spawn(gossip_handler.run());
+	keygen_gossip_engine.set_gossip_enabled(true);
+	signing_gossip_engine.set_gossip_enabled(true);
+
+	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
+	let signing_handle = tokio::spawn(signing_gossip_handler.run());
+
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,
 		backend,
 		key_store: key_store.into(),
-		gossip_engine,
+		keygen_gossip_engine,
+		signing_gossip_engine,
 		metrics,
 		base_path,
 		local_keystore,
@@ -171,5 +188,6 @@ where
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
 	worker.run().await;
-	handle.abort();
+	keygen_handle.abort();
+	signing_handle.abort();
 }
