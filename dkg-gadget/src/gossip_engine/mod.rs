@@ -55,8 +55,8 @@ pub trait GossipEngineIface: Send + Sync {
 	///
 	/// Returns `None` if there are no messages in the queue.
 	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
-	/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes it from the
-	/// queue.
+	/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes
+	/// it from the queue.
 	fn acknowledge_last_message(&self);
 
 	/// Clears the Message Queue.
