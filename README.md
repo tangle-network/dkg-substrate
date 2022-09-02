@@ -80,7 +80,12 @@ rustup target add wasm32-unknown-unknown
 
 Great! Now your Rust environment is ready! 🚀🚀
 
-**Note:** You may need additional dependencies, checkout [substrate.io](https://docs.substrate.io/v3/getting-started/installation) for more information.
+Lastly, install 
+
+  - [DVC](https://dvc.org/) is used for fetching large ZK files and managing them alongside git
+  - [substrate.io](https://docs.substrate.io/main-docs/install/) may require additional dependencies
+
+🚀🚀 Your environment is complete! 🚀🚀
 
 ## Installation 💻
 
@@ -226,7 +231,7 @@ cargo test
 ### To run E2E tests
 
 1. Run `cargo build --release -p dkg-standalone-node --features integration-tests`
-2. Run `cd dkg-test-suite && git submodule update --init --recursive`
+2. Run `cd dkg-test-suite && dvc pull`
 3. Run `cd dkg-test-suite`
 4. Run `yarn install`
 5. To run all tests: `yarn test`
