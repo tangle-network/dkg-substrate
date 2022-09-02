@@ -27,7 +27,8 @@
 //! From the [`GossipHandlerController`] which implements [`super::GossipEngineIface`], you can:
 //!  - send a DKG message to a specific peer.
 //!  - send a DKG message to all peers.
-//!  - get a stream of DKG messages.
+//!  - get a notification stream when you get a DKG message.
+//!  - Have access to the message queue, which is a FIFO queue of DKG messages.
 //!
 //!
 //! ### The Lifetime of the DKG Message:
@@ -276,10 +277,8 @@ pub struct GossipHandler<B: Block + 'static> {
 	protocol_name: Cow<'static, str>,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
-	/// The Difference between this and the controller channel is that this channel is a broadcast
-	/// and does not buffer messages, but this a message queue where it will hold them until
-	/// the controller decides to process them.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
+	/// A Simple notification stream to notify the caller that we have messages in the queue.
 	message_notifications_channel: broadcast::Sender<()>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
