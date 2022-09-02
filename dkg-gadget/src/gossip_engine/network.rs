@@ -329,6 +329,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
 		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
+		// a ticker timer to periodically check for new messages in the queue.
+		let mut timer = tokio::time::interval(core::time::Duration::from_millis(50));
 		loop {
 			futures::select! {
 				network_event = self.event_stream.next().fuse() => {
@@ -348,6 +350,14 @@ impl<B: Block + 'static> GossipHandler<B> {
 							return;
 						},
 						_ => {},
+					}
+				},
+				_tick = timer.tick().fuse() => {
+					// check if we have any messages in our queue.
+					let read_lock = self.message_queue.read();
+					if !read_lock.is_empty() {
+						// notify the caller that we have messages in the queue.
+						self.message_notifications_channel.send(()).unwrap();
 					}
 				},
 			}
