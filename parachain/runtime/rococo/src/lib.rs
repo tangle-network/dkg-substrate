@@ -506,7 +506,7 @@ parameter_types! {
 	pub const ChainIdentifier: TypedChainId = TypedChainId::RococoParachain(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const RefreshDelay: Permill = Permill::from_percent(50);
 	pub const TimeToRestart: BlockNumber = 3;
 	 // 1 hr considering block time of 12 sec
 	 pub const UnsignedProposalExpiry : BlockNumber = 300;

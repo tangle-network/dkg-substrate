@@ -205,8 +205,8 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		.extra_sets
 		.push(sc_finality_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
 
-	let keygen_network_protocol_name = "/webb-tools/dkg/1";
-	let signing_network_protocol_name = "/webb-tools/dkg/2";
+	let keygen_network_protocol_name = dkg_gadget::DKG_KEYGEN_PROTOCOL_NAME;
+	let signing_network_protocol_name = dkg_gadget::DKG_SIGNING_PROTOCOL_NAME;
 
 	config
 		.network
