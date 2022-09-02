@@ -27,7 +27,7 @@ type ScriptState = {
 const defaultState: ScriptState = {
   relayChainPath: Deno.realPathSync(
     localStorage.getItem("relayChainPath") ??
-      "../../paritytech/polkadot/target/release/polkadot",
+      "../../polkadot/target/release/polkadot",
   ),
   tmpDir: Deno.makeTempDirSync({ prefix: "dkg-" }),
   rootDir: new TextDecoder().decode(

@@ -101,7 +101,8 @@ where
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: GE,
+	pub keygen_gossip_engine: GE,
+	pub signing_gossip_engine: GE,
 	pub metrics: Option<Metrics>,
 	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
@@ -120,7 +121,8 @@ where
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
-	pub gossip_engine: Arc<GE>,
+	pub keygen_gossip_engine: Arc<GE>,
+	pub signing_gossip_engine: Arc<GE>,
 	pub metrics: Option<Metrics>,
 	// Genesis keygen and rotated round
 	pub rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
@@ -184,7 +186,8 @@ where
 			client,
 			backend,
 			key_store,
-			gossip_engine,
+			keygen_gossip_engine,
+			signing_gossip_engine,
 			metrics,
 			base_path,
 			local_keystore,
@@ -202,7 +205,8 @@ where
 			misbehaviour_tx: None,
 			backend,
 			key_store,
-			gossip_engine: Arc::new(gossip_engine),
+			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
+			signing_gossip_engine: Arc::new(signing_gossip_engine),
 			metrics,
 			rounds: None,
 			next_rounds: None,
@@ -245,6 +249,7 @@ where
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
 	// it well set the "next_rounds" field
+	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 	fn generate_async_proto_params(
 		&mut self,
 		best_authorities: Vec<Public>,
@@ -253,6 +258,7 @@ where
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
+		protocol_name: &str,
 	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -268,7 +274,7 @@ where
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
-				gossip_engine: self.gossip_engine.clone(),
+				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
@@ -317,6 +323,15 @@ where
 		Ok(params)
 	}
 
+	/// Returns the gossip engine based on the protocol_name
+	fn get_gossip_engine_from_protocol_name(&self, protocol_name: &str) -> Arc<GE> {
+		match protocol_name {
+			crate::DKG_KEYGEN_PROTOCOL_NAME => self.keygen_gossip_engine.clone(),
+			crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
+			_ => panic!("Protocol name not found!"),
+		}
+	}
+
 	fn spawn_keygen_protocol(
 		&mut self,
 		best_authorities: Vec<Public>,
@@ -333,6 +348,7 @@ where
 			local_key_path,
 			stage,
 			0u8,
+			crate::DKG_KEYGEN_PROTOCOL_NAME,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
@@ -397,6 +413,7 @@ where
 			local_key_path,
 			stage,
 			async_index,
+			crate::DKG_SIGNING_PROTOCOL_NAME,
 		)?;
 
 		let err_handler_tx = self.error_handler_tx.clone();
@@ -1335,7 +1352,8 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let mut dkg = self.gossip_engine.stream();
+		let mut keygen_dkg_stream = self.keygen_gossip_engine.stream();
+		let mut signing_dkg_stream = self.signing_gossip_engine.stream();
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 
@@ -1384,10 +1402,20 @@ where
 					}
 				},
 
-				dkg_msg = dkg.next().fuse() => {
-					if let Some(dkg_msg) = dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg message for round {}", dkg_msg.msg.round_id);
-						self.process_incoming_dkg_message(dkg_msg);
+				keygen_dkg_msg = keygen_dkg_stream.next().fuse() => {
+					if let Some(keygen_dkg_msg) = keygen_dkg_msg {
+						log::debug!(target: "dkg_gadget::worker", "KEYGEN : Going to handle dkg message for round {}", keygen_dkg_msg.msg.round_id);
+						self.process_incoming_dkg_message(keygen_dkg_msg);
+					} else {
+						log::error!("DKG stream closed");
+						break;
+					}
+				},
+
+				signing_dkg_msg = signing_dkg_stream.next().fuse() => {
+					if let Some(signing_dkg_msg) = signing_dkg_msg {
+						log::debug!(target: "dkg_gadget::worker", "SIGN : Going to handle dkg message for round {}", signing_dkg_msg.msg.round_id);
+						self.process_incoming_dkg_message(signing_dkg_msg);
 					} else {
 						log::error!("DKG stream closed");
 						break;

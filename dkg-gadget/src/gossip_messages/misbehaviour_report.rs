@@ -143,7 +143,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
-				if let Err(e) = dkg_worker.gossip_engine.gossip(signed_dkg_message) {
+				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
 					log::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.round_id, e);
 				}
 			},
