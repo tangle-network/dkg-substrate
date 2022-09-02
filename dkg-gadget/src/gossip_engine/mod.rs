@@ -48,16 +48,16 @@ pub trait GossipEngineIface: Send + Sync {
 	/// A Stream that notifies about a new message is available to be polled
 	/// from the queue, thats it.
 	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>>;
-	/// Dequeue a message from the Gossip Engine Queue.
+	/// Peek the front of the message queue.
 	///
 	/// Note that this will not remove the message from the queue, it will only return it. For
-	/// removing the message from the queue, use `acknowledge_last_dequeued_message`.
+	/// removing the message from the queue, use `acknowledge_last_message`.
 	///
 	/// Returns `None` if there are no messages in the queue.
-	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
-	/// Acknowledge the last dequeued message and mark it as processed, then removes it from the
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
+	/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes it from the
 	/// queue.
-	fn acknowledge_last_dequeued_message(&self);
+	fn acknowledge_last_message(&self);
 
 	/// Clears the Message Queue.
 	fn clear_queue(&self);
@@ -83,11 +83,11 @@ impl GossipEngineIface for () {
 		futures::stream::pending().boxed()
 	}
 
-	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
 		None
 	}
 
-	fn acknowledge_last_dequeued_message(&self) {}
+	fn acknowledge_last_message(&self) {}
 
 	fn clear_queue(&self) {}
 }

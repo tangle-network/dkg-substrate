@@ -216,7 +216,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 			.boxed()
 	}
 
-	fn dequeue_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
 		let lock = self.message_queue.read();
 		let msg = lock.front().cloned();
 		match msg {
@@ -231,7 +231,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		}
 	}
 
-	fn acknowledge_last_dequeued_message(&self) {
+	fn acknowledge_last_message(&self) {
 		let mut lock = self.message_queue.write();
 		let msg = lock.pop_front();
 		match msg {

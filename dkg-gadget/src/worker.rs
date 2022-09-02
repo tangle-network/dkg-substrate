@@ -1386,10 +1386,10 @@ where
 		// create a stream from each gossip engine queue.
 		let mut keygen_stream = keygen_gossip_engine
 			.message_available_notification()
-			.filter_map(|_| futures::future::ready(keygen_gossip_engine.dequeue_message()));
+			.filter_map(|_| futures::future::ready(keygen_gossip_engine.peek_last_message()));
 		let mut signing_stream = signing_gossip_engine
 			.message_available_notification()
-			.filter_map(|_| futures::future::ready(signing_gossip_engine.dequeue_message()));
+			.filter_map(|_| futures::future::ready(signing_gossip_engine.peek_last_message()));
 
 		loop {
 			tokio::select! {
@@ -1401,7 +1401,7 @@ where
 						log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for round {}", msg.msg.round_id);
 						match self.process_incoming_dkg_message(msg) {
 							Ok(_) => {
-								self.keygen_gossip_engine.acknowledge_last_dequeued_message();
+								self.keygen_gossip_engine.acknowledge_last_message();
 							},
 							Err(e) => {
 								log::error!(target: "dkg_gadget::worker", "Error processing keygen message: {:?}", e);
@@ -1414,7 +1414,7 @@ where
 						log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for round {}", msg.msg.round_id);
 						match self.process_incoming_dkg_message(msg) {
 							Ok(_) => {
-								self.signing_gossip_engine.acknowledge_last_dequeued_message();
+								self.signing_gossip_engine.acknowledge_last_message();
 							},
 							Err(e) => {
 								log::error!(target: "dkg_gadget::worker", "Error processing signing message: {:?}", e);
