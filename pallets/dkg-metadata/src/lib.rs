@@ -523,11 +523,11 @@ pub mod pallet {
 		/// Next public key submitted
 		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
-		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> , pub_key:Vec<u8> },
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Current Public Key Signature Changed.
-		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
+		PublicKeySignatureChanged { pub_key_sig: Vec<u8> ,pub_key:Vec<u8> },
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
@@ -795,9 +795,10 @@ pub mod pallet {
 			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
 			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
+			let decompressed_pub_key = Self::decompress_public_key(next_pub_key).unwrap_or_default();
 			let data = RefreshProposal {
 				nonce: Self::refresh_nonce().into(),
-				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
+				pub_key: decompressed_pub_key.clone(),
 			};
 			// Verify signature against the `RefreshProposal`
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
@@ -816,7 +817,7 @@ pub mod pallet {
 			// Remove unsigned refresh proposal from queue
 			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 			NextPublicKeySignature::<T>::put(signature.clone());
-			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature , pub_key:decompressed_pub_key });
 			// Handle manual refresh if flag is set
 			if Self::should_manual_refresh() {
 				ShouldManualRefresh::<T>::put(false);
@@ -1335,13 +1336,15 @@ impl<T: Config> Pallet<T> {
 				val.push(pub_key_signature.clone());
 			});
 			// Emit events so other front-end know that.
+			let uncompressed_pub_key =  Self::decompress_public_key(next_pub_key.1.clone())
+			.unwrap_or_default();
 			Self::deposit_event(Event::PublicKeyChanged {
-				uncompressed_pub_key: Self::decompress_public_key(next_pub_key.1.clone())
-					.unwrap_or_default(),
+				uncompressed_pub_key: uncompressed_pub_key.clone(),
 				compressed_pub_key: next_pub_key.1,
 			});
 			Self::deposit_event(Event::PublicKeySignatureChanged {
 				pub_key_sig: next_pub_key_signature,
+				pub_key:uncompressed_pub_key
 			});
 		}
 	}
