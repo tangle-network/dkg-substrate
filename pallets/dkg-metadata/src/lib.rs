@@ -556,6 +556,10 @@ pub mod pallet {
 		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
+		/// NextKeygenThreshold updated
+		NextKeygenThresholdUpdated { next_keygen_threshold: u16 },
+		/// NextSignatureThreshold updated
+		NextSignatureThresholdUpdated { next_signature_threshold: u16 },
 	}
 
 	#[cfg(feature = "std")]
@@ -920,7 +924,7 @@ pub mod pallet {
 								if unjailed_authorities.len() > 2 {
 									let new_val = u16::try_from(unjailed_authorities.len() - 1)
 										.unwrap_or_default();
-									NextKeygenThreshold::<T>::put(new_val);
+									Self::update_next_keygen_threshold(new_val);
 									PendingKeygenThreshold::<T>::put(new_val);
 								}
 							}
@@ -953,7 +957,7 @@ pub mod pallet {
 								// deterministic manner or expect for a forced rotation.
 								let new_val = u16::try_from(unjailed_authorities.len() - 1)
 									.unwrap_or_default();
-								NextSignatureThreshold::<T>::put(new_val);
+								Self::update_signature_keygen_threshold(new_val);
 								PendingSignatureThreshold::<T>::put(new_val);
 							}
 						} else {
@@ -1287,8 +1291,8 @@ impl<T: Config> Pallet<T> {
 		// Update the next thresholds for the next session
 		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
 		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
-		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
-		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
+		Self::update_signature_keygen_threshold(PendingSignatureThreshold::<T>::get());
+		Self::update_next_keygen_threshold(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
 		let next_id = Self::next_authority_set_id();
 		// We continue to rotate the next authority set in case of failure of the previous
@@ -1307,11 +1311,11 @@ impl<T: Config> Pallet<T> {
 		// rotates all the thresholds into the current / next sets. Pending becomes the next,
 		// next becomes the current.
 		if next_authority_ids.len() < Self::next_keygen_threshold().into() {
-			NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+			Self::update_next_keygen_threshold(next_authority_ids.len() as u16);
 			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 		}
 		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-			NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+			Self::update_signature_keygen_threshold(next_authority_ids.len() as u16 - 1);
 			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
 		}
 		// Update the next best authorities after any and all changes to the thresholds.
@@ -1604,6 +1608,20 @@ impl<T: Config> Pallet<T> {
 
 			Ok(())
 		}
+	}
+
+	pub fn update_next_keygen_threshold(next_threshold: u16) {
+		NextKeygenThreshold::<T>::put(next_threshold);
+		Self::deposit_event(Event::NextKeygenThresholdUpdated {
+			next_keygen_threshold: next_threshold,
+		});
+	}
+
+	pub fn update_signature_keygen_threshold(next_threshold: u16) {
+		NextSignatureThreshold::<T>::put(next_threshold);
+		Self::deposit_event(Event::NextSignatureThresholdUpdated {
+			next_signature_threshold: next_threshold,
+		});
 	}
 
 	/// Identifies if a new `RefreshProposal` should be created
