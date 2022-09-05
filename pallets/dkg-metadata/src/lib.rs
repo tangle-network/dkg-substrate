@@ -154,6 +154,7 @@ pub mod pallet {
 		offchain::{AppCrypto, CreateSignedTransaction},
 		pallet_prelude::*,
 	};
+	use log;
 	use sp_runtime::{Percent, Permill};
 
 	/// A `Convert` implementation that finds the stash of the given controller account,
@@ -227,17 +228,37 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_genesis_public_key_onchain(block_number);
-			let _res = Self::submit_next_public_key_onchain(block_number);
-			let _res = Self::submit_public_key_signature_onchain(block_number);
-			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
+			let res = Self::submit_genesis_public_key_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_genesis_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_next_public_key_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_next_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_public_key_signature_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_public_key_signature_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_misbehaviour_reports_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_misbehaviour_reports_onchain : {:?}",
+				res,
+			);
 			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
 			#[cfg(feature = "std")]
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
-			frame_support::log::debug!(
-				target: "dkg",
+			log::debug!(
+				target: "runtime::dkg_metadata",
 				"Current Authority({}) DKG PublicKey:
 				**********************************************************
 				compressed: 0x{}
@@ -249,8 +270,8 @@ pub mod pallet {
 			);
 			#[cfg(feature = "std")] // required since we use hex and strings
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
-				frame_support::log::debug!(
-					target: "dkg",
+				log::debug!(
+					target: "runtime::dkg_metadata",
 					"Next Authority({}) DKG PublicKey:
 					**********************************************************
 					compressed: 0x{}
@@ -277,10 +298,10 @@ pub mod pallet {
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
 							RefreshNonce::<T>::put(next_nonce);
-							frame_support::log::debug!("Handled refresh proposal");
+							log::debug!("Handled refresh proposal");
 						},
 						Err(e) => {
-							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+							log::warn!("Failed to handle refresh proposal: {:?}", e);
 						},
 					}
 
@@ -806,7 +827,7 @@ pub mod pallet {
 				.map_err(|_| {
 					#[cfg(feature = "std")]
 					log::error!(
-						target: "dkg",
+						target: "runtime::dkg_metadata",
 						"Invalid signature for RefreshProposal
 						**********************************************************
 						signature: {:?}
@@ -1066,11 +1087,11 @@ pub mod pallet {
 					Ok(()) => {
 						RefreshNonce::<T>::put(next_nonce);
 						ShouldManualRefresh::<T>::put(true);
-						frame_support::log::debug!("Handled refresh proposal");
+						log::debug!("Handled refresh proposal");
 						Ok(().into())
 					},
 					Err(e) => {
-						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						log::warn!("Failed to handle refresh proposal: {:?}", e);
 						Err(Error::<T>::ManualRefreshFailed.into())
 					},
 				}
@@ -1113,10 +1134,10 @@ pub mod pallet {
 				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 					Ok(()) => {
 						RefreshNonce::<T>::put(next_nonce);
-						frame_support::log::debug!("Handled refresh proposal");
+						log::debug!("Handled refresh proposal");
 					},
 					Err(e) => {
-						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						log::warn!("Failed to handle refresh proposal: {:?}", e);
 					},
 				}
 			}
@@ -1357,8 +1378,18 @@ impl<T: Config> Pallet<T> {
 	/// on a genesis session and triggers the first authority set change.
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
+			log::warn!(
+				target: "runtime::dkg_metadata",
+				"trying to intialize the autorities with empty list!",
+			);
 			return
 		}
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"intializing the authorities with: {:?} and account ids: {:?}",
+			authorities,
+			authority_account_ids,
+		);
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 		// Initialize current authorities
 		Authorities::<T>::put(authorities);
@@ -1370,6 +1401,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 		let best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"best_authorities: {:?}",
+			best_authorities,
+		);
 		BestAuthorities::<T>::put(best_authorities);
 		let next_best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
@@ -1398,9 +1434,15 @@ impl<T: Config> Pallet<T> {
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
 			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			if let Ok(None) = agg_keys {
+				return Ok(())
+			}
+
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1414,8 +1456,6 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
 				return Err(
@@ -1427,7 +1467,6 @@ impl<T: Config> Pallet<T> {
 				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
 					keys_and_signatures: agg_keys.clone(),
 				});
-
 				agg_key_ref.clear();
 			}
 
@@ -1452,9 +1491,15 @@ impl<T: Config> Pallet<T> {
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
 			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			if let Ok(None) = agg_keys {
+				return Ok(())
+			}
+
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping next public key submmission");
+					log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping next public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1467,8 +1512,6 @@ impl<T: Config> Pallet<T> {
 				agg_key_ref.clear();
 				return Ok(())
 			}
-
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
@@ -1519,7 +1562,7 @@ impl<T: Config> Pallet<T> {
 					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
 					});
-				frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
 
 				pub_key_sig_ref.clear();
 			}
@@ -1565,7 +1608,7 @@ impl<T: Config> Pallet<T> {
 					Call::submit_misbehaviour_reports { reports: reports.clone() }
 				});
 
-				frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting reports onchain {:?}", reports);
 
 				agg_reports_ref.clear();
 			}
@@ -1690,6 +1733,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
+		log::debug!(target: "runtime::dkg_metadata", "on_genesis_session");
 		let mut authority_account_ids = Vec::new();
 		let authorities = validators
 			.map(|(l, k)| {
