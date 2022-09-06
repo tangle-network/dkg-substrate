@@ -15,7 +15,7 @@ import {
 } from "https://deno.land/x/cliffy@v0.24.3/keypress/mod.ts";
 
 type ScriptState = {
-  relayChainPath: string;
+  relayChainPath?: string;
   relayChain: {
     alice?: Deno.Process;
     bob?: Deno.Process;
@@ -25,10 +25,7 @@ type ScriptState = {
 };
 
 const defaultState: ScriptState = {
-  relayChainPath: Deno.realPathSync(
-    localStorage.getItem("relayChainPath") ??
-      "../../polkadot/target/release/polkadot",
-  ),
+  relayChainPath: localStorage.getItem("relayChainPath"),
   tmpDir: Deno.makeTempDirSync({ prefix: "dkg-" }),
   rootDir: new TextDecoder().decode(
     await Deno.run({
@@ -41,7 +38,6 @@ const defaultState: ScriptState = {
 
 let state: ScriptState = defaultState;
 
-localStorage.setItem("relayChainPath", state.relayChainPath);
 
 const parachainPath = await Deno.realPath(
   `${state.rootDir}/target/release/dkg-collator`,
@@ -50,6 +46,8 @@ const relayChainPath: string = await Input.prompt({
   message: "Relay chain path?",
   default: state.relayChainPath,
 });
+
+localStorage.setItem("relayChainPath", await Deno.realPath(state.relayChainPath));
 
 // Build Relay chain spec
 const chainSpec = await Deno.run({

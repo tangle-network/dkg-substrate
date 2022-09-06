@@ -284,8 +284,8 @@ where
 	// 	return Err("Light client not supported!".into())
 	// }
 
-	let keygen_network_protocol_name = "/webb-tools/dkg/1";
-	let signing_network_protocol_name = "/webb-tools/dkg/2";
+	let keygen_network_protocol_name = dkg_gadget::DKG_KEYGEN_PROTOCOL_NAME;
+	let signing_network_protocol_name = dkg_gadget::DKG_SIGNING_PROTOCOL_NAME;
 
 	let mut parachain_config = prepare_node_config(parachain_config);
 	parachain_config

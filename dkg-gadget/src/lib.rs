@@ -50,8 +50,8 @@ pub mod storage;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
-pub const DKG_KEYGEN_PROTOCOL_NAME: &str = "/webb-tools/dkg/1";
-pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/2";
+pub const DKG_KEYGEN_PROTOCOL_NAME: &str = "/webb-tools/dkg/keygen/1";
+pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/signing/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].

@@ -997,17 +997,21 @@ where
 	}
 
 	/// Route messages internally where they need to be routed
-	fn process_incoming_dkg_message(&mut self, dkg_msg: SignedDKGMessage<Public>) {
+	fn process_incoming_dkg_message(
+		&mut self,
+		dkg_msg: SignedDKGMessage<Public>,
+	) -> Result<(), DKGError> {
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.as_mut() {
 					if rounds.round_id == msg.msg.round_id {
-						if let Err(err) = rounds.deliver_message(msg.clone()) {
+						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
 						}
+						return Ok(())
 					}
 				}
 
@@ -1018,21 +1022,35 @@ where
 								reason: err.to_string(),
 							})
 						}
+						return Ok(())
 					}
 				}
+
+				Err(DKGError::GenericError {
+					reason: "Message is not for this DKG round or DKG rounds are not ready yet"
+						.into(),
+				})
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
 				let async_index = msg.msg.payload.get_async_index();
+				log::debug!(target: "dkg_gadget::worker", "Received message for async index {}", async_index);
 				if let Some(rounds) = self.signing_rounds[async_index as usize].as_mut() {
+					log::debug!(target: "dkg_gadget::worker", "Message is for signing round {}", rounds.round_id);
 					if rounds.round_id == msg.msg.round_id {
+						log::debug!(target: "dkg_gadget::worker", "Message is for this signing round: {}", rounds.round_id);
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
 						}
+					} else {
+						log::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.round_id);
 					}
+				} else {
+					log::warn!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
 				}
+				Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
@@ -1048,6 +1066,7 @@ where
 						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
+				Ok(())
 			},
 			DKGMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
@@ -1063,6 +1082,8 @@ where
 						log::error!(target: "dkg_gadget::worker", "Error while verifying signature against authorities: {:?}", err)
 					},
 				}
+
+				Ok(())
 			},
 		}
 	}
@@ -1352,8 +1373,9 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let mut keygen_dkg_stream = self.keygen_gossip_engine.stream();
-		let mut signing_dkg_stream = self.signing_gossip_engine.stream();
+		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
+		let signing_gossip_engine = self.signing_gossip_engine.clone();
+
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 
@@ -1361,15 +1383,43 @@ where
 
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
+		// create a stream from each gossip engine queue.
+		let mut keygen_stream = keygen_gossip_engine
+			.message_available_notification()
+			.filter_map(|_| futures::future::ready(keygen_gossip_engine.peek_last_message()));
+		let mut signing_stream = signing_gossip_engine
+			.message_available_notification()
+			.filter_map(|_| futures::future::ready(signing_gossip_engine.peek_last_message()));
+
 		loop {
 			tokio::select! {
-				notification = self.finality_notifications.next().fuse() => {
-					if let Some(notification) = notification {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
-						self.handle_finality_notification(notification);
-					} else {
-						log::error!("Finality notification stream closed");
-						break;
+				// This will make the select a bit biased towards the keygen stream and signing
+				// stream.
+				biased;
+				keygen_msg = keygen_stream.next().fuse() => {
+					if let Some(msg) = keygen_msg {
+						log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for round {}", msg.msg.round_id);
+						match self.process_incoming_dkg_message(msg) {
+							Ok(_) => {
+								self.keygen_gossip_engine.acknowledge_last_message();
+							},
+							Err(e) => {
+								log::error!(target: "dkg_gadget::worker", "Error processing keygen message: {:?}", e);
+							},
+						}
+					}
+				},
+				signing_msg = signing_stream.next().fuse() => {
+					if let Some(msg) = signing_msg {
+						log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for round {}", msg.msg.round_id);
+						match self.process_incoming_dkg_message(msg) {
+							Ok(_) => {
+								self.signing_gossip_engine.acknowledge_last_message();
+							},
+							Err(e) => {
+								log::error!(target: "dkg_gadget::worker", "Error processing signing message: {:?}", e);
+							},
+						}
 					}
 				},
 				notification = self.import_notifications.next().fuse() => {
@@ -1377,48 +1427,29 @@ where
 						log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
 						self.handle_import_notification(notification);
 					} else {
-						log::error!("Import notification stream closed");
+						log::error!(target: "dkg_gadget::worker", "Import notification stream closed");
 						break;
 					}
 				},
-
-				misbehaviour_msg = misbehaviour_rx.recv().fuse() => {
-					if let Some(msg) = misbehaviour_msg {
-						log::debug!(target: "dkg_gadget::worker", "Going to gossip misbehaviour");
-						gossip_misbehaviour_report(&mut self, msg)
+				notification = self.finality_notifications.next().fuse() => {
+					if let Some(notification) = notification {
+						log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
+						self.handle_finality_notification(notification);
 					} else {
-						log::error!("Misbehaviour channel closed");
+						log::error!(target: "dkg_gadget::worker", "Finality notification stream closed");
 						break;
 					}
-				}
-
+				},
+				misbehaviour = misbehaviour_rx.recv().fuse() => {
+					if let Some(misbehaviour) = misbehaviour {
+						log::debug!(target: "dkg_gadget::worker", "Going to handle Misbehaviour");
+						gossip_misbehaviour_report(&mut self, misbehaviour);
+					}
+				},
 				error = error_handler_rx.recv().fuse() => {
 					if let Some(error) = error {
-						log::debug!(target: "dkg_gadget::worker", "Going to handle dkg error");
-						self.handle_dkg_error(error)
-					} else {
-						log::error!("DKG Error channel closed");
-						break;
-					}
-				},
-
-				keygen_dkg_msg = keygen_dkg_stream.next().fuse() => {
-					if let Some(keygen_dkg_msg) = keygen_dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "KEYGEN : Going to handle dkg message for round {}", keygen_dkg_msg.msg.round_id);
-						self.process_incoming_dkg_message(keygen_dkg_msg);
-					} else {
-						log::error!("DKG stream closed");
-						break;
-					}
-				},
-
-				signing_dkg_msg = signing_dkg_stream.next().fuse() => {
-					if let Some(signing_dkg_msg) = signing_dkg_msg {
-						log::debug!(target: "dkg_gadget::worker", "SIGN : Going to handle dkg message for round {}", signing_dkg_msg.msg.round_id);
-						self.process_incoming_dkg_message(signing_dkg_msg);
-					} else {
-						log::error!("DKG stream closed");
-						break;
+						log::debug!(target: "dkg_gadget::worker", "Going to handle Error");
+						self.handle_dkg_error(error);
 					}
 				},
 			}
