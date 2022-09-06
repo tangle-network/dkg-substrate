@@ -93,7 +93,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
+use codec::Encode;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{
 		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK,
@@ -109,8 +109,7 @@ use dkg_runtime_primitives::{
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
-	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
-	Parameter,
+	traits::{EstimateNextSessionRotation, OneSessionHandler},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 pub use pallet::*;
@@ -120,7 +119,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Member, Saturating},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{
