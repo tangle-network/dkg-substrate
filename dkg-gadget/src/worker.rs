@@ -1026,10 +1026,7 @@ where
 					}
 				}
 
-				Err(DKGError::GenericError {
-					reason: "Message is not for this DKG round or DKG rounds are not ready yet"
-						.into(),
-				})
+				Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
