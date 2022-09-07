@@ -69,7 +69,7 @@ use dkg_runtime_primitives::{
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
-	persistence::load_stored_key,
+	persistence::{load_saved_rounds, load_stored_key, store_saved_rounds},
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };
@@ -77,12 +77,16 @@ use crate::{
 use crate::gossip_messages::public_key_gossip::handle_public_key_broadcast;
 use dkg_primitives::{
 	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
-	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
+	utils::{
+		cleanup, ACTIVE_ROUNDS_METADATA_FILE, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
+		QUEUED_ROUNDS_METADATA_FILE,
+	},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
+	remote::{AsyncProtocolRemote, MetaHandlerStatus},
+	AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -303,14 +307,34 @@ where
 				if self.rounds.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				self.rounds = Some(status_handle.into_primary_remote())
+				self.rounds = Some(status_handle.into_primary_remote());
+				// Store the saved rounds with Keygen status since we've executed the start handler
+				store_saved_rounds::<B>(
+					round_id,
+					now,
+					MetaHandlerStatus::Keygen,
+					self.base_path.as_ref().map(|path| path.join(ACTIVE_ROUNDS_METADATA_FILE)),
+				)
+				.map_err(|e| DKGError::GenericError {
+					reason: format!("Failed to store saved rounds: {}", e),
+				})?;
 			},
 			ProtoStageType::Queued => {
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
 				if self.next_rounds.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				self.next_rounds = Some(status_handle.into_primary_remote())
+				self.next_rounds = Some(status_handle.into_primary_remote());
+				// Store the saved rounds with Keygen status since we've executed the start handler
+				store_saved_rounds::<B>(
+					round_id,
+					now,
+					MetaHandlerStatus::Keygen,
+					self.base_path.as_ref().map(|path| path.join(QUEUED_ROUNDS_METADATA_FILE)),
+				)
+				.map_err(|e| DKGError::GenericError {
+					reason: format!("Failed to store saved rounds: {}", e),
+				})?;
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
@@ -873,7 +897,7 @@ where
 					},
 				};
 				// If we are starting a new queued DKG, we rotate the next rounds
-				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!s");
+				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 				match self.rounds.as_ref() {
 					Some(r) if r.is_active() => {
 						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
@@ -1155,11 +1179,8 @@ where
 	}
 
 	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
-		let round_id =
-			if let Some(rounds) = self.rounds.as_ref() { rounds.round_id } else { return };
-
+		let round_id = self.current_validator_set.read().id;
 		let at: BlockId<B> = BlockId::hash(header.hash());
-
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
@@ -1343,6 +1364,40 @@ where
 
 	// *** Main run loop ***
 
+	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
+		let mut active_rounds_metadata_path: Option<PathBuf> = None;
+		let mut queued_rounds_metadata_path: Option<PathBuf> = None;
+
+		if self.base_path.is_some() {
+			active_rounds_metadata_path =
+				get_key_path(&self.base_path, ACTIVE_ROUNDS_METADATA_FILE);
+			queued_rounds_metadata_path =
+				get_key_path(&self.base_path, QUEUED_ROUNDS_METADATA_FILE);
+		}
+
+		if let Ok(stored_active_rounds) = load_saved_rounds::<B>(active_rounds_metadata_path) {
+			let remote = AsyncProtocolRemote::new(
+				stored_active_rounds.started_at,
+				stored_active_rounds.round_id,
+			)
+			.into_primary_remote();
+			remote.set_status(stored_active_rounds.status);
+			self.rounds = Some(remote);
+		};
+
+		if let Ok(stored_queued_rounds) = load_saved_rounds::<B>(queued_rounds_metadata_path) {
+			let remote = AsyncProtocolRemote::new(
+				stored_queued_rounds.started_at,
+				stored_queued_rounds.round_id,
+			)
+			.into_primary_remote();
+			remote.set_status(stored_queued_rounds.status);
+			self.next_rounds = Some(remote);
+		};
+
+		Ok(())
+	}
+
 	/// Wait for initial block import
 	async fn initialization(&mut self) {
 		use futures::future;
@@ -1350,14 +1405,19 @@ where
 			.import_notification_stream()
 			.take_while(|notif| {
 				if let Some((active, queued)) = self.validator_set(&notif.header) {
-					// TODO: Consider caching this data and loading it here.
-					self.best_authorities = self.get_best_authorities(&notif.header);
-					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
+					// Cache the authority sets and best authorities
 					*self.current_validator_set.write() = active;
 					self.queued_validator_set = queued;
+					self.best_authorities = self.get_best_authorities(&notif.header);
+					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
+					// If we are beyond genesis, we should attempt to initialize any saved rounds
+					if self.current_validator_set.read().id != GENESIS_AUTHORITY_SET_ID {
+						let _ = self.initialize_saved_rounds();
+					}
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
+					// End the initialization stream
 					future::ready(false)
 				} else {
 					future::ready(true)

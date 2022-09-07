@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::async_protocols::remote::MetaHandlerStatus;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	serde_json,
@@ -22,13 +23,60 @@ use dkg_runtime_primitives::offchain::crypto::{Pair as AppPair, Public};
 use log::debug;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
+use serde::{Deserialize, Serialize};
 use sp_core::Pair;
+use sp_runtime::traits::{AtLeast32BitUnsigned, Block, NumberFor};
 use std::{
 	fs,
 	io::{Error, ErrorKind},
 	path::PathBuf,
 	sync::Arc,
 };
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct StoredRoundsMetadata<C: AtLeast32BitUnsigned + Copy> {
+	pub round_id: RoundId,
+	pub status: MetaHandlerStatus,
+	pub started_at: C,
+}
+
+pub(crate) fn store_saved_rounds<B>(
+	round_id: RoundId,
+	started_at: NumberFor<B>,
+	status: MetaHandlerStatus,
+	base_path: Option<PathBuf>,
+) -> std::io::Result<()>
+where
+	B: Block,
+{
+	if let Some(path) = base_path {
+		let stored_rounds_metadata = StoredRoundsMetadata { round_id, started_at, status };
+		let serialized_data = serde_json::to_string(&stored_rounds_metadata)
+			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
+		fs::write(path.clone(), &serialized_data[..])?;
+
+		Ok(())
+	} else {
+		Err(Error::new(ErrorKind::Other, "Base path not found, need to handle default path"))
+	}
+}
+
+pub(crate) fn load_saved_rounds<B>(
+	base_path: Option<PathBuf>,
+) -> std::io::Result<StoredRoundsMetadata<NumberFor<B>>>
+where
+	B: Block,
+{
+	if let Some(path) = base_path {
+		let serialized_data = fs::read(path)?;
+		let stored_rounds_metdata: StoredRoundsMetadata<NumberFor<B>> =
+			serde_json::from_slice(&serialized_data)
+				.map_err(|_| Error::new(ErrorKind::Other, "Deserialization failed"))?;
+		Ok(stored_rounds_metdata)
+	} else {
+		Err(Error::new(ErrorKind::Other, "Base path not found, need to handle default path"))
+	}
+}
 
 pub(crate) fn store_localkey(
 	key: LocalKey<Secp256k1>,
