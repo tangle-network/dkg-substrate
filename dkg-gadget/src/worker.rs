@@ -93,6 +93,8 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_SIGNING_SETS: u64 = 16;
 
+pub type Shared<T> = Arc<RwLock<T>>;
+
 pub(crate) struct WorkerParams<B, BE, C, GE>
 where
 	B: Block,
@@ -123,43 +125,43 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: Arc<GE>,
 	pub signing_gossip_engine: Arc<GE>,
-	pub metrics: Option<Metrics>,
+	pub metrics: Arc<Option<Metrics>>,
 	// Genesis keygen and rotated round
-	pub rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
+	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Next keygen round, always taken and restarted each session
-	pub next_rounds: Option<AsyncProtocolRemote<NumberFor<B>>>,
+	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Signing rounds, created everytime there are unique unsigned proposals
-	pub signing_rounds: Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>,
+	pub signing_rounds: Shared<Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>>,
 	pub finality_notifications: FinalityNotifications<B>,
 	pub import_notifications: ImportNotifications<B>,
 	/// Best block a DKG voting round has been concluded for
-	pub best_dkg_block: Option<NumberFor<B>>,
+	pub best_dkg_block: Shared<Option<NumberFor<B>>>,
 	/// Cached best authorities
-	pub best_authorities: Vec<(u16, Public)>,
+	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
-	pub best_next_authorities: Vec<(u16, Public)>,
+	pub best_next_authorities: Shared<Vec<(u16, Public)>>,
 	/// Latest block header
-	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub latest_header: Shared<Option<B::Header>>,
 	/// Current validator set
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub current_validator_set: Shared<AuthoritySet<Public>>,
 	/// Queued validator set
-	pub queued_validator_set: AuthoritySet<Public>,
+	pub queued_validator_set: Shared<AuthoritySet<Public>>,
 	/// Tracking for the broadcasted public keys and signatures
-	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
+	pub aggregated_public_keys: Shared<HashMap<RoundId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
-	pub aggregated_misbehaviour_reports: AggregatedMisbehaviourReportStore,
+	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
 	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
-	pub has_sent_gossip_msg: HashMap<[u8; 16], u8>,
+	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
 	/// Local keystore for DKG data
-	pub base_path: Option<PathBuf>,
+	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
-	pub local_keystore: Option<Arc<LocalKeystore>>,
+	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
 	pub error_handler_tx: UnboundedSender<DKGError>,
 	/// For use in the run() function only
-	pub error_handler_rx: Option<UnboundedReceiver<DKGError>>,
+	pub error_handler_rx: Shared<Option<UnboundedReceiver<DKGError>>>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -207,25 +209,25 @@ where
 			key_store,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
-			metrics,
-			rounds: None,
-			next_rounds: None,
-			signing_rounds: vec![None; 16],
+			metrics: Arc::new(metrics),
+			rounds: Arc::new(RwLock::new(None)),
+			next_rounds: Arc::new(RwLock::new(None)),
+			signing_rounds: Arc::new(RwLock::new(vec![None; 16])),
 			finality_notifications: client.finality_notification_stream(),
 			import_notifications: client.import_notification_stream(),
-			best_dkg_block: None,
-			best_authorities: Vec::new(),
-			best_next_authorities: Vec::new(),
+			best_dkg_block: Arc::new(RwLock::new(None)),
+			best_authorities: Arc::new(RwLock::new(vec![])),
+			best_next_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
-			queued_validator_set: AuthoritySet::empty(),
+			queued_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			latest_header,
-			aggregated_public_keys: Arc::new(Mutex::new(HashMap::new())),
-			aggregated_misbehaviour_reports: HashMap::new(),
-			has_sent_gossip_msg: HashMap::new(),
-			base_path,
-			local_keystore,
+			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
+			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
+			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
+			base_path: Arc::new(RwLock::new(base_path)),
+			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler_tx,
-			error_handler_rx: Some(error_handler_rx),
+			error_handler_rx: Arc::new(RwLock::new(Some(error_handler_rx))),
 			_backend: PhantomData,
 		}
 	}
@@ -251,7 +253,7 @@ where
 	// it well set the "next_rounds" field
 	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 	fn generate_async_proto_params(
-		&mut self,
+		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		round_id: RoundId,
@@ -281,7 +283,7 @@ where
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
-				local_key_path,
+				local_key_path: Arc::new(RwLock::new(local_key_path)),
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
@@ -299,24 +301,26 @@ where
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
+				let mut lock = self.rounds.write();
 				debug!(target: "dkg_gadget::worker", "Starting genesis protocol");
-				if self.rounds.is_some() {
+				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				self.rounds = Some(status_handle.into_primary_remote())
+				*lock = Some(status_handle.into_primary_remote())
 			},
 			ProtoStageType::Queued => {
+				let mut lock = self.next_rounds.write();
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
-				if self.next_rounds.is_some() {
+				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				self.next_rounds = Some(status_handle.into_primary_remote())
+				*lock = Some(status_handle.into_primary_remote())
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
 				debug!(target: "dkg_gadget::worker", "Starting signing protocol: async_index #{}", async_index);
-				self.signing_rounds[async_index as usize] =
-					Some(status_handle.into_primary_remote())
+				let mut lock = self.signing_rounds.write();
+				lock[async_index as usize] = Some(status_handle.into_primary_remote())
 			},
 		}
 
@@ -352,7 +356,7 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler_tx.clone();
-				let status = if let Some(rounds) = self.rounds.as_mut() {
+				let status = if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.round_id == round_id {
 						DKGMsgStatus::ACTIVE
 					} else {
@@ -455,13 +459,9 @@ where
 	/// This should never execute unless we are certain that the rotation will succeed, i.e.
 	/// that the signature of the next DKG public key has been created and stored on-chain.
 	fn rotate_local_key_files(&mut self) -> bool {
-		let mut local_key_path: Option<PathBuf> = None;
-		let mut queued_local_key_path: Option<PathBuf> = None;
-
-		if self.base_path.is_some() {
-			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
-			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
-		}
+		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
+		let queued_local_key_path =
+			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
 		debug!(target: "dkg_gadget::worker", "Rotating local key files");
 		debug!(target: "dkg_gadget::worker", "Local key path: {:?}", local_key_path);
 		debug!(target: "dkg_gadget::worker", "Queued local key path: {:?}", queued_local_key_path);
@@ -480,24 +480,22 @@ where
 
 	/// Fetch the local stored keys if they exist.
 	fn fetch_local_keys(&mut self) -> (Option<StoredLocalKey>, Option<StoredLocalKey>) {
-		let mut local_key_path: Option<PathBuf> = None;
-		let mut queued_local_key_path: Option<PathBuf> = None;
-
-		if self.base_path.is_some() {
-			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
-			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
-		}
+		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
+		let queued_local_key_path =
+			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
 
 		let sr_pub = self.get_sr25519_public_key();
 		match (local_key_path, queued_local_key_path) {
 			(Some(path), Some(queued_path)) => (
-				load_stored_key(path, self.local_keystore.as_ref(), sr_pub).ok(),
-				load_stored_key(queued_path, self.local_keystore.as_ref(), sr_pub).ok(),
+				load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(),
+				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
 			),
 			(Some(path), None) =>
-				(load_stored_key(path, self.local_keystore.as_ref(), sr_pub).ok(), None),
-			(None, Some(queued_path)) =>
-				(None, load_stored_key(queued_path, self.local_keystore.as_ref(), sr_pub).ok()),
+				(load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(), None),
+			(None, Some(queued_path)) => (
+				None,
+				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
+			),
 			(None, None) => (None, None),
 		}
 	}
@@ -656,35 +654,37 @@ where
 		// If the rounds is none and we are not using the genesis authority set ID
 		// there is a critical error. I'm not sure how this can happen but it should
 		// prevent an edge case.
-		if self.rounds.is_none() && genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID {
-			error!(target: "dkg_gadget::worker", "🕸️  Rounds is not and authority set is not genesis set ID 0");
-			return
+		match self.rounds.read().as_ref() {
+			None if genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID => {
+				error!(target: "dkg_gadget::worker", "🕸️  Rounds is not and authority set is not genesis set ID 0");
+				return
+			},
+			_ => {},
 		}
 
 		let latest_block_num = self.get_latest_block_number();
 
 		// Check if we've already set up the DKG for this authority set
 		// if the active is currently running, and, the keygen has stalled, create one anew
-		if let Some(rounds) = self.rounds.as_ref() {
-			if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) {
+		match self.rounds.read().as_ref() {
+			Some(rounds) if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) => {
 				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is active");
 				return
-			}
+			},
+			_ => {},
 		}
 
-		let mut local_key_path: Option<PathBuf> = None;
-		if self.base_path.is_some() {
-			local_key_path = get_key_path(&self.base_path, DKG_LOCAL_KEY_FILE);
-			let _ = cleanup(local_key_path.as_ref().unwrap().clone());
+		let local_key_path = get_key_path(&self.base_path.read(), DKG_LOCAL_KEY_FILE);
+		if let Some(local_key) = local_key_path {
+			let _ = cleanup(local_key.clone());
 		}
-
 		// DKG keygen authorities are always taken from the best set of authorities
 		let round_id = genesis_authority_set.id;
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
-			self.rounds = None;
+			*self.rounds.write() = None;
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
@@ -712,22 +712,24 @@ where
 		}
 
 		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().is_active() {
-			debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
-			return
+		match self.next_rounds.read().as_ref() {
+			Some(next_rounds) if next_rounds.is_active() => {
+				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
+				return
+			},
+			_ => {},
 		}
 
-		if let Some(rounds) = self.next_rounds.as_ref() {
+		if let Some(rounds) = self.next_rounds.read().as_ref() {
 			if rounds.keygen_has_stalled(*header.number()) {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
 
-		let mut queued_local_key_path: Option<PathBuf> = None;
-
-		if self.base_path.is_some() {
-			queued_local_key_path = get_key_path(&self.base_path, QUEUED_DKG_LOCAL_KEY_FILE);
-			let _ = cleanup(queued_local_key_path.as_ref().unwrap().clone());
+		let queued_local_key_path =
+			get_key_path(&*self.base_path.read(), QUEUED_DKG_LOCAL_KEY_FILE);
+		if let Some(path) = queued_local_key_path.as_ref() {
+			let _ = cleanup(path.clone());
 		}
 
 		// Get the best next authorities using the keygen threshold
@@ -736,7 +738,7 @@ where
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
 			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
-			self.next_rounds = None;
+			*self.next_rounds.write() = None;
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
@@ -790,17 +792,17 @@ where
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
-			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.is_none() {
+			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.read().is_none() {
 				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
-				self.queued_validator_set = queued.clone();
+				*self.queued_validator_set.write() = queued.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-				self.best_dkg_block = Some(*header.number());
-				self.best_authorities = self.get_best_authorities(header);
-				self.best_next_authorities = self.get_next_best_authorities(header);
+				*self.best_dkg_block.write() = Some(*header.number());
+				*self.best_authorities.write() = self.get_best_authorities(header);
+				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
 				self.handle_queued_dkg_setup(header, queued);
@@ -812,17 +814,17 @@ where
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
 			let next_best = self.get_next_best_authorities(header);
-			let next_best_has_changed = next_best != self.best_next_authorities;
-			if next_best_has_changed && self.queued_validator_set.id == queued.id {
+			let next_best_has_changed = next_best != *self.best_next_authorities.read();
+			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {
 				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
 				// Update the next best authorities
-				self.best_next_authorities = next_best;
+				*self.best_next_authorities.write() = next_best;
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				return
 			}
 			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(rounds) = self.next_rounds.clone() {
+			if let Some(rounds) = self.next_rounds.read().as_ref() {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				if rounds.keygen_is_not_complete() &&
 					header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
@@ -838,22 +840,26 @@ where
 				}
 			}
 
-			let queued_keygen_in_progress =
-				self.next_rounds.as_ref().map(|r| !r.is_keygen_finished()).unwrap_or(false);
+			let queued_keygen_in_progress = self
+				.next_rounds
+				.read()
+				.as_ref()
+				.map(|r| !r.is_keygen_finished())
+				.unwrap_or(false);
 
 			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
 			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG ID: {:?}", queued.id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.as_ref().map(|r| r.status.clone()));
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.read().id);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.read().as_ref().map(|r| r.status.clone()));
 			// If the session has changed and a keygen is not in progress, we rotate
-			if self.queued_validator_set.id != queued.id && !queued_keygen_in_progress {
+			if self.queued_validator_set.read().id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				// Update the validator sets
 				*self.current_validator_set.write() = active;
-				self.queued_validator_set = queued.clone();
+				*self.queued_validator_set.write() = queued.clone();
 				// Check the local keystore, if a queued key exists with the same
 				// round ID then we shouldn't rotate since it means we have shut down
 				// and started up after a previous rotation.
@@ -1118,7 +1124,7 @@ where
 			return
 		}
 		gossip_misbehaviour_report(self, misbehaviour_msg);
-		self.has_sent_gossip_msg.insert(hash, count + 1);
+		self.has_sent_gossip_msg.write().insert(hash, count + 1);
 	}
 
 	pub fn authenticate_msg_origin(
@@ -1159,7 +1165,7 @@ where
 
 	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
 		let round_id =
-			if let Some(rounds) = self.rounds.as_ref() { rounds.round_id } else { return };
+			if let Some(rounds) = self.rounds.read().as_ref() { rounds.round_id } else { return };
 
 		let at: BlockId<B> = BlockId::hash(header.hash());
 
@@ -1354,10 +1360,11 @@ where
 			.take_while(|notif| {
 				if let Some((active, queued)) = self.validator_set(&notif.header) {
 					// TODO: Consider caching this data and loading it here.
-					self.best_authorities = self.get_best_authorities(&notif.header);
-					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
+					*self.best_authorities.write() = self.get_best_authorities(&notif.header);
+					*self.best_next_authorities.write() =
+						self.get_next_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
-					self.queued_validator_set = queued;
+					*self.queued_validator_set.write() = queued;
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
@@ -1378,9 +1385,9 @@ where
 
 		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
-
-		let mut error_handler_rx = self.error_handler_rx.take().unwrap();
-
+		let mut lock = self.error_handler_rx.write();
+		let mut error_handler_rx = lock.take().expect("Error handler is only taken once; qed");
+		drop(lock);
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
 		// create a stream from each gossip engine queue.
