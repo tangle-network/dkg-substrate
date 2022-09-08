@@ -53,7 +53,7 @@ where
 		let stored_rounds_metadata = StoredRoundsMetadata { round_id, started_at, status };
 		let serialized_data = serde_json::to_string(&stored_rounds_metadata)
 			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
-		fs::write(path.clone(), &serialized_data[..])?;
+		fs::write(path, &serialized_data[..])?;
 
 		Ok(())
 	} else {
