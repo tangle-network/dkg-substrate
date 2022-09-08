@@ -75,9 +75,8 @@ where
 		)?;
 		debug!(target: "dkg", "Reporter: {:?}", reporter);
 		// Add new report to the aggregated reports
-		let reports = dkg_worker
-			.aggregated_misbehaviour_reports
-			.write()
+		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+		let reports = lock
 			.entry((msg.misbehaviour_type, msg.round_id, msg.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: msg.misbehaviour_type,
@@ -155,9 +154,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			),
 		}
 
-		let reports = dkg_worker
-			.aggregated_misbehaviour_reports
-			.write()
+		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+		let reports = lock
 			.entry((report.misbehaviour_type, report.round_id, report.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: report.misbehaviour_type,

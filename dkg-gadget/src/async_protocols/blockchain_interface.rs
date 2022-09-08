@@ -201,8 +201,8 @@ where
 	) -> Result<(), DKGError> {
 		let sr_pub = self.get_sr25519_public_key();
 		let local_key_path = self.local_key_path.read().clone();
-		let keystore = (*self.local_keystore.read()).as_ref();
-		store_localkey(key, round_id, local_key_path, keystore, sr_pub)
+		let local_keystore = self.local_keystore.read().clone();
+		store_localkey(key, round_id, local_key_path, local_keystore.as_ref(), sr_pub)
 			.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 		Ok(())
