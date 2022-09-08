@@ -365,6 +365,20 @@ impl<B: Block + 'static> GossipHandler<B> {
 			}
 		});
 
+		// a timer that fires every few ms to check if there are messages in the queue, and if so,
+		// notify the listener.
+		let self1 = self.clone();
+		let mut timer = tokio::time::interval(core::time::Duration::from_millis(100));
+		let timer_task = tokio::spawn(async move {
+			loop {
+				timer.tick().await;
+				let queue = self1.message_queue.read();
+				if !queue.is_empty() {
+					let _ = self1.message_notifications_channel.send(());
+				}
+			}
+		});
+
 		let network_events_task = tokio::spawn(async move {
 			while let Some(event) = event_stream.next().await {
 				self.handle_network_event(event).await;
@@ -372,8 +386,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 		});
 
 		// wait for the first task to finish or error out.
-		let _ =
-			futures::future::select_all(vec![network_events_task, incoming_messages_task]).await;
+		let _result = futures::future::select_all(vec![
+			network_events_task,
+			incoming_messages_task,
+			timer_task,
+		])
+		.await;
 		log::error!(target: "dkg_gadget::gossip_engine::network", "The DKG Gossip Handler has finished!!");
 	}
 
