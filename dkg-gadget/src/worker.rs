@@ -1004,6 +1004,7 @@ where
 		// discard the message if from previous round
 		if let Some(current_round) = self.rounds.as_mut() {
 			if dkg_msg.msg.round_id < current_round.round_id {
+				log::warn!(target: "dkg_gadget::worker", "Message is for already completed round: {}, Discarding message", rounds.round_id);
 				return Ok(())
 			}
 		}
