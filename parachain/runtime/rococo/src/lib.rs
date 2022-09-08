@@ -434,7 +434,6 @@ impl pallet_authorship::Config for Runtime {
 	type UncleGenerations = UncleGenerations;
 }
 
-#[allow(clippy::identity_op)]
 parameter_types! {
 	pub const Period: u32 = 1 * MINUTES;
 	pub const Offset: u32 = 0;
