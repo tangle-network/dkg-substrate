@@ -352,26 +352,29 @@ impl<B: Block + 'static> GossipHandler<B> {
 		let mut event_stream =
 			self.event_stream.take().expect("Event stream is only taken in `run` once; qed");
 		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
-		let self0 = self.clone();
-		let network_events_task = tokio::spawn(async move {
-			while let Some(event) = event_stream.next().await {
-				self0.handle_network_event(event).await;
-			}
-		});
 
+		let self0 = self.clone();
 		let incoming_messages_task = tokio::spawn(async move {
 			while let Some(message) = incoming_messages.next().await {
 				match message {
 					Ok(ToHandler::SendMessage { recipient, message }) =>
-						self.send_signed_dkg_message(recipient, message),
-					Ok(ToHandler::Gossip(v)) => self.gossip_message(v),
+						self0.send_signed_dkg_message(recipient, message),
+					Ok(ToHandler::Gossip(v)) => self0.gossip_message(v),
 					_ => {},
 				}
 			}
 		});
 
-		// wait for the two tasks to finish.
-		let _ = futures::future::join(network_events_task, incoming_messages_task).await;
+		let network_events_task = tokio::spawn(async move {
+			while let Some(event) = event_stream.next().await {
+				self.handle_network_event(event).await;
+			}
+		});
+
+		// wait for the first task to finish or error out.
+		let _ =
+			futures::future::select_all(vec![network_events_task, incoming_messages_task]).await;
+		log::error!(target: "dkg_gadget::gossip_engine::network", "The DKG Gossip Handler has finished!!");
 	}
 
 	async fn handle_network_event(&self, event: Event) {
@@ -497,7 +500,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				},
 			}
 		}
-
+		drop(lock);
 		// if the gossip is enabled, we send the message to the gossiping peers
 		if self.gossip_enabled.load(Ordering::Relaxed) {
 			self.gossip_message(message);
