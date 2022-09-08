@@ -1001,6 +1001,14 @@ where
 		&mut self,
 		dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<(), DKGError> {
+
+		// discard the message if from previous round
+		if let Some(current_round) = self.rounds.as_mut() {
+			if dkg_msg.msg.round_id < current_round.round_id {
+				return Ok(())
+			}
+		}
+
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(..) => {
 				let msg = Arc::new(dkg_msg);
