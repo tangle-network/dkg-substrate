@@ -40,9 +40,7 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{
-	async_protocols::remote::AsyncProtocolRemote, metrics::Metrics, worker::HasLatestHeader,
-};
+use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
@@ -109,7 +107,6 @@ impl NetworkGossipEngineBuilder {
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
-		current_round: Option<AsyncProtocolRemote<NumberFor<B>>>,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
 		let event_stream = service.event_stream("dkg-handler").boxed();
 		// Here we need to create few channels to communicate back and forth between the
@@ -122,7 +119,6 @@ impl NetworkGossipEngineBuilder {
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
-			current_round,
 			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
@@ -279,10 +275,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	///
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
-	/// Latest block header
 	latest_header: Arc<RwLock<Option<B::Header>>>,
-	/// Current round information
-	current_round: Option<AsyncProtocolRemote<NumberFor<B>>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// A Simple notification stream to notify the caller that we have messages in the queue.
@@ -442,17 +435,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-
-		// discard the message if from previous round
-		if let Some(current_round) = self.current_round.as_mut() {
-			if message.msg.round_id < current_round.round_id {
-				log::warn!(target: "dkg_gadget::gossip", "Message is for already completed round: {}, Discarding message", message.msg.round_id);
-				// report bad reputation for peer sending previous round message
-				self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
-				return
-			}
-		};
-
 		debug!(target: "dkg", "{:?} round {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.round_id, who, now);
 		if let Some(ref mut peer) = self.peers.get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
