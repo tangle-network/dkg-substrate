@@ -260,7 +260,6 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			log::info!("DKG Proposal Handler : Hello World from offchain workers!");
 			let res = Self::submit_signed_proposal_onchain(block_number);
 			log::debug!(
 				target: "runtime::dkg_proposal_handler",
