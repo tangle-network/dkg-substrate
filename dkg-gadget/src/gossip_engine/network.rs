@@ -353,6 +353,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 			self.event_stream.take().expect("Event stream is only taken in `run` once; qed");
 		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
 
+		// we have two streams, one from the network and one from the controller.
+		// hence we want to start two separate tasks, one for each stream that are running
+		// in parallel, without blocking each other.
+
+		// first task, handles the incoming messages/Commands from the controller.
 		let self0 = self.clone();
 		let incoming_messages_task = tokio::spawn(async move {
 			while let Some(message) = incoming_messages.next().await {
@@ -379,6 +384,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			}
 		});
 
+		// second task, handles the incoming messages/events from the network stream.
 		let network_events_task = tokio::spawn(async move {
 			while let Some(event) = event_stream.next().await {
 				self.handle_network_event(event).await;
