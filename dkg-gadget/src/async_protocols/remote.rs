@@ -17,6 +17,7 @@ use atomic::Atomic;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT};
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 
@@ -54,7 +55,7 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 	}
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MetaHandlerStatus {
 	Beginning,
 	Keygen,

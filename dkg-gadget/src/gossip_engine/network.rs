@@ -357,7 +357,14 @@ impl<B: Block + 'static> GossipHandler<B> {
 					let read_lock = self.message_queue.read();
 					if !read_lock.is_empty() {
 						// notify the caller that we have messages in the queue.
-						self.message_notifications_channel.send(()).unwrap();
+						match self.message_notifications_channel.send(()) {
+							Ok(_) => {},
+							Err(_) => {
+								// The receiver has been dropped, so we can't send any more messages.
+								// Closing as well.
+								log::debug!(target: "dkg_gadget::gossip_engine::network", "The message notification send has failed");
+							},
+						}
 					}
 				},
 			}
