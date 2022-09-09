@@ -386,6 +386,21 @@ impl<B: Block + 'static> GossipHandler<B> {
 		});
 
 		// wait for the first task to finish or error out.
+		// 
+		// The reason why we wait for the first one to finish, is that it is a critical error 
+		// if any of them finished before the others, the must either run all together or none.
+		//
+		// Here is more information about the reason why we do this:
+		// 1. if the network events task finished, it means that the network service has been
+		//   dropped, which means that the node is shutting down, or a network issue has occurred,
+		//   which is in this point a critical error.
+		// 2. if the incoming messages task finished, it means that the controller has been dropped,
+		//   which also could mean that there is now no communication between the controller and the
+		//   handler task, which is a critical error.
+		//   This could also mean that the node is shutting down, but in this case the network events
+		//   task should have finished as well.
+		// 3. The timer task, however, will never finish, unless the node is shutting down, in which
+		//  case the network events task should have finished as well.
 		let _result = futures::future::select_all(vec![
 			network_events_task,
 			incoming_messages_task,
