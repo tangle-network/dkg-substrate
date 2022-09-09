@@ -343,13 +343,16 @@ where
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				*lock = Some(status_handle.into_primary_remote())
+				*lock = Some(status_handle.into_primary_remote());
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
 					round_id,
 					now,
 					MetaHandlerStatus::Keygen,
-					self.base_path.as_ref().map(|path| path.join(ACTIVE_ROUNDS_METADATA_FILE)),
+					self.base_path
+						.read()
+						.as_ref()
+						.map(|path| path.join(ACTIVE_ROUNDS_METADATA_FILE)),
 				)
 				.map_err(|e| DKGError::GenericError {
 					reason: format!("Failed to store saved rounds: {}", e),
@@ -361,13 +364,16 @@ where
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				*lock = Some(status_handle.into_primary_remote())
+				*lock = Some(status_handle.into_primary_remote());
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
 					round_id,
 					now,
 					MetaHandlerStatus::Keygen,
-					self.base_path.as_ref().map(|path| path.join(QUEUED_ROUNDS_METADATA_FILE)),
+					self.base_path
+						.read()
+						.as_ref()
+						.map(|path| path.join(QUEUED_ROUNDS_METADATA_FILE)),
 				)
 				.map_err(|e| DKGError::GenericError {
 					reason: format!("Failed to store saved rounds: {}", e),
@@ -936,7 +942,7 @@ where
 					},
 				};
 				// If we are starting a new queued DKG, we rotate the next rounds
-        log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
+				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 				match self.rounds.read().as_ref() {
 					Some(r) if r.is_active() => {
 						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
@@ -1226,7 +1232,7 @@ where
 		Ok(Public::from(maybe_signer.unwrap()))
 	}
 
-	fn submit_unsigned_proposals(&mut self, header: &B::Header) {
+	fn submit_unsigned_proposals(&self, header: &B::Header) {
 		let round_id = self.current_validator_set.read().id;
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let maybe_party_index = self.get_party_index(header);
@@ -1410,18 +1416,11 @@ where
 			.collect())
 	}
 
-	// *** Main run loop ***
-
 	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
-		let mut active_rounds_metadata_path: Option<PathBuf> = None;
-		let mut queued_rounds_metadata_path: Option<PathBuf> = None;
-
-		if self.base_path.is_some() {
-			active_rounds_metadata_path =
-				get_key_path(&self.base_path, ACTIVE_ROUNDS_METADATA_FILE);
-			queued_rounds_metadata_path =
-				get_key_path(&self.base_path, QUEUED_ROUNDS_METADATA_FILE);
-		}
+		let active_rounds_metadata_path =
+			get_key_path(&self.base_path.read(), ACTIVE_ROUNDS_METADATA_FILE);
+		let queued_rounds_metadata_path =
+			get_key_path(&self.base_path.read(), QUEUED_ROUNDS_METADATA_FILE);
 
 		if let Ok(stored_active_rounds) = load_saved_rounds::<B>(active_rounds_metadata_path) {
 			let remote = AsyncProtocolRemote::new(
@@ -1430,7 +1429,7 @@ where
 			)
 			.into_primary_remote();
 			remote.set_status(stored_active_rounds.status);
-			self.rounds = Some(remote);
+			*self.rounds.write() = Some(remote);
 		};
 
 		if let Ok(stored_queued_rounds) = load_saved_rounds::<B>(queued_rounds_metadata_path) {
@@ -1440,7 +1439,7 @@ where
 			)
 			.into_primary_remote();
 			remote.set_status(stored_queued_rounds.status);
-			self.next_rounds = Some(remote);
+			*self.next_rounds.write() = Some(remote);
 		};
 
 		Ok(())
@@ -1453,13 +1452,12 @@ where
 			.import_notification_stream()
 			.take_while(|notif| {
 				if let Some((active, queued)) = self.validator_set(&notif.header) {
-        	// Cache the authority sets and best authorities
+					// Cache the authority sets and best authorities
 					*self.best_authorities.write() = self.get_best_authorities(&notif.header);
 					*self.best_next_authorities.write() =
 						self.get_next_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
 					*self.queued_validator_set.write() = queued;
-					*self.current_validator_set.write() = active;
 					// If we are beyond genesis, we should attempt to initialize any saved rounds
 					if self.current_validator_set.read().id != GENESIS_AUTHORITY_SET_ID {
 						let _ = self.initialize_saved_rounds();
@@ -1479,6 +1477,7 @@ where
 		self.import_notifications = self.client.import_notification_stream();
 	}
 
+	// *** Main run loop ***
 	pub(crate) async fn run(mut self) {
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
