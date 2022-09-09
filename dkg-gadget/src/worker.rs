@@ -43,7 +43,7 @@ use sc_client_api::{
 
 use sp_api::BlockId;
 use sp_runtime::traits::{Block, Header, NumberFor};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::keystore::DKGKeystore;
 
@@ -1422,101 +1422,109 @@ where
 	}
 
 	pub(crate) async fn run(mut self) {
-		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
-		let signing_gossip_engine = self.signing_gossip_engine.clone();
-
-		let (misbehaviour_tx, mut misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
+		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;
-
-		let mut error_handler_rx = self.error_handler.subscribe();
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
-		// create a stream from each gossip engine queue.
+		// Now, we run all these tasks in parallel, and wait for any of them to complete.
+		// If any of them completes, we stop all the other tasks since this means a fatal error has
+		// occurred and we need to shut down.
+		let (first, n, ..) = futures::future::select_all(vec![
+			self.spawn_import_notification_task(),
+			self.spawn_finality_notification_task(),
+			self.spawn_keygen_messages_stream_task(),
+			self.spawn_signing_messages_stream_task(),
+			self.spawn_error_handling_task(),
+			self.spawn_misbehaviour_report_task(misbehaviour_rx),
+		])
+		.await;
+		log::error!(target: "dkg_gadget::worker", "DKG Worker finished; the reason that task({n}) ended with: {:?}", first);
+	}
+
+	fn spawn_import_notification_task(&self) -> tokio::task::JoinHandle<()> {
+		let mut self_ = self.clone();
+		tokio::spawn(async move {
+			while let Some(notification) = self_.import_notifications.next().await {
+				log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
+				self_.handle_import_notification(notification);
+			}
+		})
+	}
+
+	fn spawn_finality_notification_task(&self) -> tokio::task::JoinHandle<()> {
+		let mut self_ = self.clone();
+		tokio::spawn(async move {
+			while let Some(notification) = self_.finality_notifications.next().await {
+				log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
+				self_.handle_finality_notification(notification);
+			}
+		})
+	}
+
+	fn spawn_keygen_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
+		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
 		let mut keygen_stream = keygen_gossip_engine
 			.message_available_notification()
 			.filter_map(move |_| futures::future::ready(keygen_gossip_engine.peek_last_message()));
-		let mut signing_stream = signing_gossip_engine
-			.message_available_notification()
-			.filter_map(move |_| futures::future::ready(signing_gossip_engine.peek_last_message()));
-
-		// create a task for each of the following tasks:
-		// 1. handle import notifications
-		// 2. handle finality notifications
-		// 3. handle keygen gossip messages
-		// 4. handle signing gossip messages
-		// 5. handle misbehaviour reports.
-		// 6. handle dkg errors.
-		let mut self1 = self.clone();
-		let import_notifications_task = tokio::spawn(async move {
-			while let Some(notification) = self1.import_notifications.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
-				self1.handle_import_notification(notification);
-			}
-		});
-		let mut self2 = self.clone();
-		let finality_notifications_task = tokio::spawn(async move {
-			while let Some(notification) = self2.finality_notifications.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
-				self2.handle_finality_notification(notification);
-			}
-		});
-		let self3 = self.clone();
-		let keygen_stream_task = tokio::spawn(async move {
+		let self_ = self.clone();
+		tokio::spawn(async move {
 			while let Some(msg) = keygen_stream.next().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for round {}", msg.msg.round_id);
-				match self3.process_incoming_dkg_message(msg) {
+				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
-						self3.keygen_gossip_engine.acknowledge_last_message();
+						self_.keygen_gossip_engine.acknowledge_last_message();
 					},
 					Err(e) => {
 						log::error!(target: "dkg_gadget::worker", "Error processing keygen message: {:?}", e);
 					},
 				}
 			}
-		});
-		let self4 = self.clone();
-		let signing_stream_task = tokio::spawn(async move {
+		})
+	}
+
+	fn spawn_signing_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
+		let signing_gossip_engine = self.signing_gossip_engine.clone();
+		let mut signing_stream = signing_gossip_engine
+			.message_available_notification()
+			.filter_map(move |_| futures::future::ready(signing_gossip_engine.peek_last_message()));
+		let self_ = self.clone();
+		tokio::spawn(async move {
 			while let Some(msg) = signing_stream.next().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for round {}", msg.msg.round_id);
-				match self4.process_incoming_dkg_message(msg) {
+				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
-						self4.signing_gossip_engine.acknowledge_last_message();
+						self_.signing_gossip_engine.acknowledge_last_message();
 					},
 					Err(e) => {
 						log::error!(target: "dkg_gadget::worker", "Error processing signing message: {:?}", e);
 					},
 				}
 			}
-		});
-		let self5 = self.clone();
-		let misbehaviour_task = tokio::spawn(async move {
+		})
+	}
+
+	fn spawn_misbehaviour_report_task(
+		&self,
+		mut misbehaviour_rx: UnboundedReceiver<DKGMisbehaviourMessage>,
+	) -> tokio::task::JoinHandle<()> {
+		let self_ = self.clone();
+		tokio::spawn(async move {
 			while let Some(misbehaviour) = misbehaviour_rx.recv().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle Misbehaviour");
-				gossip_misbehaviour_report(&self5, misbehaviour);
+				gossip_misbehaviour_report(&self_, misbehaviour);
 			}
-		});
-		let self6 = self.clone();
-		let error_handler_task = tokio::spawn(async move {
+		})
+	}
+
+	fn spawn_error_handling_task(&self) -> tokio::task::JoinHandle<()> {
+		let self_ = self.clone();
+		let mut error_handler_rx = self.error_handler.subscribe();
+		tokio::spawn(async move {
 			while let Ok(error) = error_handler_rx.recv().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle Error");
-				self6.handle_dkg_error(error);
+				self_.handle_dkg_error(error);
 			}
-		});
-
-		// Now, we run all these tasks in parallel, and wait for any of them to complete.
-		// If any of them completes, we stop all the other tasks since this means a fatal error has
-		// occurred and we need to shut down.
-		//
-		let (first, n, ..) = futures::future::select_all(vec![
-			import_notifications_task,
-			finality_notifications_task,
-			keygen_stream_task,
-			signing_stream_task,
-			misbehaviour_task,
-			error_handler_task,
-		])
-		.await;
-		log::error!(target: "dkg_gadget::worker", "DKG Worker finished; the reason that task({n}) ended with: {:?}", first);
+		})
 	}
 }
 
