@@ -734,18 +734,14 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
 			return
 		}
-
-		// Check if the next rounds exists and has processed for this next queued round id
-		if self.next_rounds.is_some() && self.next_rounds.as_ref().unwrap().is_active() {
-			debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
-			return
-		}
-
+		// Handling edge cases when the rounds exists, is currently active, and not stalled
 		if let Some(rounds) = self.next_rounds.as_ref() {
+			// Check if the next rounds exists and has processed for this next queued round id
 			if self.next_rounds.as_ref().unwrap().is_active() &&
 				!rounds.keygen_has_stalled(*header.number())
 			{
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
+				return
 			} else {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
@@ -1373,7 +1369,7 @@ where
 	}
 
 	// *** Main run loop ***
-
+	#[allow(dead_code)]
 	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
 		let mut active_rounds_metadata_path: Option<PathBuf> = None;
 		let mut queued_rounds_metadata_path: Option<PathBuf> = None;
@@ -1420,10 +1416,10 @@ where
 					self.queued_validator_set = queued;
 					self.best_authorities = self.get_best_authorities(&notif.header);
 					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
-					// If we are beyond genesis, we should attempt to initialize any saved rounds
-					if self.current_validator_set.read().id != GENESIS_AUTHORITY_SET_ID {
-						let _ = self.initialize_saved_rounds();
-					}
+					// // If we are beyond genesis, we should attempt to initialize any saved rounds
+					// if self.current_validator_set.read().id != GENESIS_AUTHORITY_SET_ID {
+					// 	let _ = self.initialize_saved_rounds();
+					// }
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
