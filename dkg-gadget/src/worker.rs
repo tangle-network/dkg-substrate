@@ -742,7 +742,11 @@ where
 		}
 
 		if let Some(rounds) = self.next_rounds.as_ref() {
-			if rounds.keygen_has_stalled(*header.number()) {
+			if self.next_rounds.as_ref().unwrap().is_active() &&
+				!rounds.keygen_has_stalled(*header.number())
+			{
+				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
+			} else {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
@@ -848,9 +852,7 @@ where
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.clone() {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
-				if rounds.keygen_is_not_complete() &&
-					header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
-				{
+				if rounds.keygen_has_stalled(*header.number()) {
 					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: convert_u16_vec_to_usize_vec(
