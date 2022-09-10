@@ -356,7 +356,7 @@ fn testnet_genesis(
 		grandpa: Default::default(),
 		dkg: DKGConfig {
 			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
-			keygen_threshold: 2,
+			keygen_threshold: 3,
 			signature_threshold: 1,
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
