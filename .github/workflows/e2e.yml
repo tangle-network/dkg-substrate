@@ -22,10 +22,14 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Checkout Code
-        uses: actions/checkout@v2
-        with:
-          submodules: "recursive"
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Fetch submodules
+        run: cd /dkg-test-suite git submodule update --init --recursive && cd ..
+
+      - name: Populate fixtures
+        run: cd ./dkg-test-suite/solidity-fixtures && dvc pull && cd ../..
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
