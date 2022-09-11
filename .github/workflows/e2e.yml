@@ -25,12 +25,6 @@ jobs:
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
 
-      - name: Fetch submodules
-        run: cd ./dkg-test-suite && git submodule update --init --recursive && cd ..
-
-      - name: Populate fixtures
-        run: cd ./dkg-test-suite/solidity-fixtures && dvc pull && cd ../..
-
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
 
@@ -46,6 +40,12 @@ jobs:
           node-version-file: "./dkg-test-suite/.nvmrc"
           cache: "yarn"
           cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Fetch submodules
+        run: cd dkg-test-suite && git submodule update --init --recursive && cd ..
+
+      - name: Populate fixtures
+        run: cd dkg-test-suite/solidity-fixtures && dvc pull && cd ../..
 
       - name: Install Packages
         run: cd dkg-test-suite && yarn
