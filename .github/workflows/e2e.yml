@@ -26,7 +26,7 @@ jobs:
         uses: iterative/setup-dvc@v1
 
       - name: Fetch submodules
-        run: cd ./dkg-test-suite git submodule update --init --recursive && cd ..
+        run: cd ./dkg-test-suite && git submodule update --init --recursive && cd ..
 
       - name: Populate fixtures
         run: cd ./dkg-test-suite/solidity-fixtures && dvc pull && cd ../..
