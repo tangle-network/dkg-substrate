@@ -773,18 +773,15 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
 			return
 		}
-
-		// Check if the next rounds exists and has processed for this next queued round id
-		match self.next_rounds.read().as_ref() {
-			Some(next_rounds) if next_rounds.is_active() => {
+		// Handling edge cases when the rounds exists, is currently active, and not stalled
+		if let Some(rounds) = self.next_rounds.as_ref() {
+			// Check if the next rounds exists and has processed for this next queued round id
+			if self.next_rounds.as_ref().unwrap().is_active() &&
+				!rounds.keygen_has_stalled(*header.number())
+			{
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
 				return
-			},
-			_ => {},
-		}
-
-		if let Some(rounds) = self.next_rounds.read().as_ref() {
-			if rounds.keygen_has_stalled(*header.number()) {
+			} else {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
 			}
 		}
@@ -889,9 +886,7 @@ where
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.read().as_ref() {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
-				if rounds.keygen_is_not_complete() &&
-					header.number() >= &(rounds.started_at + KEYGEN_TIMEOUT.into())
-				{
+				if rounds.keygen_has_stalled(*header.number()) {
 					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: convert_u16_vec_to_usize_vec(
@@ -1416,6 +1411,8 @@ where
 			.collect())
 	}
 
+	// *** Main run loop ***
+	#[allow(dead_code)]
 	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
 		let active_rounds_metadata_path =
 			get_key_path(&self.base_path.read(), ACTIVE_ROUNDS_METADATA_FILE);
@@ -1457,11 +1454,9 @@ where
 					*self.best_next_authorities.write() =
 						self.get_next_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
-					*self.queued_validator_set.write() = queued;
-					// If we are beyond genesis, we should attempt to initialize any saved rounds
-					if self.current_validator_set.read().id != GENESIS_AUTHORITY_SET_ID {
-						let _ = self.initialize_saved_rounds();
-					}
+					self.queued_validator_set = queued;
+					self.best_authorities = self.get_best_authorities(&notif.header);
+					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");

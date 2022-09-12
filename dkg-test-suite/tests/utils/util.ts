@@ -116,17 +116,17 @@ export const executeBefore = async () => {
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_2/2/poseidon_vanchor_2_2.wasm'
+			'solidity-fixtures/vanchor_2/2/poseidon_vanchor_2_2.wasm'
 		),
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_2/2/witness_calculator.cjs'
+			'solidity-fixtures/vanchor_2/2/witness_calculator.cjs'
 		),
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_2/2/circuit_final.zkey'
+			'solidity-fixtures/vanchor_2/2/circuit_final.zkey'
 		)
 	);
 
@@ -134,17 +134,17 @@ export const executeBefore = async () => {
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_16/2/poseidon_vanchor_16_2.wasm'
+			'solidity-fixtures/vanchor_16/2/poseidon_vanchor_16_2.wasm'
 		),
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_16/2/witness_calculator.cjs'
+			'solidity-fixtures/vanchor_16/2/witness_calculator.cjs'
 		),
 		path.resolve(
 			gitRoot,
 			'dkg-test-suite',
-			'protocol-solidity-fixtures/fixtures/vanchor_16/2/circuit_final.zkey'
+			'solidity-fixtures/vanchor_16/2/circuit_final.zkey'
 		)
 	);
 
