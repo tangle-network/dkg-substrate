@@ -92,7 +92,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.keygen_is_not_complete() && (now - self.started_at > KEYGEN_TIMEOUT.into())
+		self.keygen_is_not_complete() && (now >= self.started_at + KEYGEN_TIMEOUT.into())
 	}
 
 	pub fn keygen_is_not_complete(&self) -> bool {

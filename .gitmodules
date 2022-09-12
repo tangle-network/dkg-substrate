@@ -1,3 +1,0 @@
-[submodule "dkg-test-suite/protocol-solidity-fixtures"]
-	path = dkg-test-suite/protocol-solidity-fixtures
-	url = https://github.com/webb-tools/protocol-solidity-fixtures.git
