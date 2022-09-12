@@ -774,11 +774,9 @@ where
 			return
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
-		if let Some(rounds) = self.next_rounds.as_ref() {
+		if let Some(rounds) = self.next_rounds.read().as_ref() {
 			// Check if the next rounds exists and has processed for this next queued round id
-			if self.next_rounds.as_ref().unwrap().is_active() &&
-				!rounds.keygen_has_stalled(*header.number())
-			{
+			if rounds.is_active() && !rounds.keygen_has_stalled(*header.number()) {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
 				return
 			} else {
@@ -1454,9 +1452,7 @@ where
 					*self.best_next_authorities.write() =
 						self.get_next_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
-					self.queued_validator_set = queued;
-					self.best_authorities = self.get_best_authorities(&notif.header);
-					self.best_next_authorities = self.get_next_best_authorities(&notif.header);
+					*self.queued_validator_set.write() = queued;
 					// Route this to the import notification handler
 					self.handle_import_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");

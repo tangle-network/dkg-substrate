@@ -490,8 +490,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "{:?} round {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.round_id, who, now);
-		let mut lock = self.peers.write();
-		if let Some(ref mut peer) = lock.get_mut(&who) {
+		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			let mut pending_messages_peers = self.pending_messages_peers.write();
 			match pending_messages_peers.entry(message.message_hash::<B>()) {
@@ -533,13 +532,17 @@ impl<B: Block + 'static> GossipHandler<B> {
 						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
 						// as malicious.
 						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
+							log::warn!(
+								target: "dkg_gadget::gossip_engine::network",
+								"reporting peer {} as they are sending us the same message over and over again", who
+							);
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
 					}
 				},
 			}
 		}
-		drop(lock);
+
 		// if the gossip is enabled, we send the message to the gossiping peers
 		if self.gossip_enabled.load(Ordering::Relaxed) {
 			self.gossip_message(message);
@@ -548,8 +551,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 	pub fn send_signed_dkg_message(&self, to_who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		let message_hash = message.message_hash::<B>();
-		let mut peers = self.peers.write();
-		if let Some(ref mut peer) = peers.get_mut(&to_who) {
+		if let Some(ref mut peer) = self.peers.write().get_mut(&to_who) {
 			let already_propagated = peer.known_messages.insert(message_hash);
 			if already_propagated {
 				return
