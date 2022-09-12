@@ -34,7 +34,7 @@ use sp_runtime::{
 
 /// cleans offchain storage at interval
 pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	header: &B::Header,
 ) where
 	B: Block,

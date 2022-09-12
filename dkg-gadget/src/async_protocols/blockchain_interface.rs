@@ -37,7 +37,7 @@ use dkg_runtime_primitives::{
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
@@ -78,15 +78,15 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
-	pub aggregated_public_keys: Arc<Mutex<HashMap<RoundId, AggregatedPublicKeys>>>,
+	pub aggregated_public_keys: Arc<RwLock<HashMap<RoundId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub vote_results: Arc<Mutex<HashMap<BatchKey, Vec<Proposal>>>>,
+	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
 	pub is_genesis: bool,
 	pub _pd: PhantomData<BE>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
-	pub local_keystore: Option<Arc<LocalKeystore>>,
-	pub local_key_path: Option<PathBuf>,
+	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
+	pub local_key_path: Arc<RwLock<Option<PathBuf>>>,
 }
 
 impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
@@ -157,7 +157,7 @@ where
 			signature: signature.encode(),
 		};
 
-		let mut lock = self.vote_results.lock();
+		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 		if let Some(proposal) =
@@ -188,7 +188,7 @@ where
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
-			&mut *self.aggregated_public_keys.lock(),
+			&mut *self.aggregated_public_keys.write(),
 			key,
 		);
 		Ok(())
@@ -200,10 +200,10 @@ where
 		round_id: RoundId,
 	) -> Result<(), DKGError> {
 		let sr_pub = self.get_sr25519_public_key();
-		if let Some(path) = self.local_key_path.clone() {
-			store_localkey(key, round_id, Some(path), self.local_keystore.as_ref(), sr_pub)
-				.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-		}
+		let local_key_path = self.local_key_path.read().clone();
+		let local_keystore = self.local_keystore.read().clone();
+		store_localkey(key, round_id, local_key_path, local_keystore.as_ref(), sr_pub)
+			.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 		Ok(())
 	}
