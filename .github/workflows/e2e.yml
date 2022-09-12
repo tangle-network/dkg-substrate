@@ -22,11 +22,8 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Setup DVC
-        uses: iterative/setup-dvc@v1
-
-      - name: Populate fixtures
-        run: dvc pull
+      - name: Checkout Code
+        uses: actions/checkout@v2
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
@@ -43,6 +40,12 @@ jobs:
           node-version-file: "./dkg-test-suite/.nvmrc"
           cache: "yarn"
           cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate fixtures
+        run: dvc pull
 
       - name: Install Packages
         run: cd dkg-test-suite && yarn
