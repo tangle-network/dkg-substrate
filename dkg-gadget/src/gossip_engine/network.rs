@@ -60,7 +60,7 @@ use std::{
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
-		atomic::{AtomicBool,  Ordering},
+		atomic::{AtomicBool, Ordering},
 		Arc,
 	},
 };
@@ -269,9 +269,6 @@ impl<B: Block> GossipHandlerController<B> {
 /// Handler for gossiping messages. Call [`GossipHandler::run`] to start the processing.
 ///
 /// This is a background task that handles all the DKG messages.
-///
-/// **Note**: Cloneing this struct will not clone the underlying `event_stream` and it will be
-/// always None, keep that in mind.
 pub struct GossipHandler<B: Block + 'static> {
 	/// The Protocol Name, should be unique.
 	///
