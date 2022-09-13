@@ -93,16 +93,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
-
-use frame_support::{
-	dispatch::DispatchResultWithPostInfo,
-	traits::{EstimateNextSessionRotation, Get, OneSessionHandler},
-	Parameter,
-};
-use frame_system::offchain::{SendSignedTransaction, Signer};
-use sp_std::convert::{TryFrom, TryInto};
-
+use codec::Encode;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::{
 		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK,
@@ -116,22 +107,32 @@ use dkg_runtime_primitives::{
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
 	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
 };
+use frame_support::{
+	dispatch::DispatchResultWithPostInfo,
+	traits::{EstimateNextSessionRotation, OneSessionHandler},
+};
+use frame_system::offchain::{SendSignedTransaction, Signer};
+pub use pallet::*;
 use sp_runtime::{
 	generic::DigestItem,
 	offchain::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Member, Saturating},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating},
 	DispatchError, Permill, RuntimeAppPublic,
 };
-use sp_std::{collections::btree_map::BTreeMap, prelude::*};
-
-pub mod types;
+use sp_std::{
+	collections::btree_map::BTreeMap,
+	convert::{TryFrom, TryInto},
+	prelude::*,
+};
 use types::RoundMetadata;
+use weights::WeightInfo;
 
 #[cfg(test)]
 mod mock;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
@@ -140,13 +141,9 @@ mod tests;
 mod benchmarking;
 
 pub mod weights;
-use weights::WeightInfo;
-
-pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use super::*;
 	use dkg_runtime_primitives::{traits::OnDKGPublicKeyChangeHandler, ProposalHandlerTrait};
 	use frame_support::{ensure, pallet_prelude::*, transactional};
 	use frame_system::{
@@ -156,6 +153,8 @@ pub mod pallet {
 	};
 	use log;
 	use sp_runtime::{Percent, Permill};
+
+	use super::*;
 
 	/// A `Convert` implementation that finds the stash of the given controller account,
 	/// if any.
@@ -544,11 +543,19 @@ pub mod pallet {
 		/// Next public key submitted
 		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
-		NextPublicKeySignatureSubmitted { pub_key_sig: Vec<u8> },
+		NextPublicKeySignatureSubmitted {
+			pub_key_sig: Vec<u8>,
+			compressed_pub_key: Vec<u8>,
+			uncompressed_pub_key: Vec<u8>,
+		},
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Current Public Key Signature Changed.
-		PublicKeySignatureChanged { pub_key_sig: Vec<u8> },
+		PublicKeySignatureChanged {
+			pub_key_sig: Vec<u8>,
+			compressed_pub_key: Vec<u8>,
+			uncompressed_pub_key: Vec<u8>,
+		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
@@ -556,6 +563,10 @@ pub mod pallet {
 		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
+		/// NextKeygenThreshold updated
+		NextKeygenThresholdUpdated { next_keygen_threshold: u16 },
+		/// NextSignatureThreshold updated
+		NextSignatureThresholdUpdated { next_signature_threshold: u16 },
 	}
 
 	#[cfg(feature = "std")]
@@ -812,9 +823,11 @@ pub mod pallet {
 			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
 			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
+			let uncompressed_pub_key =
+				Self::decompress_public_key(next_pub_key.clone()).unwrap_or_default();
 			let data = RefreshProposal {
 				nonce: Self::refresh_nonce().into(),
-				pub_key: Self::decompress_public_key(next_pub_key).unwrap_or_default(),
+				pub_key: uncompressed_pub_key.clone(),
 			};
 			// Verify signature against the `RefreshProposal`
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
@@ -833,7 +846,11 @@ pub mod pallet {
 			// Remove unsigned refresh proposal from queue
 			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
 			NextPublicKeySignature::<T>::put(signature.clone());
-			Self::deposit_event(Event::NextPublicKeySignatureSubmitted { pub_key_sig: signature });
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+				uncompressed_pub_key,
+				compressed_pub_key: next_pub_key,
+				pub_key_sig: signature,
+			});
 			// Handle manual refresh if flag is set
 			if Self::should_manual_refresh() {
 				ShouldManualRefresh::<T>::put(false);
@@ -920,7 +937,7 @@ pub mod pallet {
 								if unjailed_authorities.len() > 2 {
 									let new_val = u16::try_from(unjailed_authorities.len() - 1)
 										.unwrap_or_default();
-									NextKeygenThreshold::<T>::put(new_val);
+									Self::update_next_keygen_threshold(new_val);
 									PendingKeygenThreshold::<T>::put(new_val);
 								}
 							}
@@ -953,7 +970,7 @@ pub mod pallet {
 								// deterministic manner or expect for a forced rotation.
 								let new_val = u16::try_from(unjailed_authorities.len() - 1)
 									.unwrap_or_default();
-								NextSignatureThreshold::<T>::put(new_val);
+								Self::update_signature_keygen_threshold(new_val);
 								PendingSignatureThreshold::<T>::put(new_val);
 							}
 						} else {
@@ -1287,8 +1304,8 @@ impl<T: Config> Pallet<T> {
 		// Update the next thresholds for the next session
 		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
 		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
-		NextSignatureThreshold::<T>::put(PendingSignatureThreshold::<T>::get());
-		NextKeygenThreshold::<T>::put(PendingKeygenThreshold::<T>::get());
+		Self::update_signature_keygen_threshold(PendingSignatureThreshold::<T>::get());
+		Self::update_next_keygen_threshold(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
 		let next_id = Self::next_authority_set_id();
 		// We continue to rotate the next authority set in case of failure of the previous
@@ -1307,11 +1324,11 @@ impl<T: Config> Pallet<T> {
 		// rotates all the thresholds into the current / next sets. Pending becomes the next,
 		// next becomes the current.
 		if next_authority_ids.len() < Self::next_keygen_threshold().into() {
-			NextKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
+			Self::update_next_keygen_threshold(next_authority_ids.len() as u16);
 			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 		}
 		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-			NextSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
+			Self::update_signature_keygen_threshold(next_authority_ids.len() as u16 - 1);
 			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
 		}
 		// Update the next best authorities after any and all changes to the thresholds.
@@ -1351,13 +1368,18 @@ impl<T: Config> Pallet<T> {
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
+			let uncompressed_pub_key =
+				Self::decompress_public_key(next_pub_key.1.clone()).unwrap_or_default();
+			let compressed_pub_key = next_pub_key.1;
+
 			// Emit events so other front-end know that.
 			Self::deposit_event(Event::PublicKeyChanged {
-				uncompressed_pub_key: Self::decompress_public_key(next_pub_key.1.clone())
-					.unwrap_or_default(),
-				compressed_pub_key: next_pub_key.1,
+				uncompressed_pub_key: uncompressed_pub_key.clone(),
+				compressed_pub_key: compressed_pub_key.clone(),
 			});
 			Self::deposit_event(Event::PublicKeySignatureChanged {
+				uncompressed_pub_key,
+				compressed_pub_key,
 				pub_key_sig: next_pub_key_signature,
 			});
 		}
@@ -1604,6 +1626,20 @@ impl<T: Config> Pallet<T> {
 
 			Ok(())
 		}
+	}
+
+	pub fn update_next_keygen_threshold(next_threshold: u16) {
+		NextKeygenThreshold::<T>::put(next_threshold);
+		Self::deposit_event(Event::NextKeygenThresholdUpdated {
+			next_keygen_threshold: next_threshold,
+		});
+	}
+
+	pub fn update_signature_keygen_threshold(next_threshold: u16) {
+		NextSignatureThreshold::<T>::put(next_threshold);
+		Self::deposit_event(Event::NextSignatureThresholdUpdated {
+			next_signature_threshold: next_threshold,
+		});
 	}
 
 	/// Identifies if a new `RefreshProposal` should be created
