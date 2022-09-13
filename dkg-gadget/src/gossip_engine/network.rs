@@ -60,7 +60,7 @@ use std::{
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
-		atomic::{AtomicBool, AtomicUsize, Ordering},
+		atomic::{AtomicBool,  Ordering},
 		Arc,
 	},
 };
@@ -109,7 +109,6 @@ impl NetworkGossipEngineBuilder {
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
-		let event_stream = service.event_stream("dkg-handler");
 		// Here we need to create few channels to communicate back and forth between the
 		// background task and the controller.
 		// since we have two things here we will need two channels:
@@ -127,7 +126,6 @@ impl NetworkGossipEngineBuilder {
 			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
-			event_stream: Some(Box::pin(event_stream)),
 			peers: Arc::new(RwLock::new(HashMap::new())),
 			metrics: Arc::new(metrics),
 		};
@@ -291,8 +289,6 @@ pub struct GossipHandler<B: Block + 'static> {
 	pending_messages_peers: Arc<RwLock<HashMap<B::Hash, HashSet<PeerId>>>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
-	/// Stream of networking events.
-	event_stream: Option<Pin<Box<dyn Stream<Item = Event> + Send + Sync>>>,
 	// All connected peers
 	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
 	/// Whether the gossip mechanism is enabled or not.
@@ -312,7 +308,6 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 			message_notifications_channel: self.message_notifications_channel.clone(),
 			pending_messages_peers: self.pending_messages_peers.clone(),
 			service: self.service.clone(),
-			event_stream: None,
 			peers: self.peers.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
 			my_channel: self.my_channel.clone(),
@@ -347,11 +342,10 @@ struct Peer<B: Block> {
 impl<B: Block + 'static> GossipHandler<B> {
 	/// Turns the [`GossipHandler`] into a future that should run forever and not be
 	/// interrupted.
-	pub async fn run(mut self) {
+	pub async fn run(self) {
 		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
-		let mut event_stream =
-			self.event_stream.take().expect("Event stream is only taken in `run` once; qed");
+		let mut event_stream = self.service.event_stream("dkg-handler");
 		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
 
 		// we have two streams, one from the network and one from the controller.
@@ -557,40 +551,15 @@ impl<B: Block + 'static> GossipHandler<B> {
 			if already_propagated {
 				return
 			}
-
-			let notification_sender =
-				self.service.notification_sender(to_who, self.protocol_name.clone());
-			let tx = match notification_sender {
-				Ok(tx) => tx,
-				Err(e) => {
-					// TODO(@shekohex): we should enqueue the message and try again later.
-					warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {}: {:?}", to_who, e);
-					return
-				},
-			};
-
 			let msg = Encode::encode(&message);
-			let task = async move {
-				match tx.ready().await {
-					Ok(handle) => {
-						let _ = handle.send(msg);
-						debug!(target: "dkg_gadget::gossip_engine::network", "Sending a signed DKG messages to {}", to_who);
-					},
-					Err(e) => {
-						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {:?}", e);
-					},
-				};
-			};
-			// FIXME(@shekohex): this is a temporary workaround, we should add timeouts for the
-			// tasks.
-			tokio::spawn(task);
+			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
 		} else {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
 	fn gossip_message(&self, message: SignedDKGMessage<AuthorityId>) {
-		let propagated_messages = Arc::new(AtomicUsize::new(0));
+		let mut propagated_messages = 0;
 		let message_hash = message.message_hash::<B>();
 		let mut peers = self.peers.write();
 		if peers.is_empty() {
@@ -602,38 +571,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 			if !new_to_them {
 				continue
 			}
-			let notification_sender =
-				self.service.notification_sender(*who, self.protocol_name.clone());
-			let tx = match notification_sender {
-				Ok(tx) => tx,
-				Err(e) => {
-					// TODO(@shekohex): we should enqueue the message and try again later.
-					warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {}: {:?}", who, e);
-					continue
-				},
-			};
-			let local_propagated_messages = propagated_messages.clone();
-			let msg = msg.clone();
-			let task = async move {
-				match tx.ready().await {
-					Ok(handle) => {
-						let _ = handle.send(msg);
-						local_propagated_messages.fetch_add(1, Ordering::Relaxed);
-					},
-					Err(e) => {
-						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to send notification to {:?}", e);
-					},
-				};
-			};
-			// FIXME(@shekohex): this is a temporary workaround, we should add timeouts for the
-			// tasks.
-			tokio::spawn(task);
+			self.service.write_notification(*who, self.protocol_name.clone(), msg.clone());
+			propagated_messages += 1;
 		}
-		// FIXME(@shekohex): we should handle metrics at the end of each task, not in the function.
 		if let Some(metrics) = self.metrics.as_ref() {
-			metrics
-				.propagated_messages
-				.inc_by(propagated_messages.load(Ordering::Relaxed) as _);
+			metrics.propagated_messages.inc_by(propagated_messages);
 		}
 	}
 }
