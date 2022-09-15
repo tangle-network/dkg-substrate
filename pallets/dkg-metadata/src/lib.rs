@@ -970,7 +970,7 @@ pub mod pallet {
 								// deterministic manner or expect for a forced rotation.
 								let new_val = u16::try_from(unjailed_authorities.len() - 1)
 									.unwrap_or_default();
-								Self::update_signature_keygen_threshold(new_val);
+								Self::update_next_signature_threshold(new_val);
 								PendingSignatureThreshold::<T>::put(new_val);
 							}
 						} else {
@@ -1304,7 +1304,7 @@ impl<T: Config> Pallet<T> {
 		// Update the next thresholds for the next session
 		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
 		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
-		Self::update_signature_keygen_threshold(PendingSignatureThreshold::<T>::get());
+		Self::update_next_signature_threshold(PendingSignatureThreshold::<T>::get());
 		Self::update_next_keygen_threshold(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
 		let next_id = Self::next_authority_set_id();
@@ -1328,7 +1328,7 @@ impl<T: Config> Pallet<T> {
 			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 		}
 		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-			Self::update_signature_keygen_threshold(next_authority_ids.len() as u16 - 1);
+			Self::update_next_signature_threshold(next_authority_ids.len() as u16 - 1);
 			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
 		}
 		// Update the next best authorities after any and all changes to the thresholds.
@@ -1629,17 +1629,23 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn update_next_keygen_threshold(next_threshold: u16) {
-		NextKeygenThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextKeygenThresholdUpdated {
-			next_keygen_threshold: next_threshold,
-		});
+		let current_next_keygen_threshold = Self::next_keygen_threshold();
+		if current_next_keygen_threshold != next_threshold {
+			NextKeygenThreshold::<T>::put(next_threshold);
+			Self::deposit_event(Event::NextKeygenThresholdUpdated {
+				next_keygen_threshold: next_threshold,
+			});
+		}
 	}
 
-	pub fn update_signature_keygen_threshold(next_threshold: u16) {
-		NextSignatureThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextSignatureThresholdUpdated {
-			next_signature_threshold: next_threshold,
-		});
+	pub fn update_next_signature_threshold(next_threshold: u16) {
+		let current_next_signature_threshold = Self::next_signature_threshold();
+		if current_next_signature_threshold != next_threshold {
+			NextSignatureThreshold::<T>::put(next_threshold);
+			Self::deposit_event(Event::NextSignatureThresholdUpdated {
+				next_signature_threshold: next_threshold,
+			});
+		}
 	}
 
 	/// Identifies if a new `RefreshProposal` should be created

@@ -45,8 +45,8 @@ import { BLOCK_TIME } from '../utils/constants';
 
 // Requires total of 8 sessions to complete.
 describe('Misbehavior Flow', function () {
-  // 10 sessions should be more than enough for the test to complete
-  this.timeout(200 * BLOCK_TIME);
+  // 30 sessions should be more than enough for the test to complete
+  this.timeout(300 * BLOCK_TIME);
   // 5 session.
   this.slow(50 * BLOCK_TIME);
   // fail fast, since tests are dependent on each other.
