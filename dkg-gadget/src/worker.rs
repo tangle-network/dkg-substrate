@@ -250,7 +250,7 @@ where
 			metrics: Arc::new(metrics),
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
-			signing_rounds: Arc::new(RwLock::new(vec![None; 16])),
+			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
 			finality_notifications: client.finality_notification_stream(),
 			import_notifications: client.import_notification_stream(),
 			best_dkg_block: Arc::new(RwLock::new(None)),
@@ -343,7 +343,7 @@ where
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				*lock = Some(status_handle.into_primary_remote());
+				*lock = Some(status_handle);
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
 					round_id,
@@ -364,7 +364,7 @@ where
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
-				*lock = Some(status_handle.into_primary_remote());
+				*lock = Some(status_handle);
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
 					round_id,
@@ -383,7 +383,34 @@ where
 			ProtoStageType::Signing => {
 				debug!(target: "dkg_gadget::worker", "Starting signing protocol: async_index #{}", async_index);
 				let mut lock = self.signing_rounds.write();
-				lock[async_index as usize] = Some(status_handle.into_primary_remote())
+				// first, check if the async_index is already in use and if so, and it is still
+				// running, return an error and print a warning that we will overwrite the previous
+				// round.
+				if let Some(Some(current_round)) = lock.get(async_index as usize) {
+					// check if it has stalled or not, if so, we can overwrite it
+					if current_round.signing_has_stalled(now) {
+						// the round has stalled, so we can overwrite it
+						log::warn!(target: "dkg_gadget::worker", "signing round #{} has stalled, overwriting it", async_index);
+						lock[async_index as usize] = Some(status_handle)
+					} else if current_round.is_active() {
+						log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
+						status_handle.shutdown(
+							"Overwriting rounds will result in termination of previous rounds!",
+						)?;
+						return Err(DKGError::GenericError {
+							reason:
+								"Overwriting rounds while still running will result in termination."
+									.to_string(),
+						})
+					} else {
+						// the round is not active, nor has it stalled, so we can overwrite it.
+						log::debug!(target: "dkg_gadget::worker", "signing round #{} is not active, overwriting it", async_index);
+						lock[async_index as usize] = Some(status_handle)
+					}
+				} else {
+					// otherwise, we can safely write to this slot.
+					lock[async_index as usize] = Some(status_handle);
+				}
 			},
 		}
 
@@ -491,11 +518,12 @@ where
 			signing_set,
 			async_index,
 		)?;
-
+		// TODO: add the hash of the signing proposal to the currently being signed proposals.
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
 					log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
+					// TODO: remove the hash of the signing proposal from the currently being signed proposals.
 					Ok(async_index)
 				},
 
@@ -1247,7 +1275,7 @@ where
 		} else {
 			debug!(target: "dkg_gadget::worker", "Got unsigned proposals count {}", unsigned_proposals.len());
 		}
-
+		// TODO: check if we are already signing these proposals or not, if yes, return
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
@@ -1316,7 +1344,11 @@ where
 					ProtoStageType::Signing,
 					unsigned_proposals.clone(),
 					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),
-					i as u8,
+					// using i here as the async index is not correct at all,
+					// instead we should find a free index in the `signing_rounds` and use that
+					//
+					// FIXME: use a free index in the `signing_rounds` instead of `i`
+					i as _,
 				) {
 					Ok(task) => futures.push(task),
 					Err(err) => {
@@ -1421,8 +1453,7 @@ where
 			let remote = AsyncProtocolRemote::new(
 				stored_active_rounds.started_at,
 				stored_active_rounds.round_id,
-			)
-			.into_primary_remote();
+			);
 			remote.set_status(stored_active_rounds.status);
 			*self.rounds.write() = Some(remote);
 		};
@@ -1431,8 +1462,7 @@ where
 			let remote = AsyncProtocolRemote::new(
 				stored_queued_rounds.started_at,
 				stored_queued_rounds.round_id,
-			)
-			.into_primary_remote();
+			);
 			remote.set_status(stored_queued_rounds.status);
 			*self.next_rounds.write() = Some(remote);
 		};

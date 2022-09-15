@@ -78,13 +78,17 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 
 impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 	fn drop(&mut self) {
-		log::debug!("AsyncProtocolParameters({}) dropped", self.round_id);
 		if self.handle.is_active() && self.handle.is_primary_remote {
 			log::warn!(
 				"AsyncProtocolParameters({})'s handler is still active and now will be dropped!!!",
 				self.round_id
 			);
 		} else if self.handle.is_primary_remote {
+			log::debug!(
+				"AsyncProtocolParameters({})'s handler is going to be dropped",
+				self.round_id
+			);
+		} else {
 			log::debug!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
 				self.round_id
@@ -293,7 +297,7 @@ where
 
 	// Combine all futures into a concurrent select subroutine
 	let protocol = async move {
-		tokio::select! {
+		let res = tokio::select! {
 			proto_res = async_proto => {
 				log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), proto_res);
 				proto_res
@@ -308,7 +312,9 @@ where
 				log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
 				Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
 			}
-		}
+		};
+		log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
+		res
 	};
 
 	Ok(GenericAsyncHandler { protocol: Box::pin(protocol) })

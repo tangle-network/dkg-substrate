@@ -123,7 +123,8 @@ where
 		}
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg", "🕸️  Offline GenericAsyncHandler completed");
+			// print the res value.
+			log::info!(target: "dkg", "🕸️  Signing protocol concluded with {:?}", res);
 			res
 		});
 

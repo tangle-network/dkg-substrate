@@ -15,7 +15,7 @@
 use crate::async_protocols::CurrentRoundBlame;
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT};
+use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
@@ -86,7 +86,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 			stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
 			current_round_blame,
 			current_round_blame_tx: Arc::new(current_round_blame_tx),
-			is_primary_remote: false,
+			is_primary_remote: true,
 			round_id,
 		}
 	}
@@ -95,7 +95,16 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 		self.keygen_is_not_complete() && (now >= self.started_at + KEYGEN_TIMEOUT.into())
 	}
 
+	pub fn signing_has_stalled(&self, now: C) -> bool {
+		self.signing_is_not_complete() && (now >= self.started_at + SIGN_TIMEOUT.into())
+	}
+
 	pub fn keygen_is_not_complete(&self) -> bool {
+		self.get_status() != MetaHandlerStatus::Complete ||
+			self.get_status() == MetaHandlerStatus::Terminated
+	}
+
+	pub fn signing_is_not_complete(&self) -> bool {
 		self.get_status() != MetaHandlerStatus::Complete ||
 			self.get_status() == MetaHandlerStatus::Terminated
 	}
@@ -162,14 +171,13 @@ impl<C> AsyncProtocolRemote<C> {
 		matches!(state, MetaHandlerStatus::Complete)
 	}
 
-	pub fn current_round_blame(&self) -> CurrentRoundBlame {
-		self.current_round_blame.borrow().clone()
+	pub fn is_signing_finished(&self) -> bool {
+		let state = self.get_status();
+		matches!(state, MetaHandlerStatus::Complete)
 	}
 
-	/// Setting this as the primary remote
-	pub fn into_primary_remote(mut self) -> Self {
-		self.is_primary_remote = true;
-		self
+	pub fn current_round_blame(&self) -> CurrentRoundBlame {
+		self.current_round_blame.borrow().clone()
 	}
 }
 
