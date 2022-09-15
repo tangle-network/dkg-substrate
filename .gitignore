@@ -31,3 +31,5 @@ template-local-raw.json
 
 /scripts/seed-arana-testnet.sh
 *.txt
+rococo-local-raw.json
+rococo-local.json

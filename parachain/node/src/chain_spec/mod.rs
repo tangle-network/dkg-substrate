@@ -125,12 +125,19 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 						get_collator_keys_from_seed("Bob"),
 						get_dkg_keys_from_seed("Bob"),
 					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
+					),
 				],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
 				],
 				id,
 			)
