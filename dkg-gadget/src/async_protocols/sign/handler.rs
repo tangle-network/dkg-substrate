@@ -133,7 +133,9 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
-					Ok(())
+					Err(DKGError::GenericError {
+						reason: format!("Stopper has been called {:?}", res1)
+					})
 				}
 			}
 		});

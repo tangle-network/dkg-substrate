@@ -116,6 +116,7 @@ impl NetworkGossipEngineBuilder {
 		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 		let (message_notifications_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
+		let processing_already_seen_messages_enabled = Arc::new(AtomicBool::new(false));
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
@@ -125,6 +126,8 @@ impl NetworkGossipEngineBuilder {
 			message_notifications_channel: message_notifications_channel.clone(),
 			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: processing_already_seen_messages_enabled
+				.clone(),
 			service,
 			peers: Arc::new(RwLock::new(HashMap::new())),
 			metrics: Arc::new(metrics),
@@ -134,6 +137,7 @@ impl NetworkGossipEngineBuilder {
 			handler_channel,
 			message_notifications_channel,
 			gossip_enabled,
+			processing_already_seen_messages_enabled,
 			message_queue,
 			_pd: Default::default(),
 		};
@@ -178,6 +182,8 @@ pub struct GossipHandlerController<B: Block> {
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
 	_pd: PhantomData<B>,
@@ -264,6 +270,11 @@ impl<B: Block> GossipHandlerController<B> {
 	pub fn set_gossip_enabled(&self, enabled: bool) {
 		self.gossip_enabled.store(enabled, Ordering::Relaxed);
 	}
+
+	/// Controls whether we process already seen messages or not.
+	pub fn set_processing_already_seen_messages_enabled(&self, enabled: bool) {
+		self.processing_already_seen_messages_enabled.store(enabled, Ordering::Relaxed);
+	}
 }
 
 /// Handler for gossiping messages. Call [`GossipHandler::run`] to start the processing.
@@ -290,6 +301,8 @@ pub struct GossipHandler<B: Block + 'static> {
 	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	/// A Channel to receive commands from the controller.
 	my_channel: broadcast::Sender<ToHandler>,
 	/// Prometheus metrics.
@@ -307,6 +320,9 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 			service: self.service.clone(),
 			peers: self.peers.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: self
+				.processing_already_seen_messages_enabled
+				.clone(),
 			my_channel: self.my_channel.clone(),
 			metrics: self.metrics.clone(),
 		}
@@ -485,21 +501,24 @@ impl<B: Block + 'static> GossipHandler<B> {
 		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			let mut pending_messages_peers = self.pending_messages_peers.write();
+			let enqueue_the_message = || {
+				let mut queue_lock = self.message_queue.write();
+				queue_lock.push_back(message.clone());
+				drop(queue_lock);
+				let recv_count = self.message_notifications_channel.receiver_count();
+				if recv_count == 0 {
+					log::warn!(target: "dkg", "No one is going to process the message notification!!!");
+				}
+				if let Err(e) = self.message_notifications_channel.send(()) {
+					log::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
+				} else {
+					log::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
+				}
+			};
 			match pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					log::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
-					let mut queue_lock = self.message_queue.write();
-					queue_lock.push_back(message.clone());
-					drop(queue_lock);
-					let recv_count = self.message_notifications_channel.receiver_count();
-					if recv_count == 0 {
-						log::warn!(target: "dkg", "No one is going to process the message notification!!!");
-					}
-					if let Err(e) = self.message_notifications_channel.send(()) {
-						log::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
-					} else {
-						log::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
-					}
+					enqueue_the_message();
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
 					// we should add some good reputation to them.
@@ -530,6 +549,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 							);
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
+					}
+
+					// check if we shall process this old message or not.
+					if self.processing_already_seen_messages_enabled.load(Ordering::Relaxed) {
+						enqueue_the_message();
 					}
 				},
 			}

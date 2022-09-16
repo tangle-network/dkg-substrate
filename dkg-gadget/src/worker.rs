@@ -36,10 +36,7 @@ use std::{
 
 use parking_lot::RwLock;
 
-use sc_client_api::{
-	Backend, BlockImportNotification, FinalityNotification, FinalityNotifications,
-	ImportNotifications,
-};
+use sc_client_api::{Backend, BlockImportNotification, FinalityNotification};
 
 use sp_api::BlockId;
 use sp_runtime::traits::{Block, Header, NumberFor};
@@ -136,8 +133,6 @@ where
 	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Signing rounds, created everytime there are unique unsigned proposals
 	pub signing_rounds: Shared<Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>>,
-	pub finality_notifications: FinalityNotifications<B>,
-	pub import_notifications: ImportNotifications<B>,
 	/// Best block a DKG voting round has been concluded for
 	pub best_dkg_block: Shared<Option<NumberFor<B>>>,
 	/// Cached best authorities
@@ -158,6 +153,9 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
+	/// A HashSet of the currently being signed proposals.
+	/// Note: we only store the hash of the proposal here, not the full proposal.
+	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
 	/// Local keystore for DKG data
 	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
@@ -187,8 +185,6 @@ where
 			rounds: self.rounds.clone(),
 			next_rounds: self.next_rounds.clone(),
 			signing_rounds: self.signing_rounds.clone(),
-			finality_notifications: self.client.finality_notification_stream(),
-			import_notifications: self.client.import_notification_stream(),
 			best_dkg_block: self.best_dkg_block.clone(),
 			best_authorities: self.best_authorities.clone(),
 			best_next_authorities: self.best_next_authorities.clone(),
@@ -199,6 +195,7 @@ where
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
+			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
@@ -241,7 +238,7 @@ where
 		let (error_handler, _) = tokio::sync::broadcast::channel(1024);
 
 		DKGWorker {
-			client: client.clone(),
+			client,
 			misbehaviour_tx: None,
 			backend,
 			key_store,
@@ -251,8 +248,6 @@ where
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
 			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
-			finality_notifications: client.finality_notification_stream(),
-			import_notifications: client.import_notification_stream(),
 			best_dkg_block: Arc::new(RwLock::new(None)),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			best_next_authorities: Arc::new(RwLock::new(vec![])),
@@ -261,6 +256,7 @@ where
 			latest_header,
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
+			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
@@ -511,6 +507,7 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler.clone();
+		let proposals_hash = unsigned_proposals.iter().map(|p| p.hash()).collect::<Vec<_>>();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -518,18 +515,29 @@ where
 			signing_set,
 			async_index,
 		)?;
-		// TODO: add the hash of the signing proposal to the currently being signed proposals.
+		// insert the hash of the proposals into the currently being signed proposals.
+		let currently_signing_proposals = self.currently_signing_proposals.clone();
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
 					log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
-					// TODO: remove the hash of the signing proposal from the currently being signed proposals.
+					// remove the hash of the proposals from the currently being signed proposals.
+					let mut lock = currently_signing_proposals.write();
+					proposals_hash.iter().flatten().for_each(|h| {
+						lock.remove(h);
+					});
 					Ok(async_index)
 				},
 
 				Err(err) => {
 					error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 					let _ = err_handler_tx.send(err.clone());
+					// if we errored, we also need to remove the hash of the proposals from the
+					// currently being signed proposals.
+					let mut lock = currently_signing_proposals.write();
+					proposals_hash.iter().flatten().for_each(|h| {
+						lock.remove(h);
+					});
 					Err(err)
 				},
 			}
@@ -1269,13 +1277,31 @@ where
 			Ok(res) => res,
 			Err(_) => return,
 		};
-
+		// filter them
+		let unsigned_proposals = unsigned_proposals
+			.into_iter()
+			.filter(|proposal| {
+				// only take the proposals that are not yet being processed
+				let proposal_hash = proposal.hash();
+				match proposal_hash {
+					Some(hash) => !self.currently_signing_proposals.read().contains(&hash),
+					None => true,
+				}
+			})
+			.collect::<Vec<_>>();
 		if unsigned_proposals.is_empty() {
 			return
 		} else {
 			debug!(target: "dkg_gadget::worker", "Got unsigned proposals count {}", unsigned_proposals.len());
 		}
-		// TODO: check if we are already signing these proposals or not, if yes, return
+
+		let mut lock = self.currently_signing_proposals.write();
+		let proposals_hash = unsigned_proposals.iter().map(|p| p.hash()).collect::<Vec<_>>();
+		proposals_hash.iter().flatten().for_each(|h| {
+			lock.insert(*h);
+		});
+		drop(lock);
+
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
@@ -1494,8 +1520,6 @@ where
 			})
 			.for_each(|_| future::ready(()))
 			.await;
-		// get a new stream that provides _new_ notifications (from here on out)
-		self.import_notifications = self.client.import_notification_stream();
 	}
 
 	// *** Main run loop ***
@@ -1520,9 +1544,10 @@ where
 	}
 
 	fn spawn_import_notification_task(&self) -> tokio::task::JoinHandle<()> {
-		let mut self_ = self.clone();
+		let mut stream = self.client.import_notification_stream();
+		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(notification) = self_.import_notifications.next().await {
+			while let Some(notification) = stream.next().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
 				self_.handle_import_notification(notification);
 			}
@@ -1530,9 +1555,10 @@ where
 	}
 
 	fn spawn_finality_notification_task(&self) -> tokio::task::JoinHandle<()> {
-		let mut self_ = self.clone();
+		let mut stream = self.client.finality_notification_stream();
+		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(notification) = self_.finality_notifications.next().await {
+			while let Some(notification) = stream.next().await {
 				log::debug!(target: "dkg_gadget::worker", "Going to handle Finality notification");
 				self_.handle_finality_notification(notification);
 			}

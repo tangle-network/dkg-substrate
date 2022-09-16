@@ -25,7 +25,7 @@ pub mod utils;
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::{log, RuntimeDebug};
+use frame_support::RuntimeDebug;
 pub use proposal::*;
 
 pub use crate::proposal::DKGPayloadKey;
@@ -194,10 +194,7 @@ pub struct UnsignedProposal {
 
 impl UnsignedProposal {
 	pub fn hash(&self) -> Option<[u8; 32]> {
-		let key = (self.typed_chain_id, self.key);
-		log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
-			log::debug!(target: "dkg", "Adding unsigned proposal to hash vec");
 			Some(keccak_256(data))
 		} else {
 			None
