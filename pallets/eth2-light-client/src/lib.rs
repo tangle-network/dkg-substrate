@@ -3,10 +3,11 @@
 pub use pallet::*;
 
 #[cfg(test)]
-mod mock;
-
-#[cfg(test)]
 mod tests;
+
+mod types;
+
+mod consensus;
 
 use codec::{Codec, Decode, Encode};
 use ethereum_types::{H256, U256};
