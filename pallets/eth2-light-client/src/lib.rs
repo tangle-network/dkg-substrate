@@ -29,44 +29,69 @@ pub mod pallet {
 	// The pallet's runtime storage items.
 	// https://docs.substrate.io/main-docs/build/runtime-storage/
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
-	/// If set, only light client updates by the trusted signer will be accepted
+	#[pallet::getter(fn trusted_signer)]
 	pub type trusted_signer: Option<AccountId>;
-	/// Mask determining all paused functions
+	/// Mask determining all paused function
+	#[pallet::storage]
+	#[pallet::getter(fn paused)]
 	pub type paused: Mask;
 	/// Whether the client validates the updates.
 	/// Should only be set to `false` for debugging, testing, and diagnostic purposes
+	#[pallet::storage]
+	#[pallet::getter(fn validate_updates)]
 	pub type validate_updates: bool;
 	/// Whether the client verifies BLS signatures.
+	#[pallet::storage]
+	#[pallet::getter(fn verify_bls_signatures)]
 	pub type verify_bls_signatures: bool;
 	/// We store the hashes of the blocks for the past `hashes_gc_threshold` headers.
 	/// Events that happen past this threshold cannot be verified by the client.
 	/// It is desirable that this number is larger than 7 days' worth of headers, which is roughly
 	/// 51k Ethereum blocks. So this number should be 51k in production.
+	#[pallet::storage]
+	#[pallet::getter(fn hashes_gc_threshold)]
 	pub type hashes_gc_threshold: u64;
 	/// Network. e.g. mainnet, kiln
+	#[pallet::storage]
+	#[pallet::getter(fn network)]
 	pub type network: Network;
 	/// Hashes of the finalized execution blocks mapped to their numbers. Stores up to
 	/// `hashes_gc_threshold` entries. Execution block number -> execution block hash
+	#[pallet::storage]
+	#[pallet::getter(fn finalized_execution_blocks)]
 	pub type finalized_execution_blocks: LookupMap<u64, H256>;
 	/// All unfinalized execution blocks' headers hashes mapped to their `HeaderInfo`.
 	/// Execution block hash -> ExecutionHeaderInfo object
+	#[pallet::storage]
+	#[pallet::getter(fn unfinalized_headers)]
 	pub type unfinalized_headers: UnorderedMap<H256, ExecutionHeaderInfo>;
 	/// `AccountId`s mapped to their number of submitted headers.
 	/// Submitter account -> Num of submitted headers
+	#[pallet::storage]
+	#[pallet::getter(fn submitters)]
 	pub type submitters: LookupMap<AccountId, u32>;
 	/// Max number of unfinalized blocks allowed to be stored by one submitter account
 	/// This value should be at least 32 blocks (1 epoch), but the recommended value is 1024 (32
 	/// epochs)
+	#[pallet::storage]
+	#[pallet::getter(fn max_submitted_blocks_by_account)]
 	pub type max_submitted_blocks_by_account: u32;
 	// The minimum balance that should be attached to register a new submitter account
+	#[pallet::storage]
+	#[pallet::getter(fn min_storage_balance_for_submitter)]
 	pub type min_storage_balance_for_submitter: Balance;
 	/// Light client state
+	#[pallet::storage]
+	#[pallet::getter(fn finalized_beacon_header)]
 	pub type finalized_beacon_header: ExtendedBeaconBlockHeader;
+	#[pallet::storage]
+	#[pallet::getter(fn finalized_execution_header)]
 	pub type finalized_execution_header: LazyOption<ExecutionHeaderInfo>;
+	#[pallet::storage]
+	#[pallet::getter(fn current_sync_committee)]
 	pub type current_sync_committee: LazyOption<SyncCommittee>;
+	#[pallet::storage]
+	#[pallet::getter(fn next_sync_committee)]
 	pub type next_sync_committee: LazyOption<SyncCommittee>;
 
 	// Pallets use events to inform users when important changes are made.
