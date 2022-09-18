@@ -9,6 +9,7 @@ mod mock;
 mod tests;
 
 use codec::{Codec, Decode, Encode};
+use ethereum_types::{H256, U256};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -28,29 +29,22 @@ pub mod pallet {
 
 	// The pallet's runtime storage items.
 	// https://docs.substrate.io/main-docs/build/runtime-storage/
-	#[pallet::storage]
-	#[pallet::getter(fn trusted_signer)]
-	pub type trusted_signer: Option<AccountId>;
-	/// Mask determining all paused function
-	#[pallet::storage]
-	#[pallet::getter(fn paused)]
-	pub type paused: Mask;
 	/// Whether the client validates the updates.
 	/// Should only be set to `false` for debugging, testing, and diagnostic purposes
 	#[pallet::storage]
 	#[pallet::getter(fn validate_updates)]
-	pub type validate_updates: bool;
+	pub type validate_updates<T: Config> = StorageValue<_, bool, ValueQuery>;
 	/// Whether the client verifies BLS signatures.
 	#[pallet::storage]
 	#[pallet::getter(fn verify_bls_signatures)]
-	pub type verify_bls_signatures: bool;
+	pub type verify_bls_signatures<T: Config> = StorageValue<_, bool, ValueQuery>;
 	/// We store the hashes of the blocks for the past `hashes_gc_threshold` headers.
 	/// Events that happen past this threshold cannot be verified by the client.
 	/// It is desirable that this number is larger than 7 days' worth of headers, which is roughly
 	/// 51k Ethereum blocks. So this number should be 51k in production.
 	#[pallet::storage]
 	#[pallet::getter(fn hashes_gc_threshold)]
-	pub type hashes_gc_threshold: u64;
+	pub type hashes_gc_threshold = StorageValue<_, u64, ValueQuery>;
 	/// Network. e.g. mainnet, kiln
 	#[pallet::storage]
 	#[pallet::getter(fn network)]
@@ -59,23 +53,24 @@ pub mod pallet {
 	/// `hashes_gc_threshold` entries. Execution block number -> execution block hash
 	#[pallet::storage]
 	#[pallet::getter(fn finalized_execution_blocks)]
-	pub type finalized_execution_blocks: LookupMap<u64, H256>;
+	pub type finalized_execution_blocks = StorageMap<_, Blake2_128Concat, u64, H256, ValueQuery>;
 	/// All unfinalized execution blocks' headers hashes mapped to their `HeaderInfo`.
 	/// Execution block hash -> ExecutionHeaderInfo object
 	#[pallet::storage]
 	#[pallet::getter(fn unfinalized_headers)]
-	pub type unfinalized_headers: UnorderedMap<H256, ExecutionHeaderInfo>;
+	pub type unfinalized_headers =
+		StorageMap<_, Blake2_128Concat, H256, ExecutionHeaderInfo, ValueQuery>;
 	/// `AccountId`s mapped to their number of submitted headers.
 	/// Submitter account -> Num of submitted headers
 	#[pallet::storage]
 	#[pallet::getter(fn submitters)]
-	pub type submitters: LookupMap<AccountId, u32>;
+	pub type submitters = StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 	/// Max number of unfinalized blocks allowed to be stored by one submitter account
 	/// This value should be at least 32 blocks (1 epoch), but the recommended value is 1024 (32
 	/// epochs)
 	#[pallet::storage]
 	#[pallet::getter(fn max_submitted_blocks_by_account)]
-	pub type max_submitted_blocks_by_account: u32;
+	pub type max_submitted_blocks_by_account = StorageValue<_, u32, ValueQuery>;
 	// The minimum balance that should be attached to register a new submitter account
 	#[pallet::storage]
 	#[pallet::getter(fn min_storage_balance_for_submitter)]
