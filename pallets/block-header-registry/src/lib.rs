@@ -18,7 +18,10 @@ use webb_proposals::{
 	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
 };
 
-use bridge_proofs::{validate_block_header};
+use webb_bridge_proofs::{
+	traits::{BlockHeaderTrait, TypedChainIdTrait},
+	validate_block_header
+};
 
 pub use pallet::*;
 
@@ -38,6 +41,12 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+		/// Block header type
+		type BlockHeader: BlockHeaderTrait;
+
+		/// Typed chain Id type
+		type TypedChainId: TypedChainIdTrait;
 	}
 
 
@@ -47,10 +56,10 @@ pub mod pallet {
 	pub type BlockHeadersByChain<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_256,
-		TypedChainId,
+		T::TypedChainId,
 		Blake2_256,
 		H256,
-		BlockHeader
+		T::BlockHeader
 		ValueQuery,
 	>;
 
@@ -108,7 +117,7 @@ impl<T: Config> Pallet<T> {
 	fn validate_block_header(
 		header: &T::BlockHeader
 	) -> Result<bool, DispatchError> {
-		bridge_proofs::validate_block_header(header)
+		webb_bridge_proofs::validate_block_header(header)
 	}
 }
 
