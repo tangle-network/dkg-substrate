@@ -212,7 +212,7 @@ console.log("Almost done, now run the following commands (in terminal tabs):");
 console.log("");
 
 const cmds = [1, 2, 3].map((n) =>
-  `${parachainPath} --collator --chain ${parachainSpecPath} --base-path ${state.tmpDir}/para/collator${n} --port ${30334 + n} --force-authoring --ws-port ${9945 + n} --ws-external --rpc-port ${9979 + n} --rpc-cors all --rpc-external --unsafe-ws-external --unsafe-rpc-external -ldkg=debug -ldkg_gadget=debug -lruntime::dkg_metadata=debug -lruntime::offchain=debug -lruntime::dkg_proposal_handler=debug -ldkg_proposals=debug -ldkg_gadget::async_protocol::keygen=debug -ldkg_gadget::async_protocol::keygen=debug -ldkg_gadget::gossip_engine::network=debug -ldkg_gadget::storage::public_keys=debug -ldkg_gadget::worker=debug --log info --rpc-methods=unsafe -- --execution wasm --chain ${relaychainSpecPath}`
+  `${parachainPath} --collator --chain ${parachainSpecPath} --base-path ${state.tmpDir}/para/collator${n} --port ${30334 + n} --force-authoring --ws-port ${9945 + n} --ws-external --rpc-port ${9979 + n} --rpc-cors all --rpc-external --unsafe-ws-external --unsafe-rpc-external -ldkg=debug -ldkg_gadget=debug -lruntime::dkg_metadata=debug -lruntime::offchain=debug -lruntime::dkg_proposal_handler=debug -ldkg_proposals=debug -ldkg_gadget::async_protocol::keygen=debug -ldkg_gadget::async_protocol::keygen=debug -ldkg_gadget::gossip_engine::network=debug -ldkg_gadget::storage::public_keys=debug -ldkg_gadget::worker=debug --log info --rpc-methods=unsafe --node-key 000000000000000000000000000000000000000000000000000000000000000${n} -- --execution wasm --chain ${relaychainSpecPath}`
 );
 
 for (const cmd of cmds) {
