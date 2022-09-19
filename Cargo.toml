@@ -11,3 +11,9 @@ members = [
 	'dkg-runtime-primitives',
 	'dkg-gadget',
 ]
+
+[patch.crates-io]
+eth2_hashing = { git = "https://github.com/sigp/lighthouse", rev = "df51a73272489fe154bd10995c96199062b6c3f7"}
+eth2_serde_utils = { git = "https://github.com/sigp/lighthouse", rev = "df51a73272489fe154bd10995c96199062b6c3f7"}
+eth2_ssz = { git = "https://github.com/sigp/lighthouse", rev = "df51a73272489fe154bd10995c96199062b6c3f7"}
+tree_hash = { git = "https://github.com/sigp/lighthouse", rev = "df51a73272489fe154bd10995c96199062b6c3f7"}
