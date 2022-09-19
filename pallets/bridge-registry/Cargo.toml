@@ -24,6 +24,7 @@ frame-system-benchmarking = { default-features = false, git = "https://github.co
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.28", optional = true }
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.28", default-features = false }
 webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
+dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.119" }

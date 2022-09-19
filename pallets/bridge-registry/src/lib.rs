@@ -56,6 +56,7 @@ use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
+use dkg_runtime_primitives::BridgeRegistryTrait;
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
@@ -163,6 +164,8 @@ pub mod pallet {
 		BridgeNotFound,
 		/// Too many resources.
 		TooManyResources,
+		/// No bridge index found
+		NoBridgeFound,
 	}
 
 	#[pallet::hooks]
@@ -295,5 +298,15 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 		};
 
 		Ok(())
+	}
+}
+
+impl<T: Config<I>, I: 'static> BridgeRegistryTrait for Pallet<T, I> {
+	fn get_bridge_for_resource(r: ResourceId) -> Result<Vec<ResourceId>, DispatchError> {
+		let index = ResourceToBridgeIndex::<T, I>::get(r);
+		ensure!(index.is_some(), Error::<T, I>::NoBridgeFound);
+		let bridge = Bridges::<T, I>::get(index.unwrap());
+		ensure!(bridge.is_some(), Error::<T, I>::NoBridgeFound);
+		Ok(bridge.unwrap().resource_ids.to_vec())
 	}
 }

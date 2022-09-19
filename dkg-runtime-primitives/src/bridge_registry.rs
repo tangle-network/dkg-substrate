@@ -13,11 +13,13 @@
 // limitations under the License.
 //
 use frame_support::RuntimeDebug;
+use sp_runtime::DispatchError;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
+use webb_proposals::ResourceId;
 
-pub trait BridgeRegistryTrait {}
-
-impl BridgeRegistryTrait for () {}
+pub trait BridgeRegistryTrait {
+	fn get_bridge_for_resource(resource_id: ResourceId) -> Result<Vec<ResourceId>, DispatchError>;
+}

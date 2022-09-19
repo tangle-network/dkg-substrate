@@ -95,6 +95,9 @@ pub mod pallet {
 		type BridgeRegistry: BridgeRegistryTrait;
 
 		type ProposalHandler: ProposalHandlerTrait;
+
+		#[pallet::constant]
+		type AnchorUpdateFunctionSignature: Get<[u8; 4]>;
 	}
 
 	#[pallet::genesis_config]
@@ -164,13 +167,12 @@ pub mod pallet {
 			let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data)?;
 			let src_r_id =
 				ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
-			let bridge =
-				T::BridgeRegistry::bridges(T::BridgeRegistry::resource_to_bridge_index(src_r_id));
+			let bridge = T::BridgeRegistry::get_bridge_for_resource(src_r_id)?;
 			for r in bridge.resource_ids {
 				if r == src_r_id {
 					continue
 				}
-				let function_sig = FunctionSignature::from([0u8; 4]);
+				let function_sig = FunctionSignature::from(T::AnchorUpdateFunctionSignature::get());
 				let proposal_header = ProposalHeader::new(r, function_sig, nonce);
 				let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
 				T::ProposalHandler::submit_unsigned_proposal(typed_chain_id, proposal)?;
