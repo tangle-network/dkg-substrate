@@ -21,6 +21,7 @@ pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
+pub mod bridge_registry;
 
 use crypto::AuthorityId;
 pub use ethereum::*;

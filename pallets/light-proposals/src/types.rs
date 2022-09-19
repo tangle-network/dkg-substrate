@@ -80,7 +80,7 @@ impl<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> Decode
 		Ok(Self { resource_ids, info })
 	}
 }
-
+#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo)]
 pub struct EvmProof {
 	pub log_index: u64,
 	pub log_entry_data: Vec<u8>,
@@ -89,6 +89,7 @@ pub struct EvmProof {
 	pub header_data: Vec<u8>,
 	pub proof: Vec<Vec<u8>>,
 }
+#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo)]
 pub enum ProofData {
 	EVM(EvmProof),
 }

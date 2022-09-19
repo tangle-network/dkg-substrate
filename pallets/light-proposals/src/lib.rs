@@ -56,13 +56,19 @@ use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
-use frame_support::pallet_prelude::{ensure, DispatchError, DispatchResultWithPostInfo};
+use frame_support::pallet_prelude::{ensure, DispatchError};
 // pub use pallet::*;
+use dkg_runtime_primitives::{BridgeRegistryTrait, ProposalHandlerTrait};
 use pallet_eth2_light_client::Eth2Prover;
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
-	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId, TypedChainId,
+	evm::AnchorUpdateProposal, FunctionSignature, OnSignedProposal, Proposal, ProposalHeader,
+	ProposalKind, ResourceId, TargetSystem, TypedChainId,
 };
+
+use eth_types::{LogEntry, Receipt};
+
+use rlp::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -85,6 +91,10 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 
 		type Eth2Prover: Eth2Prover;
+
+		type BridgeRegistry: BridgeRegistryTrait;
+
+		type ProposalHandler: ProposalHandlerTrait;
 	}
 
 	#[pallet::genesis_config]
@@ -115,8 +125,8 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
-		pub fn verify_proof(
+		#[pallet::weight(100)]
+		pub fn submit_anchor_update_proposal(
 			origin: OriginFor<T>,
 			typed_chain_id: TypedChainId,
 			proof_data: ProofData,
@@ -124,17 +134,57 @@ pub mod pallet {
 			match typed_chain_id {
 				TypedChainId::Evm(_) => {
 					let evm_proof_data = proof_data.to_evm_proof().unwrap();
-					Ok(Eth2Prover::verify_log_entry(
-						evm_proof_data.log_index,
+					ensure!(
+						Eth2Prover::verify_log_entry(
+							evm_proof_data.log_index,
+							evm_proof_data.log_entry_data,
+							evm_proof_data.receipt_index,
+							evm_proof_data.receipt_data,
+							evm_proof_data.header_data,
+							evm_proof_data.proof,
+						),
+						Error::<T>::InvalidEvmLogEntryProof
+					);
+					// Submit the AnchorUpdateProposal
+					Self::submit_anchor_update_proposals_evm(
+						typed_chain_id,
 						evm_proof_data.log_entry_data,
-						evm_proof_data.receipt_index,
-						evm_proof_data.receipt_data,
-						evm_proof_data.header_data,
-						evm_proof_data.proof,
-					))
+					);
 				},
-				_ => (),
+				_ => Err(Error::<T>::InvalidTypedChainId),
 			}
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		pub fn submit_anchor_update_proposals_evm(
+			typed_chain_id: TypedChainId,
+			log_entry_data: Vec<u8>,
+		) {
+			let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data)?;
+			let src_r_id =
+				ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
+			let bridge =
+				T::BridgeRegistry::bridges(T::BridgeRegistry::resource_to_bridge_index(src_r_id));
+			for r in bridge.resource_ids {
+				if r == src_r_id {
+					continue
+				}
+				let function_sig = FunctionSignature::from([0u8; 4]);
+				let proposal_header = ProposalHeader::new(r, function_sig, nonce);
+				let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
+				T::ProposalHandler::submit_unsigned_proposal(typed_chain_id, proposal)?;
+			}
+		}
+
+		pub fn parse_evm_log(log_entry_data: Vec<u8>) {
+			let parsed_log: LogEntry = rlp::decode(log_entry_data.as_slice()).unwrap();
+
+			let address = parsed_log.address.to_fixed_bytes();
+			let topics = parsed_log.topics;
+			let merkle_root = topics[1].to_fixed_bytes();
+			let nonce = u32::from_be_bytes(topics[2].as_bytes());
+			(address, merkle_root, nonce)
 		}
 	}
 }
