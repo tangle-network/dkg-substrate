@@ -1528,7 +1528,7 @@ where
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;
 		log::debug!(target: "dkg_gadget::worker", "Starting DKG Iteration loop");
-		// Now, we run all these tasks in parallel, and wait for any of them to complete.
+		// We run all these tasks in parallel and wait for any of them to complete.
 		// If any of them completes, we stop all the other tasks since this means a fatal error has
 		// occurred and we need to shut down.
 		let (first, n, ..) = futures::future::select_all(vec![
