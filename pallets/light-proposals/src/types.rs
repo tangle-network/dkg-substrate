@@ -80,3 +80,24 @@ impl<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> Decode
 		Ok(Self { resource_ids, info })
 	}
 }
+
+pub struct EvmProof {
+	pub log_index: u64,
+	pub log_entry_data: Vec<u8>,
+	pub receipt_index: u64,
+	pub receipt_data: Vec<u8>,
+	pub header_data: Vec<u8>,
+	pub proof: Vec<Vec<u8>>,
+}
+pub enum ProofData {
+	EVM(EvmProof),
+}
+
+impl ProofData {
+	pub fn to_evm_proof(&self) -> Option<&EvmProof> {
+		match self {
+			Self::EVM(evm_proof) => Some(evm_proof),
+			_ => None,
+		}
+	}
+}

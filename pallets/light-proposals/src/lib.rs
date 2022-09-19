@@ -56,13 +56,13 @@ use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
-use frame_support::pallet_prelude::{ensure, DispatchError};
+use frame_support::pallet_prelude::{ensure, DispatchError, DispatchResultWithPostInfo};
+// pub use pallet::*;
+use pallet_eth2_light_client::Eth2Prover;
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
-	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
+	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId, TypedChainId,
 };
-use pallet_eth2_light_client::Eth2Prover;
-pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -108,12 +108,33 @@ pub mod pallet {
 	pub enum Event<T: Config> {}
 
 	#[pallet::error]
-	pub enum Error<T> {
-	}
+	pub enum Error<T> {}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {}
+	impl<T: Config> Pallet<T> {
+		#[pallet::weight(0)]
+		pub fn verify_proof(
+			origin: OriginFor<T>,
+			typed_chain_id: TypedChainId,
+			proof_data: ProofData,
+		) -> DispatchResultWithPostInfo {
+			match typed_chain_id {
+				TypedChainId::Evm(_) => {
+					let evm_proof_data = proof_data.to_evm_proof().unwrap();
+					Ok(Eth2Prover::verify_log_entry(
+						evm_proof_data.log_index,
+						evm_proof_data.log_entry_data,
+						evm_proof_data.receipt_index,
+						evm_proof_data.receipt_data,
+						evm_proof_data.header_data,
+						evm_proof_data.proof,
+					))
+				},
+				_ => (),
+			}
+		}
+	}
 }
