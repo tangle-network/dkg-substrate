@@ -2715,7 +2715,7 @@ dependencies = [
 [[package]]
 name = "eth-types"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#144d1f207dfa6932b4ae7551e9635776f292c21d"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#6569a59ba8c12cf9d6181fe6f709a56cdd1923ed"
 dependencies = [
  "derive_more",
  "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
@@ -6248,7 +6248,7 @@ dependencies = [
 [[package]]
 name = "pallet-eth2-light-client"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#144d1f207dfa6932b4ae7551e9635776f292c21d"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#6569a59ba8c12cf9d6181fe6f709a56cdd1923ed"
 dependencies = [
  "bitvec 1.0.1",
  "bls",
@@ -12634,9 +12634,9 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 1.0.0",
+ "cfg-if 0.1.10",
  "digest 0.10.3",
- "rand 0.8.5",
+ "rand 0.4.6",
  "static_assertions",
 ]
 
