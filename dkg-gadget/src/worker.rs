@@ -36,7 +36,7 @@ use std::{
 
 use parking_lot::RwLock;
 
-use sc_client_api::{Backend, BlockImportNotification, FinalityNotification};
+use sc_client_api::{Backend, FinalityNotification};
 
 use sp_api::BlockId;
 use sp_runtime::traits::{Block, Header, NumberFor};
@@ -1002,12 +1002,6 @@ where
 		self.process_block_notification(&notification.header);
 	}
 
-	fn handle_import_notification(&self, notification: BlockImportNotification<B>) {
-		trace!(target: "dkg_gadget::worker", "🕸️  Import notification: {:?}", notification);
-		// Handle import notification
-		self.process_block_notification(&notification.header);
-	}
-
 	fn verify_signature_against_authorities(
 		&self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
@@ -1496,11 +1490,11 @@ where
 		Ok(())
 	}
 
-	/// Wait for initial block import
+	/// Wait for initial finalized block
 	async fn initialization(&mut self) {
 		use futures::future;
 		self.client
-			.import_notification_stream()
+			.finality_notification_stream()
 			.take_while(|notif| {
 				if let Some((active, queued)) = self.validator_set(&notif.header) {
 					// Cache the authority sets and best authorities
@@ -1510,7 +1504,7 @@ where
 					*self.current_validator_set.write() = active;
 					*self.queued_validator_set.write() = queued;
 					// Route this to the import notification handler
-					self.handle_import_notification(notif.clone());
+					self.handle_finality_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
 					// End the initialization stream
 					future::ready(false)
@@ -1532,7 +1526,6 @@ where
 		// If any of them completes, we stop all the other tasks since this means a fatal error has
 		// occurred and we need to shut down.
 		let (first, n, ..) = futures::future::select_all(vec![
-			self.spawn_import_notification_task(),
 			self.spawn_finality_notification_task(),
 			self.spawn_keygen_messages_stream_task(),
 			self.spawn_signing_messages_stream_task(),
@@ -1541,17 +1534,6 @@ where
 		])
 		.await;
 		log::error!(target: "dkg_gadget::worker", "DKG Worker finished; the reason that task({n}) ended with: {:?}", first);
-	}
-
-	fn spawn_import_notification_task(&self) -> tokio::task::JoinHandle<()> {
-		let mut stream = self.client.import_notification_stream();
-		let self_ = self.clone();
-		tokio::spawn(async move {
-			while let Some(notification) = stream.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle Import notification");
-				self_.handle_import_notification(notification);
-			}
-		})
 	}
 
 	fn spawn_finality_notification_task(&self) -> tokio::task::JoinHandle<()> {
