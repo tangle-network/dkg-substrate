@@ -41,10 +41,10 @@
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(test)]
-pub mod mock;
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// pub mod mock;
+// #[cfg(test)]
+// mod tests;
 
 mod benchmarking;
 mod types;
@@ -56,14 +56,14 @@ use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
-use frame_support::pallet_prelude::{ensure, DispatchError};
-// pub use pallet::*;
-use dkg_runtime_primitives::{BridgeRegistryTrait, ProposalHandlerTrait};
+use dkg_runtime_primitives::{traits::BridgeRegistryTrait, ProposalHandlerTrait};
+use frame_support::pallet_prelude::ensure;
+pub use pallet::*;
 use pallet_eth2_light_client::Eth2Prover;
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
-	evm::AnchorUpdateProposal, FunctionSignature, OnSignedProposal, Proposal, ProposalHeader,
-	ProposalKind, ResourceId, TargetSystem, TypedChainId,
+	evm::AnchorUpdateProposal, FunctionSignature, Nonce, OnSignedProposal, Proposal,
+	ProposalHeader, ProposalKind, ResourceId, TargetSystem, TypedChainId,
 };
 
 use eth_types::{LogEntry, Receipt};
@@ -121,7 +121,14 @@ pub mod pallet {
 	pub enum Event<T: Config> {}
 
 	#[pallet::error]
-	pub enum Error<T> {}
+	pub enum Error<T> {
+		/// Invalid Typed Chain Id
+		InvalidTypedChainId,
+		/// Invalid EVM Log Entry Proof
+		InvalidEvmLogEntryProof,
+		/// No Bridge Found
+		NoBridgeFound,
+	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
@@ -136,11 +143,11 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			match typed_chain_id {
 				TypedChainId::Evm(_) => {
-					let evm_proof_data = proof_data.to_evm_proof().unwrap();
+					let evm_proof_data = proof_data.to_evm_proof().unwrap().clone();
 					ensure!(
-						Eth2Prover::verify_log_entry(
+						T::Eth2Prover::verify_log_entry(
 							evm_proof_data.log_index,
-							evm_proof_data.log_entry_data,
+							evm_proof_data.log_entry_data.clone(),
 							evm_proof_data.receipt_index,
 							evm_proof_data.receipt_data,
 							evm_proof_data.header_data,
@@ -153,8 +160,9 @@ pub mod pallet {
 						typed_chain_id,
 						evm_proof_data.log_entry_data,
 					);
+					Ok(().into())
 				},
-				_ => Err(Error::<T>::InvalidTypedChainId),
+				_ => Err(Error::<T>::InvalidTypedChainId.into()),
 			}
 		}
 	}
@@ -164,29 +172,36 @@ pub mod pallet {
 			typed_chain_id: TypedChainId,
 			log_entry_data: Vec<u8>,
 		) {
-			let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data)?;
+			let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data);
 			let src_r_id =
 				ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
-			let bridge = T::BridgeRegistry::get_bridge_for_resource(src_r_id)?;
-			for r in bridge.resource_ids {
+			let bridge_resource_ids = T::BridgeRegistry::get_bridge_for_resource(src_r_id);
+			for r in bridge_resource_ids.unwrap_or_default() {
 				if r == src_r_id {
 					continue
 				}
 				let function_sig = FunctionSignature::from(T::AnchorUpdateFunctionSignature::get());
-				let proposal_header = ProposalHeader::new(r, function_sig, nonce);
+				let proposal_header = ProposalHeader::new(r, function_sig, Nonce::from(nonce));
 				let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
-				T::ProposalHandler::submit_unsigned_proposal(typed_chain_id, proposal)?;
+				T::ProposalHandler::handle_unsigned_proposal(
+					proposal.to_bytes().to_vec(),
+					dkg_runtime_primitives::ProposalAction::Sign(0),
+				);
 			}
 		}
 
-		pub fn parse_evm_log(log_entry_data: Vec<u8>) {
+		pub fn parse_evm_log(log_entry_data: Vec<u8>) -> ([u8; 20], [u8; 32], u32) {
 			let parsed_log: LogEntry = rlp::decode(log_entry_data.as_slice()).unwrap();
 
 			let address = parsed_log.address.to_fixed_bytes();
 			let topics = parsed_log.topics;
 			let merkle_root = topics[1].to_fixed_bytes();
-			let nonce = u32::from_be_bytes(topics[2].as_bytes());
+			let nonce = u32::from_be_bytes(Self::convert_nonce_to_fixed_size(topics[2].as_bytes()));
 			(address, merkle_root, nonce)
+		}
+
+		pub fn convert_nonce_to_fixed_size(nonce: &[u8]) -> [u8; 4] {
+			nonce.try_into().unwrap_or_default()
 		}
 	}
 }

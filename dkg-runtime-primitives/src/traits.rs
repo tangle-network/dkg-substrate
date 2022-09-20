@@ -14,6 +14,13 @@
 //
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use sp_std::vec::Vec;
+use sp_runtime::DispatchError;
+
+use webb_proposals::ResourceId;
+
+pub trait BridgeRegistryTrait {
+	fn get_bridge_for_resource(resource_id: ResourceId) -> Result<Vec<ResourceId>, DispatchError>;
+}
 
 pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 	fn on_authority_set_changed(

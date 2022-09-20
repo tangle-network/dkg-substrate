@@ -54,10 +54,10 @@ use weights::WeightInfo;
 
 use types::*;
 
-use sp_std::{convert::TryInto, prelude::*};
+use sp_std::{convert::TryInto, prelude::*, vec};
 
-use dkg_runtime_primitives::BridgeRegistryTrait;
-use frame_support::pallet_prelude::{ensure, DispatchError};
+use dkg_runtime_primitives::traits::BridgeRegistryTrait;
+use frame_support::pallet_prelude::{ensure, BoundedVec, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
 	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
