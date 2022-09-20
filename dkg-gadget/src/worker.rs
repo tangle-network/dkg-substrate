@@ -389,15 +389,9 @@ where
 						log::warn!(target: "dkg_gadget::worker", "signing round #{} has stalled, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
+						// we will allow overwriting the round, but we will print a warning
 						log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
-						status_handle.shutdown(
-							"Overwriting rounds will result in termination of previous rounds!",
-						)?;
-						return Err(DKGError::GenericError {
-							reason:
-								"Overwriting rounds while still running will result in termination."
-									.to_string(),
-						})
+						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						log::debug!(target: "dkg_gadget::worker", "signing round #{} is not active, overwriting it", async_index);
