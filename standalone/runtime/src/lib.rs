@@ -209,7 +209,6 @@ parameter_types! {
   pub const IndexDeposit: Balance = DOLLARS;
 }
 
-
 parameter_types! {
 	pub const BasicDeposit: Balance = deposit(1, 258);
 	pub const FieldDeposit: Balance = deposit(0, 66);
