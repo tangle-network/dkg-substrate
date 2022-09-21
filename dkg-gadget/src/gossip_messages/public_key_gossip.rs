@@ -34,7 +34,7 @@ use sp_runtime::traits::{Block, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
 pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
@@ -44,7 +44,7 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	if dkg_worker.rounds.is_none() {
+	if dkg_worker.rounds.read().is_none() {
 		return Ok(())
 	}
 
@@ -60,8 +60,8 @@ where
 		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
 
 		let is_main_round = {
-			if dkg_worker.rounds.is_some() {
-				msg.round_id == dkg_worker.rounds.as_ref().unwrap().round_id
+			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
+				msg.round_id == rounds.round_id
 			} else {
 				false
 			}
@@ -76,7 +76,7 @@ where
 
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let round_id = msg.round_id;
-		let mut lock = dkg_worker.aggregated_public_keys.lock();
+		let mut lock = dkg_worker.aggregated_public_keys.write();
 		let aggregated_public_keys = lock.entry(round_id).or_default();
 
 		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {

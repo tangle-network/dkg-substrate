@@ -41,6 +41,12 @@ jobs:
           cache: "yarn"
           cache-dependency-path: "./dkg-test-suite/yarn.lock"
 
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate fixtures
+        run: dvc pull
+
       - name: Install Packages
         run: cd dkg-test-suite && yarn
 

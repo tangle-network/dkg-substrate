@@ -27,7 +27,8 @@
 //! From the [`GossipHandlerController`] which implements [`super::GossipEngineIface`], you can:
 //!  - send a DKG message to a specific peer.
 //!  - send a DKG message to all peers.
-//!  - get a stream of DKG messages.
+//!  - get a notification stream when you get a DKG message.
+//!  - Have access to the message queue, which is a FIFO queue of DKG messages.
 //!
 //!
 //! ### The Lifetime of the DKG Message:
@@ -43,7 +44,7 @@ use crate::{metrics::Metrics, worker::HasLatestHeader};
 use codec::{Decode, Encode};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, warn};
 use parking_lot::RwLock;
@@ -52,7 +53,7 @@ use sc_network_common::service::{NetworkEventStream, NetworkNotification, Networ
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	borrow::Cow,
-	collections::{hash_map::Entry, HashMap, HashSet},
+	collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
 	hash::Hash,
 	iter,
 	marker::PhantomData,
@@ -65,19 +66,23 @@ use std::{
 };
 use tokio::sync::broadcast;
 
-#[derive(Debug, Clone, Copy)]
-pub struct NetworkGossipEngineBuilder;
+#[derive(Debug, Clone)]
+pub struct NetworkGossipEngineBuilder {
+	protocol_name: Cow<'static, str>,
+}
 
 impl NetworkGossipEngineBuilder {
 	/// Create a new network gossip engine.
-	pub fn new() -> Self {
-		Self
+	pub fn new(protocol_name: Cow<'static, str>) -> Self {
+		Self { protocol_name }
 	}
 
 	/// Returns the configuration of the set to put in the network configuration.
-	pub fn set_config() -> config::NonDefaultSetConfig {
+	pub fn set_config(
+		protocol_name: std::borrow::Cow<'static, str>,
+	) -> config::NonDefaultSetConfig {
 		config::NonDefaultSetConfig {
-			notifications_protocol: crate::DKG_PROTOCOL_NAME.into(),
+			notifications_protocol: protocol_name.clone(),
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,
 			set_config: config::SetConfig {
@@ -104,35 +109,36 @@ impl NetworkGossipEngineBuilder {
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
-		let event_stream = service.event_stream("dkg-handler").boxed();
 		// Here we need to create few channels to communicate back and forth between the
 		// background task and the controller.
 		// since we have two things here we will need two channels:
 		// 1. a channel to send commands to the background task (Controller -> Background).
-		// 2. a channel to send DKG Messages back from the background task to the controller
-		// (Background -> Controller).
 		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
-		let (controller_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
-
+		let (message_notifications_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
-
+		let processing_already_seen_messages_enabled = Arc::new(AtomicBool::new(false));
+		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
-			protocol_name: crate::DKG_PROTOCOL_NAME.into(),
+			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
-			controller_channel: controller_channel.clone(),
-			pending_messages_peers: HashMap::new(),
+			message_queue: message_queue.clone(),
+			message_notifications_channel: message_notifications_channel.clone(),
+			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: processing_already_seen_messages_enabled
+				.clone(),
 			service,
-			event_stream,
-			peers: HashMap::new(),
-			metrics,
+			peers: Arc::new(RwLock::new(HashMap::new())),
+			metrics: Arc::new(metrics),
 		};
 
 		let controller = GossipHandlerController {
-			my_channel: controller_channel,
 			handler_channel,
+			message_notifications_channel,
 			gossip_enabled,
+			processing_already_seen_messages_enabled,
+			message_queue,
 			_pd: Default::default(),
 		};
 
@@ -152,7 +158,7 @@ const MAX_PENDING_MESSAGES: usize = 8192;
 /// Maximum number of duplicate messages that a single peer can send us.
 ///
 /// This is to prevent a malicious peer from spamming us with messages.
-const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 5;
+const MAX_DUPLICATED_MESSAGES_PER_PEER: usize = 8;
 
 #[allow(unused)]
 mod rep {
@@ -170,21 +176,14 @@ mod rep {
 pub struct GossipHandlerController<B: Block> {
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
-	/// a channel to send DKG Messages back from the background task to the controller
-	///
-	/// Technically, we do not need to hold a reference to this channel, but we do it
-	/// here to make this controller (**Clone-able**), meaning that we can clone it and
-	/// still be able to receive messages from the background task.
-	///
-	/// Besides that, in the [`super::GossipEngineIface`] whenever we want to get the stream
-	/// of the DKG messages (which requires the stream is Owned value), here
-	/// we just create a new receiver of this channel, and since it is a broadcast channel,
-	/// we can receive messages from all the clones of this controller.
-	///
-	/// See: [`GossipHandlerController::stream`] below.
-	my_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// A simple channel to send notifications whenever we receive a message from a peer.
+	message_notifications_channel: broadcast::Sender<()>,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
 	_pd: PhantomData<B>,
@@ -198,7 +197,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		recipient: PeerId,
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
-		debug!(target: "dkg", "Sending message to {}", recipient);
+		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to {}", recipient);
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
@@ -208,22 +207,53 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		debug!(target: "dkg", "Sending message to all peers");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to all peers");
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
 	}
 
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
 		// We need to create a new receiver of the channel, so that we can receive messages
 		// from anywhere, without actually fight the rustc borrow checker.
-		let stream = self.my_channel.subscribe();
+		let stream = self.message_notifications_channel.subscribe();
 		tokio_stream::wrappers::BroadcastStream::new(stream)
-			.inspect(
-				|msg| debug!(target: "dkg", "Streaming message from the Gossip Engine (is okay? {})", msg.is_ok()),
-			)
 			.filter_map(|m| futures::future::ready(m.ok()))
 			.boxed()
+	}
+
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		let lock = self.message_queue.read();
+		let msg = lock.front().cloned();
+		match msg {
+			Some(msg) => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "Dequeuing message: {}", msg.message_hash::<B>());
+				Some(msg)
+			},
+			None => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to dequeue");
+				None
+			},
+		}
+	}
+
+	fn acknowledge_last_message(&self) {
+		let mut lock = self.message_queue.write();
+		let msg = lock.pop_front();
+		match msg {
+			Some(msg) => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "Acknowledging message: {}", msg.message_hash::<B>());
+			},
+			None => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to acknowledge");
+			},
+		}
+	}
+
+	fn clear_queue(&self) {
+		log::debug!(target: "dkg_gadget::gossip_engine::network", "Clearing message queue");
+		let mut lock = self.message_queue.write();
+		lock.clear();
 	}
 }
 /// an Enum Representing the commands that can be sent to the background task.
@@ -240,6 +270,11 @@ impl<B: Block> GossipHandlerController<B> {
 	pub fn set_gossip_enabled(&self, enabled: bool) {
 		self.gossip_enabled.store(enabled, Ordering::Relaxed);
 	}
+
+	/// Controls whether we process already seen messages or not.
+	pub fn set_processing_already_seen_messages_enabled(&self, enabled: bool) {
+		self.processing_already_seen_messages_enabled.store(enabled, Ordering::Relaxed);
+	}
 }
 
 /// Handler for gossiping messages. Call [`GossipHandler::run`] to start the processing.
@@ -251,25 +286,47 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: Cow<'static, str>,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
-	/// Pending Messages to be sent to the [`GossipHandlerController`].
-	controller_channel: broadcast::Sender<SignedDKGMessage<AuthorityId>>,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
+	/// A Simple notification stream to notify the caller that we have messages in the queue.
+	message_notifications_channel: broadcast::Sender<()>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
 	/// multiple times concurrently.
-	pending_messages_peers: HashMap<B::Hash, HashSet<PeerId>>,
+	pending_messages_peers: Arc<RwLock<HashMap<B::Hash, HashSet<PeerId>>>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
-	/// Stream of networking events.
-	event_stream: Pin<Box<dyn Stream<Item = Event> + Send>>,
 	// All connected peers
-	peers: HashMap<PeerId, Peer<B>>,
+	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	/// A Channel to receive commands from the controller.
 	my_channel: broadcast::Sender<ToHandler>,
 	/// Prometheus metrics.
-	metrics: Option<Metrics>,
+	metrics: Arc<Option<Metrics>>,
+}
+
+impl<B: Block + 'static> Clone for GossipHandler<B> {
+	fn clone(&self) -> Self {
+		Self {
+			protocol_name: self.protocol_name.clone(),
+			latest_header: self.latest_header.clone(),
+			message_queue: self.message_queue.clone(),
+			message_notifications_channel: self.message_notifications_channel.clone(),
+			pending_messages_peers: self.pending_messages_peers.clone(),
+			service: self.service.clone(),
+			peers: self.peers.clone(),
+			gossip_enabled: self.gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: self
+				.processing_already_seen_messages_enabled
+				.clone(),
+			my_channel: self.my_channel.clone(),
+			metrics: self.metrics.clone(),
+		}
+	}
 }
 
 impl<B> HasLatestHeader<B> for GossipHandler<B>
@@ -298,36 +355,76 @@ struct Peer<B: Block> {
 impl<B: Block + 'static> GossipHandler<B> {
 	/// Turns the [`GossipHandler`] into a future that should run forever and not be
 	/// interrupted.
-	pub async fn run(mut self) {
+	pub async fn run(self) {
 		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
-		debug!(target: "dkg", "Starting the DKG Gossip Handler");
-		loop {
-			futures::select! {
-				network_event = self.event_stream.next().fuse() => {
-					if let Some(network_event) = network_event {
-						self.handle_network_event(network_event).await;
-					} else {
-						// Networking has seemingly closed. Closing as well.
-						return;
-					}
-				},
-				message = incoming_messages.next().fuse() => {
-					match message {
-						Some(Ok(ToHandler::SendMessage { recipient, message })) => self.send_signed_dkg_message(recipient, message),
-						Some(Ok(ToHandler::Gossip(v))) => self.gossip_message(v),
-						None => {
-							// The broadcast stream has been closed.
-							return;
-						},
-						_ => {},
-					}
-				},
+		let mut event_stream = self.service.event_stream("dkg-handler");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
+
+		// we have two streams, one from the network and one from the controller.
+		// hence we want to start two separate tasks, one for each stream that are running
+		// in parallel, without blocking each other.
+
+		// first task, handles the incoming messages/Commands from the controller.
+		let self0 = self.clone();
+		let incoming_messages_task = tokio::spawn(async move {
+			while let Some(message) = incoming_messages.next().await {
+				match message {
+					Ok(ToHandler::SendMessage { recipient, message }) =>
+						self0.send_signed_dkg_message(recipient, message),
+					Ok(ToHandler::Gossip(v)) => self0.gossip_message(v),
+					_ => {},
+				}
 			}
-		}
+		});
+
+		// a timer that fires every few ms to check if there are messages in the queue, and if so,
+		// notify the listener.
+		let self1 = self.clone();
+		let mut timer = tokio::time::interval(core::time::Duration::from_millis(100));
+		let timer_task = tokio::spawn(async move {
+			loop {
+				timer.tick().await;
+				let queue = self1.message_queue.read();
+				if !queue.is_empty() {
+					let _ = self1.message_notifications_channel.send(());
+				}
+			}
+		});
+
+		// second task, handles the incoming messages/events from the network stream.
+		let network_events_task = tokio::spawn(async move {
+			while let Some(event) = event_stream.next().await {
+				self.handle_network_event(event).await;
+			}
+		});
+
+		// wait for the first task to finish or error out.
+		//
+		// The reason why we wait for the first one to finish, is that it is a critical error
+		// if any of them finished before the others, the must either run all together or none.
+		//
+		// Here is more information about the reason why we do this:
+		// 1. if the network events task finished, it means that the network service has been
+		//   dropped, which means that the node is shutting down, or a network issue has occurred,
+		//   which is in this point a critical error.
+		// 2. if the incoming messages task finished, it means that the controller has been dropped,
+		//   which also could mean that there is now no communication between the controller and the
+		//   handler task, which is a critical error.
+		//   This could also mean that the node is shutting down, but in this case the network
+		// events   task should have finished as well.
+		// 3. The timer task, however, will never finish, unless the node is shutting down, in which
+		//  case the network events task should have finished as well.
+		let _result = futures::future::select_all(vec![
+			network_events_task,
+			incoming_messages_task,
+			timer_task,
+		])
+		.await;
+		log::error!(target: "dkg_gadget::gossip_engine::network", "The DKG Gossip Handler has finished!!");
 	}
 
-	async fn handle_network_event(&mut self, event: Event) {
+	async fn handle_network_event(&self, event: Event) {
 		match event {
 			Event::Dht(_) => {},
 			Event::SyncConnected { remote } => {
@@ -348,10 +445,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 			},
 
 			Event::NotificationStreamOpened { remote, protocol, .. }
-				if protocol == self.protocol_name =>
+				if protocol == *self.protocol_name =>
 			{
-				debug!(target: "dkg", "Peer {} connected to gossip protocol", remote);
-				let _was_in = self.peers.insert(
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
+				let mut lock = self.peers.write();
+				let _was_in = lock.insert(
 					remote,
 					Peer {
 						known_messages: LruHashSet::new(
@@ -365,26 +463,27 @@ impl<B: Block + 'static> GossipHandler<B> {
 				debug_assert!(_was_in.is_none());
 			},
 			Event::NotificationStreamClosed { remote, protocol }
-				if protocol == self.protocol_name =>
+				if protocol == *self.protocol_name =>
 			{
-				let _peer = self.peers.remove(&remote);
-				debug!(target: "dkg", "Peer {} disconnected from gossip protocol", remote);
+				let mut lock = self.peers.write();
+				let _peer = lock.remove(&remote);
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} disconnected from gossip protocol", remote);
 				debug_assert!(_peer.is_some());
 			},
 
 			Event::NotificationsReceived { remote, messages } => {
 				for (protocol, message) in messages {
-					if protocol != self.protocol_name {
+					if protocol != *self.protocol_name {
 						continue
 					}
-					debug!(target: "dkg", "Received message from {} from gossiping", remote);
+					debug!(target: "dkg_gadget::gossip_engine::network", "Received message from {} from gossiping", remote);
 
 					if let Ok(m) =
 						<SignedDKGMessage<AuthorityId> as Decode>::decode(&mut message.as_ref())
 					{
 						self.on_signed_dkg_message(remote, m).await;
 					} else {
-						warn!(target: "dkg", "Failed to decode signed DKG message");
+						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to decode signed DKG message");
 						self.service.report_peer(remote, rep::UNEXPECTED_MESSAGE);
 					}
 				}
@@ -395,31 +494,38 @@ impl<B: Block + 'static> GossipHandler<B> {
 	}
 
 	/// Called when peer sends us new signed DKG message.
-	async fn on_signed_dkg_message(&mut self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
+	async fn on_signed_dkg_message(&self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "{:?} round {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.round_id, who, now);
-		if let Some(ref mut peer) = self.peers.get_mut(&who) {
+		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
-			match self.pending_messages_peers.entry(message.message_hash::<B>()) {
+			let mut pending_messages_peers = self.pending_messages_peers.write();
+			let enqueue_the_message = || {
+				let mut queue_lock = self.message_queue.write();
+				queue_lock.push_back(message.clone());
+				drop(queue_lock);
+				let recv_count = self.message_notifications_channel.receiver_count();
+				if recv_count == 0 {
+					log::warn!(target: "dkg", "No one is going to process the message notification!!!");
+				}
+				if let Err(e) = self.message_notifications_channel.send(()) {
+					log::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
+				} else {
+					log::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
+				}
+			};
+			match pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					log::debug!(target: "dkg", "NEW DKG MESSAGE FROM {}", who);
-					let recv_count = self.controller_channel.receiver_count();
-					if recv_count == 0 {
-						log::warn!(target: "dkg", "No one is going to process the message!!!");
-					}
-					if let Err(e) = self.controller_channel.send(message.clone()) {
-						log::error!(target: "dkg", "Failed to send message to DKG controller: {:?}", e);
-					} else {
-						log::debug!(target: "dkg", "Message sent to {recv_count} DKG controller listeners");
-					}
+					log::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
+					enqueue_the_message();
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
 					// we should add some good reputation to them.
 					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
-					log::debug!(target: "dkg", "OLD DKG MESSAGE FROM {}", who);
+					log::debug!(target: "dkg_gadget::gossip_engine::network", "OLD DKG MESSAGE FROM {}", who);
 					// if we are here, that means this peer sent us a message we already know.
 					let inserted = entry.get_mut().insert(who);
 					// and if inserted is `false` that means this peer was already in the set
@@ -437,8 +543,17 @@ impl<B: Block + 'static> GossipHandler<B> {
 						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
 						// as malicious.
 						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
+							log::warn!(
+								target: "dkg_gadget::gossip_engine::network",
+								"reporting peer {} as they are sending us the same message over and over again", who
+							);
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
+					}
+
+					// check if we shall process this old message or not.
+					if self.processing_already_seen_messages_enabled.load(Ordering::Relaxed) {
+						enqueue_the_message();
 					}
 				},
 			}
@@ -450,48 +565,38 @@ impl<B: Block + 'static> GossipHandler<B> {
 		}
 	}
 
-	pub fn send_signed_dkg_message(
-		&mut self,
-		to_who: PeerId,
-		message: SignedDKGMessage<AuthorityId>,
-	) {
+	pub fn send_signed_dkg_message(&self, to_who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		let message_hash = message.message_hash::<B>();
-		if let Some(ref mut peer) = self.peers.get_mut(&to_who) {
+		if let Some(ref mut peer) = self.peers.write().get_mut(&to_who) {
 			let already_propagated = peer.known_messages.insert(message_hash);
 			if already_propagated {
 				return
 			}
-			self.service.write_notification(
-				to_who,
-				self.protocol_name.clone(),
-				Encode::encode(&message),
-			);
-			debug!(target: "dkg", "Sending a signed DKG messages to {}", to_who);
+			let msg = Encode::encode(&message);
+			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
 		} else {
-			debug!(target: "dkg", "Peer {} does not exist in known peers", to_who);
+			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
-	fn gossip_message(&mut self, message: SignedDKGMessage<AuthorityId>) {
+	fn gossip_message(&self, message: SignedDKGMessage<AuthorityId>) {
 		let mut propagated_messages = 0;
 		let message_hash = message.message_hash::<B>();
-		if self.peers.is_empty() {
-			warn!(target: "dkg", "No peers to gossip message {}", message_hash);
+		let mut peers = self.peers.write();
+		if peers.is_empty() {
+			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
 		}
-		for (who, peer) in self.peers.iter_mut() {
+		let msg = Encode::encode(&message);
+		for (who, peer) in peers.iter_mut() {
 			let new_to_them = peer.known_messages.insert(message_hash);
 			if !new_to_them {
 				continue
 			}
-			self.service.write_notification(
-				*who,
-				self.protocol_name.clone(),
-				Encode::encode(&message),
-			);
+			self.service.write_notification(*who, self.protocol_name.clone(), msg.clone());
 			propagated_messages += 1;
 		}
-		if let Some(ref metrics) = self.metrics {
-			metrics.propagated_messages.inc_by(propagated_messages as _)
+		if let Some(metrics) = self.metrics.as_ref() {
+			metrics.propagated_messages.inc_by(propagated_messages);
 		}
 	}
 }

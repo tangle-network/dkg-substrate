@@ -67,7 +67,6 @@ where
 			})?;
 
 		let protocol = async move {
-			let params = params;
 			let maybe_local_key = params.local_key.clone();
 			let (keygen_id, _b, _c) = get_party_round_id(&params);
 			if let (Some(keygen_id), Some(local_key)) = (keygen_id, maybe_local_key) {
@@ -124,7 +123,8 @@ where
 		}
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg", "🕸️  Offline GenericAsyncHandler completed");
+			// print the res value.
+			log::info!(target: "dkg", "🕸️  Signing protocol concluded with {:?}", res);
 			res
 		});
 
@@ -133,7 +133,9 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
-					Ok(())
+					Err(DKGError::GenericError {
+						reason: format!("Stopper has been called {:?}", res1)
+					})
 				}
 			}
 		});

@@ -497,7 +497,7 @@ fn execute_after_threshold_change() {
 			Event::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
-				data: proposal.clone(),
+				data: proposal,
 			}),
 			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,

@@ -25,7 +25,7 @@ pub mod utils;
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::{log, RuntimeDebug};
+use frame_support::RuntimeDebug;
 pub use proposal::*;
 
 pub use crate::proposal::DKGPayloadKey;
@@ -59,7 +59,7 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
 
 /// The keygen timeout limit in blocks before we consider misbehaviours
-pub const KEYGEN_TIMEOUT: u32 = 10;
+pub const KEYGEN_TIMEOUT: u32 = 5;
 
 /// The offline timeout limit in blocks before we consider misbehaviours
 pub const OFFLINE_TIMEOUT: u32 = 2;
@@ -194,10 +194,7 @@ pub struct UnsignedProposal {
 
 impl UnsignedProposal {
 	pub fn hash(&self) -> Option<[u8; 32]> {
-		let key = (self.typed_chain_id, self.key);
-		log::debug!(target: "dkg", "Got unsigned proposal with key = {:?}", &key);
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
-			log::debug!(target: "dkg", "Adding unsigned proposal to hash vec");
 			Some(keccak_256(data))
 		} else {
 			None

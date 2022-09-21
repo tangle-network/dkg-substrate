@@ -125,12 +125,19 @@ pub fn development_config(id: ParaId) -> ChainSpec {
 						get_collator_keys_from_seed("Bob"),
 						get_dkg_keys_from_seed("Bob"),
 					),
+					(
+						get_account_id_from_seed::<sr25519::Public>("Charlie"),
+						get_collator_keys_from_seed("Charlie"),
+						get_dkg_keys_from_seed("Charlie"),
+					),
 				],
 				vec![
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie"),
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
 				],
 				id,
 			)
@@ -272,7 +279,7 @@ fn testnet_genesis(
 		parachain_system: Default::default(),
 		dkg: dkg_rococo_runtime::DKGConfig {
 			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
-			keygen_threshold: 2,
+			keygen_threshold: 3,
 			signature_threshold: 1,
 			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
 		},

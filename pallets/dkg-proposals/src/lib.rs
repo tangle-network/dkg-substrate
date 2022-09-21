@@ -907,7 +907,7 @@ impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaT
 				sp_io::hashing::keccak_256(&uncompressed.as_bytes()[1..])[12..].to_vec()
 			})
 			.map_err(|_| {
-				log::error!(target: "runtime::beefy", "Invalid BEEFY PublicKey format!");
+				log::error!(target: "runtime::dkg_proposals", "Invalid DKG PublicKey format!");
 			})
 			.unwrap_or_default()
 	}
