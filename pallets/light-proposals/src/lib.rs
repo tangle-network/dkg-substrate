@@ -47,7 +47,10 @@
 // mod tests;
 
 mod benchmarking;
+mod proof;
 mod types;
+
+use proof::evm::proof_traits::EVMProver;
 
 mod weights;
 use weights::WeightInfo;
@@ -57,9 +60,8 @@ use types::*;
 use sp_std::{convert::TryInto, prelude::*};
 
 use dkg_runtime_primitives::{traits::BridgeRegistryTrait, ProposalHandlerTrait};
-use frame_support::pallet_prelude::ensure;
+use frame_support::{pallet_prelude::ensure, traits::Get};
 pub use pallet::*;
-use pallet_eth2_light_client::Eth2Prover;
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
 	evm::AnchorUpdateProposal, FunctionSignature, Nonce, OnSignedProposal, Proposal,
@@ -90,14 +92,14 @@ pub mod pallet {
 		/// Weight information for the extrinsics
 		type WeightInfo: WeightInfo;
 
-		type Eth2Prover: Eth2Prover;
-
 		type BridgeRegistry: BridgeRegistryTrait;
 
 		type ProposalHandler: ProposalHandlerTrait;
 
 		#[pallet::constant]
 		type AnchorUpdateFunctionSignature: Get<[u8; 4]>;
+
+		type EVMProver: EVMProver;
 	}
 
 	#[pallet::genesis_config]
@@ -145,7 +147,7 @@ pub mod pallet {
 				TypedChainId::Evm(_) => {
 					let evm_proof_data = proof_data.to_evm_proof().unwrap().clone();
 					ensure!(
-						T::Eth2Prover::verify_log_entry(
+						T::EVMProver::verify_log_entry(
 							evm_proof_data.log_index,
 							evm_proof_data.log_entry_data.clone(),
 							evm_proof_data.receipt_index,
@@ -166,42 +168,44 @@ pub mod pallet {
 			}
 		}
 	}
+}
 
-	impl<T: Config> Pallet<T> {
-		pub fn submit_anchor_update_proposals_evm(
-			typed_chain_id: TypedChainId,
-			log_entry_data: Vec<u8>,
-		) {
-			let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data);
-			let src_r_id =
-				ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
-			let bridge_resource_ids = T::BridgeRegistry::get_bridge_for_resource(src_r_id);
-			for r in bridge_resource_ids.unwrap_or_default() {
-				if r == src_r_id {
-					continue
-				}
-				let function_sig = FunctionSignature::from(T::AnchorUpdateFunctionSignature::get());
-				let proposal_header = ProposalHeader::new(r, function_sig, Nonce::from(nonce));
-				let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
-				T::ProposalHandler::handle_unsigned_proposal(
-					proposal.to_bytes().to_vec(),
-					dkg_runtime_primitives::ProposalAction::Sign(0),
-				);
+impl<T: Config> Pallet<T> {
+	pub fn submit_anchor_update_proposals_evm(
+		typed_chain_id: TypedChainId,
+		log_entry_data: Vec<u8>,
+	) {
+		let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data);
+		let src_r_id =
+			ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
+		let bridge_resource_ids = T::BridgeRegistry::get_bridge_for_resource(src_r_id);
+		for r in bridge_resource_ids.unwrap_or_default() {
+			if r == src_r_id {
+				continue
 			}
-		}
-
-		pub fn parse_evm_log(log_entry_data: Vec<u8>) -> ([u8; 20], [u8; 32], u32) {
-			let parsed_log: LogEntry = rlp::decode(log_entry_data.as_slice()).unwrap();
-
-			let address = parsed_log.address.to_fixed_bytes();
-			let topics = parsed_log.topics;
-			let merkle_root = topics[1].to_fixed_bytes();
-			let nonce = u32::from_be_bytes(Self::convert_nonce_to_fixed_size(topics[2].as_bytes()));
-			(address, merkle_root, nonce)
-		}
-
-		pub fn convert_nonce_to_fixed_size(nonce: &[u8]) -> [u8; 4] {
-			nonce.try_into().unwrap_or_default()
+			let function_sig = FunctionSignature::from(T::AnchorUpdateFunctionSignature::get());
+			let proposal_header = ProposalHeader::new(r, function_sig, Nonce::from(nonce));
+			let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
+			T::ProposalHandler::handle_unsigned_proposal(
+				proposal.to_bytes().to_vec(),
+				dkg_runtime_primitives::ProposalAction::Sign(0),
+			);
 		}
 	}
+
+	pub fn parse_evm_log(log_entry_data: Vec<u8>) -> ([u8; 20], [u8; 32], u32) {
+		let parsed_log: LogEntry = rlp::decode(log_entry_data.as_slice()).unwrap();
+
+		let address = parsed_log.address.to_fixed_bytes();
+		let topics = parsed_log.topics;
+		let merkle_root = topics[1].to_fixed_bytes();
+		let nonce = u32::from_be_bytes(Self::convert_nonce_to_fixed_size(topics[2].as_bytes()));
+		(address, merkle_root, nonce)
+	}
+
+	pub fn convert_nonce_to_fixed_size(nonce: &[u8]) -> [u8; 4] {
+		nonce.try_into().unwrap_or_default()
+	}
 }
+
+impl<T: Config> EVMProver for Pallet<T> {}
