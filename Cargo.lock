@@ -2394,6 +2394,7 @@ dependencies = [
  "pallet-dkg-proposals",
  "pallet-election-provider-multi-phase",
  "pallet-grandpa",
+ "pallet-identity",
  "pallet-indices",
  "pallet-nomination-pools",
  "pallet-randomness-collective-flip",
