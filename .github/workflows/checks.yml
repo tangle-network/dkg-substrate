@@ -84,7 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Run DKG test
-        run: sh scrips/verify-parachain-dkg.sh
+        run: sh scripts/verify-parachain-dkg.sh
 
   # ensures dkg works in standalone env
   dkg-check-standalone:
@@ -107,4 +107,4 @@ jobs:
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Run DKG test
-        run: sh scrips/verify-standalone-dkg.sh
+        run: sh scripts/verify-standalone-dkg.sh
