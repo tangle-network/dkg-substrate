@@ -61,3 +61,50 @@ jobs:
         run: |
           cargo +nightly fmt --all -- --check
           cargo clippy -Zunstable-options -- -D warnings
+  
+  
+  # ensures dkg works in parachain env
+  dkg-check-parachain:
+    name: DKG test parachain
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Run DKG test
+        run: sh scrips/verify-parachain-dkg.sh
+
+  # ensures dkg works in standalone env
+  dkg-check-standalone:
+    name: DKG test standalone
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Run DKG test
+        run: sh scrips/verify-standalone-dkg.sh

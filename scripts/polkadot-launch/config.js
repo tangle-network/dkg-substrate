@@ -40,7 +40,7 @@ const gitRoot = execSync("git rev-parse --show-toplevel").toString().trim();
 
 module.exports = {
   relaychain: {
-    bin: "../../../../paritytech/polkadot/target/release/polkadot",
+    bin: "../../../../polkadot/target/release/polkadot",
     chain: "rococo-local",
     nodes: [
       {
@@ -84,7 +84,7 @@ module.exports = {
         },
         {
           name: "charlie",
-          wsPort: 9990,
+          wsPort: 9946,
           rpcPort: 9979,
           port: 31202,
           basePath: mkTmpDir("charlie"),
