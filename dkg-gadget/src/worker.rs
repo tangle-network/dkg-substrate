@@ -94,6 +94,8 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_SIGNING_SETS: u64 = 16;
 
+pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
+
 pub type Shared<T> = Arc<RwLock<T>>;
 
 pub(crate) struct WorkerParams<B, BE, C, GE>
@@ -671,6 +673,16 @@ where
 		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
 	}
 
+	/// Returns the progress of current session
+	pub fn get_current_session_progress(&self, header: &B::Header) -> Option<sp_runtime::Permill> {
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		return self
+			.client
+			.runtime_api()
+			.get_current_session_progress(&at, *header.number())
+			.unwrap_or_default()
+	}
+
 	/// Return the next and queued validator set at header `header`.
 	///
 	/// Note that the validator set could be `None`. This is the case if we don't find
@@ -901,6 +913,21 @@ where
 	fn maybe_enact_new_authorities(&self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
 		if let Some((active, queued)) = self.validator_set(header) {
+			// Query the current state of session progress, we will proceed with enact new
+			// authorities if the session progress has passed threshold
+			if let Some(session_progress) = self.get_current_session_progress(header) {
+				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
+				if session_progress < SESSION_PROGRESS_THRESHOLD {
+					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
+					return
+				}
+			} else {
+				debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+				return
+			}
+
+			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
+
 			let next_best = self.get_next_best_authorities(header);
 			let next_best_has_changed = next_best != *self.best_next_authorities.read();
 			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {

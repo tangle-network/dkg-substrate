@@ -220,6 +220,8 @@ sp_api::decl_runtime_apis! {
 		fn get_best_authorities() -> Vec<(u16, AuthorityId)>;
 		/// Return the next best authority set chosen for the queued keygen
 		fn get_next_best_authorities() -> Vec<(u16, AuthorityId)>;
+		/// Returns the progress of current session
+		fn get_current_session_progress(block_number : N) -> Option<sp_runtime::Permill>;
 		/// Return the current signature threshold for the DKG
 		fn signature_threshold() -> u16;
 		/// Return the current keygen threshold for the DKG

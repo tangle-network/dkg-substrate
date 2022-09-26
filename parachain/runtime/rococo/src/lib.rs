@@ -912,6 +912,11 @@ impl_runtime_apis! {
 			DKG::next_best_authorities()
 		}
 
+		fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
+			use frame_support::traits::EstimateNextSessionRotation;
+			<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
+		}
+
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
