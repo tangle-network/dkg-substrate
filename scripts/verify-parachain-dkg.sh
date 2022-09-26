@@ -14,7 +14,7 @@ rm -rf ./tmp
 
 # start the parachain network
 echo "*** Start parachain network ***"
-#npm i -g polkadot-launch
+npm i -g polkadot-launch
 polkadot-launch /scripts/polkadot-launch/config.js
 
 # setup and run the verify script 

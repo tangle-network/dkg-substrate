@@ -21,7 +21,7 @@ echo "*** Start DKG Standalone node ***"
     --rpc-cors all \
     --ws-external \
     --port 30306 \
-    --charlie
+    --charlie &
 
 # setup and run the verify script 
 echo "*** Verify DKG keys ***"
