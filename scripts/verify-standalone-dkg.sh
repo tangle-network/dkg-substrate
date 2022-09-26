@@ -25,6 +25,5 @@ echo "*** Start DKG Standalone node ***"
 
 # setup and run the verify script 
 echo "*** Verify DKG keys ***"
-cd /scripts/verify-dkg
-npm install
-node index.js
+npm --prefix ./scripts/verify-dkg install ./scripts/verify-dkg
+node ./scripts/verify-dkg/index.js
