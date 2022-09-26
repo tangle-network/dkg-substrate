@@ -36,7 +36,7 @@ mod keyring;
 mod keystore;
 
 mod gossip_engine;
-// mod meta_async_rounds;
+mod signing_manager;
 mod metrics;
 mod persistence;
 mod proposal;
