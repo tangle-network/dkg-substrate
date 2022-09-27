@@ -18,20 +18,18 @@ async function main () {
   // are found, the call itself returns a promise with a subscription that can be
   // used to unsubscribe from the newHead subscription
   // lets wait for first few blocks
-  const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
+  const unsubscribe = await api.rpc.chain.subscribeNewHeads(async (header) => {
     console.log(`Chain is at block: #${header.number}`);
 
-    if (++count === BLOCKS_TO_WAIT_FOR) {
+    if (count > BLOCKS_TO_WAIT_FOR) {
+      // ensure the keys are added onchain as expected
+      await querydkgPublicKey(api);
+      await querynextDkgPublicKey(api);
+      await queryDkgPublicKeySignature(api);
       unsubscribe();
       process.exit(0);
     }
   });
-
-  // ensure the keys are added onchain as expected
-  await querydkgPublicKey(api);
-  await querynextDkgPublicKey(api);
-  await queryDkgPublicKeySignature(api);
-
 }
 
 // check if the dkgPublicKey has been added onchain

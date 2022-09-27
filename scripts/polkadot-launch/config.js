@@ -40,7 +40,7 @@ const gitRoot = execSync("git rev-parse --show-toplevel").toString().trim();
 
 module.exports = {
   relaychain: {
-    bin: "../../../../polkadot/target/release/polkadot",
+    bin: "./polkadot/target/release/polkadot",
     chain: "rococo-local",
     nodes: [
       {
