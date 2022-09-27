@@ -15,7 +15,8 @@
 #![allow(clippy::collapsible_match)]
 
 use crate::{
-	async_protocols::blockchain_interface::DKGProtocolEngine, utils::convert_u16_vec_to_usize_vec,
+	async_protocols::blockchain_interface::DKGProtocolEngine, signing_manager::SigningManager,
+	utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
 use dkg_primitives::utils::select_random_set;
@@ -126,6 +127,7 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: Arc<GE>,
 	pub signing_gossip_engine: Arc<GE>,
+	pub signing_manager: Arc<Box<dyn SigningManager<Message = UnsignedProposal>>>,
 	pub metrics: Arc<Option<Metrics>>,
 	// Genesis keygen and rotated round
 	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
@@ -181,6 +183,7 @@ where
 			key_store: self.key_store.clone(),
 			keygen_gossip_engine: self.keygen_gossip_engine.clone(),
 			signing_gossip_engine: self.signing_gossip_engine.clone(),
+			signing_manager: self.signing_manager.clone(),
 			metrics: self.metrics.clone(),
 			rounds: self.rounds.clone(),
 			next_rounds: self.next_rounds.clone(),
