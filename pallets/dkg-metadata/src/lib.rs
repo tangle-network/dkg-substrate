@@ -1852,6 +1852,6 @@ impl<
 		next_public_key_exists &&
 			next_public_key_signature_exists &&
 			now >= offset &&
-			((now - offset) % Period::get()).is_zero()
+			((now - offset) % Period::get()) >= Zero::zero()
 	}
 }
