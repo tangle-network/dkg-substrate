@@ -94,7 +94,7 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_SIGNING_SETS: u64 = 16;
 
-pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
+pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(60);
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
@@ -929,6 +929,7 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
 
 			let next_best = self.get_next_best_authorities(header);
+			debug!(target: "dkg_gadget::worker", "🕸️  Next Best Authorities {:?}", next_best);
 			let next_best_has_changed = next_best != *self.best_next_authorities.read();
 			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {
 				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
