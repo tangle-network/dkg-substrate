@@ -14,13 +14,17 @@
 //
 use crate::{
 	gossip_engine::GossipEngineIface,
+	signing_manager::SigningManager,
 	storage::misbehaviour_reports::store_aggregated_misbehaviour_reports,
 	worker::{DKGWorker, KeystoreExt},
 	Client,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
+use dkg_primitives::{
+	types::{
+		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
+	},
+	UnsignedProposal,
 };
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
@@ -29,8 +33,8 @@ use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
 
-pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -39,6 +43,7 @@ where
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	// Get authority accounts
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
@@ -99,8 +104,8 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
@@ -108,6 +113,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	let public = dkg_worker.get_authority_public_key();
 
@@ -182,8 +188,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 	}
 }
 
-pub(crate) fn try_store_offchain<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn try_store_offchain<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -192,6 +198,7 @@ where
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	// Fetch the current threshold for the DKG. We will use the

@@ -36,10 +36,10 @@ mod keyring;
 mod keystore;
 
 mod gossip_engine;
-mod signing_manager;
 mod metrics;
 mod persistence;
 mod proposal;
+mod signing_manager;
 mod utils;
 mod worker;
 
@@ -188,7 +188,9 @@ where
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _, signing_manager::DKGSigningManagerController>::new(
+		worker_params,
+	);
 
 	worker.run().await;
 	keygen_handle.abort();

@@ -269,7 +269,7 @@ where
 			.await
 			.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) });
 		match res {
-			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param, async_index).await,
+			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param).await,
 			Err(err) => {
 				log::error!(target: "dkg", "Async Proto Errored: {:?}", err);
 				Err(err)

@@ -3,12 +3,14 @@ use dkg_primitives::types::DKGError;
 
 mod dkg_signing_manager;
 
-pub use dkg_signing_manager::DKGSigningManagerBuilder;
+pub use dkg_signing_manager::{
+	DKGSigningManager, DKGSigningManagerBuilder, DKGSigningManagerController,
+};
 /// The Signing Manager is a simple trait that will be used
 /// to sign some message. The Signed Message will be signed in async manner between the DKG Signers
 /// and the result (the Signature) will be stored in the offchain storage.
 #[async_trait::async_trait]
-pub trait SigningManager {
+pub trait SigningManager: Send + Sync {
 	/// The type of messages that this Signing Manager is going to sign.
 	type Message: Clone + Decode + Encode + Sync + Send + 'static;
 

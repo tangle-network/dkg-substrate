@@ -14,28 +14,22 @@
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, PartyIndex, ProtocolType, Threshold,
+	AsyncProtocolParameters, GenericAsyncHandler, ProtocolType,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
+use dkg_runtime_primitives::crypto::Public;
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
 	OfflineProtocolMessage, OfflineStage,
 };
+use parking_lot::RwLock;
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
-use tokio::sync::broadcast::Receiver;
 
 #[async_trait]
 impl StateMachineHandler for OfflineStage {
-	type AdditionalReturnParam = (
-		UnsignedProposal,
-		PartyIndex,
-		Receiver<Arc<SignedDKGMessage<Public>>>,
-		Threshold,
-		BatchKey,
-	);
+	type AdditionalReturnParam = (Arc<RwLock<Vec<<Self as StateMachine>::Output>>>,);
 	type Return = ();
 
 	fn handle_unsigned_message(
@@ -87,38 +81,11 @@ impl StateMachineHandler for OfflineStage {
 	async fn on_finish<BI: BlockchainInterface>(
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
-		unsigned_proposal: Self::AdditionalReturnParam,
-		async_index: u8,
+		(store,): Self::AdditionalReturnParam,
 	) -> Result<(), DKGError> {
 		log::info!(target: "dkg", "Completed offline stage successfully!");
-		// Take the completed offline stage and immediately execute the corresponding voting
-		// stage (this will allow parallelism between offline stages executing across the
-		// network)
-		//
-		// NOTE: we pass the generated offline stage id for the i in voting to keep
-		// consistency
-		match GenericAsyncHandler::new_voting(
-			params,
-			offline_stage,
-			unsigned_proposal.0,
-			unsigned_proposal.1,
-			unsigned_proposal.2,
-			unsigned_proposal.3,
-			unsigned_proposal.4,
-			async_index,
-		) {
-			Ok(voting_stage) => {
-				log::info!(target: "dkg", "Starting voting stage...");
-				if let Err(e) = voting_stage.await {
-					log::error!(target: "dkg", "Error starting voting stage: {:?}", e);
-					return Err(e)
-				}
-				Ok(())
-			},
-			Err(err) => {
-				log::error!(target: "dkg", "Error starting voting stage: {:?}", err);
-				Err(err)
-			},
-		}
+		// store the offline stage output
+		store.write().push(offline_stage);
+		Ok(())
 	}
 }

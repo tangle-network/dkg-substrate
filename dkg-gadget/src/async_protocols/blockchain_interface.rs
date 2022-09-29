@@ -18,6 +18,7 @@ use crate::{
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	persistence::store_localkey,
 	proposal::get_signed_proposal,
+	signing_manager::SigningManager,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
@@ -72,12 +73,13 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
+pub struct DKGProtocolEngine<B: Block, BE, C, GE, S> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
+	pub signing_manager: Arc<RwLock<Option<S>>>,
 	pub aggregated_public_keys: Arc<RwLock<HashMap<RoundId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
@@ -89,13 +91,13 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub local_key_path: Arc<RwLock<Option<PathBuf>>>,
 }
 
-impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
+impl<B: Block, BE, C, GE, S> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, S> {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<B, BE, C, GE> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE>
+impl<B, BE, C, GE, S> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -107,13 +109,14 @@ where
 	}
 }
 
-impl<B, BE, C, GE> BlockchainInterface for DKGProtocolEngine<B, BE, C, GE>
+impl<B, BE, C, GE, S> BlockchainInterface for DKGProtocolEngine<B, BE, C, GE, S>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	type Clock = NumberFor<B>;
 	type GossipEngine = Arc<GE>;
@@ -124,7 +127,7 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
-		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
+		DKGWorker::<_, _, _, GE, S>::verify_signature_against_authorities_inner(
 			(&*msg).clone(),
 			&self.latest_header,
 			client,

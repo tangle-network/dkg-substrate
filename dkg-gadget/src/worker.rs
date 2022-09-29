@@ -115,19 +115,20 @@ where
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, BE, C, GE>
+pub(crate) struct DKGWorker<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
+	S: SigningManager<Message = UnsignedProposal>,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: Arc<GE>,
 	pub signing_gossip_engine: Arc<GE>,
-	pub signing_manager: Arc<Box<dyn SigningManager<Message = UnsignedProposal>>>,
+	pub signing_manager: Shared<Option<S>>,
 	pub metrics: Arc<Option<Metrics>>,
 	// Genesis keygen and rotated round
 	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
@@ -169,12 +170,13 @@ where
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
-impl<B, BE, C, GE> Clone for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, S> Clone for DKGWorker<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
+	S: SigningManager<Message = UnsignedProposal>,
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -210,13 +212,14 @@ where
 pub type AggregatedMisbehaviourReportStore =
 	HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
 
-impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, S> DKGWorker<B, BE, C, GE, S>
 where
 	B: Block + Codec,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -247,6 +250,7 @@ where
 			key_store,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
+			signing_manager: Arc::new(RwLock::new(None)),
 			metrics: Arc::new(metrics),
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
@@ -276,13 +280,14 @@ enum ProtoStageType {
 	Signing,
 }
 
-impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, S> DKGWorker<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -297,7 +302,7 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
+	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, S>>, DKGError> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -313,6 +318,7 @@ where
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
 				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
+				signing_manager: self.signing_manager.clone(),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
 				authority_public_key: authority_public_key.clone(),
@@ -1628,12 +1634,13 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C, GE> KeystoreExt for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, S> KeystoreExt for DKGWorker<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	S: SigningManager<Message = UnsignedProposal>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1659,12 +1666,13 @@ pub trait HasLatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, S> HasLatestHeader<B> for DKGWorker<B, BE, C, GE, S>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	S: SigningManager<Message = UnsignedProposal>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

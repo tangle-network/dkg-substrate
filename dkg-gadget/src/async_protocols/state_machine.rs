@@ -32,7 +32,7 @@ pub trait StateMachineHandler: StateMachine + RoundBlame + Send
 where
 	<Self as StateMachine>::Output: Send,
 {
-	type AdditionalReturnParam: Debug + Send;
+	type AdditionalReturnParam: Send;
 	type Return: Debug + Send;
 
 	fn generate_channel() -> StateMachineTxRx<<Self as StateMachine>::MessageBody> {
@@ -51,6 +51,5 @@ where
 		result: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		additional_param: Self::AdditionalReturnParam,
-		async_index: u8,
 	) -> Result<Self::Return, DKGError>;
 }

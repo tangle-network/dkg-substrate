@@ -14,9 +14,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
+use crate::{
+	gossip_engine::GossipEngineIface, signing_manager::SigningManager, worker::DKGWorker, Client,
+};
 use codec::Encode;
-use dkg_primitives::types::DKGError;
+use dkg_primitives::{types::DKGError, UnsignedProposal};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::AGGREGATED_MISBEHAVIOUR_REPORTS,
 	AggregatedMisbehaviourReports, DKGApi,
@@ -27,8 +29,8 @@ use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -37,6 +39,7 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
 	if maybe_offchain.is_none() {

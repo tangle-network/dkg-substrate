@@ -1,4 +1,4 @@
-use crate::gossip_engine::GossipEngineIface;
+use crate::{gossip_engine::GossipEngineIface, signing_manager::SigningManager};
 // Copyright 2022 Webb Technologies Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +20,12 @@ use crate::{
 	Client, DKGKeystore,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, RoundId,
-	SignedDKGMessage,
+use dkg_primitives::{
+	types::{
+		DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, RoundId,
+		SignedDKGMessage,
+	},
+	UnsignedProposal,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
@@ -33,8 +36,8 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
@@ -43,6 +46,7 @@ where
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	if dkg_worker.rounds.read().is_none() {
 		return Ok(())

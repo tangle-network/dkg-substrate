@@ -15,7 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
+use crate::{
+	gossip_engine::GossipEngineIface, signing_manager::SigningManager, worker::DKGWorker, Client,
+};
+use dkg_primitives::UnsignedProposal;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
 	offchain::storage_keys::{
@@ -33,8 +36,8 @@ use sp_runtime::{
 };
 
 /// cleans offchain storage at interval
-pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE, S>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, S>,
 	header: &B::Header,
 ) where
 	B: Block,
@@ -42,6 +45,7 @@ pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	let at: BlockId<B> = BlockId::hash(header.hash());
 	let next_dkg_public_key = dkg_worker.client.runtime_api().next_dkg_pub_key(&at);
