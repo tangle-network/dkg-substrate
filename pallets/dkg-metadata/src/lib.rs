@@ -109,6 +109,7 @@ use dkg_runtime_primitives::{
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
+	pallet_prelude::Get,
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
@@ -119,12 +120,14 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{
 	collections::btree_map::BTreeMap,
 	convert::{TryFrom, TryInto},
+	marker::PhantomData,
+	ops::{Rem, Sub},
 	prelude::*,
 };
 use types::RoundMetadata;
@@ -1823,5 +1826,32 @@ impl<T: Config> GetDKGPublicKey for Pallet<T> {
 
 	fn previous_dkg_key() -> Vec<u8> {
 		Self::previous_public_key().1
+	}
+}
+
+/// Periodic Session manager for DKGMetadata
+/// To rotate a session we require three conditions
+/// 1. The Period has passed
+/// 2. The NextDKGPublicKey has been set on chain
+/// 3. The NextPublicKeySignature has been set onchain
+pub struct DKGPeriodicSessions<Period, Offset, T>(PhantomData<(Period, Offset, T)>);
+
+impl<
+		BlockNumber: Rem<Output = BlockNumber> + Sub<Output = BlockNumber> + Zero + PartialOrd,
+		Period: Get<BlockNumber>,
+		Offset: Get<BlockNumber>,
+		T: Config,
+	> pallet_session::ShouldEndSession<BlockNumber> for DKGPeriodicSessions<Period, Offset, T>
+{
+	fn should_end_session(now: BlockNumber) -> bool {
+		// The succesful upload of the new public key is required for a successful rotation we check
+		// if the nextPublicKey and nextPublicKeySignature are stored onchain.
+		let offset = Offset::get();
+		let next_public_key_exists = NextDKGPublicKey::<T>::get().is_some();
+		let next_public_key_signature_exists = NextPublicKeySignature::<T>::get().is_some();
+		next_public_key_exists &&
+			next_public_key_signature_exists &&
+			now >= offset &&
+			((now - offset) % Period::get()) >= Zero::zero()
 	}
 }
