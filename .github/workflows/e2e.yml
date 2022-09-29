@@ -22,10 +22,10 @@ jobs:
           access_token: ${{ github.token }}
 
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v1.3.0
+        uses: Swatinem/rust-cache@v2
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
@@ -34,7 +34,7 @@ jobs:
           toolchain: nightly
 
       - name: Install Nodejs
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version-file: "./dkg-test-suite/.nvmrc"
           cache: "yarn"
@@ -47,7 +47,7 @@ jobs:
         run: dvc pull
 
       - name: Install Packages
-        run: cd dkg-test-suite && yarn
+        run: cd dkg-test-suite && yarn install --frozen-lockfile
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
@@ -71,10 +71,10 @@ jobs:
           access_token: ${{ github.token }}
 
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v1.3.0
+        uses: Swatinem/rust-cache@v2
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
@@ -83,7 +83,7 @@ jobs:
           toolchain: nightly
 
       - name: Install Nodejs
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version-file: "./dkg-test-suite/.nvmrc"
           cache: "yarn"
@@ -96,7 +96,7 @@ jobs:
         run: dvc pull
 
       - name: Install Packages
-        run: cd dkg-test-suite && yarn
+        run: cd dkg-test-suite && yarn install --frozen-lockfile
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
