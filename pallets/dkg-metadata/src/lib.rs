@@ -927,14 +927,39 @@ pub mod pallet {
 					MisbehaviourType::Keygen => {
 						// Check if we have enough unjailed authorities to run after the next
 						// session change
+						/// This set is of size N
 						let unjailed_authorities = Self::next_best_authorities()
 							.into_iter()
 							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
+
 						if unjailed_authorities.contains(&offender) {
 							// Jail the offender
 							JailedKeygenAuthorities::<T>::insert(&offender, now);
+
+							let non_jailed_non_next_best_authorities = Self::next_authorities()
+								.into_iter()
+								.filter(|id| !unjailed_authorities.contains(id))
+								.filter(|id| !JailedKeygenAuthorities::<T>::contains_key(id))
+								.collect::<Vec<T::DKGId>>();
+							if non_jailed_non_next_best_authorities.len() > 0 {
+								// TODO: Select the highest authority by reputation and replace them
+								// with the offender
+								let highest_reputation_authority =
+									non_jailed_non_next_best_authorities.get(0);
+								NextBestAuthorities::<T>::put(Self::get_best_authorities(
+									Self::next_keygen_threshold() as usize,
+									&unjailed_authorities
+										.into_iter()
+										.filter(|id| *id != offender)
+										.chain(highest_reputation_authority)
+										.collect::<Vec<_>>(),
+								));
+
+								return Ok(().into())
+							}
+
 							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {
 								// Handle edge case properly (shouldn't drop below 2 authorities)
 								if unjailed_authorities.len() > 2 {
