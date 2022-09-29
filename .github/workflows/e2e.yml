@@ -13,7 +13,7 @@ jobs:
   # The runner will stop working when the machine runs out of disk space. Free space left: 72 MB
   # dkg-substrate integration tests
   e2e:
-    name: e2e
+    name: e2e-tests
     runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - name: Cancel Previous Runs
@@ -60,6 +60,49 @@ jobs:
 
       - name: Run E2E Tests
         run: cd dkg-test-suite && yarn test:e2e
+      
+  integration-tests:
+    name: integration-tests
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+
+      - name: Install Nodejs
+        uses: actions/setup-node@v2
+        with:
+          node-version-file: "./dkg-test-suite/.nvmrc"
+          cache: "yarn"
+          cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate fixtures
+        run: dvc pull
+
+      - name: Install Packages
+        run: cd dkg-test-suite && yarn
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate Fixtures
+        run: dvc pull
 
       - name: Build Standalone Node for Integration Tests (Release)
         run: cargo build --release -p dkg-standalone-node --features integration-tests
