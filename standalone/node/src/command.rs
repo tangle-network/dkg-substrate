@@ -40,6 +40,7 @@ impl SubstrateCli for Cli {
 			"dev" => Box::new(chain_spec::development_config()?),
 			"" | "local" => Box::new(chain_spec::local_testnet_config()?),
 			"testnet-conf" => Box::new(chain_spec::arana_testnet_config()?),
+			"arana-alpha" => Box::new(chain_spec::arana_alpha_testnet_config()?),
 			path =>
 				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 		})
