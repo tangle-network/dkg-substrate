@@ -6,6 +6,7 @@
   "scripts": {
     "script": "ts-node",
     "format": "prettier --write '**/*.{ts,js,json,yml}'",
+    "fetch:fixtures": "dvc pull",
     "test:e2e": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/e2e/**/*.test.ts' --exit",
     "test:proposals": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/proposals.test.ts' --exit"
   },

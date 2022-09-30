@@ -23,7 +23,7 @@ use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
 	OfflineProtocolMessage, OfflineStage,
 };
-use round_based::{containers::StoreErr, Msg, StateMachine};
+use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
@@ -48,10 +48,15 @@ impl StateMachineHandler for OfflineStage {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Offline(msg) => {
-				use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::Error;
 				let message: Msg<OfflineProtocolMessage> =
-					serde_json::from_slice(msg.offline_msg.as_slice())
-						.map_err(|_err| Error::HandleMessage(StoreErr::NotForMe))?;
+					match serde_json::from_slice(msg.offline_msg.as_slice()) {
+						Ok(msg) => msg,
+						Err(err) => {
+							log::error!("Error deserializing offline message: {:?}", err);
+							// Skip this message.
+							return Ok(())
+						},
+					};
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
 						//log::info!("Skipping passing of message to async proto since not
@@ -66,9 +71,11 @@ impl StateMachineHandler for OfflineStage {
 					return Ok(())
 				}
 
-				to_async_proto
-					.unbounded_send(message)
-					.map_err(|_| Error::HandleMessage(StoreErr::NotForMe))?;
+				if let Err(err) = to_async_proto.unbounded_send(message) {
+					log::error!("Error sending message to async proto: {:?}", err);
+					// Skip this message.
+					return Ok(())
+				}
 			},
 
 			err => log::debug!(target: "dkg", "Invalid payload received: {:?}", err),
@@ -90,7 +97,7 @@ impl StateMachineHandler for OfflineStage {
 		//
 		// NOTE: we pass the generated offline stage id for the i in voting to keep
 		// consistency
-		GenericAsyncHandler::new_voting(
+		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
 			unsigned_proposal.0,
@@ -99,8 +106,19 @@ impl StateMachineHandler for OfflineStage {
 			unsigned_proposal.3,
 			unsigned_proposal.4,
 			async_index,
-		)?
-		.await?;
-		Ok(())
+		) {
+			Ok(voting_stage) => {
+				log::info!(target: "dkg", "Starting voting stage...");
+				if let Err(e) = voting_stage.await {
+					log::error!(target: "dkg", "Error starting voting stage: {:?}", e);
+					return Err(e)
+				}
+				Ok(())
+			},
+			Err(err) => {
+				log::error!(target: "dkg", "Error starting voting stage: {:?}", err);
+				Err(err)
+			},
+		}
 	}
 }

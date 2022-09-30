@@ -14,13 +14,14 @@
 
 //! Webb Custom DKG Gossip Engine.
 
+use std::pin::Pin;
+
 use auto_impl::auto_impl;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use std::pin::Pin;
 
 /// A Gossip Engine for DKG, that uses [`sc_network::NetworkService`] as a backend.
 mod network;
@@ -44,8 +45,22 @@ pub trait GossipEngineIface: Send + Sync {
 	) -> Result<(), DKGError>;
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
-	/// Returns a stream of DKG messages, that are received from the network.
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>>;
+	/// A Stream that notifies about a new message is available to be polled
+	/// from the queue, thats it.
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>>;
+	/// Peek the front of the message queue.
+	///
+	/// Note that this will not remove the message from the queue, it will only return it. For
+	/// removing the message from the queue, use `acknowledge_last_message`.
+	///
+	/// Returns `None` if there are no messages in the queue.
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
+	/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes
+	/// it from the queue.
+	fn acknowledge_last_message(&self);
+
+	/// Clears the Message Queue.
+	fn clear_queue(&self);
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -64,7 +79,15 @@ impl GossipEngineIface for () {
 		Ok(())
 	}
 
-	fn stream(&self) -> Pin<Box<dyn Stream<Item = SignedDKGMessage<AuthorityId>> + Send>> {
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
 		futures::stream::pending().boxed()
 	}
+
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		None
+	}
+
+	fn acknowledge_last_message(&self) {}
+
+	fn clear_queue(&self) {}
 }

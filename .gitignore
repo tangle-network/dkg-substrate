@@ -36,3 +36,5 @@ template-local-raw.json
 **/node_modules
 types/build
 types/ts-types
+rococo-local-raw.json
+rococo-local.json

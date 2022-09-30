@@ -435,7 +435,7 @@ impl pallet_authorship::Config for Runtime {
 }
 
 parameter_types! {
-	pub const Period: u32 = 4 * MINUTES;
+	pub const Period: u32 = MINUTES;
 	pub const Offset: u32 = 0;
 }
 
@@ -446,7 +446,7 @@ impl pallet_session::Config for Runtime {
 	// Essentially just Aura, but lets be pedantic.
 	type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
 	type SessionManager = CollatorSelection;
-	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	// we don't have stash and controller, thus we don't need the convert as well.
 	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
@@ -506,7 +506,7 @@ parameter_types! {
 	pub const ChainIdentifier: TypedChainId = TypedChainId::RococoParachain(5);
 	pub const ProposalLifetime: BlockNumber = HOURS / 5;
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-	pub const RefreshDelay: Permill = Permill::from_percent(90);
+	pub const RefreshDelay: Permill = Permill::from_percent(50);
 	pub const TimeToRestart: BlockNumber = 3;
 	 // 1 hr considering block time of 12 sec
 	 pub const UnsignedProposalExpiry : BlockNumber = 300;
@@ -864,7 +864,7 @@ impl_runtime_apis! {
 
 		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
 			let queued_authorities = DKG::next_authorities();
-			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
+			let queued_authority_set_id = DKG::next_authority_set_id();
 
 			dkg_runtime_primitives::AuthoritySet {
 				authorities: queued_authorities,
@@ -910,6 +910,11 @@ impl_runtime_apis! {
 
 		fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
 			DKG::next_best_authorities()
+		}
+
+		fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
+			use frame_support::traits::EstimateNextSessionRotation;
+			<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 		}
 
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {

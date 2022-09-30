@@ -109,6 +109,7 @@ use dkg_runtime_primitives::{
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
+	pallet_prelude::Get,
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
@@ -119,12 +120,14 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{
 	collections::btree_map::BTreeMap,
 	convert::{TryFrom, TryInto},
+	marker::PhantomData,
+	ops::{Rem, Sub},
 	prelude::*,
 };
 use types::RoundMetadata;
@@ -151,6 +154,7 @@ pub mod pallet {
 		offchain::{AppCrypto, CreateSignedTransaction},
 		pallet_prelude::*,
 	};
+	use log;
 	use sp_runtime::{Percent, Permill};
 
 	use super::*;
@@ -226,17 +230,37 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let _res = Self::submit_genesis_public_key_onchain(block_number);
-			let _res = Self::submit_next_public_key_onchain(block_number);
-			let _res = Self::submit_public_key_signature_onchain(block_number);
-			let _res = Self::submit_misbehaviour_reports_onchain(block_number);
+			let res = Self::submit_genesis_public_key_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_genesis_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_next_public_key_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_next_public_key_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_public_key_signature_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_public_key_signature_onchain : {:?}",
+				res,
+			);
+			let res = Self::submit_misbehaviour_reports_onchain(block_number);
+			log::debug!(
+				target: "runtime::dkg_metadata",
+				"submit_misbehaviour_reports_onchain : {:?}",
+				res,
+			);
 			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
 			#[cfg(feature = "std")]
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
 			#[cfg(feature = "std")] // required since we use hex and strings
-			frame_support::log::debug!(
-				target: "dkg",
+			log::debug!(
+				target: "runtime::dkg_metadata",
 				"Current Authority({}) DKG PublicKey:
 				**********************************************************
 				compressed: 0x{}
@@ -248,8 +272,8 @@ pub mod pallet {
 			);
 			#[cfg(feature = "std")] // required since we use hex and strings
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
-				frame_support::log::debug!(
-					target: "dkg",
+				log::debug!(
+					target: "runtime::dkg_metadata",
 					"Next Authority({}) DKG PublicKey:
 					**********************************************************
 					compressed: 0x{}
@@ -276,10 +300,10 @@ pub mod pallet {
 					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 						Ok(()) => {
 							RefreshNonce::<T>::put(next_nonce);
-							frame_support::log::debug!("Handled refresh proposal");
+							log::debug!("Handled refresh proposal");
 						},
 						Err(e) => {
-							frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+							log::warn!("Failed to handle refresh proposal: {:?}", e);
 						},
 					}
 
@@ -813,7 +837,7 @@ pub mod pallet {
 				.map_err(|_| {
 					#[cfg(feature = "std")]
 					log::error!(
-						target: "dkg",
+						target: "runtime::dkg_metadata",
 						"Invalid signature for RefreshProposal
 						**********************************************************
 						signature: {:?}
@@ -949,7 +973,7 @@ pub mod pallet {
 								// deterministic manner or expect for a forced rotation.
 								let new_val = u16::try_from(unjailed_authorities.len() - 1)
 									.unwrap_or_default();
-								Self::update_signature_keygen_threshold(new_val);
+								Self::update_next_signature_threshold(new_val);
 								PendingSignatureThreshold::<T>::put(new_val);
 							}
 						} else {
@@ -1074,11 +1098,11 @@ pub mod pallet {
 					Ok(()) => {
 						RefreshNonce::<T>::put(next_nonce);
 						ShouldManualRefresh::<T>::put(true);
-						frame_support::log::debug!("Handled refresh proposal");
+						log::debug!("Handled refresh proposal");
 						Ok(().into())
 					},
 					Err(e) => {
-						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						log::warn!("Failed to handle refresh proposal: {:?}", e);
 						Err(Error::<T>::ManualRefreshFailed.into())
 					},
 				}
@@ -1121,10 +1145,10 @@ pub mod pallet {
 				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 					Ok(()) => {
 						RefreshNonce::<T>::put(next_nonce);
-						frame_support::log::debug!("Handled refresh proposal");
+						log::debug!("Handled refresh proposal");
 					},
 					Err(e) => {
-						frame_support::log::warn!("Failed to handle refresh proposal: {:?}", e);
+						log::warn!("Failed to handle refresh proposal: {:?}", e);
 					},
 				}
 			}
@@ -1283,7 +1307,7 @@ impl<T: Config> Pallet<T> {
 		// Update the next thresholds for the next session
 		let new_current_signature_threshold = NextSignatureThreshold::<T>::get();
 		let new_current_keygen_threshold = NextKeygenThreshold::<T>::get();
-		Self::update_signature_keygen_threshold(PendingSignatureThreshold::<T>::get());
+		Self::update_next_signature_threshold(PendingSignatureThreshold::<T>::get());
 		Self::update_next_keygen_threshold(PendingKeygenThreshold::<T>::get());
 		// Compute next ID for next authorities
 		let next_id = Self::next_authority_set_id();
@@ -1307,7 +1331,7 @@ impl<T: Config> Pallet<T> {
 			PendingKeygenThreshold::<T>::put(next_authority_ids.len() as u16);
 		}
 		if next_authority_ids.len() <= Self::next_signature_threshold().into() {
-			Self::update_signature_keygen_threshold(next_authority_ids.len() as u16 - 1);
+			Self::update_next_signature_threshold(next_authority_ids.len() as u16 - 1);
 			PendingSignatureThreshold::<T>::put(next_authority_ids.len() as u16 - 1);
 		}
 		// Update the next best authorities after any and all changes to the thresholds.
@@ -1368,8 +1392,18 @@ impl<T: Config> Pallet<T> {
 	/// on a genesis session and triggers the first authority set change.
 	fn initialize_authorities(authorities: &[T::DKGId], authority_account_ids: &[T::AccountId]) {
 		if authorities.is_empty() {
+			log::warn!(
+				target: "runtime::dkg_metadata",
+				"trying to intialize the autorities with empty list!",
+			);
 			return
 		}
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"intializing the authorities with: {:?} and account ids: {:?}",
+			authorities,
+			authority_account_ids,
+		);
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 		// Initialize current authorities
 		Authorities::<T>::put(authorities);
@@ -1381,6 +1415,11 @@ impl<T: Config> Pallet<T> {
 		NextAuthoritiesAccounts::<T>::put(authority_account_ids);
 		let best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
+		log::debug!(
+			target: "runtime::dkg_metadata",
+			"best_authorities: {:?}",
+			best_authorities,
+		);
 		BestAuthorities::<T>::put(best_authorities);
 		let next_best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
@@ -1409,9 +1448,15 @@ impl<T: Config> Pallet<T> {
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
 			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			if let Ok(None) = agg_keys {
+				return Ok(())
+			}
+
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping public key submmission");
+					log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1425,8 +1470,6 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
-
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
 				return Err(
@@ -1438,7 +1481,6 @@ impl<T: Config> Pallet<T> {
 				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
 					keys_and_signatures: agg_keys.clone(),
 				});
-
 				agg_key_ref.clear();
 			}
 
@@ -1463,9 +1505,15 @@ impl<T: Config> Pallet<T> {
 			const RECENTLY_SENT: &str = "Already submitted a key in this session";
 			let submit_at = submit_at_ref.get::<T::BlockNumber>();
 
+			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
+
+			if let Ok(None) = agg_keys {
+				return Ok(())
+			}
+
 			if let Ok(Some(submit_at)) = submit_at {
 				if block_number < submit_at {
-					frame_support::log::debug!(target: "dkg", "Offchain worker skipping next public key submmission");
+					log::debug!(target: "runtime::dkg_metadata", "Offchain worker skipping next public key submmission");
 					return Ok(())
 				} else {
 					submit_at_ref.clear();
@@ -1478,8 +1526,6 @@ impl<T: Config> Pallet<T> {
 				agg_key_ref.clear();
 				return Ok(())
 			}
-
-			let agg_keys = agg_key_ref.get::<AggregatedPublicKeys>();
 
 			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
 			if !signer.can_sign() {
@@ -1530,7 +1576,7 @@ impl<T: Config> Pallet<T> {
 					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
 					});
-				frame_support::log::debug!(target: "dkg", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
 
 				pub_key_sig_ref.clear();
 			}
@@ -1576,7 +1622,7 @@ impl<T: Config> Pallet<T> {
 					Call::submit_misbehaviour_reports { reports: reports.clone() }
 				});
 
-				frame_support::log::debug!(target: "dkg", "Offchain submitting reports onchain {:?}", reports);
+				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting reports onchain {:?}", reports);
 
 				agg_reports_ref.clear();
 			}
@@ -1586,17 +1632,23 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn update_next_keygen_threshold(next_threshold: u16) {
-		NextKeygenThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextKeygenThresholdUpdated {
-			next_keygen_threshold: next_threshold,
-		});
+		let current_next_keygen_threshold = Self::next_keygen_threshold();
+		if current_next_keygen_threshold != next_threshold {
+			NextKeygenThreshold::<T>::put(next_threshold);
+			Self::deposit_event(Event::NextKeygenThresholdUpdated {
+				next_keygen_threshold: next_threshold,
+			});
+		}
 	}
 
-	pub fn update_signature_keygen_threshold(next_threshold: u16) {
-		NextSignatureThreshold::<T>::put(next_threshold);
-		Self::deposit_event(Event::NextSignatureThresholdUpdated {
-			next_signature_threshold: next_threshold,
-		});
+	pub fn update_next_signature_threshold(next_threshold: u16) {
+		let current_next_signature_threshold = Self::next_signature_threshold();
+		if current_next_signature_threshold != next_threshold {
+			NextSignatureThreshold::<T>::put(next_threshold);
+			Self::deposit_event(Event::NextSignatureThresholdUpdated {
+				next_signature_threshold: next_threshold,
+			});
+		}
 	}
 
 	/// Identifies if a new `RefreshProposal` should be created
@@ -1701,6 +1753,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::DKGId)>,
 	{
+		log::debug!(target: "runtime::dkg_metadata", "on_genesis_session");
 		let mut authority_account_ids = Vec::new();
 		let authorities = validators
 			.map(|(l, k)| {
@@ -1773,5 +1826,32 @@ impl<T: Config> GetDKGPublicKey for Pallet<T> {
 
 	fn previous_dkg_key() -> Vec<u8> {
 		Self::previous_public_key().1
+	}
+}
+
+/// Periodic Session manager for DKGMetadata
+/// To rotate a session we require three conditions
+/// 1. The Period has passed
+/// 2. The NextDKGPublicKey has been set on chain
+/// 3. The NextPublicKeySignature has been set onchain
+pub struct DKGPeriodicSessions<Period, Offset, T>(PhantomData<(Period, Offset, T)>);
+
+impl<
+		BlockNumber: Rem<Output = BlockNumber> + Sub<Output = BlockNumber> + Zero + PartialOrd,
+		Period: Get<BlockNumber>,
+		Offset: Get<BlockNumber>,
+		T: Config,
+	> pallet_session::ShouldEndSession<BlockNumber> for DKGPeriodicSessions<Period, Offset, T>
+{
+	fn should_end_session(now: BlockNumber) -> bool {
+		// The succesful upload of the new public key is required for a successful rotation we check
+		// if the nextPublicKey and nextPublicKeySignature are stored onchain.
+		let offset = Offset::get();
+		let next_public_key_exists = NextDKGPublicKey::<T>::get().is_some();
+		let next_public_key_signature_exists = NextPublicKeySignature::<T>::get().is_some();
+		next_public_key_exists &&
+			next_public_key_signature_exists &&
+			now >= offset &&
+			((now - offset) % Period::get()) >= Zero::zero()
 	}
 }

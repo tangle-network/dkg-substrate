@@ -1,0 +1,70 @@
+[relaychain]
+default_command = "../../paritytech/polkadot/target/release/polkadot"
+chain = "rococo-local"
+
+  [[relaychain.nodes]]
+  name = "alice"
+  validator = true
+
+  [[relaychain.nodes]]
+  name = "bob"
+  validator = true
+
+[[parachains]]
+id = 2000
+chain = "local"
+cumulus_based = true
+
+  [[parachains.collators]]
+  name = "alice"
+  command = "target/release/dkg-collator"
+  args = [
+    "-ldkg=debug",
+    "-ldkg_gadget=debug",
+    "-lruntime::dkg_metadata=debug",
+    "-lruntime::offchain=debug",
+    "-lruntime::dkg_proposal_handler=debug",
+    "-ldkg_proposals=debug",
+    "-ldkg_gadget::async_protocol::keygen=debug",
+    "-ldkg_gadget::gossip_engine::network=debug",
+    "-ldkg_gadget::storage::public_keys=debug",
+    "-ldkg_gadget::worker=debug",
+    "--log info",
+    "--rpc-methods=unsafe"
+  ]
+
+  [[parachains.collators]]
+  name = "bob"
+  command = "target/release/dkg-collator"
+  args = [
+    "-ldkg=debug",
+    "-ldkg_gadget=debug",
+    "-lruntime::dkg_metadata=debug",
+    "-lruntime::offchain=debug",
+    "-lruntime::dkg_proposal_handler=debug",
+    "-ldkg_proposals=debug",
+    "-ldkg_gadget::async_protocol::keygen=debug",
+    "-ldkg_gadget::gossip_engine::network=debug",
+    "-ldkg_gadget::storage::public_keys=debug",
+    "-ldkg_gadget::worker=debug",
+    "--log info",
+    "--rpc-methods=unsafe"
+  ]
+
+  [[parachains.collators]]
+  name = "charlie"
+  command = "target/release/dkg-collator"
+  args = [
+    "-ldkg=debug",
+    "-ldkg_gadget=debug",
+    "-lruntime::dkg_metadata=debug",
+    "-lruntime::offchain=debug",
+    "-lruntime::dkg_proposal_handler=debug",
+    "-ldkg_proposals=debug",
+    "-ldkg_gadget::async_protocol::keygen=debug",
+    "-ldkg_gadget::gossip_engine::network=debug",
+    "-ldkg_gadget::storage::public_keys=debug",
+    "-ldkg_gadget::worker=debug",
+    "--log info",
+    "--rpc-methods=unsafe"
+  ]
