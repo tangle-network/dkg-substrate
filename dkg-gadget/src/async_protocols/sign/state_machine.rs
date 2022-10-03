@@ -14,10 +14,10 @@
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, GenericAsyncHandler, ProtocolType,
+	AsyncProtocolParameters, ProtocolType,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
 use dkg_runtime_primitives::crypto::Public;
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 #[async_trait]
 impl StateMachineHandler for OfflineStage {
-	type AdditionalReturnParam = (Arc<RwLock<Vec<<Self as StateMachine>::Output>>>,);
+	type AdditionalReturnParam = Arc<RwLock<Vec<<Self as StateMachine>::Output>>>;
 	type Return = ();
 
 	fn handle_unsigned_message(
@@ -59,9 +59,10 @@ impl StateMachineHandler for OfflineStage {
 					}
 				}
 
-				if local_ty.get_unsigned_proposal().unwrap().hash().unwrap() != msg.key.as_slice() {
-					//log::info!("Skipping passing of message to async proto since not correct
-					// unsigned proposal");
+				if local_ty.uid().map(|uid| uid != msg.uid).unwrap_or(false) {
+					log::warn!(
+						"Skipping passing of message to async proto since not having the same uid"
+					);
 					return Ok(())
 				}
 
@@ -81,7 +82,7 @@ impl StateMachineHandler for OfflineStage {
 	async fn on_finish<BI: BlockchainInterface>(
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
-		(store,): Self::AdditionalReturnParam,
+		store: Self::AdditionalReturnParam,
 	) -> Result<(), DKGError> {
 		log::info!(target: "dkg", "Completed offline stage successfully!");
 		// store the offline stage output

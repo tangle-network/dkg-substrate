@@ -1,5 +1,8 @@
 use codec::{Decode, Encode};
-use dkg_primitives::types::DKGError;
+use dkg_primitives::{
+	crypto::Public,
+	types::{DKGError, SignedDKGMessage},
+};
 
 mod dkg_signing_manager;
 
@@ -16,6 +19,8 @@ pub trait SigningManager: Send + Sync {
 
 	/// Try to sign this message, asynchronously, between the different DKG Signers.
 	async fn sign(&self, msg: Self::Message) -> Result<(), DKGError>;
+
+	fn deliver_dkg_message(&self, msg: SignedDKGMessage<Public>) -> Result<(), DKGError>;
 
 	/// Reset the Signing Manager to its initial state.
 	/// and stop the worker.
@@ -45,4 +50,8 @@ where
 	}
 
 	fn stop(&self) {}
+
+	fn deliver_dkg_message(&self, _msg: SignedDKGMessage<Public>) -> Result<(), DKGError> {
+		Ok(())
+	}
 }

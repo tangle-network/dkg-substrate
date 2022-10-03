@@ -21,14 +21,14 @@ use serde::{Deserialize, Serialize};
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use std::sync::{atomic::Ordering, Arc};
 
-pub struct AsyncProtocolRemote<C> {
+pub struct AsyncProtocolRemote {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
 	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
-	pub(crate) started_at: C,
+	pub(crate) started_at: u64,
 	pub(crate) is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
@@ -36,7 +36,7 @@ pub struct AsyncProtocolRemote<C> {
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
 
-impl<C: Clone> Clone for AsyncProtocolRemote<C> {
+impl Clone for AsyncProtocolRemote {
 	fn clone(&self) -> Self {
 		Self {
 			status: self.status.clone(),
@@ -60,14 +60,15 @@ pub enum MetaHandlerStatus {
 	Beginning,
 	Keygen,
 	AwaitingProposals,
-	OfflineAndVoting,
+	Offline,
+	Voting,
 	Complete,
 	Terminated,
 }
 
-impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
+impl AsyncProtocolRemote {
 	/// Create at the beginning of each meta handler instantiation
-	pub fn new(at: C, round_id: RoundId) -> Self {
+	pub fn new<C: AtLeast32BitUnsigned>(at: C, round_id: RoundId) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
@@ -79,7 +80,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
 			status_history: Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning])),
 			broadcaster,
-			started_at: at,
+			started_at: at.try_into().unwrap_or_default(),
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
 			stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
@@ -91,12 +92,16 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 		}
 	}
 
-	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.keygen_is_not_complete() && (now >= self.started_at + KEYGEN_TIMEOUT.into())
+	pub fn keygen_has_stalled<C: AtLeast32BitUnsigned>(&self, now: C) -> bool {
+		let now: u64 = now.try_into().unwrap_or_default();
+		self.keygen_is_not_complete() &&
+			(now >= self.started_at.saturating_add(KEYGEN_TIMEOUT.into()))
 	}
 
-	pub fn signing_has_stalled(&self, now: C) -> bool {
-		self.signing_is_not_complete() && (now >= self.started_at + SIGN_TIMEOUT.into())
+	pub fn signing_has_stalled<C: AtLeast32BitUnsigned>(&self, now: C) -> bool {
+		let now: u64 = now.try_into().unwrap_or_default();
+		self.signing_is_not_complete() &&
+			(now >= self.started_at.saturating_add(SIGN_TIMEOUT.into()))
 	}
 
 	pub fn keygen_is_not_complete(&self) -> bool {
@@ -110,7 +115,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	}
 }
 
-impl<C> AsyncProtocolRemote<C> {
+impl AsyncProtocolRemote {
 	pub fn get_status(&self) -> MetaHandlerStatus {
 		self.status.load(Ordering::SeqCst)
 	}
@@ -181,7 +186,7 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 }
 
-impl<C> Drop for AsyncProtocolRemote<C> {
+impl Drop for AsyncProtocolRemote {
 	fn drop(&mut self) {
 		if Arc::strong_count(&self.status) == 2 || self.is_primary_remote {
 			// at this point, the only instances of this arc are this one, and,

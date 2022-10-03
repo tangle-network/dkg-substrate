@@ -28,7 +28,7 @@ use dkg_primitives::{
 	crypto::{AuthorityId, Public},
 	types::{
 		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
-		RoundId,
+		RoundId, Uid,
 	},
 	AuthoritySet, AuthoritySetId,
 };
@@ -46,10 +46,7 @@ use serde::Serialize;
 use std::{
 	fmt::{Debug, Formatter},
 	pin::Pin,
-	sync::{
-		atomic::{AtomicU64, Ordering},
-		Arc,
-	},
+	sync::Arc,
 	task::{Context, Poll},
 };
 
@@ -64,19 +61,18 @@ use crate::{
 };
 use incoming::IncomingAsyncProtocolWrapper;
 
-pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
+pub struct AsyncProtocolParameters<BI> {
 	pub engine: Arc<BI>,
 	pub keystore: DKGKeystore,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub batch_id_gen: Arc<AtomicU64>,
-	pub handle: AsyncProtocolRemote<BI::Clock>,
+	pub handle: AsyncProtocolRemote,
 	pub round_id: RoundId,
 	pub local_key: Option<LocalKey<Secp256k1>>,
 }
 
-impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
+impl<BI> Drop for AsyncProtocolParameters<BI> {
 	fn drop(&mut self) {
 		if self.handle.is_active() && self.handle.is_primary_remote {
 			log::warn!(
@@ -103,12 +99,6 @@ impl<BI: BlockchainInterface> KeystoreExt for AsyncProtocolParameters<BI> {
 	}
 }
 
-impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
-	pub fn get_next_batch_key(&self, batch: &[UnsignedProposal]) -> BatchKey {
-		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
-	}
-}
-
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
 impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 	fn clone(&self) -> Self {
@@ -119,7 +109,6 @@ impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
-			batch_id_gen: self.batch_id_gen.clone(),
 			handle: self.handle.clone(),
 			local_key: self.local_key.clone(),
 		}
@@ -159,7 +148,7 @@ pub enum ProtocolType {
 		n: u16,
 	},
 	Offline {
-		unsigned_proposal: Arc<UnsignedProposal>,
+		uid: Uid,
 		i: u16,
 		s_l: Vec<u16>,
 		local_key: Arc<LocalKey<Secp256k1>>,
@@ -180,8 +169,14 @@ impl ProtocolType {
 
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
-			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
-				Some(&*unsigned_proposal),
+			Self::Voting { unsigned_proposal, .. } => Some(&*unsigned_proposal),
+			_ => None,
+		}
+	}
+
+	pub fn uid(&self) -> Option<Uid> {
+		match self {
+			Self::Offline { uid, .. } => Some(*uid),
 			_ => None,
 		}
 	}
@@ -198,8 +193,8 @@ impl Debug for ProtocolType {
 				};
 				write!(f, "{} | Keygen: (i, t, n) = ({}, {}, {})", ty, i, t, n)
 			},
-			ProtocolType::Offline { i, unsigned_proposal, .. } => {
-				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
+			ProtocolType::Offline { i, s_l, .. } => {
+				write!(f, "Offline: (i, s_l) = ({}, {:?})", i, &s_l)
 			},
 			ProtocolType::Voting { unsigned_proposal, .. } => {
 				write!(f, "Voting: proposal = {:?}", &unsigned_proposal.proposal)
@@ -236,7 +231,6 @@ pub fn new_inner<'a, SM: StateMachineHandler + 'static, BI: BlockchainInterface 
 	sm: SM,
 	params: AsyncProtocolParameters<BI>,
 	channel_type: ProtocolType,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'a, SM::Return>, DKGError>
 where
@@ -283,7 +277,6 @@ where
 		params.clone(),
 		outgoing_rx,
 		channel_type.clone(),
-		async_index,
 		status,
 	);
 
@@ -336,7 +329,6 @@ fn generate_outgoing_to_wire_fn<'a, SM: StateMachineHandler + 'a, BI: Blockchain
 	params: AsyncProtocolParameters<BI>,
 	mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'a, ()>
 where
@@ -363,13 +355,11 @@ where
 					sender_id: party_id,
 					keygen_msg: serialized_body,
 				}),
-				ProtocolType::Offline { unsigned_proposal, .. } =>
-					DKGMsgPayload::Offline(DKGOfflineMessage {
-						key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
-						signer_set_id: party_id as u64,
-						offline_msg: serialized_body,
-						async_index,
-					}),
+				ProtocolType::Offline { uid, .. } => DKGMsgPayload::Offline(DKGOfflineMessage {
+					uid: *uid,
+					signer_set_id: party_id as u64,
+					offline_msg: serialized_body,
+				}),
 				_ => {
 					unreachable!(
 						"Should not happen since voting is handled with a custom subroutine"

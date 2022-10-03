@@ -47,9 +47,7 @@ where
 	pub fn setup_signing<BI: BlockchainInterface + 'a>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
-		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
-		async_index: u8,
 	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
 		assert!(
 			threshold + 1 == signing_set.len() as u16,
@@ -76,39 +74,8 @@ where
 					.await
 					.map_err(|err| DKGError::StartOffline { reason: err.to_string() })?;
 
-				params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
-				let count_in_batch = unsigned_proposals.len();
-				let batch_key = params.get_next_batch_key(&unsigned_proposals);
-
-				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
-
+				params.handle.set_status(MetaHandlerStatus::Offline);
 				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
-					log::info!(target: "dkg", "Offline stage index: {}", offline_i);
-
-					// create one offline stage for each unsigned proposal
-					let futures = FuturesUnordered::new();
-					for unsigned_proposal in unsigned_proposals {
-						futures.push(Box::pin(GenericAsyncHandler::new_offline(
-							params.clone(),
-							unsigned_proposal,
-							offline_i,
-							signing_set.clone(),
-							local_key.clone(),
-							t,
-							batch_key,
-							async_index,
-						)?));
-					}
-
-					// NOTE: this will block at each batch of unsigned proposals.
-					// TODO: Consider not blocking here and allowing processing of
-					// each batch of unsigned proposals concurrently
-					futures.try_collect::<()>().await.map(|_| ())?;
-					log::info!(
-						target: "dkg",
-						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-						count_in_batch
-					);
 				} else {
 					log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
 					return Err(DKGError::GenericError {
@@ -141,35 +108,6 @@ where
 		});
 
 		Ok(GenericAsyncHandler { protocol })
-	}
-
-	#[allow(clippy::too_many_arguments)]
-	fn new_offline<BI: BlockchainInterface + 'a>(
-		params: AsyncProtocolParameters<BI>,
-		unsigned_proposal: UnsignedProposal,
-		i: u16,
-		s_l: Vec<u16>,
-		local_key: LocalKey<Secp256k1>,
-		threshold: u16,
-		batch_key: BatchKey,
-		async_index: u8,
-	) -> Result<GenericAsyncHandler<'a, <OfflineStage as StateMachineHandler>::Return>, DKGError> {
-		let channel_type = ProtocolType::Offline {
-			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
-			i,
-			s_l: s_l.clone(),
-			local_key: Arc::new(local_key.clone()),
-		};
-		let early_handle = params.handle.broadcaster.subscribe();
-		new_inner(
-			(unsigned_proposal, i, early_handle, threshold, batch_key),
-			OfflineStage::new(i, s_l, local_key)
-				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
-			params,
-			channel_type,
-			async_index,
-			DKGMsgStatus::ACTIVE,
-		)
 	}
 
 	#[allow(clippy::too_many_arguments)]
@@ -220,7 +158,6 @@ where
 				// are allowing for parallelism now
 				round_key: Vec::from(&hash_of_proposal as &[u8]),
 				partial_signature: partial_sig_bytes,
-				async_index,
 			});
 
 			// now, broadcast the data

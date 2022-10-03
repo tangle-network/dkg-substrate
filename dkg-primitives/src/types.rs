@@ -29,6 +29,43 @@ pub type SignerSetId = u64;
 
 pub use dkg_runtime_primitives::DKGPayloadKey;
 
+/// A Unique identifier.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct Uid([u8; 16]);
+
+impl Uid {
+	pub fn random() -> Self {
+		let mut uid = [0u8; 16];
+		uid.copy_from_slice(&rand::random::<[u8; 16]>());
+		Self(uid)
+	}
+
+	pub fn from_hash_of<T: Encode>(t: &T) -> Self {
+		let mut uid = [0u8; 16];
+		uid.copy_from_slice(&sp_core::hashing::blake2_128(&t.encode()));
+		Self(uid)
+	}
+}
+
+impl From<[u8; 16]> for Uid {
+	fn from(uid: [u8; 16]) -> Self {
+		Self(uid)
+	}
+}
+
+impl fmt::Display for Uid {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		// it is 4 parts, each part is 4 bytes, which is just u32.
+		// then each number is hex encoded.
+		let part1 = u32::from_be_bytes(self.0[0..4].try_into().unwrap());
+		let part2 = u32::from_be_bytes(self.0[4..8].try_into().unwrap());
+		let part3 = u32::from_be_bytes(self.0[8..12].try_into().unwrap());
+		let part4 = u32::from_be_bytes(self.0[12..16].try_into().unwrap());
+		write!(f, "{:x}-{:x}-{:x}-{:x}", part1, part2, part3, part4)
+	}
+}
+
 /// DKGMsgStatus Enum identifies if a message is for an active or queued round
 #[derive(Debug, Copy, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
@@ -119,14 +156,6 @@ impl DKGMsgPayload {
 			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
 		}
 	}
-
-	pub fn get_async_index(&self) -> u8 {
-		match self {
-			DKGMsgPayload::Offline(m) => m.async_index,
-			DKGMsgPayload::Vote(m) => m.async_index,
-			_ => 0,
-		}
-	}
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -141,14 +170,13 @@ pub struct DKGKeygenMessage {
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGOfflineMessage {
-	// Identifier
-	pub key: Vec<u8>,
+	/// Unique identifier for the offline stage
+	/// that this message is intended for.
+	pub uid: Uid,
 	/// Signer set epoch id
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -160,8 +188,6 @@ pub struct DKGVoteMessage {
 	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
