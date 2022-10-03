@@ -149,6 +149,7 @@ where
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
+		log::info!(target: "dkg", "PROCESS VOTE RESULT : round_id {:?}, signature : {:?}", round_id, signature);
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),

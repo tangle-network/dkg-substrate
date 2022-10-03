@@ -1,0 +1,39 @@
+name: Bump types package
+
+# If changes are made to the types/src folder,
+# Create a pull request to bump the package.json 
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "types/src/*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '16.x'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install npm dependencies
+        run: cd types && yarn install
+      - name: Configure Github Actions user
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Actions"
+      - name: Do a patch update for the package
+        run: cd types && yarn version --patch
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          commit-message: update dkg-substrate-types package version
+          title: Update types package version
+          branch: update-types

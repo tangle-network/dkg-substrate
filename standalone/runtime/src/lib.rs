@@ -306,7 +306,7 @@ impl pallet_session::Config for Runtime {
 	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_staking::StashOf<Self>;
-	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type SessionManager = Staking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
@@ -932,6 +932,11 @@ impl_runtime_apis! {
 
 	fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
 	  DKG::next_best_authorities()
+	}
+
+	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
+		use frame_support::traits::EstimateNextSessionRotation;
+		<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
 	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
