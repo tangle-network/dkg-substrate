@@ -134,7 +134,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("dkg-standalone-node"),
 	impl_name: create_runtime_str!("dkg-standalone-node"),
 	authoring_version: 1,
-	spec_version: 14,
+	spec_version: 15,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -209,6 +209,29 @@ parameter_types! {
   pub const IndexDeposit: Balance = DOLLARS;
 }
 
+parameter_types! {
+	pub const BasicDeposit: Balance = deposit(1, 258);
+	pub const FieldDeposit: Balance = deposit(0, 66);
+	pub const SubAccountDeposit: Balance = deposit(1, 53);
+	pub const MaxSubAccounts: u32 = 100;
+	pub const MaxAdditionalFields: u32 = 100;
+	pub const MaxRegistrars: u32 = 20;
+}
+
+impl pallet_identity::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type BasicDeposit = BasicDeposit;
+	type FieldDeposit = FieldDeposit;
+	type SubAccountDeposit = SubAccountDeposit;
+	type MaxSubAccounts = MaxSubAccounts;
+	type MaxAdditionalFields = MaxAdditionalFields;
+	type MaxRegistrars = MaxRegistrars;
+	type Slashed = ();
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
+	type RegistrarOrigin = EnsureRoot<Self::AccountId>;
+	type WeightInfo = ();
+}
 impl pallet_indices::Config for Runtime {
 	type AccountIndex = AccountIndex;
 	type Currency = Balances;
@@ -268,7 +291,7 @@ impl pallet_timestamp::Config for Runtime {
 parameter_types! {
   // How often we trigger a new session.
   // during integration tests, we use manual sessions.
-  pub const Period: BlockNumber = 6 * HOURS;
+  pub const Period: BlockNumber = 1 * HOURS;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -283,7 +306,7 @@ impl pallet_session::Config for Runtime {
 	type Event = Event;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_staking::StashOf<Self>;
-	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type SessionManager = Staking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
@@ -668,7 +691,6 @@ where
 }
 
 parameter_types! {
-	pub const MaxAdditionalFields: u32 = 5;
 	pub const MaxResources: u32 = 32;
 }
 
@@ -708,6 +730,8 @@ construct_runtime!(
 	Session: pallet_session,
 	Historical: pallet_session_historical,
 	BridgeRegistry: pallet_bridge_registry::<Instance1>,
+	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>}
+
   }
 );
 
@@ -908,6 +932,11 @@ impl_runtime_apis! {
 
 	fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
 	  DKG::next_best_authorities()
+	}
+
+	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
+		use frame_support::traits::EstimateNextSessionRotation;
+		<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
 	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {

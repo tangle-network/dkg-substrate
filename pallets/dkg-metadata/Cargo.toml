@@ -12,7 +12,7 @@ edition = "2021"
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-log = "0.4"
+log = { version = "0.4.13", default-features = false }
 codec = { package = "parity-scale-codec", version = "3", features = [
 	"derive",
 ], default-features = false }
@@ -28,13 +28,12 @@ frame-system = { git = "https://github.com/paritytech/substrate", branch = "polk
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
-
+pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.119" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
-pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28" }
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.28", default-features = false }
 
@@ -46,6 +45,7 @@ std = [
 	"hex/std",
 	"scale-info/std",
 	"sp-std/std",
+	"log/std",
 	"sp-runtime/std",
 	"dkg-runtime-primitives/std",
 	"frame-support/std",

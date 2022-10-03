@@ -28,7 +28,7 @@ use sp_runtime::traits::{Block, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
 pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -51,7 +51,7 @@ where
 		reports.encode()
 	);
 
-	let _ = dkg_worker.aggregated_misbehaviour_reports.remove(&(
+	let _ = dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
 		reports.misbehaviour_type,
 		reports.round_id,
 		reports.offender.clone(),

@@ -30,7 +30,7 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -51,8 +51,8 @@ where
 		debug!(target: "dkg", "Received misbehaviour report");
 
 		let is_main_round = {
-			if dkg_worker.rounds.is_some() {
-				msg.round_id == dkg_worker.rounds.as_ref().unwrap().round_id
+			if let Some(round) = dkg_worker.rounds.read().as_ref() {
+				msg.round_id == round.round_id
 			} else {
 				false
 			}
@@ -75,8 +75,8 @@ where
 		)?;
 		debug!(target: "dkg", "Reporter: {:?}", reporter);
 		// Add new report to the aggregated reports
-		let reports = dkg_worker
-			.aggregated_misbehaviour_reports
+		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+		let reports = lock
 			.entry((msg.misbehaviour_type, msg.round_id, msg.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: msg.misbehaviour_type,
@@ -100,7 +100,7 @@ where
 }
 
 pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
@@ -143,7 +143,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
 				log::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
-				if let Err(e) = dkg_worker.gossip_engine.gossip(signed_dkg_message) {
+				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
 					log::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.round_id, e);
 				}
 			},
@@ -154,8 +154,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			),
 		}
 
-		let reports = dkg_worker
-			.aggregated_misbehaviour_reports
+		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+		let reports = lock
 			.entry((report.misbehaviour_type, report.round_id, report.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: report.misbehaviour_type,
@@ -183,7 +183,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 }
 
 pub(crate) fn try_store_offchain<B, BE, C, GE>(
-	dkg_worker: &mut DKGWorker<B, BE, C, GE>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where

@@ -22,6 +22,7 @@ use curv::{arithmetic::Converter, elliptic::curves::Secp256k1};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
+
 use sc_service::{ChainType, Configuration};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
@@ -75,8 +76,12 @@ pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
 	return input.iter().map(|v| *v as u16).collect()
 }
 
+// Paths for saved key files across rounds/shutdowns
 pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
 pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
+// Paths for saved metadata across shutdowns
+pub const ACTIVE_ROUNDS_METADATA_FILE: &str = "active_rounds_metadata";
+pub const QUEUED_ROUNDS_METADATA_FILE: &str = "queued_rounds_metadata";
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct StoredLocalKey {
