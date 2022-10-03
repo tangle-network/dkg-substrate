@@ -3,7 +3,7 @@ use rlp::*;
 use sp_std::vec;
 
 pub trait EVMProver {
-	fn near_keccak256(data: &[u8]) -> [u8; 32] {
+	fn keccak_256(data: &[u8]) -> [u8; 32] {
 		let mut buffer = [0u8; 32];
 		let mut hasher = tiny_keccak::Keccak::v256();
 		tiny_keccak::Hasher::update(&mut hasher, data);
@@ -57,16 +57,16 @@ pub trait EVMProver {
 		proof_index: usize,
 	) -> Vec<u8> {
 		let node = &proof[proof_index];
-		//println!("node {:?}", hex::encode(Self::near_keccak256(node)));
+		//println!("node {:?}", hex::encode(Self::keccak_256(node)));
 
 		if key_index == 0 {
 			// trie root is always a hash
-			assert_eq!(Self::near_keccak256(node), expected_root.as_slice());
+			assert_eq!(Self::keccak_256(node), expected_root.as_slice());
 		} else if node.len() < 32 {
 			// if rlp < 32 bytes, then it is not hashed
 			assert_eq!(node.as_slice(), expected_root);
 		} else {
-			assert_eq!(Self::near_keccak256(node), expected_root.as_slice());
+			assert_eq!(Self::keccak_256(node), expected_root.as_slice());
 		}
 
 		let node = Rlp::new(&node.as_slice());

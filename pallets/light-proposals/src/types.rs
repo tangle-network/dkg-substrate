@@ -15,71 +15,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::*;
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, Encode};
 use frame_support::{
-	traits::Get, BoundedVec, CloneNoBound, DefaultNoBound, PartialEqNoBound, RuntimeDebugNoBound,
+	CloneNoBound, PartialEqNoBound, RuntimeDebugNoBound,
 };
-use pallet_identity::Data;
 use scale_info::TypeInfo;
-use sp_runtime::traits::AppendZerosInput;
 use sp_std::prelude::*;
 
-/// Information concerning the identity of the controller of an account.
-///
-/// NOTE: This should be stored at the end of the storage item to facilitate the addition of extra
-/// fields in a backwards compatible way through a specialized `Decode` impl.
-#[derive(
-	DefaultNoBound,
-	CloneNoBound,
-	Encode,
-	Decode,
-	Eq,
-	MaxEncodedLen,
-	PartialEqNoBound,
-	RuntimeDebugNoBound,
-	TypeInfo,
-)]
-#[codec(mel_bound())]
-#[scale_info(skip_type_params(FieldLimit))]
-pub struct BridgeInfo<FieldLimit: Get<u32>> {
-	/// Additional fields of the metadata that are not catered for with the struct's explicit
-	/// fields.
-	pub additional: BoundedVec<(Data, Data), FieldLimit>,
-
-	/// A reasonable display name for the bridge. This should be whatever it is
-	/// that it is typically known as and should not be confusable with other entities, given
-	/// reasonable context.
-	///
-	/// Stored as UTF-8.
-	pub display: Data,
-}
-
-/// Information concerning the identity of the controller of an account.
-///
-/// NOTE: This is stored separately primarily to facilitate the addition of extra fields in a
-/// backwards compatible way through a specialized `Decode` impl.
-#[derive(
-	CloneNoBound, Encode, Eq, MaxEncodedLen, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo,
-)]
-#[codec(mel_bound())]
-#[scale_info(skip_type_params(MaxResources, MaxAdditionalFields))]
-pub struct BridgeMetadata<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> {
-	/// A list of resource IDs for the bridge
-	pub resource_ids: BoundedVec<ResourceId, MaxResources>,
-
-	/// Auxilliary information on the bridge.
-	pub info: BridgeInfo<MaxAdditionalFields>,
-}
-
-impl<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> Decode
-	for BridgeMetadata<MaxResources, MaxAdditionalFields>
-{
-	fn decode<I: codec::Input>(input: &mut I) -> sp_std::result::Result<Self, codec::Error> {
-		let (resource_ids, info) = Decode::decode(&mut AppendZerosInput::new(input))?;
-		Ok(Self { resource_ids, info })
-	}
-}
 #[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo)]
 pub struct EvmProof {
 	pub log_index: u64,
@@ -95,9 +37,10 @@ pub enum ProofData {
 }
 
 impl ProofData {
+	#[allow(unreachable_patterns)]
 	pub fn to_evm_proof(&self) -> Option<&EvmProof> {
 		match self {
-			Self::EVM(evm_proof) => Some(evm_proof),
+			ProofData::EVM(evm_proof) => Some(evm_proof),
 			_ => None,
 		}
 	}

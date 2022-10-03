@@ -25,11 +25,12 @@ frame-system-benchmarking = { default-features = false, git = "https://github.co
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.28", optional = true }
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.28", default-features = false }
 webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
-pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", branch = "main", default-features = false }
 pallet-bridge-registry = { path = '../bridge-registry', default-features = false }
-eth-types = { path = "./eth-types", features = ["eth2", "eip1559"], default-features = false }
 rlp = { version = "0.5.0", default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
+
+pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false }
+eth-types = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eth2", "eip1559"], default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.119" }

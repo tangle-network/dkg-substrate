@@ -2716,31 +2716,7 @@ dependencies = [
 [[package]]
 name = "eth-types"
 version = "0.1.0"
-dependencies = [
- "derive_more",
- "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
- "eth2_ssz 0.4.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
- "eth2_ssz_derive",
- "ethereum-types 0.13.1",
- "frame-support",
- "frame-system",
- "hex",
- "parity-scale-codec 3.1.5",
- "rlp",
- "rlp-derive",
- "scale-info",
- "serde",
- "serde-big-array",
- "sp-io",
- "sp-std",
- "tree_hash 0.4.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
- "tree_hash_derive",
-]
-
-[[package]]
-name = "eth-types"
-version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#6569a59ba8c12cf9d6181fe6f709a56cdd1923ed"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#e7298370ce381c37b0ac7a976262d56b6eed5155"
 dependencies = [
  "derive_more",
  "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
@@ -6275,12 +6251,12 @@ dependencies = [
 [[package]]
 name = "pallet-eth2-light-client"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main#6569a59ba8c12cf9d6181fe6f709a56cdd1923ed"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#e7298370ce381c37b0ac7a976262d56b6eed5155"
 dependencies = [
  "bitvec 1.0.1",
  "bls",
  "derive_more",
- "eth-types 0.1.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git?branch=main)",
+ "eth-types",
  "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/lighthouse.git?branch=develop)",
  "ethereum-types 0.13.1",
  "frame-benchmarking",
@@ -6396,7 +6372,7 @@ name = "pallet-light-proposals"
 version = "1.0.0"
 dependencies = [
  "dkg-runtime-primitives",
- "eth-types 0.1.0",
+ "eth-types",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -6414,6 +6390,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "tiny-keccak",
  "webb-proposals",
 ]
 

@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 use frame_support::dispatch::DispatchResultWithPostInfo;
-use sp_std::vec::Vec;
 use sp_runtime::DispatchError;
+use sp_std::vec::Vec;
 
 use webb_proposals::ResourceId;
 

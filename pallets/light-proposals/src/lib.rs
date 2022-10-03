@@ -15,15 +15,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Bridge Registry Module
+//! # Light Proposals Module
 //!
-//! A module for maintaining bridge metadata or views over connected
-//! sets of anchors.
+//! A module for creating Webb Proposals from light-client proofs.
 //!
 //! ## Overview
 //!
-//! The Bridge Registry module provides functionality maintaing and storing
-//! metadata about existing bridges.
+//! This module provides the ability to create a proposal from a light-client
+//! proof. This enables a trustless and permissionless way to create proposals
+//! for the Webb chain.
 //!
 //! The supported dispatchable functions are documented in the [`Call`] enum.
 //!
@@ -46,15 +46,13 @@
 // #[cfg(test)]
 // mod tests;
 
-mod benchmarking;
+mod evm_utils;
 mod proof;
 mod types;
 
+use evm_utils::parse_evm_log;
 use proof::evm::proof_traits::EVMProver;
-
-mod weights;
-use weights::WeightInfo;
-
+use sp_runtime::DispatchError;
 use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
@@ -62,15 +60,12 @@ use sp_std::{convert::TryInto, prelude::*};
 use dkg_runtime_primitives::{traits::BridgeRegistryTrait, ProposalHandlerTrait};
 use frame_support::{pallet_prelude::ensure, traits::Get};
 pub use pallet::*;
-use sp_runtime::traits::{AtLeast32Bit, One, Zero};
 use webb_proposals::{
-	evm::AnchorUpdateProposal, FunctionSignature, Nonce, OnSignedProposal, Proposal,
-	ProposalHeader, ProposalKind, ResourceId, TargetSystem, TypedChainId,
+	evm::AnchorUpdateProposal, FunctionSignature, Nonce,
+	ProposalHeader, ResourceId, TargetSystem, TypedChainId,
 };
 
-use eth_types::{LogEntry, Receipt};
-
-use rlp::*;
+use eth_types::{LogEntry};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -89,9 +84,6 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-		/// Weight information for the extrinsics
-		type WeightInfo: WeightInfo;
-
 		type BridgeRegistry: BridgeRegistryTrait;
 
 		type ProposalHandler: ProposalHandlerTrait;
@@ -104,7 +96,7 @@ pub mod pallet {
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		pub phantom: (PhantomData<T>),
+		pub phantom: PhantomData<T>,
 	}
 
 	#[cfg(feature = "std")]
@@ -137,12 +129,13 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(100)]
+		#[pallet::weight(0)]
 		pub fn submit_anchor_update_proposal(
 			origin: OriginFor<T>,
 			typed_chain_id: TypedChainId,
 			proof_data: ProofData,
 		) -> DispatchResultWithPostInfo {
+			let _origin = ensure_signed(origin)?;
 			match typed_chain_id {
 				TypedChainId::Evm(_) => {
 					let evm_proof_data = proof_data.to_evm_proof().unwrap().clone();
@@ -161,7 +154,7 @@ pub mod pallet {
 					Self::submit_anchor_update_proposals_evm(
 						typed_chain_id,
 						evm_proof_data.log_entry_data,
-					);
+					)?;
 					Ok(().into())
 				},
 				_ => Err(Error::<T>::InvalidTypedChainId.into()),
@@ -174,8 +167,8 @@ impl<T: Config> Pallet<T> {
 	pub fn submit_anchor_update_proposals_evm(
 		typed_chain_id: TypedChainId,
 		log_entry_data: Vec<u8>,
-	) {
-		let (contract_address, merkle_root, nonce) = Self::parse_evm_log(log_entry_data);
+	) -> Result<(), DispatchError> {
+		let (contract_address, merkle_root, nonce) = parse_evm_log(log_entry_data);
 		let src_r_id =
 			ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
 		let bridge_resource_ids = T::BridgeRegistry::get_bridge_for_resource(src_r_id);
@@ -189,22 +182,10 @@ impl<T: Config> Pallet<T> {
 			T::ProposalHandler::handle_unsigned_proposal(
 				proposal.to_bytes().to_vec(),
 				dkg_runtime_primitives::ProposalAction::Sign(0),
-			);
+			)?;
 		}
-	}
 
-	pub fn parse_evm_log(log_entry_data: Vec<u8>) -> ([u8; 20], [u8; 32], u32) {
-		let parsed_log: LogEntry = rlp::decode(log_entry_data.as_slice()).unwrap();
-
-		let address = parsed_log.address.to_fixed_bytes();
-		let topics = parsed_log.topics;
-		let merkle_root = topics[1].to_fixed_bytes();
-		let nonce = u32::from_be_bytes(Self::convert_nonce_to_fixed_size(topics[2].as_bytes()));
-		(address, merkle_root, nonce)
-	}
-
-	pub fn convert_nonce_to_fixed_size(nonce: &[u8]) -> [u8; 4] {
-		nonce.try_into().unwrap_or_default()
+		Ok(())
 	}
 }
 
