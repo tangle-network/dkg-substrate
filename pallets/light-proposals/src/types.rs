@@ -16,9 +16,7 @@
 // limitations under the License.
 
 use codec::{Decode, Encode};
-use frame_support::{
-	CloneNoBound, PartialEqNoBound, RuntimeDebugNoBound,
-};
+use frame_support::{CloneNoBound, PartialEqNoBound, RuntimeDebugNoBound};
 use scale_info::TypeInfo;
 use sp_std::prelude::*;
 

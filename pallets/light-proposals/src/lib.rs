@@ -61,11 +61,11 @@ use dkg_runtime_primitives::{traits::BridgeRegistryTrait, ProposalHandlerTrait};
 use frame_support::{pallet_prelude::ensure, traits::Get};
 pub use pallet::*;
 use webb_proposals::{
-	evm::AnchorUpdateProposal, FunctionSignature, Nonce,
-	ProposalHeader, ResourceId, TargetSystem, TypedChainId,
+	evm::AnchorUpdateProposal, FunctionSignature, Nonce, ProposalHeader, ResourceId, TargetSystem,
+	TypedChainId,
 };
 
-use eth_types::{LogEntry};
+use eth_types::LogEntry;
 
 #[frame_support::pallet]
 pub mod pallet {
