@@ -15,7 +15,8 @@
 #![allow(clippy::collapsible_match)]
 
 use crate::{
-	async_protocols::blockchain_interface::DKGProtocolEngine, signing_manager::SigningManager,
+	async_protocols::blockchain_interface::DKGProtocolEngine,
+	signing_manager::{DKGSigningManagerBuilder, DKGSigningManagerController, SigningManager},
 	utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
@@ -270,17 +271,15 @@ where
 enum ProtoStageType {
 	Genesis,
 	Queued,
-	Signing,
 }
 
-impl<B, BE, C, GE, S> DKGWorker<B, BE, C, GE, S>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE, DKGSigningManagerController>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
-	S: SigningManager<Message = UnsignedProposal> + 'static,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -295,7 +294,10 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, S>>, DKGError> {
+	) -> Result<
+		AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, DKGSigningManagerController>>,
+		DKGError,
+	> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -420,10 +422,24 @@ where
 				};
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
+						let this = self.clone();
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
 									log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
+									// do we have an active signing manager?
+									// if not, we create one
+									let now = this
+										.latest_header
+										.read()
+										.clone()
+										.expect("Header is set at initialization; qed");
+									let has_active_signing_manager =
+										this.signing_manager.read().is_some();
+									let is_genesis = stage == ProtoStageType::Genesis;
+									if !has_active_signing_manager && is_genesis {
+										this.setup_signing_manager(&now);
+									}
 								},
 
 								Err(err) => {
@@ -962,11 +978,91 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
+				// stop the current signing manager.
+				let _ = self
+					.signing_manager
+					.read()
+					.as_ref()
+					.map(|sm| sm.stop())
+					.expect("signing manager should exist");
+				// create a new signing manager.
+				self.setup_signing_manager(header);
 			}
 		} else {
 			// no queued validator set, so we don't do anything
 			debug!(target: "dkg_gadget::worker", "🕸️  NO QUEUED VALIDATOR SET");
 		}
+	}
+
+	fn setup_signing_manager(&self, header: &B::Header) {
+		let best_authorities: Vec<Public> =
+			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		let threshold = self.get_signature_threshold(header);
+		let authority_public_key = self.get_authority_public_key();
+
+		let (active_local_key, _) = self.fetch_local_keys();
+		let local_key = if let Some(active_local_key) = active_local_key {
+			active_local_key.local_key
+		} else {
+			return
+		};
+		let round_id = self.rounds.read().as_ref().map(|r| r.round_id).unwrap_or(0);
+
+		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
+		let builder = DKGSigningManagerBuilder {
+			threshold,
+			best_authorities: best_authorities.clone(),
+			local_key: local_key.clone(),
+			authority_public_key: authority_public_key.clone(),
+			round_id,
+			initial_signing_sets: Vec::new(),
+		};
+		let params = {
+			let collection = Vec::new();
+
+			let best_authorities = Arc::new(best_authorities);
+			let authority_public_key = Arc::new(authority_public_key);
+			let now = self.get_latest_block_number();
+
+			// Fetch the active key. This requires rotating the key to have happened
+			// with full certainty in order to ensure the right key is being used to
+			// make signatures.
+			let (active_local_key, _) = self.fetch_local_keys();
+			for _ in 0..100 {
+				let status_handle = AsyncProtocolRemote::new(now, round_id);
+				let params = AsyncProtocolParameters {
+					engine: Arc::new(DKGProtocolEngine {
+						backend: self.backend.clone(),
+						latest_header: self.latest_header.clone(),
+						client: self.client.clone(),
+						keystore: self.key_store.clone(),
+						gossip_engine: self
+							.get_gossip_engine_from_protocol_name(crate::DKG_SIGNING_PROTOCOL_NAME),
+						signing_manager: self.signing_manager.clone(),
+						aggregated_public_keys: self.aggregated_public_keys.clone(),
+						best_authorities: best_authorities.clone(),
+						authority_public_key: authority_public_key.clone(),
+						current_validator_set: self.current_validator_set.clone(),
+						local_keystore: self.local_keystore.clone(),
+						vote_results: Arc::new(Default::default()),
+						local_key_path: Arc::new(RwLock::new(local_key_path)),
+						is_genesis: false,
+						_pd: Default::default(),
+					}),
+					round_id,
+					keystore: self.key_store.clone(),
+					current_validator_set: self.current_validator_set.clone(),
+					best_authorities,
+					authority_public_key,
+					handle: status_handle.clone(),
+					local_key: active_local_key.map(|k| k.local_key),
+				};
+				collection.push(params);
+			}
+			collection
+		};
+		let (signing_manager, signing_manager_controller) = builder.build(params);
+		*self.signing_manager.write() = Some(signing_manager_controller);
 	}
 
 	fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
@@ -1107,7 +1203,7 @@ where
 				if let Some(signing_manager) = self.signing_manager.read().as_ref() {
 					// deliver the message to the signing manager.
 					if let Err(err) = signing_manager.deliver_dkg_message(dkg_msg) {
-						self.handle_dkg_error(DKGError::CriticalError { reason: err.to_string() })
+						return Err(DKGError::CriticalError { reason: err.to_string() })
 					}
 				}
 				Ok(())
