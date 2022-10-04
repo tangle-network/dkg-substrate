@@ -949,7 +949,7 @@ pub mod pallet {
 							// If we have authorities that can take the place of the jailed
 							// authority find the authority with the highest reputation to replace
 							// the jailed authority
-							if non_jailed_non_next_best_authorities.len() > 0 {
+							if !non_jailed_non_next_best_authorities.is_empty() {
 								let mut authorities_ordered_by_reputation =
 									AuthorityReputations::<T>::iter()
 										.filter(|id| {
@@ -973,7 +973,7 @@ pub mod pallet {
 									&unjailed_authorities
 										.into_iter()
 										.filter(|id| *id != offender)
-										.chain(vec![highest_reputation_authority.clone()])
+										.chain(vec![highest_reputation_authority])
 										.collect::<Vec<_>>(),
 								));
 
@@ -1703,6 +1703,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	#[allow(clippy::unit_arg)]
 	pub fn process_send_signed_transaction_result(
 		results: Vec<(frame_system::offchain::Account<T>, Result<(), ()>)>,
 	) -> Result<(), ()> {
