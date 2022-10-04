@@ -171,7 +171,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 6_000;
+pub const MILLISECS_PER_BLOCK: u64 = 12_000;
 
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
@@ -435,7 +435,7 @@ impl pallet_authorship::Config for Runtime {
 }
 
 parameter_types! {
-	pub const Period: u32 = MINUTES;
+	pub const Period: u32 = 15 * MINUTES;
 	pub const Offset: u32 = 0;
 }
 
