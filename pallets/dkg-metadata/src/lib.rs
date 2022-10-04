@@ -468,7 +468,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn authority_reputations)]
 	pub type AuthorityReputations<T: Config> =
-		StorageMap<_, Blake2_256, T::DKGId, T::Reputation, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, T::DKGId, T::Reputation, ValueQuery>;
 
 	/// Tracks jailed authorities for keygen by mapping
 	/// to the block number when the authority was last jailed
@@ -932,9 +932,56 @@ pub mod pallet {
 							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
+
 						if unjailed_authorities.contains(&offender) {
 							// Jail the offender
 							JailedKeygenAuthorities::<T>::insert(&offender, now);
+
+							// Check for authorities that are
+							// 1. Not jailed
+							// 2. Not already included in the next_best_authorities
+							let non_jailed_non_next_best_authorities = Self::next_authorities()
+								.into_iter()
+								.filter(|id| !unjailed_authorities.contains(id))
+								.filter(|id| !JailedKeygenAuthorities::<T>::contains_key(id))
+								.collect::<Vec<T::DKGId>>();
+
+							// If we have authorities that can take the place of the jailed
+							// authority find the authority with the highest reputation to replace
+							// the jailed authority
+							if non_jailed_non_next_best_authorities.len() > 0 {
+								let mut authorities_ordered_by_reputation =
+									AuthorityReputations::<T>::iter()
+										.filter(|id| {
+											non_jailed_non_next_best_authorities.contains(&id.0)
+										})
+										.collect::<Vec<(T::DKGId, T::Reputation)>>();
+
+								authorities_ordered_by_reputation.sort_by(|a, b| a.1.cmp(&b.1));
+
+								// If we cannot find any authority by highest reputation
+								// pick the first authority
+								let highest_reputation_authority =
+									if authorities_ordered_by_reputation.is_empty() {
+										non_jailed_non_next_best_authorities[0].clone()
+									} else {
+										authorities_ordered_by_reputation.pop().unwrap().0
+									};
+
+								NextBestAuthorities::<T>::put(Self::get_best_authorities(
+									Self::next_keygen_threshold() as usize,
+									&unjailed_authorities
+										.into_iter()
+										.filter(|id| *id != offender)
+										.chain(vec![highest_reputation_authority.clone()])
+										.collect::<Vec<_>>(),
+								));
+
+								return Ok(().into())
+							}
+
+							// If we do not have any authorities remaining, drop the keygen
+							// threshold
 							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {
 								// Handle edge case properly (shouldn't drop below 2 authorities)
 								if unjailed_authorities.len() > 2 {
@@ -1535,9 +1582,15 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| {
-					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
+				let res = signer.send_signed_transaction(|_account| Call::submit_next_public_key {
+					keys_and_signatures: agg_keys.clone(),
 				});
+
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain SUCCEEDED{:?}", agg_keys);
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain FAILED {:?}", agg_keys);
+				}
 
 				agg_key_ref.clear();
 			}
@@ -1572,11 +1625,16 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(refresh_proposal)) = refresh_proposal {
-				let _ =
+				let res =
 					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
 					});
-				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain SUCCEEDED{:?}", refresh_proposal.signature);
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain FAILED {:?}", refresh_proposal.signature);
+				}
 
 				pub_key_sig_ref.clear();
 			}
@@ -1618,13 +1676,17 @@ impl<T: Config> Pallet<T> {
 					return Ok(())
 				}
 
-				let _ = signer.send_signed_transaction(|_account| {
+				let res = signer.send_signed_transaction(|_account| {
 					Call::submit_misbehaviour_reports { reports: reports.clone() }
 				});
 
-				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting reports onchain {:?}", reports);
-
-				agg_reports_ref.clear();
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::info!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain SUCCEEDED {:?}", reports);
+					// clear storage since we successfuly reported
+					agg_reports_ref.clear();
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain FAILED {:?}", reports);
+				}
 			}
 
 			Ok(())
@@ -1639,6 +1701,19 @@ impl<T: Config> Pallet<T> {
 				next_keygen_threshold: next_threshold,
 			});
 		}
+	}
+
+	pub fn process_send_signed_transaction_result(
+		results: Vec<(frame_system::offchain::Account<T>, Result<(), ()>)>,
+	) -> Result<(), ()> {
+		for (_acc, res) in &results {
+			match res {
+				Ok(()) => {},
+				Err(e) => return Err(*e),
+			}
+		}
+		// transaction submitted succesfully
+		Ok(())
 	}
 
 	pub fn update_next_signature_threshold(next_threshold: u16) {
