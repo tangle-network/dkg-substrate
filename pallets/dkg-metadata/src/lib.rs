@@ -1735,7 +1735,7 @@ impl<T: Config> Pallet<T> {
 		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
 		>>::estimate_current_session_progress(now);
-		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress", session_progress);
+		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress {:?}", session_progress);
 		if let Some(session_progress) = session_progress {
 			let delay = RefreshDelay::<T>::get();
 			let next_dkg_public_key_signature = Self::next_public_key_signature();
