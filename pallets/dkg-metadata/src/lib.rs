@@ -1735,11 +1735,14 @@ impl<T: Config> Pallet<T> {
 		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
 		>>::estimate_current_session_progress(now);
+		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress {:?}", session_progress);
 		if let Some(session_progress) = session_progress {
 			let delay = RefreshDelay::<T>::get();
 			let next_dkg_public_key_signature = Self::next_public_key_signature();
 			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
 		}
+
+		log::debug!(target: "runtime::dkg_metadata", "Unable to read session progress");
 		false
 	}
 
