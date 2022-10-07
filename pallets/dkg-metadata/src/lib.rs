@@ -109,8 +109,8 @@ use dkg_runtime_primitives::{
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
-	pallet_prelude::Get,
-	traits::{EstimateNextSessionRotation, OneSessionHandler},
+	pallet_prelude::{Get, Weight},
+	traits::{EstimateNextSessionRotation, OneSessionHandler, ValidatorSet},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 pub use pallet::*;
@@ -120,7 +120,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating, Zero},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, One, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{
@@ -1929,5 +1929,76 @@ impl<
 			next_public_key_signature_exists &&
 			now >= offset &&
 			((now - offset) % Period::get()) >= Zero::zero()
+	}
+}
+
+impl<
+		BlockNumber: AtLeast32BitUnsigned + Clone + core::fmt::Debug,
+		Period: Get<BlockNumber>,
+		Offset: Get<BlockNumber>,
+		T: Config + pallet_session::Config,
+	> EstimateNextSessionRotation<BlockNumber> for DKGPeriodicSessions<Period, Offset, T>
+{
+	fn average_session_length() -> BlockNumber {
+		Period::get()
+	}
+
+	fn estimate_current_session_progress(now: BlockNumber) -> (Option<Permill>, Weight) {
+		let offset = Offset::get();
+		let period = Period::get();
+
+		let progress = if now >= offset {
+			// let's calculate what the session index should be if we rotated every period
+			let expected_session = now.clone() / period.clone();
+			// read the actual session index
+			let actual_session_index: BlockNumber =
+				<pallet_session::Pallet<T> as ValidatorSet<T::AccountId>>::session_index().into();
+			// if the expected_session is ahead of actual_session this means we did
+			// not rotate at every period in this case we return 100% since this signals that we
+			// should rotate
+			if expected_session > actual_session_index {
+				Some(Permill::from_percent(100))
+			} else {
+				// NOTE: we add one since we assume that the current block has already elapsed,
+				// i.e. when evaluating the last block in the session the progress should be 100%
+				// (0% is never returned).
+				let current = (now - offset) % period.clone() + One::one();
+				Some(Permill::from_rational(current, period))
+			}
+		} else {
+			Some(Permill::from_rational(now + One::one(), offset))
+		};
+
+		// Weight note: `estimate_current_session_progress` has no storage reads and trivial
+		// computational overhead. There should be no risk to the chain having this weight value be
+		// zero for now. However, this value of zero was not properly calculated, and so it would be
+		// reasonable to come back here and properly calculate the weight of this function.
+		(progress, Zero::zero())
+	}
+
+	fn estimate_next_session_rotation(now: BlockNumber) -> (Option<BlockNumber>, Weight) {
+		let offset = Offset::get();
+		let period = Period::get();
+
+		let next_session = if now > offset {
+			let block_after_last_session = (now.clone() - offset) % period.clone();
+			if block_after_last_session > Zero::zero() {
+				now.saturating_add(period.saturating_sub(block_after_last_session))
+			} else {
+				// this branch happens when the session is already rotated or will rotate in this
+				// block (depending on being called before or after `session::on_initialize`). Here,
+				// we assume the latter, namely that this is called after `session::on_initialize`,
+				// and thus we add period to it as well.
+				now + period
+			}
+		} else {
+			offset
+		};
+
+		// Weight note: `estimate_next_session_rotation` has no storage reads and trivial
+		// computational overhead. There should be no risk to the chain having this weight value be
+		// zero for now. However, this value of zero was not properly calculated, and so it would be
+		// reasonable to come back here and properly calculate the weight of this function.
+		(Some(next_session), Zero::zero())
 	}
 }
