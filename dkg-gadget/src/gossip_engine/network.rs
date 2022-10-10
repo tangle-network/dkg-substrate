@@ -52,7 +52,6 @@ use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId, Protoc
 use sc_network_common::service::{NetworkEventStream, NetworkNotification, NetworkPeers};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
-	borrow::Cow,
 	collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
 	hash::Hash,
 	iter,
