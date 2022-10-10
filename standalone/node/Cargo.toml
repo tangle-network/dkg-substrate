@@ -48,6 +48,7 @@ sp-finality-grandpa = { git = "https://github.com/paritytech/substrate", branch 
 sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
+sc-network-common = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sp-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 

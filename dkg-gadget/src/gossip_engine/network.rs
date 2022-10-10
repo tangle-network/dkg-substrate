@@ -48,7 +48,7 @@ use futures::{Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, warn};
 use parking_lot::RwLock;
-use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId};
+use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId, ProtocolName};
 use sc_network_common::service::{NetworkEventStream, NetworkNotification, NetworkPeers};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
@@ -68,19 +68,17 @@ use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]
 pub struct NetworkGossipEngineBuilder {
-	protocol_name: Cow<'static, str>,
+	protocol_name: ProtocolName,
 }
 
 impl NetworkGossipEngineBuilder {
 	/// Create a new network gossip engine.
-	pub fn new(protocol_name: Cow<'static, str>) -> Self {
+	pub fn new(protocol_name: ProtocolName) -> Self {
 		Self { protocol_name }
 	}
 
 	/// Returns the configuration of the set to put in the network configuration.
-	pub fn set_config(
-		protocol_name: std::borrow::Cow<'static, str>,
-	) -> config::NonDefaultSetConfig {
+	pub fn set_config(protocol_name: ProtocolName) -> config::NonDefaultSetConfig {
 		config::NonDefaultSetConfig {
 			notifications_protocol: protocol_name.clone(),
 			fallback_names: Vec::new(),
@@ -284,7 +282,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// The Protocol Name, should be unique.
 	///
 	/// Used as an identifier for the gossip protocol.
-	protocol_name: Cow<'static, str>,
+	protocol_name: ProtocolName,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
@@ -445,7 +443,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			},
 
 			Event::NotificationStreamOpened { remote, protocol, .. }
-				if protocol == *self.protocol_name =>
+				if protocol == self.protocol_name =>
 			{
 				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
 				let mut lock = self.peers.write();
@@ -463,7 +461,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				debug_assert!(_was_in.is_none());
 			},
 			Event::NotificationStreamClosed { remote, protocol }
-				if protocol == *self.protocol_name =>
+				if protocol == self.protocol_name =>
 			{
 				let mut lock = self.peers.write();
 				let _peer = lock.remove(&remote);
@@ -473,7 +471,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 			Event::NotificationsReceived { remote, messages } => {
 				for (protocol, message) in messages {
-					if protocol != *self.protocol_name {
+					if protocol != self.protocol_name {
 						continue
 					}
 					debug!(target: "dkg_gadget::gossip_engine::network", "Received message from {} from gossiping", remote);
