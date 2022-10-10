@@ -748,7 +748,7 @@ impl<T: Config> Pallet<T> {
 			}
 		});
 
-		if res.is_err() || all_proposals.is_empty() {
+		if res.is_err() {
 			return Err("Unable to get next proposal batch")
 		}
 

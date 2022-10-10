@@ -109,8 +109,8 @@ use dkg_runtime_primitives::{
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
-	pallet_prelude::Get,
-	traits::{EstimateNextSessionRotation, OneSessionHandler},
+	pallet_prelude::{Get, Weight},
+	traits::{EstimateNextSessionRotation, OneSessionHandler, ValidatorSet},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 pub use pallet::*;
@@ -120,7 +120,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Convert, IsMember, Saturating, Zero},
+	traits::{AtLeast32BitUnsigned, Convert, IsMember, One, Saturating, Zero},
 	DispatchError, Permill, RuntimeAppPublic,
 };
 use sp_std::{
@@ -468,7 +468,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn authority_reputations)]
 	pub type AuthorityReputations<T: Config> =
-		StorageMap<_, Blake2_256, T::DKGId, T::Reputation, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, T::DKGId, T::Reputation, ValueQuery>;
 
 	/// Tracks jailed authorities for keygen by mapping
 	/// to the block number when the authority was last jailed
@@ -932,9 +932,56 @@ pub mod pallet {
 							.filter(|(_, id)| !JailedKeygenAuthorities::<T>::contains_key(id))
 							.map(|(_, id)| id)
 							.collect::<Vec<T::DKGId>>();
+
 						if unjailed_authorities.contains(&offender) {
 							// Jail the offender
 							JailedKeygenAuthorities::<T>::insert(&offender, now);
+
+							// Check for authorities that are
+							// 1. Not jailed
+							// 2. Not already included in the next_best_authorities
+							let non_jailed_non_next_best_authorities = Self::next_authorities()
+								.into_iter()
+								.filter(|id| !unjailed_authorities.contains(id))
+								.filter(|id| !JailedKeygenAuthorities::<T>::contains_key(id))
+								.collect::<Vec<T::DKGId>>();
+
+							// If we have authorities that can take the place of the jailed
+							// authority find the authority with the highest reputation to replace
+							// the jailed authority
+							if !non_jailed_non_next_best_authorities.is_empty() {
+								let mut authorities_ordered_by_reputation =
+									AuthorityReputations::<T>::iter()
+										.filter(|id| {
+											non_jailed_non_next_best_authorities.contains(&id.0)
+										})
+										.collect::<Vec<(T::DKGId, T::Reputation)>>();
+
+								authorities_ordered_by_reputation.sort_by(|a, b| a.1.cmp(&b.1));
+
+								// If we cannot find any authority by highest reputation
+								// pick the first authority
+								let highest_reputation_authority =
+									if authorities_ordered_by_reputation.is_empty() {
+										non_jailed_non_next_best_authorities[0].clone()
+									} else {
+										authorities_ordered_by_reputation.pop().unwrap().0
+									};
+
+								NextBestAuthorities::<T>::put(Self::get_best_authorities(
+									Self::next_keygen_threshold() as usize,
+									&unjailed_authorities
+										.into_iter()
+										.filter(|id| *id != offender)
+										.chain(vec![highest_reputation_authority])
+										.collect::<Vec<_>>(),
+								));
+
+								return Ok(().into())
+							}
+
+							// If we do not have any authorities remaining, drop the keygen
+							// threshold
 							if unjailed_authorities.len() <= Self::next_keygen_threshold().into() {
 								// Handle edge case properly (shouldn't drop below 2 authorities)
 								if unjailed_authorities.len() > 2 {
@@ -1535,9 +1582,15 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| {
-					Call::submit_next_public_key { keys_and_signatures: agg_keys.clone() }
+				let res = signer.send_signed_transaction(|_account| Call::submit_next_public_key {
+					keys_and_signatures: agg_keys.clone(),
 				});
+
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain SUCCEEDED{:?}", agg_keys);
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain FAILED {:?}", agg_keys);
+				}
 
 				agg_key_ref.clear();
 			}
@@ -1572,11 +1625,16 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(refresh_proposal)) = refresh_proposal {
-				let _ =
+				let res =
 					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
 					});
-				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain {:?}", refresh_proposal.signature);
+
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain SUCCEEDED{:?}", refresh_proposal.signature);
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain FAILED {:?}", refresh_proposal.signature);
+				}
 
 				pub_key_sig_ref.clear();
 			}
@@ -1618,13 +1676,17 @@ impl<T: Config> Pallet<T> {
 					return Ok(())
 				}
 
-				let _ = signer.send_signed_transaction(|_account| {
+				let res = signer.send_signed_transaction(|_account| {
 					Call::submit_misbehaviour_reports { reports: reports.clone() }
 				});
 
-				log::debug!(target: "runtime::dkg_metadata", "Offchain submitting reports onchain {:?}", reports);
-
-				agg_reports_ref.clear();
+				if Self::process_send_signed_transaction_result(res).is_ok() {
+					log::info!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain SUCCEEDED {:?}", reports);
+					// clear storage since we successfuly reported
+					agg_reports_ref.clear();
+				} else {
+					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain FAILED {:?}", reports);
+				}
 			}
 
 			Ok(())
@@ -1639,6 +1701,20 @@ impl<T: Config> Pallet<T> {
 				next_keygen_threshold: next_threshold,
 			});
 		}
+	}
+
+	#[allow(clippy::unit_arg)]
+	pub fn process_send_signed_transaction_result(
+		results: Vec<(frame_system::offchain::Account<T>, Result<(), ()>)>,
+	) -> Result<(), ()> {
+		for (_acc, res) in &results {
+			match res {
+				Ok(()) => {},
+				Err(e) => return Err(*e),
+			}
+		}
+		// transaction submitted succesfully
+		Ok(())
 	}
 
 	pub fn update_next_signature_threshold(next_threshold: u16) {
@@ -1659,11 +1735,14 @@ impl<T: Config> Pallet<T> {
 		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
 			T::BlockNumber,
 		>>::estimate_current_session_progress(now);
+		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress {:?}", session_progress);
 		if let Some(session_progress) = session_progress {
 			let delay = RefreshDelay::<T>::get();
 			let next_dkg_public_key_signature = Self::next_public_key_signature();
 			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
 		}
+
+		log::debug!(target: "runtime::dkg_metadata", "Unable to read session progress");
 		false
 	}
 
@@ -1853,5 +1932,76 @@ impl<
 			next_public_key_signature_exists &&
 			now >= offset &&
 			((now - offset) % Period::get()) >= Zero::zero()
+	}
+}
+
+impl<
+		BlockNumber: AtLeast32BitUnsigned + Clone + core::fmt::Debug,
+		Period: Get<BlockNumber>,
+		Offset: Get<BlockNumber>,
+		T: Config + pallet_session::Config,
+	> EstimateNextSessionRotation<BlockNumber> for DKGPeriodicSessions<Period, Offset, T>
+{
+	fn average_session_length() -> BlockNumber {
+		Period::get()
+	}
+
+	fn estimate_current_session_progress(now: BlockNumber) -> (Option<Permill>, Weight) {
+		let offset = Offset::get();
+		let period = Period::get();
+
+		let progress = if now >= offset {
+			// let's calculate what the session index should be if we rotated every period
+			let expected_session = now.clone() / period.clone();
+			// read the actual session index
+			let actual_session_index: BlockNumber =
+				<pallet_session::Pallet<T> as ValidatorSet<T::AccountId>>::session_index().into();
+			// if the expected_session is ahead of actual_session this means we did
+			// not rotate at every period in this case we return 100% since this signals that we
+			// should rotate
+			if expected_session > actual_session_index {
+				Some(Permill::from_percent(100))
+			} else {
+				// NOTE: we add one since we assume that the current block has already elapsed,
+				// i.e. when evaluating the last block in the session the progress should be 100%
+				// (0% is never returned).
+				let current = (now - offset) % period.clone() + One::one();
+				Some(Permill::from_rational(current, period))
+			}
+		} else {
+			Some(Permill::from_rational(now + One::one(), offset))
+		};
+
+		// Weight note: `estimate_current_session_progress` has no storage reads and trivial
+		// computational overhead. There should be no risk to the chain having this weight value be
+		// zero for now. However, this value of zero was not properly calculated, and so it would be
+		// reasonable to come back here and properly calculate the weight of this function.
+		(progress, Zero::zero())
+	}
+
+	fn estimate_next_session_rotation(now: BlockNumber) -> (Option<BlockNumber>, Weight) {
+		let offset = Offset::get();
+		let period = Period::get();
+
+		let next_session = if now > offset {
+			let block_after_last_session = (now.clone() - offset) % period.clone();
+			if block_after_last_session > Zero::zero() {
+				now.saturating_add(period.saturating_sub(block_after_last_session))
+			} else {
+				// this branch happens when the session is already rotated or will rotate in this
+				// block (depending on being called before or after `session::on_initialize`). Here,
+				// we assume the latter, namely that this is called after `session::on_initialize`,
+				// and thus we add period to it as well.
+				now + period
+			}
+		} else {
+			offset
+		};
+
+		// Weight note: `estimate_next_session_rotation` has no storage reads and trivial
+		// computational overhead. There should be no risk to the chain having this weight value be
+		// zero for now. However, this value of zero was not properly calculated, and so it would be
+		// reasonable to come back here and properly calculate the weight of this function.
+		(Some(next_session), Zero::zero())
 	}
 }

@@ -94,7 +94,7 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_SIGNING_SETS: u64 = 16;
 
-pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(60);
+pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
@@ -155,9 +155,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
-	/// A HashSet of the currently being signed proposals.
-	/// Note: we only store the hash of the proposal here, not the full proposal.
-	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
 	/// Local keystore for DKG data
 	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
@@ -197,7 +194,6 @@ where
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
-			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
@@ -258,7 +254,6 @@ where
 			latest_header,
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
-			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
@@ -503,7 +498,6 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler.clone();
-		let proposals_hash = unsigned_proposals.iter().map(|p| p.hash()).collect::<Vec<_>>();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -511,29 +505,16 @@ where
 			signing_set,
 			async_index,
 		)?;
-		// insert the hash of the proposals into the currently being signed proposals.
-		let currently_signing_proposals = self.currently_signing_proposals.clone();
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
 					log::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
-					// remove the hash of the proposals from the currently being signed proposals.
-					let mut lock = currently_signing_proposals.write();
-					proposals_hash.iter().flatten().for_each(|h| {
-						lock.remove(h);
-					});
 					Ok(async_index)
 				},
 
 				Err(err) => {
 					error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 					let _ = err_handler_tx.send(err.clone());
-					// if we errored, we also need to remove the hash of the proposals from the
-					// currently being signed proposals.
-					let mut lock = currently_signing_proposals.write();
-					proposals_hash.iter().flatten().for_each(|h| {
-						lock.remove(h);
-					});
 					Err(err)
 				},
 			}
@@ -965,6 +946,7 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG ID: {:?}", queued.id);
 			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.read().id);
 			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.read().as_ref().map(|r| r.status.clone()));
+
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.read().id != queued.id && !queued_keygen_in_progress {
 				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
@@ -1293,30 +1275,11 @@ where
 			Ok(res) => res,
 			Err(_) => return,
 		};
-		// filter them
-		let unsigned_proposals = unsigned_proposals
-			.into_iter()
-			.filter(|proposal| {
-				// only take the proposals that are not yet being processed
-				let proposal_hash = proposal.hash();
-				match proposal_hash {
-					Some(hash) => !self.currently_signing_proposals.read().contains(&hash),
-					None => true,
-				}
-			})
-			.collect::<Vec<_>>();
 		if unsigned_proposals.is_empty() {
 			return
 		} else {
 			debug!(target: "dkg_gadget::worker", "Got unsigned proposals count {}", unsigned_proposals.len());
 		}
-
-		let mut lock = self.currently_signing_proposals.write();
-		let proposals_hash = unsigned_proposals.iter().map(|p| p.hash()).collect::<Vec<_>>();
-		proposals_hash.iter().flatten().for_each(|h| {
-			lock.insert(*h);
-		});
-		drop(lock);
 
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
