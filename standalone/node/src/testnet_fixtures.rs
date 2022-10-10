@@ -17,7 +17,7 @@
 use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use dkg_standalone_runtime::AccountId;
 use hex_literal::hex;
-use sc_network::config::MultiaddrWithPeerId;
+use sc_network_common::config::MultiaddrWithPeerId;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::crypto::UncheckedInto;
 use sp_finality_grandpa::AuthorityId as GrandpaId;

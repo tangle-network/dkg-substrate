@@ -66,7 +66,7 @@ fn check_offchain_proposals_num_eq(num: usize) {
 // helper function to skip blocks
 pub fn run_n_blocks(n: u64) -> u64 {
 	// lets leave enough weight to read a queue with length one and remove one item
-	let idle_weight: u64 = RocksDbWeight::get().reads_writes(1, 1);
+	let idle_weight = RocksDbWeight::get().reads_writes(1, 1);
 	let start_block = System::block_number();
 
 	for block_number in start_block..=n {

@@ -66,48 +66,48 @@ pub struct WebbWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn set_maintainer() -> Weight {
-		(11_000_000_u64)
+		Weight::from_ref_time(11_000_000_u64)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals Maintainer (r:1 w:1)
 	fn force_set_maintainer() -> Weight {
-		(10_000_000_u64)
+		Weight::from_ref_time(10_000_000_u64)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals ProposerThreshold (r:0 w:1)
 	fn set_threshold(_c: u32, ) -> Weight {
-		(7_949_000_u64)
+		Weight::from_ref_time(7_949_000_u64)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals Resources (r:0 w:1)
 	fn set_resource(_c: u32, ) -> Weight {
-		(1_266_000_u64)
+		Weight::from_ref_time(1_266_000_u64)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals Resources (r:0 w:1)
 	fn remove_resource() -> Weight {
-		(1_000_000_u64)
+		Weight::from_ref_time(1_000_000_u64)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals ChainNonces (r:1 w:1)
 	fn whitelist_chain() -> Weight {
-		(11_000_000_u64)
+		Weight::from_ref_time(11_000_000_u64)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKGProposals Proposers (r:1 w:1)
 	// Storage: DKGProposals ProposerCount (r:1 w:1)
 	fn add_proposer() -> Weight {
-		(12_000_000_u64)
+		Weight::from_ref_time(12_000_000_u64)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
 	// Storage: DKGProposals Proposers (r:1 w:1)
 	// Storage: DKGProposals ProposerCount (r:1 w:1)
 	fn remove_proposer() -> Weight {
-		(13_000_000_u64)
+		Weight::from_ref_time(13_000_000_u64)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
@@ -118,7 +118,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
 	fn acknowledge_proposal(_c: u32, ) -> Weight {
-		(27_981_000_u64)
+		Weight::from_ref_time(27_981_000_u64)
 			.saturating_add(T::DbWeight::get().reads(6_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -129,7 +129,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
 	fn reject_proposal(_c: u32, ) -> Weight {
-		(28_205_000_u64)
+		Weight::from_ref_time(28_205_000_u64)
 			.saturating_add(T::DbWeight::get().reads(6_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -137,7 +137,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals ProposerThreshold (r:1 w:0)
 	// Storage: DKGProposals ProposerCount (r:1 w:0)
 	fn eval_vote_state(_c: u32, ) -> Weight {
-		(10_859_000_u64)
+		Weight::from_ref_time(10_859_000_u64)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -145,15 +145,15 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 }
 
 impl WeightInfo for () {
-	fn set_maintainer() -> Weight { 0 }
-	fn force_set_maintainer() -> Weight { 0 }
-	fn set_threshold(_c: u32, ) -> Weight { 0 }
-	fn set_resource(_c: u32, ) -> Weight { 0 }
-	fn remove_resource() -> Weight { 0 }
-	fn whitelist_chain() -> Weight { 0 }
-	fn add_proposer() -> Weight { 0 }
-	fn remove_proposer() -> Weight { 0 }
-	fn acknowledge_proposal(_c: u32,) -> Weight { 0 }
-	fn reject_proposal(_c: u32,) -> Weight { 0 }
-	fn eval_vote_state(_c: u32,) -> Weight { 0 }
+	fn set_maintainer() -> Weight { Weight::from_ref_time(0) }
+	fn force_set_maintainer() -> Weight { Weight::from_ref_time(0) }
+	fn set_threshold(_c: u32, ) -> Weight { Weight::from_ref_time(0) }
+	fn set_resource(_c: u32, ) -> Weight { Weight::from_ref_time(0) }
+	fn remove_resource() -> Weight { Weight::from_ref_time(0) }
+	fn whitelist_chain() -> Weight { Weight::from_ref_time(0) }
+	fn add_proposer() -> Weight { Weight::from_ref_time(0) }
+	fn remove_proposer() -> Weight { Weight::from_ref_time(0) }
+	fn acknowledge_proposal(_c: u32,) -> Weight { Weight::from_ref_time(0) }
+	fn reject_proposal(_c: u32,) -> Weight { Weight::from_ref_time(0) }
+	fn eval_vote_state(_c: u32,) -> Weight { Weight::from_ref_time(0) }
 }
