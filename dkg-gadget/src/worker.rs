@@ -31,7 +31,10 @@ use std::{
 	marker::PhantomData,
 	path::PathBuf,
 	pin::Pin,
-	sync::Arc,
+	sync::{
+		atomic::{AtomicUsize, Ordering},
+		Arc,
+	},
 };
 
 use parking_lot::RwLock;
@@ -93,6 +96,8 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_SIGNING_SETS: u64 = 16;
+
+pub const MAX_KEYGEN_RETRIES: usize = 5;
 
 pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
 
@@ -161,6 +166,8 @@ where
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
+	/// Keep track of the number of how many times we have tried the keygen protocol.
+	pub keygen_retry_count: Arc<AtomicUsize>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -197,6 +204,7 @@ where
 			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
+			keygen_retry_count: self.keygen_retry_count.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -258,6 +266,7 @@ where
 			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
+			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			_backend: PhantomData,
 		}
 	}
@@ -923,15 +932,40 @@ where
 			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(rounds) = self.next_rounds.read().as_ref() {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
-				if rounds.keygen_has_stalled(*header.number()) {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STALLED: round {:?}", queued.id);
+				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
+				let (current_attmp, max, should_retry) = {
+					// check how many authorities are in the next best authorities
+					// and then check the signature threshold `t`, if `t+1` is greater than the
+					// number of authorities and we still have not reached the maximum number of
+					// retries, we should retry the keygen
+					let n = next_best.len();
+					let t = self.get_next_signature_threshold(header) as usize;
+					// in this case, if t + 1 is equal to n, we should retry the keygen
+					// indefinitely.
+					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
+					// be possible to successfully report the DKG Misbehavior on chain.
+					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
+					let should_retry = v < max_retries || max_retries == 0;
+					debug!(
+						target: "dkg_gadget::worker",
+						"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}"
+					);
+					(v, max_retries, should_retry)
+				};
+				if keygen_stalled && should_retry {
+					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})", current_attmp, max);
+					// Update the next best authorities
+					*self.best_next_authorities.write() = next_best;
+					// Start the queued Keygen protocol again.
+					self.handle_queued_dkg_setup(header, queued);
+					return
+				} else if keygen_stalled && !should_retry {
+					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, but we have reached the maximum number of retries will report bad actors.");
 					return self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: convert_u16_vec_to_usize_vec(
 							rounds.current_round_blame().blamed_parties,
 						),
 					})
-				} else {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG NOT STALLED: round {:?}", queued.id);
 				}
 			}
 
@@ -991,6 +1025,8 @@ where
 				// Rotate the key files
 				let success = self.rotate_local_key_files();
 				debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
+				// since we just rotate, we rest the keygen retry counter
+				self.keygen_retry_count.store(0, Ordering::Relaxed);
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 			}
