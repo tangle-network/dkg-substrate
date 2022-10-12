@@ -955,7 +955,7 @@ where
 					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})", current_attmp, max);
 					// Update the next best authorities
 					*self.best_next_authorities.write() = next_best;
-					// Start the queued DKG setup for the new queued authorities
+					// Start the queued Keygen protocol again.
 					self.handle_queued_dkg_setup(header, queued);
 					return
 				} else if keygen_stalled && !should_retry {
