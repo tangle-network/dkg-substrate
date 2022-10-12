@@ -307,11 +307,11 @@ pub mod pallet {
 						},
 					}
 
-					return 1
+					return Weight::from_ref_time(1 as u64)
 				}
 			}
 
-			0
+			Weight::from_ref_time(0)
 		}
 	}
 

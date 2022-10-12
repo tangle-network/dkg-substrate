@@ -55,14 +55,14 @@ pub struct WebbWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: BridgeRegistry Bridges (r:1 w:1)
 	fn set_metadata() -> Weight {
-		(6_000_000 as Weight)
-			.saturating_add(T::DbWeight::get().reads(1 as Weight))
-			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		Weight::from_ref_time(6_000_000)
+			.saturating_add(T::DbWeight::get().reads(1 as u64))
+			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: BridgeRegistry ResourceToBridgeIndex (r:0 w:1)
 	fn force_reset_indices() -> Weight {
-		(862_000_000 as Weight)
-			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		Weight::from_ref_time(862_000_000)
+			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 }
 
@@ -70,13 +70,13 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 impl WeightInfo for () {
 	// Storage: BridgeRegistry Bridges (r:1 w:1)
 	fn set_metadata() -> Weight {
-		(6_000_000 as Weight)
-			.saturating_add(RocksDbWeight::get().reads(1 as Weight))
-			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		Weight::from_ref_time(6_000_000)
+			.saturating_add(RocksDbWeight::get().reads(1 as u64))
+			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: BridgeRegistry ResourceToBridgeIndex (r:0 w:1)
 	fn force_reset_indices() -> Weight {
-		(862_000_000 as Weight)
-			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		Weight::from_ref_time(862_000_000)
+			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 }

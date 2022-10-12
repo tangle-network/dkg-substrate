@@ -22,7 +22,7 @@ use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 
-use sc_network::{ExHashT, NetworkService};
+use sc_network::{ExHashT, NetworkService, ProtocolName};
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block;
@@ -56,7 +56,7 @@ pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/signing/1";
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config(
-	protocol_name: std::borrow::Cow<'static, str>,
+	protocol_name: ProtocolName,
 ) -> sc_network::config::NonDefaultSetConfig {
 	NetworkGossipEngineBuilder::set_config(protocol_name)
 }
