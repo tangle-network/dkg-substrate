@@ -1112,7 +1112,10 @@ where
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.round_id == msg.msg.round_id {
-						debug!("Receiving keygen message for round {} from party {}", rounds.round_id, sender_id);
+						debug!(
+							"Receiving keygen message for round {} from party {}",
+							rounds.round_id, sender_id
+						);
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
