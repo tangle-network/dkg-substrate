@@ -939,7 +939,7 @@ where
 					// number of authorities and we still have not reached the maximum number of
 					// retries, we should retry the keygen
 					let n = next_best.len();
-					let t = self.get_signature_threshold(header) as usize;
+					let t = self.get_next_signature_threshold(header) as usize;
 					// in this case, if t + 1 is equal to n, we should retry the keygen
 					// indefinitely.
 					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
