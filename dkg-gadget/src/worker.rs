@@ -940,10 +940,11 @@ where
 					// retries, we should retry the keygen
 					let n = next_best.len();
 					let t = self.get_signature_threshold(header) as usize;
-					// in this case, if t + 1 is less than or equal n, we should retry the keygen
+					// in this case, if t + 1 is equal to n, we should retry the keygen
 					// indefinitely.
-					let max_retries = if t + 1 > n { MAX_KEYGEN_RETRIES } else { 0 };
-					let v = self.keygen_retry_count.load(Ordering::SeqCst);
+					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
+					// be possible to successfully report the DKG Misbehavior on chain.
+					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
 					let should_retry = v < max_retries || max_retries == 0;
 					debug!(
 						target: "dkg_gadget::worker",
