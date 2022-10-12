@@ -945,6 +945,7 @@ where
 					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
 					// be possible to successfully report the DKG Misbehavior on chain.
 					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
+					let v = self.keygen_retry_count.load(Ordering::SeqCst);
 					let should_retry = v < max_retries || max_retries == 0;
 					debug!(
 						target: "dkg_gadget::worker",
