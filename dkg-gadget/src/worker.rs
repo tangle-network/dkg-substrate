@@ -340,8 +340,9 @@ where
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
+				debug!(target: "dkg_gadget::worker", "Starting genesis protocol (obtaing the lock)");
 				let mut lock = self.rounds.write();
-				debug!(target: "dkg_gadget::worker", "Starting genesis protocol");
+				debug!(target: "dkg_gadget::worker", "Starting genesis protocol (got the lock)");
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
@@ -361,8 +362,9 @@ where
 				})?;
 			},
 			ProtoStageType::Queued => {
+				debug!(target: "dkg_gadget::worker", "Starting queued protocol (obtaing the lock)");
 				let mut lock = self.next_rounds.write();
-				debug!(target: "dkg_gadget::worker", "Starting queued protocol");
+				debug!(target: "dkg_gadget::worker", "Starting queued protocol (got the lock)");
 				if lock.is_some() {
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
@@ -813,6 +815,7 @@ where
 				return
 			} else {
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
+				// clear the next rounds.
 			}
 		}
 
@@ -839,6 +842,8 @@ where
 		let threshold = self.get_next_signature_threshold(header);
 
 		let authority_public_key = self.get_authority_public_key();
+		// spawn the Keygen protocol for the Queued DKG.
+		debug!(target: "dkg_gadget::worker", "🕸️  Spawning keygen protocol for queued DKG");
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
@@ -929,8 +934,12 @@ where
 				self.handle_queued_dkg_setup(header, queued);
 				return
 			}
+			// a read only clone, to avoid holding the lock for the whole duration of the function
+			let lock = self.next_rounds.read();
+			let next_rounds_clone = (*lock).clone();
+			drop(lock);
 			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(rounds) = self.next_rounds.read().as_ref() {
+			if let Some(rounds) = next_rounds_clone {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
 				let (current_attmp, max, should_retry) = {
@@ -947,10 +956,12 @@ where
 					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
 					let v = self.keygen_retry_count.load(Ordering::SeqCst);
 					let should_retry = v < max_retries || max_retries == 0;
-					debug!(
-						target: "dkg_gadget::worker",
-						"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}"
-					);
+					if keygen_stalled {
+						debug!(
+							target: "dkg_gadget::worker",
+							"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}"
+						);
+					}
 					(v, max_retries, should_retry)
 				};
 				if keygen_stalled && should_retry {
@@ -959,6 +970,8 @@ where
 					*self.best_next_authorities.write() = next_best;
 					// Start the queued Keygen protocol again.
 					self.handle_queued_dkg_setup(header, queued);
+					// Increment the retry count
+					self.keygen_retry_count.fetch_add(1, Ordering::SeqCst);
 					return
 				} else if keygen_stalled && !should_retry {
 					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, but we have reached the maximum number of retries will report bad actors.");
