@@ -307,7 +307,7 @@ pub mod pallet {
 						},
 					}
 
-					return Weight::from_ref_time(1 as u64)
+					return Weight::from_ref_time(1_u64)
 				}
 			}
 
@@ -1704,6 +1704,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	#[allow(clippy::unit_arg)]
+	#[allow(clippy::all)]
 	pub fn process_send_signed_transaction_result(
 		results: Vec<(frame_system::offchain::Account<T>, Result<(), ()>)>,
 	) -> Result<(), ()> {
