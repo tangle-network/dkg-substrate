@@ -25,6 +25,8 @@ ignore:
   - .*/parachain/.*
   - ^runtime/*/**
   - ^node/*/**
+  - parachain/.*
+  - standalone/.*
 
 # Pull request comments:
 # ----------------------
