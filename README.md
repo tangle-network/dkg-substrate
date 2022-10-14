@@ -1,25 +1,15 @@
-<h1 align="center">Webb DKG 🕸️ </h1>
 <div align="center">
 <a href="https://www.webb.tools/">
-    <img alt="Webb Logo" src="./assets/webb-icon.svg" width="15%" height="30%" />
+    
+![Webb Logo](./assets/webb_banner_light.png#gh-light-mode-only)
+![Webb Logo](./assets/webb_banner_dark.png#gh-dark-mode-only)
   </a>
   </div>
-<p align="center">
+<p align="left">
     <strong>🚀 Threshold ECDSA Distributed Key Generation Protocol 🔑 </strong>
-    <br />
-    <sub> ⚠️ Beta Software ⚠️ </sub>
 </p>
 
-<div align="center" >
-
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webb-tools/dkg-substrate/check?style=flat-square)](https://github.com/webb-tools/dkg-substrate/actions)
-[![Codecov](https://img.shields.io/codecov/c/gh/webb-tools/dkg-substrate?style=flat-square&token=HNT1CEZ01E)](https://codecov.io/gh/webb-tools/dkg-substrate)
-[![License Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Twitter](https://img.shields.io/twitter/follow/webbprotocol.svg?style=flat-square&label=Twitter&color=1DA1F2)](https://twitter.com/webbprotocol)
-[![Telegram](https://img.shields.io/badge/Telegram-gray?logo=telegram)](https://t.me/webbprotocol)
-[![Discord](https://img.shields.io/discord/833784453251596298.svg?style=flat-square&label=Discord&logo=discord)](https://discord.gg/cv8EfJu3Tn)
-
-</div>
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webb-tools/dkg-substrate/check?style=flat-square)](https://github.com/webb-tools/dkg-substrate/actions) [![Codecov](https://img.shields.io/codecov/c/gh/webb-tools/dkg-substrate?style=flat-square&token=HNT1CEZ01E)](https://codecov.io/gh/webb-tools/dkg-substrate) [![License Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](https://www.apache.org/licenses/LICENSE-2.0) [![Twitter](https://img.shields.io/twitter/follow/webbprotocol.svg?style=flat-square&label=Twitter&color=1DA1F2)](https://twitter.com/webbprotocol) [![Telegram](https://img.shields.io/badge/Telegram-gray?logo=telegram)](https://t.me/webbprotocol) [![Discord](https://img.shields.io/discord/833784453251596298.svg?style=flat-square&label=Discord&logo=discord)](https://discord.gg/cv8EfJu3Tn)
 
 <!-- TABLE OF CONTENTS -->
 <h2 id="table-of-contents"> 📖 Table of Contents</h2>
@@ -166,34 +156,6 @@ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
 
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
 instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
-
-<h3 id="launch"> Run local testnet with <a href="https://github.com/paritytech/polkadot-launch">polkadot-launch</a> ☄️</h3>
-
-The fastest way to set up the DKG to run as a parachain is to make use of [polkadot-launch](https://github.com/paritytech/polkadot-launch). Follow the below steps to get up and running! 🏃
-
-**Install polkadot-launch:**
-
-```
-npm install -g polkadot-launch
-```
-
-**Update configuration script:**
-
-1. Run: `cd scripts/polkadot-launch`
-2. Update the `bin` field for `relaychain` and `parachains` to point to appropriate paths. **Note:** You will need to have a built Polkadot binary. For Polkadot installation instructions follow the steps outlined [here](https://github.com/paritytech/polkadot).
-3. Update ports and debug logs as you see fit.
-
-**Launch Polkadot relay chain and DKG parachain:**
-
-```bash
-polkadot-launch dkg-launch.json
-```
-
-If everything went well you should see `POLKADOT LAUNCHED SUCCESSFULLY 🚀`. To follow the DKG parachain logs:
-
-```bash
-tail -f 9988.log
-```
 
 <h3 id="para"> Run local testnet with <a href="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
 
