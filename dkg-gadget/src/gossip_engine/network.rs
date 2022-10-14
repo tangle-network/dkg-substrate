@@ -79,7 +79,7 @@ impl NetworkGossipEngineBuilder {
 	/// Returns the configuration of the set to put in the network configuration.
 	pub fn set_config(protocol_name: ProtocolName) -> config::NonDefaultSetConfig {
 		config::NonDefaultSetConfig {
-			notifications_protocol: protocol_name.clone(),
+			notifications_protocol: protocol_name,
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,
 			set_config: config::SetConfig {
@@ -117,7 +117,7 @@ impl NetworkGossipEngineBuilder {
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
-			protocol_name: self.protocol_name.clone(),
+			protocol_name: self.protocol_name,
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),

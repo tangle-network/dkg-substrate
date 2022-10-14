@@ -62,28 +62,28 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKG PendingSignatureThreshold (r:1 w:1)
 	fn set_signature_threshold() -> Weight {
 		Weight::from_ref_time(16_000_000)
-			.saturating_add(T::DbWeight::get().reads(2 as u64))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG NextAuthorities (r:1 w:0)
 	// Storage: DKG PendingSignatureThreshold (r:1 w:0)
 	// Storage: DKG PendingKeygenThreshold (r:1 w:1)
 	fn set_keygen_threshold() -> Weight {
 		Weight::from_ref_time(27_000_000)
-			.saturating_add(T::DbWeight::get().reads(3 as u64))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG RefreshDelay (r:0 w:1)
 	fn set_refresh_delay(_n: u32, ) -> Weight {
 		Weight::from_ref_time(2_110_000)
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG RefreshInProgress (r:1 w:0)
 	// Storage: DKG RefreshNonce (r:1 w:1)
 	fn manual_increment_nonce() -> Weight {
 		Weight::from_ref_time(9_000_000)
-			.saturating_add(T::DbWeight::get().reads(2 as u64))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG RefreshInProgress (r:1 w:1)
 	// Storage: DKG NextDKGPublicKey (r:1 w:0)
@@ -92,8 +92,8 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposalHandler UnsignedProposalQueue (r:0 w:1)
 	fn manual_refresh() -> Weight {
 		Weight::from_ref_time(30_000_000)
-			.saturating_add(T::DbWeight::get().reads(3 as u64))
-			.saturating_add(T::DbWeight::get().writes(4 as u64))
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
 	}
 	// Storage: DKG DKGPublicKey (r:1 w:1)
 	// Storage: DKG Authorities (r:1 w:0)
@@ -103,11 +103,11 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	fn submit_public_key(n: u32, ) -> Weight {
 		Weight::from_ref_time(0)
 			// Standard Error: 22_593_000
-			.saturating_add(Weight::from_ref_time((2_352_338_000 as u64).saturating_mul(n as u64)))
-			.saturating_add(T::DbWeight::get().reads(4 as u64))
-			.saturating_add(T::DbWeight::get().reads((1 as u64).saturating_mul(n as u64)))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
-			.saturating_add(T::DbWeight::get().writes((1 as u64).saturating_mul(n as u64)))
+			.saturating_add(Weight::from_ref_time((2_352_338_000_u64).saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n as u64)))
 	}
 	// Storage: DKG NextDKGPublicKey (r:1 w:1)
 	// Storage: DKG NextAuthorities (r:1 w:0)
@@ -116,9 +116,9 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	fn submit_next_public_key(n: u32, ) -> Weight {
 		Weight::from_ref_time(0)
 			// Standard Error: 22_659_000
-			.saturating_add(Weight::from_ref_time((2_358_378_000 as u64).saturating_mul(n as u64)))
-			.saturating_add(T::DbWeight::get().reads(4 as u64))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(Weight::from_ref_time((2_358_378_000_u64).saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG NextDKGPublicKey (r:1 w:1)
 	// Storage: DKG NextPublicKeySignature (r:1 w:1)
@@ -155,8 +155,8 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposals Proposers (r:0 w:3)
 	fn submit_public_key_signature() -> Weight {
 		Weight::from_ref_time(383_000_000)
-			.saturating_add(T::DbWeight::get().reads(24 as u64))
-			.saturating_add(T::DbWeight::get().writes(31 as u64))
+			.saturating_add(T::DbWeight::get().reads(24_u64))
+			.saturating_add(T::DbWeight::get().writes(31_u64))
 	}
 	// Storage: DKG NextAuthorities (r:1 w:0)
 	// Storage: DKG NextSignatureThreshold (r:1 w:0)
@@ -167,27 +167,27 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	fn submit_misbehaviour_reports(n: u32, ) -> Weight {
 		Weight::from_ref_time(0)
 			// Standard Error: 23_711_000
-			.saturating_add(Weight::from_ref_time((2_358_101_000 as u64).saturating_mul(n as u64)))
-			.saturating_add(T::DbWeight::get().reads(8 as u64))
-			.saturating_add(T::DbWeight::get().writes(2 as u64))
+			.saturating_add(Weight::from_ref_time((2_358_101_000_u64).saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().reads(8_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
 	// Storage: DKG AccountToAuthority (r:1 w:0)
 	// Storage: DKG JailedKeygenAuthorities (r:1 w:1)
 	// Storage: DKG JailedSigningAuthorities (r:1 w:1)
 	fn unjail() -> Weight {
 		Weight::from_ref_time(22_000_000)
-			.saturating_add(T::DbWeight::get().reads(3 as u64))
-			.saturating_add(T::DbWeight::get().writes(2 as u64))
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
 	// Storage: DKG JailedSigningAuthorities (r:0 w:1)
 	fn force_unjail_signing() -> Weight {
 		Weight::from_ref_time(2_000_000)
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	// Storage: DKG JailedKeygenAuthorities (r:0 w:1)
 	fn force_unjail_keygen() -> Weight {
 		Weight::from_ref_time(2_000_000)
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 }
 
