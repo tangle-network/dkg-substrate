@@ -57,7 +57,7 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.session_id);
+		debug!(target: "dkg", "SESSION {} | Received public key broadcast", msg.session_id);
 
 		let is_main_round = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
@@ -88,7 +88,7 @@ where
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
 		log::debug!(
 			target: "dkg",
-			"ROUND {:?} | Threshold {} | Aggregated pubkeys {}",
+			"SESSION {:?} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id, threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		);

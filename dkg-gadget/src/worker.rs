@@ -395,7 +395,7 @@ where
 					// TODO: Write more on what we should be going here since it's all the same
 					if current_round.signing_has_stalled(now) {
 						// the round has stalled, so we can overwrite it
-						log::warn!(target: "dkg_gadget::worker", "signing round #{} has stalled, overwriting it", async_index);
+						log::warn!(target: "dkg_gadget::worker", "signing round async index #{} has stalled, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
 						// we will allow overwriting the round, but we will print a warning
@@ -403,7 +403,7 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
-						log::debug!(target: "dkg_gadget::worker", "signing round #{} is not active, overwriting it", async_index);
+						log::debug!(target: "dkg_gadget::worker", "signing round async index #{} is not active, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					}
 				} else {
@@ -781,11 +781,11 @@ where
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
 			*self.rounds.write() = None;
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -831,11 +831,11 @@ where
 		let maybe_party_index = self.get_next_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
 			*self.next_rounds.write() = None;
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -1189,9 +1189,9 @@ where
 				let async_index = msg.msg.payload.get_async_index();
 				log::debug!(target: "dkg_gadget::worker", "Received message for async index {}", async_index);
 				if let Some(Some(rounds)) = self.signing_rounds.read().get(async_index as usize) {
-					log::debug!(target: "dkg_gadget::worker", "Message is for signing round {}", rounds.session_id);
+					log::debug!(target: "dkg_gadget::worker", "Message is for signing execution in session {}", rounds.session_id);
 					if rounds.session_id == msg.msg.session_id {
-						log::debug!(target: "dkg_gadget::worker", "Message is for this signing round: {}", rounds.session_id);
+						log::debug!(target: "dkg_gadget::worker", "Message is for this signing execution in session: {}", rounds.session_id);
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1316,10 +1316,10 @@ where
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
@@ -1390,7 +1390,7 @@ where
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
-				log::info!(target: "dkg_gadget::worker", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				log::info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
@@ -1591,7 +1591,7 @@ where
 		let self_ = self.clone();
 		tokio::spawn(async move {
 			while let Some(msg) = keygen_stream.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for round {}", msg.msg.session_id);
+				log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for session {}", msg.msg.session_id);
 				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
 						self_.keygen_gossip_engine.acknowledge_last_message();
@@ -1612,7 +1612,7 @@ where
 		let self_ = self.clone();
 		tokio::spawn(async move {
 			while let Some(msg) = signing_stream.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for round {}", msg.msg.session_id);
+				log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for session {}", msg.msg.session_id);
 				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
 						self_.signing_gossip_engine.acknowledge_last_message();
