@@ -1158,7 +1158,7 @@ where
 		}
 
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(kg) => {
+			DKGMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.session_id == msg.msg.session_id {
