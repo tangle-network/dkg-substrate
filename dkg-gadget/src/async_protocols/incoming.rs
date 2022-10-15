@@ -83,17 +83,17 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 							.verify_signature_against_authorities(self)
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
+						log::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this round {:?}", self.msg.round_id, this_round_id);
 						Ok(None)
 					}
 				} else {
-					//log::info!(target: "dkg", "Will skip passing message to state machine since
-					// loopback (loopback_id={})", sender);
+					log::warn!(target: "dkg", "Will skip passing message to state machine since sender {:?} != receiver {:?}", sender, receiver);
 					Ok(None)
 				}
 			},
 
-			(_l, _r) => {
-				//log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
+			(l, r) => {
+				log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
 				Ok(None)
 			},
 		}

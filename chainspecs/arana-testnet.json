@@ -3,9 +3,9 @@
   "id": "arana",
   "chainType": "Development",
   "bootNodes": [
-    "/ip4/158.247.202.146/tcp/30333/p2p/12D3KooWJ7PSFvtU3i1LK8E6QmPqHvihs9RTvFw9ZoxGpHGhgNG3",
-    "/ip4/158.247.210.6/tcp/30333/p2p/12D3KooWQs9faHSzWq4EadVmaBmqTDV2KmEBVQdaXDQLccd9bRjS",
-    "/ip4/141.164.55.77/tcp/30333/p2p/12D3KooWSBjUxtAxw4Jpb76QY4JySsrr5seB4QhkYVB64sVWbAFH"
+    "/ip4/45.32.85.173/tcp/30333/p2p/12D3KooWALNXqLwePiPBeqbTU8aFU16vXaSuBH4rVpM4qZ2JB2xE",
+    "/ip4/45.77.223.184/tcp/30333/p2p/12D3KooWKLqLfRCskai6hkrNpXMk116k3v96Wd64VTQtGsExcyRb",
+    "/ip4/149.28.73.239/tcp/30333/p2p/12D3KooWQj27YSDnQVpzrxMxtTEAcn9pnRfwrtGoVHnmCbCdpy9D"
   ],
   "telemetryEndpoints": null,
   "protocolId": null,
