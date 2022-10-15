@@ -77,7 +77,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
 				// only clone if the downstream receiver expects this type
 				let sender = self.msg.payload.async_proto_only_get_sender_id().unwrap();
-				if sender !=  stream_type.get_i() {
+				if sender != stream_type.get_i() {
 					if self.msg.session_id == this_session_id {
 						verify
 							.verify_signature_against_authorities(self)
