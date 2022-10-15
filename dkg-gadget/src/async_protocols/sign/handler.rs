@@ -225,7 +225,7 @@ where
 
 			// now, broadcast the data
 			let unsigned_dkg_message =
-				DKGMessage { id, status: DKGMsgStatus::ACTIVE, payload, session_id };
+				DKGMessage { sender_id: id, status: DKGMsgStatus::ACTIVE, payload, session_id };
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 
 			// we only need a threshold count of sigs

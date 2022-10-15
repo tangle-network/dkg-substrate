@@ -130,7 +130,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		let status =
 			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
-			id: public.clone(),
+			sender_id: public.clone(),
 			status,
 			session_id: report.session_id,
 			payload,

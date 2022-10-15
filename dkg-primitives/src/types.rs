@@ -48,7 +48,7 @@ pub enum DKGMsgStatus {
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGMessage<AuthorityId> {
 	/// Node authority id
-	pub id: AuthorityId,
+	pub sender_id: AuthorityId,
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message

@@ -130,7 +130,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 		let status =
 			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
-			id: public.clone(),
+			sender_id: public.clone(),
 			status,
 			session_id: msg.session_id,
 			payload,

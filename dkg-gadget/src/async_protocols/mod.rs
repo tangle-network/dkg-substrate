@@ -379,7 +379,7 @@ where
 				},
 			};
 
-			let unsigned_dkg_message = DKGMessage { id, status, payload, session_id };
+			let unsigned_dkg_message = DKGMessage { sender_id: id, status, payload, session_id };
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				log::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {
