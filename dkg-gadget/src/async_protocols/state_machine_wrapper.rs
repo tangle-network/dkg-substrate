@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
@@ -20,6 +21,7 @@ use super::{CurrentRoundBlame, ProtocolType};
 
 pub(crate) struct StateMachineWrapper<T: StateMachine> {
 	sm: T,
+	session_id: SessionId,
 	channel_type: ProtocolType,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 }
@@ -27,10 +29,11 @@ pub(crate) struct StateMachineWrapper<T: StateMachine> {
 impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	pub fn new(
 		sm: T,
+		session_id: SessionId,
 		channel_type: ProtocolType,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	) -> Self {
-		Self { sm, channel_type, current_round_blame }
+		Self { sm, session_id, channel_type, current_round_blame }
 	}
 
 	fn collect_round_blame(&self) {
@@ -50,12 +53,25 @@ where
 	type MessageBody = T::MessageBody;
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+		log::debug!(
+			"Handling incoming message from session={}, round={}, sender={}",
+			self.session_id,
+			self.current_round(),
+			msg.sender
+		);
 		let result = self.sm.handle_incoming(msg);
 		self.collect_round_blame();
 		result
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
+		if self.sm.message_queue().len() > 0 {
+			log::debug!(
+				"Preparing to drain message queue in session={}, round={}",
+				self.session_id,
+				self.current_round()
+			);
+		}
 		self.sm.message_queue()
 	}
 

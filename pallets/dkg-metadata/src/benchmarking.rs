@@ -60,13 +60,13 @@ fn mock_misbehaviour_report<T: Config>(
 	offender: T::DKGId,
 	misbehaviour_type: MisbehaviourType,
 ) -> Vec<u8> {
-	let round_id: u64 = 1;
+	let session_id: u64 = 1;
 	let mut payload = Vec::new();
 	payload.extend_from_slice(&match misbehaviour_type {
 		MisbehaviourType::Keygen => [0x01],
 		MisbehaviourType::Sign => [0x02],
 	});
-	payload.extend_from_slice(round_id.to_be_bytes().as_ref());
+	payload.extend_from_slice(session_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(offender.clone().as_ref());
 	let hash = keccak_256(&payload);
 	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
@@ -227,7 +227,7 @@ benchmarks! {
 		let mut next_authorities: Vec<T::DKGId> = Vec::new();
 		let mut reporters: Vec<T::DKGId> = Vec::new();
 		let mut signatures: Vec<Vec<u8>> = Vec::new();
-		let round_id = 1;
+		let session_id = 1;
 		let misbehaviour_type = MisbehaviourType::Keygen;
 		for id in 1..=n{
 			let authority_id = mock_pub_key();
@@ -242,7 +242,7 @@ benchmarks! {
 		NextAuthorities::<T>::put(&next_authorities);
 		let aggregated_misbehaviour_reports= AggregatedMisbehaviourReports {
 													misbehaviour_type,
-													round_id,
+													session_id,
 													offender,
 													reporters:reporters.clone(),
 													signatures,

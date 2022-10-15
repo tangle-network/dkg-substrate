@@ -21,7 +21,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, RoundId,
+	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, SessionId,
 	SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
@@ -57,11 +57,11 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.round_id);
+		debug!(target: "dkg", "ROUND {} | Received public key broadcast", msg.session_id);
 
 		let is_main_round = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
-				msg.round_id == rounds.round_id
+				msg.session_id == rounds.session_id
 			} else {
 				false
 			}
@@ -75,9 +75,9 @@ where
 		)?;
 
 		let key_and_sig = (msg.pub_key, msg.signature);
-		let round_id = msg.round_id;
+		let session_id = msg.session_id;
 		let mut lock = dkg_worker.aggregated_public_keys.write();
-		let aggregated_public_keys = lock.entry(round_id).or_default();
+		let aggregated_public_keys = lock.entry(session_id).or_default();
 
 		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
@@ -89,7 +89,7 @@ where
 		log::debug!(
 			target: "dkg",
 			"ROUND {:?} | Threshold {} | Aggregated pubkeys {}",
-			msg.round_id, threshold,
+			msg.session_id, threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		);
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
@@ -97,7 +97,7 @@ where
 				&dkg_worker.backend,
 				&mut *lock,
 				is_main_round,
-				round_id,
+				session_id,
 				current_block_number,
 			)?;
 		}
@@ -109,7 +109,7 @@ where
 pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
-	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
+	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
 	msg: DKGPublicKeyMessage,
 ) where
 	B: Block,
@@ -127,11 +127,12 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			..msg.clone()
 		});
 
-		let status = if msg.round_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
+		let status =
+			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			id: public.clone(),
 			status,
-			round_id: msg.round_id,
+			session_id: msg.session_id,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();
@@ -154,7 +155,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 		}
 
 		aggregated_public_keys
-			.entry(msg.round_id)
+			.entry(msg.session_id)
 			.or_default()
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));

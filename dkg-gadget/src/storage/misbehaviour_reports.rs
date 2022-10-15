@@ -53,7 +53,7 @@ where
 
 	let _ = dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
 		reports.misbehaviour_type,
-		reports.round_id,
+		reports.session_id,
 		reports.offender.clone(),
 	));
 

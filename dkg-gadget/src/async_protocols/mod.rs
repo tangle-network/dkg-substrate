@@ -28,7 +28,7 @@ use dkg_primitives::{
 	crypto::{AuthorityId, Public},
 	types::{
 		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
-		RoundId,
+		SessionId,
 	},
 	AuthoritySet, AuthoritySetId,
 };
@@ -72,7 +72,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub authority_public_key: Arc<Public>,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub local_key: Option<LocalKey<Secp256k1>>,
 }
 
@@ -81,17 +81,17 @@ impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 		if self.handle.is_active() && self.handle.is_primary_remote {
 			log::warn!(
 				"AsyncProtocolParameters({})'s handler is still active and now will be dropped!!!",
-				self.round_id
+				self.session_id
 			);
 		} else if self.handle.is_primary_remote {
 			log::debug!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
-				self.round_id
+				self.session_id
 			);
 		} else {
 			log::debug!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
-				self.round_id
+				self.session_id
 			);
 		}
 	}
@@ -113,7 +113,7 @@ impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
 impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 	fn clone(&self) -> Self {
 		Self {
-			round_id: self.round_id,
+			session_id: self.session_id,
 			engine: self.engine.clone(),
 			keystore: self.keystore.clone(),
 			current_validator_set: self.current_validator_set.clone(),
@@ -248,8 +248,10 @@ where
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 	let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
 
+	let session_id = params.session_id;
 	let sm = StateMachineWrapper::new(
 		sm,
+		session_id,
 		channel_type.clone(),
 		params.handle.current_round_blame_tx.clone(),
 	);
@@ -320,16 +322,16 @@ where
 	Ok(GenericAsyncHandler { protocol: Box::pin(protocol) })
 }
 
-fn get_party_round_id<'a, BI: BlockchainInterface + 'a>(
+fn get_party_session_id<'a, BI: BlockchainInterface + 'a>(
 	params: &AsyncProtocolParameters<BI>,
 ) -> (Option<u16>, AuthoritySetId, Public) {
 	let party_ind =
 		find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key)
 			.map(|r| r as u16 + 1);
-	let round_id = params.round_id;
+	let session_id = params.session_id;
 	let id = params.get_authority_public_key();
 
-	(party_ind, round_id, id)
+	(party_ind, session_id, id)
 }
 
 fn generate_outgoing_to_wire_fn<'a, SM: StateMachineHandler + 'a, BI: BlockchainInterface + 'a>(
@@ -347,7 +349,7 @@ where
 	Box::pin(async move {
 		// take all unsigned messages, then sign them and send outbound
 		while let Some(unsigned_message) = outgoing_rx.next().await {
-			log::info!(target: "dkg", "Async proto sent outbound request on node={:?} to: {:?} |(ty: {:?})", unsigned_message.sender, unsigned_message.receiver, &proto_ty);
+			log::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -356,7 +358,7 @@ where
 					continue
 				},
 			};
-			let (_, round_id, id) = get_party_round_id(&params);
+			let (_, session_id, id) = get_party_session_id(&params);
 
 			let payload = match &proto_ty {
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
@@ -377,7 +379,7 @@ where
 				},
 			};
 
-			let unsigned_dkg_message = DKGMessage { id, status, payload, round_id };
+			let unsigned_dkg_message = DKGMessage { id, status, payload, session_id };
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				log::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {

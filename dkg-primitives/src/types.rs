@@ -22,8 +22,8 @@ use std::fmt;
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
 
-/// A typedef for keygen set id
-pub type RoundId = u64;
+/// A typedef for keygen set / session id
+pub type SessionId = u64;
 /// A typedef for signer set id
 pub type SignerSetId = u64;
 
@@ -52,7 +52,7 @@ pub struct DKGMessage<AuthorityId> {
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// enum for active or queued
 	pub status: DKGMsgStatus,
 }
@@ -179,7 +179,7 @@ pub struct DKGSignedPayload {
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
 	/// Round ID of DKG protocol
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// Public key for the DKG
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
@@ -192,7 +192,7 @@ pub struct DKGMisbehaviourMessage {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// Misbehaving round
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// Offending authority's id
 	pub offender: AuthorityId,
 	/// Authority's signature for this report
@@ -220,14 +220,14 @@ pub trait DKGRoundsSM<Payload, Output, Clock> {
 }
 
 pub struct KeygenParams {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
 }
 
 pub struct SignParams {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
@@ -238,7 +238,7 @@ pub struct SignParams {
 #[derive(Debug, Clone)]
 pub enum DKGResult {
 	Empty,
-	KeygenFinished { round_id: RoundId, local_key: Box<LocalKey<Secp256k1>> },
+	KeygenFinished { session_id: SessionId, local_key: Box<LocalKey<Secp256k1>> },
 }
 
 #[derive(Debug, Clone)]
