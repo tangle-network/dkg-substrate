@@ -65,13 +65,13 @@ where
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
 		log::debug!(
-			"Trying to proceed: round {:?}, blame: {:?}",
+			"Trying to proceed: current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.current_round(),
 			self.round_blame(),
 		);
 		let result = self.sm.proceed();
 		log::debug!(
-			"Proceeded {:?}: round {:?}, blame: {:?}",
+			"Proceeded through SM: ({:?}), new current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.channel_type,
 			self.current_round(),
 			self.round_blame(),

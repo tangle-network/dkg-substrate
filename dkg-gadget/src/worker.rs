@@ -392,6 +392,7 @@ where
 				// round.
 				if let Some(Some(current_round)) = lock.get(async_index as usize) {
 					// check if it has stalled or not, if so, we can overwrite it
+					// TODO: Write more on what we should be going here since it's all the same
 					if current_round.signing_has_stalled(now) {
 						// the round has stalled, so we can overwrite it
 						log::warn!(target: "dkg_gadget::worker", "signing round #{} has stalled, overwriting it", async_index);
