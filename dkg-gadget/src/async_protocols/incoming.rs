@@ -77,13 +77,14 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
 				// only clone if the downstream receiver expects this type
 				let sender = self.msg.payload.async_proto_only_get_sender_id().unwrap();
-				if sender != stream_type.get_i() {
+				let receiver = stream_type.get_i();
+				if sender != receiver {
 					if self.msg.session_id == this_session_id {
 						verify
 							.verify_signature_against_authorities(self)
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
-						log::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this round {:?}", self.msg.round_id, this_round_id);
+						log::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this round {:?}", self.msg.session_id, this_session_id);
 						Ok(None)
 					}
 				} else {
