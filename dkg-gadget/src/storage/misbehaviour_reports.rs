@@ -50,12 +50,5 @@ where
 		"Stored aggregated misbehaviour reports {:?}",
 		reports.encode()
 	);
-
-	let _ = dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
-		reports.misbehaviour_type,
-		reports.round_id,
-		reports.offender.clone(),
-	));
-
 	Ok(())
 }
