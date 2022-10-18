@@ -1132,7 +1132,8 @@ where
 
 		let (bad_actors, session_id) = match dkg_error {
 			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
-			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } => (bad_actors.clone(), session_id),
+			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } =>
+				(bad_actors.clone(), session_id),
 			// Todo: Handle Signing Timeout as a separate case
 			DKGError::SignMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
 			_ => Default::default(),
