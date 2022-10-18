@@ -41,17 +41,7 @@ echo "*** Start Webb DKG Node ***"
   --port 30305 \
   --ws-port 9945 &
 # Charlie
-./target/release/dkg-standalone-node --base-path=./tmp/charlie -lerror --charlie \
-  --rpc-cors all --ws-external \
-  --port 30306 \
-  --ws-port 9946 &
-# Dave
-./target/release/dkg-standalone-node --base-path=./tmp/dave -lerror --dave \
-  --rpc-cors all --ws-external \
-  --port 30307 \
-  --ws-port 9947 &
-# Eve
-./target/release/dkg-standalone-node --base-path=./tmp/eve -linfo --eve \
+./target/release/dkg-standalone-node --base-path=./tmp/eve -linfo --charlie \
     --rpc-cors all --ws-external \
     --ws-port 9948 \
     --port 30308 \

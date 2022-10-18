@@ -157,6 +157,9 @@ where
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
 	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
+	/// A HashSet of the currently being signed proposals.
+	/// Note: we only store the hash of the proposal here, not the full proposal.
+	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
@@ -201,6 +204,7 @@ where
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
+			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
@@ -263,6 +267,7 @@ where
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
+			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
@@ -509,6 +514,8 @@ where
 		)?;
 
 		let err_handler_tx = self.error_handler.clone();
+		let proposal_hashes =
+			unsigned_proposals.iter().map(|p| p.hash()).flatten().collect::<Vec<_>>();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -516,6 +523,7 @@ where
 			signing_set,
 			async_index,
 		)?;
+		let currently_signing_proposals = self.currently_signing_proposals.clone();
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
@@ -526,6 +534,11 @@ where
 				Err(err) => {
 					error!(target: "dkg_gadget::worker", "Error executing meta handler {:?}", &err);
 					let _ = err_handler_tx.send(err.clone());
+					// remove proposal hashes, so that they can be reprocessed
+					let mut lock = currently_signing_proposals.write();
+					proposal_hashes.iter().for_each(|h| {
+						lock.remove(h);
+					});
 					Err(err)
 				},
 			}
@@ -1318,7 +1331,17 @@ where
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
-			Ok(res) => res,
+			Ok(res) => {
+				let mut filtered_unsigned_proposals = Vec::new();
+				for proposal in res {
+					if let Some(hash) = proposal.hash() {
+						if !self.currently_signing_proposals.read().contains(&hash) {
+							filtered_unsigned_proposals.push(proposal);
+						}
+					}
+				}
+				filtered_unsigned_proposals
+			},
 			Err(_) => return,
 		};
 		if unsigned_proposals.is_empty() {
@@ -1413,6 +1436,11 @@ where
 		if futures.is_empty() {
 			log::error!(target: "dkg_gadget::worker", "While creating the signing protocol, 0 were created");
 		} else {
+			let proposal_hashes =
+				unsigned_proposals.iter().map(|x| x.hash()).flatten().collect::<Vec<_>>();
+			// save the proposal hashes in the currently_signing_proposals.
+			// this is used to check if we have already signed a proposal or not.
+			self.currently_signing_proposals.write().extend(proposal_hashes);
 			// the goal of the meta task is to select the first winner
 			let meta_signing_protocol = async move {
 				// select the first future to return Ok(()), ignoring every failure
