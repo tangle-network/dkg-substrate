@@ -14,12 +14,12 @@
 
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, MaxNominations,
-	Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, ImOnlineConfig,
+	MaxNominations, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig,
+	SudoConfig, SystemConfig, WASM_BINARY,
 };
 use hex_literal::hex;
-
+use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
@@ -53,12 +53,13 @@ where
 pub fn authority_keys_from_seed(
 	stash: &str,
 	controller: &str,
-) -> (AccountId, AccountId, AuraId, GrandpaId, DKGId) {
+) -> (AccountId, AccountId, AuraId, GrandpaId, ImOnlineId, DKGId) {
 	(
 		get_account_id_from_seed::<sr25519::Public>(stash),
 		get_account_id_from_seed::<sr25519::Public>(controller),
 		get_from_seed::<AuraId>(stash),
 		get_from_seed::<GrandpaId>(stash),
+		get_from_seed::<ImOnlineId>(stash),
 		get_from_seed::<DKGId>(stash),
 	)
 }
@@ -70,9 +71,10 @@ pub fn authority_keys_from_seed(
 fn dkg_session_keys(
 	grandpa: GrandpaId,
 	aura: AuraId,
+	im_online: ImOnlineId,
 	dkg: DKGId,
 ) -> dkg_standalone_runtime::opaque::SessionKeys {
-	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, dkg }
+	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, dkg, im_online }
 }
 
 pub fn development_config() -> Result<ChainSpec, String> {
@@ -288,7 +290,7 @@ pub fn arana_testnet_config() -> Result<ChainSpec, String> {
 #[allow(clippy::too_many_arguments)]
 fn testnet_genesis(
 	wasm_binary: &[u8],
-	initial_authorities: Vec<(AccountId, AccountId, AuraId, GrandpaId, DKGId)>,
+	initial_authorities: Vec<(AccountId, AccountId, AuraId, GrandpaId, ImOnlineId, DKGId)>,
 	initial_nominators: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
@@ -339,7 +341,7 @@ fn testnet_genesis(
 					(
 						x.1.clone(),
 						x.0.clone(),
-						dkg_session_keys(x.3.clone(), x.2.clone(), x.4.clone()),
+						dkg_session_keys(x.3.clone(), x.2.clone(), x.4.clone(), x.5.clone()),
 					)
 				})
 				.collect::<Vec<_>>(),
@@ -362,5 +364,6 @@ fn testnet_genesis(
 		},
 		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
 		bridge_registry: Default::default(),
+		im_online: ImOnlineConfig { keys: vec![] },
 	}
 }

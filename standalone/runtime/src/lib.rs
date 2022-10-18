@@ -73,6 +73,7 @@ pub use frame_support::{
 	PalletId, StorageValue,
 };
 pub use pallet_balances::Call as BalancesCall;
+use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 pub use pallet_timestamp::Call as TimestampCall;
 use sp_runtime::generic::Era;
 #[cfg(any(feature = "std", test))]
@@ -125,6 +126,7 @@ pub mod opaque {
 		pub aura: Aura,
 		pub grandpa: Grandpa,
 		pub dkg: DKG,
+		pub im_online: ImOnline,
 	  }
 	}
 }
@@ -590,7 +592,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
@@ -626,7 +628,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
@@ -704,6 +706,26 @@ impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
+	pub const MaxKeys: u32 = 10_000;
+	pub const MaxPeerInHeartbeats: u32 = 10_000;
+	pub const MaxPeerDataEncodingSize: u32 = 1_000;
+}
+
+impl pallet_im_online::Config for Runtime {
+	type AuthorityId = ImOnlineId;
+	type Event = Event;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+	type ValidatorSet = Historical;
+	type ReportUnresponsiveness = ();
+	type UnsignedPriority = ImOnlineUnsignedPriority;
+	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
+	type MaxKeys = MaxKeys;
+	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
+	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
   pub enum Runtime where
@@ -730,8 +752,8 @@ construct_runtime!(
 	Session: pallet_session,
 	Historical: pallet_session_historical,
 	BridgeRegistry: pallet_bridge_registry::<Instance1>,
-	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>}
-
+	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
+	ImOnline: pallet_im_online,
   }
 );
 
@@ -936,7 +958,7 @@ impl_runtime_apis! {
 
 	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
 		use frame_support::traits::EstimateNextSessionRotation;
-		<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
+		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
 	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {

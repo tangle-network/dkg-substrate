@@ -51,6 +51,7 @@ sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sc-network-common = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sp-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
+pallet-im-online = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29" }
 
 # These dependencies are used for the node template's RPCs
 jsonrpsee = { version = "0.15.0", features = ["server"] }
