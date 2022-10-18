@@ -1339,7 +1339,14 @@ where
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
-				log::info!(target: "dkg_gadget::worker", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", round_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				log::info!(
+					target: "dkg_gadget::worker", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})",
+					round_id,
+					i,
+					threshold,
+					best_authorities.len(),
+					signing_sets[i].clone()
+				);
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
