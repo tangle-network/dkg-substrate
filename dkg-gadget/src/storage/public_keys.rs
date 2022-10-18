@@ -14,7 +14,7 @@
 
 use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
 use codec::Encode;
-use dkg_primitives::types::{DKGError, RoundId};
+use dkg_primitives::types::{DKGError, SessionId};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
 	offchain::storage_keys::{
@@ -31,9 +31,9 @@ use std::{collections::HashMap, sync::Arc};
 /// stores genesis or next aggregated public keys offchain
 pub(crate) fn store_aggregated_public_keys<B, C, BE>(
 	backend: &Arc<BE>,
-	aggregated_public_keys: &mut HashMap<RoundId, AggregatedPublicKeys>,
+	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
 	is_genesis_round: bool,
-	round_id: RoundId,
+	session_id: SessionId,
 	current_block_number: NumberFor<B>,
 ) -> Result<(), DKGError>
 where
@@ -47,8 +47,8 @@ where
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
 	let offchain = maybe_offchain.unwrap();
-	let keys = aggregated_public_keys.get(&round_id).ok_or_else(|| DKGError::CriticalError {
-		reason: format!("Aggregated public key for round {} does not exist in map", round_id),
+	let keys = aggregated_public_keys.get(&session_id).ok_or_else(|| DKGError::CriticalError {
+		reason: format!("Aggregated public key for session {} does not exist in map", session_id),
 	})?;
 	if is_genesis_round {
 		//dkg_worker.dkg_state.listening_for_active_pub_key = false;
@@ -68,7 +68,7 @@ where
 			AGGREGATED_PUBLIC_KEYS,
 			SUBMIT_KEYS_AT,
 		);
-		let _ = aggregated_public_keys.remove(&round_id);
+		let _ = aggregated_public_keys.remove(&session_id);
 	}
 
 	Ok(())

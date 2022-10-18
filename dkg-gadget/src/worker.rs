@@ -54,7 +54,7 @@ use crate::gossip_messages::misbehaviour_report::{
 use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
 
 use dkg_primitives::{
-	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, RoundId},
+	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
@@ -153,7 +153,7 @@ where
 	/// Queued validator set
 	pub queued_validator_set: Shared<AuthoritySet<Public>>,
 	/// Tracking for the broadcasted public keys and signatures
-	pub aggregated_public_keys: Shared<HashMap<RoundId, AggregatedPublicKeys>>,
+	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
 	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
@@ -215,7 +215,7 @@ where
 }
 
 pub type AggregatedMisbehaviourReportStore =
-	HashMap<(MisbehaviourType, RoundId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
@@ -300,7 +300,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
-		round_id: RoundId,
+		session_id: SessionId,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
@@ -310,7 +310,7 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let status_handle = AsyncProtocolRemote::new(now, round_id);
+		let status_handle = AsyncProtocolRemote::new(now, session_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
 		let (active_local_key, _) = self.fetch_local_keys();
@@ -331,7 +331,7 @@ where
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
-			round_id,
+			session_id,
 			keystore: self.key_store.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
@@ -354,7 +354,7 @@ where
 				*lock = Some(status_handle);
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
-					round_id,
+					session_id,
 					now,
 					MetaHandlerStatus::Keygen,
 					self.base_path
@@ -376,7 +376,7 @@ where
 				*lock = Some(status_handle);
 				// Store the saved rounds with Keygen status since we've executed the start handler
 				store_saved_rounds::<B>(
-					round_id,
+					session_id,
 					now,
 					MetaHandlerStatus::Keygen,
 					self.base_path
@@ -397,9 +397,10 @@ where
 				// round.
 				if let Some(Some(current_round)) = lock.get(async_index as usize) {
 					// check if it has stalled or not, if so, we can overwrite it
+					// TODO: Write more on what we should be going here since it's all the same
 					if current_round.signing_has_stalled(now) {
 						// the round has stalled, so we can overwrite it
-						log::warn!(target: "dkg_gadget::worker", "signing round #{} has stalled, overwriting it", async_index);
+						log::warn!(target: "dkg_gadget::worker", "signing round async index #{} has stalled, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
 						// we will allow overwriting the round, but we will print a warning
@@ -407,7 +408,7 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
-						log::debug!(target: "dkg_gadget::worker", "signing round #{} is not active, overwriting it", async_index);
+						log::debug!(target: "dkg_gadget::worker", "signing round async index #{} is not active, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					}
 				} else {
@@ -433,7 +434,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
-		round_id: RoundId,
+		session_id: SessionId,
 		threshold: u16,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
@@ -441,7 +442,7 @@ where
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
-			round_id,
+			session_id,
 			local_key_path,
 			stage,
 			0u8,
@@ -450,7 +451,7 @@ where
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler.clone();
 				let status = if let Some(rounds) = self.rounds.read().as_ref() {
-					if rounds.round_id == round_id {
+					if rounds.session_id == session_id {
 						DKGMsgStatus::ACTIVE
 					} else {
 						DKGMsgStatus::QUEUED
@@ -495,7 +496,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
-		round_id: RoundId,
+		session_id: SessionId,
 		threshold: u16,
 		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
@@ -506,7 +507,7 @@ where
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
-			round_id,
+			session_id,
 			local_key_path,
 			stage,
 			async_index,
@@ -789,15 +790,15 @@ where
 			let _ = cleanup(local_key.clone());
 		}
 		// DKG keygen authorities are always taken from the best set of authorities
-		let round_id = genesis_authority_set.id;
+		let session_id = genesis_authority_set.id;
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
 			*self.rounds.write() = None;
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -807,7 +808,7 @@ where
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
-			round_id,
+			session_id,
 			threshold,
 			local_key_path,
 			ProtoStageType::Genesis,
@@ -839,15 +840,15 @@ where
 		}
 
 		// Get the best next authorities using the keygen threshold
-		let round_id = queued.id;
+		let session_id = queued.id;
 		let maybe_party_index = self.get_next_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
 			*self.next_rounds.write() = None;
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
 		}
 
 		let best_authorities: Vec<Public> =
@@ -860,7 +861,7 @@ where
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
-			round_id,
+			session_id,
 			threshold,
 			queued_local_key_path,
 			ProtoStageType::Queued,
@@ -901,7 +902,7 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.read().is_none() {
-				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS ROUND_ID {:?}", active.id);
+				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS SESSION ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
@@ -1013,7 +1014,7 @@ where
 
 			// If the session has changed and a keygen is not in progress, we rotate
 			if self.queued_validator_set.read().id != queued.id && !queued_keygen_in_progress {
-				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE ROUND_ID {:?}", active.id);
+				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
@@ -1025,13 +1026,13 @@ where
 				// and started up after a previous rotation.
 				let (_, maybe_queued_key) = self.fetch_local_keys();
 				match maybe_queued_key {
-					Some(queued_key) if queued_key.round_id == queued.id => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.round_id);
+					Some(queued_key) if queued_key.session_id == queued.id => {
+						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.session_id);
 						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
 						return
 					},
 					Some(k) => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.round_id);
+						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.session_id);
 						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
 					},
 					None => {
@@ -1167,17 +1168,17 @@ where
 	) -> Result<(), DKGError> {
 		// discard the message if from previous round
 		if let Some(current_round) = self.rounds.read().as_ref() {
-			if dkg_msg.msg.round_id < current_round.round_id {
-				log::warn!(target: "dkg_gadget::worker", "Message is for already completed round: {}, Discarding message", dkg_msg.msg.round_id);
+			if dkg_msg.msg.session_id < current_round.session_id {
+				log::warn!(target: "dkg_gadget::worker", "Message is for already completed round: {}, Discarding message", dkg_msg.msg.session_id);
 				return Ok(())
 			}
 		}
 
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(..) => {
+			DKGMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.read().as_ref() {
-					if rounds.round_id == msg.msg.round_id {
+					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1188,7 +1189,7 @@ where
 				}
 
 				if let Some(rounds) = self.next_rounds.read().as_ref() {
-					if rounds.round_id == msg.msg.round_id {
+					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1205,16 +1206,16 @@ where
 				let async_index = msg.msg.payload.get_async_index();
 				log::debug!(target: "dkg_gadget::worker", "Received message for async index {}", async_index);
 				if let Some(Some(rounds)) = self.signing_rounds.read().get(async_index as usize) {
-					log::debug!(target: "dkg_gadget::worker", "Message is for signing round {}", rounds.round_id);
-					if rounds.round_id == msg.msg.round_id {
-						log::debug!(target: "dkg_gadget::worker", "Message is for this signing round: {}", rounds.round_id);
+					log::debug!(target: "dkg_gadget::worker", "Message is for signing execution in session {}", rounds.session_id);
+					if rounds.session_id == msg.msg.session_id {
+						log::debug!(target: "dkg_gadget::worker", "Message is for this signing execution in session: {}", rounds.session_id);
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
 						}
 					} else {
-						log::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.round_id);
+						log::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
 					}
 				} else {
 					log::warn!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
@@ -1258,21 +1259,21 @@ where
 	}
 
 	fn handle_dkg_report(&self, dkg_report: DKGReport) {
-		let (offender, round_id, misbehaviour_type) = match dkg_report {
+		let (offender, session_id, misbehaviour_type) = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
 			DKGReport::KeygenMisbehaviour { offender, round } => {
-				info!(target: "dkg_gadget::worker", "🕸️  DKG Keygen misbehaviour @ Round({round}) by {offender}");
-				(offender, round, MisbehaviourType::Keygen)
+				info!(target: "dkg_gadget::worker", "🕸️  DKG Keygen misbehaviour @ Session ({session_id}) by {offender}");
+				(offender, session_id, MisbehaviourType::Keygen)
 			},
 			DKGReport::SignMisbehaviour { offender, round } => {
-				info!(target: "dkg_gadget::worker", "🕸️  DKG Signing misbehaviour @ Round({round}) by {offender}");
-				(offender, round, MisbehaviourType::Sign)
+				info!(target: "dkg_gadget::worker", "🕸️  DKG Signing misbehaviour @ Session ({session_id}) by {offender}");
+				(offender, session_id, MisbehaviourType::Sign)
 			},
 		};
 
 		let misbehaviour_msg =
-			DKGMisbehaviourMessage { misbehaviour_type, round_id, offender, signature: vec![] };
+			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
 		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
 		let count = *self.has_sent_gossip_msg.read().get(&hash).unwrap_or(&0u8);
 		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
@@ -1319,15 +1320,15 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) {
-		let round_id = self.current_validator_set.read().id;
+		let session_id = self.current_validator_set.read().id;
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: round {:?}", round_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
@@ -1408,11 +1409,11 @@ where
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
-				log::info!(target: "dkg_gadget::worker", "🕸️  Round Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", round_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				log::info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
-					round_id,
+					session_id,
 					threshold,
 					None,
 					ProtoStageType::Signing,
@@ -1531,7 +1532,7 @@ where
 		if let Ok(stored_active_rounds) = load_saved_rounds::<B>(active_rounds_metadata_path) {
 			let remote = AsyncProtocolRemote::new(
 				stored_active_rounds.started_at,
-				stored_active_rounds.round_id,
+				stored_active_rounds.session_id,
 			);
 			remote.set_status(stored_active_rounds.status);
 			*self.rounds.write() = Some(remote);
@@ -1540,7 +1541,7 @@ where
 		if let Ok(stored_queued_rounds) = load_saved_rounds::<B>(queued_rounds_metadata_path) {
 			let remote = AsyncProtocolRemote::new(
 				stored_queued_rounds.started_at,
-				stored_queued_rounds.round_id,
+				stored_queued_rounds.session_id,
 			);
 			remote.set_status(stored_queued_rounds.status);
 			*self.next_rounds.write() = Some(remote);
@@ -1614,7 +1615,7 @@ where
 		let self_ = self.clone();
 		tokio::spawn(async move {
 			while let Some(msg) = keygen_stream.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for round {}", msg.msg.round_id);
+				log::debug!(target: "dkg_gadget::worker", "Going to handle keygen message for session {}", msg.msg.session_id);
 				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
 						self_.keygen_gossip_engine.acknowledge_last_message();
@@ -1635,7 +1636,7 @@ where
 		let self_ = self.clone();
 		tokio::spawn(async move {
 			while let Some(msg) = signing_stream.next().await {
-				log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for round {}", msg.msg.round_id);
+				log::debug!(target: "dkg_gadget::worker", "Going to handle signing message for session {}", msg.msg.session_id);
 				match self_.process_incoming_dkg_message(msg) {
 					Ok(_) => {
 						self_.signing_gossip_engine.acknowledge_last_message();

@@ -2397,6 +2397,7 @@ dependencies = [
  "futures",
  "hex-literal",
  "jsonrpsee",
+ "pallet-im-online",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
@@ -2457,6 +2458,7 @@ dependencies = [
  "pallet-election-provider-multi-phase",
  "pallet-grandpa",
  "pallet-identity",
+ "pallet-im-online",
  "pallet-indices",
  "pallet-nomination-pools",
  "pallet-randomness-collective-flip",
@@ -6172,6 +6174,7 @@ name = "pallet-im-online"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.29#cc370aa61e15c18d23a2f686b812fd576a630afe"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "log",

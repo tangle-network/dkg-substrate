@@ -103,7 +103,7 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
-	pub round_id: u64,
+	pub session_id: u64,
 	/// The offending authority
 	pub offender: DKGId,
 	/// A list of reporters

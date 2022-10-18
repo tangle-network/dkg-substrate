@@ -16,7 +16,7 @@ use crate::async_protocols::remote::MetaHandlerStatus;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	serde_json,
-	types::RoundId,
+	types::SessionId,
 	utils::{decrypt_data, encrypt_data, StoredLocalKey},
 };
 use dkg_runtime_primitives::offchain::crypto::{Pair as AppPair, Public};
@@ -35,13 +35,13 @@ use std::{
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct StoredRoundsMetadata<C: AtLeast32BitUnsigned + Copy> {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub status: MetaHandlerStatus,
 	pub started_at: C,
 }
 
 pub(crate) fn store_saved_rounds<B>(
-	round_id: RoundId,
+	session_id: SessionId,
 	started_at: NumberFor<B>,
 	status: MetaHandlerStatus,
 	base_path: Option<PathBuf>,
@@ -50,7 +50,7 @@ where
 	B: Block,
 {
 	if let Some(path) = base_path {
-		let stored_rounds_metadata = StoredRoundsMetadata { round_id, started_at, status };
+		let stored_rounds_metadata = StoredRoundsMetadata { session_id, started_at, status };
 		let serialized_data = serde_json::to_string(&stored_rounds_metadata)
 			.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 		fs::write(path, &serialized_data[..])?;
@@ -80,7 +80,7 @@ where
 
 pub(crate) fn store_localkey(
 	key: LocalKey<Secp256k1>,
-	round_id: RoundId,
+	session_id: SessionId,
 	path: Option<PathBuf>,
 	local_keystore: Option<&Arc<LocalKeystore>>,
 	sr25519_public_key: sp_core::sr25519::Public,
@@ -95,7 +95,7 @@ pub(crate) fn store_localkey(
 			if let Ok(Some(key_pair)) = key_pair {
 				let secret_key = key_pair.to_raw_vec();
 
-				let stored_local_key = StoredLocalKey { round_id, local_key: key };
+				let stored_local_key = StoredLocalKey { session_id, local_key: key };
 				let serialized_data = serde_json::to_string(&stored_local_key)
 					.map_err(|_| Error::new(ErrorKind::Other, "Serialization failed"))?;
 
