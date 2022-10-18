@@ -19,13 +19,10 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
 
-pub use dkg_runtime_primitives::RoundId;
+pub use dkg_runtime_primitives::SessionId;
 
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
-
-/// A typedef for keygen set / session id
-pub type SessionId = u64;
 
 /// A typedef for signer set id
 pub type SignerSetId = u64;
@@ -247,7 +244,7 @@ pub enum DKGResult {
 #[derive(Debug, Clone)]
 pub enum DKGError {
 	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
-	KeygenTimeout { round: RoundId, bad_actors: Vec<usize> },
+	KeygenTimeout { session_id: SessionId, bad_actors: Vec<usize> },
 	StartKeygen { reason: String },
 	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
@@ -265,8 +262,8 @@ impl fmt::Display for DKGError {
 		let label = match self {
 			KeygenMisbehaviour { bad_actors, reason } =>
 				format!("Keygen misbehaviour: reason: {reason} bad actors: {:?}", bad_actors),
-			KeygenTimeout { bad_actors, round } =>
-				format!("Keygen timeout @ Round({round}): bad actors: {:?}", bad_actors),
+			KeygenTimeout { bad_actors, session_id } =>
+				format!("Keygen timeout @ Session({session_id}): bad actors: {:?}", bad_actors),
 			Vote { reason } => format!("Vote: {}", reason),
 			StartKeygen { reason } => format!("Start keygen: {}", reason),
 			CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),

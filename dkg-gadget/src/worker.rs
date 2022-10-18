@@ -980,7 +980,7 @@ where
 						bad_actors: convert_u16_vec_to_usize_vec(
 							rounds.current_round_blame().blamed_parties,
 						),
-						round: rounds.round_id,
+						session_id: rounds.session_id,
 					})
 				}
 			}
@@ -1130,9 +1130,9 @@ where
 		let authorities: Vec<Public> =
 			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
-		let (bad_actors, round) = match dkg_error {
+		let (bad_actors, session_id) = match dkg_error {
 			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
-			DKGError::KeygenTimeout { ref bad_actors, round, .. } => (bad_actors.clone(), round),
+			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } => (bad_actors.clone(), session_id),
 			// Todo: Handle Signing Timeout as a separate case
 			DKGError::SignMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
 			_ => Default::default(),
@@ -1151,11 +1151,11 @@ where
 		for offender in offenders {
 			match dkg_error {
 				DKGError::KeygenMisbehaviour { bad_actors: _, .. } =>
-					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender, round }),
+					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender, session_id }),
 				DKGError::KeygenTimeout { .. } =>
-					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender, round }),
+					self.handle_dkg_report(DKGReport::KeygenMisbehaviour { offender, session_id }),
 				DKGError::SignMisbehaviour { bad_actors: _, .. } =>
-					self.handle_dkg_report(DKGReport::SignMisbehaviour { offender, round }),
+					self.handle_dkg_report(DKGReport::SignMisbehaviour { offender, session_id }),
 				_ => (),
 			}
 		}
@@ -1262,11 +1262,11 @@ where
 		let (offender, session_id, misbehaviour_type) = match dkg_report {
 			// Keygen misbehaviour possibly leads to keygen failure. This should be slashed
 			// more severely than sign misbehaviour events.
-			DKGReport::KeygenMisbehaviour { offender, round } => {
+			DKGReport::KeygenMisbehaviour { offender, session_id } => {
 				info!(target: "dkg_gadget::worker", "🕸️  DKG Keygen misbehaviour @ Session ({session_id}) by {offender}");
 				(offender, session_id, MisbehaviourType::Keygen)
 			},
-			DKGReport::SignMisbehaviour { offender, round } => {
+			DKGReport::SignMisbehaviour { offender, session_id } => {
 				info!(target: "dkg_gadget::worker", "🕸️  DKG Signing misbehaviour @ Session ({session_id}) by {offender}");
 				(offender, session_id, MisbehaviourType::Sign)
 			},

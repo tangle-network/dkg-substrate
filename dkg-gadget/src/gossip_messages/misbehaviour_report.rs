@@ -179,7 +179,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		// Try to store reports offchain
 		if let Ok(_) = try_store_offchain(dkg_worker, &reports) {
 			// remove the report from the queue
-			lock.remove(&(report.misbehaviour_type, report.round_id, report.offender));
+			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
 		}
 	} else {
 		error!(target: "dkg", "Could not sign public key");
