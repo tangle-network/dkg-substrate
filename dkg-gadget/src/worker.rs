@@ -516,7 +516,7 @@ where
 
 		let err_handler_tx = self.error_handler.clone();
 		let proposal_hashes =
-			unsigned_proposals.iter().map(|p| p.hash()).flatten().collect::<Vec<_>>();
+			unsigned_proposals.iter().filter_map(|p| p.hash()).collect::<Vec<_>>();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
@@ -1439,7 +1439,7 @@ where
 			log::error!(target: "dkg_gadget::worker", "While creating the signing protocol, 0 were created");
 		} else {
 			let proposal_hashes =
-				unsigned_proposals.iter().map(|x| x.hash()).flatten().collect::<Vec<_>>();
+				unsigned_proposals.iter().filter_map(|x| x.hash()).collect::<Vec<_>>();
 			// save the proposal hashes in the currently_signing_proposals.
 			// this is used to check if we have already signed a proposal or not.
 			self.currently_signing_proposals.write().extend(proposal_hashes);

@@ -65,7 +65,7 @@ where
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-		if self.sm.message_queue().len() > 0 {
+		if !self.sm.message_queue().is_empty() {
 			log::debug!(
 				"Preparing to drain message queue in session={}, round={}",
 				self.session_id,

@@ -177,7 +177,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 
 		let reports = (*reports).clone();
 		// Try to store reports offchain
-		if let Ok(_) = try_store_offchain(dkg_worker, &reports) {
+		if try_store_offchain(dkg_worker, &reports).is_ok() {
 			// remove the report from the queue
 			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
 		}
