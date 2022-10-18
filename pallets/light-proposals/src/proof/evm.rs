@@ -1,8 +1,54 @@
-use eth_types::*;
-use rlp::*;
-use sp_std::vec;
+use core::marker::PhantomData;
+use eth_types::{BlockHeader, LogEntry, Receipt, H256};
+use frame_support::ensure;
+use rlp::Rlp;
+use sp_runtime::DispatchError;
 
-pub trait EVMProver {
+use crate::{types::EvmProof, Config, Error};
+
+#[derive(Clone)]
+pub struct EvmStorageVerifier<T: Config> {
+	phantom: PhantomData<T>,
+}
+
+impl<T: Config> EvmStorageVerifier<T> {
+	pub fn new() -> Self {
+		Self { phantom: Default::default() }
+	}
+}
+
+impl<T: Config> Default for EvmStorageVerifier<T> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl<T: Config> EvmTrieVerifier for EvmStorageVerifier<T> {}
+impl<T: Config> EvmStorageVerifierTrait<T> for EvmStorageVerifier<T> {}
+
+pub trait EvmStorageVerifierTrait<T: Config>: EvmTrieVerifier {
+	fn try_verify_log_entry(proof: EvmProof) -> Result<Vec<u8>, DispatchError> {
+		ensure!(
+			Self::verify_log_entry(
+				proof.log_index,
+				proof.log_entry_data.clone(),
+				proof.receipt_index,
+				proof.receipt_data,
+				proof.header_data,
+				proof.proof,
+			),
+			Error::<T>::InvalidEvmLogEntryProof,
+		);
+
+		Ok(proof.log_entry_data)
+	}
+
+	fn try_verify_trie_proof(_proof: EvmProof) -> Result<Vec<u8>, DispatchError> {
+		Ok(vec![])
+	}
+}
+
+pub trait EvmTrieVerifier {
 	fn keccak_256(data: &[u8]) -> [u8; 32] {
 		let mut buffer = [0u8; 32];
 		let mut hasher = tiny_keccak::Keccak::v256();

@@ -40,7 +40,7 @@
 
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
-
+#![allow(dead_code)]
 // #[cfg(test)]
 // pub mod mock;
 // #[cfg(test)]
@@ -48,29 +48,21 @@
 
 mod evm_utils;
 mod proof;
+mod traits;
 mod types;
-
-use evm_utils::parse_evm_log;
-use proof::evm::proof_traits::EVMProver;
-use sp_runtime::DispatchError;
-use types::*;
 
 use sp_std::{convert::TryInto, prelude::*};
 
 use dkg_runtime_primitives::{traits::BridgeRegistryTrait, ProposalHandlerTrait};
-use frame_support::{pallet_prelude::ensure, traits::Get};
+use frame_support::traits::Get;
 pub use pallet::*;
-use webb_proposals::{
-	evm::AnchorUpdateProposal, FunctionSignature, Nonce, ProposalHeader, ResourceId, TargetSystem,
-	TypedChainId,
-};
 
 use eth_types::LogEntry;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
+	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
@@ -90,8 +82,6 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type AnchorUpdateFunctionSignature: Get<[u8; 4]>;
-
-		type EVMProver: EVMProver;
 	}
 
 	#[pallet::genesis_config]
@@ -116,77 +106,28 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Invalid Typed Chain Id
+		/// Invalid typed chain identifier
 		InvalidTypedChainId,
-		/// Invalid EVM Log Entry Proof
+		/// Invalid EVM log entry proof
 		InvalidEvmLogEntryProof,
-		/// No Bridge Found
+		/// No bridge found
 		NoBridgeFound,
+		/// Invalid proof data
+		InvalidProofData,
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
-
-	#[pallet::call]
-	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
-		pub fn submit_anchor_update_proposal(
-			origin: OriginFor<T>,
-			typed_chain_id: TypedChainId,
-			proof_data: ProofData,
-		) -> DispatchResultWithPostInfo {
-			let _origin = ensure_signed(origin)?;
-			match typed_chain_id {
-				TypedChainId::Evm(_) => {
-					let evm_proof_data = proof_data.to_evm_proof().unwrap().clone();
-					ensure!(
-						T::EVMProver::verify_log_entry(
-							evm_proof_data.log_index,
-							evm_proof_data.log_entry_data.clone(),
-							evm_proof_data.receipt_index,
-							evm_proof_data.receipt_data,
-							evm_proof_data.header_data,
-							evm_proof_data.proof,
-						),
-						Error::<T>::InvalidEvmLogEntryProof
-					);
-					// Submit the AnchorUpdateProposal
-					Self::submit_anchor_update_proposals_evm(
-						typed_chain_id,
-						evm_proof_data.log_entry_data,
-					)?;
-					Ok(().into())
-				},
-				_ => Err(Error::<T>::InvalidTypedChainId.into()),
-			}
-		}
-	}
 }
 
-impl<T: Config> Pallet<T> {
-	pub fn submit_anchor_update_proposals_evm(
-		typed_chain_id: TypedChainId,
-		log_entry_data: Vec<u8>,
-	) -> Result<(), DispatchError> {
-		let (contract_address, merkle_root, nonce) = parse_evm_log(log_entry_data);
-		let src_r_id =
-			ResourceId::new(TargetSystem::ContractAddress(contract_address), typed_chain_id);
-		let bridge_resource_ids = T::BridgeRegistry::get_bridge_for_resource(src_r_id);
-		for r in bridge_resource_ids.unwrap_or_default() {
-			if r == src_r_id {
-				continue
-			}
-			let function_sig = FunctionSignature::from(T::AnchorUpdateFunctionSignature::get());
-			let proposal_header = ProposalHeader::new(r, function_sig, Nonce::from(nonce));
-			let proposal = AnchorUpdateProposal::new(proposal_header, merkle_root, src_r_id);
-			T::ProposalHandler::handle_unsigned_proposal(
-				proposal.to_bytes().to_vec(),
-				dkg_runtime_primitives::ProposalAction::Sign(0),
-			)?;
-		}
+impl<T: Config> proof::StorageVerifier<T> for Pallet<T> {}
 
-		Ok(())
-	}
+impl<T: Config> traits::AnchorUpdateSubmitter<T> for Pallet<T> {
+	type ProposalHandler = T::ProposalHandler;
+	type BridgeRegistry = T::BridgeRegistry;
 }
 
-impl<T: Config> EVMProver for Pallet<T> {}
+impl<T: Config> traits::AnchorUpdateCreator<T> for Pallet<T> {
+	type AnchorUpdateSubmitter = Self;
+	type StorageVerifier = Self;
+}
