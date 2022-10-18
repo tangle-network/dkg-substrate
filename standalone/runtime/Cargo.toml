@@ -53,6 +53,7 @@ frame-election-provider-support = { git = "https://github.com/paritytech/substra
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29", default-features = false }
+pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29", default-features = false }
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
@@ -110,6 +111,7 @@ std = [
 	'pallet-dkg-metadata/std',
 	'pallet-dkg-proposals/std',
 	'pallet-dkg-proposal-handler/std',
+	'pallet-im-online/std',
 	"pallet-bridge-registry/std",
 	'pallet-election-provider-multi-phase/std',
 	'sp-npos-elections/std',
@@ -127,6 +129,7 @@ runtime-benchmarks = [
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"pallet-dkg-proposal-handler/runtime-benchmarks",
+	"pallet-im-online/runtime-benchmarks",
 	"pallet-dkg-proposals/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
 	"pallet-bridge-registry/runtime-benchmarks",

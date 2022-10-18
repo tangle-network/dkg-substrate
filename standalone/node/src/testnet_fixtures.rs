@@ -17,6 +17,7 @@
 use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use dkg_standalone_runtime::AccountId;
 use hex_literal::hex;
+use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_network_common::config::MultiaddrWithPeerId;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::crypto::UncheckedInto;
@@ -44,7 +45,8 @@ pub fn get_arana_bootnodes() -> Vec<MultiaddrWithPeerId> {
 }
 
 /// Arana initial authorities
-pub fn get_arana_initial_authorities() -> Vec<(AccountId, AccountId, AuraId, GrandpaId, DKGId)> {
+pub fn get_arana_initial_authorities(
+) -> Vec<(AccountId, AccountId, AuraId, GrandpaId, ImOnlineId, DKGId)> {
 	return vec![
 		(
 			hex!["4e85271af1330e5e9384bd3ac5bdc04c0f8ef5a8cc29c1a8ae483d674164745c"].into(),
@@ -52,6 +54,8 @@ pub fn get_arana_initial_authorities() -> Vec<(AccountId, AccountId, AuraId, Gra
 			hex!["16be9647f91aa5441e300acb8f0d6ccc63e72850202a7947df6a646c1bb4071a"]
 				.unchecked_into(),
 			hex!["71bf01524c555f1e0f6b7dc7243caf00851d3afc543422f98d3eb6bca78acd8c"]
+				.unchecked_into(),
+			hex!["16be9647f91aa5441e300acb8f0d6ccc63e72850202a7947df6a646c1bb4071a"]
 				.unchecked_into(),
 			hex!["028a4c0781f8369fdd873f8531491f24e2e806fd11a13d828cb4099e6c1045103e"]
 				.unchecked_into(),
@@ -63,6 +67,8 @@ pub fn get_arana_initial_authorities() -> Vec<(AccountId, AccountId, AuraId, Gra
 				.unchecked_into(),
 			hex!["61f771ebfdb0a6de08b8e0ca7a39a01f24e7eaa3d1e7f1001e6503490c25c044"]
 				.unchecked_into(),
+			hex!["f4e206607ffffcd389c4c60523de5dda5a411d1435f8540b6b6bc181553bd65a"]
+				.unchecked_into(),
 			hex!["02427a6cf7f1d7538d9e3e4df834e27db337fd6ef0f530aab4e9799ff865e843fc"]
 				.unchecked_into(),
 		),
@@ -72,6 +78,8 @@ pub fn get_arana_initial_authorities() -> Vec<(AccountId, AccountId, AuraId, Gra
 			hex!["8e92157e55a72fe0ee78c251a7553af341635bec0aafee1e4189cf8ce52cdd71"]
 				.unchecked_into(),
 			hex!["a41a815db90b9bd3d9ec462f90ba77ba1d627a9fccc9f7847e34c9e9e9b57c90"]
+				.unchecked_into(),
+			hex!["8e92157e55a72fe0ee78c251a7553af341635bec0aafee1e4189cf8ce52cdd71"]
 				.unchecked_into(),
 			hex!["036aec5853fba2662f31ba89e859ac100daa6c58dc8fdaf0555565663f2b99f8f2"]
 				.unchecked_into(),
