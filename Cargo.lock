@@ -2792,7 +2792,7 @@ dependencies = [
 [[package]]
 name = "eth-types"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#de55c120ebc1cc0636d1850e3347e7404289641a"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#d17107d1c874155bdc52d218dc467140bd61970f"
 dependencies = [
  "derive_more",
  "eth2_serde_utils",
@@ -6288,7 +6288,7 @@ dependencies = [
 [[package]]
 name = "pallet-eth2-light-client"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#de55c120ebc1cc0636d1850e3347e7404289641a"
+source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#d17107d1c874155bdc52d218dc467140bd61970f"
 dependencies = [
  "bitvec",
  "bls",
