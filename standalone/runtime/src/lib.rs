@@ -125,8 +125,8 @@ pub mod opaque {
 	  pub struct SessionKeys {
 		pub aura: Aura,
 		pub grandpa: Grandpa,
-		pub dkg: DKG,
 		pub im_online: ImOnline,
+		pub dkg: DKG,
 	  }
 	}
 }
