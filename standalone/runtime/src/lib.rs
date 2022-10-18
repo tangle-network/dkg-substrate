@@ -298,7 +298,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = 10 * MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
@@ -307,7 +307,7 @@ impl pallet_session::Config for Runtime {
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_staking::StashOf<Self>;
 	type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type SessionManager = Staking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
@@ -459,7 +459,7 @@ impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 
 	#[allow(unused)]
 	fn solution_weight(v: u32, t: u32, a: u32, d: u32) -> Weight {
-		0
+		Weight::from_ref_time(0)
 	}
 }
 
@@ -760,7 +760,7 @@ pub type Executive = frame_executive::Executive<
 	Block,
 	frame_system::ChainContext<Runtime>,
 	Runtime,
-	AllPalletsWithSystemReversed,
+	AllPalletsWithSystem,
 >;
 
 impl_runtime_apis! {

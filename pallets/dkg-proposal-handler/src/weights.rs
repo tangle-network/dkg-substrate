@@ -58,26 +58,26 @@ impl<T: frame_system::Config>WeightInfo for WebbWeight<T> {
 	// Storage: DKGProposalHandler UnsignedProposalQueue (r:2 w:2)
 	// Storage: DKGProposalHandler SignedProposals (r:0 w:2)
 	fn submit_signed_proposals(n: u32, ) -> Weight {
-		(0_u64)
+		Weight::from_ref_time(0)
 			// Standard Error: 397_000
-			.saturating_add((296_117_000_u64).saturating_mul(n as Weight))
+			.saturating_add(Weight::from_ref_time((296_117_000_u64).saturating_mul(n as u64)))
 			.saturating_add(T::DbWeight::get().reads(1_u64))
-			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n as Weight)))
-			.saturating_add(T::DbWeight::get().writes((2_u64).saturating_mul(n as Weight)))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().writes((2_u64).saturating_mul(n as u64)))
 	}
 	// Storage: DKGProposalHandler UnsignedProposalQueue (r:0 w:1)
 	fn force_submit_unsigned_proposal() -> Weight {
-		(2_000_000_u64)
+		Weight::from_ref_time(2_000_000_u64)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 }
 
 impl WeightInfo for () {
 	fn submit_signed_proposals(_n: u32, ) -> Weight {
-		0
+		Weight::from_ref_time(0)
 	}
 
 	fn force_submit_unsigned_proposal() -> Weight {
-		0
+		Weight::from_ref_time(0)
 	}
 }
