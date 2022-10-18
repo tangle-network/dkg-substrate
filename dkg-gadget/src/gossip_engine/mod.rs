@@ -45,8 +45,7 @@ pub trait GossipEngineIface: Send + Sync {
 	) -> Result<(), DKGError>;
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
-	/// A Stream that notifies about a new message is available to be polled
-	/// from the queue, thats it.
+	/// A stream that sends messages when they are ready to be polled from the message queue.
 	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>>;
 	/// Peek the front of the message queue.
 	///

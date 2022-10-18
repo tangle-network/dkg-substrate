@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, RoundId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::Public;
 use futures::Stream;
 use round_based::Msg;
@@ -28,7 +28,7 @@ use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, 
 /// Used to filter and transform incoming messages from the DKG worker
 pub struct IncomingAsyncProtocolWrapper<T, BI> {
 	pub receiver: BroadcastStream<T>,
-	round_id: RoundId,
+	session_id: SessionId,
 	engine: Arc<BI>,
 	ty: ProtocolType,
 }
@@ -41,7 +41,7 @@ impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper
 	) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),
-			round_id: params.round_id,
+			session_id: params.session_id,
 			engine: params.engine.clone(),
 			ty,
 		}
@@ -54,7 +54,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		self,
 		verify: &BI,
 		stream_type: &ProtocolType,
-		this_round_id: RoundId,
+		this_session_id: SessionId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized;
@@ -66,7 +66,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		self,
 		verify: &BI,
 		stream_type: &ProtocolType,
-		this_round_id: RoundId,
+		this_session_id: SessionId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized,
@@ -78,22 +78,22 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 				// only clone if the downstream receiver expects this type
 				let sender = self.msg.payload.async_proto_only_get_sender_id().unwrap();
 				if sender != stream_type.get_i() {
-					if self.msg.round_id == this_round_id {
+					if self.msg.session_id == this_session_id {
 						verify
 							.verify_signature_against_authorities(self)
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
+						log::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id);
 						Ok(None)
 					}
 				} else {
-					//log::info!(target: "dkg", "Will skip passing message to state machine since
-					// loopback (loopback_id={})", sender);
+					log::warn!(target: "dkg", "Will skip passing message to state machine since sender is self");
 					Ok(None)
 				}
 			},
 
-			(_l, _r) => {
-				//log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
+			(l, r) => {
+				log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
 				Ok(None)
 			},
 		}
@@ -108,12 +108,12 @@ where
 	type Item = Msg<T::IncomingMapped>;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, engine, round_id } = &mut *self;
+		let Self { receiver, ty, engine, session_id } = &mut *self;
 		let mut receiver = Pin::new(receiver);
 
 		loop {
 			match futures::ready!(receiver.as_mut().poll_next(cx)) {
-				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *round_id) {
+				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *session_id) {
 					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
 
 					Ok(None) => continue,
