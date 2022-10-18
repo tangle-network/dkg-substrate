@@ -49,6 +49,8 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	output
 }
 
+/// A typedef for keygen set id
+pub type RoundId = u64;
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
@@ -152,8 +154,8 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
-	KeygenMisbehaviour { offender: AuthorityId },
-	SignMisbehaviour { offender: AuthorityId },
+	KeygenMisbehaviour { round: RoundId, offender: AuthorityId },
+	SignMisbehaviour { round: RoundId, offender: AuthorityId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
