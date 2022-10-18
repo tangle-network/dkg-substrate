@@ -590,7 +590,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
@@ -626,7 +626,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type Event = Event;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
@@ -936,7 +936,7 @@ impl_runtime_apis! {
 
 	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
 		use frame_support::traits::EstimateNextSessionRotation;
-		<pallet_session::PeriodicSessions<Period, Offset> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
+		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
 	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
