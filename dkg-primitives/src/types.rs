@@ -19,11 +19,11 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
 
+pub use dkg_runtime_primitives::SessionId;
+
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
 
-/// A typedef for keygen set id
-pub type RoundId = u64;
 /// A typedef for signer set id
 pub type SignerSetId = u64;
 
@@ -48,11 +48,11 @@ pub enum DKGMsgStatus {
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGMessage<AuthorityId> {
 	/// Node authority id
-	pub id: AuthorityId,
+	pub sender_id: AuthorityId,
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// enum for active or queued
 	pub status: DKGMsgStatus,
 }
@@ -179,7 +179,7 @@ pub struct DKGSignedPayload {
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
 	/// Round ID of DKG protocol
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// Public key for the DKG
 	pub pub_key: Vec<u8>,
 	/// Authority's signature for this public key
@@ -192,7 +192,7 @@ pub struct DKGMisbehaviourMessage {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// Misbehaving round
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	/// Offending authority's id
 	pub offender: AuthorityId,
 	/// Authority's signature for this report
@@ -220,14 +220,14 @@ pub trait DKGRoundsSM<Payload, Output, Clock> {
 }
 
 pub struct KeygenParams {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
 }
 
 pub struct SignParams {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub party_index: u16,
 	pub threshold: u16,
 	pub parties: u16,
@@ -238,13 +238,13 @@ pub struct SignParams {
 #[derive(Debug, Clone)]
 pub enum DKGResult {
 	Empty,
-	KeygenFinished { round_id: RoundId, local_key: Box<LocalKey<Secp256k1>> },
+	KeygenFinished { session_id: SessionId, local_key: Box<LocalKey<Secp256k1>> },
 }
 
 #[derive(Debug, Clone)]
 pub enum DKGError {
 	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
-	KeygenTimeout { bad_actors: Vec<usize> },
+	KeygenTimeout { session_id: SessionId, bad_actors: Vec<usize> },
 	StartKeygen { reason: String },
 	StartOffline { reason: String },
 	CreateOfflineStage { reason: String },
@@ -260,9 +260,10 @@ impl fmt::Display for DKGError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use DKGError::*;
 		let label = match self {
-			KeygenMisbehaviour { reason, bad_actors } =>
-				format!("Keygen misbehaviour: reason : {:?} bad actors: {:?}", reason, bad_actors),
-			KeygenTimeout { bad_actors } => format!("Keygen timeout: bad actors: {:?}", bad_actors),
+			KeygenMisbehaviour { bad_actors, reason } =>
+				format!("Keygen misbehaviour: reason: {reason} bad actors: {:?}", bad_actors),
+			KeygenTimeout { bad_actors, session_id } =>
+				format!("Keygen timeout @ Session({session_id}): bad actors: {:?}", bad_actors),
 			Vote { reason } => format!("Vote: {}", reason),
 			StartKeygen { reason } => format!("Start keygen: {}", reason),
 			CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
@@ -272,7 +273,7 @@ impl fmt::Display for DKGError {
 			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
 			NoHeader => "No Header!".to_string(),
 			SignMisbehaviour { reason, bad_actors } =>
-				format!("SignMisbehaviour : reason: {:?},  bad actors: {:?}", reason, bad_actors),
+				format!("SignMisbehaviour: reason: {reason},  bad actors: {:?}", bad_actors),
 		};
 		write!(f, "DKGError of type {}", label)
 	}

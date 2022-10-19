@@ -24,7 +24,7 @@ use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_round_id,
+	blockchain_interface::BlockchainInterface, get_party_session_id,
 	incoming::IncomingAsyncProtocolWrapper, new_inner, remote::MetaHandlerStatus,
 	state_machine::StateMachineHandler, AsyncProtocolParameters, BatchKey, GenericAsyncHandler,
 	PartyIndex, ProtocolType, Threshold,
@@ -68,7 +68,7 @@ where
 
 		let protocol = async move {
 			let maybe_local_key = params.local_key.clone();
-			let (keygen_id, _b, _c) = get_party_round_id(&params);
+			let (keygen_id, _b, _c) = get_party_session_id(&params);
 			if let (Some(keygen_id), Some(local_key)) = (keygen_id, maybe_local_key) {
 				let t = threshold;
 
@@ -193,7 +193,7 @@ where
 			// the below wrapper will map signed messages into unsigned messages
 			let incoming = rx;
 			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
-			let (_, round_id, id) = get_party_round_id(&params);
+			let (_, session_id, id) = get_party_session_id(&params);
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
@@ -225,7 +225,7 @@ where
 
 			// now, broadcast the data
 			let unsigned_dkg_message =
-				DKGMessage { id, status: DKGMsgStatus::ACTIVE, payload, round_id };
+				DKGMessage { sender_id: id, status: DKGMsgStatus::ACTIVE, payload, session_id };
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 
 			// we only need a threshold count of sigs
@@ -278,7 +278,7 @@ where
 			params.engine.process_vote_result(
 				signature,
 				unsigned_proposal,
-				round_id,
+				session_id,
 				batch_key,
 				message,
 			)

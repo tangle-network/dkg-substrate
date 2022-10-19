@@ -1,0 +1,153 @@
+version: "3.9"
+
+services:
+  dkg_alice:
+    command:
+    - dkg-standalone-node
+    - --node-key
+    - "0000000000000000000000000000000000000000000000000000000000000001"
+    - --alice
+    - --base-path=./tmp/alice
+    - --rpc-cors=all
+    - --ws-external
+    - --port=30333
+    - --ws-port=9933
+    - -ldkg=debug
+    - -ldkg_gadget::worker=debug
+    - -ldkg_metadata=debug
+    - -lruntime::dkg_metadata=debug
+    - -ldkg_proposal_handler=debug
+    container_name: alice
+    image: webb-tools/dkg-standalone-node
+    networks:
+      testing_net:
+        ipv4_address: 172.28.1.1
+    ports:
+    - mode: ingress
+      target: 30333
+      published: 30333
+      protocol: tcp
+    - mode: ingress
+      target: 9933
+      published: 9933
+      protocol: tcp
+    - mode: ingress
+      target: 9944
+      published: 9944
+      protocol: tcp
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2048M
+  dkg_bob:
+    command:
+    - dkg-standalone-node
+    - --node-key
+    - "0000000000000000000000000000000000000000000000000000000000000002"
+    - --bob
+    - --base-path=./tmp/bob
+    - --rpc-cors=all
+    - --ws-external
+    - --port=30334
+    - --ws-port=9934
+    - -ldkg=debug
+    - -ldkg_gadget::worker=debug
+    - -ldkg_metadata=debug
+    - -lruntime::dkg_metadata=debug
+    - -ldkg_proposal_handler=debug
+    container_name: bob
+    image: webb-tools/dkg-standalone-node
+    networks:
+      testing_net:
+        ipv4_address: 172.28.1.2
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2048M
+  dkg_charlie:
+    command:
+    - dkg-standalone-node
+    - --node-key
+    - "0000000000000000000000000000000000000000000000000000000000000003"
+    - --charlie
+    - --base-path=./tmp/charlie
+    - --rpc-cors=all
+    - --ws-external
+    - --port=30335
+    - --ws-port=9935
+    - -ldkg=debug
+    - -ldkg_gadget::worker=debug
+    - -ldkg_metadata=debug
+    - -lruntime::dkg_metadata=debug
+    - -ldkg_proposal_handler=debug
+    container_name: charlie
+    image: webb-tools/dkg-standalone-node
+    networks:
+      testing_net:
+        ipv4_address: 172.28.1.3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2048M
+  dkg_dave:
+    command:
+    - dkg-standalone-node
+    - --node-key
+    - "0000000000000000000000000000000000000000000000000000000000000004"
+    - --dave
+    - --base-path=./tmp/charlie
+    - --rpc-cors=all
+    - --ws-external
+    - --port=30335
+    - --ws-port=9935
+    - -ldkg=debug
+    - -ldkg_gadget::worker=debug
+    - -ldkg_metadata=debug
+    - -lruntime::dkg_metadata=debug
+    - -ldkg_proposal_handler=debug
+    container_name: dave
+    image: webb-tools/dkg-standalone-node
+    networks:
+      testing_net:
+        ipv4_address: 172.28.1.4
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2048M
+  dkg_eve:
+    command:
+    - dkg-standalone-node
+    - --node-key
+    - "0000000000000000000000000000000000000000000000000000000000000005"
+    - --eve
+    - --base-path=./tmp/charlie
+    - --rpc-cors=all
+    - --ws-external
+    - --port=30335
+    - --ws-port=9935
+    - -ldkg=debug
+    - -ldkg_gadget::worker=debug
+    - -ldkg_metadata=debug
+    - -lruntime::dkg_metadata=debug
+    - -ldkg_proposal_handler=debug
+    container_name: eve
+    image: webb-tools/dkg-standalone-node
+    networks:
+      testing_net:
+        ipv4_address: 172.28.1.5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2048M
+networks:
+  testing_net:
+    name: docker_testing_net
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.28.0.0/16

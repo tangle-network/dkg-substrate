@@ -52,7 +52,7 @@ where
 
 		let is_main_round = {
 			if let Some(round) = dkg_worker.rounds.read().as_ref() {
-				msg.round_id == round.round_id
+				msg.session_id == round.session_id
 			} else {
 				false
 			}
@@ -64,7 +64,7 @@ where
 			MisbehaviourType::Keygen => [0x01],
 			MisbehaviourType::Sign => [0x02],
 		});
-		signed_payload.extend_from_slice(msg.round_id.to_be_bytes().as_ref());
+		signed_payload.extend_from_slice(msg.session_id.to_be_bytes().as_ref());
 		signed_payload.extend_from_slice(msg.offender.as_ref());
 		// Authenticate the message against the current authorities
 		let reporter = dkg_worker.authenticate_msg_origin(
@@ -77,10 +77,10 @@ where
 		// Add new report to the aggregated reports
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 		let reports = lock
-			.entry((msg.misbehaviour_type, msg.round_id, msg.offender.clone()))
+			.entry((msg.misbehaviour_type, msg.session_id, msg.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: msg.misbehaviour_type,
-				round_id: msg.round_id,
+				session_id: msg.session_id,
 				offender: msg.offender.clone(),
 				reporters: Vec::new(),
 				signatures: Vec::new(),
@@ -117,7 +117,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		MisbehaviourType::Keygen => [0x01],
 		MisbehaviourType::Sign => [0x02],
 	});
-	payload.extend_from_slice(report.round_id.to_be_bytes().as_ref());
+	payload.extend_from_slice(report.session_id.to_be_bytes().as_ref());
 	payload.extend_from_slice(report.offender.as_ref());
 
 	if let Ok(signature) = dkg_worker.key_store.sign(&public.clone(), &payload) {
@@ -127,11 +127,12 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			..report.clone()
 		});
 
-		let status = if report.round_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
+		let status =
+			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
-			id: public.clone(),
+			sender_id: public.clone(),
 			status,
-			round_id: report.round_id,
+			session_id: report.session_id,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();
@@ -142,9 +143,9 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				log::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.round_id, encoded_signed_dkg_message.len());
+				log::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.session_id, encoded_signed_dkg_message.len());
 				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
-					log::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.round_id, e);
+					log::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.session_id, e);
 				}
 			},
 			Err(e) => error!(
@@ -156,10 +157,10 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 		let reports = lock
-			.entry((report.misbehaviour_type, report.round_id, report.offender.clone()))
+			.entry((report.misbehaviour_type, report.session_id, report.offender.clone()))
 			.or_insert_with(|| AggregatedMisbehaviourReports {
 				misbehaviour_type: report.misbehaviour_type,
-				round_id: report.round_id,
+				session_id: report.session_id,
 				offender: report.offender.clone(),
 				reporters: Vec::new(),
 				signatures: Vec::new(),
@@ -174,9 +175,12 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
 
+		let reports = (*reports).clone();
 		// Try to store reports offchain
-		let reports = reports.clone();
-		let _ = try_store_offchain(dkg_worker, &reports);
+		if try_store_offchain(dkg_worker, &reports).is_ok() {
+			// remove the report from the queue
+			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
+		}
 	} else {
 		error!(target: "dkg", "Could not sign public key");
 	}

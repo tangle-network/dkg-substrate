@@ -49,6 +49,8 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	output
 }
 
+/// A typedef for keygen set / session id
+pub type SessionId = u64;
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
@@ -101,7 +103,7 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
-	pub round_id: u64,
+	pub session_id: u64,
 	/// The offending authority
 	pub offender: DKGId,
 	/// A list of reporters
@@ -152,8 +154,8 @@ impl<AuthorityId> AuthoritySet<AuthorityId> {
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode, TypeInfo)]
 pub enum DKGReport {
-	KeygenMisbehaviour { offender: AuthorityId },
-	SignMisbehaviour { offender: AuthorityId },
+	KeygenMisbehaviour { session_id: SessionId, offender: AuthorityId },
+	SignMisbehaviour { session_id: SessionId, offender: AuthorityId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]

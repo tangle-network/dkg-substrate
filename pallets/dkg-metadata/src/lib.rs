@@ -1293,7 +1293,7 @@ impl<T: Config> Pallet<T> {
 				MisbehaviourType::Keygen => [0x01],
 				MisbehaviourType::Sign => [0x02],
 			});
-			signed_payload.extend_from_slice(reports.round_id.to_be_bytes().as_ref());
+			signed_payload.extend_from_slice(reports.session_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
 			// TODO: Verify signer from set over the best authorities set (compute it on chain)
@@ -1667,7 +1667,7 @@ impl<T: Config> Pallet<T> {
 				// If this offender has already been reported, don't report it again.
 				if Self::misbehaviour_reports((
 					reports.misbehaviour_type,
-					reports.round_id,
+					reports.session_id,
 					reports.offender.clone(),
 				))
 				.is_some()

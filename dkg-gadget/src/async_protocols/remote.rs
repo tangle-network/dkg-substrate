@@ -14,7 +14,7 @@
 
 use crate::async_protocols::CurrentRoundBlame;
 use atomic::Atomic;
-use dkg_primitives::types::{DKGError, RoundId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,7 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
-	pub(crate) round_id: RoundId,
+	pub(crate) session_id: SessionId,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
 
@@ -49,7 +49,7 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			current_round_blame: self.current_round_blame.clone(),
 			current_round_blame_tx: self.current_round_blame_tx.clone(),
-			round_id: self.round_id,
+			session_id: self.session_id,
 			status_history: self.status_history.clone(),
 		}
 	}
@@ -67,7 +67,7 @@ pub enum MetaHandlerStatus {
 
 impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
-	pub fn new(at: C, round_id: RoundId) -> Self {
+	pub fn new(at: C, session_id: SessionId) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
@@ -87,7 +87,7 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 			current_round_blame,
 			current_round_blame_tx: Arc::new(current_round_blame_tx),
 			is_primary_remote: true,
-			round_id,
+			session_id,
 		}
 	}
 
