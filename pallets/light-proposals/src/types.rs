@@ -31,14 +31,14 @@ pub struct EvmProof {
 }
 #[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo)]
 pub enum ProofData {
-	EVM(EvmProof),
+	Evm(EvmProof),
 }
 
 impl ProofData {
 	#[allow(unreachable_patterns)]
 	pub fn to_evm_proof(&self) -> Option<&EvmProof> {
 		match self {
-			ProofData::EVM(evm_proof) => Some(evm_proof),
+			ProofData::Evm(evm_proof) => Some(evm_proof),
 			_ => None,
 		}
 	}

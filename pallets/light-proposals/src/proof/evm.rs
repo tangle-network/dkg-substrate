@@ -82,7 +82,7 @@ pub trait EvmTrieVerifier {
 			proof,
 		);
 
-		return verification_result == receipt_data
+		verification_result == receipt_data
 	}
 
 	fn verify_trie_proof(expected_root: H256, key: Vec<u8>, proof: Vec<Vec<u8>>) -> Vec<u8> {
@@ -115,7 +115,7 @@ pub trait EvmTrieVerifier {
 			assert_eq!(Self::keccak_256(node), expected_root.as_slice());
 		}
 
-		let node = Rlp::new(&node.as_slice());
+		let node = Rlp::new(node.as_slice());
 
 		if node.iter().count() == 17 {
 			// Branch node

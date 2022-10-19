@@ -23,11 +23,9 @@ pub trait StorageVerifier<T: Config> {
 	}
 
 	fn verify_trie_proof(
-		typed_chain_id: TypedChainId,
+		_typed_chain_id: TypedChainId,
 		_proof: ProofData,
 	) -> Result<Vec<u8>, DispatchError> {
-		match typed_chain_id {
-			_ => Err(Error::<T>::InvalidTypedChainId)?,
-		}
+		Err(Error::<T>::InvalidTypedChainId)?
 	}
 }
