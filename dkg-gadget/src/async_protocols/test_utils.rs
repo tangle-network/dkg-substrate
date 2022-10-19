@@ -6,7 +6,7 @@ use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
 	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, RoundId, SignedDKGMessage,
+		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
 	},
 	utils::convert_signature,
 };
@@ -58,7 +58,7 @@ impl BlockchainInterface for TestDummyIface {
 		&self,
 		signature_rec: SignatureRecid,
 		unsigned_proposal: UnsignedProposal,
-		round_id: RoundId,
+		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
 	) -> Result<(), DKGError> {
@@ -69,7 +69,7 @@ impl BlockchainInterface for TestDummyIface {
 		})?;
 
 		let finished_round = DKGSignedPayload {
-			key: round_id.encode(),
+			key: session_id.encode(),
 			payload: "Webb".encode(),
 			signature: signature.encode(),
 		};
@@ -85,7 +85,7 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn store_public_key(&self, key: LocalKey<Secp256k1>, _: RoundId) -> Result<(), DKGError> {
+	fn store_public_key(&self, key: LocalKey<Secp256k1>, _: SessionId) -> Result<(), DKGError> {
 		*self.keygen_key.lock() = Some(key);
 		Ok(())
 	}
