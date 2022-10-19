@@ -27,7 +27,7 @@ pub trait AnchorUpdateSubmitter<T: Config> {
 					ProposalNonce::from(nonce),
 				))
 			},
-			_ => return Err(Error::<T>::InvalidTypedChainId)?,
+			_ => Err(Error::<T>::InvalidTypedChainId)?,
 		}
 	}
 
@@ -51,7 +51,7 @@ pub trait AnchorUpdateSubmitter<T: Config> {
 				substrate::AnchorUpdateProposal::from(evm_anchor_update_proposal)
 					.to_bytes()
 					.to_vec(),
-			_ => return Err(Error::<T>::InvalidTypedChainId)?,
+			_ => Err(Error::<T>::InvalidTypedChainId)?,
 		};
 
 		Ok(proposal_bytes)
@@ -97,10 +97,9 @@ pub trait AnchorUpdateCreator<T: Config> {
 			TypedChainId::Evm(_) => {
 				let data = Self::StorageVerifier::verify_trie_proof(typed_chain_id, proof)?;
 				// Submit the AnchorUpdateProposal
-				Self::AnchorUpdateSubmitter::submit_anchor_update(typed_chain_id, data)?;
-				Ok(().into())
+				Self::AnchorUpdateSubmitter::submit_anchor_update(typed_chain_id, data)
 			},
-			_ => return Err(Error::<T>::InvalidTypedChainId)?,
+			_ => Err(Error::<T>::InvalidTypedChainId)?,
 		}
 	}
 }
