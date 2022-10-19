@@ -26,7 +26,7 @@ use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
 	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, RoundId, SignedDKGMessage,
+		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
 	},
 	utils::convert_signature,
 };
@@ -59,13 +59,16 @@ pub trait BlockchainInterface: Send + Sync {
 		&self,
 		signature: SignatureRecid,
 		unsigned_proposal: UnsignedProposal,
-		round_id: RoundId,
+		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
 	) -> Result<(), DKGError>;
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
-	fn store_public_key(&self, key: LocalKey<Secp256k1>, round_id: RoundId)
-		-> Result<(), DKGError>;
+	fn store_public_key(
+		&self,
+		key: LocalKey<Secp256k1>,
+		session_id: SessionId,
+	) -> Result<(), DKGError>;
 	fn get_authority_set(&self) -> &Vec<Public>;
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 	/// Returns the present time
@@ -78,7 +81,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
 	pub gossip_engine: Arc<GE>,
-	pub aggregated_public_keys: Arc<RwLock<HashMap<RoundId, AggregatedPublicKeys>>>,
+	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
@@ -140,20 +143,20 @@ where
 		&self,
 		signature: SignatureRecid,
 		unsigned_proposal: UnsignedProposal,
-		round_id: RoundId,
+		session_id: SessionId,
 		batch_key: BatchKey,
 		_message: BigInt,
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
-		log::info!(target: "dkg", "PROCESS VOTE RESULT : round_id {:?}, signature : {:?}", round_id, signature);
+		log::info!(target: "dkg", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
 		})?;
 
 		let finished_round = DKGSignedPayload {
-			key: round_id.encode(),
+			key: session_id.encode(),
 			payload: unsigned_proposal.data().clone(),
 			signature: signature.encode(),
 		};
@@ -198,12 +201,12 @@ where
 	fn store_public_key(
 		&self,
 		key: LocalKey<Secp256k1>,
-		round_id: RoundId,
+		session_id: SessionId,
 	) -> Result<(), DKGError> {
 		let sr_pub = self.get_sr25519_public_key();
 		let local_key_path = self.local_key_path.read().clone();
 		let local_keystore = self.local_keystore.read().clone();
-		store_localkey(key, round_id, local_key_path, local_keystore.as_ref(), sr_pub)
+		store_localkey(key, session_id, local_key_path, local_keystore.as_ref(), sr_pub)
 			.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 
 		Ok(())

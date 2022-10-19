@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_round_id,
+	blockchain_interface::BlockchainInterface, get_party_session_id,
 	state_machine::StateMachineHandler, AsyncProtocolParameters, ProtocolType,
 };
 use async_trait::async_trait;
@@ -35,11 +35,11 @@ impl StateMachineHandler for Keygen {
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType,
 	) -> Result<(), <Self as StateMachine>::Err> {
-		let DKGMessage { payload, round_id, .. } = msg.body;
+		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				log::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, round={}", msg.sender_id, round_id);
+				log::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, session={}", msg.sender_id, session_id);
 				let message: Msg<ProtocolMessage> =
 					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
 						Ok(message) => message,
@@ -80,15 +80,15 @@ impl StateMachineHandler for Keygen {
 		// [1] create the message, call the "public key gossip" in
 		// public_key_gossip.rs:gossip_public_key [2] store public key locally (public_keys.rs:
 		// store_aggregated_public_keys)
-		let round_id = get_party_round_id(&params).1;
+		let session_id = get_party_session_id(&params).1;
 		let pub_key_msg = DKGPublicKeyMessage {
-			round_id,
+			session_id,
 			pub_key: local_key.public_key().to_bytes(true).to_vec(),
 			signature: vec![],
 		};
 
 		params.engine.gossip_public_key(pub_key_msg)?;
-		params.engine.store_public_key(local_key.clone(), round_id)?;
+		params.engine.store_public_key(local_key.clone(), session_id)?;
 
 		Ok(local_key)
 	}

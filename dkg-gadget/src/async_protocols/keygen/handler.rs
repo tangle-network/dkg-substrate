@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_round_id, new_inner,
+	blockchain_interface::BlockchainInterface, get_party_session_id, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
 	GenericAsyncHandler, KeygenRound, ProtocolType,
 };
@@ -49,7 +49,7 @@ where
 			})?;
 
 		let protocol = async move {
-			let (keygen_id, _b, _c) = get_party_round_id(&params);
+			let (keygen_id, _b, _c) = get_party_session_id(&params);
 			if let Some(keygen_id) = keygen_id {
 				log::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::types::RoundId;
+use crate::types::SessionId;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
@@ -85,7 +85,7 @@ pub const QUEUED_ROUNDS_METADATA_FILE: &str = "queued_rounds_metadata";
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct StoredLocalKey {
-	pub round_id: RoundId,
+	pub session_id: SessionId,
 	pub local_key: LocalKey<Secp256k1>,
 }
 
