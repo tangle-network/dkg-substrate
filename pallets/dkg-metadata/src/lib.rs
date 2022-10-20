@@ -110,7 +110,7 @@ use dkg_runtime_primitives::{
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::{Get, Weight},
-	traits::{EstimateNextSessionRotation, OneSessionHandler, ValidatorSet},
+	traits::{EstimateNextSessionRotation, OneSessionHandler},
 };
 use frame_system::offchain::{SendSignedTransaction, Signer};
 pub use pallet::*;
