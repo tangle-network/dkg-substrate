@@ -423,6 +423,10 @@ where
 		let incoming = params.handle.broadcaster.subscribe();
 		let incoming_wrapper =
 			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
+		// we use fuse here, since normally, once a stream has returned `None` from calling
+		// `next()` any further calls could exhibit bad behavior such as block forever, panic, never return, etc.
+		// that's why we use fuse here to ensure that it has defined semantics, 
+		// which means, once it returns `None` we will never poll that stream again.
 		let mut incoming_wrapper = incoming_wrapper.fuse();
 		loop {
 			let unsigned_message = match incoming_wrapper.next().await {
