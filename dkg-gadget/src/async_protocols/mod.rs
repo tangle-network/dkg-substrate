@@ -315,7 +315,6 @@ where
 				Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
 			}
 		};
-		log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
 		res
 	};
 
