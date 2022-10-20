@@ -39,18 +39,18 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	state_machine::sign::SignError::{CompleteSigning, LocalSigning},
 };
 
-impl<'a, Out: Send + Debug + 'a> GenericAsyncHandler<'a, Out>
+impl<Out: Send + Debug + 'static> GenericAsyncHandler<'static, Out>
 where
 	(): Extend<Out>,
 {
 	/// Top level function for setting up signing
-	pub fn setup_signing<BI: BlockchainInterface + 'a>(
+	pub fn setup_signing<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
 		async_index: u8,
-	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(
 			threshold + 1 == signing_set.len() as u16,
 			"Signing set must be of size threshold + 1"
@@ -144,7 +144,7 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	fn new_offline<BI: BlockchainInterface + 'a>(
+	fn new_offline<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal,
 		i: u16,
@@ -153,7 +153,8 @@ where
 		threshold: u16,
 		batch_key: BatchKey,
 		async_index: u8,
-	) -> Result<GenericAsyncHandler<'a, <OfflineStage as StateMachineHandler>::Return>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, <OfflineStage as StateMachineHandler>::Return>, DKGError>
+	{
 		let channel_type = ProtocolType::Offline {
 			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 			i,
@@ -173,7 +174,7 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	pub(crate) fn new_voting<BI: BlockchainInterface + 'a>(
+	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal,
@@ -182,7 +183,7 @@ where
 		threshold: Threshold,
 		batch_key: BatchKey,
 		async_index: u8,
-	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),

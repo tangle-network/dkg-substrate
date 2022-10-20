@@ -167,13 +167,21 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	pub fn is_keygen_finished(&self) -> bool {
+		self.is_completed()
+	}
+
+	pub fn is_signing_finished(&self) -> bool {
+		self.is_completed()
+	}
+
+	pub fn is_completed(&self) -> bool {
 		let state = self.get_status();
 		matches!(state, MetaHandlerStatus::Complete)
 	}
 
-	pub fn is_signing_finished(&self) -> bool {
+	pub fn is_terminated(&self) -> bool {
 		let state = self.get_status();
-		matches!(state, MetaHandlerStatus::Complete)
+		matches!(state, MetaHandlerStatus::Terminated)
 	}
 
 	pub fn current_round_blame(&self) -> CurrentRoundBlame {

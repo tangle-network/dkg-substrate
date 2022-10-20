@@ -68,7 +68,7 @@ impl StateMachineHandler for Keygen {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface>(
+	async fn on_finish<BI: BlockchainInterface + 'static>(
 		local_key: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		_: Self::AdditionalReturnParam,
