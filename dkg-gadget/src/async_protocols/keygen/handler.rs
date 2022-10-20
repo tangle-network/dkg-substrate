@@ -27,16 +27,16 @@ use std::fmt::Debug;
 use dkg_primitives::types::{DKGError, DKGMsgStatus};
 use futures::FutureExt;
 
-impl<'a, Out: Send + Debug + 'a> GenericAsyncHandler<'a, Out>
+impl<Out: Send + Debug + 'static> GenericAsyncHandler<'static, Out>
 where
 	(): Extend<Out>,
 {
 	/// Top-level function used to begin the execution of async protocols
-	pub fn setup_keygen<BI: BlockchainInterface + 'a>(
+	pub fn setup_keygen<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		status: DKGMsgStatus,
-	) -> Result<GenericAsyncHandler<'a, ()>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
@@ -88,14 +88,14 @@ where
 		Ok(GenericAsyncHandler { protocol })
 	}
 
-	fn new_keygen<BI: BlockchainInterface + 'a>(
+	fn new_keygen<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		i: u16,
 		t: u16,
 		n: u16,
 		async_index: u8,
 		status: DKGMsgStatus,
-	) -> Result<GenericAsyncHandler<'a, <Keygen as StateMachineHandler>::Return>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler>::Return>, DKGError> {
 		let ty = match status {
 			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
