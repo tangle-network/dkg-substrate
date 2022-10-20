@@ -59,7 +59,7 @@ use std::{
 	num::NonZeroUsize,
 	pin::Pin,
 	sync::{
-		atomic::{AtomicBool, Ordering},
+		atomic::{AtomicBool, AtomicU8, Ordering},
 		Arc,
 	},
 };
@@ -168,6 +168,51 @@ mod rep {
 	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
 
+/// A wrapper around a [`SignedDKGMessage`] that also keeps track of how many time we tried to
+/// process (read from the queue) that message and depending on that counter, we can decide to
+/// ignore the message if it has been processed too many times but no progress has been made.
+#[derive(Debug)]
+struct DKGMessageWrapper<AuthorityId> {
+	inner: SignedDKGMessage<AuthorityId>,
+	read_count: AtomicU8,
+}
+
+impl DKGMessageWrapper<AuthorityId> {
+	/// Maximum number of times we try to process a message before we ignore it.
+	const MAX_READ_COUNT: u8 = 5;
+	/// Create a new [`DKGMessageWrapper`].
+	fn new(inner: SignedDKGMessage<AuthorityId>) -> Self {
+		Self { inner, read_count: AtomicU8::new(0) }
+	}
+
+	/// Returns the current read count.
+	fn read_count(&self) -> u8 {
+		self.read_count.load(Ordering::Relaxed)
+	}
+
+	/// Returns a clone of the inner [`SignedDKGMessage`]
+	/// and increases the read count by one, ignoring the message if the read count is too high.
+	fn read(&self) -> SignedDKGMessage<AuthorityId> {
+		self.read_count.fetch_add(1, Ordering::Relaxed);
+		self.inner.clone()
+	}
+
+	/// Returns a clone of the inner [`SignedDKGMessage`] if the read count is less than the
+	/// [`Self::MAX_READ_COUNT`].
+	fn try_read(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		if self.read_count() < Self::MAX_READ_COUNT {
+			Some(self.read())
+		} else {
+			None
+		}
+	}
+
+	/// Unwraps the inner [`SignedDKGMessage`].
+	fn unwrap(self) -> SignedDKGMessage<AuthorityId> {
+		self.inner
+	}
+}
+
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
@@ -176,7 +221,7 @@ pub struct GossipHandlerController<B: Block> {
 	/// A simple channel to send notifications whenever we receive a message from a peer.
 	message_notifications_channel: broadcast::Sender<()>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
-	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
+	message_queue: Arc<RwLock<VecDeque<DKGMessageWrapper<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
 	/// Whether we should process already seen messages or not.
@@ -220,15 +265,23 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
-		let lock = self.message_queue.read();
-		let msg = lock.front().cloned();
+		let mut lock = self.message_queue.write();
+		let msg = match lock.front() {
+			Some(value) => value.try_read(),
+			None => {
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to dequeue");
+				return None
+			},
+		};
 		match msg {
 			Some(msg) => {
 				log::debug!(target: "dkg_gadget::gossip_engine::network", "Dequeuing message: {}", msg.message_hash::<B>());
 				Some(msg)
 			},
 			None => {
-				log::debug!(target: "dkg_gadget::gossip_engine::network", "No message to dequeue");
+				log::debug!(target: "dkg_gadget::gossip_engine::network", "Message already read too many times, ignoring");
+				// We have already read this message too many times, so we remove it from the queue.
+				let _ = lock.pop_front();
 				None
 			},
 		}
@@ -236,7 +289,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 
 	fn acknowledge_last_message(&self) {
 		let mut lock = self.message_queue.write();
-		let msg = lock.pop_front();
+		let msg = lock.pop_front().map(|m| m.unwrap());
 		match msg {
 			Some(msg) => {
 				log::debug!(target: "dkg_gadget::gossip_engine::network", "Acknowledging message: {}", msg.message_hash::<B>());
@@ -284,7 +337,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	protocol_name: ProtocolName,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
-	message_queue: Arc<RwLock<VecDeque<SignedDKGMessage<AuthorityId>>>>,
+	message_queue: Arc<RwLock<VecDeque<DKGMessageWrapper<AuthorityId>>>>,
 	/// A Simple notification stream to notify the caller that we have messages in the queue.
 	message_notifications_channel: broadcast::Sender<()>,
 	/// As multiple peers can send us the same message, we group
@@ -500,7 +553,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			let mut pending_messages_peers = self.pending_messages_peers.write();
 			let enqueue_the_message = || {
 				let mut queue_lock = self.message_queue.write();
-				queue_lock.push_back(message.clone());
+				queue_lock.push_back(DKGMessageWrapper::new(message.clone()));
 				drop(queue_lock);
 				let recv_count = self.message_notifications_channel.receiver_count();
 				if recv_count == 0 {
