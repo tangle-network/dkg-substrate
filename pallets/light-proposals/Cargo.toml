@@ -23,13 +23,12 @@ tiny-keccak = { version = "2.0.0", default-features = false, features = ["keccak
 
 frame-system-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29", optional = true }
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29", optional = true }
-pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29", default-features = false }
 webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
 pallet-bridge-registry = { path = '../bridge-registry', default-features = false }
 rlp = { version = "0.5.0", default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
-pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false }
+pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eip1559"], default-features = false }
 eth-types = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eth2", "eip1559"], default-features = false }
 
 [dev-dependencies]
@@ -47,9 +46,9 @@ std = [
     "frame-system/std",
     "sp-runtime/std",
     "sp-std/std",
-    "pallet-identity/std",
+    "dkg-runtime-primitives/std",
     "pallet-eth2-light-client/std",
-    "dkg-runtime-primitives/std"
+    "eth-types/std",
 ]
 runtime-benchmarks = [
   "frame-benchmarking",

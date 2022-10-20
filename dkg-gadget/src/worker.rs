@@ -1216,7 +1216,7 @@ where
 							})
 						}
 					} else {
-						log::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
+						log::warn!(target: "dkg_gadget::worker", "Signing message is for another session: {}", rounds.session_id);
 					}
 				} else {
 					log::warn!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);

@@ -6419,7 +6419,6 @@ dependencies = [
  "pallet-balances",
  "pallet-bridge-registry",
  "pallet-eth2-light-client",
- "pallet-identity",
  "parity-scale-codec",
  "rlp",
  "scale-info",
