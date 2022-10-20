@@ -396,7 +396,7 @@ where
 			}
 
 			// check the status of the async protocol.
-			// if it is complete, or if it has errored, then break out of the loop.
+			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
 				log::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
 				break
