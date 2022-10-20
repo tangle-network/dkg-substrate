@@ -899,22 +899,19 @@ where
 
 	fn maybe_enact_genesis_authorities(&self, header: &B::Header) {
 		// Get the active and queued validators to check for updates
-		if let Some((active, queued)) = self.validator_set(header) {
+		if let Some((active, _queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
 			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.read().is_none() {
 				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS SESSION ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
-				*self.queued_validator_set.write() = queued.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
 				*self.best_dkg_block.write() = Some(*header.number());
 				*self.best_authorities.write() = self.get_best_authorities(header);
-				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
-				self.handle_queued_dkg_setup(header, queued);
 			}
 		}
 	}
@@ -924,7 +921,8 @@ where
 		if let Some((active, queued)) = self.validator_set(header) {
 			// Check if the current validator set is the same as the active validator set
 			let next_best = self.get_next_best_authorities(header);
-			debug!(target: "dkg_gadget::worker", "🕸️  Next Best Authorities {:?}", next_best);
+			debug!(target: "dkg_gadget::worker", "🕸️  Incoming Next Best Authorities {:?}", next_best);
+			debug!(target: "dkg_gadget::worker", "🕸️  Current Next Best Authorities {:?}", self.best_next_authorities);
 			let next_best_has_changed = next_best != *self.best_next_authorities.read();
 			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {
 				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
@@ -1560,8 +1558,6 @@ where
 				if let Some((active, queued)) = self.validator_set(&notif.header) {
 					// Cache the authority sets and best authorities
 					*self.best_authorities.write() = self.get_best_authorities(&notif.header);
-					*self.best_next_authorities.write() =
-						self.get_next_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
 					*self.queued_validator_set.write() = queued;
 					// Route this to the import notification handler
