@@ -495,6 +495,12 @@ pub mod pallet {
 	pub(super) type NextBestAuthorities<T: Config> =
 		StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
 
+	/// The last BlockNumber at which the session rotation happened
+	#[pallet::storage]
+	#[pallet::getter(fn last_session_rotation_block)]
+	pub(super) type LastSessionRotationBlock<T: Config> =
+		StorageValue<_, T::BlockNumber, ValueQuery>;
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
@@ -1874,6 +1880,9 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 			})
 			.collect::<Vec<_>>();
 
+		// store the current block as the start of new session
+		LastSessionRotationBlock::<T>::put(frame_system::Pallet::<T>::block_number());
+
 		Self::change_authorities(
 			next_authorities,
 			next_queued_authorities,
@@ -1937,7 +1946,10 @@ impl<
 }
 
 impl<
-		BlockNumber: AtLeast32BitUnsigned + Clone + core::fmt::Debug,
+		BlockNumber: AtLeast32BitUnsigned
+			+ Clone
+			+ core::fmt::Debug
+			+ sp_std::convert::From<<T as frame_system::Config>::BlockNumber>,
 		Period: Get<BlockNumber>,
 		Offset: Get<BlockNumber>,
 		T: Config + pallet_session::Config,
@@ -1952,15 +1964,12 @@ impl<
 		let period = Period::get();
 
 		let progress = if now >= offset {
-			// let's calculate what the session index should be if we rotated every period
-			let expected_session = now.clone() / period.clone();
-			// read the actual session index
-			let actual_session_index: BlockNumber =
-				<pallet_session::Pallet<T> as ValidatorSet<T::AccountId>>::session_index().into();
-			// if the expected_session is ahead of actual_session this means we did
-			// not rotate at every period in this case we return 100% since this signals that we
-			// should rotate
-			if expected_session > actual_session_index {
+			// read the last block at which the session was rotated
+			let last_rotated_block = LastSessionRotationBlock::<T>::get();
+			let current_elapsed_time = now.clone().saturating_sub(last_rotated_block.into());
+
+			// if we have gone above the period, return 100% to signal that we need to rotate
+			if current_elapsed_time > period {
 				Some(Permill::from_percent(100))
 			} else {
 				// NOTE: we add one since we assume that the current block has already elapsed,
