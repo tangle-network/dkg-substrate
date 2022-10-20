@@ -47,7 +47,7 @@ where
 		local_ty: &ProtocolType,
 	) -> Result<(), <Self as StateMachine>::Err>;
 
-	async fn on_finish<BI: BlockchainInterface>(
+	async fn on_finish<BI: BlockchainInterface + 'static>(
 		result: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		additional_param: Self::AdditionalReturnParam,

@@ -231,14 +231,14 @@ impl<Out> Future for GenericAsyncHandler<'_, Out> {
 	}
 }
 
-pub fn new_inner<'a, SM: StateMachineHandler + 'static, BI: BlockchainInterface + 'a>(
+pub fn new_inner<SM: StateMachineHandler + 'static, BI: BlockchainInterface + 'static>(
 	additional_param: SM::AdditionalReturnParam,
 	sm: SM,
 	params: AsyncProtocolParameters<BI>,
 	channel_type: ProtocolType,
 	async_index: u8,
 	status: DKGMsgStatus,
-) -> Result<GenericAsyncHandler<'a, SM::Return>, DKGError>
+) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
 	<SM as StateMachine>::MessageBody: Send,
@@ -297,27 +297,20 @@ where
 		incoming_tx_proto,
 	);
 
-	// Combine all futures into a concurrent select subroutine
+	// Spawn the 3 tasks
+	// 1. The outbound task (will stop if the protocol finished, after flushing the messages to the
+	// network.)
+	tokio::spawn(outgoing_to_wire);
+	// 2. The inbound task (we will abort that task if the protocol finished)
+	let handle = tokio::spawn(inbound_signed_message_receiver);
+	// 3. The async protocol itself
 	let protocol = async move {
-		let res = tokio::select! {
-			proto_res = async_proto => {
-				log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), proto_res);
-				proto_res
-			},
-
-			outgoing_res = outgoing_to_wire => {
-				log::error!(target: "dkg", "🕸️  Outbound Sender Ended: {:?}", outgoing_res);
-				Err(DKGError::GenericError { reason: "Outbound sender ended".to_string() })
-			},
-
-			incoming_res = inbound_signed_message_receiver => {
-				log::error!(target: "dkg", "🕸️  Inbound Receiver Ended: {:?}", incoming_res);
-				Err(DKGError::GenericError { reason: "Incoming receiver ended".to_string() })
-			}
-		};
+		let res = async_proto.await;
+		log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
+		// Abort the inbound task
+		handle.abort();
 		res
 	};
-
 	Ok(GenericAsyncHandler { protocol: Box::pin(protocol) })
 }
 
@@ -333,21 +326,38 @@ fn get_party_session_id<'a, BI: BlockchainInterface + 'a>(
 	(party_ind, session_id, id)
 }
 
-fn generate_outgoing_to_wire_fn<'a, SM: StateMachineHandler + 'a, BI: BlockchainInterface + 'a>(
+fn generate_outgoing_to_wire_fn<
+	SM: StateMachineHandler + 'static,
+	BI: BlockchainInterface + 'static,
+>(
 	params: AsyncProtocolParameters<BI>,
-	mut outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
+	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType,
 	async_index: u8,
 	status: DKGMsgStatus,
-) -> impl SendFuture<'a, ()>
+) -> impl SendFuture<'static, ()>
 where
 	<SM as StateMachine>::MessageBody: Serialize,
 	<SM as StateMachine>::MessageBody: Send,
 	<SM as StateMachine>::Output: Send,
 {
 	Box::pin(async move {
+		let mut outgoing_rx = outgoing_rx.fuse();
 		// take all unsigned messages, then sign them and send outbound
-		while let Some(unsigned_message) = outgoing_rx.next().await {
+		loop {
+			// Here is a few explanations about the next few lines:
+			// We wait for a message to be available on the channel, and then we take it.
+			// this returns an Option<Msg>, which is None if the channel is closed.
+			// the channel could be closed if the protocol is finished, since the last sender is
+			// dropped. hence, we will break the loop and return.
+			let unsigned_message = match outgoing_rx.next().await {
+				Some(msg) => msg,
+				None => {
+					log::debug!(target: "dkg", "🕸️  Outgoing Receiver Ended");
+					break
+				},
+			};
+
 			log::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
@@ -384,23 +394,26 @@ where
 			} else {
 				log::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
 			}
-		}
 
-		Err(DKGError::CriticalError {
-			reason: "Outbound stream stopped producing items".to_string(),
-		})
+			// check the status of the async protocol.
+			// if it has completed or terminated then break out of the loop.
+			if params.handle.is_completed() || params.handle.is_terminated() {
+				log::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
+				break
+			}
+		}
+		Ok(())
 	})
 }
 
 pub fn generate_inbound_signed_message_receiver_fn<
-	'a,
-	SM: StateMachineHandler + 'a,
-	BI: BlockchainInterface + 'a,
+	SM: StateMachineHandler + 'static,
+	BI: BlockchainInterface + 'static,
 >(
 	params: AsyncProtocolParameters<BI>,
 	channel_type: ProtocolType,
 	to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
-) -> impl SendFuture<'a, ()>
+) -> impl SendFuture<'static, ()>
 where
 	<SM as StateMachine>::MessageBody: Send,
 	<SM as StateMachine>::Output: Send,
@@ -408,20 +421,35 @@ where
 	Box::pin(async move {
 		// the below wrapper will map signed messages into unsigned messages
 		let incoming = params.handle.broadcaster.subscribe();
-		let mut incoming_wrapper =
+		let incoming_wrapper =
 			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
+		// we use fuse here, since normally, once a stream has returned `None` from calling
+		// `next()` any further calls could exhibit bad behavior such as block forever, panic, never
+		// return, etc. that's why we use fuse here to ensure that it has defined semantics,
+		// which means, once it returns `None` we will never poll that stream again.
+		let mut incoming_wrapper = incoming_wrapper.fuse();
+		loop {
+			let unsigned_message = match incoming_wrapper.next().await {
+				Some(msg) => msg,
+				None => {
+					log::debug!(target: "dkg", "🕸️  Inbound Receiver Ended");
+					break
+				},
+			};
 
-		while let Some(unsigned_message) = incoming_wrapper.next().await {
 			if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type)
 				.is_err()
 			{
 				log::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
 				break
 			}
-		}
 
-		Err::<(), _>(DKGError::CriticalError {
-			reason: "Inbound stream stopped producing items".to_string(),
-		})
+			// check the status of the async protocol.
+			if params.handle.is_completed() || params.handle.is_terminated() {
+				log::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of inbound loop");
+				break
+			}
+		}
+		Ok(())
 	})
 }

@@ -84,7 +84,7 @@ impl StateMachineHandler for OfflineStage {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface>(
+	async fn on_finish<BI: BlockchainInterface + 'static>(
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: Self::AdditionalReturnParam,
