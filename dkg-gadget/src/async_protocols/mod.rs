@@ -347,7 +347,7 @@ where
 		loop {
 			// Here is a few explanations about the next few lines:
 			// We wait for a message to be available on the channel, and then we take it.
-			// this return an Option<Msg> which is None if the channel is closed.
+			// this returns an Option<Msg>, which is None if the channel is closed.
 			// the channel could be closed if the protocol is finished, since the last sender is
 			// dropped. hence, we will break the loop and return.
 			let unsigned_message = match outgoing_rx.next().await {
