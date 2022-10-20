@@ -840,7 +840,7 @@ where
 		}
 
 		// Get the best next authorities using the keygen threshold
-		let session_id = queued.id; 
+		let session_id = queued.id;
 		let maybe_party_index = self.get_next_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
