@@ -300,7 +300,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = 1 * HOURS;
   pub const Offset: BlockNumber = 0;
 }
 
