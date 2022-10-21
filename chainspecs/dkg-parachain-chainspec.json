@@ -3,9 +3,9 @@
   "id": "dev",
   "chainType": "Local",
   "bootNodes": [
-    "/ip4/18.119.156.80/tcp/40333/p2p/12D3KooWPU2eWyZrDMVtNBiKYKLGPJw8EDjbkYeXMyotmdVBKNnx",
-    "/ip4/18.191.138.127/tcp/40333/p2p/12D3KooWPdjcMcMACp7s2XecreNZAG9q3v6XUcoUFLg4sYJmcK7m",
-    "/ip4/3.16.148.103/tcp/40333/p2p/12D3KooWSHvLKw7tVGF2UTvvxSgArvioUxkEVdwHR9PiWLzvmPoD"
+    "/ip4/18.119.156.80/tcp/30334/p2p/12D3KooWPU2eWyZrDMVtNBiKYKLGPJw8EDjbkYeXMyotmdVBKNnx",
+    "/ip4/18.191.138.127/tcp/30334/p2p/12D3KooWPdjcMcMACp7s2XecreNZAG9q3v6XUcoUFLg4sYJmcK7m",
+    "/ip4/3.16.148.103/tcp/30334/p2p/12D3KooWSHvLKw7tVGF2UTvvxSgArvioUxkEVdwHR9PiWLzvmPoD"
   ],
   "telemetryEndpoints": null,
   "protocolId": "dkg-dev",
