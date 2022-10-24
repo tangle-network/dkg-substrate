@@ -54,7 +54,8 @@ where
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
 		log::debug!(
-			"Handling incoming message from session={}, round={}, sender={}",
+			"Handling incoming message for {:?} from session={}, round={}, sender={}",
+			self.channel_type,
 			self.session_id,
 			self.current_round(),
 			msg.sender
@@ -67,9 +68,11 @@ where
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		if !self.sm.message_queue().is_empty() {
 			log::debug!(
-				"Preparing to drain message queue in session={}, round={}",
+				"Preparing to drain message queue for {:?} in session={}, round={}, queue size={}",
+				self.channel_type,
 				self.session_id,
-				self.current_round()
+				self.current_round(),
+				self.sm.message_queue().len(),
 			);
 		}
 		self.sm.message_queue()
