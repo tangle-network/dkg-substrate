@@ -28,8 +28,9 @@ pallet-bridge-registry = { path = '../bridge-registry', default-features = false
 rlp = { version = "0.5.0", default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
-pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eip1559"], default-features = false }
-eth-types = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eth2", "eip1559"], default-features = false }
+# eth-types = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eth2", "eip1559"], default-features = false }
+
+eth-types = { path = "../../../pallet-eth2-light-client/crates/eth-types", features = ["eth2", "eip1559"], default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.119" }
@@ -37,6 +38,8 @@ sp-core = { default-features = false, git = "https://github.com/paritytech/subst
 sp-io = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 pallet-balances = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
+
+pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eip1559"], default-features = false }
 
 [features]
 default = ["std"]
@@ -47,7 +50,6 @@ std = [
     "sp-runtime/std",
     "sp-std/std",
     "dkg-runtime-primitives/std",
-    "pallet-eth2-light-client/std",
     "eth-types/std",
 ]
 runtime-benchmarks = [

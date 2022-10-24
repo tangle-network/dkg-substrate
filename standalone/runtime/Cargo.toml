@@ -61,6 +61,9 @@ pallet-dkg-metadata = { path = '../../pallets/dkg-metadata', default-features = 
 pallet-dkg-proposals = { path = '../../pallets/dkg-proposals', default-features = false }
 pallet-dkg-proposal-handler = { path = '../../pallets/dkg-proposal-handler', default-features = false }
 pallet-bridge-registry = { path = "../../pallets/bridge-registry", default-features = false }
+pallet-light-proposals = { path = "../../pallets/light-proposals", default-features = false }
+pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false, features = ["eip1559"] }
+
 
 # Used for the node template's RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
@@ -108,16 +111,18 @@ std = [
 	"dkg-runtime-primitives/std",
 	"pallet-session/std",
 	"pallet-staking/std",
-	'pallet-dkg-metadata/std',
-	'pallet-dkg-proposals/std',
-	'pallet-dkg-proposal-handler/std',
 	'pallet-im-online/std',
-	"pallet-bridge-registry/std",
 	'pallet-election-provider-multi-phase/std',
 	'sp-npos-elections/std',
 	'frame-election-provider-support/std',
 	'sp-staking/std',
 	'sp-io/std',
+	'pallet-dkg-metadata/std',
+	'pallet-dkg-proposals/std',
+	'pallet-dkg-proposal-handler/std',
+	"pallet-bridge-registry/std",
+	"pallet-light-proposals/std",
+	"pallet-eth2-light-client/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",

@@ -726,6 +726,29 @@ impl pallet_im_online::Config for Runtime {
 	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
+parameter_types! {
+	pub const AnchorUpdateFunctionSignature: [u8; 4] = *b"anchr";
+}
+
+impl pallet_light_proposals::Config for Runtime {
+	type Event = Event;
+	type BridgeRegistry = BridgeRegistry;
+	type ProposalHandler = DKGProposalHandler;
+	type AnchorUpdateFunctionSignature = AnchorUpdateFunctionSignature;
+}
+
+parameter_types! {
+	pub const Eth2PalletId: PalletId = PalletId(*b"py/eth2");
+	pub const StoragePricePerByte: Balance = 1 * MILLICENTS;
+}
+
+impl pallet_eth2_light_client::Config for Runtime {
+	type Event = Event;
+	type PalletId = Eth2PalletId;
+	type Currency = Balances;
+	type StoragePricePerByte = StoragePricePerByte;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
   pub enum Runtime where
@@ -752,6 +775,8 @@ construct_runtime!(
 	Session: pallet_session,
 	Historical: pallet_session_historical,
 	BridgeRegistry: pallet_bridge_registry::<Instance1>,
+	LightProposals: pallet_light_proposals,
+	Eth2LightClient: pallet_eth2_light_client,
 	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 	ImOnline: pallet_im_online,
   }
