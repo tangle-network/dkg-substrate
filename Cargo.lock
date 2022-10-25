@@ -732,18 +732,17 @@ dependencies = [
 [[package]]
 name = "bls"
 version = "0.2.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
- "eth2_hashing 0.3.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "eth2_ssz 0.4.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "eth2_hashing",
+ "eth2_serde_utils",
+ "eth2_ssz",
  "ethereum-types",
  "hex",
  "milagro_bls",
  "rand 0.7.3",
  "rand_chacha 0.3.1",
  "serde",
- "tree_hash 0.4.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "tree_hash",
  "zeroize",
 ]
 
@@ -2796,9 +2795,9 @@ name = "eth-types"
 version = "0.1.0"
 dependencies = [
  "derive_more",
- "eth2_serde_utils 0.1.1",
- "eth2_ssz 0.4.1",
- "eth2_ssz_derive 0.3.0",
+ "eth2_serde_utils",
+ "eth2_ssz",
+ "eth2_ssz_derive",
  "ethereum-types",
  "hex",
  "parity-scale-codec",
@@ -2808,30 +2807,8 @@ dependencies = [
  "serde",
  "sp-std",
  "tiny-keccak",
- "tree_hash 0.4.1",
- "tree_hash_derive 0.4.0",
-]
-
-[[package]]
-name = "eth-types"
-version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
-dependencies = [
- "derive_more",
- "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "eth2_ssz 0.4.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "eth2_ssz_derive 0.3.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "ethereum-types",
- "hex",
- "parity-scale-codec",
- "rlp",
- "rlp-derive",
- "scale-info",
- "serde",
- "sp-std",
- "tiny-keccak",
- "tree_hash 0.4.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "tree_hash_derive 0.4.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "tree_hash",
+ "tree_hash_derive",
 ]
 
 [[package]]
@@ -2839,32 +2816,13 @@ name = "eth2_hashing"
 version = "0.3.0"
 dependencies = [
  "lazy_static",
- "sha2 0.10.6",
-]
-
-[[package]]
-name = "eth2_hashing"
-version = "0.3.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
-dependencies = [
- "lazy_static",
+ "ring",
  "sha2 0.10.6",
 ]
 
 [[package]]
 name = "eth2_serde_utils"
 version = "0.1.1"
-dependencies = [
- "ethereum-types",
- "hex",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "eth2_serde_utils"
-version = "0.1.1"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
  "ethereum-types",
  "hex",
@@ -2882,29 +2840,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "eth2_ssz"
-version = "0.4.1"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
-dependencies = [
- "ethereum-types",
- "itertools 0.10.5",
- "smallvec",
-]
-
-[[package]]
 name = "eth2_ssz_derive"
 version = "0.3.0"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "eth2_ssz_derive"
-version = "0.3.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -5431,9 +5368,8 @@ dependencies = [
 [[package]]
 name = "merkle_proof"
 version = "0.2.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
- "eth2_hashing 0.3.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "eth2_hashing",
  "ethereum-types",
  "lazy_static",
  "safe_arith",
@@ -5468,6 +5404,8 @@ version = "1.5.0"
 source = "git+https://github.com/webb-tools/milagro_bls#583bdf821befbee4e09161ff92398f1e75372456"
 dependencies = [
  "amcl",
+ "hex",
+ "lazy_static",
  "rand 0.8.5",
  "zeroize",
 ]
@@ -6345,28 +6283,21 @@ dependencies = [
 [[package]]
 name = "pallet-eth2-light-client"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
  "bitvec",
  "bls",
- "derive_more",
- "eth-types 0.1.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "eth2_serde_utils 0.1.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "eth-types",
  "ethereum-types",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
- "log",
  "merkle_proof",
  "pallet-balances",
  "parity-scale-codec",
- "rlp",
- "rlp-derive",
  "scale-info",
- "serde",
  "sp-runtime",
  "sp-std",
- "tree_hash 0.4.1 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
- "tree_hash_derive 0.4.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "tree_hash",
  "webb-proposals",
 ]
 
@@ -6465,12 +6396,11 @@ name = "pallet-light-proposals"
 version = "1.0.0"
 dependencies = [
  "dkg-runtime-primitives",
- "eth-types 0.1.0",
+ "eth-types",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "frame-system-benchmarking",
- "log",
  "pallet-balances",
  "pallet-bridge-registry",
  "pallet-eth2-light-client",
@@ -9447,7 +9377,6 @@ dependencies = [
 [[package]]
 name = "safe_arith"
 version = "0.1.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 
 [[package]]
 name = "salsa20"
@@ -12555,17 +12484,7 @@ dependencies = [
 name = "tree_hash"
 version = "0.4.1"
 dependencies = [
- "eth2_hashing 0.3.0",
- "ethereum-types",
- "smallvec",
-]
-
-[[package]]
-name = "tree_hash"
-version = "0.4.1"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
-dependencies = [
- "eth2_hashing 0.3.0 (git+https://github.com/webb-tools/pallet-eth2-light-client.git)",
+ "eth2_hashing",
  "ethereum-types",
  "smallvec",
 ]
@@ -12573,16 +12492,6 @@ dependencies = [
 [[package]]
 name = "tree_hash_derive"
 version = "0.4.0"
-dependencies = [
- "darling",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "tree_hash_derive"
-version = "0.4.0"
-source = "git+https://github.com/webb-tools/pallet-eth2-light-client.git#40ee4c2cd4a24b1124a2dedd0066ad34dc1072b1"
 dependencies = [
  "darling",
  "quote",

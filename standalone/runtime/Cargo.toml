@@ -62,7 +62,8 @@ pallet-dkg-proposals = { path = '../../pallets/dkg-proposals', default-features 
 pallet-dkg-proposal-handler = { path = '../../pallets/dkg-proposal-handler', default-features = false }
 pallet-bridge-registry = { path = "../../pallets/bridge-registry", default-features = false }
 pallet-light-proposals = { path = "../../pallets/light-proposals", default-features = false }
-pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false, features = ["eip1559"] }
+# pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false }
+pallet-eth2-light-client = { path = "../../../pallet-eth2-light-client/pallet", default-features = false }
 
 
 # Used for the node template's RPCs
@@ -138,6 +139,7 @@ runtime-benchmarks = [
 	"pallet-dkg-proposals/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
 	"pallet-bridge-registry/runtime-benchmarks",
+	"pallet-eth2-light-client/runtime-benchmarks",
 ]
 
 integration-tests = []

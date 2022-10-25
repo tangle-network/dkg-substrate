@@ -2,7 +2,6 @@
 authors = ["Webb Technologies Inc."]
 description = "A pallet that maintains bridge configuration metadata."
 edition = "2018"
-homepage = "https://substrate.dev"
 license = "Unlicense"
 name = "pallet-bridge-registry"
 repository = "https://github.com/webb-tools/protocol-substrate"

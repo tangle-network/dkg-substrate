@@ -1,8 +1,7 @@
 [package]
 authors = ["Webb Technologies Inc."]
-description = "A pallet that..."
+description = "A pallet that creates proposals based on light-client proofs."
 edition = "2018"
-homepage = "https://substrate.dev"
 license = "Unlicense"
 name = "pallet-light-proposals"
 repository = "https://github.com/webb-tools/protocol-substrate"
@@ -14,7 +13,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
-log = { version = "0.4.14", default-features = false }
 frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
@@ -29,7 +27,6 @@ rlp = { version = "0.5.0", default-features = false }
 dkg-runtime-primitives = { path = '../../dkg-runtime-primitives', default-features = false }
 
 # eth-types = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eth2", "eip1559"], default-features = false }
-
 eth-types = { path = "../../../pallet-eth2-light-client/crates/eth-types", features = ["eth2", "eip1559"], default-features = false }
 
 [dev-dependencies]
@@ -39,7 +36,8 @@ sp-io = { default-features = false, git = "https://github.com/paritytech/substra
 sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 pallet-balances = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.29" }
 
-pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", features = ["eip1559"], default-features = false }
+# pallet-eth2-light-client = { git = "https://github.com/webb-tools/pallet-eth2-light-client.git", default-features = false }
+pallet-eth2-light-client = { path = "../../../pallet-eth2-light-client/pallet", default-features = false }
 
 [features]
 default = ["std"]

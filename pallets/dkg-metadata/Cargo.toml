@@ -4,7 +4,6 @@ authors = ["Anonymous"]
 description = "FRAME pallet for DKG metadata"
 version = "0.1.0"
 license = "Unlicense"
-homepage = "https://substrate.dev"
 repository = "https://github.com/paritytech/substrate/"
 edition = "2021"
 

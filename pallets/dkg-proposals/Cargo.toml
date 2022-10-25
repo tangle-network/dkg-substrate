@@ -2,7 +2,6 @@
 authors = ["Webb Technologies Inc."]
 description = "FRAME pallet for proposing and reporting signed transaction blobs."
 edition = "2021"
-homepage = "https://substrate.dev"
 license = "Unlicense"
 name = "pallet-dkg-proposals"
 repository = "https://github.com/substrate-developer-hub/substrate-darkwebb-node/"
