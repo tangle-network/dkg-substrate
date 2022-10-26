@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM rust:1 as builder
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /dkg
 
-# Install Required Packages
-RUN apt-get update && apt-get install -y git clang curl libssl-dev llvm libudev-dev libgmp3-dev protobuf-compiler && rm -rf /var/lib/apt/lists/*
-
+FROM chef AS planner
 COPY . .
-# Build Standalone Node
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+# Install Required Packages
+RUN apt-get update && apt-get install -y git cmake clang curl libssl-dev llvm libudev-dev libgmp3-dev protobuf-compiler && rm -rf /var/lib/apt/lists/*
+COPY --from=planner /dkg/recipe.json recipe.json
+COPY rust-toolchain.toml .
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+# Build application
 RUN cargo build --release -p dkg-standalone-node
 
 # This is the 2nd stage: a very small image where we copy the DKG binary."

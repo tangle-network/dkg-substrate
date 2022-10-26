@@ -352,19 +352,6 @@ where
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
 				*lock = Some(status_handle);
-				// Store the saved rounds with Keygen status since we've executed the start handler
-				store_saved_rounds::<B>(
-					session_id,
-					now,
-					MetaHandlerStatus::Keygen,
-					self.base_path
-						.read()
-						.as_ref()
-						.map(|path| path.join(ACTIVE_ROUNDS_METADATA_FILE)),
-				)
-				.map_err(|e| DKGError::GenericError {
-					reason: format!("Failed to store saved rounds: {}", e),
-				})?;
 			},
 			ProtoStageType::Queued => {
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol (obtaing the lock)");
@@ -374,19 +361,6 @@ where
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
 				*lock = Some(status_handle);
-				// Store the saved rounds with Keygen status since we've executed the start handler
-				store_saved_rounds::<B>(
-					session_id,
-					now,
-					MetaHandlerStatus::Keygen,
-					self.base_path
-						.read()
-						.as_ref()
-						.map(|path| path.join(QUEUED_ROUNDS_METADATA_FILE)),
-				)
-				.map_err(|e| DKGError::GenericError {
-					reason: format!("Failed to store saved rounds: {}", e),
-				})?;
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
@@ -1520,35 +1494,6 @@ where
 			.collect())
 	}
 
-	// *** Main run loop ***
-	#[allow(dead_code)]
-	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
-		let active_rounds_metadata_path =
-			get_key_path(&self.base_path.read(), ACTIVE_ROUNDS_METADATA_FILE);
-		let queued_rounds_metadata_path =
-			get_key_path(&self.base_path.read(), QUEUED_ROUNDS_METADATA_FILE);
-
-		if let Ok(stored_active_rounds) = load_saved_rounds::<B>(active_rounds_metadata_path) {
-			let remote = AsyncProtocolRemote::new(
-				stored_active_rounds.started_at,
-				stored_active_rounds.session_id,
-			);
-			remote.set_status(stored_active_rounds.status);
-			*self.rounds.write() = Some(remote);
-		};
-
-		if let Ok(stored_queued_rounds) = load_saved_rounds::<B>(queued_rounds_metadata_path) {
-			let remote = AsyncProtocolRemote::new(
-				stored_queued_rounds.started_at,
-				stored_queued_rounds.session_id,
-			);
-			remote.set_status(stored_queued_rounds.status);
-			*self.next_rounds.write() = Some(remote);
-		};
-
-		Ok(())
-	}
-
 	/// Wait for initial finalized block
 	async fn initialization(&mut self) {
 		use futures::future;
@@ -1560,7 +1505,7 @@ where
 					*self.best_authorities.write() = self.get_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
 					*self.queued_validator_set.write() = queued;
-					// Route this to the import notification handler
+					// Route this to the finality notification handler
 					self.handle_finality_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
 					// End the initialization stream
