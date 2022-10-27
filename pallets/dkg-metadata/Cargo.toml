@@ -19,7 +19,7 @@ codec = { package = "parity-scale-codec", version = "3", features = [
 scale-info = { version = "2.1.1", default-features = false, features = [
 	"derive",
 ] }
-hex = { version = "0.4", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 libsecp256k1 = { version = "0.7.0", default-features = false }
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false, optional = true }
