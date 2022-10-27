@@ -92,8 +92,8 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 				}
 			},
 
-			(l, r) => {
-				log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
+			(_l, _r) => {
+				// log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
 				Ok(None)
 			},
 		}
