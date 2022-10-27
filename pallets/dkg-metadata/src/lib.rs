@@ -1518,7 +1518,7 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			let signer = Signer::<T, T::OffChainAuthId>::any_account();
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -1526,10 +1526,20 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let _res = signer.send_signed_transaction(|_account| Call::submit_public_key {
-					keys_and_signatures: agg_keys.clone(),
-				});
-				agg_key_ref.clear();
+				let (_acc, res) = signer
+					.send_signed_transaction(|_account| Call::submit_public_key {
+						keys_and_signatures: agg_keys.clone(),
+					})
+					.ok_or("Failed to submit transaction")?;
+				match res {
+					Ok(_) => {
+						agg_key_ref.clear();
+					},
+					Err(e) => {
+						log::error!(target: "runtime::dkg_metadata", "Error: {:?}", e);
+						return Err("Failed to submit the public key, will retry later")
+					},
+				};
 			}
 
 			Ok(())
@@ -1575,7 +1585,7 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			let signer = Signer::<T, T::OffChainAuthId>::any_account();
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -1583,17 +1593,21 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let res = signer.send_signed_transaction(|_account| Call::submit_next_public_key {
-					keys_and_signatures: agg_keys.clone(),
-				});
+				let (_acc, res) = signer
+					.send_signed_transaction(|_account| Call::submit_next_public_key {
+						keys_and_signatures: agg_keys.clone(),
+					})
+					.ok_or("Failed to submit transaction")?;
 
-				if Self::process_send_signed_transaction_result(res).is_ok() {
-					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain SUCCEEDED{:?}", agg_keys);
-				} else {
-					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting next public key sig onchain FAILED {:?}", agg_keys);
-				}
-
-				agg_key_ref.clear();
+				match res {
+					Ok(_) => {
+						agg_key_ref.clear();
+					},
+					Err(e) => {
+						log::error!(target: "runtime::dkg_metadata", "Error: {:?}", e);
+						return Err("Failed to submit the next public key, will retry later")
+					},
+				};
 			}
 
 			Ok(())
@@ -1618,7 +1632,7 @@ impl<T: Config> Pallet<T> {
 
 			let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
 
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			let signer = Signer::<T, T::OffChainAuthId>::any_account();
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -1626,18 +1640,21 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if let Ok(Some(refresh_proposal)) = refresh_proposal {
-				let res =
-					signer.send_signed_transaction(|_account| Call::submit_public_key_signature {
+				let (_acc, res) = signer
+					.send_signed_transaction(|_account| Call::submit_public_key_signature {
 						signature_proposal: refresh_proposal.clone(),
-					});
+					})
+					.ok_or("Failed to submit transaction")?;
 
-				if Self::process_send_signed_transaction_result(res).is_ok() {
-					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain SUCCEEDED{:?}", refresh_proposal.signature);
-				} else {
-					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting public key sig onchain FAILED {:?}", refresh_proposal.signature);
-				}
-
-				pub_key_sig_ref.clear();
+				match res {
+					Ok(_) => {
+						pub_key_sig_ref.clear();
+					},
+					Err(e) => {
+						log::error!(target: "runtime::dkg_metadata", "Error: {:?}", e);
+						return Err("Failed to submit the public key sig, will retry later")
+					},
+				};
 			}
 
 			Ok(())
@@ -1653,7 +1670,7 @@ impl<T: Config> Pallet<T> {
 		{
 			let _guard = lock.lock();
 
-			let signer = Signer::<T, T::OffChainAuthId>::all_accounts();
+			let signer = Signer::<T, T::OffChainAuthId>::any_account();
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
@@ -1677,17 +1694,21 @@ impl<T: Config> Pallet<T> {
 					return Ok(())
 				}
 
-				let res = signer.send_signed_transaction(|_account| {
-					Call::submit_misbehaviour_reports { reports: reports.clone() }
-				});
+				let (_acc, res) = signer
+					.send_signed_transaction(|_account| Call::submit_misbehaviour_reports {
+						reports: reports.clone(),
+					})
+					.ok_or("Failed to submit transaction")?;
 
-				if Self::process_send_signed_transaction_result(res).is_ok() {
-					log::info!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain SUCCEEDED {:?}", reports);
-					// clear storage since we successfuly reported
-					agg_reports_ref.clear();
-				} else {
-					log::debug!(target: "runtime::dkg_metadata", "Offchain submitting misbehaviour reports onchain FAILED {:?}", reports);
-				}
+				match res {
+					Ok(_) => {
+						agg_reports_ref.clear();
+					},
+					Err(e) => {
+						log::error!(target: "runtime::dkg_metadata", "Error: {:?}", e);
+						return Err("Failed to submit the misbehaviour reports, will retry later")
+					},
+				};
 			}
 
 			Ok(())
@@ -1702,21 +1723,6 @@ impl<T: Config> Pallet<T> {
 				next_keygen_threshold: next_threshold,
 			});
 		}
-	}
-
-	#[allow(clippy::unit_arg)]
-	#[allow(clippy::all)]
-	pub fn process_send_signed_transaction_result(
-		results: Vec<(frame_system::offchain::Account<T>, Result<(), ()>)>,
-	) -> Result<(), ()> {
-		for (_acc, res) in &results {
-			match res {
-				Ok(()) => {},
-				Err(e) => return Err(*e),
-			}
-		}
-		// transaction submitted succesfully
-		Ok(())
 	}
 
 	pub fn update_next_signature_threshold(next_threshold: u16) {
