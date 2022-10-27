@@ -254,11 +254,8 @@ pub mod pallet {
 				"submit_misbehaviour_reports_onchain : {:?}",
 				res,
 			);
-			#[cfg(feature = "std")]
 			let (authority_id, pk) = DKGPublicKey::<T>::get();
-			#[cfg(feature = "std")]
 			let maybe_next_key = NextDKGPublicKey::<T>::get();
-			#[cfg(feature = "std")] // required since we use hex and strings
 			log::debug!(
 				target: "runtime::dkg_metadata",
 				"Current Authority({}) DKG PublicKey:
@@ -270,7 +267,6 @@ pub mod pallet {
 				hex::encode(pk.clone()),
 				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
 			);
-			#[cfg(feature = "std")] // required since we use hex and strings
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
 				log::debug!(
 					target: "runtime::dkg_metadata",
@@ -841,7 +837,6 @@ pub mod pallet {
 			// Verify signature against the `RefreshProposal`
 			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
 				.map_err(|_| {
-					#[cfg(feature = "std")]
 					log::error!(
 						target: "runtime::dkg_metadata",
 						"Invalid signature for RefreshProposal
