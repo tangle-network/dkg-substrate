@@ -69,7 +69,7 @@ use dkg_runtime_primitives::{
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
-	persistence::{load_saved_rounds, load_stored_key, store_saved_rounds},
+	persistence::load_stored_key,
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };
@@ -77,16 +77,12 @@ use crate::{
 use crate::gossip_messages::public_key_gossip::handle_public_key_broadcast;
 use dkg_primitives::{
 	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
-	utils::{
-		cleanup, ACTIVE_ROUNDS_METADATA_FILE, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
-		QUEUED_ROUNDS_METADATA_FILE,
-	},
+	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	remote::{AsyncProtocolRemote, MetaHandlerStatus},
-	AsyncProtocolParameters, GenericAsyncHandler,
+	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
