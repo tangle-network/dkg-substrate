@@ -112,7 +112,7 @@ use frame_support::{
 	pallet_prelude::{Get, Weight},
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
 };
-use frame_system::offchain::{SendSignedTransaction, Signer};
+use frame_system::offchain::{Signer, SubmitTransaction};
 pub use pallet::*;
 use sp_runtime::{
 	generic::DigestItem,
@@ -218,6 +218,19 @@ pub mod pallet {
 		/// Percentage session should have progressed for refresh to begin
 		#[pallet::constant]
 		type RefreshDelay: Get<Permill>;
+
+		/// Number of blocks of cooldown after unsigned transaction is included.
+		///
+		/// This ensures that we only accept unsigned transactions once, every `UnsignedInterval`
+		/// blocks.
+		#[pallet::constant]
+		type UnsignedInterval: Get<Self::BlockNumber>;
+		/// A configuration for base priority of unsigned transactions.
+		///
+		/// This is exposed so that it can be tuned for particular runtime, when
+		/// multiple pallets send unsigned transactions.
+		#[pallet::constant]
+		type UnsignedPriority: Get<TransactionPriority>;
 
 		type WeightInfo: WeightInfo;
 	}
@@ -325,7 +338,14 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_delay)]
 	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
-
+	/// Defines the block when next unsigned transaction will be accepted.
+	///
+	/// To prevent spam of unsigned (and unpayed!) transactions on the network,
+	/// we only allow one transaction every `T::UnsignedInterval` blocks.
+	/// This storage entry defines when new transaction is going to be accepted.
+	#[pallet::storage]
+	#[pallet::getter(fn next_unsigned_at)]
+	pub(super) type NextUnsignedAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 	/// Check if there is a refresh in progress.
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_in_progress)]
@@ -740,6 +760,9 @@ pub mod pallet {
 			}
 
 			if accepted {
+				// now increment the block number at which we expect next unsigned transaction.
+				let current_block = <frame_system::Pallet<T>>::block_number();
+				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 				return Ok(().into())
 			}
 
@@ -785,7 +808,11 @@ pub mod pallet {
 			}
 
 			if accepted {
-				// TODO Do something about accounts that posted a wrong key
+				// TODO: Do something about accounts that posted a wrong key
+				// now increment the block number at which we expect next unsigned transaction.
+				let current_block = <frame_system::Pallet<T>>::block_number();
+				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
+
 				return Ok(().into())
 			}
 
@@ -855,6 +882,10 @@ pub mod pallet {
 				compressed_pub_key: next_pub_key,
 				pub_key_sig: signature,
 			});
+
+			// now increment the block number at which we expect next unsigned transaction.
+			let current_block = <frame_system::Pallet<T>>::block_number();
+			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 			// Handle manual refresh if flag is set
 			if Self::should_manual_refresh() {
 				ShouldManualRefresh::<T>::put(false);
@@ -1034,6 +1065,10 @@ pub mod pallet {
 					misbehaviour_type,
 					reporters: valid_reporters,
 				});
+
+				// now increment the block number at which we expect next unsigned transaction.
+				let current_block = <frame_system::Pallet<T>>::block_number();
+				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 				return Ok(().into())
 			}
 
@@ -1072,8 +1107,7 @@ pub mod pallet {
 
 		/// Force removes an authority from keygen jail.
 		///
-		/// Can only be called by the root origin.
-		///
+		/// Can only be called by DKG
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the keygen jail.
 		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
@@ -1202,6 +1236,90 @@ pub mod pallet {
 			}
 
 			Ok(().into())
+		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			// Now let's check if the transaction has any chance to succeed.
+			let current_block = <frame_system::Pallet<T>>::block_number();
+			let next_unsigned_at = <NextUnsignedAt<T>>::get();
+			if next_unsigned_at > current_block {
+				frame_support::log::debug!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: early block: current: {:?}, next_unsigned_at: {:?}",
+					current_block,
+					next_unsigned_at,
+				);
+				return InvalidTransaction::Stale.into()
+			}
+			// Next, let's check that we call the right function.
+			// Here we will use match stmt, to match over the call and see if it is
+			// one of the functions we allow. if not we should return
+			// `InvalidTransaction::Call.into()`.
+			// we should handle the following calls:
+			// 1. `submit_public_key`
+			// 2. `submit_next_public_key`
+			// 3. `submit_public_key_signature`
+			// 4. `submit_misbehaviour_reports`.
+			// other than that we should return `InvalidTransaction::Call.into()`.
+			let is_valid_call = matches! {
+				call,
+				Call::submit_public_key { .. } |
+					Call::submit_next_public_key { .. } |
+					Call::submit_public_key_signature { .. } |
+					Call::submit_misbehaviour_reports { .. }
+			};
+			if !is_valid_call {
+				frame_support::log::warn!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: invalid call: {:?}",
+					call,
+				);
+				InvalidTransaction::Call.into()
+			} else {
+				frame_support::log::debug!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: valid call: {:?}",
+					call,
+				);
+				ValidTransaction::with_tag_prefix("DKG")
+					// We set base priority to 2**20 and hope it's included before any other
+					// transactions in the pool. Next we tweak the priority by the current block,
+					// so that transactions from older blocks are (more) included first.
+					.priority(
+						T::UnsignedPriority::get()
+							.saturating_sub(current_block.try_into().unwrap_or_default()),
+					)
+					// This transaction does not require anything else to go before into the pool.
+					// In theory we could require `previous_unsigned_at` transaction to go first,
+					// but it's not necessary in our case.
+					//.and_requires()
+					// We set the `provides` tag to be the same as `next_unsigned_at`. This makes
+					// sure only one transaction produced after `next_unsigned_at` will ever
+					// get to the transaction pool and will end up in the block.
+					// We can still have multiple transactions compete for the same "spot",
+					// and the one with higher priority will replace other one in the pool.
+					.and_provides(next_unsigned_at)
+					// The transaction is only valid for next 5 blocks. After that it's
+					// going to be revalidated by the pool.
+					.longevity(5)
+					// It's fine to propagate that transaction to other peers, which means it can be
+					// created even by nodes that don't produce blocks.
+					// Note that sometimes it's better to keep it for yourself (if you are the block
+					// producer), since for instance in some schemes others may copy your solution
+					// and claim a reward.
+					.propagate(true)
+					.build()
+			}
 		}
 	}
 }
@@ -1488,6 +1606,10 @@ impl<T: Config> Pallet<T> {
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
 	fn submit_genesis_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let next_unsigned_at = <NextUnsignedAt<T>>::get();
+		if next_unsigned_at > block_number {
+			return Err("Too early to send unsigned transaction")
+		}
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK);
 		{
 			let _guard = lock.lock();
@@ -1518,19 +1640,11 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let signer = Signer::<T, T::OffChainAuthId>::any_account();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
-
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let (_acc, res) = signer
-					.send_signed_transaction(|_account| Call::submit_public_key {
-						keys_and_signatures: agg_keys.clone(),
-					})
-					.ok_or("Failed to submit transaction")?;
+				let res = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+					Call::submit_public_key { keys_and_signatures: agg_keys }.into(),
+				)
+				.map_err(|_| "Failed to submit transaction");
 				match res {
 					Ok(_) => {
 						agg_key_ref.clear();
@@ -1554,6 +1668,10 @@ impl<T: Config> Pallet<T> {
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let next_unsigned_at = <NextUnsignedAt<T>>::get();
+		if next_unsigned_at > block_number {
+			return Err("Too early to send unsigned transaction")
+		}
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_PUBLIC_KEYS_LOCK);
 		{
 			let _guard = lock.lock();
@@ -1585,19 +1703,11 @@ impl<T: Config> Pallet<T> {
 				return Ok(())
 			}
 
-			let signer = Signer::<T, T::OffChainAuthId>::any_account();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
-
 			if let Ok(Some(agg_keys)) = agg_keys {
-				let (_acc, res) = signer
-					.send_signed_transaction(|_account| Call::submit_next_public_key {
-						keys_and_signatures: agg_keys.clone(),
-					})
-					.ok_or("Failed to submit transaction")?;
+				let res = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+					Call::submit_next_public_key { keys_and_signatures: agg_keys }.into(),
+				)
+				.map_err(|_| "Failed to submit transaction");
 
 				match res {
 					Ok(_) => {
@@ -1617,8 +1727,12 @@ impl<T: Config> Pallet<T> {
 	/// An offchain function that collects the next DKG public key
 	/// signature and submits it to the chain.
 	fn submit_public_key_signature_onchain(
-		_block_number: T::BlockNumber,
+		block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
+		let next_unsigned_at = <NextUnsignedAt<T>>::get();
+		if next_unsigned_at > block_number {
+			return Err("Too early to send unsigned transaction")
+		}
 		let mut lock = StorageLock::<Time>::new(OFFCHAIN_PUBLIC_KEY_SIG_LOCK);
 		{
 			let _guard = lock.lock();
@@ -1632,19 +1746,12 @@ impl<T: Config> Pallet<T> {
 
 			let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
 
-			let signer = Signer::<T, T::OffChainAuthId>::any_account();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
-
 			if let Ok(Some(refresh_proposal)) = refresh_proposal {
-				let (_acc, res) = signer
-					.send_signed_transaction(|_account| Call::submit_public_key_signature {
-						signature_proposal: refresh_proposal.clone(),
-					})
-					.ok_or("Failed to submit transaction")?;
+				let res = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+					Call::submit_public_key_signature { signature_proposal: refresh_proposal }
+						.into(),
+				)
+				.map_err(|_| "Failed to submit transaction");
 
 				match res {
 					Ok(_) => {
@@ -1664,8 +1771,12 @@ impl<T: Config> Pallet<T> {
 	/// An offchain function that collects the misbehaviour reports in
 	/// the offchain storage and submits them to the chain.
 	fn submit_misbehaviour_reports_onchain(
-		_block_number: T::BlockNumber,
+		block_number: T::BlockNumber,
 	) -> Result<(), &'static str> {
+		let next_unsigned_at = <NextUnsignedAt<T>>::get();
+		if next_unsigned_at > block_number {
+			return Err("Too early to send unsigned transaction")
+		}
 		let mut lock = StorageLock::<Time>::new(AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK);
 		{
 			let _guard = lock.lock();
@@ -1694,11 +1805,10 @@ impl<T: Config> Pallet<T> {
 					return Ok(())
 				}
 
-				let (_acc, res) = signer
-					.send_signed_transaction(|_account| Call::submit_misbehaviour_reports {
-						reports: reports.clone(),
-					})
-					.ok_or("Failed to submit transaction")?;
+				let res = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+					Call::submit_misbehaviour_reports { reports }.into(),
+				)
+				.map_err(|_| "Failed to submit transaction");
 
 				match res {
 					Ok(_) => {
