@@ -723,10 +723,9 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_public_key(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let authorities: Vec<T::DKGId> =
@@ -781,10 +780,9 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_next_public_key(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
 			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let next_authorities: Vec<T::DKGId> =
@@ -836,10 +834,9 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		pub fn submit_public_key_signature(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
 		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
 			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
 			ensure!(
 				Self::next_public_key_signature().is_none(),
@@ -925,10 +922,9 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		pub fn submit_misbehaviour_reports(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<T::DKGId>,
 		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
 			let offender = reports.offender.clone();
 			let misbehaviour_type = reports.misbehaviour_type;
 			let authorities = match misbehaviour_type {
