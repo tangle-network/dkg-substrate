@@ -16,13 +16,13 @@
 
 use super::*;
 
-use crate::{self as pallet_dkg_proposals};
+use crate as pallet_dkg_proposals;
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
 	PalletId,
 };
-use frame_system::{self as system};
+use frame_system as system;
 pub use pallet_balances;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{

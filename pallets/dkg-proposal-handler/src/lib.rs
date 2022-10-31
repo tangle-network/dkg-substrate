@@ -445,7 +445,12 @@ pub mod pallet {
 		/// By default unsigned transactions are disallowed, but implementing the validator
 		/// here we make sure that some particular calls (the ones produced by offchain worker)
 		/// are being whitelisted and marked as valid.
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+		fn validate_unsigned(source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			// we allow calls only from the local OCW engine.
+			match source {
+				TransactionSource::Local | TransactionSource::InBlock => {},
+				_ => return InvalidTransaction::Call.into(),
+			}
 			// Now let's check if the transaction has any chance to succeed.
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			let next_unsigned_at = <NextUnsignedAt<T>>::get();

@@ -723,9 +723,10 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_public_key(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
 			ensure!(!DKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let authorities: Vec<T::DKGId> =
@@ -780,9 +781,10 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_next_public_key(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
 			ensure!(!NextDKGPublicKey::<T>::exists(), Error::<T>::AlreadySubmittedPublicKey);
 
 			let next_authorities: Vec<T::DKGId> =
@@ -834,9 +836,10 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		pub fn submit_public_key_signature(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
 			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
 			ensure!(
 				Self::next_public_key_signature().is_none(),
@@ -922,9 +925,10 @@ pub mod pallet {
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		pub fn submit_misbehaviour_reports(
-			_origin: OriginFor<T>,
+			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<T::DKGId>,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
 			let offender = reports.offender.clone();
 			let misbehaviour_type = reports.misbehaviour_type;
 			let authorities = match misbehaviour_type {
@@ -1244,7 +1248,12 @@ pub mod pallet {
 		/// By default unsigned transactions are disallowed, but implementing the validator
 		/// here we make sure that some particular calls (the ones produced by offchain worker)
 		/// are being whitelisted and marked as valid.
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+		fn validate_unsigned(source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			// we allow calls only from the local OCW engine.
+			match source {
+				TransactionSource::Local | TransactionSource::InBlock => {},
+				_ => return InvalidTransaction::Call.into(),
+			}
 			// Now let's check if the transaction has any chance to succeed.
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			let next_unsigned_at = <NextUnsignedAt<T>>::get();
@@ -1374,6 +1383,7 @@ impl<T: Config> Pallet<T> {
 				.iter()
 				.map(|x| {
 					ecdsa::Public(to_slice_33(&x.encode()).unwrap_or_else(|| {
+						// FIXME: remove this panic, and return an error instead.
 						panic!("Failed to convert account id to ecdsa public key")
 					}))
 				})
