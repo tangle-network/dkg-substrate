@@ -777,7 +777,7 @@ construct_runtime!(
 		// DKG / offchain worker - the order and position of these pallet should not change
 		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>, ValidateUnsigned} = 10,
 		DKGProposals: pallet_dkg_proposals = 11,
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Storage, Call, Event<T>, Config<T>, ValidateUnsigned} = 12,
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Storage, Call, Event<T>, ValidateUnsigned} = 12,
 
 		// Monetary stuff
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
