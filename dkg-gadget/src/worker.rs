@@ -1120,8 +1120,8 @@ where
 				&self.backend,
 				&mut *lock,
 				false,
-				1,
-				100u32.into(),
+				self.rounds.session_id,
+				self.get_latest_block_number(),
 			);
 		}
 	}
