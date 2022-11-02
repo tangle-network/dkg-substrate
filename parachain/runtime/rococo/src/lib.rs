@@ -948,6 +948,10 @@ impl_runtime_apis! {
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
 		}
+
+		fn should_execute_emergency_keygen() -> bool {
+			DKG::should_execute_emergency_keygen()
+		}
 	}
 
 	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
