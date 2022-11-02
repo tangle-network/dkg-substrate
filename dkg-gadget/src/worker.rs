@@ -51,9 +51,16 @@ use crate::gossip_messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
 };
 
-use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
+use crate::{
+	gossip_engine::GossipEngineIface,
+	storage::{
+		clear::{is_offchain_storage_empty, listen_and_clear_offchain_storage},
+		public_keys::store_aggregated_public_keys,
+	},
+};
 
 use dkg_primitives::{
+	offchain::storage_keys::AGGREGATED_PUBLIC_KEYS,
 	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
@@ -958,6 +965,8 @@ where
 			if let Some(session_progress) = self.get_current_session_progress(header) {
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
 				if session_progress < SESSION_PROGRESS_THRESHOLD {
+					// execute a check for previous keys not posted onchain
+					self.ensure_generated_keys_are_posted_onchain(header);
 					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 					return
 				}
@@ -1090,6 +1099,30 @@ where
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
+		}
+	}
+
+	/// This function checks
+	/// 1. if the offchain storage of value X is empty, and
+	/// 2. if the corresponding value of X on is not on chain and
+	/// IF the condition is true this means that the offchain storage was cleared without the key
+	/// being written onchain. This function will write the key again to the offchain storage so
+	/// that its pickedup by the offchain workers and tried again.
+	pub fn ensure_generated_keys_are_posted_onchain(&self, latest_header: &B::Header) {
+		// nextPublicKey
+		if self.get_next_dkg_pub_key(latest_header).is_none() &&
+			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS)
+		{
+			let mut lock = self.aggregated_public_keys.write();
+			// push the value to offchain storage again so that it is picked up by the offchain
+			// workers
+			let _ = store_aggregated_public_keys::<B, C, BE>(
+				&self.backend,
+				&mut *lock,
+				false,
+				1,
+				100u32.into(),
+			);
 		}
 	}
 
