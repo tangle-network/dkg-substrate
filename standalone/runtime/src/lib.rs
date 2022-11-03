@@ -992,6 +992,10 @@ impl_runtime_apis! {
 	fn refresh_nonce() -> u32 {
 	  DKG::refresh_nonce()
 	}
+
+	fn should_execute_emergency_keygen() -> bool {
+		DKG::should_execute_emergency_keygen()
+	}
   }
 
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
