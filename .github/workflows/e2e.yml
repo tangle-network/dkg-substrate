@@ -93,11 +93,11 @@ jobs:
       - name: Populate fixtures
         run: dvc pull
 
-      - name: Install Packages
-        run: cd dkg-test-suite && yarn install --frozen-lockfile
-      
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler
+
+      - name: Install Packages
+        run: cd dkg-test-suite && yarn install --frozen-lockfile
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
