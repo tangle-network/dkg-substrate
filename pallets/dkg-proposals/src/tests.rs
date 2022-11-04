@@ -16,7 +16,7 @@
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, Origin,
+		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, RuntimeOrigin,
 		ProposalLifetime, RuntimeEvent, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C,
 		PROPOSER_D, PROPOSER_E, TEST_THRESHOLD,
 	},
@@ -114,13 +114,13 @@ fn setup_resources() {
 		let method = "Pallet.do_something".as_bytes().to_vec();
 		let method2 = "Pallet.do_somethingElse".as_bytes().to_vec();
 
-		assert_ok!(DKGProposals::set_resource(Origin::root(), id, method.clone()));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method.clone()));
 		assert_eq!(DKGProposals::resources(id), Some(method));
 
-		assert_ok!(DKGProposals::set_resource(Origin::root(), id, method2.clone()));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method2.clone()));
 		assert_eq!(DKGProposals::resources(id), Some(method2));
 
-		assert_ok!(DKGProposals::remove_resource(Origin::root(), id));
+		assert_ok!(DKGProposals::remove_resource(RuntimeOrigin::root(), id));
 		assert_eq!(DKGProposals::resources(id), None);
 	})
 }
@@ -130,14 +130,14 @@ fn whitelist_chain() {
 	new_test_ext().execute_with(|| {
 		assert!(!DKGProposals::chain_whitelisted(TypedChainId::Evm(0)));
 
-		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), TypedChainId::Evm(0)));
+		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), TypedChainId::Evm(0)));
 		let typed_chain_id = ChainIdentifier::get();
 		assert_noop!(
-			DKGProposals::whitelist_chain(Origin::root(), typed_chain_id),
+			DKGProposals::whitelist_chain(RuntimeOrigin::root(), typed_chain_id),
 			Error::<Test>::InvalidChainId
 		);
 
-		assert_events(vec![Event::DKGProposals(pallet_dkg_proposals::Event::ChainWhitelisted {
+		assert_events(vec![RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ChainWhitelisted {
 			chain_id: TypedChainId::Evm(0),
 		})]);
 	})
@@ -148,17 +148,17 @@ fn set_get_threshold() {
 	new_test_ext().execute_with(|| {
 		assert_eq!(ProposerThreshold::<Test>::get(), 1);
 
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(ProposerThreshold::<Test>::get(), TEST_THRESHOLD);
 
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), 5));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), 5));
 		assert_eq!(ProposerThreshold::<Test>::get(), 5);
 
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: TEST_THRESHOLD,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: 5,
 			}),
 		]);
@@ -168,21 +168,21 @@ fn set_get_threshold() {
 #[test]
 fn add_remove_relayer() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD,));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD,));
 		assert_eq!(DKGProposals::proposer_count(), 0);
 
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_A),
 			mock_ecdsa_key(PROPOSER_A)
 		));
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_B),
 			mock_ecdsa_key(PROPOSER_B)
 		));
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_C),
 			mock_ecdsa_key(PROPOSER_C)
 		));
@@ -191,7 +191,7 @@ fn add_remove_relayer() {
 		// Already exists
 		assert_noop!(
 			DKGProposals::add_proposer(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				mock_pub_key(PROPOSER_A),
 				mock_ecdsa_key(PROPOSER_A)
 			),
@@ -199,25 +199,25 @@ fn add_remove_relayer() {
 		);
 
 		// Confirm removal
-		assert_ok!(DKGProposals::remove_proposer(Origin::root(), mock_pub_key(PROPOSER_B)));
+		assert_ok!(DKGProposals::remove_proposer(RuntimeOrigin::root(), mock_pub_key(PROPOSER_B)));
 		assert_eq!(DKGProposals::proposer_count(), 2);
 		assert_noop!(
-			DKGProposals::remove_proposer(Origin::root(), mock_pub_key(PROPOSER_B)),
+			DKGProposals::remove_proposer(RuntimeOrigin::root(), mock_pub_key(PROPOSER_B)),
 			Error::<Test>::ProposerInvalid
 		);
 		assert_eq!(DKGProposals::proposer_count(), 2);
 
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
 				proposer_id: mock_pub_key(PROPOSER_A),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
 				proposer_id: mock_pub_key(PROPOSER_B),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
 				proposer_id: mock_pub_key(PROPOSER_C),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerRemoved {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerRemoved {
 				proposer_id: mock_pub_key(PROPOSER_B),
 			}),
 		]);
@@ -260,7 +260,7 @@ fn create_successful_proposal() {
 		});
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -278,7 +278,7 @@ fn create_successful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_B)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_B)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -295,7 +295,7 @@ fn create_successful_proposal() {
 
 		// Third relayer votes in favour
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_C)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_C)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -311,31 +311,31 @@ fn create_successful_proposal() {
 		assert_eq!(prop, expected);
 
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_A),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_B),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_C),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 			}),
-			Event::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
+			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
 				data: proposal,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 			}),
@@ -357,7 +357,7 @@ fn create_unsucessful_proposal() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -374,7 +374,7 @@ fn create_unsucessful_proposal() {
 
 		// Second relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_B)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_B)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -391,7 +391,7 @@ fn create_unsucessful_proposal() {
 
 		// Third relayer votes against
 		assert_ok!(DKGProposals::reject_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_C)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_C)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -408,22 +408,22 @@ fn create_unsucessful_proposal() {
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_A),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_B),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_C),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 			}),
@@ -445,7 +445,7 @@ fn execute_after_threshold_change() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -461,11 +461,11 @@ fn execute_after_threshold_change() {
 		assert_eq!(prop, expected);
 
 		// Change threshold
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), 1));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), 1));
 
 		// Attempt to execute
 		assert_ok!(DKGProposals::eval_vote_state(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			proposal.clone(),
@@ -482,24 +482,24 @@ fn execute_after_threshold_change() {
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_events(vec![
-			Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_A),
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: 1,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 			}),
-			Event::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
+			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
 				data: proposal,
 			}),
-			Event::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
+			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 			}),
@@ -521,7 +521,7 @@ fn proposal_expires() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			r_id,
@@ -551,7 +551,7 @@ fn proposal_expires() {
 		// Attempt to submit a vote should fail
 		assert_noop!(
 			DKGProposals::reject_proposal(
-				Origin::signed(mock_pub_key(PROPOSER_B)),
+				RuntimeOrigin::signed(mock_pub_key(PROPOSER_B)),
 				prop_id,
 				typed_chain_id,
 				r_id,
@@ -573,7 +573,7 @@ fn proposal_expires() {
 		// eval_vote_state should have no effect
 		assert_noop!(
 			DKGProposals::eval_vote_state(
-				Origin::signed(mock_pub_key(PROPOSER_C)),
+				RuntimeOrigin::signed(mock_pub_key(PROPOSER_C)),
 				prop_id,
 				typed_chain_id,
 				proposal.clone(),
@@ -589,7 +589,7 @@ fn proposal_expires() {
 		};
 		assert_eq!(prop, expected);
 
-		assert_events(vec![Event::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
+		assert_events(vec![RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 			chain_id: typed_chain_id,
 			proposal_nonce: prop_id,
 			who: mock_pub_key(PROPOSER_A),
@@ -616,13 +616,13 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		// Leave proposer set before session change
-		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		// Advance a session
 		roll_to(10);
 		// Proposer set remains the same size
 		assert_eq!(DKGProposals::proposer_count(), 3);
-		assert_has_event(Event::Session(pallet_session::Event::NewSession { session_index: 1 }));
-		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
+		assert_has_event(RuntimeEvent::Session(pallet_session::Event::NewSession { session_index: 1 }));
+		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -637,9 +637,9 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 #[test]
 fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
-		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
-		assert_has_event(Event::DKGProposals(crate::Event::AuthorityProposersReset {
+		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -658,13 +658,13 @@ fn only_current_authorities_should_make_successful_proposals() {
 	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
 
 	ExtBuilder::with_genesis_collators().execute_with(|| {
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
 
 		// Whitelist chain
-		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), typed_chain_id));
+		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), typed_chain_id));
 		// Set and check resource ID mapped to some junk data
-		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, b"System.remark".to_vec()));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), r_id, b"System.remark".to_vec()));
 		assert!(DKGProposals::resource_exists(r_id), "{}", true);
 
 		let prop_id = ProposalNonce::from(1u32);
@@ -675,7 +675,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(mock_pub_key(NOT_PROPOSER)),
+				RuntimeOrigin::signed(mock_pub_key(NOT_PROPOSER)),
 				prop_id,
 				typed_chain_id,
 				r_id,
@@ -686,18 +686,18 @@ fn only_current_authorities_should_make_successful_proposals() {
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
-			Origin::signed(mock_pub_key(PROPOSER_A)),
+			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
 			prop_id,
 			typed_chain_id,
 			r_id,
 			proposal.clone(),
 		));
 
-		CollatorSelection::leave_intent(Origin::signed(mock_pub_key(PROPOSER_D))).unwrap();
+		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		// Create proposal (& vote)
 		assert_err!(
 			DKGProposals::reject_proposal(
-				Origin::signed(mock_pub_key(PROPOSER_E)),
+				RuntimeOrigin::signed(mock_pub_key(PROPOSER_E)),
 				prop_id,
 				typed_chain_id,
 				r_id,

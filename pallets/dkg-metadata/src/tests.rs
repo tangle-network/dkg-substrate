@@ -111,7 +111,7 @@ fn trigger_emergency_keygen_works() {
 		System::set_block_number(1);
 		DKGMetadata::on_initialize(1);
 		assert!(!DKGMetadata::should_execute_emergency_keygen());
-		assert_ok!(DKGMetadata::trigger_emergency_keygen(Origin::root()));
+		assert_ok!(DKGMetadata::trigger_emergency_keygen(RuntimeOrigin::root()));
 		assert!(DKGMetadata::should_execute_emergency_keygen());
 		System::set_block_number(2);
 		DKGMetadata::on_initialize(2);

@@ -106,7 +106,7 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -168,7 +168,7 @@ fn store_signed_proposal_offchain() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -196,7 +196,7 @@ fn submit_signed_proposal_onchain_success() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -226,7 +226,7 @@ fn submit_signed_proposal_success() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -243,7 +243,7 @@ fn submit_signed_proposal_success() {
 		let signed_proposal = mock_signed_proposal(tx_v_2);
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal]
 		));
 
@@ -276,7 +276,7 @@ fn submit_signed_proposal_already_exists() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -293,7 +293,7 @@ fn submit_signed_proposal_already_exists() {
 		let signed_proposal = mock_signed_proposal(tx_v_2.clone());
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal.clone()]
 		));
 
@@ -319,7 +319,7 @@ fn submit_signed_proposal_already_exists() {
 
 		// Second submission
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -334,7 +334,7 @@ fn submit_signed_proposal_already_exists() {
 		);
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal]
 		));
 
@@ -365,7 +365,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
 		));
 
@@ -391,7 +391,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		// This is because the signature is invalid, and we are batch processing.
 		// we could check for the RuntimeEvent that is emitted.
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			Origin::signed(sr25519::Public::from_raw([1; 32])),
+			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal]
 		));
 
@@ -485,7 +485,7 @@ fn force_submit_should_fail_with_invalid_proposal_type() {
 	execute_test_with(|| {
 		assert_err!(
 			DKGProposalHandler::force_submit_unsigned_proposal(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] }
 			),
 			crate::Error::<Test>::ProposalFormatInvalid
@@ -498,7 +498,7 @@ fn force_submit_should_work_with_valid_proposals() {
 	execute_test_with(|| {
 		// EVM Tests
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
 				TypedChainId::Evm(0)
@@ -514,7 +514,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
 				TypedChainId::Evm(0)
@@ -530,7 +530,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<2>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
 				TypedChainId::Evm(0)
@@ -546,7 +546,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<72>(
 				Proposal::Unsigned { kind: ProposalKind::RescueTokens, data: vec![] },
 				TypedChainId::Evm(0)
@@ -562,7 +562,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<52>(
 				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
 				TypedChainId::Evm(0)
@@ -579,7 +579,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<32>(
 				Proposal::Unsigned { kind: ProposalKind::MaxDepositLimitUpdate, data: vec![] },
 				TypedChainId::Evm(0)
@@ -596,7 +596,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<32>(
 				Proposal::Unsigned { kind: ProposalKind::MinWithdrawalLimitUpdate, data: vec![] },
 				TypedChainId::Evm(0)
@@ -613,7 +613,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::SetTreasuryHandler, data: vec![] },
 				TypedChainId::Evm(0)
@@ -630,7 +630,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::SetVerifier, data: vec![] },
 				TypedChainId::Evm(0)
@@ -647,7 +647,7 @@ fn force_submit_should_work_with_valid_proposals() {
 		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::FeeRecipientUpdate, data: vec![] },
 				TypedChainId::Evm(0)
@@ -665,7 +665,7 @@ fn force_submit_should_work_with_valid_proposals() {
 
 		// Substrate Tests
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -681,7 +681,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -697,7 +697,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<1>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -713,7 +713,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -729,7 +729,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -745,7 +745,7 @@ fn force_submit_should_work_with_valid_proposals() {
 			true
 		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<72>(
 				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
 				TypedChainId::Substrate(0)
@@ -768,7 +768,7 @@ fn expired_unsigned_proposals_are_removed() {
 	execute_test_with(|| {
 		// Submit one unsigned proposal
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
 				TypedChainId::Evm(0)
@@ -778,7 +778,7 @@ fn expired_unsigned_proposals_are_removed() {
 		// lets time travel to 5 blocks later and submit another proposal
 		run_n_blocks(5);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			make_proposal::<1>(
 				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
 				TypedChainId::Substrate(0)
