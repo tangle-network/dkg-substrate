@@ -81,7 +81,7 @@ pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
 	}
 }
 
-/// cleans offchain storage at interval
+/// Checks if the Off-chain storage stored at `storage_key` is empty or not.
 pub(crate) fn is_offchain_storage_empty<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	storage_key: &[u8],
@@ -98,5 +98,5 @@ where
 		return offchain.unwrap().get(STORAGE_PREFIX, storage_key).is_some()
 	}
 
-	return true
+	true
 }
