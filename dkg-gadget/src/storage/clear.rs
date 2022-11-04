@@ -80,3 +80,23 @@ pub(crate) fn listen_and_clear_offchain_storage<B, BE, C, GE>(
 		}
 	}
 }
+
+/// Checks if the Off-chain storage stored at `storage_key` is empty or not.
+pub(crate) fn is_offchain_storage_empty<B, BE, C, GE>(
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
+	storage_key: &[u8],
+) -> bool
+where
+	B: Block,
+	GE: GossipEngineIface + 'static,
+	BE: Backend<B>,
+	C: Client<B, BE>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+{
+	let offchain = dkg_worker.backend.offchain_storage();
+	if offchain.is_some() {
+		return offchain.unwrap().get(STORAGE_PREFIX, storage_key).is_some()
+	}
+
+	true
+}
