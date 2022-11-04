@@ -69,7 +69,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u128;
 	type DustRemoval = ();
-	type Event = RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -83,7 +83,7 @@ parameter_types! {
 }
 
 impl pallet_bridge_registry::Config for Test {
-	type Event = RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type BridgeIndex = u32;
 	type MaxAdditionalFields = MaxAdditionalFields;
 	type MaxResources = MaxResources;
