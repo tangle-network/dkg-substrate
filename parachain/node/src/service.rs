@@ -37,12 +37,10 @@ use cumulus_relay_chain_interface::{RelayChainError, RelayChainInterface, RelayC
 use cumulus_relay_chain_rpc_interface::{create_client_and_start_worker, RelayChainRpcInterface};
 
 // Substrate Imports
-use sc_client_api::ExecutorProvider;
+
 use sc_executor::NativeElseWasmExecutor;
 use sc_network::{NetworkBlock, NetworkService};
-use sc_service::{
-	config::BasePath, Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager,
-};
+use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sp_api::ConstructRuntimeApi;
 use sp_keystore::SyncCryptoStorePtr;
@@ -342,10 +340,7 @@ where
 		})?;
 
 	let base_path = if parachain_config.base_path.is_some() {
-		match parachain_config.base_path.as_ref() {
-			Some(path) => Some(PathBuf::from(path.path())),
-			_ => None,
-		}
+		parachain_config.base_path.as_ref().map(|path| PathBuf::from(path.path()))
 	} else {
 		None
 	};
@@ -510,7 +505,7 @@ pub fn parachain_build_import_queue(
 		_,
 	>(cumulus_client_consensus_aura::ImportQueueParams {
 		block_import: client.clone(),
-		client: client.clone(),
+		client,
 		create_inherent_data_providers: move |_, _| async move {
 			let time = sp_timestamp::InherentDataProvider::from_system_time();
 

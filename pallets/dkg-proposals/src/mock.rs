@@ -111,7 +111,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u64;
 	type DustRemoval = ();
-	type RuntimeEvent =RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -203,7 +203,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type RuntimeEvent =RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -223,7 +223,7 @@ parameter_types! {
 }
 
 impl pallet_collator_selection::Config for Test {
-	type RuntimeEvent =RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type PotId = PotId;
@@ -239,7 +239,7 @@ impl pallet_collator_selection::Config for Test {
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
-	type RuntimeEvent =RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
@@ -252,7 +252,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type RuntimeEvent =RuntimeEvent;
+	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
@@ -382,8 +382,9 @@ impl ExtBuilder {
 
 		let mut ext = sp_io::TestExternalities::new(t);
 		ext.execute_with(|| {
-			let _ =
-				CollatorSelection::register_as_candidate(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D)));
+			let _ = CollatorSelection::register_as_candidate(RuntimeOrigin::signed(mock_pub_key(
+				PROPOSER_D,
+			)));
 			System::set_block_number(1);
 		});
 		ext
@@ -441,10 +442,8 @@ pub fn manually_set_proposer_count(count: u32) -> sp_io::TestExternalities {
 // provided. They must include the most recent RuntimeEvent, but do not have to include
 // every past RuntimeEvent.
 pub fn assert_events(mut expected: Vec<RuntimeEvent>) {
-	let mut actual: Vec<RuntimeEvent> = system::Pallet::<Test>::events()
-		.iter()
-		.map(|e| e.event.clone())
-		.collect();
+	let mut actual: Vec<RuntimeEvent> =
+		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
 
 	expected.reverse();
 	for evt in expected {

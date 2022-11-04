@@ -16,12 +16,12 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
-use sc_client_api::{BlockBackend, ExecutorProvider};
+use sc_client_api::BlockBackend;
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 pub use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
-use sc_service::{error::Error as ServiceError, BasePath, Configuration, TaskManager};
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -242,10 +242,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	}
 
 	let base_path = if config.base_path.is_some() {
-		match config.base_path.as_ref() {
-			Some(path) => Some(PathBuf::from(path.path())),
-			_ => None,
-		}
+		config.base_path.as_ref().map(|path| PathBuf::from(path.path()))
 	} else {
 		None
 	};

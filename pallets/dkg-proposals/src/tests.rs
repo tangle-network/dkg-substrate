@@ -16,9 +16,9 @@
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, RuntimeOrigin,
-		ProposalLifetime, RuntimeEvent, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C,
-		PROPOSER_D, PROPOSER_E, TEST_THRESHOLD,
+		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, ProposalLifetime,
+		RuntimeEvent, RuntimeOrigin, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
+		PROPOSER_E, TEST_THRESHOLD,
 	},
 	*,
 };
@@ -137,9 +137,9 @@ fn whitelist_chain() {
 			Error::<Test>::InvalidChainId
 		);
 
-		assert_events(vec![RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ChainWhitelisted {
-			chain_id: TypedChainId::Evm(0),
-		})]);
+		assert_events(vec![RuntimeEvent::DKGProposals(
+			pallet_dkg_proposals::Event::ChainWhitelisted { chain_id: TypedChainId::Evm(0) },
+		)]);
 	})
 }
 
@@ -621,7 +621,9 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		roll_to(10);
 		// Proposer set remains the same size
 		assert_eq!(DKGProposals::proposer_count(), 3);
-		assert_has_event(RuntimeEvent::Session(pallet_session::Event::NewSession { session_index: 1 }));
+		assert_has_event(RuntimeEvent::Session(pallet_session::Event::NewSession {
+			session_index: 1,
+		}));
 		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::AuthorityProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
@@ -664,7 +666,11 @@ fn only_current_authorities_should_make_successful_proposals() {
 		// Whitelist chain
 		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), typed_chain_id));
 		// Set and check resource ID mapped to some junk data
-		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), r_id, b"System.remark".to_vec()));
+		assert_ok!(DKGProposals::set_resource(
+			RuntimeOrigin::root(),
+			r_id,
+			b"System.remark".to_vec()
+		));
 		assert!(DKGProposals::resource_exists(r_id), "{}", true);
 
 		let prop_id = ProposalNonce::from(1u32);
