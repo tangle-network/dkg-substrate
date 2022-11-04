@@ -447,8 +447,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 		// second task, handles the incoming messages/events from the network stream.
 		let network_events_task = tokio::spawn(async move {
-			while let Some(Event) = event_stream.next().await {
-				self.handle_network_event(Event).await;
+			while let Some(event) = event_stream.next().await {
+				self.handle_network_event(event).await;
 			}
 		});
 
@@ -477,8 +477,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		log::error!(target: "dkg_gadget::gossip_engine::network", "The DKG Gossip Handler has finished!!");
 	}
 
-	async fn handle_network_event(&self, Event: Event) {
-		match Event {
+	async fn handle_network_event(&self, event: Event) {
+		match event {
 			Event::Dht(_) => {},
 			Event::SyncConnected { remote } => {
 				let addr = iter::once(multiaddr::Protocol::P2p(remote.into()))

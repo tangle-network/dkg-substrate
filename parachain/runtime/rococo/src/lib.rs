@@ -52,9 +52,11 @@ pub type AccountIndex = u32;
 // A few exports that help ease life for downstream crates.
 pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 pub use frame_support::{
-	construct_runtime, match_types, parameter_types,
+	construct_runtime,
+	dispatch::DispatchClass,
+	match_types, parameter_types,
 	traits::{Currency, EitherOfDiverse, EqualPrivilegeOnly, Everything, IsInVec, Randomness},
-	weights::{constants::WEIGHT_PER_SECOND, DispatchClass, IdentityFee, Weight},
+	weights::{constants::WEIGHT_PER_SECOND, IdentityFee, Weight},
 	PalletId, StorageValue,
 };
 #[cfg(any(feature = "std", test))]
