@@ -58,12 +58,12 @@ frame_support::construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Session: pallet_session,
 		DKG: pallet_dkg_metadata,
-		Balances: pallet_balances::{Pallet, Call, Storage, RuntimeEvent<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, RuntimeEvent<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, RuntimeEvent<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
@@ -163,7 +163,7 @@ where
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
@@ -176,7 +176,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type Proposal = Vec<u8>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
@@ -217,7 +217,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -230,7 +230,7 @@ impl pallet_session::Config for Test {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = ();
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;

@@ -10,7 +10,7 @@ on:
 
 jobs:
   docs:
-    if: github.event_name == 'push' && github.RuntimeEvent.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.event.ref == 'refs/heads/master'
     name: docs
     runs-on: ubuntu-20.04
     steps:

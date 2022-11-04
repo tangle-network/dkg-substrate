@@ -23,9 +23,9 @@ frame_support::construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
-		BridgeRegistry: pallet_bridge_registry::{Pallet, Call, Storage, RuntimeEvent<T>},
-		Balances: pallet_balances::{Pallet, Call, Storage, RuntimeEvent<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		BridgeRegistry: pallet_bridge_registry::{Pallet, Call, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -69,7 +69,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u128;
 	type DustRemoval = ();
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -83,7 +83,7 @@ parameter_types! {
 }
 
 impl pallet_bridge_registry::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type BridgeIndex = u32;
 	type MaxAdditionalFields = MaxAdditionalFields;
 	type MaxResources = MaxResources;

@@ -54,9 +54,9 @@ construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, RuntimeEvent<T>, Storage},
-		Session: pallet_session::{Pallet, Call, Storage, RuntimeEvent, Config<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
+		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 	}
 );
 
@@ -125,7 +125,7 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = ();
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
@@ -151,7 +151,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;

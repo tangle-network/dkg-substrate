@@ -53,15 +53,15 @@ frame_support::construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Balances: pallet_balances::{Pallet, Call, Storage, RuntimeEvent<T>},
-		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, RuntimeEvent<T>, Config<T>},
-		Session: pallet_session::{Pallet, Call, Storage, RuntimeEvent, Config<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, RuntimeEvent<T>, Storage},
+		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
+		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>},
+		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, RuntimeEvent<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, RuntimeEvent<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -111,7 +111,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u64;
 	type DustRemoval = ();
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -203,7 +203,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -223,7 +223,7 @@ parameter_types! {
 }
 
 impl pallet_collator_selection::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type Currency = Balances;
 	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type PotId = PotId;
@@ -239,7 +239,7 @@ impl pallet_collator_selection::Config for Test {
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
@@ -252,7 +252,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type RuntimeEvent = RuntimeEvent;
+	type Event = RuntimeEvent;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
