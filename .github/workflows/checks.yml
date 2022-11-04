@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
-      - run: apt-get install protobuf-compiler
+      - run: sudo apt-get install protobuf-compiler
       - run: cargo check --workspace --verbose --no-default-features
   
   # ensures proper formatting and clippy lint
@@ -62,6 +62,6 @@ jobs:
 
       - name: Run Linters
         run: |
-          apt-get install protobuf-compiler
+          sudo apt-get install protobuf-compiler
           cargo +nightly fmt --all -- --check
           cargo clippy -Zunstable-options -- -D warnings

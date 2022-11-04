@@ -48,7 +48,7 @@ jobs:
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Install Protobuf
-        run: apt-get install protobuf-compiler
+        run: sudo apt-get install protobuf-compiler
 
       - name: Run tests
         run: cargo nextest run
