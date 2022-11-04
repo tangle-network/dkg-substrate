@@ -95,6 +95,9 @@ jobs:
 
       - name: Install Packages
         run: cd dkg-test-suite && yarn install --frozen-lockfile
+      
+      - name: Install Protobuf
+        run: apt-get install protobuf-compiler
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
