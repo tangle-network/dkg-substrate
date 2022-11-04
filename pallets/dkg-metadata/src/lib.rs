@@ -320,6 +320,12 @@ pub mod pallet {
 				}
 			}
 
+			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
+			// this is done to ensure that the flag is reset and only read once per DKG
+			// `on_finality_notification` call.
+			if ShouldExecuteEmergencyKeygen::<T>::get() {
+				ShouldExecuteEmergencyKeygen::<T>::put(false);
+			}
 			Weight::from_ref_time(0)
 		}
 	}
@@ -355,6 +361,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn should_manual_refresh)]
 	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	/// Should we execute emergency keygen protocol.
+	#[pallet::storage]
+	#[pallet::getter(fn should_execute_emergency_keygen)]
+	pub type ShouldExecuteEmergencyKeygen<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -592,6 +603,8 @@ pub mod pallet {
 		NextKeygenThresholdUpdated { next_keygen_threshold: u16 },
 		/// NextSignatureThreshold updated
 		NextSignatureThresholdUpdated { next_signature_threshold: u16 },
+		/// An Emergency Keygen Protocol was triggered.
+		EmergencyKeygenTriggered,
 	}
 
 	#[cfg(feature = "std")]
@@ -1235,6 +1248,21 @@ pub mod pallet {
 				}
 			}
 
+			Ok(().into())
+		}
+
+		/// Triggers an Emergency Keygen Porotocol.
+		///
+		/// The keygen protocol will then be executed and the result will be stored in the off chain
+		/// storage, which will be picked up by the on chain worker and stored on chain.
+		#[pallet::weight(0)]
+		#[transactional]
+		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			// emit `EmergencyKeygenTriggered` event so that we can see it on monitoring.
+			Self::deposit_event(Event::EmergencyKeygenTriggered);
+			// trigger the keygen protocol.
+			<ShouldExecuteEmergencyKeygen<T>>::put(true);
 			Ok(().into())
 		}
 	}

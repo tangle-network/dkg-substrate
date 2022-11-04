@@ -857,6 +857,12 @@ where
 		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
+		// Check if we should execute emergency Keygen Protocol.
+		if self.should_execute_emergency_keygen(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Should execute emergency keygen");
+			self.handle_emergency_keygen(header);
+			return
+		}
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
@@ -1127,6 +1133,14 @@ where
 				session_id,
 				self.get_latest_block_number(),
 			);
+		}
+	}
+
+	
+	pub fn handle_emergency_keygen(&self, header: &B::Header) {
+		// Start the queued DKG setup for the new queued authorities
+		if let Some((_active, queued)) = self.validator_set(header) {
+			self.handle_queued_dkg_setup(header, queued);
 		}
 	}
 
@@ -1525,6 +1539,15 @@ where
 			.filter(|(_, key)| jailed_signers.contains(key))
 			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
 			.collect())
+	}
+
+	fn should_execute_emergency_keygen(&self, header: &B::Header) -> bool {
+		// query runtime api to check if we should execute emergency keygen.
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		self.client
+			.runtime_api()
+			.should_execute_emergency_keygen(&at)
+			.unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block
