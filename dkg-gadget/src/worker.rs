@@ -627,7 +627,6 @@ where
 	}
 
 	/// Get the next DKG public key
-	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
@@ -1136,7 +1135,6 @@ where
 		}
 	}
 
-	
 	pub fn handle_emergency_keygen(&self, header: &B::Header) {
 		// Start the queued DKG setup for the new queued authorities
 		if let Some((_active, queued)) = self.validator_set(header) {
