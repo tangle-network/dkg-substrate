@@ -966,7 +966,7 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
 				if session_progress < SESSION_PROGRESS_THRESHOLD {
 					// execute a check for previous keys not posted onchain
-					self.ensure_generated_keys_are_posted_onchain(header);
+					self.ensure_generated_keys_are_posted_onchain(header, queued.id);
 					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 					return
 				}
@@ -1108,7 +1108,11 @@ where
 	/// IF the condition is true this means that the offchain storage was cleared without the key
 	/// being written onchain. This function will write the key again to the offchain storage so
 	/// that its pickedup by the offchain workers and tried again.
-	pub fn ensure_generated_keys_are_posted_onchain(&self, latest_header: &B::Header) {
+	pub fn ensure_generated_keys_are_posted_onchain(
+		&self,
+		latest_header: &B::Header,
+		session_id: SessionId,
+	) {
 		// nextPublicKey
 		if self.get_next_dkg_pub_key(latest_header).is_none() &&
 			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS)
@@ -1120,7 +1124,7 @@ where
 				&self.backend,
 				&mut *lock,
 				false,
-				self.rounds.session_id,
+				session_id,
 				self.get_latest_block_number(),
 			);
 		}
