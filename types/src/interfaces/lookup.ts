@@ -54,15 +54,15 @@ export default {
     }
   },
   /**
-   * Lookup16: frame_system::EventRecord<dkg_standalone_runtime::Event, primitive_types::H256>
+   * Lookup16: frame_system::EventRecord<dkg_standalone_runtime::RuntimeEvent, primitive_types::H256>
    **/
   FrameSystemEventRecord: {
     phase: 'FrameSystemPhase',
-    event: 'Event',
+    RuntimeEvent: 'RuntimeEvent',
     topics: 'Vec<H256>'
   },
   /**
-   * Lookup18: frame_system::pallet::Event<T>
+   * Lookup18: frame_system::pallet::RuntimeEvent<T>
    **/
   FrameSystemEvent: {
     _enum: {
@@ -152,7 +152,7 @@ export default {
     _enum: ['LimitReached', 'NoLayer']
   },
   /**
-   * Lookup27: pallet_indices::pallet::Event<T>
+   * Lookup27: pallet_indices::pallet::RuntimeEvent<T>
    **/
   PalletIndicesEvent: {
     _enum: {
@@ -170,7 +170,7 @@ export default {
     }
   },
   /**
-   * Lookup28: pallet_grandpa::pallet::Event
+   * Lookup28: pallet_grandpa::pallet::RuntimeEvent
    **/
   PalletGrandpaEvent: {
     _enum: {
@@ -190,7 +190,7 @@ export default {
    **/
   SpCoreEd25519Public: '[u8;32]',
   /**
-   * Lookup33: pallet_balances::pallet::Event<T, I>
+   * Lookup33: pallet_balances::pallet::RuntimeEvent<T, I>
    **/
   PalletBalancesEvent: {
     _enum: {
@@ -247,7 +247,7 @@ export default {
     _enum: ['Free', 'Reserved']
   },
   /**
-   * Lookup35: pallet_dkg_metadata::pallet::Event<T>
+   * Lookup35: pallet_dkg_metadata::pallet::RuntimeEvent<T>
    **/
   PalletDkgMetadataEvent: {
     _enum: {
@@ -303,7 +303,7 @@ export default {
    **/
   SpCoreEcdsaPublic: '[u8;33]',
   /**
-   * Lookup42: pallet_dkg_proposals::pallet::Event<T>
+   * Lookup42: pallet_dkg_proposals::pallet::RuntimeEvent<T>
    **/
   PalletDkgProposalsEvent: {
     _enum: {
@@ -367,7 +367,7 @@ export default {
     }
   },
   /**
-   * Lookup46: pallet_dkg_proposal_handler::pallet::Event<T>
+   * Lookup46: pallet_dkg_proposal_handler::pallet::RuntimeEvent<T>
    **/
   PalletDkgProposalHandlerEvent: {
     _enum: {
@@ -424,7 +424,7 @@ export default {
     }
   },
   /**
-   * Lookup50: pallet_transaction_payment::pallet::Event<T>
+   * Lookup50: pallet_transaction_payment::pallet::RuntimeEvent<T>
    **/
   PalletTransactionPaymentEvent: {
     _enum: {
@@ -436,7 +436,7 @@ export default {
     }
   },
   /**
-   * Lookup51: pallet_sudo::pallet::Event<T>
+   * Lookup51: pallet_sudo::pallet::RuntimeEvent<T>
    **/
   PalletSudoEvent: {
     _enum: {
@@ -452,7 +452,7 @@ export default {
     }
   },
   /**
-   * Lookup55: pallet_election_provider_multi_phase::pallet::Event<T>
+   * Lookup55: pallet_election_provider_multi_phase::pallet::RuntimeEvent<T>
    **/
   PalletElectionProviderMultiPhaseEvent: {
     _enum: {
@@ -486,7 +486,7 @@ export default {
     _enum: ['OnChain', 'Signed', 'Unsigned', 'Fallback', 'Emergency']
   },
   /**
-   * Lookup59: pallet_bags_list::pallet::Event<T, I>
+   * Lookup59: pallet_bags_list::pallet::RuntimeEvent<T, I>
    **/
   PalletBagsListEvent: {
     _enum: {
@@ -502,7 +502,7 @@ export default {
     }
   },
   /**
-   * Lookup60: pallet_nomination_pools::pallet::Event<T>
+   * Lookup60: pallet_nomination_pools::pallet::RuntimeEvent<T>
    **/
   PalletNominationPoolsEvent: {
     _enum: {
@@ -568,7 +568,7 @@ export default {
     _enum: ['Open', 'Blocked', 'Destroying']
   },
   /**
-   * Lookup62: pallet_staking::pallet::pallet::Event<T>
+   * Lookup62: pallet_staking::pallet::pallet::RuntimeEvent<T>
    **/
   PalletStakingPalletEvent: {
     _enum: {
@@ -595,7 +595,7 @@ export default {
     blocked: 'bool'
   },
   /**
-   * Lookup66: pallet_session::pallet::Event
+   * Lookup66: pallet_session::pallet::RuntimeEvent
    **/
   PalletSessionEvent: {
     _enum: {
@@ -605,7 +605,7 @@ export default {
     }
   },
   /**
-   * Lookup67: pallet_bridge_registry::pallet::Event<T, I>
+   * Lookup67: pallet_bridge_registry::pallet::RuntimeEvent<T, I>
    **/
   PalletBridgeRegistryEvent: 'Null',
   /**

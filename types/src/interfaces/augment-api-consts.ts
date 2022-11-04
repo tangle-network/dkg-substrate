@@ -58,7 +58,7 @@ declare module '@polkadot/api-base/types/consts' {
        * 
        * # Migration
        * 
-       * In the event that this list ever changes, a copy of the old bags list must be retained.
+       * In the RuntimeEvent that this list ever changes, a copy of the old bags list must be retained.
        * With that `List::migrate` can be called, which will perform the appropriate migration.
        **/
       bagThresholds: Vec<u64> & AugmentedConst<ApiType>;
@@ -251,7 +251,7 @@ declare module '@polkadot/api-base/types/consts' {
       /**
        * The maximum pool points-to-balance ratio that an `open` pool can have.
        * 
-       * This is important in the event slashing takes place and the pool's points-to-balance
+       * This is important in the RuntimeEvent slashing takes place and the pool's points-to-balance
        * ratio becomes disproportional.
        * 
        * Moreover, this relates to the `RewardCounter` type as well, as the arithmetic operations

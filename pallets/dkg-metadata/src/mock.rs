@@ -54,9 +54,9 @@ construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
-		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
+		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, RuntimeEvent<T>, Storage},
+		Session: pallet_session::{Pallet, Call, Storage, RuntimeEvent, Config<T>},
 	}
 );
 
@@ -72,16 +72,16 @@ impl frame_system::Config for Test {
 	type BlockWeights = ();
 	type BlockLength = ();
 	type DbWeight = ();
-	type Origin = Origin;
+	type RuntimeOrigin = RuntimeOrigin;
 	type Index = u64;
 	type BlockNumber = u64;
 	type Hash = H256;
-	type Call = Call;
+	type RuntimeCall = RuntimeCall;
 	type Hashing = BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
@@ -125,7 +125,7 @@ where
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = ();
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
@@ -151,7 +151,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;

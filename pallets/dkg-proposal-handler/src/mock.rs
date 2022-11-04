@@ -58,12 +58,12 @@ frame_support::construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		System: frame_system::{Pallet, Call, Config, Storage, RuntimeEvent<T>},
 		Session: pallet_session,
 		DKG: pallet_dkg_metadata,
-		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
-		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, RuntimeEvent<T>},
+		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, RuntimeEvent<T>},
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, RuntimeEvent<T>},
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
@@ -96,8 +96,8 @@ impl system::Config for Test {
 	type BlockWeights = ();
 	type BlockLength = ();
 	type DbWeight = ();
-	type Origin = Origin;
-	type Call = Call;
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeCall = RuntimeCall;
 	type Index = u64;
 	type BlockNumber = u64;
 	type Hash = H256;
@@ -105,7 +105,7 @@ impl system::Config for Test {
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
@@ -125,7 +125,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u64;
 	type DustRemoval = ();
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -163,7 +163,7 @@ where
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
@@ -176,7 +176,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Proposal = Vec<u8>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
@@ -217,7 +217,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -230,7 +230,7 @@ impl pallet_session::Config for Test {
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = ();
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;

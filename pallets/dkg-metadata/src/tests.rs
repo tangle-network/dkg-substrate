@@ -104,7 +104,7 @@ fn next_authority_set_updates_work() {
 }
 
 // a test to ensure that when we set `ShouldTriggerEmergencyKeygen` to true, it will emit
-// an `EmertgencyKeygenTriggered` event and next block it will be reset back to false.
+// an `EmertgencyKeygenTriggered` RuntimeEvent and next block it will be reset back to false.
 #[test]
 fn trigger_emergency_keygen_works() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {

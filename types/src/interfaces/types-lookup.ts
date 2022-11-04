@@ -9,7 +9,7 @@ import type { Data } from '@polkadot/types';
 import type { BTreeMap, Bytes, Compact, Enum, Null, Option, Result, Struct, Text, U8aFixed, Vec, bool, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, Call, H256, MultiAddress, PerU16, Perbill, Percent } from '@polkadot/types/interfaces/runtime';
-import type { Event } from '@polkadot/types/interfaces/system';
+import type { RuntimeEvent } from '@polkadot/types/interfaces/system';
 
 declare module '@polkadot/types/lookup' {
   /** @name FrameSystemAccountInfo (3) */
@@ -58,7 +58,7 @@ declare module '@polkadot/types/lookup' {
   /** @name FrameSystemEventRecord (16) */
   interface FrameSystemEventRecord extends Struct {
     readonly phase: FrameSystemPhase;
-    readonly event: Event;
+    readonly RuntimeEvent: RuntimeEvent;
     readonly topics: Vec<H256>;
   }
 

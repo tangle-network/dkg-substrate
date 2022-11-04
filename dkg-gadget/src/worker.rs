@@ -1349,7 +1349,7 @@ where
 		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
 
 		// Generate multiple signing sets for signing the same unsigned proposals.
-		// The goal is to successfully sign proposals immediately in the event that
+		// The goal is to successfully sign proposals immediately in the RuntimeEvent that
 		// some authorities are not present.
 		//
 		// For example, if we have authorities: [1,2,3] and we only generate a single

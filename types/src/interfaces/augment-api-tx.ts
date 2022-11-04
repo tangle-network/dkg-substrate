@@ -537,7 +537,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)`.
        * - One storage mutation (codec `O(1)`).
        * - One reserve operation.
-       * - One event.
+       * - One RuntimeEvent.
        * -------------------
        * - DB Weight: 1 Read/Write (Accounts)
        * # </weight>
@@ -559,7 +559,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)`.
        * - One storage mutation (codec `O(1)`).
        * - Up to one reserve operation.
-       * - One event.
+       * - One RuntimeEvent.
        * -------------------
        * - DB Weight:
        * - Reads: Indices Accounts, System Account (original owner)
@@ -582,7 +582,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)`.
        * - One storage mutation (codec `O(1)`).
        * - One reserve operation.
-       * - One event.
+       * - One RuntimeEvent.
        * -------------------
        * - DB Weight: 1 Read/Write (Accounts)
        * # </weight>
@@ -603,7 +603,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)`.
        * - One storage mutation (codec `O(1)`).
        * - Up to one slash operation.
-       * - One event.
+       * - One RuntimeEvent.
        * -------------------
        * - DB Weight: 1 Read/Write (Accounts)
        * # </weight>
@@ -624,7 +624,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)`.
        * - One storage mutation (codec `O(1)`).
        * - One transfer operation.
-       * - One event.
+       * - One RuntimeEvent.
        * -------------------
        * - DB Weight:
        * - Reads: Indices Accounts, System Account (recipient)
@@ -788,7 +788,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * The root is the only entity that can change any of the roles, including itself,
        * excluding the depositor, who can never change.
        * 
-       * It emits an event, notifying UIs of the role change. This event is quite relevant to
+       * It emits an RuntimeEvent, notifying UIs of the role change. This RuntimeEvent is quite relevant to
        * most pool members and they should be informed of changes to pool roles.
        **/
       updateRoles: AugmentedSubmittable<(poolId: u32 | AnyNumber | Uint8Array, newRoot: PalletNominationPoolsConfigOpAccountId32 | { Noop: any } | { Set: any } | { Remove: any } | string | Uint8Array, newNominator: PalletNominationPoolsConfigOpAccountId32 | { Noop: any } | { Set: any } | { Remove: any } | string | Uint8Array, newStateToggler: PalletNominationPoolsConfigOpAccountId32 | { Noop: any } | { Set: any } | { Remove: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [u32, PalletNominationPoolsConfigOpAccountId32, PalletNominationPoolsConfigOpAccountId32, PalletNominationPoolsConfigOpAccountId32]>;
@@ -1286,7 +1286,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * # <weight>
        * - O(1).
        * - Limited storage reads.
-       * - One DB write (event).
+       * - One DB write (RuntimeEvent).
        * - Weight of derivative `call` execution + 10,000.
        * # </weight>
        **/
@@ -1300,7 +1300,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * # <weight>
        * - O(1).
        * - Limited storage reads.
-       * - One DB write (event).
+       * - One DB write (RuntimeEvent).
        * - Weight of derivative `call` execution + 10,000.
        * # </weight>
        **/
@@ -1348,7 +1348,7 @@ declare module '@polkadot/api-base/types/submittable' {
        **/
       remark: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
       /**
-       * Make some on-chain remark and emit event.
+       * Make some on-chain remark and emit RuntimeEvent.
        **/
       remarkWithEvent: AugmentedSubmittable<(remark: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes]>;
       /**
@@ -1360,7 +1360,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * expensive).
        * - 1 storage write (codec `O(C)`).
        * - 1 digest item.
-       * - 1 event.
+       * - 1 RuntimeEvent.
        * The weight of this function is dependent on the runtime, but generally this is very
        * expensive. We will treat this as a full block.
        * # </weight>
@@ -1373,7 +1373,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(C)` where `C` length of `code`
        * - 1 storage write (codec `O(C)`).
        * - 1 digest item.
-       * - 1 event.
+       * - 1 RuntimeEvent.
        * The weight of this function is dependent on the runtime. We will treat this as a full
        * block. # </weight>
        **/
@@ -1407,7 +1407,7 @@ declare module '@polkadot/api-base/types/submittable' {
        * - `O(1)` (Note that implementations of `OnTimestampSet` must also be `O(1)`)
        * - 1 storage read and 1 storage mutation (codec `O(1)`). (because of `DidUpdate::take` in
        * `on_finalize`)
-       * - 1 event handler `on_timestamp_set`. Must be `O(1)`.
+       * - 1 RuntimeEvent handler `on_timestamp_set`. Must be `O(1)`.
        * # </weight>
        **/
       set: AugmentedSubmittable<(now: Compact<u64> | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [Compact<u64>]>;

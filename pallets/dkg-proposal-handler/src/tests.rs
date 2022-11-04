@@ -389,7 +389,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 
 		// it does not return an error, however the proposal is not added to the list.
 		// This is because the signature is invalid, and we are batch processing.
-		// we could check for the event that is emitted.
+		// we could check for the RuntimeEvent that is emitted.
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			Origin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal]
