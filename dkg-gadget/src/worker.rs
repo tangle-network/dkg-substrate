@@ -102,6 +102,10 @@ pub const MAX_SIGNING_SETS: u64 = 32;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
+/// Number of blocks we wait until we repopulate offchain storage in case the storage
+/// has been cleared and values not updated
+pub const OFFCHAIN_RETRY_THRESHOLD: u32 = 5;
+
 pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
 
 pub type Shared<T> = Arc<RwLock<T>>;
@@ -920,7 +924,7 @@ where
 			let next_rounds_clone = (*lock).clone();
 			drop(lock);
 			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(rounds) = next_rounds_clone {
+			if let Some(ref rounds) = next_rounds_clone {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
 				let (current_attmp, max, should_retry) = {
@@ -971,7 +975,11 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
 				if session_progress < SESSION_PROGRESS_THRESHOLD {
 					// execute a check for previous keys not posted onchain
-					self.ensure_generated_keys_are_posted_onchain(header, queued.id);
+					if let Some(next_round) = next_rounds_clone {
+						self.ensure_generated_keys_are_posted_onchain(
+							header, queued.id, next_round,
+						);
+					}
 					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 					return
 				}
@@ -1110,17 +1118,21 @@ where
 	/// This function checks
 	/// 1. if the offchain storage of value X is empty, and
 	/// 2. if the corresponding value of X on is not on chain and
-	/// IF the condition is true this means that the offchain storage was cleared without the key
-	/// being written onchain. This function will write the key again to the offchain storage so
-	/// that its pickedup by the offchain workers and tried again.
+	/// 3. if OFFCHAIN_RETRY_THRESHOLD blocks has passed since we wrote that value on the offchain
+	/// storage. IF the condition is true this means that the offchain storage was cleared without
+	/// the key being written onchain. This function will write the key again to the offchain
+	/// storage so that its pickedup by the offchain workers and tried again.
 	pub fn ensure_generated_keys_are_posted_onchain(
 		&self,
 		latest_header: &B::Header,
 		session_id: SessionId,
+		next_round: AsyncProtocolRemote<NumberFor<B>>,
 	) {
 		// nextPublicKey
+		let time_passed = *latest_header.number() - next_round.started_at;
 		if self.get_next_dkg_pub_key(latest_header).is_none() &&
-			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS)
+			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS) &&
+			time_passed > OFFCHAIN_RETRY_THRESHOLD.into()
 		{
 			let mut lock = self.aggregated_public_keys.write();
 			// push the value to offchain storage again so that it is picked up by the offchain
