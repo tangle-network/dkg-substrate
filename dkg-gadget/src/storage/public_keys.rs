@@ -75,7 +75,7 @@ where
 }
 
 /// stores the aggregated public keys
-fn perform_storing_of_aggregated_public_keys<B, BE>(
+pub fn perform_storing_of_aggregated_public_keys<B, BE>(
 	mut offchain: <BE as Backend<B>>::OffchainStorage,
 	keys: &AggregatedPublicKeys,
 	current_block_number: NumberFor<B>,
