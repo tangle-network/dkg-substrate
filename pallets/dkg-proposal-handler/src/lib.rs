@@ -188,6 +188,15 @@ pub mod pallet {
 		StoredUnsignedProposalOf<T>,
 	>;
 
+	/// Defines the block when next unsigned transaction will be accepted.
+	///
+	/// To prevent spam of unsigned (and unpayed!) transactions on the network,
+	/// we only allow one transaction every `T::UnsignedInterval` blocks.
+	/// This storage entry defines when new transaction is going to be accepted.
+	#[pallet::storage]
+	#[pallet::getter(fn next_unsigned_at)]
+	pub(super) type NextUnsignedAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+
 	/// All signed proposals.
 	#[pallet::storage]
 	#[pallet::getter(fn signed_proposals)]
@@ -319,11 +328,9 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
-			origin: OriginFor<T>,
+			_origin: OriginFor<T>,
 			props: Vec<Proposal>,
 		) -> DispatchResultWithPostInfo {
-			let sender = ensure_signed(origin)?;
-
 			ensure!(
 				props.len() <= T::MaxSubmissionsPerBatch::get() as usize,
 				Error::<T>::ProposalsLengthOverflow
@@ -332,9 +339,8 @@ pub mod pallet {
 			// log the caller, and the props.
 			log::debug!(
 				target: "runtime::dkg_proposal_handler",
-				"submit_signed_proposal: props: {:?} by {:?}",
+				"submit_signed_proposal: props: {:?}",
 				&props,
-				sender
 			);
 
 			for prop in &props {
@@ -387,6 +393,9 @@ pub mod pallet {
 				return Err(Error::<T>::ProposalSignatureInvalid.into())
 			}
 
+			// now increment the block number at which we expect next unsigned transaction.
+			let current_block = <frame_system::Pallet<T>>::block_number();
+			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 			Ok(().into())
 		}
 
@@ -423,6 +432,89 @@ pub mod pallet {
 				}
 			} else {
 				Err(Error::<T>::ProposalFormatInvalid.into())
+			}
+		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			// we allow calls only from the local OCW engine.
+			match source {
+				TransactionSource::Local | TransactionSource::InBlock => {},
+				_ => return InvalidTransaction::Call.into(),
+			}
+			// Now let's check if the transaction has any chance to succeed.
+			let current_block = <frame_system::Pallet<T>>::block_number();
+			let next_unsigned_at = <NextUnsignedAt<T>>::get();
+			if next_unsigned_at > current_block {
+				frame_support::log::debug!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: early block: current: {:?}, next_unsigned_at: {:?}",
+					current_block,
+					next_unsigned_at,
+				);
+				return InvalidTransaction::Stale.into()
+			}
+			// Next, let's check that we call the right function.
+			// Here we will use match stmt, to match over the call and see if it is
+			// one of the functions we allow. if not we should return
+			// `InvalidTransaction::Call.into()`.
+			// we should handle the following calls:
+			// 1. `submit_signed_proposals`
+			// other than that we should return `InvalidTransaction::Call.into()`.
+			let is_valid_call = matches! {
+				call,
+				Call::submit_signed_proposals { .. }
+			};
+			if !is_valid_call {
+				frame_support::log::warn!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: invalid call: {:?}",
+					call,
+				);
+				InvalidTransaction::Call.into()
+			} else {
+				frame_support::log::debug!(
+					target: "runtime::dkg_metadata",
+					"validate unsigned: valid call: {:?}",
+					call,
+				);
+				ValidTransaction::with_tag_prefix("DKG")
+					// We set base priority to 2**20 and hope it's included before any other
+					// transactions in the pool. Next we tweak the priority by the current block,
+					// so that transactions from older blocks are (more) included first.
+					.priority(
+						T::UnsignedPriority::get()
+							.saturating_sub(current_block.try_into().unwrap_or_default()),
+					)
+					// This transaction does not require anything else to go before into the pool.
+					// In theory we could require `previous_unsigned_at` transaction to go first,
+					// but it's not necessary in our case.
+					//.and_requires()
+					// We set the `provides` tag to be the same as `next_unsigned_at`. This makes
+					// sure only one transaction produced after `next_unsigned_at` will ever
+					// get to the transaction pool and will end up in the block.
+					// We can still have multiple transactions compete for the same "spot",
+					// and the one with higher priority will replace other one in the pool.
+					.and_provides(next_unsigned_at)
+					// The transaction is only valid for next 5 blocks. After that it's
+					// going to be revalidated by the pool.
+					.longevity(5)
+					// It's fine to propagate that transaction to other peers, which means it can be
+					// created even by nodes that don't produce blocks.
+					// Note that sometimes it's better to keep it for yourself (if you are the block
+					// producer), since for instance in some schemes others may copy your solution
+					// and claim a reward.
+					.propagate(true)
+					.build()
 			}
 		}
 	}
@@ -622,6 +714,10 @@ impl<T: Config> Pallet<T> {
 	/// for submission. This function polls all relevant proposals ready for submission at the
 	/// current block number
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		let next_unsigned_at = <NextUnsignedAt<T>>::get();
+		if next_unsigned_at > block_number {
+			return Err("Too early to send unsigned transaction")
+		}
 		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK);
 		{
 			let _guard = lock.lock();

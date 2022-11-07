@@ -51,9 +51,16 @@ use crate::gossip_messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
 };
 
-use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
+use crate::{
+	gossip_engine::GossipEngineIface,
+	storage::{
+		clear::{is_offchain_storage_empty, listen_and_clear_offchain_storage},
+		public_keys::store_aggregated_public_keys,
+	},
+};
 
 use dkg_primitives::{
+	offchain::storage_keys::AGGREGATED_PUBLIC_KEYS,
 	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
@@ -69,7 +76,7 @@ use dkg_runtime_primitives::{
 use crate::{
 	error, metric_set,
 	metrics::Metrics,
-	persistence::{load_saved_rounds, load_stored_key, store_saved_rounds},
+	persistence::load_stored_key,
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };
@@ -77,16 +84,12 @@ use crate::{
 use crate::gossip_messages::public_key_gossip::handle_public_key_broadcast;
 use dkg_primitives::{
 	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
-	utils::{
-		cleanup, ACTIVE_ROUNDS_METADATA_FILE, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE,
-		QUEUED_ROUNDS_METADATA_FILE,
-	},
+	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 };
 use dkg_runtime_primitives::{AuthoritySet, DKGApi};
 
 use crate::async_protocols::{
-	remote::{AsyncProtocolRemote, MetaHandlerStatus},
-	AsyncProtocolParameters, GenericAsyncHandler,
+	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -98,6 +101,10 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 pub const MAX_SIGNING_SETS: u64 = 32;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
+
+/// Number of blocks we wait until we repopulate offchain storage in case the storage
+/// has been cleared and values not updated
+pub const OFFCHAIN_RETRY_THRESHOLD: u32 = 5;
 
 pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
 
@@ -352,19 +359,6 @@ where
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
 				*lock = Some(status_handle);
-				// Store the saved rounds with Keygen status since we've executed the start handler
-				store_saved_rounds::<B>(
-					session_id,
-					now,
-					MetaHandlerStatus::Keygen,
-					self.base_path
-						.read()
-						.as_ref()
-						.map(|path| path.join(ACTIVE_ROUNDS_METADATA_FILE)),
-				)
-				.map_err(|e| DKGError::GenericError {
-					reason: format!("Failed to store saved rounds: {}", e),
-				})?;
 			},
 			ProtoStageType::Queued => {
 				debug!(target: "dkg_gadget::worker", "Starting queued protocol (obtaing the lock)");
@@ -374,19 +368,6 @@ where
 					log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
 				*lock = Some(status_handle);
-				// Store the saved rounds with Keygen status since we've executed the start handler
-				store_saved_rounds::<B>(
-					session_id,
-					now,
-					MetaHandlerStatus::Keygen,
-					self.base_path
-						.read()
-						.as_ref()
-						.map(|path| path.join(QUEUED_ROUNDS_METADATA_FILE)),
-				)
-				.map_err(|e| DKGError::GenericError {
-					reason: format!("Failed to store saved rounds: {}", e),
-				})?;
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
@@ -650,7 +631,6 @@ where
 	}
 
 	/// Get the next DKG public key
-	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
@@ -880,6 +860,12 @@ where
 		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
+		// Check if we should execute emergency Keygen Protocol.
+		if self.should_execute_emergency_keygen(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Should execute emergency keygen");
+			self.handle_emergency_keygen(header);
+			return
+		}
 		// Clear offchain storage
 		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
@@ -938,7 +924,7 @@ where
 			let next_rounds_clone = (*lock).clone();
 			drop(lock);
 			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(rounds) = next_rounds_clone {
+			if let Some(ref rounds) = next_rounds_clone {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
 				let (current_attmp, max, should_retry) = {
@@ -988,6 +974,12 @@ where
 			if let Some(session_progress) = self.get_current_session_progress(header) {
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
 				if session_progress < SESSION_PROGRESS_THRESHOLD {
+					// execute a check for previous keys not posted onchain
+					if let Some(next_round) = next_rounds_clone {
+						self.ensure_generated_keys_are_posted_onchain(
+							header, queued.id, next_round,
+						);
+					}
 					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 					return
 				}
@@ -1120,6 +1112,45 @@ where
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
+		}
+	}
+
+	/// This function checks
+	/// 1. if the offchain storage of value X is empty, and
+	/// 2. if the corresponding value of X on is not on chain and
+	/// 3. if OFFCHAIN_RETRY_THRESHOLD blocks has passed since we wrote that value on the offchain
+	/// storage. IF the condition is true this means that the offchain storage was cleared without
+	/// the key being written onchain. This function will write the key again to the offchain
+	/// storage so that its pickedup by the offchain workers and tried again.
+	pub fn ensure_generated_keys_are_posted_onchain(
+		&self,
+		latest_header: &B::Header,
+		session_id: SessionId,
+		next_round: AsyncProtocolRemote<NumberFor<B>>,
+	) {
+		// nextPublicKey
+		let time_passed = *latest_header.number() - next_round.started_at;
+		if self.get_next_dkg_pub_key(latest_header).is_none() &&
+			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS) &&
+			time_passed > OFFCHAIN_RETRY_THRESHOLD.into()
+		{
+			let mut lock = self.aggregated_public_keys.write();
+			// push the value to offchain storage again so that it is picked up by the offchain
+			// workers
+			let _ = store_aggregated_public_keys::<B, C, BE>(
+				&self.backend,
+				&mut *lock,
+				false,
+				session_id,
+				self.get_latest_block_number(),
+			);
+		}
+	}
+
+	pub fn handle_emergency_keygen(&self, header: &B::Header) {
+		// Start the queued DKG setup for the new queued authorities
+		if let Some((_active, queued)) = self.validator_set(header) {
+			self.handle_queued_dkg_setup(header, queued);
 		}
 	}
 
@@ -1520,33 +1551,13 @@ where
 			.collect())
 	}
 
-	// *** Main run loop ***
-	#[allow(dead_code)]
-	fn initialize_saved_rounds(&mut self) -> Result<(), DKGError> {
-		let active_rounds_metadata_path =
-			get_key_path(&self.base_path.read(), ACTIVE_ROUNDS_METADATA_FILE);
-		let queued_rounds_metadata_path =
-			get_key_path(&self.base_path.read(), QUEUED_ROUNDS_METADATA_FILE);
-
-		if let Ok(stored_active_rounds) = load_saved_rounds::<B>(active_rounds_metadata_path) {
-			let remote = AsyncProtocolRemote::new(
-				stored_active_rounds.started_at,
-				stored_active_rounds.session_id,
-			);
-			remote.set_status(stored_active_rounds.status);
-			*self.rounds.write() = Some(remote);
-		};
-
-		if let Ok(stored_queued_rounds) = load_saved_rounds::<B>(queued_rounds_metadata_path) {
-			let remote = AsyncProtocolRemote::new(
-				stored_queued_rounds.started_at,
-				stored_queued_rounds.session_id,
-			);
-			remote.set_status(stored_queued_rounds.status);
-			*self.next_rounds.write() = Some(remote);
-		};
-
-		Ok(())
+	fn should_execute_emergency_keygen(&self, header: &B::Header) -> bool {
+		// query runtime api to check if we should execute emergency keygen.
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		self.client
+			.runtime_api()
+			.should_execute_emergency_keygen(&at)
+			.unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block
@@ -1560,7 +1571,7 @@ where
 					*self.best_authorities.write() = self.get_best_authorities(&notif.header);
 					*self.current_validator_set.write() = active;
 					*self.queued_validator_set.write() = queued;
-					// Route this to the import notification handler
+					// Route this to the finality notification handler
 					self.handle_finality_notification(notif.clone());
 					log::debug!(target: "dkg_gadget::worker", "Initialization complete");
 					// End the initialization stream

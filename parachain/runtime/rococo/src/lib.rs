@@ -483,6 +483,8 @@ impl pallet_collator_selection::Config for Runtime {
 
 parameter_types! {
 	pub const DecayPercentage: Percent = Percent::from_percent(50);
+	pub const UnsignedPriority: u64 = 1 << 20;
+	pub const UnsignedInterval: BlockNumber = 3;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
@@ -493,6 +495,8 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type RefreshDelay = RefreshDelay;
+	type UnsignedPriority = UnsignedPriority;
+	type UnsignedInterval = UnsignedInterval;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
@@ -771,9 +775,9 @@ construct_runtime!(
 		ParachainInfo: parachain_info::{Pallet, Storage, Config} = 3,
 
 		// DKG / offchain worker - the order and position of these pallet should not change
-		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>} = 10,
+		DKG: pallet_dkg_metadata::{Pallet, Storage, Call, Event<T>, Config<T>, ValidateUnsigned} = 10,
 		DKGProposals: pallet_dkg_proposals = 11,
-		DKGProposalHandler: pallet_dkg_proposal_handler = 12,
+		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Storage, Call, Event<T>, ValidateUnsigned} = 12,
 
 		// Monetary stuff
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
@@ -943,6 +947,10 @@ impl_runtime_apis! {
 
 		fn refresh_nonce() -> u32 {
 			DKG::refresh_nonce()
+		}
+
+		fn should_execute_emergency_keygen() -> bool {
+			DKG::should_execute_emergency_keygen()
 		}
 	}
 
