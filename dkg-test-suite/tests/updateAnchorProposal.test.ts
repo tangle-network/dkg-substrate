@@ -110,8 +110,8 @@ it('should be able to sign anchor update proposal', async () => {
 			({ events, status }) => {
 				if (status.isFinalized) {
 					unsub();
-					const success = events.find(({ RuntimeEvent }) =>
-						polkadotApi.events.system.ExtrinsicSuccess.is(RuntimeEvent)
+					const success = events.find(({ event }) =>
+						polkadotApi.events.system.ExtrinsicSuccess.is(event)
 					);
 					if (success) {
 						resolve();
@@ -129,7 +129,7 @@ it('should be able to sign anchor update proposal', async () => {
 		key: 'anchorUpdateProposal',
 	});
 
-	console.log('after wait for RuntimeEvent');
+	console.log('after wait for event');
 
 	// now we need to query the proposal and its signature.
 	const key = {

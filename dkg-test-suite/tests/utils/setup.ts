@@ -258,10 +258,10 @@ export async function waitForEvent(
 
 			// Loop through the Vec<EventRecord>
 			events.forEach((record) => {
-				const { RuntimeEvent } = record;
-				if (RuntimeEvent.section === pallet && RuntimeEvent.method === eventVariant) {
+				const { event } = record;
+				if (event.section === pallet && event.method === eventVariant) {
 					if (dataQuery) {
-						RuntimeEvent.data.forEach((value, index) => {
+						event.data.forEach((value, index) => {
 							const jsonData = value.toJSON();
 							if (jsonData instanceof Object) {
 								Object.keys(jsonData).map((key) => {
