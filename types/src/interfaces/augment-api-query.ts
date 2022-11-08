@@ -618,7 +618,7 @@ declare module '@polkadot/api-base/types/storage' {
        **/
       bondedEras: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[u32, u32]>>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
-       * The amount of currency given to reporters of a slash event which was
+       * The amount of currency given to reporters of a slash RuntimeEvent which was
        * canceled by extraordinary circumstances (e.g. governance).
        **/
       canceledSlashPayout: AugmentedQuery<ApiType, () => Observable<u128>, []> & QueryableStorageEntry<ApiType, []>;
@@ -895,7 +895,7 @@ declare module '@polkadot/api-base/types/storage' {
        * 
        * The value has the type `(T::BlockNumber, EventIndex)` because if we used only just
        * the `EventIndex` then in case if the topic has the same contents on the next block
-       * no notification will be triggered thus the event might be lost.
+       * no notification will be triggered thus the RuntimeEvent might be lost.
        **/
       eventTopics: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Vec<ITuple<[u32, u32]>>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
       /**

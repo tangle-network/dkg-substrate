@@ -54,7 +54,7 @@
  Handled unsigned proposals are added to the `UnsignedProposalQueue` and are processed by the DKG
  authorities offchain. The queue is polled using a runtime API and the multi-party ECDSA
  threshold signing protocol is initiated for each proposal. Once the DKG authorities have signed
- the unsigned proposal, the proposal is submitted on-chain and an event is emitted.
+ the unsigned proposal, the proposal is submitted on-chain and an RuntimeEvent is emitted.
  Signed proposals are stored in the offchain storage system and polled each block by the offchain
  worker system.
 
