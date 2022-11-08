@@ -342,11 +342,6 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_in_progress)]
 	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
 
-	/// Should we manually trigger a DKG refresh process.
-	#[pallet::storage]
-	#[pallet::getter(fn should_manual_refresh)]
-	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
-
 	/// Should we execute emergency keygen protocol.
 	#[pallet::storage]
 	#[pallet::getter(fn should_execute_emergency_keygen)]
@@ -547,8 +542,6 @@ pub mod pallet {
 		InvalidMisbehaviourReports,
 		/// DKG Refresh is already in progress.
 		RefreshInProgress,
-		/// Manual DKG Refresh failed to progress.
-		ManualRefreshFailed,
 		/// No NextPublicKey stored on-chain.
 		NoNextPublicKey,
 		/// Must be calling from the controller account
@@ -894,20 +887,6 @@ pub mod pallet {
 			// now increment the block number at which we expect next unsigned transaction.
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-			// Handle manual refresh if flag is set
-			if Self::should_manual_refresh() {
-				ShouldManualRefresh::<T>::put(false);
-				let next_authorities = NextAuthorities::<T>::get();
-				let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
-				// Force rotate the next authorities into the active and next set.
-				Self::change_authorities(
-					next_authorities.clone(),
-					next_authorities,
-					next_authority_accounts.clone(),
-					next_authority_accounts,
-					true,
-				);
-			}
 
 			Ok(().into())
 		}
@@ -1144,63 +1123,6 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Manually Update the `RefreshNonce` (increment it by one).
-		///
-		/// Can only be called by the root origin.
-		///
-		/// * `origin` - The account origin.
-		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(<T as Config>::WeightInfo::manual_increment_nonce())]
-		#[transactional]
-		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			if Self::refresh_in_progress() {
-				return Err(Error::<T>::RefreshInProgress.into())
-			}
-			let next_nonce = Self::refresh_nonce() + 1u32;
-			RefreshNonce::<T>::put(next_nonce);
-			Ok(().into())
-		}
-
-		/// Manual Trigger DKG Refresh process.
-		///
-		/// Can only be called by the root origin.
-		///
-		/// * `origin` - The account that is initiating the refresh process.
-		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(<T as Config>::WeightInfo::manual_refresh())]
-		#[transactional]
-		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			if Self::refresh_in_progress() {
-				return Err(Error::<T>::RefreshInProgress.into())
-			}
-			if let Some(pub_key) = Self::next_dkg_public_key() {
-				RefreshInProgress::<T>::put(true);
-				let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap();
-				let next_nonce = Self::refresh_nonce() + 1u32;
-				let data = dkg_runtime_primitives::RefreshProposal {
-					nonce: next_nonce.into(),
-					pub_key: uncompressed_pub_key,
-				};
-
-				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
-					Ok(()) => {
-						RefreshNonce::<T>::put(next_nonce);
-						ShouldManualRefresh::<T>::put(true);
-						log::debug!("Handled refresh proposal");
-						Ok(().into())
-					},
-					Err(e) => {
-						log::warn!("Failed to handle refresh proposal: {:?}", e);
-						Err(Error::<T>::ManualRefreshFailed.into())
-					},
-				}
-			} else {
-				Err(Error::<T>::NoNextPublicKey.into())
-			}
-		}
-
 		/// Forcefully rotate the DKG
 		///
 		/// This forces the next authorities into the current authority spot and
@@ -1403,16 +1325,15 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn do_refresh(pub_key: (u64, Vec<u8>)) {
-		RefreshInProgress::<T>::put(true);
 		let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-		let next_nonce = Self::refresh_nonce() + 1u32;
+		// the nonce will be auto incremented once we rotate the keys successfully.
 		let data = dkg_runtime_primitives::RefreshProposal {
-			nonce: next_nonce.into(),
+			nonce: Self::refresh_nonce().into(),
 			pub_key: uncompressed_pub_key,
 		};
 		match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
 			Ok(()) => {
-				RefreshNonce::<T>::put(next_nonce);
+				RefreshInProgress::<T>::put(true);
 				log::debug!("Handled refresh proposal");
 			},
 			Err(e) => {
@@ -1592,6 +1513,9 @@ impl<T: Config> Pallet<T> {
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
+			// and increment the nonce
+			let next_nonce = Self::refresh_nonce().saturating_add(1);
+			RefreshNonce::<T>::put(next_nonce);
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.1.clone()).unwrap_or_default();
 			let compressed_pub_key = next_pub_key.1;
