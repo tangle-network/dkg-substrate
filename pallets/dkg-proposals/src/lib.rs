@@ -139,11 +139,11 @@ pub mod pallet {
 	#[pallet::config]
 	/// The module configuration trait.
 	pub trait Config: frame_system::Config + pallet_timestamp::Config {
-		/// The overarching event type.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		/// The overarching RuntimeEvent type.
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Origin used to administer the pallet
-		type AdminOrigin: EnsureOrigin<Self::Origin>;
+		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Proposed transaction blob proposal
 		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
@@ -513,7 +513,7 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 	// *** Utility methods ***
 
-	pub fn ensure_admin(o: T::Origin) -> DispatchResultWithPostInfo {
+	pub fn ensure_admin(o: T::RuntimeOrigin) -> DispatchResultWithPostInfo {
 		T::AdminOrigin::try_origin(o).map(|_| ()).or_else(ensure_root)?;
 		Ok(().into())
 	}
@@ -693,7 +693,7 @@ impl<T: Config> Pallet<T> {
 		Self::try_resolve_proposal(nonce, src_chain_id, prop)
 	}
 
-	/// Execute the proposal and signals the result as an event
+	/// Execute the proposal and signals the result as an RuntimeEvent
 	fn finalize_execution(
 		src_chain_id: TypedChainId,
 		nonce: ProposalNonce,

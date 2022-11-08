@@ -25,7 +25,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       ScoreUpdated: AugmentedEvent<ApiType, [who: AccountId32, newScore: u64], { who: AccountId32, newScore: u64 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -73,13 +73,13 @@ declare module '@polkadot/api-base/types/events' {
        **/
       Withdraw: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], { who: AccountId32, amount: u128 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
     bridgeRegistry: {
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -121,29 +121,29 @@ declare module '@polkadot/api-base/types/events' {
        **/
       RefreshKeysFinished: AugmentedEvent<ApiType, [nextAuthoritySetId: u64], { nextAuthoritySetId: u64 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
     dkgProposalHandler: {
       /**
-       * Event Emitted when we encounter a Proposal with invalid Signature.
+       * RuntimeEvent Emitted when we encounter a Proposal with invalid Signature.
        **/
       InvalidProposalSignature: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes>], { kind: WebbProposalsProposalProposalKind, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes> }>;
       /**
-       * Event When a Proposal is added to UnsignedProposalQueue.
+       * RuntimeEvent When a Proposal is added to UnsignedProposalQueue.
        **/
       ProposalAdded: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes }>;
       /**
-       * Event When a Proposal is removed to UnsignedProposalQueue.
+       * RuntimeEvent When a Proposal is removed to UnsignedProposalQueue.
        **/
       ProposalRemoved: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId }>;
       /**
-       * Event When a Proposal Gets Signed by DKG.
+       * RuntimeEvent When a Proposal Gets Signed by DKG.
        **/
       ProposalSigned: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes, signature: Bytes], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes, signature: Bytes }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -193,7 +193,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       VoteFor: AugmentedEvent<ApiType, [chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32], { chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -229,7 +229,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       UnsignedPhaseStarted: AugmentedEvent<ApiType, [round: u32], { round: u32 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -247,7 +247,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       Resumed: AugmentedEvent<ApiType, []>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -265,7 +265,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       IndexFrozen: AugmentedEvent<ApiType, [index: u32, who: AccountId32], { index: u32, who: AccountId32 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -328,12 +328,12 @@ declare module '@polkadot/api-base/types/events' {
        * 
        * The given number of `points` have been dissolved in return of `balance`.
        * 
-       * Similar to `Unbonded` event, in the absence of slashing, the ratio of point to balance
+       * Similar to `Unbonded` RuntimeEvent, in the absence of slashing, the ratio of point to balance
        * will be 1.
        **/
       Withdrawn: AugmentedEvent<ApiType, [member: AccountId32, poolId: u32, balance: u128, points: u128], { member: AccountId32, poolId: u32, balance: u128, points: u128 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -344,7 +344,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       NewSession: AugmentedEvent<ApiType, [sessionIndex: u32], { sessionIndex: u32 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -352,7 +352,7 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * An account has bonded this amount. \[stash, amount\]
        * 
-       * NOTE: This event is only emitted when funds are bonded via a dispatchable. Notably,
+       * NOTE: This RuntimeEvent is only emitted when funds are bonded via a dispatchable. Notably,
        * it will not be emitted for staking rewards when they are added to stake.
        **/
       Bonded: AugmentedEvent<ApiType, [AccountId32, u128]>;
@@ -411,7 +411,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       Withdrawn: AugmentedEvent<ApiType, [AccountId32, u128]>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -429,7 +429,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       SudoAsDone: AugmentedEvent<ApiType, [sudoResult: Result<Null, SpRuntimeDispatchError>], { sudoResult: Result<Null, SpRuntimeDispatchError> }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -459,7 +459,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       Remarked: AugmentedEvent<ApiType, [sender: AccountId32, hash_: H256], { sender: AccountId32, hash_: H256 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
@@ -470,7 +470,7 @@ declare module '@polkadot/api-base/types/events' {
        **/
       TransactionFeePaid: AugmentedEvent<ApiType, [who: AccountId32, actualFee: u128, tip: u128], { who: AccountId32, actualFee: u128, tip: u128 }>;
       /**
-       * Generic event
+       * Generic RuntimeEvent
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };

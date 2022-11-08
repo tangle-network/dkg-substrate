@@ -25,7 +25,7 @@ use sp_std::vec;
 const SEED: u32 = 0;
 const CHAIN_IDENTIFIER: u32 = 10;
 
-fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
+fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 

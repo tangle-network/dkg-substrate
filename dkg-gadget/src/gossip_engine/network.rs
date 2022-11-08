@@ -48,8 +48,11 @@ use futures::{Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, warn};
 use parking_lot::RwLock;
-use sc_network::{config, error, multiaddr, Event, NetworkService, PeerId, ProtocolName};
-use sc_network_common::service::{NetworkEventStream, NetworkNotification, NetworkPeers};
+use sc_network::{multiaddr, Event, NetworkService, PeerId, ProtocolName};
+use sc_network_common::{
+	config, error,
+	service::{NetworkEventStream, NetworkNotification, NetworkPeers},
+};
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	collections::{hash_map::Entry, HashMap, HashSet, VecDeque},

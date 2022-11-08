@@ -129,7 +129,7 @@ it('should be able to sign anchor update proposal', async () => {
 		key: 'anchorUpdateProposal',
 	});
 
-	console.log('after wait for Event');
+	console.log('after wait for event');
 
 	// now we need to query the proposal and its signature.
 	const key = {
