@@ -297,6 +297,13 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
+			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
+			// this is done to ensure that the flag is reset and only read once per DKG
+			// `on_finality_notification` call.
+			if ShouldExecuteEmergencyKeygen::<T>::get() {
+				ShouldExecuteEmergencyKeygen::<T>::put(false);
+			}
+			// Check if we shall refresh the DKG.
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					Self::do_refresh(pub_key);
@@ -304,12 +311,6 @@ pub mod pallet {
 				}
 			}
 
-			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
-			// this is done to ensure that the flag is reset and only read once per DKG
-			// `on_finality_notification` call.
-			if ShouldExecuteEmergencyKeygen::<T>::get() {
-				ShouldExecuteEmergencyKeygen::<T>::put(false);
-			}
 			Weight::from_ref_time(0)
 		}
 	}
@@ -789,39 +790,41 @@ pub mod pallet {
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			let threshold = Self::next_signature_threshold();
 
-			let mut accepted = false;
-			for (key, accounts) in dict.iter() {
-				if accounts.len() > threshold.into() {
-					NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
-					Self::deposit_event(Event::NextPublicKeySubmitted {
-						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: Self::decompress_public_key(key.clone())
-							.unwrap_or_default(),
-					});
-					accepted = true;
-
-					break
+			// Loop through the keys, and if we find one that has enough signatures, store it.
+			//
+			// This loop returns early if a key is found that has enough signatures, otherwise, it
+			// will return None.
+			let mut keys = dict.iter();
+			let accepted_key = loop {
+				if let Some((key, accounts)) = keys.next() {
+					if accounts.len() > threshold.into() {
+						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
+						Self::deposit_event(Event::NextPublicKeySubmitted {
+							compressed_pub_key: key.clone(),
+							uncompressed_pub_key: Self::decompress_public_key(key.clone())
+								.unwrap_or_default(),
+						});
+						break Some((Self::next_authority_set_id(), key.clone()))
+					}
+				} else {
+					break None
 				}
-			}
+			};
 
-			if accepted {
+			if let Some((set_id, key)) = accepted_key {
 				// TODO: Do something about accounts that posted a wrong key
 				// now increment the block number at which we expect next unsigned transaction.
 				let current_block = <frame_system::Pallet<T>>::block_number();
 				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-
-				return Ok(().into())
-			}
-
-			// Trigger a refresh if we are submitting the next public key and we are ready to
-			// refresh
-			if Self::should_refresh(<frame_system::Pallet<T>>::block_number()) {
-				if let Some(pub_key) = Self::next_dkg_public_key() {
-					Self::do_refresh(pub_key);
+				// Trigger a refresh if we are submitting the next public key and we are ready to
+				// refresh
+				if Self::should_refresh(<frame_system::Pallet<T>>::block_number()) {
+					Self::do_refresh((set_id, key));
 				}
+				Ok(().into())
+			} else {
+				Err(Error::<T>::InvalidPublicKeys.into())
 			}
-
-			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
 		/// Submits the public key signature for the key refresh/rotation process.
