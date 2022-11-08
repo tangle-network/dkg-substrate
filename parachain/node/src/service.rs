@@ -18,9 +18,9 @@
 use std::{sync::Arc, time::Duration};
 
 // rpc
-use jsonrpsee::RpcModule;
-
 use cumulus_client_cli::CollatorOptions;
+use jsonrpsee::RpcModule;
+use std::path::PathBuf;
 // Local Runtime Types
 use dkg_rococo_runtime::{opaque::Block, AccountId, Balance, Hash, Index as Nonce, RuntimeApi};
 
@@ -37,12 +37,10 @@ use cumulus_relay_chain_interface::{RelayChainError, RelayChainInterface, RelayC
 use cumulus_relay_chain_rpc_interface::{create_client_and_start_worker, RelayChainRpcInterface};
 
 // Substrate Imports
-use sc_client_api::ExecutorProvider;
+
 use sc_executor::NativeElseWasmExecutor;
 use sc_network::{NetworkBlock, NetworkService};
-use sc_service::{
-	config::BasePath, Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager,
-};
+use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sp_api::ConstructRuntimeApi;
 use sp_keystore::SyncCryptoStorePtr;
@@ -328,7 +326,7 @@ where
 	let prometheus_registry = parachain_config.prometheus_registry().cloned();
 	let transaction_pool = params.transaction_pool.clone();
 	let import_queue = cumulus_client_service::SharedImportQueue::new(params.import_queue);
-	let (network, system_rpc_tx, start_network) =
+	let (network, system_rpc_tx, tx_handler_controller, start_network) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &parachain_config,
 			client: client.clone(),
@@ -342,10 +340,7 @@ where
 		})?;
 
 	let base_path = if parachain_config.base_path.is_some() {
-		match parachain_config.base_path.as_ref() {
-			Some(BasePath::Permanenent(path_buf)) => Some(path_buf.clone()),
-			_ => None,
-		}
+		parachain_config.base_path.as_ref().map(|path| PathBuf::from(path.path()))
 	} else {
 		None
 	};
@@ -391,6 +386,7 @@ where
 		backend: backend.clone(),
 		network: network.clone(),
 		system_rpc_tx,
+		tx_handler_controller,
 		telemetry: telemetry.as_mut(),
 	})?;
 
@@ -507,10 +503,9 @@ pub fn parachain_build_import_queue(
 		_,
 		_,
 		_,
-		_,
 	>(cumulus_client_consensus_aura::ImportQueueParams {
 		block_import: client.clone(),
-		client: client.clone(),
+		client,
 		create_inherent_data_providers: move |_, _| async move {
 			let time = sp_timestamp::InherentDataProvider::from_system_time();
 
@@ -520,10 +515,9 @@ pub fn parachain_build_import_queue(
 					slot_duration,
 				);
 
-			Ok((time, slot))
+			Ok((slot, time))
 		},
 		registry: config.prometheus_registry(),
-		can_author_with: sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
 		spawner: &task_manager.spawn_essential_handle(),
 		telemetry,
 	})
@@ -593,7 +587,7 @@ pub async fn start_parachain_node(
 									"Failed to create parachain inherent",
 								)
 							})?;
-							Ok((time, slot, parachain_inherent))
+							Ok((slot, time, parachain_inherent))
 						}
 					},
 					block_import: client.clone(),

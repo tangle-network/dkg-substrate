@@ -172,8 +172,8 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
-		/// The overarching event type.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		/// The overarching RuntimeEvent type.
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Authority identifier type
 		type DKGId: Member
 			+ Parameter
@@ -1254,7 +1254,7 @@ pub mod pallet {
 		#[transactional]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			// emit `EmergencyKeygenTriggered` event so that we can see it on monitoring.
+			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
 			// trigger the keygen protocol.
 			<ShouldExecuteEmergencyKeygen<T>>::put(true);

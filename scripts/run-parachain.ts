@@ -223,8 +223,8 @@ for (const cmd of cmds) {
 console.log("");
 console.log("Once done, hit enter to continue.");
 
-keypress().addEventListener("keydown", (event: KeyPressEvent) => {
-  if (event.key === "return") {
+keypress().addEventListener("keydown", (RuntimeEvent: KeyPressEvent) => {
+  if (RuntimeEvent.key === "return") {
     deployParachain();
     keypress().dispose();
   }

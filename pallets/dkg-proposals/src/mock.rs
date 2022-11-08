@@ -80,9 +80,9 @@ impl system::Config for Test {
 	type BlockLength = ();
 	type BlockNumber = u64;
 	type BlockWeights = ();
-	type Call = Call;
+	type RuntimeCall = RuntimeCall;
 	type DbWeight = ();
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
 	type Header = Header;
@@ -91,7 +91,7 @@ impl system::Config for Test {
 	type OnKilledAccount = ();
 	type OnNewAccount = ();
 	type OnSetCode = ();
-	type Origin = Origin;
+	type RuntimeOrigin = RuntimeOrigin;
 	type PalletInfo = PalletInfo;
 	type SS58Prefix = SS58Prefix;
 	type SystemWeightInfo = ();
@@ -111,7 +111,7 @@ impl pallet_balances::Config for Test {
 	type AccountStore = System;
 	type Balance = u64;
 	type DustRemoval = ();
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ExistentialDeposit;
 	type MaxLocks = ();
 	type MaxReserves = ();
@@ -126,7 +126,7 @@ parameter_types! {
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 }
 
-type Extrinsic = TestXt<Call, ()>;
+type Extrinsic = TestXt<RuntimeCall, ()>;
 
 impl frame_system::offchain::SigningTypes for Test {
 	type Public = <Signature as Verify>::Signer;
@@ -135,29 +135,29 @@ impl frame_system::offchain::SigningTypes for Test {
 
 impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
 where
-	Call: From<LocalCall>,
+	RuntimeCall: From<LocalCall>,
 {
-	type OverarchingCall = Call;
+	type OverarchingCall = RuntimeCall;
 	type Extrinsic = Extrinsic;
 }
 
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
 where
-	Call: From<LocalCall>,
+	RuntimeCall: From<LocalCall>,
 {
 	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
-		call: Call,
+		call: RuntimeCall,
 		_public: <Signature as Verify>::Signer,
 		_account: AccountId,
 		nonce: u64,
-	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+	) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
 }
 
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OnAuthoritySetChangeHandler = DKGProposals;
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
@@ -203,7 +203,7 @@ parameter_types! {
 }
 
 impl pallet_session::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
@@ -223,7 +223,7 @@ parameter_types! {
 }
 
 impl pallet_collator_selection::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type UpdateOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	type PotId = PotId;
@@ -239,7 +239,7 @@ impl pallet_collator_selection::Config for Test {
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
@@ -252,7 +252,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
@@ -382,8 +382,9 @@ impl ExtBuilder {
 
 		let mut ext = sp_io::TestExternalities::new(t);
 		ext.execute_with(|| {
-			let _ =
-				CollatorSelection::register_as_candidate(Origin::signed(mock_pub_key(PROPOSER_D)));
+			let _ = CollatorSelection::register_as_candidate(RuntimeOrigin::signed(mock_pub_key(
+				PROPOSER_D,
+			)));
 			System::set_block_number(1);
 		});
 		ext
@@ -402,28 +403,28 @@ pub fn new_test_ext_initialized(
 	let mut t = ExtBuilder::build();
 	t.execute_with(|| {
 		// Set and check threshold
-		assert_ok!(DKGProposals::set_threshold(Origin::root(), TEST_THRESHOLD));
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
 		// Add proposers
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_A),
 			mock_ecdsa_key(PROPOSER_A)
 		));
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_B),
 			mock_ecdsa_key(PROPOSER_B)
 		));
 		assert_ok!(DKGProposals::add_proposer(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			mock_pub_key(PROPOSER_C),
 			mock_ecdsa_key(PROPOSER_C)
 		));
 		// Whitelist chain
-		assert_ok!(DKGProposals::whitelist_chain(Origin::root(), src_chain_id));
+		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), src_chain_id));
 		// Set and check resource ID mapped to some junk data
-		assert_ok!(DKGProposals::set_resource(Origin::root(), r_id, resource));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), r_id, resource));
 		assert!(DKGProposals::resource_exists(r_id), "{}", true);
 	});
 	t
@@ -438,20 +439,20 @@ pub fn manually_set_proposer_count(count: u32) -> sp_io::TestExternalities {
 }
 
 // Checks events against the latest. A contiguous set of events must be
-// provided. They must include the most recent event, but do not have to include
-// every past event.
-pub fn assert_events(mut expected: Vec<Event>) {
-	let mut actual: Vec<Event> =
+// provided. They must include the most recent RuntimeEvent, but do not have to include
+// every past RuntimeEvent.
+pub fn assert_events(mut expected: Vec<RuntimeEvent>) {
+	let mut actual: Vec<RuntimeEvent> =
 		system::Pallet::<Test>::events().iter().map(|e| e.event.clone()).collect();
 
 	expected.reverse();
 	for evt in expected {
-		let next = actual.pop().expect("event expected");
+		let next = actual.pop().expect("RuntimeEvent expected");
 		assert_eq!(next, evt, "Events don't match (actual,expected)");
 	}
 }
 
-pub fn assert_has_event(ev: Event) {
+pub fn assert_has_event(ev: RuntimeEvent) {
 	println!("{:?}", ev);
 	println!("{:?}", system::Pallet::<Test>::events());
 	assert!(system::Pallet::<Test>::events()
@@ -460,7 +461,7 @@ pub fn assert_has_event(ev: Event) {
 		.any(|x| x == ev))
 }
 
-pub fn assert_does_not_have_event(ev: Event) {
+pub fn assert_does_not_have_event(ev: RuntimeEvent) {
 	assert!(!system::Pallet::<Test>::events()
 		.iter()
 		.map(|e| e.event.clone())
