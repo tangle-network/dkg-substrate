@@ -1250,10 +1250,17 @@ pub mod pallet {
 		///
 		/// The keygen protocol will then be executed and the result will be stored in the off chain
 		/// storage, which will be picked up by the on chain worker and stored on chain.
+		///
+		/// Note that, this will clear the next public key and its signature, if any.
 		#[pallet::weight(0)]
 		#[transactional]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
+			// Clear the next public key, if any, to ensure that the keygen protocol runs and we
+			// do not have any invalid state.
+			NextDKGPublicKey::<T>::kill();
+			// also, we clear the next public key signature, if any.
+			NextPublicKeySignature::<T>::kill();
 			// emit `EmergencyKeygenTriggered` event so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
 			// trigger the keygen protocol.
