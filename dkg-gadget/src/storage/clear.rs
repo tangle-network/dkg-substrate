@@ -94,8 +94,8 @@ where
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
 	let offchain = dkg_worker.backend.offchain_storage();
-	if offchain.is_some() {
-		return offchain.unwrap().get(STORAGE_PREFIX, storage_key).is_some()
+	if let Some(offchain) = offchain {
+		return offchain.get(STORAGE_PREFIX, storage_key).is_some()
 	}
 
 	true
