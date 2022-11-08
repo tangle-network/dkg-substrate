@@ -68,7 +68,7 @@
 //! Handled unsigned proposals are added to the `UnsignedProposalQueue` and are processed by the DKG
 //! authorities offchain. The queue is polled using a runtime API and the multi-party ECDSA
 //! threshold signing protocol is initiated for each proposal. Once the DKG authorities have signed
-//! the unsigned proposal, the proposal is submitted on-chain and an event is emitted.
+//! the unsigned proposal, the proposal is submitted on-chain and an RuntimeEvent is emitted.
 //! Signed proposals are stored in the offchain storage system and polled each block by the offchain
 //! worker system.
 //!
@@ -155,8 +155,9 @@ pub mod pallet {
 	pub trait Config:
 		frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_dkg_metadata::Config
 	{
-		/// Because this pallet emits events, it depends on the runtime's definition of an event.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		/// Because this pallet emits events, it depends on the runtime's definition of an
+		/// RuntimeEvent.
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 		/// The signed proposal handler trait
@@ -212,7 +213,7 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event Emitted when we encounter a Proposal with invalid Signature.
+		/// RuntimeEvent Emitted when we encounter a Proposal with invalid Signature.
 		InvalidProposalSignature {
 			/// The Type of the Proposal.
 			kind: ProposalKind,
@@ -225,7 +226,7 @@ pub mod pallet {
 			/// The actual one we recovered from the data and signature.
 			actual_public_key: Option<Vec<u8>>,
 		},
-		/// Event When a Proposal is added to UnsignedProposalQueue.
+		/// RuntimeEvent When a Proposal is added to UnsignedProposalQueue.
 		ProposalAdded {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
@@ -234,14 +235,14 @@ pub mod pallet {
 			/// The Proposal Data.
 			data: Vec<u8>,
 		},
-		/// Event When a Proposal is removed to UnsignedProposalQueue.
+		/// RuntimeEvent When a Proposal is removed to UnsignedProposalQueue.
 		ProposalRemoved {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
 			/// The Target Chain.
 			target_chain: TypedChainId,
 		},
-		/// Event When a Proposal Gets Signed by DKG.
+		/// RuntimeEvent When a Proposal Gets Signed by DKG.
 		ProposalSigned {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
@@ -355,7 +356,7 @@ pub mod pallet {
 						},
 						Err(e) => {
 							// this is a bad signature.
-							// we emit it as an event.
+							// we emit it as an RuntimeEvent.
 							Self::deposit_event(Event::InvalidProposalSignature {
 								kind: *kind,
 								data: data.clone(),
@@ -657,7 +658,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// Update storage
 		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
 		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
-		// Emit event so frontend can react to it.
+		// Emit RuntimeEvent so frontend can react to it.
 		Self::deposit_event(Event::<T>::ProposalSigned {
 			key: id.key,
 			target_chain: id.typed_chain_id,
