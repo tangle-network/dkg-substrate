@@ -812,7 +812,7 @@ pub mod pallet {
 				// Reset `RefreshInProgress` to false, so that we submit a new refresh.
 				RefreshInProgress::<T>::put(false);
 				frame_support::log::debug!(
-					target: "runtime::dkg",
+					target: "runtime::dkg_metadata",
 					"Next DKG Public Key: {}, Authority Set ID: {}",
 					hex::encode(key),
 					set_id,
