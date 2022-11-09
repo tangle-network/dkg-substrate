@@ -809,11 +809,14 @@ pub mod pallet {
 				// now increment the block number at which we expect next unsigned transaction.
 				let current_block = <frame_system::Pallet<T>>::block_number();
 				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-				// Trigger a refresh if we are submitting the next public key and we are ready to
-				// refresh
-				if Self::should_refresh(<frame_system::Pallet<T>>::block_number()) {
-					Self::do_refresh((set_id, key));
-				}
+				// Reset `RefreshInProgress` to false, so that we submit a new refresh.
+				RefreshInProgress::<T>::put(false);
+				frame_support::log::debug!(
+					target: "runtime::dkg",
+					"Next DKG Public Key: {}, Authority Set ID: {}",
+					hex::encode(key),
+					set_id,
+				);
 				Ok(().into())
 			} else {
 				Err(Error::<T>::InvalidPublicKeys.into())
