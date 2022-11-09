@@ -29,16 +29,16 @@ pub fn get_testnet_root_key() -> AccountId {
 	hex!["888a3ab33eea2b827f15302cb26af0e007b067ccfbf693faff3aa7ffcfa25925"].into()
 }
 
-/// Arana bootnodes
+/// Arana alpha bootnodes
 pub fn get_arana_bootnodes() -> Vec<MultiaddrWithPeerId> {
 	return vec![
-		"/ip4/158.247.202.146/tcp/30333/p2p/12D3KooWJ7PSFvtU3i1LK8E6QmPqHvihs9RTvFw9ZoxGpHGhgNG3"
+		"/ip4/140.82.21.142/tcp/30333/p2p/12D3KooWPU2eWyZrDMVtNBiKYKLGPJw8EDjbkYeXMyotmdVBKNnx"
 			.parse()
 			.unwrap(),
-		"/ip4/158.247.210.6/tcp/30333/p2p/12D3KooWQs9faHSzWq4EadVmaBmqTDV2KmEBVQdaXDQLccd9bRjS"
+		"/ip4/149.28.81.60/tcp/30333/p2p/12D3KooWHXiHVg1YX9PHsa8NrS5ZWEoaKBydqZvLoegw2bcTiCtf"
 			.parse()
 			.unwrap(),
-		"/ip4/141.164.55.77/tcp/30333/p2p/12D3KooWSBjUxtAxw4Jpb76QY4JySsrr5seB4QhkYVB64sVWbAFH"
+		"/ip4/45.32.66.129/tcp/30333/p2p/12D3KooWPEpgPPBArgEa1v7X7YR5UiZ6BLxmCsNqC8F6fJ6cULLc"
 			.parse()
 			.unwrap(),
 	]
