@@ -533,7 +533,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
