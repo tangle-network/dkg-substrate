@@ -1827,23 +1827,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// Identifies if a new `RefreshProposal` should be created
-	/// at a given block number. This is meant to be called on the
-	/// `on_initialize` hook at every block to check if we should begin
-	/// the refresh proposal signing process.
-	pub fn should_refresh(now: T::BlockNumber) -> bool {
-		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
-			T::BlockNumber,
-		>>::estimate_current_session_progress(now);
-		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress {:?}", session_progress);
-		if let Some(session_progress) = session_progress {
-			let delay = RefreshDelay::<T>::get();
-			let next_dkg_public_key_signature = Self::next_public_key_signature();
-			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
-		}
-
-		log::debug!(target: "runtime::dkg_metadata", "Unable to read session progress");
-		false
+	pub fn should_refresh(_now: T::BlockNumber) -> bool {
+		let next_dkg_public_key = Self::next_dkg_public_key();
+		let next_dkg_public_key_signature = Self::next_public_key_signature();
+		next_dkg_public_key.is_some() && next_dkg_public_key_signature.is_none()
 	}
 
 	/// Inserts a successful rotation into the history

@@ -138,7 +138,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("dkg-standalone-node"),
 	impl_name: create_runtime_str!("dkg-standalone-node"),
 	authoring_version: 1,
-	spec_version: 15,
+	spec_version: 19,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -301,7 +301,7 @@ parameter_types! {
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = 1 * HOURS;
   pub const Offset: BlockNumber = 0;
 }
 
