@@ -51,16 +51,9 @@ use crate::gossip_messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
 };
 
-use crate::{
-	gossip_engine::GossipEngineIface,
-	storage::{
-		clear::{is_offchain_storage_empty, listen_and_clear_offchain_storage},
-		public_keys::store_aggregated_public_keys,
-	},
-};
+use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
 
 use dkg_primitives::{
-	offchain::storage_keys::AGGREGATED_PUBLIC_KEYS,
 	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
 	utils::StoredLocalKey,
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
@@ -101,10 +94,6 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 pub const MAX_SIGNING_SETS: u64 = 32;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
-
-/// Number of blocks we wait until we repopulate offchain storage in case the storage
-/// has been cleared and values not updated
-pub const OFFCHAIN_RETRY_THRESHOLD: u32 = 5;
 
 pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(100);
 
@@ -630,6 +619,7 @@ where
 	}
 
 	/// Get the next DKG public key
+	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
@@ -932,7 +922,7 @@ where
 			return
 		}
 		// Get the active and queued validators to check for updates
-		if let Some((active, queued)) = self.validator_set(header) {
+		if let Some((_active, queued)) = self.validator_set(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
 			// Check if there is a keygen is finished:
 			let queued_keygen_finished = self
@@ -1005,161 +995,6 @@ where
 					})
 				}
 			}
-		}
-	}
-
-	fn maybe_enact_new_authorities(&self, header: &B::Header) {
-		// Get the active and queued validators to check for updates
-		if let Some((active, queued)) = self.validator_set(header) {
-			// Check if the current validator set is the same as the active validator set
-			let next_best = self.get_next_best_authorities(header);
-			debug!(target: "dkg_gadget::worker", "🕸️  Incoming Next Best Authorities {:?}", next_best);
-			debug!(target: "dkg_gadget::worker", "🕸️  Current Next Best Authorities {:?}", self.best_next_authorities);
-			let next_best_has_changed = next_best != *self.best_next_authorities.read();
-			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {
-				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
-				// Update the next best authorities
-				*self.best_next_authorities.write() = next_best;
-				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(header, queued);
-				return
-			}
-			// ***Check if the Keygen Protocol Stalled.***
-			// a read only clone, to avoid holding the lock for the whole duration of the function
-			let lock = self.next_rounds.read();
-			let next_rounds_clone = (*lock).clone();
-			drop(lock);
-			// If the next rounds have stalled, we restart similarly to above.
-			if let Some(ref rounds) = next_rounds_clone {
-				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
-				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
-				let (current_attmp, max, should_retry) = {
-					// check how many authorities are in the next best authorities
-					// and then check the signature threshold `t`, if `t+1` is greater than the
-					// number of authorities and we still have not reached the maximum number of
-					// retries, we should retry the keygen
-					let n = next_best.len();
-					let t = self.get_next_signature_threshold(header) as usize;
-					// in this case, if t + 1 is equal to n, we should retry the keygen
-					// indefinitely.
-					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
-					// be possible to successfully report the DKG Misbehavior on chain.
-					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
-					let v = self.keygen_retry_count.load(Ordering::SeqCst);
-					let should_retry = v < max_retries || max_retries == 0;
-					if keygen_stalled {
-						debug!(
-							target: "dkg_gadget::worker",
-							"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}"
-						);
-					}
-					(v, max_retries, should_retry)
-				};
-				if keygen_stalled && should_retry {
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})", current_attmp, max);
-					// Update the next best authorities
-					*self.best_next_authorities.write() = next_best;
-					// Start the queued Keygen protocol again.
-					self.handle_queued_dkg_setup(header, queued);
-					// Increment the retry count
-					self.keygen_retry_count.fetch_add(1, Ordering::SeqCst);
-					return
-				} else if keygen_stalled && !should_retry {
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, but we have reached the maximum number of retries will report bad actors.");
-					return self.handle_dkg_error(DKGError::KeygenTimeout {
-						bad_actors: convert_u16_vec_to_usize_vec(
-							rounds.current_round_blame().blamed_parties,
-						),
-						session_id: rounds.session_id,
-					})
-				}
-			}
-
-			// Query the current state of session progress, we will proceed with enact new
-			// authorities if the session progress has passed threshold
-			if let Some(session_progress) = self.get_current_session_progress(header) {
-				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-				if session_progress < SESSION_PROGRESS_THRESHOLD {
-					// execute a check for previous keys not posted onchain
-					if let Some(next_round) = next_rounds_clone {
-						self.ensure_generated_keys_are_posted_onchain(
-							header, queued.id, next_round,
-						);
-					}
-					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
-					return
-				}
-			} else {
-				debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
-				return
-			}
-
-			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
-			// Check if the next_rounds is None, and if
-			let queued_keygen_in_progress = self
-				.next_rounds
-				.read()
-				.as_ref()
-				.map(|r| !r.is_keygen_finished())
-				.unwrap_or(false);
-
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG ID: {:?}", queued.id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.read().id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.read().as_ref().map(|r| r.status.clone()));
-
-			// If the session has changed and a keygen is not in progress, we rotate
-			if self.queued_validator_set.read().id != queued.id && !queued_keygen_in_progress {
-				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
-				metric_set!(self, dkg_validator_set_id, active.id);
-				// verify the new validator set
-				let _ = self.verify_validator_set(header.number(), active.clone());
-				// Update the validator sets
-				*self.current_validator_set.write() = active;
-				*self.queued_validator_set.write() = queued.clone();
-				// Check the local keystore, if a queued key exists with the same
-				// round ID then we shouldn't rotate since it means we have shut down
-				// and started up after a previous rotation.
-				let (_, maybe_queued_key) = self.fetch_local_keys();
-				match maybe_queued_key {
-					Some(queued_key) if queued_key.session_id == queued.id => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.session_id);
-						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
-						return
-					},
-					Some(k) => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.session_id);
-						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
-					},
-					None => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY DOES NOT EXIST");
-					},
-				};
-				// If we are starting a new queued DKG, we rotate the next rounds
-				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
-				match self.rounds.read().as_ref() {
-					Some(r) if r.is_active() => {
-						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
-					},
-					Some(_) | None => {
-						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is not active, rotating next rounds is okay");
-					},
-				};
-				*self.rounds.write() = self.next_rounds.write().take();
-				// We also rotate the best authority caches
-				*self.best_authorities.write() = self.best_next_authorities.read().clone();
-				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
-				// Rotate the key files
-				let success = self.rotate_local_key_files();
-				debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
-				// since we just rotate, we rest the keygen retry counter
-				self.keygen_retry_count.store(0, Ordering::Relaxed);
-				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(header, queued);
-			}
-		} else {
-			// no queued validator set, so we don't do anything
-			debug!(target: "dkg_gadget::worker", "🕸️  NO QUEUED VALIDATOR SET");
 		}
 	}
 
@@ -1275,38 +1110,6 @@ where
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
-		}
-	}
-
-	/// This function checks
-	/// 1. if the offchain storage of value X is empty, and
-	/// 2. if the corresponding value of X on is not on chain and
-	/// 3. if OFFCHAIN_RETRY_THRESHOLD blocks has passed since we wrote that value on the offchain
-	/// storage. IF the condition is true this means that the offchain storage was cleared without
-	/// the key being written onchain. This function will write the key again to the offchain
-	/// storage so that its pickedup by the offchain workers and tried again.
-	pub fn ensure_generated_keys_are_posted_onchain(
-		&self,
-		latest_header: &B::Header,
-		session_id: SessionId,
-		next_round: AsyncProtocolRemote<NumberFor<B>>,
-	) {
-		// nextPublicKey
-		let time_passed = *latest_header.number() - next_round.started_at;
-		if self.get_next_dkg_pub_key(latest_header).is_none() &&
-			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS) &&
-			time_passed > OFFCHAIN_RETRY_THRESHOLD.into()
-		{
-			let mut lock = self.aggregated_public_keys.write();
-			// push the value to offchain storage again so that it is picked up by the offchain
-			// workers
-			let _ = store_aggregated_public_keys::<B, C, BE>(
-				&self.backend,
-				&mut *lock,
-				false,
-				session_id,
-				self.get_latest_block_number(),
-			);
 		}
 	}
 
