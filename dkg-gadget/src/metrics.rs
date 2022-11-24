@@ -32,6 +32,8 @@ pub(crate) struct Metrics {
 	pub dkg_keygen_retry_counter: Counter<U64>,
 	/// The latest block height witnessed by the dkg worker
 	pub dkg_latest_block_height: Gauge<U64>,
+	/// The signing sets for dkg worker
+	pub dkg_signing_sets: Gauge<U64>,
 }
 
 impl Metrics {
@@ -69,6 +71,10 @@ impl Metrics {
 					"dkg_latest_block_height",
 					"The blocknumber of highest block seen by dkg worker",
 				)?,
+				registry,
+			)?,
+			dkg_signing_sets: register(
+				Gauge::new("dkg_signing_sets", "The number of signing sets created")?,
 				registry,
 			)?,
 		})

@@ -1390,6 +1390,7 @@ where
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
 		debug!(target: "dkg_gadget::worker", "Generating {} signing sets", num_combinations);
+		metric_set!(self, dkg_signing_sets, signing_sets.len());
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
