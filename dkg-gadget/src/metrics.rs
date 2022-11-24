@@ -18,9 +18,20 @@ use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 /// DKG metrics exposed through Prometheus
 #[derive(Clone)]
 pub(crate) struct Metrics {
-	pub propagated_messages: Counter<U64>,
+	/// Count to total propogated messages
+	pub dkg_propagated_messages: Counter<U64>,
 	/// Current active validator set id
 	pub dkg_validator_set_id: Gauge<U64>,
+	/// Total messages received
+	pub dkg_inbound_messages: Counter<U64>,
+	/// Total error messages received
+	pub dkg_error_counter: Counter<U64>,
+	/// Current session progress witnessed by dkg worker
+	pub dkg_session_progress: Gauge<U64>,
+	/// Keygen retry counter for dkg worker
+	pub dkg_keygen_retry_counter: Counter<U64>,
+	/// The latest block height witnessed by the dkg worker
+	pub dkg_latest_block_height: Gauge<U64>,
 }
 
 impl Metrics {
@@ -30,8 +41,34 @@ impl Metrics {
 				Gauge::new("dkg_validator_set_id", "Current DKG active validator set id.")?,
 				registry,
 			)?,
-			propagated_messages: register(
+			dkg_propagated_messages: register(
 				Counter::new("dkg_propagated_messages", "Number of DKG messages propagated.")?,
+				registry,
+			)?,
+			dkg_inbound_messages: register(
+				Counter::new("dkg_inbound_messages", "Number of DKG messages received.")?,
+				registry,
+			)?,
+			dkg_error_counter: register(
+				Counter::new("dkg_error_counter", "Number of DKG errors generated")?,
+				registry,
+			)?,
+			dkg_session_progress: register(
+				Gauge::new("dkg_session_progress", "Current DKG session progress")?,
+				registry,
+			)?,
+			dkg_keygen_retry_counter: register(
+				Counter::new(
+					"dkg_keygen_retry_counter",
+					"Number of times Keygen has been retried",
+				)?,
+				registry,
+			)?,
+			dkg_latest_block_height: register(
+				Gauge::new(
+					"dkg_latest_block_height",
+					"The blocknumber of highest block seen by dkg worker",
+				)?,
 				registry,
 			)?,
 		})

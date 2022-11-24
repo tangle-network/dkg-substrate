@@ -67,7 +67,7 @@ use dkg_runtime_primitives::{
 };
 
 use crate::{
-	error, metric_set,
+	error, metric_inc, metric_set,
 	metrics::Metrics,
 	persistence::load_stored_key,
 	utils::{find_authorities_change, get_key_path},
@@ -850,6 +850,7 @@ where
 			}
 		}
 		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
+		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 		// Check if we should execute emergency Keygen Protocol.
@@ -913,6 +914,7 @@ where
 		// authorities if the session progress has passed threshold
 		if let Some(session_progress) = self.get_current_session_progress(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
+			metric_set!(self, dkg_session_progress, session_progress.clone().deconstruct());
 			if session_progress < SESSION_PROGRESS_THRESHOLD {
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 				return
@@ -981,6 +983,7 @@ where
 				};
 				if keygen_stalled && should_retry {
 					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})", current_attmp, max);
+					metric_inc!(self, dkg_keygen_retry_counter);
 					// Start the queued Keygen protocol again.
 					self.handle_queued_dkg_setup(header, queued);
 					// Increment the retry count
@@ -1122,6 +1125,7 @@ where
 
 	pub fn handle_dkg_error(&self, dkg_error: DKGError) {
 		log::error!(target: "dkg_gadget", "Received error: {:?}", dkg_error);
+		metric_inc!(self, dkg_error_counter);
 		let authorities: Vec<Public> =
 			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
@@ -1162,6 +1166,7 @@ where
 		&self,
 		dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<(), DKGError> {
+		metric_inc!(self, dkg_inbound_messages);
 		// discard the message if from previous round
 		if let Some(current_round) = self.rounds.read().as_ref() {
 			if dkg_msg.msg.session_id < current_round.session_id {
