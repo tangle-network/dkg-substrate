@@ -914,7 +914,7 @@ where
 		// authorities if the session progress has passed threshold
 		if let Some(session_progress) = self.get_current_session_progress(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-			metric_set!(self, dkg_session_progress, session_progress.clone().deconstruct());
+			metric_set!(self, dkg_session_progress, session_progress.deconstruct());
 			if session_progress < SESSION_PROGRESS_THRESHOLD {
 				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 				return
