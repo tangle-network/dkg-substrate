@@ -170,6 +170,7 @@ pub mod pallet {
 		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
+
 	}
 
 	#[pallet::pallet]
