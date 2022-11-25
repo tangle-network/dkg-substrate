@@ -42,7 +42,7 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 		assert_eq!(
 			Bridges::<Test>::get(1).unwrap(),
 			BridgeMetadata {
-				resource_ids: bounded_vec![target_resource_id, src_resource_id],
+				resource_ids: bounded_vec![src_resource_id, target_resource_id],
 				info: Default::default()
 			}
 		);
