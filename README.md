@@ -109,8 +109,20 @@ brew install openssl
 
 ❗ **Note:** Native ARM Homebrew installations are only going to be supported at `/opt/homebrew`. After Homebrew installs, make sure to add `/opt/homebrew/bin` to your PATH.
 
-```bash
+```
 echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.bash_profile
+```
+
+An example `bash_profile` for reference may look like the following:
+
+```
+export PATH=/opt/homebrew/bin:$PATH
+export PATH=/opt/homebrew/opt/llvm/bin:$PATH
+export CC=/opt/homebrew/opt/llvm/bin/clang
+export AR=/opt/homebrew/opt/llvm/bin/llvm-ar
+export LDFLAGS=-L/opt/homebrew/opt/llvm/lib
+export CPPFLAGS=-I/opt/homebrew/opt/llvm/include
+export RUSTFLAGS='-L /opt/homebrew/lib'
 ```
 
 In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-darwin` Rust toolchain you need to set the following environment variables:
@@ -123,6 +135,28 @@ Ensure `gmp` dependency is installed correctly.
 
 ```
 brew install gmp
+```
+
+If you are still receiving an issue with `gmp`, you may need to adjust your path to the `gmp` lib. Below is a suggestive fix, but paths are machine / environment specific. 
+
+Run:
+
+```
+cargo clean
+```
+
+Then:
+
+```
+export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib:$(brew --prefix)/opt/gmp/lib
+```
+
+This should be added to your bash_profile as well. 
+
+Ensure `protobuf` dependency is installed correctly.
+
+```
+brew install protobuf
 ```
 
 <h1 id="usage"> Usage </h1>
