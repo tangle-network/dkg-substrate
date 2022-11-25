@@ -171,6 +171,8 @@ pub mod pallet {
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
 
+		type AssetModifierOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
 	}
 
 	#[pallet::pallet]
@@ -412,9 +414,9 @@ pub mod pallet {
 			prop: Proposal,
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
-			ensure_root(origin)?;
+			<T as pallet::Config>::AssetModifierOrigin::ensure_origin(origin)?;
 
-			// We ensure that only certain proposals are valid this way
+			// We ensure that only certain proposalos are valid this way
 			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
 					Ok(v) => {
