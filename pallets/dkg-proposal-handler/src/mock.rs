@@ -35,7 +35,7 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::RuntimeAppPublic;
 
 use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
-
+use frame_system::EnsureRoot;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, EIP2930Transaction, TransactionAction, U256,
 };
@@ -245,6 +245,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type WeightInfo = ();
+	type AssetModifierOrigin = EnsureRoot<AccountId>;
 }
 
 const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";

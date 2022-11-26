@@ -35,6 +35,7 @@ use sp_runtime::{
 	Percent, Permill,
 };
 use std::{sync::Arc, vec};
+use frame_system::EnsureRoot;
 
 use crate as pallet_dkg_metadata;
 pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
@@ -140,6 +141,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type WeightInfo = ();
+	type AssetModifierOrigin = EnsureRoot<AccountId>;
 }
 
 parameter_types! {

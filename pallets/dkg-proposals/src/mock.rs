@@ -23,6 +23,7 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
+use frame_system::EnsureRoot;
 pub use pallet_balances;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -172,6 +173,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type WeightInfo = ();
+	type AssetModifierOrigin = EnsureRoot<AccountId>;
 }
 
 pub const MILLISECS_PER_BLOCK: u64 = 10000;
