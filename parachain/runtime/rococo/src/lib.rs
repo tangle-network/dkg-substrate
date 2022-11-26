@@ -527,6 +527,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = ();
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
+	type AssetModifierOrigin = EnsureRoot<AccountId>;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {

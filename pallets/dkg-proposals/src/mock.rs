@@ -247,6 +247,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type WeightInfo = ();
+	type AssetModifierOrigin = EnsureRoot<AccountId>;
 }
 
 impl pallet_dkg_proposals::Config for Test {
