@@ -747,6 +747,11 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is active");
 				return
 			},
+			// For when we already completed the DKG, no need to do it again.
+			Some(rounds) if rounds.is_completed() => {
+				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is completed");
+				return
+			},
 			_ => {},
 		}
 
