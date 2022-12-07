@@ -136,8 +136,6 @@ where
 	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Signing rounds, created everytime there are unique unsigned proposals
 	pub signing_rounds: Shared<Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>>,
-	/// Best block a DKG voting round has been concluded for
-	pub best_dkg_block: Shared<Option<NumberFor<B>>>,
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
@@ -190,7 +188,6 @@ where
 			rounds: self.rounds.clone(),
 			next_rounds: self.next_rounds.clone(),
 			signing_rounds: self.signing_rounds.clone(),
-			best_dkg_block: self.best_dkg_block.clone(),
 			best_authorities: self.best_authorities.clone(),
 			best_next_authorities: self.best_next_authorities.clone(),
 			latest_header: self.latest_header.clone(),
@@ -254,7 +251,6 @@ where
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
 			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
-			best_dkg_block: Arc::new(RwLock::new(None)),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			best_next_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
@@ -881,14 +877,13 @@ where
 		// Get the active and queued validators to check for updates
 		if let Some((active, _queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
-			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.read().is_none() {
+			if active.id == GENESIS_AUTHORITY_SET_ID {
 				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS SESSION ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
-				// Setting new validator set id as current
-				*self.current_validator_set.write() = active.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-				*self.best_dkg_block.write() = Some(*header.number());
+				// Setting new validator set id as current
+				*self.current_validator_set.write() = active.clone();
 				*self.best_authorities.write() = self.get_best_authorities(header);
 				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
