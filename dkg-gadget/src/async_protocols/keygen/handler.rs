@@ -70,8 +70,17 @@ where
 			Ok(())
 		}
 		.then(|res| async move {
-			status_handle.set_status(MetaHandlerStatus::Complete);
-			log::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
+			match res {
+				Ok(_) => {
+					// Set the status as complete.
+					status_handle.set_status(MetaHandlerStatus::Complete);
+					log::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
+				}
+				Err(ref err) => {
+					// Do not update the status here, evetually the Keygen will fail and timeout.
+					log::error!(target: "dkg_gadget::keygen", "Keygen failed with error: {:?}", err);
+				}
+			};
 			res
 		});
 

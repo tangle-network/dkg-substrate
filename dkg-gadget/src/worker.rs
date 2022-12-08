@@ -51,7 +51,7 @@ use crate::gossip_messages::misbehaviour_report::{
 	gossip_misbehaviour_report, handle_misbehaviour_report,
 };
 
-use crate::{gossip_engine::GossipEngineIface, storage::clear::listen_and_clear_offchain_storage};
+use crate::gossip_engine::GossipEngineIface;
 
 use dkg_primitives::{
 	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
@@ -860,8 +860,6 @@ where
 			self.handle_emergency_keygen(header);
 			return
 		}
-		// Clear offchain storage
-		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 
 		// The Steps for enacting new DKG authorities are:
