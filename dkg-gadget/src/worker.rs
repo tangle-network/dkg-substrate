@@ -42,47 +42,39 @@ use parking_lot::RwLock;
 use sc_client_api::{Backend, FinalityNotification};
 
 use sp_api::BlockId;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_arithmetic::traits::CheckedRem;
+use sp_runtime::traits::{Block, Header, NumberFor, Zero};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::keystore::DKGKeystore;
-
-use crate::gossip_messages::misbehaviour_report::{
-	gossip_misbehaviour_report, handle_misbehaviour_report,
-};
-
-use crate::gossip_engine::GossipEngineIface;
-
 use dkg_primitives::{
-	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
-	utils::StoredLocalKey,
+	types::{
+		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
+		SignedDKGMessage,
+	},
+	utils::{cleanup, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
-
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, UnsignedProposal,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
 	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
-	error, metric_inc, metric_set,
+	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler},
+	error,
+	gossip_engine::GossipEngineIface,
+	gossip_messages::{
+		misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
+		public_key_gossip::handle_public_key_broadcast,
+	},
+	keystore::DKGKeystore,
+	metric_inc, metric_set,
 	metrics::Metrics,
 	persistence::load_stored_key,
 	utils::{find_authorities_change, get_key_path},
 	Client,
-};
-
-use crate::gossip_messages::public_key_gossip::handle_public_key_broadcast;
-use dkg_primitives::{
-	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
-	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
-};
-use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-
-use crate::async_protocols::{
-	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -96,6 +88,9 @@ pub const MAX_SIGNING_SETS: u64 = 32;
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
 pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(100);
+
+/// How many blocks to keep the proposal hash in out local cache.
+pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
@@ -1053,6 +1048,8 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 			// since we just rotate, we reset the keygen retry counter
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
+			// clear the currently being signing proposals cache.
+			self.currently_signing_proposals.write().clear();
 		}
 	}
 
@@ -1328,6 +1325,27 @@ where
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
+		}
+
+		// check if we should clear our proposal hash cache,
+		// the condition is that `PROPOSAL_HASH_LIFETIME` blocks have passed since the last
+		// block time we cached a proposal hash for.
+		// this could be done without actually keeping track of the last block time we cached a
+		// proposal hash for, by taking the modulo of the block number with
+		// `PROPOSAL_HASH_LIFETIME`,
+		let should_clear_proposals_cache = {
+			// take the modulo of the block number with `PROPOSAL_HASH_LIFETIME`
+			// if the result is 0, then `PROPOSAL_HASH_LIFETIME` blocks have passed since the last
+			// block time we cached a proposal hash for.
+			header
+				.number()
+				.checked_rem(&PROPOSAL_HASH_LIFETIME.into())
+				.map(|x| x.is_zero())
+				.unwrap_or(false)
+		};
+
+		if should_clear_proposals_cache {
+			self.currently_signing_proposals.write().clear();
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
