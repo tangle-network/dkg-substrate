@@ -82,7 +82,7 @@ impl NetworkGossipEngineBuilder {
 	/// Returns the configuration of the set to put in the network configuration.
 	pub fn set_config(protocol_name: ProtocolName) -> config::NonDefaultSetConfig {
 		config::NonDefaultSetConfig {
-			handshake: 0,
+			handshake: None,
 			notifications_protocol: protocol_name,
 			fallback_names: Vec::new(),
 			max_notification_size: MAX_MESSAGE_SIZE,

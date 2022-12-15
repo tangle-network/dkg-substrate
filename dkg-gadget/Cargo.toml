@@ -23,7 +23,7 @@ strum = { version = "0.21", features = ["derive"] }
 linked-hash-map = "0.5.4"
 lru = "0.7.0"
 
-curv = { package = "curv-kzen", git = "https://github.com/webb-tools/curv.git", default-features = false }
+curv = { package = "curv-kzen", version = "0.10.0", default-features = false }
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }

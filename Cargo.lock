@@ -790,7 +790,7 @@ dependencies = [
 [[package]]
 name = "bulletproof-kzen"
 version = "1.2.0"
-source = "git+https://github.com/webb-tools/bulletproofs-kzen.git#7610d547bba635075d7e3567f61cfb9f7aef1ea7"
+source = "git+https://github.com/webb-tools/bulletproofs-kzen.git#df49bfc8d48d2252177defe4114612e2b147f6bf"
 dependencies = [
  "curv-kzen",
  "generic-array 0.14.6",
@@ -884,7 +884,7 @@ dependencies = [
 [[package]]
 name = "centipede"
 version = "0.3.0"
-source = "git+https://github.com/webb-tools/centipede.git#015fd108012638efcc630889eccc243a1f371438"
+source = "git+https://github.com/webb-tools/centipede.git#397a180d07cc567367c65e7400df1bc7a2ddd0ca"
 dependencies = [
  "bulletproof-kzen",
  "curv-kzen",
@@ -1885,8 +1885,9 @@ dependencies = [
 
 [[package]]
 name = "curv-kzen"
-version = "0.9.0"
-source = "git+https://github.com/webb-tools/curv.git#8e27ba688aacfb6aada0562a0261892671820b43"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a616b5f766fd80307f0e83de6326ccd9fe7b3ba4225fe4e12ae3a692a939d07b"
 dependencies = [
  "cryptoxide",
  "curve25519-dalek 3.2.0",
@@ -2554,19 +2555,7 @@ dependencies = [
  "der",
  "elliptic-curve",
  "rfc6979",
- "signature 1.6.4",
-]
-
-[[package]]
-name = "ecdsa"
-version = "0.15.0-pre.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deb984c19733374d04faa1143d4a952d9621564760561d5272bffcf45723268e"
-dependencies = [
- "der",
- "elliptic-curve",
- "rfc6979",
- "signature 2.0.0-pre.3",
+ "signature",
 ]
 
 [[package]]
@@ -2575,7 +2564,7 @@ version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
 dependencies = [
- "signature 1.6.4",
+ "signature",
 ]
 
 [[package]]
@@ -4602,7 +4591,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72c1e0b51e7ec0a97369623508396067a486bd0cbed95a2659a4b863d28cfc8b"
 dependencies = [
  "cfg-if",
- "ecdsa 0.14.8",
+ "ecdsa",
  "elliptic-curve",
  "sha2 0.10.6",
 ]
@@ -4799,7 +4788,7 @@ dependencies = [
 [[package]]
 name = "kzen-paillier"
 version = "0.4.2"
-source = "git+https://github.com/webb-tools/rust-paillier#b32106a6c3432325cce810a97422e6fe9e3aa772"
+source = "git+https://github.com/webb-tools/rust-paillier#9ed9071c53fcba28d35d89379d03519884068458"
 dependencies = [
  "curv-kzen",
  "rayon",
@@ -5650,7 +5639,7 @@ dependencies = [
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.8.2"
-source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=thomas/fix-dependencies#849533f55dbd87f0b9261bc5bf3e92ee2a20a076"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=thomas/fix-dependencies#77df1f789c1f643d02ff899368bbb4372fbcf86c"
 dependencies = [
  "centipede",
  "curv-kzen",
@@ -6065,12 +6054,12 @@ checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
 name = "p256"
-version = "0.12.0-pre.0"
-source = "git+https://github.com/RustCrypto/elliptic-curves.git#a92061e3afe5c18f49b269d956bb17ab59b918b8"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
 dependencies = [
- "ecdsa 0.15.0-pre.1",
+ "ecdsa",
  "elliptic-curve",
- "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -10559,14 +10548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "primeorder"
-version = "0.0.1"
-source = "git+https://github.com/RustCrypto/elliptic-curves.git#a92061e3afe5c18f49b269d956bb17ab59b918b8"
-dependencies = [
- "elliptic-curve",
-]
-
-[[package]]
 name = "primitive-types"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14145,16 +14126,6 @@ name = "signature"
 version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-dependencies = [
- "digest 0.10.6",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "signature"
-version = "2.0.0-pre.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72c5ea30954aaba8f04263dd4d766a33d4838ae5535fccc81341b147604e7526"
 dependencies = [
  "digest 0.10.6",
  "rand_core 0.6.4",
@@ -17881,7 +17852,7 @@ dependencies = [
 [[package]]
 name = "zk-paillier"
 version = "0.4.3"
-source = "git+https://github.com/webb-tools/zk-paillier.git#cf4a5e8f6cc99a83720cca9347de94fa965a29c5"
+source = "git+https://github.com/webb-tools/zk-paillier.git#ade9fa93423a62a92f29d047a83a6186cd923a05"
 dependencies = [
  "bit-vec",
  "curv-kzen",
