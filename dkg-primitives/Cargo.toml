@@ -21,10 +21,10 @@ rand = "0.8.4"
 chacha20poly1305 = "0.9.0"
 typed-builder = "0.9.1"
 
-curv = { package = "curv-kzen", version = "0.9", default-features = false }
+curv = { package = "curv-kzen", git = "https://github.com/webb-tools/curv.git", default-features = false }
 
 round-based = { version = "0.1.7", features = [] }
-multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
+multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git", branch = "thomas/fix-dependencies" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.34" }
 sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.34" }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.34" }
