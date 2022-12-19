@@ -15,15 +15,18 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
+      
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y clang libssl-dev llvm libudev-dev libgmp3-dev protobuf-compiler && \
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: nightly
-
-      - name: Update apt repositories
-        run: sudo apt update
 
       - name: Build documentation
         run: cargo doc --no-deps 
