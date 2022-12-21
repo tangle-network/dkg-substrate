@@ -16,16 +16,6 @@
 // limitations under the License.
 
 pub mod constants {
-	use frame_support::{
-		parameter_types,
-		weights::{constants, Weight},
-	};
-
-	parameter_types! {
-		/// Executing a NO-OP `System::remarks` Extrinsic.
-		pub const ExtrinsicBaseWeight: Weight = constants::WEIGHT_PER_NANOS.saturating_mul(125_000);
-	}
-
 	#[cfg(test)]
 	mod test_weights {
 		use frame_support::weights::constants;

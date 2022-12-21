@@ -69,7 +69,7 @@ pub use frame_support::{
 	parameter_types,
 	traits::{KeyOwnerProofSystem, Randomness, StorageInfo},
 	weights::{
-		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
+		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
 		IdentityFee, Weight,
 	},
 	PalletId, StorageValue,
@@ -372,7 +372,7 @@ impl pallet_staking::Config for Runtime {
 	type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
 	type OffendingValidatorsThreshold = OffendingValidatorsThreshold;
 	type ElectionProvider = ElectionProviderMultiPhase;
-	type GenesisElectionProvider = onchain::UnboundedExecution<OnChainSeqPhragmen>;
+	type GenesisElectionProvider = onchain::OnChainExecution<OnChainSeqPhragmen>;
 	type VoterList = BagsList;
 	type MaxUnlockingChunks = ConstU32<32>;
 	type OnStakerSlash = NominationPools;
@@ -450,11 +450,6 @@ impl onchain::Config for OnChainSeqPhragmen {
 	type WeightInfo = frame_election_provider_support::weights::SubstrateWeight<Runtime>;
 }
 
-impl onchain::BoundedConfig for OnChainSeqPhragmen {
-	type VotersBound = MaxElectingVoters;
-	type TargetsBound = ConstU32<2_000>;
-}
-
 pub struct WebbMinerConfig;
 impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type AccountId = AccountId;
@@ -490,8 +485,8 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type SlashHandler = (); // burn slashes
 	type RewardHandler = (); // nothing to do upon rewards
 	type DataProvider = Staking;
-	type Fallback = onchain::BoundedExecution<OnChainSeqPhragmen>;
-	type GovernanceFallback = onchain::BoundedExecution<OnChainSeqPhragmen>;
+	type Fallback = onchain::OnChainExecution<OnChainSeqPhragmen>;
+	type GovernanceFallback = onchain::OnChainExecution<OnChainSeqPhragmen>;
 	type Solver = SequentialPhragmen<AccountId, SolutionAccuracyOf<Self>, ()>;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type MaxElectableTargets = ConstU16<{ u16::MAX }>;
@@ -532,11 +527,9 @@ impl pallet_nomination_pools::Config for Runtime {
 	type WeightInfo = ();
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
-	type CurrencyBalance = Balance;
 	type RewardCounter = sp_runtime::FixedU128;
 	type BalanceToU256 = BalanceToU256;
 	type U256ToBalance = U256ToBalance;
-	type StakingInterface = pallet_staking::Pallet<Self>;
 	type PostUnbondingPoolsWindow = PostUnbondPoolsWindow;
 	type MaxMetadataLen = ConstU32<256>;
 	type MaxUnbonding = ConstU32<8>;

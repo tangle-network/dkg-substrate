@@ -897,9 +897,9 @@ impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaT
 		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		use sp_core::crypto::ByteArray;
 		let _x = VerifyingKey::from_sec1_bytes(
-			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a),
+			sp_core::crypto::ByteArray::as_slice(&a),
 		);
-		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
+		VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a))
 			.map(|pub_key| {
 				// uncompress the key
 				let uncompressed = pub_key.to_encoded_point(false);

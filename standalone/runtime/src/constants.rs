@@ -37,7 +37,7 @@ pub mod time {
 	/// Type used for expressing timestamp.
 	pub type Moment = u64;
 
-	use frame_support::weights::{constants::WEIGHT_PER_SECOND, Weight};
+	use frame_support::weights::Weight;
 	use sp_runtime::Perbill;
 	/// We assume that ~5% of the block weight is consumed by `on_initialize`
 	/// handlers. This is used to limit the maximal weight of a single

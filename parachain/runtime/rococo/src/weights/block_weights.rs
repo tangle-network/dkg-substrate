@@ -16,16 +16,6 @@
 // limitations under the License.
 
 pub mod constants {
-	use frame_support::{
-		parameter_types,
-		weights::{constants, Weight},
-	};
-
-	parameter_types! {
-		/// Importing a block with 0 Extrinsics.
-		pub const BlockExecutionWeight: Weight = constants::WEIGHT_PER_NANOS.saturating_mul(5_000_000);
-	}
-
 	#[cfg(test)]
 	mod test_weights {
 		use frame_support::weights::constants;

@@ -21,6 +21,4 @@ pub mod block_weights;
 pub mod extrinsic_weights;
 pub mod rocksdb_weights;
 
-pub use block_weights::constants::BlockExecutionWeight;
-pub use extrinsic_weights::constants::ExtrinsicBaseWeight;
-pub use rocksdb_weights::constants::RocksDbWeight;
+pub use frame_support::weights::constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
