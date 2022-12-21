@@ -108,7 +108,6 @@ where
 		let ty = match status {
 			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
-			DKGMsgStatus::UNKNOWN => KeygenRound::UNKNOWN,
 		};
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
