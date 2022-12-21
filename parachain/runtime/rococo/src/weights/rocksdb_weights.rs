@@ -16,6 +16,20 @@
 // limitations under the License.
 
 pub mod constants {
+	use frame_support::{
+		parameter_types,
+		weights::{constants, RuntimeDbWeight},
+	};
+
+	parameter_types! {
+		/// By default, Substrate uses `RocksDB`, so this will be the weight used throughout
+		/// the runtime.
+		pub const RocksDbWeight: RuntimeDbWeight = RuntimeDbWeight {
+			read: 25_000 * constants::WEIGHT_REF_TIME_PER_NANOS.ref_time(),
+			write: 100_000 * constants::WEIGHT_REF_TIME_PER_NANOS.ref_time(),
+		};
+	}
+
 	#[cfg(test)]
 	mod test_db_weights {
 		use super::constants::RocksDbWeight as W;
