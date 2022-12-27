@@ -2282,6 +2282,7 @@ name = "dkg-primitives"
 version = "0.0.1"
 dependencies = [
  "chacha20poly1305",
+ "clap 3.2.23",
  "curv-kzen",
  "dkg-runtime-primitives",
  "fnv",
@@ -2294,6 +2295,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "rand 0.8.5",
  "round-based",
+ "sc-cli",
  "sc-keystore",
  "sc-service",
  "serde",
