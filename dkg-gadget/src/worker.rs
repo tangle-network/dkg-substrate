@@ -410,7 +410,6 @@ where
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler.clone();
-				// Check first from the rounds object, if any.
 				let status = if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.session_id == session_id {
 						DKGMsgStatus::ACTIVE
@@ -424,7 +423,6 @@ where
 					DKGMsgStatus::ACTIVE
 				} else {
 					// We are likely crashed and restarted, and we are not in the genesis stage,
-					// so we can safely assume that we are in the queued state.
 					DKGMsgStatus::QUEUED
 				};
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
