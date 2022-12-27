@@ -21,7 +21,6 @@ mod service;
 mod benchmarking;
 mod cli;
 mod command;
-mod dkg_key;
 mod rpc;
 mod testnet_fixtures;
 

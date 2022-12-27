@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use sc_cli::{Error, SubstrateCli};
 use sp_core::crypto::Pair;
 
-use dkg_primitives::utils::{decrypt_data, StoredLocalKey};
+use crate::utils::{decrypt_data, StoredLocalKey};
 
 /// Key utilities for the cli.
 #[derive(Debug, clap::Subcommand)]
