@@ -44,9 +44,8 @@ impl InspectKeyCmd {
 			.map_err(|e| Error::Input(format!("Failed to read secret file: {}", e)))?;
 		// remove the qoutes and newlines
 		let secret = file_data.replace('"', "").replace('\r', "").replace('\n', "");
-		let (pair, _) = sp_core::sr25519::Pair::from_string_with_seed(&secret, None).map_err(|e| {
-			Error::Input(format!("Failed to parse secret file: {:?}", e))
-		})?;
+		let (pair, _) = sp_core::sr25519::Pair::from_string_with_seed(&secret, None)
+			.map_err(|e| Error::Input(format!("Failed to parse secret file: {:?}", e)))?;
 		let secret = pair.to_raw_vec();
 		// Read the encrypted local key file
 		let encrypted_local_key = std::fs::read(&self.dkg_file)
