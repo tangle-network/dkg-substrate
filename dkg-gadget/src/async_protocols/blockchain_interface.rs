@@ -80,16 +80,17 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
 	pub keystore: DKGKeystore,
+	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
 	pub is_genesis: bool,
-	pub _pd: PhantomData<BE>,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub local_key_path: Arc<RwLock<Option<PathBuf>>>,
+	pub _pd: PhantomData<BE>,
 }
 
 impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
@@ -203,12 +204,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
-		let sr_pub = self.get_sr25519_public_key();
-		let local_key_path = self.local_key_path.read().clone();
-		let local_keystore = self.local_keystore.read().clone();
-		store_localkey(key, session_id, local_key_path, local_keystore.as_ref(), sr_pub)
-			.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
-
+		self.db.store_local_key(session_id, key)?;
 		Ok(())
 	}
 

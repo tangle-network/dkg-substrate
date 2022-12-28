@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_session_id,
-	state_machine::StateMachineHandler, AsyncProtocolParameters, ProtocolType,
+	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+	AsyncProtocolParameters, ProtocolType,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
