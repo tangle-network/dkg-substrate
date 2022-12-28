@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate core;
-
 use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use log::debug;
@@ -38,6 +36,7 @@ mod keystore;
 
 mod gossip_engine;
 // mod meta_async_rounds;
+mod db;
 mod metrics;
 mod persistence;
 mod proposal;
@@ -176,6 +175,7 @@ where
 	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
 	let signing_handle = tokio::spawn(signing_gossip_handler.run());
 
+	let db_backend = Arc::new(db::DKGInMemoryDb::new());
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,
@@ -183,6 +183,7 @@ where
 		key_store: key_store.into(),
 		keygen_gossip_engine,
 		signing_gossip_engine,
+		db_backend,
 		metrics,
 		base_path,
 		local_keystore,
