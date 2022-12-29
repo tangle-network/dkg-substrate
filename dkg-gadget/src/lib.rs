@@ -38,7 +38,6 @@ mod gossip_engine;
 // mod meta_async_rounds;
 mod db;
 mod metrics;
-mod persistence;
 mod proposal;
 mod utils;
 mod worker;
