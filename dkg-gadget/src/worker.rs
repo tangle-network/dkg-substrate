@@ -72,7 +72,6 @@ use crate::{
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	persistence::load_stored_key,
 	utils::{find_authorities_change, get_key_path},
 	Client,
 };
@@ -305,7 +304,8 @@ where
 		let status_handle = AsyncProtocolRemote::new(now, session_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
-		let (active_local_key, _) = self.fetch_local_keys();
+		let optional_session_id = Some(session_id);
+		let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
 				backend: self.backend.clone(),
@@ -332,7 +332,7 @@ where
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
 			handle: status_handle.clone(),
-			local_key: active_local_key.map(|k| k.local_key),
+			local_key: active_local_key,
 		};
 		// Start the respective protocol
 		status_handle.start()?;
@@ -523,57 +523,22 @@ where
 		Ok(Box::pin(task))
 	}
 
-	/// Rotates the contents of the DKG local key files from the queued file to the active file.
-	///
-	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
-	/// a new queued DKG local key for the new queued authority set. The previously queued set
-	/// is now the active set and so we transition their local key data into the active file path.
-	///
-	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
-	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
-	///
-	/// This should never execute unless we are certain that the rotation will succeed, i.e.
-	/// that the signature of the next DKG public key has been created and stored on-chain.
-	fn rotate_local_key_files(&self) -> bool {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-		debug!(target: "dkg_gadget::worker", "Rotating local key files");
-		debug!(target: "dkg_gadget::worker", "Local key path: {:?}", local_key_path);
-		debug!(target: "dkg_gadget::worker", "Queued local key path: {:?}", queued_local_key_path);
-		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
-			if let Err(err) = std::fs::copy(queued_path, path) {
-				error!("Error copying queued key {:?}", &err);
-				return false
-			} else {
-				debug!("Successfully copied queued key to current key");
-				return true
-			}
-		}
-
-		false
-	}
-
 	/// Fetch the local stored keys if they exist.
-	fn fetch_local_keys(&self) -> (Option<StoredLocalKey>, Option<StoredLocalKey>) {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-
-		let sr_pub = self.get_sr25519_public_key();
-		match (local_key_path, queued_local_key_path) {
-			(Some(path), Some(queued_path)) => (
-				load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(Some(path), None) =>
-				(load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(), None),
-			(None, Some(queued_path)) => (
-				None,
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(None, None) => (None, None),
-		}
+	///
+	/// The `optional_session_id` is used to fetch the keys for a specific session, only in case
+	/// if `self.rounds` is `None`. This is useful when the node is restarted and we need to fetch
+	/// the keys for the current session.
+	fn fetch_local_keys(
+		&self,
+		optional_session_id: Option<SessionId>,
+	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
+		let current_session_id =
+			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id);
+		let next_session_id = current_session_id.map(|s| s + 1);
+		let active_local_key =
+			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		let next_local_key = next_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		(active_local_key, next_local_key)
 	}
 
 	/// Get the party index of our worker
@@ -881,7 +846,7 @@ where
 			self.maybe_enact_genesis_authorities(header);
 		} else {
 			self.maybe_enact_next_authorities(header);
-			self.maybe_rotate_local_keys(header);
+			self.maybe_rotate_local_sessions(header);
 			self.submit_unsigned_proposals(header);
 		}
 	}
@@ -1009,7 +974,7 @@ where
 		}
 	}
 
-	fn maybe_rotate_local_keys(&self, header: &B::Header) {
+	fn maybe_rotate_local_sessions(&self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
 			metric_set!(self, dkg_validator_set_id, active.id);
@@ -1025,26 +990,7 @@ where
 			}
 			// Update the validator sets
 			*self.current_validator_set.write() = active;
-			*self.queued_validator_set.write() = queued.clone();
-			// Check the local keystore, if a queued key exists with the same
-			// round ID then we shouldn't rotate since it means we have shut down
-			// and started up after a previous rotation.
-			let (_, maybe_queued_key) = self.fetch_local_keys();
-			match maybe_queued_key {
-				Some(queued_key) if queued_key.session_id == queued.id => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.session_id);
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
-					return
-				},
-				Some(k) => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.session_id);
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
-				},
-				None => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY DOES NOT EXIST");
-				},
-			};
-			// If we are starting a new queued DKG, we rotate the next rounds
+			*self.queued_validator_set.write() = queued;
 			log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 			match self.rounds.read().as_ref() {
 				Some(r) if r.is_active() => {
@@ -1058,9 +1004,6 @@ where
 			// We also rotate the best authority caches
 			*self.best_authorities.write() = self.best_next_authorities.read().clone();
 			*self.best_next_authorities.write() = self.get_next_best_authorities(header);
-			// Rotate the key files
-			let success = self.rotate_local_key_files();
-			debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 			// since we just rotate, we reset the keygen retry counter
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
 			// clear the currently being signing proposals cache.
@@ -1331,7 +1274,9 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) {
-		let session_id = self.current_validator_set.read().id;
+		let on_chain_dkg = self.get_dkg_pub_key(header);
+		let session_id = on_chain_dkg.0;
+		let dkg_pub_key = on_chain_dkg.1;
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
@@ -1387,16 +1332,8 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-
-		let (active_local_key, _) = self.fetch_local_keys();
-		let local_key = if let Some(active_local_key) = active_local_key {
-			active_local_key.local_key
-		} else {
-			return
-		};
-
 		let mut count = 0;
-		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
+		let mut seed = dkg_pub_key;
 
 		// Generate multiple signing sets for signing the same unsigned proposals.
 		// The goal is to successfully sign proposals immediately in the event that

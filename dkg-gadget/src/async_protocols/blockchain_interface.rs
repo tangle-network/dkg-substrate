@@ -16,7 +16,6 @@ use crate::{
 	async_protocols::BatchKey,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
-	persistence::store_localkey,
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
@@ -204,8 +203,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
-		self.db.store_local_key(session_id, key)?;
-		Ok(())
+		self.db.store_local_key(session_id, key)
 	}
 
 	fn get_authority_set(&self) -> &Vec<Public> {
