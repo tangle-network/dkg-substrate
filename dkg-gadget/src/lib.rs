@@ -175,7 +175,14 @@ where
 	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
 	let signing_handle = tokio::spawn(signing_gossip_handler.run());
 
-	let db_backend = Arc::new(db::DKGInMemoryDb::new());
+	// In memory backend, not used for now
+	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
+	let offchain_db_backend = db::DKGOffchainStorageDb::new(
+		backend.clone(),
+		key_store.clone().into(),
+		local_keystore.clone(),
+	);
+	let db_backend = Arc::new(offchain_db_backend);
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,

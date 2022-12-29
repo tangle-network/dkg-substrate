@@ -6,7 +6,7 @@ mod mem;
 mod offchain_storage;
 
 pub use mem::DKGInMemoryDb;
-// pub use offchain_storage::DKGOffchainStorageDb;
+pub use offchain_storage::DKGOffchainStorageDb;
 
 /// A Database backend, specificly for the DKG to store and load important state
 ///

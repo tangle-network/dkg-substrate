@@ -16,6 +16,7 @@ pub struct DKGInMemoryDb {
 
 impl DKGInMemoryDb {
 	/// Create a new instance of [`DKGInMemoryDb`].
+	#[allow(unused)]
 	pub fn new() -> Self {
 		Self { local_keys: Mutex::new(BTreeMap::new()) }
 	}
