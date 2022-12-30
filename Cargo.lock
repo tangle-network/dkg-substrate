@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "bulletproof-kzen"
 version = "1.2.0"
-source = "git+https://github.com/webb-tools/bulletproofs-kzen.git#df49bfc8d48d2252177defe4114612e2b147f6bf"
+source = "git+https://github.com/webb-tools/bulletproofs-kzen.git#841bb9f07ad82d1391a476355cfc078af5f9ceb6"
 dependencies = [
  "curv-kzen",
  "generic-array 0.14.6",
@@ -809,7 +809,7 @@ dependencies = [
 [[package]]
 name = "centipede"
 version = "0.3.0"
-source = "git+https://github.com/webb-tools/centipede.git#397a180d07cc567367c65e7400df1bc7a2ddd0ca"
+source = "git+https://github.com/webb-tools/centipede.git#6395a9b32ad67108f2a311e95d8115f0c3a6cf51"
 dependencies = [
  "bulletproof-kzen",
  "curv-kzen",
@@ -2195,6 +2195,7 @@ dependencies = [
  "env_logger",
  "fnv",
  "futures",
+ "getrandom 0.2.8",
  "hex",
  "itertools 0.10.5",
  "libsecp256k1 0.3.5",
@@ -3453,8 +3454,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c05aeb6a22b8f62540c194aac980f2115af067bfe15a0734d7277a768d396b31"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -5125,7 +5128,7 @@ dependencies = [
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.8.2"
-source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=thomas/fix-dependencies#77df1f789c1f643d02ff899368bbb4372fbcf86c"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git?branch=thomas/fix-dependencies#a464d96d6fdada6892b86b74d4068a620cff6fd8"
 dependencies = [
  "centipede",
  "curv-kzen",
@@ -13442,7 +13445,7 @@ dependencies = [
 [[package]]
 name = "zk-paillier"
 version = "0.4.3"
-source = "git+https://github.com/webb-tools/zk-paillier.git#ade9fa93423a62a92f29d047a83a6186cd923a05"
+source = "git+https://github.com/webb-tools/zk-paillier.git#0ca2d32e041c7102cdd2e61b55bcbc6cb4bf5114"
 dependencies = [
  "bit-vec",
  "curv-kzen",
