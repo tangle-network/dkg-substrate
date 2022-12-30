@@ -17,7 +17,7 @@ use codec::Encode;
 use frame_support::{
 	assert_err, assert_ok,
 	traits::{Hooks, OnFinalize},
-	weights::{constants::RocksDbWeight, DispatchClass},
+	weights::constants::RocksDbWeight,
 };
 use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
 use sp_std::vec::Vec;
@@ -75,7 +75,7 @@ pub fn run_n_blocks(n: u64) -> u64 {
 		// ensure the on_idle is executed
 		<frame_system::Pallet<Test>>::register_extra_weight_unchecked(
 			DKGProposalHandler::on_idle(block_number, idle_weight),
-			DispatchClass::Mandatory,
+			frame_support::dispatch::DispatchClass::Mandatory,
 		);
 
 		<frame_system::Pallet<Test> as OnFinalize<u64>>::on_finalize(block_number);

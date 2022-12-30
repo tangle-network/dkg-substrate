@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-jsonrpsee = { version = "0.15.0", features = ["server"] }
+jsonrpsee = { version = "0.16.2", features = ["server"] }
 sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }

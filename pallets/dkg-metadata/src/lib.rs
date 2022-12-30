@@ -655,7 +655,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new signature threshold for the DKG.
-		#[pallet::weight(<T as Config>::WeightInfo::set_signature_threshold())]
+		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
 		pub fn set_signature_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -682,7 +683,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new keygen threshold for the DKG.
 		#[transactional]
-		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
+		#[pallet::weight(1)]
+		#[pallet::call_index(1)]
 		pub fn set_keygen_threshold(
 			origin: OriginFor<T>,
 			new_threshold: u16,
@@ -707,7 +709,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `new_delay` - The percentage of elapsed session duration to wait before adding an
 		///   unsigned refresh proposal to the unsigned proposal queue.
-		#[pallet::weight(<T as Config>::WeightInfo::set_refresh_delay(*new_delay as u32))]
+		#[pallet::weight(2)]
+		#[pallet::call_index(2)]
 		pub fn set_refresh_delay(
 			origin: OriginFor<T>,
 			new_delay: u8,
@@ -734,7 +737,8 @@ pub mod pallet {
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
 		///   DKG public keys.
 		#[transactional]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
+		#[pallet::weight(3)]
+		#[pallet::call_index(3)]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -792,7 +796,8 @@ pub mod pallet {
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
 		///   DKG public keys.
 		#[transactional]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
+		#[pallet::weight(4)]
+		#[pallet::call_index(4)]
 		pub fn submit_next_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -847,7 +852,8 @@ pub mod pallet {
 		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
 		///   and nonce.
 		#[transactional]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
+		#[pallet::weight(5)]
+		#[pallet::call_index(5)]
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
@@ -936,7 +942,8 @@ pub mod pallet {
 		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
 		///   authority
 		#[transactional]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
+		#[pallet::weight(6)]
+		#[pallet::call_index(6)]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<T::DKGId>,
@@ -1096,7 +1103,8 @@ pub mod pallet {
 		/// for the authority to be removed from the jail.
 		///
 		/// * `origin` - The account origin.
-		#[pallet::weight(<T as Config>::WeightInfo::unjail())]
+		#[pallet::weight(7)]
+		#[pallet::call_index(7)]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 			let authority =
@@ -1123,7 +1131,8 @@ pub mod pallet {
 		/// Can only be called by DKG
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the keygen jail.
-		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
+		#[pallet::weight(8)]
+		#[pallet::call_index(8)]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1139,7 +1148,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the signing jail.
-		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_signing())]
+		#[pallet::weight(9)]
+		#[pallet::call_index(9)]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1155,7 +1165,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(<T as Config>::WeightInfo::manual_increment_nonce())]
+		#[pallet::weight(10)]
+		#[pallet::call_index(10)]
 		#[transactional]
 		pub fn manual_increment_nonce(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1173,7 +1184,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The account that is initiating the refresh process.
 		/// **Important**: This function is only available for testing purposes.
-		#[pallet::weight(<T as Config>::WeightInfo::manual_refresh())]
+		#[pallet::weight(11)]
+		#[pallet::call_index(11)]
 		#[transactional]
 		pub fn manual_refresh(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1211,7 +1223,8 @@ pub mod pallet {
 		/// This forces the next authorities into the current authority spot and
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
-		#[pallet::weight(0)]
+		#[pallet::weight(12)]
+		#[pallet::call_index(12)]
 		#[transactional]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1255,7 +1268,8 @@ pub mod pallet {
 		///
 		/// The keygen protocol will then be executed and the result will be stored in the off chain
 		/// storage, which will be picked up by the on chain worker and stored on chain.
-		#[pallet::weight(0)]
+		#[pallet::weight(13)]
+		#[pallet::call_index(13)]
 		#[transactional]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;

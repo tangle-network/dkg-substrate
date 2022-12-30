@@ -326,7 +326,8 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
+		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
 			_origin: OriginFor<T>,
@@ -405,7 +406,8 @@ pub mod pallet {
 		/// There are certain proposals we'd like to be proposable only
 		/// through root actions. The currently supported proposals are
 		/// 	1. Updating
-		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
+		#[pallet::weight(1)]
+		#[pallet::call_index(1)]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
 			prop: Proposal,
