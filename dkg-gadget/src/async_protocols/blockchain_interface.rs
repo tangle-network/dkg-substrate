@@ -41,7 +41,7 @@ use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, NumberFor};
-use std::{collections::HashMap, fmt::Debug, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use webb_proposals::Proposal;
 
 #[auto_impl::auto_impl(Arc,&,&mut)]
@@ -88,7 +88,6 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub is_genesis: bool,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
-	pub local_key_path: Arc<RwLock<Option<PathBuf>>>,
 	pub _pd: PhantomData<BE>,
 }
 

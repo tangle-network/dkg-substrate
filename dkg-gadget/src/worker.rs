@@ -31,7 +31,6 @@ use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
 	marker::PhantomData,
-	path::PathBuf,
 	pin::Pin,
 	sync::{
 		atomic::{AtomicUsize, Ordering},
@@ -53,7 +52,6 @@ use dkg_primitives::{
 		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
 		SignedDKGMessage,
 	},
-	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{
@@ -74,7 +72,7 @@ use crate::{
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	utils::{find_authorities_change, get_key_path},
+	utils::find_authorities_change,
 	Client,
 };
 
@@ -107,7 +105,6 @@ where
 	pub signing_gossip_engine: GE,
 	pub db_backend: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Option<Metrics>,
-	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub _marker: PhantomData<B>,
@@ -155,8 +152,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
-	/// Local keystore for DKG data
-	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -197,7 +192,6 @@ where
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
-			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
@@ -232,7 +226,6 @@ where
 			keygen_gossip_engine,
 			signing_gossip_engine,
 			metrics,
-			base_path,
 			local_keystore,
 			latest_header,
 			..
@@ -261,7 +254,6 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
-			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
@@ -294,7 +286,6 @@ where
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		session_id: SessionId,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
@@ -322,7 +313,6 @@ where
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
-				local_key_path: Arc::new(RwLock::new(local_key_path)),
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
@@ -405,14 +395,12 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			0u8,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
@@ -475,7 +463,6 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
@@ -485,7 +472,6 @@ where
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			async_index,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
@@ -732,10 +718,6 @@ where
 			_ => {},
 		}
 
-		let local_key_path = get_key_path(&self.base_path.read(), DKG_LOCAL_KEY_FILE);
-		if let Some(local_key) = local_key_path.as_ref() {
-			let _ = cleanup(local_key.clone());
-		}
 		// DKG keygen authorities are always taken from the best set of authorities
 		let session_id = genesis_authority_set.id;
 		let maybe_party_index = self.get_party_index(header);
@@ -757,7 +739,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			local_key_path,
 			ProtoStageType::Genesis,
 		);
 	}
@@ -781,13 +762,6 @@ where
 				// clear the next rounds.
 			}
 		}
-
-		let queued_local_key_path =
-			get_key_path(&*self.base_path.read(), QUEUED_DKG_LOCAL_KEY_FILE);
-		if let Some(path) = queued_local_key_path.as_ref() {
-			let _ = cleanup(path.clone());
-		}
-
 		// Get the best next authorities using the keygen threshold
 		let session_id = queued.id;
 		let maybe_party_index = self.get_next_party_index(header);
@@ -813,7 +787,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
 	}
@@ -1398,7 +1371,6 @@ where
 					authority_public_key.clone(),
 					session_id,
 					threshold,
-					None,
 					ProtoStageType::Signing,
 					unsigned_proposals.clone(),
 					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),

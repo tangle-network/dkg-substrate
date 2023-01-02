@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use log::debug;
 use parking_lot::RwLock;
@@ -108,8 +108,6 @@ where
 
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
-	/// Path to the persistent keystore directory for DKG data
-	pub base_path: Option<PathBuf>,
 	/// Phantom block type
 	pub _block: PhantomData<B>,
 }
@@ -130,7 +128,6 @@ where
 		key_store,
 		network,
 		prometheus_registry,
-		base_path,
 		local_keystore,
 		_block,
 	} = dkg_params;
@@ -191,7 +188,6 @@ where
 		signing_gossip_engine,
 		db_backend,
 		metrics,
-		base_path,
 		local_keystore,
 		_marker: PhantomData::default(),
 	};
