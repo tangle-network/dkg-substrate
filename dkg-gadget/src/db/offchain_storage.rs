@@ -47,8 +47,8 @@ impl<B, BE> DKGOffchainStorageDb<B, BE> {
 mod keys {
 	use super::*;
 	#[derive(Debug, Clone, codec::Encode, codec::Decode)]
-	pub(super) struct LocalKeyDbKey {
-		/// [d,k,g] letters.
+	pub(super) struct LocalKey {
+		/// "dkg" letters.
 		_prefix: [u8; 3],
 		/// Key name "local_key".
 		_key_name: [u8; 9],
@@ -56,7 +56,7 @@ mod keys {
 		pub session_id: SessionId,
 	}
 
-	impl LocalKeyDbKey {
+	impl LocalKey {
 		pub fn new(session_id: SessionId) -> Self {
 			Self { _prefix: *b"dkg", _key_name: *b"local_key", session_id }
 		}
@@ -72,7 +72,7 @@ where
 		&self,
 		session_id: SessionId,
 	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
-		let db_key = keys::LocalKeyDbKey::new(session_id);
+		let db_key = keys::LocalKey::new(session_id);
 		let maybe_decrypted_bytes = self.load_and_decrypt(codec::Encode::encode(&db_key))?;
 		match maybe_decrypted_bytes {
 			Some(decrypted_bytes) => {
@@ -89,7 +89,7 @@ where
 		session_id: SessionId,
 		local_key: LocalKey<Secp256k1>,
 	) -> Result<(), DKGError> {
-		let db_key = keys::LocalKeyDbKey::new(session_id);
+		let db_key = keys::LocalKey::new(session_id);
 		let value = serde_json::to_vec(&local_key)
 			.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;
 		self.encrypt_and_store(codec::Encode::encode(&db_key), value)
@@ -116,6 +116,9 @@ where
 	B: Block,
 	BE: Backend<B>,
 {
+	/// Fetch the secret key from the keystore and use it to encrypt and decrypt the data.
+	///
+	/// This needs at least one sr25519 key in the keystore.
 	fn secret_key(&self) -> Result<Vec<u8>, DKGError> {
 		let public_key = self
 			.key_store
@@ -145,6 +148,9 @@ where
 		}
 	}
 
+	/// Encrypts the raw data and stores it in the offchain storage.
+	///
+	/// Note: This will overwrite any existing data at the given key.
 	fn encrypt_and_store(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), DKGError> {
 		let secret_key = self.secret_key()?;
 		let encrypted_data = encrypt_data(value, secret_key).map_err(|e| {
@@ -153,6 +159,10 @@ where
 		self.store_encrypted_bytes(key, EncryptedBytes::new(encrypted_data))
 	}
 
+	/// Loads the encrypted data from the offchain storage and decrypts it.
+	///
+	/// Returns None if the key is not found.
+	/// Returns an error if the decryption fails.
 	fn load_and_decrypt(&self, key: Vec<u8>) -> Result<Option<DecryptedBytes>, DKGError> {
 		let secret_key = self.secret_key()?;
 		let maybe_encrypted_data = self.load_encrypted_bytes(key)?;
@@ -167,10 +177,19 @@ where
 		}
 	}
 
+	/// Stores the encrypted bytes in the offchain storage.
+	/// You should use [`Self::encrypt_and_store`] for a more convenient method.
+	///
+	/// Note: This will overwrite any existing data at the given key.
 	fn store_encrypted_bytes(&self, key: Vec<u8>, value: EncryptedBytes) -> Result<(), DKGError> {
 		self.store(key, value.0)
 	}
 
+	/// Loads the encrypted bytes from the offchain storage.
+	/// You should use [`Self::load_and_decrypt`] for a more convenient method.
+	///
+	/// Returns None if the key is not found.
+	/// Returns an error if the decryption fails.
 	fn load_encrypted_bytes(&self, key: Vec<u8>) -> Result<Option<EncryptedBytes>, DKGError> {
 		let maybe_bytes = self.load(key)?;
 		match maybe_bytes {
@@ -179,6 +198,10 @@ where
 		}
 	}
 
+	/// Stores the raw bytes in the offchain storage.
+	///
+	/// Note: This will overwrite any existing data at the given key.
+	/// Note: The stored data is not encrypted, so use this with care.
 	fn store(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), DKGError> {
 		let mut offchain_storage = self.backend.offchain_storage().ok_or_else(|| {
 			DKGError::CriticalError { reason: String::from("No Offchain Storage available!!") }
@@ -187,6 +210,10 @@ where
 		Ok(())
 	}
 
+	/// Loads the raw bytes from the offchain storage.
+	///
+	/// Returns None if the key is not found.
+	/// Note: The loaded data may not be encrypted, so use this with care.
 	fn load(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>, DKGError> {
 		let offchain_storage = self.backend.offchain_storage().ok_or_else(|| {
 			DKGError::CriticalError { reason: String::from("No Offchain Storage available!!") }
