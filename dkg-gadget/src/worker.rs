@@ -1014,6 +1014,13 @@ where
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
 			// clear the currently being signing proposals cache.
 			self.currently_signing_proposals.write().clear();
+			// Reset all the signing rounds.
+			self.signing_rounds.write().iter_mut().for_each(|v| {
+				if let Some(r) = v.as_mut() {
+					let _ = r.shutdown("Rotating next round");
+				}
+				*v = None;
+			});
 		}
 	}
 
