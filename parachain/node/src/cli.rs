@@ -54,8 +54,13 @@ pub enum Subcommand {
 	#[clap(subcommand)]
 	Benchmark(frame_benchmarking_cli::BenchmarkCmd),
 
-	/// Try some testing command against a specified runtime state.
+	/// Try some command against runtime state.
+	#[cfg(feature = "try-runtime")]
 	TryRuntime(try_runtime_cli::TryRuntimeCmd),
+
+	/// Try some command against runtime state. Note: `try-runtime` feature must be enabled.
+	#[cfg(not(feature = "try-runtime"))]
+	TryRuntime,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -69,7 +74,7 @@ pub struct Cli {
 	pub subcommand: Option<Subcommand>,
 
 	#[clap(flatten)]
-	pub run: cumulus_client_cli::RunCmd,
+	pub run: sc_cli::RunCmd,
 
 	/// Disable automatic hardware benchmarks.
 	///
