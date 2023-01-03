@@ -35,13 +35,13 @@ frame-benchmarking = { default-features = false, git = "https://github.com/parit
 
 [dev-dependencies]
 webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
-pallet-dkg-proposal-handler = { path = "../dkg-proposal-handler" }
-pallet-dkg-metadata = { path = "../dkg-metadata" }
-pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36" }
-pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+pallet-dkg-proposal-handler = { default-features = false, path = "../dkg-proposal-handler" }
+pallet-dkg-metadata = { default-features = false, path = "../dkg-metadata" }
+pallet-collator-selection = { default-features = false, git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36" }
+pallet-aura = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-consensus-aura = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+pallet-session = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 hex = { version = "0.4", default-features = false }
 
 [features]

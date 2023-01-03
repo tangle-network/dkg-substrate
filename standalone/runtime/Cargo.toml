@@ -72,7 +72,7 @@ frame-system-benchmarking = { git = "https://github.com/paritytech/substrate", b
 hex-literal = { version = "0.3.3", optional = true }
 
 [build-dependencies]
-substrate-wasm-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+substrate-wasm-builder = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 [features]
 default = ["std"]

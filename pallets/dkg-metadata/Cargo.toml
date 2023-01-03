@@ -20,7 +20,7 @@ scale-info = { version = "2.1.1", default-features = false, features = [
 	"derive",
 ] }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-libsecp256k1 = { version = "0.7.0", default-features = false }
+libsecp256k1 = { version = "0.7.1", default-features = false }
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false, optional = true }
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }

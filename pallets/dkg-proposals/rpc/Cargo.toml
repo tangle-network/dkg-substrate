@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 jsonrpsee = { version = "0.16.2", features = ["server"] }
-sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sc-rpc = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-api = {  default-features = false,git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-blockchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 pallet-dkg-proposals-runtime-api = { path = "./runtime-api", default-features = false }
 
