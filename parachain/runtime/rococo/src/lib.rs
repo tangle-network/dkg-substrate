@@ -73,6 +73,7 @@ pub use sp_runtime::BuildStorage;
 use sp_runtime::{generic::Era, traits::ConstU32};
 pub use sp_runtime::{MultiAddress, Perbill, Percent, Permill};
 use weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
+use frame_support::traits::WithdrawReasons;
 
 // XCM Imports
 use smallvec::smallvec;
@@ -578,6 +579,8 @@ impl pallet_utility::Config for Runtime {
 
 parameter_types! {
 	pub const MinVestedTransfer: Balance = DOLLAR;
+	pub UnvestedFundsAllowedWithdrawReasons: WithdrawReasons =
+	WithdrawReasons::except(WithdrawReasons::TRANSFER | WithdrawReasons::RESERVE);
 }
 
 impl pallet_vesting::Config for Runtime {
@@ -585,6 +588,7 @@ impl pallet_vesting::Config for Runtime {
 	type Currency = Balances;
 	type BlockNumberToBalance = sp_runtime::traits::ConvertInto;
 	type MinVestedTransfer = MinVestedTransfer;
+	type UnvestedFundsAllowedWithdrawReasons = UnvestedFundsAllowedWithdrawReasons;
 	type WeightInfo = ();
 	const MAX_VESTING_SCHEDULES: u32 = 28;
 }
@@ -695,6 +699,9 @@ impl pallet_democracy::Config for Runtime {
 	type VoteLockingPeriod = EnactmentPeriod;
 	type VotingPeriod = VotingPeriod;
 	type WeightInfo = pallet_democracy::weights::SubstrateWeight<Runtime>;
+	type Preimages = Preimage;
+	type MaxDeposits = ConstU32<100>;
+	type MaxBlacklisted = ConstU32<100>;
 }
 
 parameter_types! {
@@ -746,6 +753,7 @@ impl pallet_scheduler::Config for Runtime {
 	type PalletsOrigin = OriginCaller;
 	type ScheduleOrigin = EnsureRoot<AccountId>;
 	type WeightInfo = pallet_scheduler::weights::SubstrateWeight<Runtime>;
+	type Preimages = Preimage;
 }
 
 impl frame_system::offchain::SigningTypes for Runtime {
