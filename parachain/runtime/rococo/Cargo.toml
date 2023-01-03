@@ -20,6 +20,7 @@ serde = { version = "1.0.101", optional = true, features = ["derive"]}
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.3", optional = true }
 smallvec = "1.6.1"
+getrandom = { version = "0.2.8", features = ["js"] }
 
 # DKG Substrate Dependencies
 pallet-dkg-metadata = { path = "../../../pallets/dkg-metadata", default-features = false }
@@ -55,7 +56,7 @@ frame-try-runtime = { git = "https://github.com/paritytech/substrate", default-f
 pallet-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-randomness-collective-flip = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-pallet-society = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+pallet-society = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 pallet-collective = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 pallet-sudo = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
@@ -84,7 +85,7 @@ cumulus-primitives-timestamp = { git = "https://github.com/paritytech/cumulus", 
 cumulus-primitives-utility = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36", default-features = false }
 pallet-collator-selection = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36", default-features = false }
 parachain-info = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36", default-features = false }
-
+ 
 # Polkadot Dependencies
 polkadot-parachain = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.36", default-features = false }
 polkadot-runtime-common = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
@@ -149,6 +150,7 @@ std = [
 	"pallet-democracy/std",
 	"pallet-scheduler/std",
 	"pallet-preimage/std",
+	"pallet-society/std",
 
 	# DKG
 	"pallet-dkg-metadata/std",
