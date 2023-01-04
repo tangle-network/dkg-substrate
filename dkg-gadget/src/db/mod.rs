@@ -11,7 +11,7 @@ pub use offchain_storage::DKGOffchainStorageDb;
 /// A Database backend, specificly for the DKG to store and load important state
 ///
 /// The backend of this database could be using a persistence store, or in-memory
-/// ephermal store, depending on the use case, for example during the tests we can switch
+/// ephemeral store, depending on the use case. For example, during the tests we can switch
 /// to in-memory store, and in production we could use sled database or Offchain storage.
 #[auto_impl::auto_impl(Arc, &, &mut)]
 pub trait DKGDbBackend: Send + Sync + 'static {
