@@ -28,11 +28,7 @@ import {
 	waitForPublicKeyToChange,
 } from './utils/setup';
 
-import {
-	localChain,
-	polkadotApi,
-	signatureVBridge,
-} from './utils/util';
+import { localChain, polkadotApi, signatureVBridge } from './utils/util';
 
 it.skip('should be able to transfer ownership to new Governor with Signature', async () => {
 	// we trigger a manual renonce since we already transfered the ownership before.
@@ -54,7 +50,9 @@ it.skip('should be able to transfer ownership to new Governor with Signature', a
 	expect(dkgPublicKeySignature).to.be.length.greaterThan(0);
 	expect(refreshNonce).to.be.greaterThan(0);
 	// now we can transfer ownership.
-	const signatureSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const signatureSide = signatureVBridge.getVBridgeSide(
+		localChain.typedChainId
+	);
 	const contract = signatureSide.contract;
 	contract.connect(localChain.provider());
 	const governor = await contract.governor();

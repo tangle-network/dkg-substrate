@@ -1,59 +1,59 @@
 {
-  "name": "dkg-test-suite",
-  "version": "0.0.1",
-  "description": "e2e testing utilities for dkg-substrate",
-  "main": "index.js",
-  "scripts": {
-    "script": "ts-node",
-    "format": "prettier --write '**/*.{ts,js,json,yml}'",
-    "fetch:fixtures": "dvc pull",
-    "test:e2e": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/e2e/**/*.test.ts' --exit",
-    "test:proposals": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/proposals.test.ts' --exit"
-  },
-  "author": "",
-  "license": "ISC",
-  "resolutions": {
-    "@webb-tools/api": "0.1.4-98",
-    "@webb-tools/api-derive": "0.1.4-98",
-    "@webb-tools/sdk-core": "0.1.4-98",
-    "@webb-tools/test-utils": "0.1.4-98",
-    "@webb-tools/types": "0.1.4-98",
-    "@polkadot/api": "9.2.3",
-    "@polkadot/keyring": "10.1.5",
-    "@polkadot/networks": "10.1.5",
-    "@polkadot/types": "9.2.3",
-    "@polkadot/util": "10.1.5",
-    "@polkadot/util-crypto": "10.1.5"
-  },
-  "dependencies": {
-    "@polkadot/api": "^9.2.3",
-    "@polkadot/util": "^10.1.5",
-    "@types/chai": "^4.3.0",
-    "@types/mocha": "^9.1.0",
-    "@webb-tools/protocol-solidity": "0.2.5",
-    "@webb-tools/api": "0.1.4-98",
-    "@webb-tools/api-derive": "0.1.4-98",
-    "@webb-tools/sdk-core": "0.1.4-98",
-    "@webb-tools/test-utils": "0.1.4-98",
-    "@webb-tools/types": "0.1.4-98",
-    "chai": "^4.3.6",
-    "ecpair": "^1.0.0",
-    "ethers": "^5.5.4",
-    "ganache": "7.4.1",
-    "mocha": "10.0.0",
-    "ora": "5",
-    "ts-node": "10.8.0",
-    "typescript": "4.5.4"
-  },
-  "engines": {
-    "node": "17.x.x"
-  },
-  "devDependencies": {
-    "husky": "^7.0.4",
-    "lint-staged": "^12.1.7",
-    "prettier": "2.5.1"
-  },
-  "lint-staged": {
-    "**/*": "prettier --write --ignore-unknown"
-  }
+	"name": "dkg-test-suite",
+	"version": "0.0.1",
+	"description": "e2e testing utilities for dkg-substrate",
+	"main": "index.js",
+	"scripts": {
+		"script": "ts-node",
+		"format": "prettier --write '**/*.{ts,js,json,yml}'",
+		"fetch:fixtures": "dvc pull",
+		"test:e2e": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/e2e/**/*.test.ts' --exit",
+		"test:proposals": "NODE_OPTIONS=--openssl-legacy-provider mocha 'tests/proposals.test.ts' --exit"
+	},
+	"author": "",
+	"license": "ISC",
+	"resolutions": {
+		"@webb-tools/api": "0.1.4-98",
+		"@webb-tools/api-derive": "0.1.4-98",
+		"@webb-tools/sdk-core": "0.1.4-98",
+		"@webb-tools/test-utils": "0.1.4-98",
+		"@webb-tools/types": "0.1.4-98",
+		"@polkadot/api": "9.2.3",
+		"@polkadot/keyring": "10.1.5",
+		"@polkadot/networks": "10.1.5",
+		"@polkadot/types": "9.2.3",
+		"@polkadot/util": "10.1.5",
+		"@polkadot/util-crypto": "10.1.5"
+	},
+	"dependencies": {
+		"@polkadot/api": "^9.2.3",
+		"@polkadot/util": "^10.1.5",
+		"@types/chai": "^4.3.0",
+		"@types/mocha": "^9.1.0",
+		"@webb-tools/protocol-solidity": "0.2.5",
+		"@webb-tools/api": "0.1.4-98",
+		"@webb-tools/api-derive": "0.1.4-98",
+		"@webb-tools/sdk-core": "0.1.4-98",
+		"@webb-tools/test-utils": "0.1.4-98",
+		"@webb-tools/types": "0.1.4-98",
+		"chai": "^4.3.6",
+		"ecpair": "^1.0.0",
+		"ethers": "^5.5.4",
+		"ganache": "7.4.1",
+		"mocha": "10.0.0",
+		"ora": "5",
+		"ts-node": "10.8.0",
+		"typescript": "4.5.4"
+	},
+	"engines": {
+		"node": "17.x.x"
+	},
+	"devDependencies": {
+		"husky": "^7.0.4",
+		"lint-staged": "^12.1.7",
+		"prettier": "2.5.1"
+	},
+	"lint-staged": {
+		"**/*": "prettier --write --ignore-unknown"
+	}
 }

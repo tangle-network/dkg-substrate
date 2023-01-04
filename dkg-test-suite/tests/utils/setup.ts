@@ -246,7 +246,6 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
-
 		// Subscribe to system events via storage
 		const unsub = await api.query.system.events((events) => {
 			const handleUnsub = () => {
@@ -268,9 +267,9 @@ export async function waitForEvent(
 									if (key === dataQuery.key) {
 										handleUnsub();
 									}
-								})
+								});
 							}
-						})
+						});
 					} else {
 						handleUnsub();
 					}

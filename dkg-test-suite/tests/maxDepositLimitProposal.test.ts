@@ -19,16 +19,36 @@ import { sudoTx, waitForEvent } from './utils/setup';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
 import { localChain, polkadotApi, signatureVBridge } from './utils/util';
 import { expect } from 'chai';
-import { ChainType, MaxDepositLimitProposal, ProposalHeader, ResourceId } from '@webb-tools/sdk-core';
+import {
+	ChainType,
+	MaxDepositLimitProposal,
+	ProposalHeader,
+	ResourceId,
+} from '@webb-tools/sdk-core';
 import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to update max deposit limit', async () => {
 	const vAnchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
-	const resourceId = ResourceId.newFromContractAddress(vAnchor.getAddress(), ChainType.EVM, localChain.evmId);
-	const functionSignature = hexToU8a(vAnchor.contract.interface.getSighash('configureMaximumDepositLimit(uint256,uint32)'));
+	const resourceId = ResourceId.newFromContractAddress(
+		vAnchor.getAddress(),
+		ChainType.EVM,
+		localChain.evmId
+	);
+	const functionSignature = hexToU8a(
+		vAnchor.contract.interface.getSighash(
+			'configureMaximumDepositLimit(uint256,uint32)'
+		)
+	);
 	const nonce = Number(await vAnchor.contract.getProposalNonce()) + 1;
-	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
-	const maxLimitProposal = new MaxDepositLimitProposal(proposalHeader, '0x50000000');
+	const proposalHeader = new ProposalHeader(
+		resourceId,
+		functionSignature,
+		nonce
+	);
+	const maxLimitProposal = new MaxDepositLimitProposal(
+		proposalHeader,
+		'0x50000000'
+	);
 
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, maxLimitProposal.header.resourceId);
@@ -44,7 +64,10 @@ it('should be able to update max deposit limit', async () => {
 		}
 	);
 
-	const proposalCall = polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(maxDepositLimitProposal.toU8a());
+	const proposalCall =
+		polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+			maxDepositLimitProposal.toU8a()
+		);
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
@@ -58,7 +81,7 @@ it('should be able to update max deposit limit', async () => {
 	};
 	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
 		{
-			Evm: localChain.evmId
+			Evm: localChain.evmId,
 		},
 		key
 	);
@@ -66,7 +89,9 @@ it('should be able to update max deposit limit', async () => {
 	const signedDkgProposal = proposal.unwrap().asSigned;
 
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(
+		localChain.typedChainId
+	);
 	const contract = bridgeSide.contract;
 
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(

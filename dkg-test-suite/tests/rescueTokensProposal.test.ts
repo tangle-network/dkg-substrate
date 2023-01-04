@@ -40,9 +40,7 @@ import { BLOCK_TIME } from './utils/constants';
 import { expect } from 'chai';
 
 it('should be able to sign and execute rescue token proposal', async () => {
-	const anchor = signatureVBridge.getVAnchor(
-		localChain.typedChainId,
-	)!;
+	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
 	const governedToken = GovernedTokenWrapper.connect(
 		governedTokenAddress,
@@ -59,11 +57,24 @@ it('should be able to sign and execute rescue token proposal', async () => {
 	// First, we will execute the update wrapping fee proposal to change the fee to be greater than 0
 	// This will allow tokens to accumulate to the treasury
 	{
-		const governedTokenResourceId = ResourceId.newFromContractAddress(governedToken.contract.address, ChainType.EVM, localChain.evmId);
-		const functionSignature = hexToU8a(governedToken.contract.interface.getSighash('setFee(uint16,uint32)'));
+		const governedTokenResourceId = ResourceId.newFromContractAddress(
+			governedToken.contract.address,
+			ChainType.EVM,
+			localChain.evmId
+		);
+		const functionSignature = hexToU8a(
+			governedToken.contract.interface.getSighash('setFee(uint16,uint32)')
+		);
 		const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
-		const proposalHeader = new ProposalHeader(governedTokenResourceId, functionSignature, nonce);
-		const wrappingFeeProposal = new WrappingFeeUpdateProposal(proposalHeader, '0x0A');
+		const proposalHeader = new ProposalHeader(
+			governedTokenResourceId,
+			functionSignature,
+			nonce
+		);
+		const wrappingFeeProposal = new WrappingFeeUpdateProposal(
+			proposalHeader,
+			'0x0A'
+		);
 
 		const prop = u8aToHex(wrappingFeeProposal.toU8a());
 
@@ -77,9 +88,10 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			}
 		);
 
-		const proposalCall = polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
-			wrappingFeeProposalType.toU8a()
-		);
+		const proposalCall =
+			polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+				wrappingFeeProposalType.toU8a()
+			);
 
 		await sudoTx(polkadotApi, proposalCall);
 
@@ -103,7 +115,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		// sanity check.
 		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
-		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+		const bridgeSide = await signatureVBridge.getVBridgeSide(
+			localChain.typedChainId
+		);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.data,
@@ -180,11 +194,28 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		);
 		let balToBeforeRescue = await mintableToken.getBalance(to);
 
-		const treasuryResourceId =  ResourceId.newFromContractAddress(treasury.contract.address, ChainType.EVM, localChain.evmId);
-		const functionSignature = hexToU8a(treasury.contract.interface.getSighash('rescueTokens(address,address,uint256,uint32)'));
-		const nonce = Number(await treasury.contract.proposalNonce()) + 1
-		const proposalHeader = new ProposalHeader(treasuryResourceId, functionSignature, nonce);
-		const rescueTokensProposal = new RescueTokensProposal(proposalHeader, mintableTokenAddress, to, '0x01F4');
+		const treasuryResourceId = ResourceId.newFromContractAddress(
+			treasury.contract.address,
+			ChainType.EVM,
+			localChain.evmId
+		);
+		const functionSignature = hexToU8a(
+			treasury.contract.interface.getSighash(
+				'rescueTokens(address,address,uint256,uint32)'
+			)
+		);
+		const nonce = Number(await treasury.contract.proposalNonce()) + 1;
+		const proposalHeader = new ProposalHeader(
+			treasuryResourceId,
+			functionSignature,
+			nonce
+		);
+		const rescueTokensProposal = new RescueTokensProposal(
+			proposalHeader,
+			mintableTokenAddress,
+			to,
+			'0x01F4'
+		);
 
 		const prop = u8aToHex(rescueTokensProposal.toU8a());
 		const rescueTokensProposalType = polkadotApi.createType(
@@ -222,7 +253,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		// sanity check.
 		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
-		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+		const bridgeSide = await signatureVBridge.getVBridgeSide(
+			localChain.typedChainId
+		);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.data,

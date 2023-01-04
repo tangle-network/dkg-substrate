@@ -187,14 +187,16 @@ export const handleSetup = async (governor: string) => {
 	await anchor.setSigner(wallet1);
 
 	// approve token spending
-	const tokenAddress = signatureVBridge.getWebbTokenAddress(localChain.typedChainId)!;
+	const tokenAddress = signatureVBridge.getWebbTokenAddress(
+		localChain.typedChainId
+	)!;
 	const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
 	let tx = await token.approveSpending(anchor.contract.address);
 	await tx.wait();
 	await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
 
 	// do the same but on localchain2
-	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!
+	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!;
 
 	await anchor2.setSigner(wallet2);
 	const tokenAddress2 = signatureVBridge.getWebbTokenAddress(
