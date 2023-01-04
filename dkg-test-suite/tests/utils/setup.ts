@@ -134,9 +134,12 @@ const __NODE_STATE: {
 	alice: { isRunning: false, process: null },
 	bob: { isRunning: false, process: null },
 	charlie: { isRunning: false, process: null },
+	dave: { isRunning: false, process: null },
+	eve: { isRunning: false, process: null },
+	ferdie: { isRunning: false, process: null },
 };
 export function startStandaloneNode(
-	authority: 'alice' | 'bob' | 'charlie',
+	authority: 'alice' | 'bob' | 'charlie' | 'dave' | 'eve' | 'ferdie',
 	options: { tmp: boolean; printLogs: boolean } = {
 		tmp: true,
 		printLogs: false,
@@ -154,13 +157,16 @@ export function startStandaloneNode(
 		alice: { ws: 9944, http: 9933, p2p: 30333 },
 		bob: { ws: 9945, http: 9934, p2p: 30334 },
 		charlie: { ws: 9946, http: 9935, p2p: 30335 },
+		dave: { ws: 9947, http: 9936, p2p: 30336 },
+		eve: { ws: 9948, http: 9937, p2p: 30337 },
+		ferdie: { ws: 9949, http: 9938, p2p: 30338 },
 	};
 	const proc = child.spawn(
 		nodePath,
 		[
 			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
-			options.tmp ? `--base-path=./tmp/${authority}` : '',
+			options.tmp ? '--tmp' : '',
 			`--ws-port=${ports[authority].ws}`,
 			`--rpc-port=${ports[authority].http}`,
 			`--port=${ports[authority].p2p}`,
@@ -194,13 +200,14 @@ export function startStandaloneNode(
 	__NODE_STATE[authority].isRunning = true;
 	__NODE_STATE[authority].process = proc;
 
-	proc.stdout.on('data', (data) => {
-		process.stdout.write(data);
-	});
-
-	proc.stderr.on('data', (data) => {
-		process.stdout.write(data);
-	});
+	if (options.printLogs) {
+		proc.stdout.on('data', (data) => {
+			console.log(`${authority}: ${data}`);
+		});
+		proc.stderr.on('data', (data) => {
+			console.error(`${authority}: ${data}`);
+		});
+	}
 
 	proc.on('close', (code) => {
 		__NODE_STATE[authority].isRunning = false;
