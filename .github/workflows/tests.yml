@@ -42,7 +42,7 @@ jobs:
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Install cargo-nextest
-        run: cargo install cargo-nextest
+        run: cargo +stable install cargo-nextest
 
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler
