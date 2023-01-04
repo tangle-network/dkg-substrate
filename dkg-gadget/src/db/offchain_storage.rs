@@ -25,7 +25,7 @@ const STORAGE_PREFIX: &[u8] = b"dkg";
 /// A Database backend, specifically for the DKG to store and load important state
 /// implemented using Offchain Storage.
 ///
-/// This backend also uses the DKG Keystore to stores the data in an encrypted form.
+/// This backend also uses the DKG Keystore to store the data in an encrypted form.
 pub struct DKGOffchainStorageDb<B, BE> {
 	backend: Arc<BE>,
 	key_store: DKGKeystore,
