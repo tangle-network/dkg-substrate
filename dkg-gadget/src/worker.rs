@@ -511,7 +511,7 @@ where
 		Ok(Box::pin(task))
 	}
 
-	/// Fetch the local stored keys if they exist.
+	/// Fetch the stored local keys if they exist.
 	///
 	/// The `optional_session_id` is used to fetch the keys for a specific session, only in case
 	/// if `self.rounds` is `None`. This is useful when the node is restarted and we need to fetch
