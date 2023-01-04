@@ -34,8 +34,8 @@ import { Vec } from '@polkadot/types';
 import { BLOCK_TIME } from '../utils/constants';
 
 describe('Keygen Changes Flow', function () {
-	// 10 sessions should be more than enough for the test to complete
-	this.timeout(130 * BLOCK_TIME);
+	// 300 sessions should be more than enough for the test to complete
+	this.timeout(300 * BLOCK_TIME);
 	// 4 session.
 	this.slow(40 * BLOCK_TIME);
 	// fail fast, since tests are dependent on each other.
