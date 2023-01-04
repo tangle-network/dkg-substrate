@@ -22,7 +22,7 @@ use crate::DKGKeystore;
 /// DKG Offchain Storage prefix.
 const STORAGE_PREFIX: &[u8] = b"dkg";
 
-/// A Database backend, specificly for the DKG to store and load important state
+/// A Database backend, specifically for the DKG to store and load important state
 /// implemented using Offchain Storage.
 ///
 /// This backend also uses the DKG Keystore to stores the data in an encrypted form.
