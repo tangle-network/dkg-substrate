@@ -1,5 +1,5 @@
 //! DKG Database backend, implemented using Offchain Storage.
-//! Unlike the in-memory database, this database is persistent, and can be used to store
+//! Unlike the in-memory database, this database is persistent and can be used to store
 //! the DKG state across multiple runs of the node.
 
 use std::sync::Arc;
