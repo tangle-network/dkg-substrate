@@ -18,7 +18,7 @@ pub trait DKGDbBackend: Send + Sync + 'static {
 	/// Returns the DKG [`LocalKey<Secp256k1>`] at specific session, if any.
 	fn get_local_key(&self, session_id: SessionId)
 		-> Result<Option<LocalKey<Secp256k1>>, DKGError>;
-	/// Stores the [`LocalKey<Secp256k1>`] at this session.
+	/// Stores the [`LocalKey<Secp256k1>`] at a specified session.
 	fn store_local_key(
 		&self,
 		session_id: SessionId,
