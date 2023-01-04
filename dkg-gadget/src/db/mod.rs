@@ -12,7 +12,7 @@ pub use offchain_storage::DKGOffchainStorageDb;
 ///
 /// The backend of this database could be using a persistence store or in-memory
 /// ephemeral store, depending on the use case. For example, during the tests we can switch
-/// to in-memory store, and in production we could use sled database or Offchain storage.
+/// to an in-memory store, and in production we could use sled database or Offchain storage.
 #[auto_impl::auto_impl(Arc, &, &mut)]
 pub trait DKGDbBackend: Send + Sync + 'static {
 	/// Returns the DKG [`LocalKey<Secp256k1>`] at specific session, if any.
