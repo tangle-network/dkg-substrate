@@ -41,6 +41,8 @@ export let polkadotApi: ApiPromise;
 export let aliceNode: ChildProcess;
 export let bobNode: ChildProcess;
 export let charlieNode: ChildProcess;
+export let daveNode: ChildProcess;
+export let eveNode: ChildProcess;
 
 export let localChain: LocalEvmChain;
 export let localChain2: LocalEvmChain;
@@ -61,7 +63,10 @@ export const executeBefore = async () => {
 	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
 	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
 	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
-	console.log('started alice, bob, charlie');
+	daveNode = startStandaloneNode('dave', { tmp: true, printLogs: false });
+	eveNode = startStandaloneNode('eve', { tmp: true, printLogs: false });
+
+	console.log('started alice, bob, charlie, dave, eve nodes');
 
 	localChain = await LocalEvmChain.init('local', 5001, [
 		{
@@ -176,6 +181,8 @@ export async function executeAfter() {
 	aliceNode?.kill('SIGINT');
 	bobNode?.kill('SIGINT');
 	charlieNode?.kill('SIGINT');
+	daveNode?.kill('SIGINT');
+	eveNode?.kill('SIGINT');
 	await localChain?.stop();
 	await localChain2?.stop();
 	await sleep(5 * SECONDS);
@@ -187,14 +194,16 @@ export const handleSetup = async (governor: string) => {
 	await anchor.setSigner(wallet1);
 
 	// approve token spending
-	const tokenAddress = signatureVBridge.getWebbTokenAddress(localChain.typedChainId)!;
+	const tokenAddress = signatureVBridge.getWebbTokenAddress(
+		localChain.typedChainId
+	)!;
 	const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
 	let tx = await token.approveSpending(anchor.contract.address);
 	await tx.wait();
 	await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
 
 	// do the same but on localchain2
-	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!
+	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!;
 
 	await anchor2.setSigner(wallet2);
 	const tokenAddress2 = signatureVBridge.getWebbTokenAddress(

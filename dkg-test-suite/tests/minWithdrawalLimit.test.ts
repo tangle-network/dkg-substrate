@@ -14,10 +14,7 @@
  * limitations under the License.
  *
  */
-import {
-	waitForEvent,
-	sudoTx,
-} from './utils/setup';
+import { waitForEvent, sudoTx } from './utils/setup';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
 import {
 	MinWithdrawalLimitProposal,
@@ -25,21 +22,32 @@ import {
 	ResourceId,
 	ProposalHeader,
 } from '@webb-tools/sdk-core';
-import {
-	localChain,
-	polkadotApi,
-	signatureVBridge,
-} from './utils/util';
+import { localChain, polkadotApi, signatureVBridge } from './utils/util';
 import { expect } from 'chai';
 import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to update min withdrawal limit', async () => {
 	const vAnchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
-	const resourceId = ResourceId.newFromContractAddress(vAnchor.contract.address, ChainType.EVM, localChain.evmId);
-	const functionSignature = hexToU8a(vAnchor.contract.interface.getSighash('configureMinimalWithdrawalLimit(uint256,uint32)'));
+	const resourceId = ResourceId.newFromContractAddress(
+		vAnchor.contract.address,
+		ChainType.EVM,
+		localChain.evmId
+	);
+	const functionSignature = hexToU8a(
+		vAnchor.contract.interface.getSighash(
+			'configureMinimalWithdrawalLimit(uint256,uint32)'
+		)
+	);
 	const nonce = Number(await vAnchor.contract.getProposalNonce()) + 1;
-	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
-	const minLimitProposal = new MinWithdrawalLimitProposal(proposalHeader, '0x50');
+	const proposalHeader = new ProposalHeader(
+		resourceId,
+		functionSignature,
+		nonce
+	);
+	const minLimitProposal = new MinWithdrawalLimitProposal(
+		proposalHeader,
+		'0x50'
+	);
 
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, minLimitProposal.header.resourceId);
@@ -60,7 +68,7 @@ it('should be able to update min withdrawal limit', async () => {
 		polkadotApi.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
 			minWithdrawalLimitProposal.toU8a()
 		);
-	
+
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
@@ -74,7 +82,7 @@ it('should be able to update min withdrawal limit', async () => {
 	};
 	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
 		{
-			Evm: localChain.evmId
+			Evm: localChain.evmId,
 		},
 		key
 	);
@@ -84,7 +92,9 @@ it('should be able to update min withdrawal limit', async () => {
 	// sanity check.
 	expect(dkgProposal.data.toString()).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(
+		localChain.typedChainId
+	);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
 		dkgProposal.data,

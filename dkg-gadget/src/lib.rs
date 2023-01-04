@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate core;
-
-use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use log::debug;
 use parking_lot::RwLock;
@@ -38,8 +36,8 @@ mod keystore;
 
 mod gossip_engine;
 // mod meta_async_rounds;
+mod db;
 mod metrics;
-mod persistence;
 mod proposal;
 mod utils;
 mod worker;
@@ -110,8 +108,6 @@ where
 
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
-	/// Path to the persistent keystore directory for DKG data
-	pub base_path: Option<PathBuf>,
 	/// Phantom block type
 	pub _block: PhantomData<B>,
 }
@@ -132,7 +128,6 @@ where
 		key_store,
 		network,
 		prometheus_registry,
-		base_path,
 		local_keystore,
 		_block,
 	} = dkg_params;
@@ -176,6 +171,14 @@ where
 	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
 	let signing_handle = tokio::spawn(signing_gossip_handler.run());
 
+	// In memory backend, not used for now
+	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
+	let offchain_db_backend = db::DKGOffchainStorageDb::new(
+		backend.clone(),
+		key_store.clone().into(),
+		local_keystore.clone(),
+	);
+	let db_backend = Arc::new(offchain_db_backend);
 	let worker_params = worker::WorkerParams {
 		latest_header,
 		client,
@@ -183,8 +186,8 @@ where
 		key_store: key_store.into(),
 		keygen_gossip_engine,
 		signing_gossip_engine,
+		db_backend,
 		metrics,
-		base_path,
 		local_keystore,
 		_marker: PhantomData::default(),
 	};

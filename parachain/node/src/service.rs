@@ -20,7 +20,6 @@ use std::{sync::Arc, time::Duration};
 // rpc
 use cumulus_client_cli::CollatorOptions;
 use jsonrpsee::RpcModule;
-use std::path::PathBuf;
 // Local Runtime Types
 use dkg_rococo_runtime::{opaque::Block, AccountId, Balance, Hash, Index as Nonce, RuntimeApi};
 
@@ -339,12 +338,6 @@ where
 			warp_sync: None,
 		})?;
 
-	let base_path = if parachain_config.base_path.is_some() {
-		parachain_config.base_path.as_ref().map(|path| PathBuf::from(path.path()))
-	} else {
-		None
-	};
-
 	if validator {
 		dkg_primitives::utils::insert_controller_account_keys_into_keystore(
 			&parachain_config,
@@ -417,7 +410,6 @@ where
 			key_store: Some(params.keystore_container.sync_keystore()),
 			network: network.clone(),
 			prometheus_registry: prometheus_registry.clone(),
-			base_path,
 			local_keystore: params.keystore_container.local_keystore(),
 			_block: std::marker::PhantomData::<Block>,
 		};
