@@ -131,7 +131,7 @@ impl<C> AsyncProtocolRemote<C> {
 		&self,
 		msg: Arc<SignedDKGMessage<Public>>,
 	) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
-		if self.broadcaster.receiver_count() != 0 {
+		if self.broadcaster.receiver_count() != 0 && self.is_active() {
 			self.broadcaster.send(msg).map(|_| ())
 		} else {
 			// do not forward the message

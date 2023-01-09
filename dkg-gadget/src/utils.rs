@@ -16,7 +16,7 @@ use crate::worker::ENGINE_ID;
 use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog};
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
-use std::{fmt::Debug, future::Future, path::PathBuf};
+use std::{fmt::Debug, future::Future};
 
 pub trait SendFuture<'a, Out: 'a>: Future<Output = Result<Out, DKGError>> + Send + 'a {}
 impl<'a, T, Out: Debug + Send + 'a> SendFuture<'a, Out> for T where
@@ -51,14 +51,6 @@ fn match_consensus_log(
 			Some((authority_set, queued_authority_set)),
 		_ => None,
 	}
-}
-
-/// Returns an optional key path if a base path is provided.
-///
-/// This path is used to store the DKG public key / local key
-/// generated through the multi-party threshold ECDSA key generation.
-pub fn get_key_path(base_path: &Option<PathBuf>, path_str: &str) -> Option<PathBuf> {
-	base_path.as_ref().map(|path| path.join(path_str))
 }
 
 #[cfg(feature = "outbound-inspection")]

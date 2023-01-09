@@ -2,10 +2,10 @@ name: run
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: 
-      - '**'        # matches every branch
+    branches:
+      - "**" # matches every branch
 
   workflow_dispatch:
 
@@ -29,12 +29,6 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
 
-      - name: Install cargo-nextest
-        uses: baptiste0928/cargo-install@v1
-        with:
-          crate: cargo-nextest
-          version: latest
-
       - name: Install Toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -46,6 +40,9 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Install cargo-nextest
+        run: cargo +stable install cargo-nextest
 
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler

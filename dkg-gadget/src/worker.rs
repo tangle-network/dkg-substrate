@@ -18,18 +18,19 @@ use crate::{
 	async_protocols::blockchain_interface::DKGProtocolEngine, utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
+use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::StreamExt;
 use itertools::Itertools;
 use log::{debug, error, info, trace};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
 	marker::PhantomData,
-	path::PathBuf,
 	pin::Pin,
 	sync::{
 		atomic::{AtomicUsize, Ordering},
@@ -51,7 +52,6 @@ use dkg_primitives::{
 		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
 		SignedDKGMessage,
 	},
-	utils::{cleanup, StoredLocalKey, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
 use dkg_runtime_primitives::{
@@ -72,8 +72,7 @@ use crate::{
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	persistence::load_stored_key,
-	utils::{find_authorities_change, get_key_path},
+	utils::find_authorities_change,
 	Client,
 };
 
@@ -104,8 +103,8 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: GE,
 	pub signing_gossip_engine: GE,
+	pub db_backend: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Option<Metrics>,
-	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub _marker: PhantomData<B>,
@@ -124,6 +123,7 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: Arc<GE>,
 	pub signing_gossip_engine: Arc<GE>,
+	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Arc<Option<Metrics>>,
 	// Genesis keygen and rotated round
 	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
@@ -152,8 +152,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
-	/// Local keystore for DKG data
-	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -177,6 +175,7 @@ where
 			client: self.client.clone(),
 			backend: self.backend.clone(),
 			key_store: self.key_store.clone(),
+			db: self.db.clone(),
 			keygen_gossip_engine: self.keygen_gossip_engine.clone(),
 			signing_gossip_engine: self.signing_gossip_engine.clone(),
 			metrics: self.metrics.clone(),
@@ -193,7 +192,6 @@ where
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
-			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
@@ -224,10 +222,10 @@ where
 			client,
 			backend,
 			key_store,
+			db_backend,
 			keygen_gossip_engine,
 			signing_gossip_engine,
 			metrics,
-			base_path,
 			local_keystore,
 			latest_header,
 			..
@@ -240,6 +238,7 @@ where
 			misbehaviour_tx: None,
 			backend,
 			key_store,
+			db: db_backend,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
 			metrics: Arc::new(metrics),
@@ -255,7 +254,6 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
-			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
@@ -288,7 +286,6 @@ where
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		session_id: SessionId,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
@@ -300,13 +297,15 @@ where
 		let status_handle = AsyncProtocolRemote::new(now, session_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
-		let (active_local_key, _) = self.fetch_local_keys();
+		let optional_session_id = Some(session_id);
+		let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
 				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
+				db: self.db.clone(),
 				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
@@ -314,18 +313,18 @@ where
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
-				local_key_path: Arc::new(RwLock::new(local_key_path)),
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
 			session_id,
+			db: self.db.clone(),
 			keystore: self.key_store.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
 			handle: status_handle.clone(),
-			local_key: active_local_key.map(|k| k.local_key),
+			local_key: active_local_key,
 		};
 		// Start the respective protocol
 		status_handle.start()?;
@@ -396,14 +395,12 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			0u8,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
@@ -466,7 +463,6 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
@@ -476,7 +472,6 @@ where
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			async_index,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
@@ -516,57 +511,22 @@ where
 		Ok(Box::pin(task))
 	}
 
-	/// Rotates the contents of the DKG local key files from the queued file to the active file.
+	/// Fetch the stored local keys if they exist.
 	///
-	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
-	/// a new queued DKG local key for the new queued authority set. The previously queued set
-	/// is now the active set and so we transition their local key data into the active file path.
-	///
-	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
-	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
-	///
-	/// This should never execute unless we are certain that the rotation will succeed, i.e.
-	/// that the signature of the next DKG public key has been created and stored on-chain.
-	fn rotate_local_key_files(&self) -> bool {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-		debug!(target: "dkg_gadget::worker", "Rotating local key files");
-		debug!(target: "dkg_gadget::worker", "Local key path: {:?}", local_key_path);
-		debug!(target: "dkg_gadget::worker", "Queued local key path: {:?}", queued_local_key_path);
-		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
-			if let Err(err) = std::fs::copy(queued_path, path) {
-				error!("Error copying queued key {:?}", &err);
-				return false
-			} else {
-				debug!("Successfully copied queued key to current key");
-				return true
-			}
-		}
-
-		false
-	}
-
-	/// Fetch the local stored keys if they exist.
-	fn fetch_local_keys(&self) -> (Option<StoredLocalKey>, Option<StoredLocalKey>) {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-
-		let sr_pub = self.get_sr25519_public_key();
-		match (local_key_path, queued_local_key_path) {
-			(Some(path), Some(queued_path)) => (
-				load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(Some(path), None) =>
-				(load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(), None),
-			(None, Some(queued_path)) => (
-				None,
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(None, None) => (None, None),
-		}
+	/// The `optional_session_id` is used to fetch the keys for a specific session, only in case
+	/// if `self.rounds` is `None`. This is useful when the node is restarted and we need to fetch
+	/// the keys for the current session.
+	fn fetch_local_keys(
+		&self,
+		optional_session_id: Option<SessionId>,
+	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
+		let current_session_id =
+			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id);
+		let next_session_id = current_session_id.map(|s| s + 1);
+		let active_local_key =
+			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		let next_local_key = next_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		(active_local_key, next_local_key)
 	}
 
 	/// Get the party index of our worker
@@ -758,10 +718,6 @@ where
 			_ => {},
 		}
 
-		let local_key_path = get_key_path(&self.base_path.read(), DKG_LOCAL_KEY_FILE);
-		if let Some(local_key) = local_key_path.as_ref() {
-			let _ = cleanup(local_key.clone());
-		}
 		// DKG keygen authorities are always taken from the best set of authorities
 		let session_id = genesis_authority_set.id;
 		let maybe_party_index = self.get_party_index(header);
@@ -783,7 +739,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			local_key_path,
 			ProtoStageType::Genesis,
 		);
 	}
@@ -807,13 +762,6 @@ where
 				// clear the next rounds.
 			}
 		}
-
-		let queued_local_key_path =
-			get_key_path(&*self.base_path.read(), QUEUED_DKG_LOCAL_KEY_FILE);
-		if let Some(path) = queued_local_key_path.as_ref() {
-			let _ = cleanup(path.clone());
-		}
-
 		// Get the best next authorities using the keygen threshold
 		let session_id = queued.id;
 		let maybe_party_index = self.get_next_party_index(header);
@@ -839,7 +787,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
 	}
@@ -874,7 +821,7 @@ where
 			self.maybe_enact_genesis_authorities(header);
 		} else {
 			self.maybe_enact_next_authorities(header);
-			self.maybe_rotate_local_keys(header);
+			self.maybe_rotate_local_sessions(header);
 			self.submit_unsigned_proposals(header);
 		}
 	}
@@ -942,8 +889,12 @@ where
 
 			let has_keygen = self.next_rounds.read().is_some();
 			debug!(target: "dkg_gadget::worker", "🕸️  HAS KEYGEN: {:?}", has_keygen);
+			// Check if there is a next DKG Key on-chain.
+			let next_dkg_key = self.get_next_dkg_pub_key(header);
+			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
 			// Start a keygen if we don't have one.
-			if !has_keygen {
+			// only if there is no queued key on chain.
+			if !has_keygen && next_dkg_key.is_none() {
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Reset the Retry counter.
@@ -1002,7 +953,7 @@ where
 		}
 	}
 
-	fn maybe_rotate_local_keys(&self, header: &B::Header) {
+	fn maybe_rotate_local_sessions(&self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
 			metric_set!(self, dkg_validator_set_id, active.id);
@@ -1018,26 +969,7 @@ where
 			}
 			// Update the validator sets
 			*self.current_validator_set.write() = active;
-			*self.queued_validator_set.write() = queued.clone();
-			// Check the local keystore, if a queued key exists with the same
-			// round ID then we shouldn't rotate since it means we have shut down
-			// and started up after a previous rotation.
-			let (_, maybe_queued_key) = self.fetch_local_keys();
-			match maybe_queued_key {
-				Some(queued_key) if queued_key.session_id == queued.id => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.session_id);
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
-					return
-				},
-				Some(k) => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.session_id);
-					debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
-				},
-				None => {
-					debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY DOES NOT EXIST");
-				},
-			};
-			// If we are starting a new queued DKG, we rotate the next rounds
+			*self.queued_validator_set.write() = queued;
 			log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 			match self.rounds.read().as_ref() {
 				Some(r) if r.is_active() => {
@@ -1051,13 +983,17 @@ where
 			// We also rotate the best authority caches
 			*self.best_authorities.write() = self.best_next_authorities.read().clone();
 			*self.best_next_authorities.write() = self.get_next_best_authorities(header);
-			// Rotate the key files
-			let success = self.rotate_local_key_files();
-			debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
 			// since we just rotate, we reset the keygen retry counter
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
 			// clear the currently being signing proposals cache.
 			self.currently_signing_proposals.write().clear();
+			// Reset all the signing rounds.
+			self.signing_rounds.write().iter_mut().for_each(|v| {
+				if let Some(r) = v.as_mut() {
+					let _ = r.shutdown("Rotating next round");
+				}
+				*v = None;
+			});
 		}
 	}
 
@@ -1324,7 +1260,9 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) {
-		let session_id = self.current_validator_set.read().id;
+		let on_chain_dkg = self.get_dkg_pub_key(header);
+		let session_id = on_chain_dkg.0;
+		let dkg_pub_key = on_chain_dkg.1;
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
@@ -1380,16 +1318,8 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-
-		let (active_local_key, _) = self.fetch_local_keys();
-		let local_key = if let Some(active_local_key) = active_local_key {
-			active_local_key.local_key
-		} else {
-			return
-		};
-
 		let mut count = 0;
-		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
+		let mut seed = dkg_pub_key;
 
 		// Generate multiple signing sets for signing the same unsigned proposals.
 		// The goal is to successfully sign proposals immediately in the event that
@@ -1441,7 +1371,6 @@ where
 					authority_public_key.clone(),
 					session_id,
 					threshold,
-					None,
 					ProtoStageType::Signing,
 					unsigned_proposals.clone(),
 					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),

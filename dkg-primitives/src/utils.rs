@@ -12,23 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::types::SessionId;
 use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
 };
 use codec::Encode;
-use curv::{arithmetic::Converter, elliptic::curves::Secp256k1};
-use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
-	party_i::SignatureRecid, state_machine::keygen::LocalKey,
-};
+use curv::arithmetic::Converter;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
 
 use sc_service::{ChainType, Configuration};
-use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::key_types::ACCOUNT;
-use std::{fs, path::PathBuf};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use sp_core::ecdsa::Signature;
@@ -74,24 +69,6 @@ pub fn insert_controller_account_keys_into_keystore(
 
 pub fn vec_usize_to_u16(input: Vec<usize>) -> Vec<u16> {
 	return input.iter().map(|v| *v as u16).collect()
-}
-
-// Paths for saved key files across rounds/shutdowns
-pub const DKG_LOCAL_KEY_FILE: &str = "dkg_local_key";
-pub const QUEUED_DKG_LOCAL_KEY_FILE: &str = "queued_dkg_local_key";
-// Paths for saved metadata across shutdowns
-pub const ACTIVE_ROUNDS_METADATA_FILE: &str = "active_rounds_metadata";
-pub const QUEUED_ROUNDS_METADATA_FILE: &str = "queued_rounds_metadata";
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct StoredLocalKey {
-	pub session_id: SessionId,
-	pub local_key: LocalKey<Secp256k1>,
-}
-
-pub fn cleanup(path: PathBuf) -> std::io::Result<()> {
-	fs::remove_file(path)?;
-	Ok(())
 }
 
 /// Encrypt a vector of bytes `data` with a `secret_key`.

@@ -14,11 +14,7 @@
  * limitations under the License.
  *
  */
-import {
-	sleep,
-	waitForEvent,
-	sudoTx,
-} from './utils/setup';
+import { sleep, waitForEvent, sudoTx } from './utils/setup';
 import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
 import {
@@ -39,18 +35,26 @@ import { BLOCK_TIME } from './utils/constants';
 import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to sign token add & remove proposal', async () => {
-	const anchor = signatureVBridge.getVAnchor(
-		localChain.typedChainId,
-	)!;
+	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
 	let governedToken = GovernedTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);
-	const resourceId = ResourceId.newFromContractAddress(governedTokenAddress, ChainType.EVM, localChain.evmId);
-	const functionSignature = hexToU8a(governedToken.contract.interface.getSighash('add(address,uint32)'));
-	const nonce = Number(await governedToken.contract.proposalNonce()) + 1
-	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
+	const resourceId = ResourceId.newFromContractAddress(
+		governedTokenAddress,
+		ChainType.EVM,
+		localChain.evmId
+	);
+	const functionSignature = hexToU8a(
+		governedToken.contract.interface.getSighash('add(address,uint32)')
+	);
+	const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
+	const proposalHeader = new ProposalHeader(
+		resourceId,
+		functionSignature,
+		nonce
+	);
 	// Create Mintable Token to add to GovernedTokenWrapper
 	//Create an ERC20 Token
 	const tokenToAdd = await MintableToken.createToken(
@@ -59,8 +63,11 @@ it('should be able to sign token add & remove proposal', async () => {
 		wallet1
 	);
 	{
-		const tokenAddProposal = new TokenAddProposal(proposalHeader, tokenToAdd.contract.address);
-		
+		const tokenAddProposal = new TokenAddProposal(
+			proposalHeader,
+			tokenToAdd.contract.address
+		);
+
 		// register proposal resourceId.
 		await registerResourceId(polkadotApi, tokenAddProposal.header.resourceId);
 		const prop = u8aToHex(tokenAddProposal.toU8a());
@@ -99,7 +106,9 @@ it('should be able to sign token add & remove proposal', async () => {
 		// sanity check.
 		expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 		// perfect! now we need to send it to the signature bridge.
-		const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+		const bridgeSide = await signatureVBridge.getVBridgeSide(
+			localChain.typedChainId
+		);
 		const contract = bridgeSide.contract;
 		const isSignedByGovernor = await contract.isSignatureFromGovernor(
 			dkgProposal.data,
@@ -120,10 +129,20 @@ it('should be able to sign token add & remove proposal', async () => {
 		).to.eq(true);
 	}
 	await sleep(5 * BLOCK_TIME);
-	const removeSignature = hexToU8a(governedToken.contract.interface.getSighash('remove(address,uint32)'));
-	const proposalNonce = Number(await governedToken.contract.proposalNonce()) + 1;
-	const removeProposalHeader = new ProposalHeader(resourceId, removeSignature, proposalNonce);
-	const tokenRemoveProposal = new TokenRemoveProposal(removeProposalHeader, tokenToAdd.contract.address);
+	const removeSignature = hexToU8a(
+		governedToken.contract.interface.getSighash('remove(address,uint32)')
+	);
+	const proposalNonce =
+		Number(await governedToken.contract.proposalNonce()) + 1;
+	const removeProposalHeader = new ProposalHeader(
+		resourceId,
+		removeSignature,
+		proposalNonce
+	);
+	const tokenRemoveProposal = new TokenRemoveProposal(
+		removeProposalHeader,
+		tokenToAdd.contract.address
+	);
 
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, tokenRemoveProposal.header.resourceId);
@@ -166,7 +185,9 @@ it('should be able to sign token add & remove proposal', async () => {
 	// sanity check.
 	expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(
+		localChain.typedChainId
+	);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
 		dkgProposal.data,

@@ -74,6 +74,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
 	pub local_key: Option<LocalKey<Secp256k1>>,
+	pub db: Arc<dyn crate::db::DKGDbBackend>,
 }
 
 impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
@@ -122,6 +123,7 @@ impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 			batch_id_gen: self.batch_id_gen.clone(),
 			handle: self.handle.clone(),
 			local_key: self.local_key.clone(),
+			db: self.db.clone(),
 		}
 	}
 }

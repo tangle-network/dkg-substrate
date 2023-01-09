@@ -26,11 +26,9 @@ import {
 	ResourceId,
 	ProposalHeader,
 	AnchorUpdateProposal,
-	CircomUtxo
+	CircomUtxo,
 } from '@webb-tools/sdk-core';
-import { 
-	registerResourceId
-} from '@webb-tools/test-utils';
+import { registerResourceId } from '@webb-tools/test-utils';
 import {
 	localChain,
 	polkadotApi,
@@ -44,16 +42,12 @@ import { Keyring } from '@polkadot/api';
 
 it('should be able to sign anchor update proposal', async () => {
 	// get the anhor on localchain1
-	const anchor = signatureVBridge.getVAnchor(
-		localChain.typedChainId
-	)!;
+	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	await anchor.setSigner(wallet1);
 	// check the merkle root
 	const merkleRoot1 = await anchor.contract.getLastRoot();
 	// get the anchor on localchain2
-	const anchor2 = signatureVBridge.getVAnchor(
-		localChain2.typedChainId
-	)!;
+	const anchor2 = signatureVBridge.getVAnchor(localChain2.typedChainId)!;
 	await anchor2.setSigner(wallet2);
 
 	// create a deposit on localchain1
@@ -69,19 +63,33 @@ it('should be able to sign anchor update proposal', async () => {
 		{},
 		0,
 		wallet1.address,
-		wallet1.address,
+		wallet1.address
 	);
 
 	// now check the new merkel root.
 	const newMerkleRoot1 = await anchor.contract.getLastRoot();
 	expect(newMerkleRoot1).not.to.eq(merkleRoot1);
 	// create anchor update proposal to be sent to the dkg.
-	const resourceId = ResourceId.newFromContractAddress(anchor2.contract.address, ChainType.EVM, localChain2.evmId);
-	const functionSignature = hexToU8a(anchor.contract.interface.getSighash('updateEdge(bytes32,uint32,bytes32)'));
-	const nonce = Number(await anchor.contract.getProposalNonce()) + 1
-	const proposalHeader = new ProposalHeader(resourceId, functionSignature, nonce);
+	const resourceId = ResourceId.newFromContractAddress(
+		anchor2.contract.address,
+		ChainType.EVM,
+		localChain2.evmId
+	);
+	const functionSignature = hexToU8a(
+		anchor.contract.interface.getSighash('updateEdge(bytes32,uint32,bytes32)')
+	);
+	const nonce = Number(await anchor.contract.getProposalNonce()) + 1;
+	const proposalHeader = new ProposalHeader(
+		resourceId,
+		functionSignature,
+		nonce
+	);
 
-	const srcResourceId = ResourceId.newFromContractAddress(anchor.contract.address, ChainType.EVM, localChain.evmId);
+	const srcResourceId = ResourceId.newFromContractAddress(
+		anchor.contract.address,
+		ChainType.EVM,
+		localChain.evmId
+	);
 
 	const anchorProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
 		proposalHeader,
@@ -100,7 +108,7 @@ it('should be able to sign anchor update proposal', async () => {
 		resourceId.toU8a(),
 		prop
 	);
-	
+
 	// The acknowledgeProposal call should come from someone in the proposer set
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');

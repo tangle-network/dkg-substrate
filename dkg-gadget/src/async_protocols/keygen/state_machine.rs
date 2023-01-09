@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_session_id,
-	state_machine::StateMachineHandler, AsyncProtocolParameters, ProtocolType,
+	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+	AsyncProtocolParameters, ProtocolType,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
@@ -80,7 +80,7 @@ impl StateMachineHandler for Keygen {
 		// [1] create the message, call the "public key gossip" in
 		// public_key_gossip.rs:gossip_public_key [2] store public key locally (public_keys.rs:
 		// store_aggregated_public_keys)
-		let session_id = get_party_session_id(&params).1;
+		let session_id = params.session_id;
 		let pub_key_msg = DKGPublicKeyMessage {
 			session_id,
 			pub_key: local_key.public_key().to_bytes(true).to_vec(),
