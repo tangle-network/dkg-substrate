@@ -364,6 +364,8 @@ pub mod pallet {
 								actual_public_key: e.actual_public_key(),
 								invalid_signature: signature.clone(),
 							});
+							// Cloning `data` and `signature` could be avoided if logging was done
+							// before depositing the event.
 							log::error!(
 								target: "runtime::dkg_proposal_handler",
 								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",

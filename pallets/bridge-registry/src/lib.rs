@@ -72,6 +72,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	// Usage of `without_storage_info` is deprecated: https://github.com/paritytech/substrate/issues/8629
 	#[pallet::without_storage_info]
 	pub struct Pallet<T, I = ()>(_);
 
@@ -125,13 +126,13 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_bridge_index)]
-	/// Details of the module's parameters
+	/// Details of the module's parameters - ???
 	pub(super) type NextBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageValue<_, T::BridgeIndex, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bridges)]
-	/// Details of the module's parameters
+	/// Details of the module's parameters - ???
 	pub(super) type Bridges<T: Config<I>, I: 'static = ()> = StorageMap<
 		_,
 		Blake2_256,
@@ -141,7 +142,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn resource_to_bridge_index)]
-	/// Details of the module's parameters
+	/// Details of the module's parameters - ???
 	pub(super) type ResourceToBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageMap<_, Blake2_256, ResourceId, T::BridgeIndex>;
 
@@ -171,6 +172,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config<I>, I: 'static> Pallet<T, I> {
+		// The docstring below seems completely irrelevant to the extrinsic's logic.
 		/// Set an account's identity information and reserve the appropriate deposit.
 		///
 		/// If the account already has identity information, the deposit is taken as part payment
@@ -189,6 +191,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			let extra_fields = info.additional.len() as u32;
+			// This check is redundant. BoundedVec decoding fails if length is too big.
 			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T, I>::TooManyFields);
 
 			let metadata = match <Bridges<T, I>>::get(&bridge_index) {
@@ -211,6 +214,7 @@ pub mod pallet {
 			bridge_index: T::BridgeIndex,
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
+			// Iteration over an unbounded vector is potentially dangerous and should be avoided.
 			for resource_id in resource_ids {
 				ResourceToBridgeIndex::<T, I>::insert(resource_id, bridge_index);
 			}
@@ -237,6 +241,8 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 			// Decode the anchor update
 			let data = proposal.data();
 			let mut buf = [0u8; AnchorUpdateProposal::LENGTH];
+			// `clone_from_slice` will panic if data length is different than `AnchorUpdateProposal::LENGTH`
+			// I recommend adding an explicit `ensure!` check here.
 			buf.clone_from_slice(data.as_slice());
 			let anchor_update_proposal = AnchorUpdateProposal::from(buf);
 			// Get the source and target resource IDs to check existence of
@@ -272,6 +278,7 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 					Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
 					// Increment the next bridge index
 					NextBridgeIndex::<T, I>::mutate(|next_bridge_index| {
+						// Please avoid unchecked incrementation. `saturating_inc` or `checked_inc` should be used instead.
 						*next_bridge_index += T::BridgeIndex::one();
 					});
 				} else {

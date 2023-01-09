@@ -576,6 +576,7 @@ impl<T: Config> Pallet<T> {
 		Proposers::<T>::insert(&proposer, true);
 		// Add the proposer's public key to the set
 		ExternalProposerAccounts::<T>::insert(&proposer, external_account);
+		// Unsafe arithmetic operation. Using `saturating_inc` is recommended.
 		ProposerCount::<T>::mutate(|i| *i += 1);
 
 		Self::deposit_event(Event::ProposerAdded { proposer_id: proposer });
@@ -590,6 +591,7 @@ impl<T: Config> Pallet<T> {
 		// Remove the proposer's external account
 		ExternalProposerAccounts::<T>::remove(&proposer);
 		// Decrement the proposer count
+		// Unsafe arithmetic operation. Using `saturating_dec` is recommended.
 		ProposerCount::<T>::mutate(|i| *i -= 1);
 		Self::deposit_event(Event::ProposerRemoved { proposer_id: proposer });
 		Ok(().into())
@@ -613,6 +615,7 @@ impl<T: Config> Pallet<T> {
 				<T as frame_system::Config>::AccountId,
 				<T as frame_system::Config>::BlockNumber,
 			> {
+				// Unsafe arithmetic operation. Using `saturating_add` is recommended.
 				expiry: now + T::ProposalLifetime::get(),
 				..Default::default()
 			},

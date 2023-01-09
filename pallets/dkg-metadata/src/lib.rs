@@ -238,6 +238,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	// Usage of `without_storage_info` is deprecated: https://github.com/paritytech/substrate/issues/8629
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
@@ -318,6 +319,8 @@ pub mod pallet {
 	/// Public key Signatures for past sessions
 	#[pallet::storage]
 	#[pallet::getter(fn used_signatures)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type UsedSignatures<T: Config> = StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
 
 	/// Nonce value for next refresh proposal
@@ -350,28 +353,38 @@ pub mod pallet {
 	/// Holds public key for next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_dkg_public_key)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type NextDKGPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
 
 	/// Signature of the DKG public key for the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_public_key_signature)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type NextPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, OptionQuery>;
 
 	/// Holds active public key for ongoing session
 	#[pallet::storage]
 	#[pallet::getter(fn dkg_public_key)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type DKGPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
 
 	/// Signature of the current DKG public key
 	#[pallet::storage]
 	#[pallet::getter(fn public_key_signature)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type DKGPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
 
 	/// Holds public key for immediate past session
 	#[pallet::storage]
 	#[pallet::getter(fn previous_public_key)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub type PreviousPublicKey<T: Config> =
 		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
 
@@ -419,6 +432,8 @@ pub mod pallet {
 	/// The current authorities set
 	#[pallet::storage]
 	#[pallet::getter(fn authorities)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type Authorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
 
 	/// The current authority set id
@@ -436,17 +451,23 @@ pub mod pallet {
 	/// Authorities set scheduled to be used with the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type NextAuthorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
 
 	/// Accounts for the current authorities
 	#[pallet::storage]
 	#[pallet::getter(fn current_authorities_accounts)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
 		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
 	/// Authority account ids scheduled for the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities_accounts)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type NextAuthoritiesAccounts<T: Config> =
 		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
@@ -494,11 +515,15 @@ pub mod pallet {
 	/// The current best authorities of the active keygen set
 	#[pallet::storage]
 	#[pallet::getter(fn best_authorities)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type BestAuthorities<T: Config> = StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
 
 	/// The next best authorities of the active keygen set
 	#[pallet::storage]
 	#[pallet::getter(fn next_best_authorities)]
+	// Storage of unbounded vectors will no longer be possible after removing `without_storage_info`
+	// This should be replaced with `BoundedVec`
 	pub(super) type NextBestAuthorities<T: Config> =
 		StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
 
@@ -553,22 +578,24 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Current public key submitted
+		// Putting uncompressed key in the event seems unnecessary. It makes the event storage bigger
+		// and extrinsic execution longer, while it could be easily done in client applications.
 		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
 		/// Next public key submitted
-		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> }, // Consider removing uncompressed key.
 		/// Next public key signature submitted
 		NextPublicKeySignatureSubmitted {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
+			uncompressed_pub_key: Vec<u8>, // Consider removing uncompressed key.
 		},
 		/// Current Public Key Changed.
-		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> }, // Consider removing uncompressed key.
 		/// Current Public Key Signature Changed.
 		PublicKeySignatureChanged {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
+			uncompressed_pub_key: Vec<u8>, // Consider removing uncompressed key.
 		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
@@ -644,6 +671,7 @@ pub mod pallet {
 				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
 				Error::<T>::InvalidThreshold
 			);
+			// `update_signature_threshold` could be used here
 			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
 				*threshold = new_threshold;
 				Ok(().into())
@@ -659,6 +687,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new keygen threshold for the DKG.
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
 		pub fn set_keygen_threshold(
@@ -711,6 +741,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
 		///   DKG public keys.
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_public_key(
@@ -723,6 +755,7 @@ pub mod pallet {
 			let authorities: Vec<T::DKGId> =
 				Self::best_authorities().iter().map(|id| id.1.clone()).collect();
 
+			// `dict` as a variable name is quite uninformative
 			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
 			let threshold = Self::signature_threshold();
 
@@ -769,6 +802,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
 		///   DKG public keys.
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		pub fn submit_next_public_key(
@@ -837,6 +872,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
 		///   and nonce.
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		pub fn submit_public_key_signature(
@@ -912,6 +949,8 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
 		///   authority
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		pub fn submit_misbehaviour_reports(
@@ -937,6 +976,8 @@ pub mod pallet {
 				MisbehaviourType::Sign => Self::signature_threshold(),
 			};
 
+			// The block below is over 120 lines long and indentation level reaches 11 tabs.
+			// Because of this, it is difficult to comprehend. I suggest some refactoring to improve readability.
 			if valid_reporters.len() >= signature_threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
@@ -1132,6 +1173,8 @@ pub mod pallet {
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
 		#[pallet::weight(0)]
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1178,6 +1221,8 @@ pub mod pallet {
 		///
 		/// Note that, this will clear the next public key and its signature, if any.
 		#[pallet::weight(0)]
+		// Extrinsics are now transactional by default, no need for `#[transactional]`
+		// See https://github.com/paritytech/substrate/pull/11431
 		#[transactional]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1347,7 +1392,7 @@ impl<T: Config> Pallet<T> {
 
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
-		authorities: Vec<T::DKGId>,
+		authorities: Vec<T::DKGId>,  // The function only needs to iterate over references, so maybe Iterator<Item=&T::DKGId> will suffice
 	) -> BTreeMap<Vec<u8>, Vec<T::DKGId>> {
 		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
 
@@ -1366,11 +1411,8 @@ impl<T: Config> Pallet<T> {
 				verify_signer_from_set_ecdsa(maybe_signers, &pub_key, &signature);
 
 			if success {
-				let authority = T::DKGId::from(maybe_authority.unwrap());
-				if !dict.contains_key(&pub_key) {
-					dict.insert(pub_key.clone(), Vec::new());
-				}
-				let temp = dict.get_mut(&pub_key).unwrap();
+				let authority = T::DKGId::from(maybe_authority.unwrap());  // FIXME: avoid unwrap, return error instead
+				let temp = dict.entry(pub_key).or_default();
 				if !temp.contains(&authority) {
 					temp.push(authority);
 				}
@@ -1650,6 +1692,8 @@ impl<T: Config> Pallet<T> {
 	/// DKG public key to be submitted in order to modify the on-chain
 	/// storage.
 	fn submit_next_public_key_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
+		// This function seems to duplicate a lot of logic from `submit_genesis_public_key_onchain`.
+		// Maybe it could be refactored into a single function?
 		let next_unsigned_at = <NextUnsignedAt<T>>::get();
 		if next_unsigned_at > block_number {
 			return Err("Too early to send unsigned transaction")
