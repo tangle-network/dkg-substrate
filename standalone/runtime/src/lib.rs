@@ -292,8 +292,6 @@ impl pallet_timestamp::Config for Runtime {
 
 #[cfg(feature = "integration-tests")]
 parameter_types! {
-  // How often we trigger a new session.
-  // during integration tests, we use manual sessions.
   pub const Period: BlockNumber = HOURS;
   pub const Offset: BlockNumber = 0;
 }

@@ -41,8 +41,6 @@ export let polkadotApi: ApiPromise;
 export let aliceNode: ChildProcess;
 export let bobNode: ChildProcess;
 export let charlieNode: ChildProcess;
-export let daveNode: ChildProcess;
-export let eveNode: ChildProcess;
 
 export let localChain: LocalEvmChain;
 export let localChain2: LocalEvmChain;
@@ -63,10 +61,8 @@ export const executeBefore = async () => {
 	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
 	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
 	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
-	daveNode = startStandaloneNode('dave', { tmp: true, printLogs: false });
-	eveNode = startStandaloneNode('eve', { tmp: true, printLogs: false });
 
-	console.log('started alice, bob, charlie, dave, eve nodes');
+	console.log('started alice, bob, charlie nodes');
 
 	localChain = await LocalEvmChain.init('local', 5001, [
 		{
@@ -181,8 +177,6 @@ export async function executeAfter() {
 	aliceNode?.kill('SIGINT');
 	bobNode?.kill('SIGINT');
 	charlieNode?.kill('SIGINT');
-	daveNode?.kill('SIGINT');
-	eveNode?.kill('SIGINT');
 	await localChain?.stop();
 	await localChain2?.stop();
 	await sleep(5 * SECONDS);
