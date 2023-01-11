@@ -58,7 +58,7 @@ describe('Keygen Changes Flow', function () {
 		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
 		charlieNode = startStandaloneNode('charlie', {
 			tmp: true,
-			printLogs: true,
+			printLogs: false,
 		});
 
 		api = await ApiPromise.create({
