@@ -72,12 +72,14 @@ where
 		&self,
 		session_id: SessionId,
 	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
+		log::info!(target: "dkg", "Offchain Storage : Fetching local keys for session {:?}", session_id);
 		let db_key = keys::LocalKey::new(session_id);
 		let maybe_decrypted_bytes = self.load_and_decrypt(codec::Encode::encode(&db_key))?;
 		match maybe_decrypted_bytes {
 			Some(decrypted_bytes) => {
 				let local_key = serde_json::from_slice(&decrypted_bytes.0)
 					.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;
+				log::info!(target: "dkg", "Offchain Storage : Fetched local keys for session {:?}, Key : {:?}", session_id, local_key);
 				Ok(Some(local_key))
 			},
 			None => Ok(None),
@@ -89,6 +91,7 @@ where
 		session_id: SessionId,
 		local_key: LocalKey<Secp256k1>,
 	) -> Result<(), DKGError> {
+		log::info!(target: "dkg", "Offchain Storage : Store local keys for session {:?}, Key : {:?}", session_id, local_key);
 		let db_key = keys::LocalKey::new(session_id);
 		let value = serde_json::to_vec(&local_key)
 			.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;
@@ -206,6 +209,12 @@ where
 		let mut offchain_storage = self.backend.offchain_storage().ok_or_else(|| {
 			DKGError::CriticalError { reason: String::from("No Offchain Storage available!!") }
 		})?;
+		if offchain_storage.get(STORAGE_PREFIX, &key).is_some() {
+			log::warn!(
+				"Offchain Storage : Overwriting already existing database entry at key 0x{}",
+				hex::encode(key.clone())
+			);
+		}
 		offchain_storage.set(STORAGE_PREFIX, &key, &value);
 		Ok(())
 	}
