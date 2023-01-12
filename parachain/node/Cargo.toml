@@ -94,7 +94,6 @@ grandpa = { default-features = false, git = "https://github.com/paritytech/subst
 
 ## Substrate Primitive Dependencies
 sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sc-network-common = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-block-builder = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-blockchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-consensus = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }

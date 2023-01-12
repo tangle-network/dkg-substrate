@@ -206,7 +206,6 @@ pub fn run() -> Result<()> {
 			})
 		},
 		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
-		Some(Subcommand::DKGKey(cmd)) => cmd.run(&cli),
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			// Switch on the concrete benchmark sub-command-
@@ -271,7 +270,9 @@ pub fn run() -> Result<()> {
 			You can enable it with `--features try-runtime`."
 			.into()),
 		None => {
-			let runner = cli.create_runner(&cli.run)?;
+			let runner = cli.create_runner(&cli.run.normalize())?;
+			let collator_options = cli.run.collator_options();
+
 			runner.run_node_until_exit(|config| async move {
 				let hwbench = if !cli.no_hardware_benchmarks {
 					config.database.path().map(|database_path| {
