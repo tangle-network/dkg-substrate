@@ -1947,7 +1947,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let next_authorities = validators
 			.map(|(acc, k)| {
 				authority_account_ids.push(acc.clone());
-				AccountToAuthority::<T>::insert(&acc, k.clone());
+				AccountToAuthority::<T>::insert(acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();
@@ -1955,7 +1955,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 		let next_queued_authorities = queued_validators
 			.map(|(acc, k)| {
 				queued_authority_account_ids.push(acc.clone());
-				AccountToAuthority::<T>::insert(&acc, k.clone());
+				AccountToAuthority::<T>::insert(acc, k.clone());
 				k
 			})
 			.collect::<Vec<_>>();

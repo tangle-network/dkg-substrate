@@ -191,7 +191,7 @@ pub mod pallet {
 			let extra_fields = info.additional.len() as u32;
 			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T, I>::TooManyFields);
 
-			let metadata = match <Bridges<T, I>>::get(&bridge_index) {
+			let metadata = match <Bridges<T, I>>::get(bridge_index) {
 				Some(mut id) => {
 					id.info = info;
 					id
@@ -199,7 +199,7 @@ pub mod pallet {
 				None => BridgeMetadata { info, resource_ids: BoundedVec::default() },
 			};
 
-			<Bridges<T, I>>::insert(&bridge_index, metadata);
+			<Bridges<T, I>>::insert(bridge_index, metadata);
 
 			Ok(().into())
 		}

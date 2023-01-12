@@ -48,7 +48,7 @@ where
 	}
 	let offchain = maybe_offchain.unwrap();
 	let keys = aggregated_public_keys.get(&session_id).ok_or_else(|| DKGError::CriticalError {
-		reason: format!("Aggregated public key for session {} does not exist in map", session_id),
+		reason: format!("Aggregated public key for session {session_id} does not exist in map"),
 	})?;
 	if is_genesis_round {
 		//dkg_worker.dkg_state.listening_for_active_pub_key = false;

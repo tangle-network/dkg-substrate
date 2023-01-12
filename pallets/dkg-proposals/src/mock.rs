@@ -453,7 +453,7 @@ pub fn assert_events(mut expected: Vec<RuntimeEvent>) {
 }
 
 pub fn assert_has_event(ev: RuntimeEvent) {
-	println!("{:?}", ev);
+	println!("{ev:?}");
 	println!("{:?}", system::Pallet::<Test>::events());
 	assert!(system::Pallet::<Test>::events()
 		.iter()

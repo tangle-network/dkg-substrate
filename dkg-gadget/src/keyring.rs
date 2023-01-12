@@ -54,7 +54,7 @@ impl Keyring {
 
 	/// Return seed string.
 	pub fn to_seed(self) -> String {
-		format!("//{:?}", self)
+		format!("//{self:?}")
 	}
 
 	/// Iterator over all test accounts

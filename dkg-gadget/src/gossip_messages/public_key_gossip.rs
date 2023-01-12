@@ -91,7 +91,7 @@ where
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, C, BE>(
 				&dkg_worker.backend,
-				&mut *lock,
+				&mut lock,
 				is_main_round,
 				session_id,
 				current_block_number,
