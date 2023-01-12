@@ -209,6 +209,9 @@ where
 		let mut offchain_storage = self.backend.offchain_storage().ok_or_else(|| {
 			DKGError::CriticalError { reason: String::from("No Offchain Storage available!!") }
 		})?;
+		if let Some(_) = offchain_storage.get(STORAGE_PREFIX, &key) {
+			log::warn!("Offchain Storage : Overwriting already existing key for session {:?}", key);
+		}
 		offchain_storage.set(STORAGE_PREFIX, &key, &value);
 		Ok(())
 	}
