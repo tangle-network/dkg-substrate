@@ -44,10 +44,6 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	if dkg_worker.rounds.read().is_none() {
-		return Ok(())
-	}
-
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
 	let current_block_number = *header.number();
@@ -100,6 +96,13 @@ where
 				session_id,
 				current_block_number,
 			)?;
+		} else {
+			log::debug!(
+				target: "dkg",
+				"SESSION {:?} | Need more signatures to submit next DKG public key, needs {} more",
+				msg.session_id,
+				threshold - aggregated_public_keys.keys_and_signatures.len()
+			);
 		}
 	}
 

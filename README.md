@@ -9,7 +9,7 @@
     <strong>🚀 Threshold ECDSA Distributed Key Generation Protocol 🔑 </strong>
 </p>
 
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webb-tools/dkg-substrate/check?style=flat-square)](https://github.com/webb-tools/dkg-substrate/actions) [![Codecov](https://img.shields.io/codecov/c/gh/webb-tools/dkg-substrate?style=flat-square&token=HNT1CEZ01E)](https://codecov.io/gh/webb-tools/dkg-substrate) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Twitter](https://img.shields.io/twitter/follow/webbprotocol.svg?style=flat-square&label=Twitter&color=1DA1F2)](https://twitter.com/webbprotocol) [![Telegram](https://img.shields.io/badge/Telegram-gray?logo=telegram)](https://t.me/webbprotocol) [![Discord](https://img.shields.io/discord/833784453251596298.svg?style=flat-square&label=Discord&logo=discord)](https://discord.gg/cv8EfJu3Tn)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/webb-tools/dkg-substrate/checks.yml?branch=master&style=flat-square)](https://github.com/webb-tools/dkg-substrate/actions) [![Codecov](https://img.shields.io/codecov/c/gh/webb-tools/dkg-substrate?style=flat-square&token=HNT1CEZ01E)](https://codecov.io/gh/webb-tools/dkg-substrate) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Twitter](https://img.shields.io/twitter/follow/webbprotocol.svg?style=flat-square&label=Twitter&color=1DA1F2)](https://twitter.com/webbprotocol) [![Telegram](https://img.shields.io/badge/Telegram-gray?logo=telegram)](https://t.me/webbprotocol) [![Discord](https://img.shields.io/discord/833784453251596298.svg?style=flat-square&label=Discord&logo=discord)](https://discord.gg/cv8EfJu3Tn)
 
 <!-- TABLE OF CONTENTS -->
 <h2 id="table-of-contents"> 📖 Table of Contents</h2>
@@ -119,8 +119,20 @@ export PATH="/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/:$PATH"
 
 ❗ **Note:** Native ARM Homebrew installations are only going to be supported at `/opt/homebrew`. After Homebrew installs, make sure to add `/opt/homebrew/bin` to your PATH.
 
-```bash
+```
 echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.bash_profile
+```
+
+An example `bash_profile` for reference may look like the following:
+
+```
+export PATH=/opt/homebrew/bin:$PATH
+export PATH=/opt/homebrew/opt/llvm/bin:$PATH
+export CC=/opt/homebrew/opt/llvm/bin/clang
+export AR=/opt/homebrew/opt/llvm/bin/llvm-ar
+export LDFLAGS=-L/opt/homebrew/opt/llvm/lib
+export CPPFLAGS=-I/opt/homebrew/opt/llvm/include
+export RUSTFLAGS='-L /opt/homebrew/lib'
 ```
 
 In order to build **dkg-substrate** in `--release` mode using `aarch64-apple-darwin` Rust toolchain you need to set the following environment variables:
@@ -133,6 +145,28 @@ Ensure `gmp` dependency is installed correctly.
 
 ```
 brew install gmp
+```
+
+If you are still receiving an issue with `gmp`, you may need to adjust your path to the `gmp` lib. Below is a suggestive fix, but paths are machine / environment specific. 
+
+Run:
+
+```
+cargo clean
+```
+
+Then:
+
+```
+export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib:$(brew --prefix)/opt/gmp/lib
+```
+
+This should be added to your bash_profile as well. 
+
+Ensure `protobuf` dependency is installed correctly.
+
+```
+brew install protobuf
 ```
 
 <h1 id="usage"> Usage </h1>

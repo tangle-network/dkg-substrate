@@ -5,6 +5,7 @@
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
+use jsonrpsee::RpcModule;
 // Local Runtime Types
 use dkg_rococo_runtime::{opaque::Block, Hash, RuntimeApi};
 

@@ -37,8 +37,6 @@ pub enum DKGMsgStatus {
 	ACTIVE,
 	/// Queued round,
 	QUEUED,
-	/// Unknown
-	UNKNOWN,
 }
 
 /// Gossip message struct for all DKG + Webb Protocol messages.

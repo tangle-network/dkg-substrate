@@ -54,11 +54,14 @@ describe('E2E Test Runner', function () {
 			'Wrapping Fee Update Proposal',
 			'./wrappingFeeUpdateProposal.test'
 		);
-		importTest('Resource ID Update Proposal', './resourceIdUpdateProposal.test');
+		importTest(
+			'Resource ID Update Proposal',
+			'./resourceIdUpdateProposal.test'
+		);
 		importTest('Token Add & Remove Proposal', './tokenUpdateProposal.test');
 		importTest('Anchor Update Proposal', './updateAnchorProposal.test');
 		importTest('Governor Update / Refresh Proposal', './updateGovernor.test');
-	})
+	});
 
 	after(async () => {
 		await executeAfter();

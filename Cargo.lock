@@ -65,7 +65,7 @@ checksum = "df5f85a83a7d8b0442b6aa7b504b8212c1733da07b98aae43d4bc21b2cb3cdf6"
 dependencies = [
  "aead",
  "aes",
- "cipher",
+ "cipher 0.3.0",
  "ctr",
  "ghash",
  "subtle",
@@ -870,7 +870,7 @@ checksum = "a18446b09be63d457bbec447509e85f662f32952b035ce892290396bc0b0cff5"
 dependencies = [
  "aead",
  "chacha20",
- "cipher",
+ "cipher 0.3.0",
  "poly1305",
  "zeroize",
 ]
@@ -910,6 +910,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ee52072ec15386f770805afd189a01c8841be8696bed250fa2f13c4c0d6dfb7"
 dependencies = [
  "generic-array 0.14.6",
+]
+
+[[package]]
+name = "cipher"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1873270f8f7942c191139cb8a40fd228da6c3fd2fc376d7e92d47aa14aeb59e"
+dependencies = [
+ "crypto-common",
+ "inout",
 ]
 
 [[package]]
@@ -1342,7 +1352,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "049bb91fb4aaf0e3c7efa6cd5ef877dbbbd15b39dad06d9948de4ec8a75761ea"
 dependencies = [
- "cipher",
+ "cipher 0.3.0",
 ]
 
 [[package]]
@@ -2208,6 +2218,7 @@ name = "dkg-primitives"
 version = "0.0.1"
 dependencies = [
  "chacha20poly1305",
+ "clap 3.2.23",
  "curv-kzen",
  "dkg-runtime-primitives",
  "fnv",
@@ -2220,6 +2231,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "rand 0.8.5",
  "round-based",
+ "sc-cli",
  "sc-keystore",
  "sc-service",
  "serde",
@@ -2366,6 +2378,7 @@ dependencies = [
  "sc-telemetry",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+ "serde_json",
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
@@ -4474,8 +4487,8 @@ dependencies = [
  "multistream-select",
  "parking_lot 0.12.1",
  "pin-project",
- "prost",
- "prost-build",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "rand 0.8.5",
  "rw-stream-sink",
  "sha2 0.10.6",
@@ -4613,8 +4626,8 @@ dependencies = [
  "lazy_static",
  "libp2p-core",
  "log",
- "prost",
- "prost-build",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "rand 0.8.5",
  "sha2 0.10.6",
  "snow",
@@ -5166,6 +5179,7 @@ dependencies = [
  "curv-kzen",
  "derivative",
  "kzen-paillier",
+ "log",
  "round-based",
  "serde",
  "sha2 0.9.9",
@@ -8647,7 +8661,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c01db6702aa05baa3f57dec92b8eeeeb4cb19e894e73996b32a4093289e54592"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.10.1",
+]
+
+[[package]]
+name = "prost"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "399c3c31cdec40583bb68f0b18403400d01ec4289c383aa047560439952c4dd7"
+dependencies = [
+ "bytes",
+ "prost-derive 0.11.0",
 ]
 
 [[package]]
@@ -8680,7 +8704,7 @@ checksum = "011ae9ff8359df7915f97302d591cdd9e0e27fbd5a4ddc5bd13b71079bb20987"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "prost",
+ "prost 0.10.4",
  "thiserror",
  "unsigned-varint",
 ]
@@ -8699,13 +8723,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7345d5f0e08c0536d7ac7229952590239e77abf0a0100a1b1d890add6ea96364"
+dependencies = [
+ "anyhow",
+ "itertools 0.10.5",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "017f79637768cde62820bc2d4fe0e45daaa027755c323ad077767c6c5f173091"
 dependencies = [
  "bytes",
- "prost",
+ "prost 0.10.4",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dfaa718ad76a44b3415e6c4d53b17c8f99160dcb3a99b10470fce8ad43f6e3e"
+dependencies = [
+ "bytes",
+ "prost 0.11.0",
 ]
 
 [[package]]
@@ -9513,8 +9560,8 @@ dependencies = [
  "libp2p",
  "log",
  "parity-scale-codec",
- "prost",
- "prost-build",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "rand 0.7.3",
  "sc-client-api",
  "sc-network-common",
@@ -10127,7 +10174,7 @@ dependencies = [
  "libp2p",
  "linked_hash_set",
  "parity-scale-codec",
- "prost-build",
+ "prost-build 0.10.4",
  "sc-consensus",
  "sc-peerset",
  "serde",
@@ -10168,8 +10215,8 @@ dependencies = [
  "libp2p",
  "log",
  "parity-scale-codec",
- "prost",
- "prost-build",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "sc-client-api",
  "sc-network-common",
  "sc-peerset",
@@ -10193,8 +10240,8 @@ dependencies = [
  "lru 0.8.1",
  "mockall",
  "parity-scale-codec",
- "prost",
- "prost-build",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "sc-client-api",
  "sc-consensus",
  "sc-network-common",
@@ -10248,6 +10295,25 @@ version = "0.10.0-dev"
 source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.36#cb4f2491b00af7d7817f3a54209c26b20faa1f51"
 dependencies = [
  "array-bytes 4.2.0",
+ "futures",
+ "hex",
+ "libp2p",
+ "log",
+ "parity-scale-codec",
+ "pin-project",
+ "sc-network-common",
+ "sc-peerset",
+ "sp-consensus",
+ "sp-runtime",
+ "substrate-prometheus-endpoint",
+]
+
+[[package]]
+name = "sc-network-transactions"
+version = "0.10.0-dev"
+source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.30#a3ed0119c45cdd0d571ad34e5b3ee7518c8cef8d"
+dependencies = [
+ "array-bytes",
  "futures",
  "hex",
  "libp2p",

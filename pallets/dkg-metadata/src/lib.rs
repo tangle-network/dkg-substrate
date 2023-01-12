@@ -105,7 +105,8 @@ use dkg_runtime_primitives::{
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, MisbehaviourType, RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal, RefreshProposalSigned,
+	DKG_ENGINE_ID,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -296,36 +297,20 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
-			if Self::should_refresh(n) && !Self::refresh_in_progress() {
-				if let Some(pub_key) = Self::next_dkg_public_key() {
-					RefreshInProgress::<T>::put(true);
-					let uncompressed_pub_key =
-						Self::decompress_public_key(pub_key.1).unwrap_or_default();
-					let next_nonce = Self::refresh_nonce() + 1u32;
-					let data = dkg_runtime_primitives::RefreshProposal {
-						nonce: next_nonce.into(),
-						pub_key: uncompressed_pub_key,
-					};
-					match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
-						Ok(()) => {
-							RefreshNonce::<T>::put(next_nonce);
-							log::debug!("Handled refresh proposal");
-						},
-						Err(e) => {
-							log::warn!("Failed to handle refresh proposal: {:?}", e);
-						},
-					}
-
-					return Weight::from_ref_time(1_u64)
-				}
-			}
-
 			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
 			// this is done to ensure that the flag is reset and only read once per DKG
 			// `on_finality_notification` call.
 			if ShouldExecuteEmergencyKeygen::<T>::get() {
 				ShouldExecuteEmergencyKeygen::<T>::put(false);
 			}
+			// Check if we shall refresh the DKG.
+			if Self::should_refresh(n) && !Self::refresh_in_progress() {
+				if let Some(pub_key) = Self::next_dkg_public_key() {
+					Self::do_refresh(pub_key);
+					return Weight::from_ref_time(1_u64)
+				}
+			}
+
 			Weight::from_ref_time(0)
 		}
 	}
@@ -356,11 +341,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_in_progress)]
 	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
-
-	/// Should we manually trigger a DKG refresh process.
-	#[pallet::storage]
-	#[pallet::getter(fn should_manual_refresh)]
-	pub type ShouldManualRefresh<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Should we execute emergency keygen protocol.
 	#[pallet::storage]
@@ -562,8 +542,6 @@ pub mod pallet {
 		InvalidMisbehaviourReports,
 		/// DKG Refresh is already in progress.
 		RefreshInProgress,
-		/// Manual DKG Refresh failed to progress.
-		ManualRefreshFailed,
 		/// No NextPublicKey stored on-chain.
 		NoNextPublicKey,
 		/// Must be calling from the controller account
@@ -810,31 +788,44 @@ pub mod pallet {
 			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
 			let threshold = Self::next_signature_threshold();
 
-			let mut accepted = false;
-			for (key, accounts) in dict.iter() {
-				if accounts.len() > threshold.into() {
-					NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
-					Self::deposit_event(Event::NextPublicKeySubmitted {
-						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: Self::decompress_public_key(key.clone())
-							.unwrap_or_default(),
-					});
-					accepted = true;
-
-					break
+			// Loop through the keys, and if we find one that has enough signatures, store it.
+			//
+			// This loop returns early if a key is found that has enough signatures, otherwise, it
+			// will return None.
+			let mut keys = dict.iter();
+			let accepted_key = loop {
+				if let Some((key, accounts)) = keys.next() {
+					if accounts.len() > threshold.into() {
+						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
+						Self::deposit_event(Event::NextPublicKeySubmitted {
+							compressed_pub_key: key.clone(),
+							uncompressed_pub_key: Self::decompress_public_key(key.clone())
+								.unwrap_or_default(),
+						});
+						break Some((Self::next_authority_set_id(), key.clone()))
+					}
+				} else {
+					break None
 				}
-			}
+			};
 
-			if accepted {
+			if let Some((set_id, key)) = accepted_key {
 				// TODO: Do something about accounts that posted a wrong key
 				// now increment the block number at which we expect next unsigned transaction.
 				let current_block = <frame_system::Pallet<T>>::block_number();
 				<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-
-				return Ok(().into())
+				// Reset `RefreshInProgress` to false, so that we submit a new refresh.
+				RefreshInProgress::<T>::put(false);
+				frame_support::log::debug!(
+					target: "runtime::dkg_metadata",
+					"Next DKG Public Key: {}, Authority Set ID: {}",
+					hex::encode(key),
+					set_id,
+				);
+				Ok(().into())
+			} else {
+				Err(Error::<T>::InvalidPublicKeys.into())
 			}
-
-			Err(Error::<T>::InvalidPublicKeys.into())
 		}
 
 		/// Submits the public key signature for the key refresh/rotation process.
@@ -905,20 +896,6 @@ pub mod pallet {
 			// now increment the block number at which we expect next unsigned transaction.
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-			// Handle manual refresh if flag is set
-			if Self::should_manual_refresh() {
-				ShouldManualRefresh::<T>::put(false);
-				let next_authorities = NextAuthorities::<T>::get();
-				let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
-				// Force rotate the next authorities into the active and next set.
-				Self::change_authorities(
-					next_authorities.clone(),
-					next_authorities,
-					next_authority_accounts.clone(),
-					next_authority_accounts,
-					true,
-				);
-			}
 
 			Ok(().into())
 		}
@@ -1414,6 +1391,24 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	pub fn do_refresh(pub_key: (u64, Vec<u8>)) {
+		let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
+		// the nonce will be auto incremented once we rotate the keys successfully.
+		let data = dkg_runtime_primitives::RefreshProposal {
+			nonce: Self::refresh_nonce().into(),
+			pub_key: uncompressed_pub_key,
+		};
+		match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+			Ok(()) => {
+				RefreshInProgress::<T>::put(true);
+				log::debug!("Handled refresh proposal");
+			},
+			Err(e) => {
+				log::warn!("Failed to handle refresh proposal: {:?}", e);
+			},
+		}
+	}
+
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
 		authorities: Vec<T::DKGId>,
@@ -1585,6 +1580,9 @@ impl<T: Config> Pallet<T> {
 			UsedSignatures::<T>::mutate(|val| {
 				val.push(pub_key_signature.clone());
 			});
+			// and increment the nonce
+			let next_nonce = Self::refresh_nonce().saturating_add(1);
+			RefreshNonce::<T>::put(next_nonce);
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.1.clone()).unwrap_or_default();
 			let compressed_pub_key = next_pub_key.1;
@@ -1893,23 +1891,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// Identifies if a new `RefreshProposal` should be created
-	/// at a given block number. This is meant to be called on the
-	/// `on_initialize` hook at every block to check if we should begin
-	/// the refresh proposal signing process.
-	pub fn should_refresh(now: T::BlockNumber) -> bool {
-		let (session_progress, ..) = <T::NextSessionRotation as EstimateNextSessionRotation<
-			T::BlockNumber,
-		>>::estimate_current_session_progress(now);
-		log::debug!(target: "runtime::dkg_metadata", "SHOULD_REFRESH : Session progress {:?}", session_progress);
-		if let Some(session_progress) = session_progress {
-			let delay = RefreshDelay::<T>::get();
-			let next_dkg_public_key_signature = Self::next_public_key_signature();
-			return (delay <= session_progress) && next_dkg_public_key_signature.is_none()
-		}
-
-		log::debug!(target: "runtime::dkg_metadata", "Unable to read session progress");
-		false
+	pub fn should_refresh(_now: T::BlockNumber) -> bool {
+		let next_dkg_public_key = Self::next_dkg_public_key();
+		let next_dkg_public_key_signature = Self::next_public_key_signature();
+		next_dkg_public_key.is_some() && next_dkg_public_key_signature.is_none()
 	}
 
 	/// Inserts a successful rotation into the history

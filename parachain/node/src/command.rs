@@ -206,6 +206,7 @@ pub fn run() -> Result<()> {
 			})
 		},
 		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
+		Some(Subcommand::DKGKey(cmd)) => cmd.run(&cli),
 		Some(Subcommand::Benchmark(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			// Switch on the concrete benchmark sub-command-

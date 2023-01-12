@@ -14,10 +14,7 @@
  * limitations under the License.
  *
  */
-import {
-	sudoTx,
-	waitForEvent,
-} from './utils/setup';
+import { sudoTx, waitForEvent } from './utils/setup';
 import { GovernedTokenWrapper } from '@webb-tools/tokens';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
 import {
@@ -37,13 +34,23 @@ import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to sign resource id update proposal', async () => {
 	const bridgeSide = signatureVBridge.getVBridgeSide(localChain.typedChainId);
-	const resourceId = ResourceId.newFromContractAddress(bridgeSide.contract.address, ChainType.EVM, localChain.evmId);
+	const resourceId = ResourceId.newFromContractAddress(
+		bridgeSide.contract.address,
+		ChainType.EVM,
+		localChain.evmId
+	);
 	const proposalFunctionSignature = hexToU8a(
-		bridgeSide.contract.interface.getSighash('adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,bytes)')
+		bridgeSide.contract.interface.getSighash(
+			'adminSetResourceWithSignature(bytes32,bytes4,uint32,bytes32,address,bytes)'
+		)
 	);
 
 	const proposalNonce = Number(await bridgeSide.contract.proposalNonce()) + 1;
-	const proposalHeader = new ProposalHeader(resourceId, proposalFunctionSignature, proposalNonce);
+	const proposalHeader = new ProposalHeader(
+		resourceId,
+		proposalFunctionSignature,
+		proposalNonce
+	);
 
 	// Let's create a new GovernedTokenWrapper and set the resourceId for it via
 	// the ResourceIdUpdate Proposal
@@ -58,13 +65,24 @@ it('should be able to sign resource id update proposal', async () => {
 		wallet1
 	);
 
-	const newResourceId = ResourceId.newFromContractAddress(governedToken.contract.address, ChainType.EVM, localChain.evmId);
+	const newResourceId = ResourceId.newFromContractAddress(
+		governedToken.contract.address,
+		ChainType.EVM,
+		localChain.evmId
+	);
 	const handlerAddress = bridgeSide.tokenHandler.contract.address;
 
-	const resourceUpdateProposal = new ResourceIdUpdateProposal(proposalHeader, newResourceId.toString(), handlerAddress)
+	const resourceUpdateProposal = new ResourceIdUpdateProposal(
+		proposalHeader,
+		newResourceId.toString(),
+		handlerAddress
+	);
 
 	// register proposal resourceId.
-	await registerResourceId(polkadotApi, resourceUpdateProposal.header.resourceId);
+	await registerResourceId(
+		polkadotApi,
+		resourceUpdateProposal.header.resourceId
+	);
 	const prop = u8aToHex(resourceUpdateProposal.toU8a());
 
 	const resourceIdUpdateProposal = polkadotApi.createType(
@@ -121,6 +139,8 @@ it('should be able to sign resource id update proposal', async () => {
 	await tx2.wait();
 
 	expect(
-		await bridgeSide.contract._resourceIDToHandlerAddress(newResourceId.toString())
+		await bridgeSide.contract._resourceIDToHandlerAddress(
+			newResourceId.toString()
+		)
 	).to.eq(handlerAddress);
 });

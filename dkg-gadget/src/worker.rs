@@ -18,18 +18,19 @@ use crate::{
 	async_protocols::blockchain_interface::DKGProtocolEngine, utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
+use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::StreamExt;
 use itertools::Itertools;
 use log::{debug, error, info, trace};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
 	marker::PhantomData,
-	path::PathBuf,
 	pin::Pin,
 	sync::{
 		atomic::{AtomicUsize, Ordering},
@@ -42,54 +43,37 @@ use parking_lot::RwLock;
 use sc_client_api::{Backend, FinalityNotification};
 
 use sp_api::BlockId;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_arithmetic::traits::CheckedRem;
+use sp_runtime::traits::{Block, Header, NumberFor, Zero};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::keystore::DKGKeystore;
-
-use crate::gossip_messages::misbehaviour_report::{
-	gossip_misbehaviour_report, handle_misbehaviour_report,
-};
-
-use crate::{
-	gossip_engine::GossipEngineIface,
-	storage::{
-		clear::{is_offchain_storage_empty, listen_and_clear_offchain_storage},
-		public_keys::store_aggregated_public_keys,
-	},
-};
-
 use dkg_primitives::{
-	offchain::storage_keys::AGGREGATED_PUBLIC_KEYS,
-	types::{DKGError, DKGMisbehaviourMessage, DKGMsgStatus, SessionId},
-	utils::StoredLocalKey,
+	types::{
+		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
+		SignedDKGMessage,
+	},
 	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
 };
-
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, UnsignedProposal,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
 	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
-	error, metric_set,
+	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler},
+	error,
+	gossip_engine::GossipEngineIface,
+	gossip_messages::{
+		misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
+		public_key_gossip::handle_public_key_broadcast,
+	},
+	keystore::DKGKeystore,
+	metric_inc, metric_set,
 	metrics::Metrics,
-	persistence::load_stored_key,
-	utils::{find_authorities_change, get_key_path},
+	utils::find_authorities_change,
 	Client,
-};
-
-use crate::gossip_messages::public_key_gossip::handle_public_key_broadcast;
-use dkg_primitives::{
-	types::{DKGMessage, DKGMsgPayload, SignedDKGMessage},
-	utils::{cleanup, DKG_LOCAL_KEY_FILE, QUEUED_DKG_LOCAL_KEY_FILE},
-};
-use dkg_runtime_primitives::{AuthoritySet, DKGApi};
-
-use crate::async_protocols::{
-	remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler,
 };
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -102,11 +86,10 @@ pub const MAX_SIGNING_SETS: u64 = 32;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-/// Number of blocks we wait until we repopulate offchain storage in case the storage
-/// has been cleared and values not updated
-pub const OFFCHAIN_RETRY_THRESHOLD: u32 = 5;
+pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(100);
 
-pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(90);
+/// How many blocks to keep the proposal hash in out local cache.
+pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
@@ -120,8 +103,8 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: GE,
 	pub signing_gossip_engine: GE,
+	pub db_backend: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Option<Metrics>,
-	pub base_path: Option<PathBuf>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub _marker: PhantomData<B>,
@@ -140,6 +123,7 @@ where
 	pub key_store: DKGKeystore,
 	pub keygen_gossip_engine: Arc<GE>,
 	pub signing_gossip_engine: Arc<GE>,
+	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Arc<Option<Metrics>>,
 	// Genesis keygen and rotated round
 	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
@@ -147,8 +131,6 @@ where
 	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Signing rounds, created everytime there are unique unsigned proposals
 	pub signing_rounds: Shared<Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>>,
-	/// Best block a DKG voting round has been concluded for
-	pub best_dkg_block: Shared<Option<NumberFor<B>>>,
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
@@ -170,8 +152,6 @@ where
 	/// Tracking for sent gossip messages: using blake2_128 for message hashes
 	/// The value is the number of times the message has been sent.
 	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
-	/// Local keystore for DKG data
-	pub base_path: Shared<Option<PathBuf>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -195,13 +175,13 @@ where
 			client: self.client.clone(),
 			backend: self.backend.clone(),
 			key_store: self.key_store.clone(),
+			db: self.db.clone(),
 			keygen_gossip_engine: self.keygen_gossip_engine.clone(),
 			signing_gossip_engine: self.signing_gossip_engine.clone(),
 			metrics: self.metrics.clone(),
 			rounds: self.rounds.clone(),
 			next_rounds: self.next_rounds.clone(),
 			signing_rounds: self.signing_rounds.clone(),
-			best_dkg_block: self.best_dkg_block.clone(),
 			best_authorities: self.best_authorities.clone(),
 			best_next_authorities: self.best_next_authorities.clone(),
 			latest_header: self.latest_header.clone(),
@@ -212,7 +192,6 @@ where
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
-			base_path: self.base_path.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
@@ -243,10 +222,10 @@ where
 			client,
 			backend,
 			key_store,
+			db_backend,
 			keygen_gossip_engine,
 			signing_gossip_engine,
 			metrics,
-			base_path,
 			local_keystore,
 			latest_header,
 			..
@@ -259,13 +238,13 @@ where
 			misbehaviour_tx: None,
 			backend,
 			key_store,
+			db: db_backend,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
 			metrics: Arc::new(metrics),
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
 			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
-			best_dkg_block: Arc::new(RwLock::new(None)),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			best_next_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
@@ -275,7 +254,6 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
-			base_path: Arc::new(RwLock::new(base_path)),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
@@ -308,7 +286,6 @@ where
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
 		session_id: SessionId,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
@@ -320,13 +297,15 @@ where
 		let status_handle = AsyncProtocolRemote::new(now, session_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
-		let (active_local_key, _) = self.fetch_local_keys();
+		let optional_session_id = Some(session_id);
+		let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
 				backend: self.backend.clone(),
 				latest_header: self.latest_header.clone(),
 				client: self.client.clone(),
 				keystore: self.key_store.clone(),
+				db: self.db.clone(),
 				gossip_engine: self.get_gossip_engine_from_protocol_name(protocol_name),
 				aggregated_public_keys: self.aggregated_public_keys.clone(),
 				best_authorities: best_authorities.clone(),
@@ -334,18 +313,18 @@ where
 				current_validator_set: self.current_validator_set.clone(),
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
-				local_key_path: Arc::new(RwLock::new(local_key_path)),
 				is_genesis: stage == ProtoStageType::Genesis,
 				_pd: Default::default(),
 			}),
 			session_id,
+			db: self.db.clone(),
 			keystore: self.key_store.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
 			handle: status_handle.clone(),
-			local_key: active_local_key.map(|k| k.local_key),
+			local_key: active_local_key,
 		};
 		// Start the respective protocol
 		status_handle.start()?;
@@ -384,9 +363,8 @@ where
 						log::warn!(target: "dkg_gadget::worker", "signing round async index #{} has stalled, overwriting it", async_index);
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
-						// we will allow overwriting the round, but we will print a warning
 						log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
-						lock[async_index as usize] = Some(status_handle)
+					// lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						log::debug!(target: "dkg_gadget::worker", "signing round async index #{} is not active, overwriting it", async_index);
@@ -417,28 +395,34 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 	) {
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			0u8,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler.clone();
+				// Check first from the rounds object, if any.
 				let status = if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.session_id == session_id {
 						DKGMsgStatus::ACTIVE
 					} else {
 						DKGMsgStatus::QUEUED
 					}
+				} else if session_id == GENESIS_AUTHORITY_SET_ID {
+					// We are likely crashed and restarted, so we do not have the rounds object,
+					// yet. We can safely assume that we are in the genesis stage since we are
+					// session 0.
+					DKGMsgStatus::ACTIVE
 				} else {
-					DKGMsgStatus::UNKNOWN
+					// We are likely crashed and restarted, and we are not in the genesis stage,
+					// so we can safely assume that we are in the queued state.
+					DKGMsgStatus::QUEUED
 				};
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
@@ -479,7 +463,6 @@ where
 		authority_public_key: Public,
 		session_id: SessionId,
 		threshold: u16,
-		local_key_path: Option<PathBuf>,
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
 		signing_set: Vec<u16>,
@@ -489,7 +472,6 @@ where
 			best_authorities,
 			authority_public_key,
 			session_id,
-			local_key_path,
 			stage,
 			async_index,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
@@ -529,57 +511,22 @@ where
 		Ok(Box::pin(task))
 	}
 
-	/// Rotates the contents of the DKG local key files from the queued file to the active file.
+	/// Fetch the stored local keys if they exist.
 	///
-	/// This is meant to be used when rotating the DKG. During a rotation, we begin generating
-	/// a new queued DKG local key for the new queued authority set. The previously queued set
-	/// is now the active set and so we transition their local key data into the active file path.
-	///
-	/// `DKG_LOCAL_KEY_FILE` - the active file path for the active local key (DKG public key)
-	/// `QUEUED_DKG_LOCAL_KEY_FILE` - the queued file path for the queued local key (DKG public key)
-	///
-	/// This should never execute unless we are certain that the rotation will succeed, i.e.
-	/// that the signature of the next DKG public key has been created and stored on-chain.
-	fn rotate_local_key_files(&self) -> bool {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-		debug!(target: "dkg_gadget::worker", "Rotating local key files");
-		debug!(target: "dkg_gadget::worker", "Local key path: {:?}", local_key_path);
-		debug!(target: "dkg_gadget::worker", "Queued local key path: {:?}", queued_local_key_path);
-		if let (Some(path), Some(queued_path)) = (local_key_path, queued_local_key_path) {
-			if let Err(err) = std::fs::copy(queued_path, path) {
-				error!("Error copying queued key {:?}", &err);
-				return false
-			} else {
-				debug!("Successfully copied queued key to current key");
-				return true
-			}
-		}
-
-		false
-	}
-
-	/// Fetch the local stored keys if they exist.
-	fn fetch_local_keys(&self) -> (Option<StoredLocalKey>, Option<StoredLocalKey>) {
-		let local_key_path = get_key_path(&self.base_path.read().clone(), DKG_LOCAL_KEY_FILE);
-		let queued_local_key_path =
-			get_key_path(&self.base_path.read().clone(), QUEUED_DKG_LOCAL_KEY_FILE);
-
-		let sr_pub = self.get_sr25519_public_key();
-		match (local_key_path, queued_local_key_path) {
-			(Some(path), Some(queued_path)) => (
-				load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(Some(path), None) =>
-				(load_stored_key(path, self.local_keystore.read().as_ref(), sr_pub).ok(), None),
-			(None, Some(queued_path)) => (
-				None,
-				load_stored_key(queued_path, self.local_keystore.read().as_ref(), sr_pub).ok(),
-			),
-			(None, None) => (None, None),
-		}
+	/// The `optional_session_id` is used to fetch the keys for a specific session, only in case
+	/// if `self.rounds` is `None`. This is useful when the node is restarted and we need to fetch
+	/// the keys for the current session.
+	fn fetch_local_keys(
+		&self,
+		optional_session_id: Option<SessionId>,
+	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
+		let current_session_id =
+			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id);
+		let next_session_id = current_session_id.map(|s| s + 1);
+		let active_local_key =
+			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		let next_local_key = next_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		(active_local_key, next_local_key)
 	}
 
 	/// Get the party index of our worker
@@ -631,6 +578,7 @@ where
 	}
 
 	/// Get the next DKG public key
+	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
@@ -762,13 +710,14 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is active");
 				return
 			},
+			// For when we already completed the DKG, no need to do it again.
+			Some(rounds) if rounds.is_completed() => {
+				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is completed");
+				return
+			},
 			_ => {},
 		}
 
-		let local_key_path = get_key_path(&self.base_path.read(), DKG_LOCAL_KEY_FILE);
-		if let Some(local_key) = local_key_path.as_ref() {
-			let _ = cleanup(local_key.clone());
-		}
 		// DKG keygen authorities are always taken from the best set of authorities
 		let session_id = genesis_authority_set.id;
 		let maybe_party_index = self.get_party_index(header);
@@ -790,7 +739,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			local_key_path,
 			ProtoStageType::Genesis,
 		);
 	}
@@ -800,6 +748,8 @@ where
 		if queued.authorities.is_empty() {
 			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
 			return
+		} else {
+			*self.queued_validator_set.write() = queued.clone();
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
 		if let Some(rounds) = self.next_rounds.read().as_ref() {
@@ -812,13 +762,6 @@ where
 				// clear the next rounds.
 			}
 		}
-
-		let queued_local_key_path =
-			get_key_path(&*self.base_path.read(), QUEUED_DKG_LOCAL_KEY_FILE);
-		if let Some(path) = queued_local_key_path.as_ref() {
-			let _ = cleanup(path.clone());
-		}
-
 		// Get the best next authorities using the keygen threshold
 		let session_id = queued.id;
 		let maybe_party_index = self.get_next_party_index(header);
@@ -831,6 +774,7 @@ where
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
 		}
 
+		*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 		let best_authorities: Vec<Public> =
 			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_next_signature_threshold(header);
@@ -843,7 +787,6 @@ where
 			authority_public_key,
 			session_id,
 			threshold,
-			queued_local_key_path,
 			ProtoStageType::Queued,
 		);
 	}
@@ -858,6 +801,7 @@ where
 			}
 		}
 		debug!(target: "dkg_gadget::worker", "🕸️  Processing block notification for block {}", header.number());
+		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 		// Check if we should execute emergency Keygen Protocol.
@@ -866,8 +810,6 @@ where
 			self.handle_emergency_keygen(header);
 			return
 		}
-		// Clear offchain storage
-		listen_and_clear_offchain_storage(self, header);
 		// Attempt to enact new DKG authorities if sessions have changed
 
 		// The Steps for enacting new DKG authorities are:
@@ -878,7 +820,8 @@ where
 		if self.get_dkg_pub_key(header).1.is_empty() {
 			self.maybe_enact_genesis_authorities(header);
 		} else {
-			self.maybe_enact_new_authorities(header);
+			self.maybe_enact_next_authorities(header);
+			self.maybe_rotate_local_sessions(header);
 			self.submit_unsigned_proposals(header);
 		}
 	}
@@ -887,43 +830,83 @@ where
 		// Get the active and queued validators to check for updates
 		if let Some((active, _queued)) = self.validator_set(header) {
 			// If we are in the genesis state, we need to enact the genesis authorities
-			if active.id == GENESIS_AUTHORITY_SET_ID && self.best_dkg_block.read().is_none() {
+			if active.id == GENESIS_AUTHORITY_SET_ID {
 				debug!(target: "dkg_gadget::worker", "🕸️  GENESIS SESSION ID {:?}", active.id);
 				metric_set!(self, dkg_validator_set_id, active.id);
-				// Setting new validator set id as current
-				*self.current_validator_set.write() = active.clone();
 				// verify the new validator set
 				let _ = self.verify_validator_set(header.number(), active.clone());
-				*self.best_dkg_block.write() = Some(*header.number());
+				// Setting new validator set id as current
+				*self.current_validator_set.write() = active.clone();
 				*self.best_authorities.write() = self.get_best_authorities(header);
+				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
 			}
 		}
 	}
 
-	fn maybe_enact_new_authorities(&self, header: &B::Header) {
-		// Get the active and queued validators to check for updates
-		if let Some((active, queued)) = self.validator_set(header) {
-			// Check if the current validator set is the same as the active validator set
-			let next_best = self.get_next_best_authorities(header);
-			debug!(target: "dkg_gadget::worker", "🕸️  Incoming Next Best Authorities {:?}", next_best);
-			debug!(target: "dkg_gadget::worker", "🕸️  Current Next Best Authorities {:?}", self.best_next_authorities);
-			let next_best_has_changed = next_best != *self.best_next_authorities.read();
-			if next_best_has_changed && self.queued_validator_set.read().id == queued.id {
-				debug!(target: "dkg_gadget::worker", "🕸️  Best authorities has changed on-chain\nOLD {:?}\nNEW: {:?}", self.best_next_authorities, next_best);
-				// Update the next best authorities
-				*self.best_next_authorities.write() = next_best;
-				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(header, queued);
+	/// Should enact next authorities will check for the follwoing situations:
+	///
+	/// If the session period has not elapsed, we will return early.
+	///
+	/// 1. If we detect a change in the best authorities, we should enact the next authorities with
+	/// the new ones.
+	/// 2. If the session progress is greater than the threshold, we should enact the next
+	/// authorities.
+	///
+	/// Edge cases:
+	/// 1. If we already running a keygen protocol, and we detected that we are stalled, this
+	///    method will try to restart the keygen protocol.
+	fn maybe_enact_next_authorities(&self, header: &B::Header) {
+		// Query the current state of session progress, we will proceed with enact next
+		// authorities if the session progress has passed threshold
+		if let Some(session_progress) = self.get_current_session_progress(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
+			metric_set!(self, dkg_session_progress, session_progress.deconstruct());
+			if session_progress < SESSION_PROGRESS_THRESHOLD {
+				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 				return
 			}
-			// ***Check if the Keygen Protocol Stalled.***
+		} else {
+			debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+			return
+		}
+		// Get the active and queued validators to check for updates
+		if let Some((_active, queued)) = self.validator_set(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
+			// Check if there is a keygen is finished:
+			let queued_keygen_finished = self
+				.next_rounds
+				.read()
+				.as_ref()
+				.map(|r| r.is_keygen_finished())
+				.unwrap_or(false);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEYGEN FINISHED: {:?}", queued_keygen_finished);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.read().as_ref().map(|r| r.status.clone()));
+			if queued_keygen_finished {
+				return
+			}
+
+			let has_keygen = self.next_rounds.read().is_some();
+			debug!(target: "dkg_gadget::worker", "🕸️  HAS KEYGEN: {:?}", has_keygen);
+			// Check if there is a next DKG Key on-chain.
+			let next_dkg_key = self.get_next_dkg_pub_key(header);
+			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
+			// Start a keygen if we don't have one.
+			// only if there is no queued key on chain.
+			if !has_keygen && next_dkg_key.is_none() {
+				// Start the queued DKG setup for the new queued authorities
+				self.handle_queued_dkg_setup(header, queued);
+				// Reset the Retry counter.
+				self.keygen_retry_count.store(0, Ordering::SeqCst);
+				return
+			}
+
+			// Check if we are stalled:
 			// a read only clone, to avoid holding the lock for the whole duration of the function
 			let lock = self.next_rounds.read();
 			let next_rounds_clone = (*lock).clone();
 			drop(lock);
-			// If the next rounds have stalled, we restart similarly to above.
 			if let Some(ref rounds) = next_rounds_clone {
 				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
@@ -932,6 +915,7 @@ where
 					// and then check the signature threshold `t`, if `t+1` is greater than the
 					// number of authorities and we still have not reached the maximum number of
 					// retries, we should retry the keygen
+					let next_best = self.get_next_best_authorities(header);
 					let n = next_best.len();
 					let t = self.get_next_signature_threshold(header) as usize;
 					// in this case, if t + 1 is equal to n, we should retry the keygen
@@ -951,16 +935,14 @@ where
 				};
 				if keygen_stalled && should_retry {
 					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})", current_attmp, max);
-					// Update the next best authorities
-					*self.best_next_authorities.write() = next_best;
+					metric_inc!(self, dkg_keygen_retry_counter);
 					// Start the queued Keygen protocol again.
 					self.handle_queued_dkg_setup(header, queued);
 					// Increment the retry count
 					self.keygen_retry_count.fetch_add(1, Ordering::SeqCst);
-					return
 				} else if keygen_stalled && !should_retry {
 					debug!(target: "dkg_gadget::worker", "🕸️  Queued Keygen has stalled, but we have reached the maximum number of retries will report bad actors.");
-					return self.handle_dkg_error(DKGError::KeygenTimeout {
+					self.handle_dkg_error(DKGError::KeygenTimeout {
 						bad_actors: convert_u16_vec_to_usize_vec(
 							rounds.current_round_blame().blamed_parties,
 						),
@@ -968,92 +950,50 @@ where
 					})
 				}
 			}
+		}
+	}
 
-			// Query the current state of session progress, we will proceed with enact new
-			// authorities if the session progress has passed threshold
-			if let Some(session_progress) = self.get_current_session_progress(header) {
-				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-				if session_progress < SESSION_PROGRESS_THRESHOLD {
-					// execute a check for previous keys not posted onchain
-					if let Some(next_round) = next_rounds_clone {
-						self.ensure_generated_keys_are_posted_onchain(
-							header, queued.id, next_round,
-						);
-					}
-					debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
-					return
-				}
-			} else {
-				debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+	fn maybe_rotate_local_sessions(&self, header: &B::Header) {
+		if let Some((active, queued)) = self.validator_set(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
+			metric_set!(self, dkg_validator_set_id, active.id);
+			// verify the new validator set
+			let _ = self.verify_validator_set(header.number(), active.clone());
+			// Check if the on chain authority_set_id is the same as the queued_authority_set_id.
+			let (set_id, _) = self.get_dkg_pub_key(header);
+			let queued_authority_set_id = self.queued_validator_set.read().id;
+			debug!(target: "dkg_gadget::worker", "🕸️  CURRENT SET ID: {:?}", set_id);
+			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED AUTHORITY SET ID: {:?}", queued_authority_set_id);
+			if set_id != queued_authority_set_id {
 				return
 			}
-
-			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
-
-			let queued_keygen_in_progress = self
-				.next_rounds
-				.read()
-				.as_ref()
-				.map(|r| !r.is_keygen_finished())
-				.unwrap_or(false);
-
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEYGEN IN PROGRESS: {:?}", queued_keygen_in_progress);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG ID: {:?}", queued.id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED VALIDATOR SET ID: {:?}", self.queued_validator_set.read().id);
-			debug!(target: "dkg_gadget::worker", "🕸️  QUEUED DKG STATUS: {:?}", self.next_rounds.read().as_ref().map(|r| r.status.clone()));
-
-			// If the session has changed and a keygen is not in progress, we rotate
-			if self.queued_validator_set.read().id != queued.id && !queued_keygen_in_progress {
-				debug!(target: "dkg_gadget::worker", "🕸️  ACTIVE SESSION ID {:?}", active.id);
-				metric_set!(self, dkg_validator_set_id, active.id);
-				// verify the new validator set
-				let _ = self.verify_validator_set(header.number(), active.clone());
-				// Update the validator sets
-				*self.current_validator_set.write() = active;
-				*self.queued_validator_set.write() = queued.clone();
-				// Check the local keystore, if a queued key exists with the same
-				// round ID then we shouldn't rotate since it means we have shut down
-				// and started up after a previous rotation.
-				let (_, maybe_queued_key) = self.fetch_local_keys();
-				match maybe_queued_key {
-					Some(queued_key) if queued_key.session_id == queued.id => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", queued_key.session_id);
-						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at same round as queued validator set {:?}", queued.id);
-						return
-					},
-					Some(k) => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY EXISTS: {:?}", k.session_id);
-						debug!(target: "dkg_gadget::worker", "🕸️  Queued local key exists at different round than queued validator set {:?}", queued.id);
-					},
-					None => {
-						debug!(target: "dkg_gadget::worker", "🕸️  QUEUED KEY DOES NOT EXIST");
-					},
-				};
-				// If we are starting a new queued DKG, we rotate the next rounds
-				log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
-				match self.rounds.read().as_ref() {
-					Some(r) if r.is_active() => {
-						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
-					},
-					Some(_) | None => {
-						log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is not active, rotating next rounds is okay");
-					},
-				};
-				*self.rounds.write() = self.next_rounds.write().take();
-				// We also rotate the best authority caches
-				*self.best_authorities.write() = self.best_next_authorities.read().clone();
-				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
-				// Rotate the key files
-				let success = self.rotate_local_key_files();
-				debug!(target: "dkg_gadget::worker", "🕸️  ROTATED LOCAL KEY FILES: {:?}", success);
-				// since we just rotate, we rest the keygen retry counter
-				self.keygen_retry_count.store(0, Ordering::Relaxed);
-				// Start the queued DKG setup for the new queued authorities
-				self.handle_queued_dkg_setup(header, queued);
-			}
-		} else {
-			// no queued validator set, so we don't do anything
-			debug!(target: "dkg_gadget::worker", "🕸️  NO QUEUED VALIDATOR SET");
+			// Update the validator sets
+			*self.current_validator_set.write() = active;
+			*self.queued_validator_set.write() = queued;
+			log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
+			match self.rounds.read().as_ref() {
+				Some(r) if r.is_active() => {
+					log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");
+				},
+				Some(_) | None => {
+					log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is not active, rotating next rounds is okay");
+				},
+			};
+			*self.rounds.write() = self.next_rounds.write().take();
+			// We also rotate the best authority caches
+			*self.best_authorities.write() = self.best_next_authorities.read().clone();
+			*self.best_next_authorities.write() = self.get_next_best_authorities(header);
+			// since we just rotate, we reset the keygen retry counter
+			self.keygen_retry_count.store(0, Ordering::Relaxed);
+			// clear the currently being signing proposals cache.
+			self.currently_signing_proposals.write().clear();
+			// Reset all the signing rounds.
+			self.signing_rounds.write().iter_mut().for_each(|v| {
+				if let Some(r) = v.as_mut() {
+					let _ = r.shutdown("Rotating next round");
+				}
+				*v = None;
+			});
 		}
 	}
 
@@ -1115,38 +1055,6 @@ where
 		}
 	}
 
-	/// This function checks
-	/// 1. if the offchain storage of value X is empty, and
-	/// 2. if the corresponding value of X on is not on chain and
-	/// 3. if OFFCHAIN_RETRY_THRESHOLD blocks has passed since we wrote that value on the offchain
-	/// storage. IF the condition is true this means that the offchain storage was cleared without
-	/// the key being written onchain. This function will write the key again to the offchain
-	/// storage so that its pickedup by the offchain workers and tried again.
-	pub fn ensure_generated_keys_are_posted_onchain(
-		&self,
-		latest_header: &B::Header,
-		session_id: SessionId,
-		next_round: AsyncProtocolRemote<NumberFor<B>>,
-	) {
-		// nextPublicKey
-		let time_passed = *latest_header.number() - next_round.started_at;
-		if self.get_next_dkg_pub_key(latest_header).is_none() &&
-			is_offchain_storage_empty(self, AGGREGATED_PUBLIC_KEYS) &&
-			time_passed > OFFCHAIN_RETRY_THRESHOLD.into()
-		{
-			let mut lock = self.aggregated_public_keys.write();
-			// push the value to offchain storage again so that it is picked up by the offchain
-			// workers
-			let _ = store_aggregated_public_keys::<B, C, BE>(
-				&self.backend,
-				&mut *lock,
-				false,
-				session_id,
-				self.get_latest_block_number(),
-			);
-		}
-	}
-
 	pub fn handle_emergency_keygen(&self, header: &B::Header) {
 		// Start the queued DKG setup for the new queued authorities
 		if let Some((_active, queued)) = self.validator_set(header) {
@@ -1156,6 +1064,7 @@ where
 
 	pub fn handle_dkg_error(&self, dkg_error: DKGError) {
 		log::error!(target: "dkg_gadget", "Received error: {:?}", dkg_error);
+		metric_inc!(self, dkg_error_counter);
 		let authorities: Vec<Public> =
 			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
@@ -1196,6 +1105,7 @@ where
 		&self,
 		dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<(), DKGError> {
+		metric_inc!(self, dkg_inbound_messages);
 		// discard the message if from previous round
 		if let Some(current_round) = self.rounds.read().as_ref() {
 			if dkg_msg.msg.session_id < current_round.session_id {
@@ -1350,7 +1260,9 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) {
-		let session_id = self.current_validator_set.read().id;
+		let on_chain_dkg = self.get_dkg_pub_key(header);
+		let session_id = on_chain_dkg.0;
+		let dkg_pub_key = on_chain_dkg.1;
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
@@ -1359,6 +1271,27 @@ where
 			return
 		} else {
 			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
+		}
+
+		// check if we should clear our proposal hash cache,
+		// the condition is that `PROPOSAL_HASH_LIFETIME` blocks have passed since the last
+		// block time we cached a proposal hash for.
+		// this could be done without actually keeping track of the last block time we cached a
+		// proposal hash for, by taking the modulo of the block number with
+		// `PROPOSAL_HASH_LIFETIME`,
+		let should_clear_proposals_cache = {
+			// take the modulo of the block number with `PROPOSAL_HASH_LIFETIME`
+			// if the result is 0, then `PROPOSAL_HASH_LIFETIME` blocks have passed since the last
+			// block time we cached a proposal hash for.
+			header
+				.number()
+				.checked_rem(&PROPOSAL_HASH_LIFETIME.into())
+				.map(|x| x.is_zero())
+				.unwrap_or(false)
+		};
+
+		if should_clear_proposals_cache {
+			self.currently_signing_proposals.write().clear();
 		}
 
 		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
@@ -1385,16 +1318,8 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-
-		let (active_local_key, _) = self.fetch_local_keys();
-		let local_key = if let Some(active_local_key) = active_local_key {
-			active_local_key.local_key
-		} else {
-			return
-		};
-
 		let mut count = 0;
-		let mut seed = local_key.public_key().to_bytes(true)[1..].to_vec();
+		let mut seed = dkg_pub_key;
 
 		// Generate multiple signing sets for signing the same unsigned proposals.
 		// The goal is to successfully sign proposals immediately in the event that
@@ -1419,6 +1344,7 @@ where
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
 		debug!(target: "dkg_gadget::worker", "Generating {} signing sets", num_combinations);
+		metric_set!(self, dkg_signing_sets, signing_sets.len());
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
@@ -1445,7 +1371,6 @@ where
 					authority_public_key.clone(),
 					session_id,
 					threshold,
-					None,
 					ProtoStageType::Signing,
 					unsigned_proposals.clone(),
 					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),

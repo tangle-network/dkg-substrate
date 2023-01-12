@@ -779,8 +779,7 @@ impl<T: Config> Pallet<T> {
 					}
 				},
 				Err(e) => {
-					// log the error
-					log::warn!(
+					log::trace!(
 						target: "runtime::dkg_proposal_handler",
 						"Failed to get next signed proposal: {}",
 						e

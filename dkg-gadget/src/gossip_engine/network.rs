@@ -650,7 +650,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			propagated_messages += 1;
 		}
 		if let Some(metrics) = self.metrics.as_ref() {
-			metrics.propagated_messages.inc_by(propagated_messages);
+			metrics.dkg_propagated_messages.inc_by(propagated_messages);
 		}
 	}
 }

@@ -53,7 +53,7 @@ where
 	type MessageBody = T::MessageBody;
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-		log::debug!(
+		log::trace!(
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type,
 			self.session_id,
@@ -67,7 +67,7 @@ where
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		if !self.sm.message_queue().is_empty() {
-			log::debug!(
+			log::trace!(
 				"Preparing to drain message queue for {:?} in session={}, round={}, queue size={}",
 				self.channel_type,
 				self.session_id,
@@ -83,13 +83,13 @@ where
 	}
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
-		log::debug!(
+		log::trace!(
 			"Trying to proceed: current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.current_round(),
 			self.round_blame(),
 		);
 		let result = self.sm.proceed();
-		log::debug!(
+		log::trace!(
 			"Proceeded through SM: ({:?}), new current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.channel_type,
 			self.current_round(),

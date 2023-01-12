@@ -28,6 +28,10 @@ pub enum Subcommand {
 	/// Validate blocks.
 	CheckBlock(sc_cli::CheckBlockCmd),
 
+	/// DKG key management cli utilities
+	#[clap(subcommand)]
+	DKGKey(dkg_primitives::dkg_key_cli::DKGKeySubcommand),
+
 	/// Export blocks.
 	ExportBlocks(sc_cli::ExportBlocksCmd),
 

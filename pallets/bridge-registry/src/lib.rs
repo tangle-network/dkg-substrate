@@ -242,8 +242,8 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> 
 			buf.clone_from_slice(data.as_slice());
 			let anchor_update_proposal = AnchorUpdateProposal::from(buf);
 			// Get the source and target resource IDs to check existence of
-			let src_resource_id = anchor_update_proposal.header().resource_id();
-			let dest_resource_id = anchor_update_proposal.src_resource_id();
+			let src_resource_id = anchor_update_proposal.src_resource_id();
+			let dest_resource_id = anchor_update_proposal.header().resource_id();
 			// Get the respective bridge indices
 			let src_bridge_index =
 				ResourceToBridgeIndex::<T, I>::get(src_resource_id).unwrap_or_default();

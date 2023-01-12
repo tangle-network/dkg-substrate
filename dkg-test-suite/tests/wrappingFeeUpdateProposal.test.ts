@@ -14,10 +14,7 @@
  * limitations under the License.
  *
  */
-import {
-	waitForEvent,
-	sudoTx,
-} from './utils/setup';
+import { waitForEvent, sudoTx } from './utils/setup';
 import { GovernedTokenWrapper } from '@webb-tools/tokens';
 import { hexToNumber, hexToU8a, u8aToHex } from '@polkadot/util';
 import {
@@ -36,20 +33,27 @@ import { expect } from 'chai';
 import { registerResourceId } from '@webb-tools/test-utils';
 
 it('should be able to sign wrapping fee update proposal', async () => {
-	const anchor = signatureVBridge.getVAnchor(
-		localChain.typedChainId,
-	)!;
+	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
 	let governedToken = GovernedTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);
-	const resourceId = ResourceId.newFromContractAddress(governedTokenAddress, ChainType.EVM, localChain.evmId);
-	const functionSig = hexToU8a(governedToken.contract.interface.getSighash('setFee(uint16,uint32)'));
+	const resourceId = ResourceId.newFromContractAddress(
+		governedTokenAddress,
+		ChainType.EVM,
+		localChain.evmId
+	);
+	const functionSig = hexToU8a(
+		governedToken.contract.interface.getSighash('setFee(uint16,uint32)')
+	);
 	const nonce = Number(await governedToken.contract.proposalNonce()) + 1;
 	const proposalHeader = new ProposalHeader(resourceId, functionSig, nonce);
 
-	const wrappingFeeProposal = new WrappingFeeUpdateProposal(proposalHeader, '0x50');
+	const wrappingFeeProposal = new WrappingFeeUpdateProposal(
+		proposalHeader,
+		'0x50'
+	);
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, wrappingFeeProposal.header.resourceId);
 	const prop = u8aToHex(wrappingFeeProposal.toU8a());
@@ -87,7 +91,9 @@ it('should be able to sign wrapping fee update proposal', async () => {
 	// sanity check.
 	expect(u8aToHex(dkgProposal.data)).to.eq(prop);
 	// perfect! now we need to send it to the signature bridge.
-	const bridgeSide = await signatureVBridge.getVBridgeSide(localChain.typedChainId);
+	const bridgeSide = await signatureVBridge.getVBridgeSide(
+		localChain.typedChainId
+	);
 	const contract = bridgeSide.contract;
 	const isSignedByGovernor = await contract.isSignatureFromGovernor(
 		dkgProposal.data,
