@@ -30,7 +30,7 @@ use sp_core::ecdsa::Signature;
 
 /// Helper function to generate a crypto pair from seed
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
-	TPublic::Pair::from_string(&format!("//{}", seed), None)
+	TPublic::Pair::from_string(&format!("//{seed}"), None)
 		.expect("static values are valid; qed")
 		.public()
 }
@@ -57,7 +57,7 @@ pub fn insert_controller_account_keys_into_keystore(
 					let _ = SyncCryptoStore::insert_unknown(
 						&*keystore,
 						ACCOUNT,
-						&format!("//{}", seed),
+						&format!("//{seed}"),
 						&pub_key,
 					);
 				}
@@ -154,10 +154,10 @@ mod tests {
 
 		let encrypted_data = encrypt(data.to_vec());
 		let decrypted_data = decrypt(encrypted_data.clone());
-		println!("{:?}", encrypted_data);
+		println!("{encrypted_data:?}");
 		assert_ne!(encrypted_data, data.to_vec());
 
-		println!("{:?}, {:?}", data, decrypted_data);
+		println!("{data:?}, {decrypted_data:?}");
 		assert_eq!(decrypted_data, data.to_vec());
 	}
 

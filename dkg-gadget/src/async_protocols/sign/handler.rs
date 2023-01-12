@@ -134,7 +134,7 @@ where
 				res1 = stop_rx.recv() => {
 					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
 					Err(DKGError::GenericError {
-						reason: format!("Stopper has been called {:?}", res1)
+						reason: format!("Stopper has been called {res1:?}")
 					})
 				}
 			}
@@ -272,7 +272,7 @@ where
 
 			log::info!("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
-				reason: format!("Verification of voting stage failed with error : {:?}", err),
+				reason: format!("Verification of voting stage failed with error : {err:?}"),
 			})?;
 
 			log::info!("RD3");

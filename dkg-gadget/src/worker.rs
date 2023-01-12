@@ -1437,7 +1437,7 @@ where
 		}
 
 		select_random_set(seed, final_set, t + 1).map_err(|err| DKGError::CreateOfflineStage {
-			reason: format!("generate_signers failed, reason: {}", err),
+			reason: format!("generate_signers failed, reason: {err}"),
 		})
 	}
 

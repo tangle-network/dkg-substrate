@@ -82,7 +82,7 @@ impl<ID> fmt::Display for DKGMessage<ID> {
 			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
 			DKGMsgPayload::MisbehaviourBroadcast(_) => "MisbehaviourBroadcast",
 		};
-		write!(f, "DKGMessage of type {}", label)
+		write!(f, "DKGMessage of type {label}")
 	}
 }
 
@@ -259,20 +259,20 @@ impl fmt::Display for DKGError {
 		use DKGError::*;
 		let label = match self {
 			KeygenMisbehaviour { bad_actors, reason } =>
-				format!("Keygen misbehaviour: reason: {reason} bad actors: {:?}", bad_actors),
+				format!("Keygen misbehaviour: reason: {reason} bad actors: {bad_actors:?}"),
 			KeygenTimeout { bad_actors, session_id } =>
-				format!("Keygen timeout @ Session({session_id}): bad actors: {:?}", bad_actors),
-			Vote { reason } => format!("Vote: {}", reason),
-			StartKeygen { reason } => format!("Start keygen: {}", reason),
-			CreateOfflineStage { reason } => format!("Create offline stage: {}", reason),
-			CriticalError { reason } => format!("Critical error: {}", reason),
-			GenericError { reason } => format!("Generic error: {}", reason),
-			StartOffline { reason } => format!("Unable to start Offline Signing: {}", reason),
+				format!("Keygen timeout @ Session({session_id}): bad actors: {bad_actors:?}"),
+			Vote { reason } => format!("Vote: {reason}"),
+			StartKeygen { reason } => format!("Start keygen: {reason}"),
+			CreateOfflineStage { reason } => format!("Create offline stage: {reason}"),
+			CriticalError { reason } => format!("Critical error: {reason}"),
+			GenericError { reason } => format!("Generic error: {reason}"),
+			StartOffline { reason } => format!("Unable to start Offline Signing: {reason}"),
 			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
 			NoHeader => "No Header!".to_string(),
 			SignMisbehaviour { reason, bad_actors } =>
-				format!("SignMisbehaviour: reason: {reason},  bad actors: {:?}", bad_actors),
+				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
 		};
-		write!(f, "DKGError of type {}", label)
+		write!(f, "DKGError of type {label}")
 	}
 }

@@ -14,6 +14,7 @@
 
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 // std
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;

@@ -91,7 +91,7 @@ impl BlockchainInterface for TestDummyIface {
 	}
 
 	fn get_authority_set(&self) -> &Vec<Public> {
-		&*self.best_authorities
+		&self.best_authorities
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {

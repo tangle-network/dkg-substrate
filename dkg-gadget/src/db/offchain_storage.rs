@@ -137,7 +137,7 @@ where
 			})?;
 		let key_pair = local_keystore.key_pair::<AppPair>(&our_public_key).map_err(|e| {
 			DKGError::CriticalError {
-				reason: format!("Error getting key pair from local keystore: {}", e),
+				reason: format!("Error getting key pair from local keystore: {e}"),
 			}
 		})?;
 		match key_pair {
@@ -154,7 +154,7 @@ where
 	fn encrypt_and_store(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), DKGError> {
 		let secret_key = self.secret_key()?;
 		let encrypted_data = encrypt_data(value, secret_key).map_err(|e| {
-			DKGError::CriticalError { reason: format!("Error encrypting data: {}", e) }
+			DKGError::CriticalError { reason: format!("Error encrypting data: {e}") }
 		})?;
 		self.store_encrypted_bytes(key, EncryptedBytes::new(encrypted_data))
 	}
@@ -169,7 +169,7 @@ where
 		match maybe_encrypted_data {
 			Some(encrypted_data) => {
 				let decrypted_data = decrypt_data(encrypted_data.0, secret_key).map_err(|e| {
-					DKGError::CriticalError { reason: format!("Error decrypting data: {}", e) }
+					DKGError::CriticalError { reason: format!("Error decrypting data: {e}") }
 				})?;
 				Ok(Some(DecryptedBytes::new(decrypted_data)))
 			},
