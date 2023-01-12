@@ -266,6 +266,10 @@ export async function waitForEvent(
 			events.forEach((record) => {
 				const { event } = record;
 				if (event.section === pallet && event.method === eventVariant) {
+					console.log(
+						`Event (${event.section}.${event.method}) =>`,
+						event.data.toJSON()
+					);
 					if (dataQuery) {
 						event.data.forEach((value, index) => {
 							const jsonData = value.toJSON();

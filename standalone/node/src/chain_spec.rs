@@ -94,8 +94,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					authority_keys_from_seed("Alice", "Alice//stash"),
 					authority_keys_from_seed("Bob", "Bob//stash"),
 					authority_keys_from_seed("Charlie", "Charlie//stash"),
-					authority_keys_from_seed("Dave", "Dave//stash"),
-					authority_keys_from_seed("Eve", "Eve//stash"),
 				],
 				vec![],
 				// Sudo account
@@ -176,8 +174,6 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					authority_keys_from_seed("Alice", "Alice//stash"),
 					authority_keys_from_seed("Bob", "Bob//stash"),
 					authority_keys_from_seed("Charlie", "Charlie//stash"),
-					authority_keys_from_seed("Dave", "Dave//stash"),
-					authority_keys_from_seed("Eve", "Eve//stash"),
 				],
 				vec![],
 				// Sudo account
@@ -368,8 +364,9 @@ fn testnet_genesis(
 		grandpa: Default::default(),
 		dkg: DKGConfig {
 			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
-			keygen_threshold: 5,
-			signature_threshold: 3,
+			keygen_threshold: initial_authorities.len() as _,
+			// 2/3 of the keygen_threshold
+			signature_threshold: (initial_authorities.len() as f64 * 2.0 / 3.0).ceil() as _,
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
 		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
