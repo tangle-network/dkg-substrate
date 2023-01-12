@@ -210,7 +210,10 @@ where
 			DKGError::CriticalError { reason: String::from("No Offchain Storage available!!") }
 		})?;
 		if let Some(_) = offchain_storage.get(STORAGE_PREFIX, &key) {
-			log::warn!("Offchain Storage : Overwriting already existing key for session {:?}", key);
+			log::warn!(
+				"Offchain Storage : Overwriting already existing database entry at key 0x{}",
+				hex::encode(key.clone())
+			);
 		}
 		offchain_storage.set(STORAGE_PREFIX, &key, &value);
 		Ok(())
