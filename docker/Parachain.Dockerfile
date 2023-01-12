@@ -15,8 +15,8 @@
 FROM rust:buster as builder
 WORKDIR /app
 
-RUN rustup default nightly-2021-11-07 && \
-	rustup target add wasm32-unknown-unknown --toolchain nightly-2021-11-07
+RUN rustup default nightly-2022-12-26 && \
+	rustup target add wasm32-unknown-unknown --toolchain nightly-2022-12-26
 
 # Install Required Packages
 RUN apt-get update && apt-get install -y git clang curl libssl-dev llvm libudev-dev libgmp3-dev protobuf-compiler && rm -rf /var/lib/apt/lists/*
