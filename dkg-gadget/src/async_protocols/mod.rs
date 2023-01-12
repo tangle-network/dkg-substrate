@@ -183,7 +183,7 @@ impl ProtocolType {
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
-				Some(&*unsigned_proposal),
+				Some(unsigned_proposal),
 			_ => None,
 		}
 	}
@@ -198,7 +198,7 @@ impl Debug for ProtocolType {
 					KeygenRound::QUEUED => "QUEUED",
 					KeygenRound::UNKNOWN => "UNKNOWN",
 				};
-				write!(f, "{} | Keygen: (i, t, n) = ({}, {}, {})", ty, i, t, n)
+				write!(f, "{ty} | Keygen: (i, t, n) = ({i}, {t}, {n})")
 			},
 			ProtocolType::Offline { i, unsigned_proposal, .. } => {
 				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
@@ -271,7 +271,7 @@ where
 		let res = async_proto
 			.run()
 			.await
-			.map_err(|err| DKGError::GenericError { reason: format!("{:?}", err) });
+			.map_err(|err| DKGError::GenericError { reason: format!("{err:?}") });
 		match res {
 			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param, async_index).await,
 			Err(err) => {

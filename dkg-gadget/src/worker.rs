@@ -1084,7 +1084,7 @@ where
 
 		let mut offenders: Vec<AuthorityId> = Vec::new();
 		for bad_actor in bad_actors {
-			let bad_actor = bad_actor as usize;
+			let bad_actor = bad_actor;
 			if bad_actor > 0 && bad_actor <= authorities.len() {
 				if let Some(offender) = authorities.get(bad_actor - 1) {
 					offenders.push(offender.clone());
@@ -1442,7 +1442,7 @@ where
 		}
 
 		select_random_set(seed, final_set, t + 1).map_err(|err| DKGError::CreateOfflineStage {
-			reason: format!("generate_signers failed, reason: {}", err),
+			reason: format!("generate_signers failed, reason: {err}"),
 		})
 	}
 

@@ -99,7 +99,7 @@ impl DKGKeystore {
 
 		// check that `sig` has the expected result type
 		let sig = sig.clone().try_into().map_err(|_| {
-			error::Error::Signature(format!("invalid signature {:?} for key {:?}", sig, public))
+			error::Error::Signature(format!("invalid signature {sig:?} for key {public:?}"))
 		})?;
 
 		Ok(sig)
@@ -150,7 +150,7 @@ impl DKGKeystore {
 		// check that `sig` has the expected result type
 		let signature: sr25519::Signature =
 			sr25519::Signature::decode(&mut &sig[..]).map_err(|_| {
-				error::Error::Signature(format!("invalid signature {:?} for key {:?}", sig, public))
+				error::Error::Signature(format!("invalid signature {sig:?} for key {public:?}"))
 			})?;
 
 		Ok(signature)

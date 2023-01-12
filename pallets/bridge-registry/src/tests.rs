@@ -8,7 +8,7 @@ use webb_proposals::{self, evm, FunctionSignature, Nonce, ProposalHeader};
 fn should_init() {
 	new_test_ext().execute_with(|| {
 		assert_eq!(NextBridgeIndex::<Test>::get(), 1);
-		assert_eq!(ResourceToBridgeIndex::<Test>::get(&ResourceId([0u8; 32])), None);
+		assert_eq!(ResourceToBridgeIndex::<Test>::get(ResourceId([0u8; 32])), None);
 	});
 }
 
@@ -37,8 +37,8 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 		// Handle signed proposal
 		assert_ok!(BridgeRegistry::on_signed_proposal(signed_proposal));
 		// Verify the storage system updates correctly
-		assert_eq!(ResourceToBridgeIndex::<Test>::get(&target_resource_id), Some(1));
-		assert_eq!(ResourceToBridgeIndex::<Test>::get(&src_resource_id), Some(1));
+		assert_eq!(ResourceToBridgeIndex::<Test>::get(target_resource_id), Some(1));
+		assert_eq!(ResourceToBridgeIndex::<Test>::get(src_resource_id), Some(1));
 		assert_eq!(
 			Bridges::<Test>::get(1).unwrap(),
 			BridgeMetadata {
@@ -80,7 +80,7 @@ fn should_handle_multiple_signed_evm_anchor_update_proposals() {
 		}
 		// Check that all resources point to the same bridge
 		for r in resources.clone() {
-			assert_eq!(ResourceToBridgeIndex::<Test>::get(&r), Some(1));
+			assert_eq!(ResourceToBridgeIndex::<Test>::get(r), Some(1));
 		}
 		// Check that all resources are in the storage system as expected
 		assert_eq!(

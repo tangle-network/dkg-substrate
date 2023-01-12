@@ -28,7 +28,7 @@ impl super::DKGDbBackend for DKGInMemoryDb {
 		session_id: SessionId,
 	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
 		let lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
-			reason: format!("Failed to lock local_keys: {}", e),
+			reason: format!("Failed to lock local_keys: {e}"),
 		})?;
 		Ok(lock.get(&session_id).cloned())
 	}
@@ -39,7 +39,7 @@ impl super::DKGDbBackend for DKGInMemoryDb {
 		local_key: LocalKey<Secp256k1>,
 	) -> Result<(), DKGError> {
 		let mut lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
-			reason: format!("Failed to lock local_keys: {}", e),
+			reason: format!("Failed to lock local_keys: {e}"),
 		})?;
 		lock.insert(session_id, local_key);
 		Ok(())
