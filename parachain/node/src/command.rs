@@ -270,9 +270,7 @@ pub fn run() -> Result<()> {
 			You can enable it with `--features try-runtime`."
 			.into()),
 		None => {
-			let runner = cli.create_runner(&cli.run.normalize())?;
-			let collator_options = cli.run.collator_options();
-
+			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
 				let hwbench = if !cli.no_hardware_benchmarks {
 					config.database.path().map(|database_path| {

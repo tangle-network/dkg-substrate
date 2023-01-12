@@ -113,6 +113,7 @@ Before compiling, you should point CC and AR to use llvm in your environment (ru
 ```bash
 export CC=/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/clang
 export AR=/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/llvm-ar
+export PATH="/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/:$PATH"
 
 ```
 
