@@ -25,9 +25,9 @@ jobs:
       - name: Build Image
         run: ./scripts/build-standalone-docker.sh
       - name: Install docker-slim
-        run: curl -sL https://raw.githubusercontent.com/docker-slim/docker-slim/master/scripts/install-dockerslim.sh | sudo -E bash -
+        run: curl -sL https://raw.githubusercontent.com/slimtoolkit/slim/master/scripts/install-slim.sh | sudo -E bash -
       - name: Slim down the Image
-        run: docker-slim build --target webb-tools/dkg-standalone-node --http-probe-off --entrypoint dkg-standalone-node
+        run: slim build --target webb-tools/dkg-standalone-node --http-probe-off --entrypoint dkg-standalone-node
       - name: Log into registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Push image
