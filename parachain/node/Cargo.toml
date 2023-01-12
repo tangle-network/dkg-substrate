@@ -28,12 +28,12 @@ try-runtime = ["dkg-rococo-runtime/try-runtime"]
 
 [dependencies]
 derive_more = "0.99.2"
-log = "0.4.14"
+log = "0.4.17"
 codec = { package = "parity-scale-codec", version = "3" }
 structopt = "0.3.8"
 serde = { version = "1.0.119", default-features = false, features = ["derive"] }
 hex-literal = "0.3.1"
-clap = { version = "3.1", features = ["derive"] }
+clap = { version = "4.0.29", features = ["derive"] }
 
 # RPC related Dependencies
 jsonrpsee = { version = "0.16.2", features = ["server"] }
@@ -74,6 +74,7 @@ try-runtime-cli = { default-features = false, git = "https://github.com/parityte
 
 ## Substrate Primitive Dependencies
 sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sc-network-common = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-block-builder = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-blockchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-consensus = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
