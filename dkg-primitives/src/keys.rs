@@ -138,7 +138,7 @@ pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
 	}
 	let pub_key_hash = hasher.finalize();
 
-	let serialized_pub_key_hash = hex::encode(&pub_key_hash);
+	let serialized_pub_key_hash = hex::encode(pub_key_hash);
 	let eth_address = &serialized_pub_key_hash[24..serialized_pub_key_hash.len()];
 
 	convert_to_checksum_eth_address(eth_address)

@@ -187,16 +187,16 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 	let mut sig_vec: Vec<u8> = Vec::new();
 
 	for _ in 0..(32 - r.len()) {
-		sig_vec.extend(&[0]);
+		sig_vec.extend([0]);
 	}
 	sig_vec.extend_from_slice(&r);
 
 	for _ in 0..(32 - s.len()) {
-		sig_vec.extend(&[0]);
+		sig_vec.extend([0]);
 	}
 	sig_vec.extend_from_slice(&s);
 
-	sig_vec.extend(&[v]);
+	sig_vec.extend([v]);
 
 	if 65 != sig_vec.len() {
 		log::warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());

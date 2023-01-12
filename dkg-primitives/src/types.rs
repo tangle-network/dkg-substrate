@@ -101,7 +101,7 @@ impl DKGMsgPayload {
 	/// TODO: Change enums for keygen, offline, vote
 	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
 		match self {
-			DKGMsgPayload::Keygen(kg) => Some(kg.sender_id as u16),
+			DKGMsgPayload::Keygen(kg) => Some(kg.sender_id),
 			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
 			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
 			_ => None,

@@ -127,7 +127,7 @@ where
 		let client = &self.client;
 
 		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
-			(&*msg).clone(),
+			(*msg).clone(),
 			&self.latest_header,
 			client,
 		)
@@ -191,7 +191,7 @@ where
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
-			&mut *self.aggregated_public_keys.write(),
+			&mut self.aggregated_public_keys.write(),
 			key,
 		);
 		Ok(())
@@ -206,7 +206,7 @@ where
 	}
 
 	fn get_authority_set(&self) -> &Vec<Public> {
-		&*self.best_authorities
+		&self.best_authorities
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {

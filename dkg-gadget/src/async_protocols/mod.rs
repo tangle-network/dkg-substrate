@@ -183,7 +183,7 @@ impl ProtocolType {
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
-				Some(&*unsigned_proposal),
+				Some(unsigned_proposal),
 			_ => None,
 		}
 	}
