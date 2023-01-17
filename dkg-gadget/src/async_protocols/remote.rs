@@ -115,9 +115,25 @@ impl<C> AsyncProtocolRemote<C> {
 		self.status.load(Ordering::SeqCst)
 	}
 
+	#[track_caller]
 	pub fn set_status(&self, status: MetaHandlerStatus) {
-		self.status_history.lock().push(status);
-		self.status.store(status, Ordering::SeqCst)
+		// Validate that the status is being set in the correct order
+		let should_update = match (self.get_status(), status) {
+			(MetaHandlerStatus::Beginning, MetaHandlerStatus::Keygen) => true,
+			(MetaHandlerStatus::Beginning, MetaHandlerStatus::OfflineAndVoting) => true,
+			(MetaHandlerStatus::Beginning, MetaHandlerStatus::Terminated) => true,
+			(MetaHandlerStatus::Keygen, MetaHandlerStatus::Complete) => true,
+			(MetaHandlerStatus::Keygen, MetaHandlerStatus::Terminated) => true,
+			(MetaHandlerStatus::OfflineAndVoting, MetaHandlerStatus::Complete) => true,
+			(MetaHandlerStatus::OfflineAndVoting, MetaHandlerStatus::Terminated) => true,
+			_ => false,
+		};
+		if should_update {
+			self.status_history.lock().push(status);
+			self.status.store(status, Ordering::SeqCst);
+		} else {
+			log::error!(target: "dkg", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
+		}
 	}
 
 	pub fn is_active(&self) -> bool {
@@ -157,9 +173,17 @@ impl<C> AsyncProtocolRemote<C> {
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines
 	pub fn shutdown<R: AsRef<str>>(&self, reason: R) -> Result<(), DKGError> {
-		let tx = self.stop_tx.lock().take().ok_or_else(|| DKGError::GenericError {
-			reason: "Shutdown has already been called".to_string(),
-		})?;
+		// check the state if it is active so that we can send a shutdown signal.
+		let tx = match self.stop_tx.lock().take() {
+			Some(tx) => tx,
+			None => {
+				log::warn!(
+					target: "dkg", "Unable to shutdown meta handler since it is already {:?}, ignoring...",
+					self.get_status()
+				);
+				return Ok(())
+			},
+		};
 		log::info!("Shutting down meta handler: {}", reason.as_ref());
 		tx.send(()).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
@@ -203,7 +227,11 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 					self.get_status(),
 					self.status_history.lock(),
 				);
-				self.set_status(MetaHandlerStatus::Terminated);
+				// if it is not complete, then it must be terminated, since the only other
+				// way to exit is to complete.
+				if self.get_status() != MetaHandlerStatus::Terminated {
+					self.set_status(MetaHandlerStatus::Terminated);
+				}
 			}
 
 			let _ = self.shutdown("drop code");
