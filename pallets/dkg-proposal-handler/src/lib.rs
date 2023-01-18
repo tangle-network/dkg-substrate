@@ -235,7 +235,7 @@ pub mod pallet {
 			/// The Proposal Data.
 			data: Vec<u8>,
 		},
-		/// RuntimeEvent When a Proposal is removed to UnsignedProposalQueue.
+		/// RuntimeEvent When a Proposal is removed from UnsignedProposalQueue.
 		ProposalRemoved {
 			/// The Payload Type or the Key.
 			key: DKGPayloadKey,
@@ -346,11 +346,9 @@ pub mod pallet {
 			);
 
 			for prop in &props {
-				if let Proposal::Signed { kind, data, signature } = prop {
-					let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
-						signature,
-						&data[..],
-					);
+				if let Proposal::Signed { kind, ref data, ref signature } = prop {
+					let result =
+						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data);
 					match result {
 						Ok(_) => {
 							// Do nothing, it is all good.

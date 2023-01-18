@@ -87,7 +87,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 						Ok(None)
 					}
 				} else {
-					log::warn!(target: "dkg", "Will skip passing message to state machine since sender is self");
+					log::trace!(target: "dkg", "Will skip passing message to state machine since sender is self");
 					Ok(None)
 				}
 			},
