@@ -364,7 +364,7 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
 						log::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
-					// lock[async_index as usize] = Some(status_handle)
+						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						log::debug!(target: "dkg_gadget::worker", "signing round async index #{} is not active, overwriting it", async_index);
@@ -751,8 +751,6 @@ where
 		if queued.authorities.is_empty() {
 			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
 			return
-		} else {
-			*self.queued_validator_set.write() = queued.clone();
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
 		if let Some(rounds) = self.next_rounds.read().as_ref() {
@@ -973,7 +971,7 @@ where
 			// Update the validator sets
 			*self.current_validator_set.write() = active;
 			*self.queued_validator_set.write() = queued;
-			log::warn!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
+			log::debug!(target: "dkg_gadget::worker", "🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 			match self.rounds.read().as_ref() {
 				Some(r) if r.is_active() => {
 					log::warn!(target: "dkg_gadget::worker", "🕸️  Current rounds is active, rotating next round will terminate it!!");

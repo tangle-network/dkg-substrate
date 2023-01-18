@@ -72,9 +72,7 @@ impl StateMachineHandler for OfflineStage {
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
-					log::error!("Error sending message to async proto: {:?}", err);
-					// Skip this message.
-					return Ok(())
+					log::error!(target: "dkg_gadget::async_protocol::sign", "Error sending message to async proto: {}", err);
 				}
 			},
 
