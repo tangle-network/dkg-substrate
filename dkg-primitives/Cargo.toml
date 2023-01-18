@@ -24,7 +24,7 @@ clap = { version = "4.0.29", features = ["derive"] }
 curv = { package = "curv-kzen", version = "0.10.0" }
 
 round-based = { version = "0.1.7", features = [] }
-multi-party-ecdsa = { default-features = false, git = "https://github.com/webb-tools/multi-party-ecdsa.git", branch = "thomas/fix-dependencies" }
+multi-party-ecdsa = { default-features = false, git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
