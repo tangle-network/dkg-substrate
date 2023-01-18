@@ -118,6 +118,7 @@ impl<C> AsyncProtocolRemote<C> {
 	#[track_caller]
 	pub fn set_status(&self, status: MetaHandlerStatus) {
 		// Validate that the status is being set in the correct order
+		#[allow(clippy::match_like_matches_macro)]
 		let should_update = match (self.get_status(), status) {
 			(MetaHandlerStatus::Beginning, MetaHandlerStatus::Keygen) => true,
 			(MetaHandlerStatus::Beginning, MetaHandlerStatus::OfflineAndVoting) => true,
