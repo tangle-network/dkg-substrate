@@ -54,6 +54,7 @@ sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
 pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
+cumulus-primitives-core = { default-features = false, git = "https://github.com/paritytech/cumulus.git", branch = "polkadot-v0.9.36" }
 
 # Local dependencies
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
@@ -118,6 +119,7 @@ std = [
 	'frame-election-provider-support/std',
 	'sp-staking/std',
 	'sp-io/std',
+	"cumulus-primitives-core/std"
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",
