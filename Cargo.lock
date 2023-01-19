@@ -2404,6 +2404,8 @@ dependencies = [
  "pallet-bags-list",
  "pallet-balances",
  "pallet-bridge-registry",
+ "pallet-dkg-metadata",
+ "pallet-dkg-proposal-handler",
  "pallet-dkg-proposals",
  "pallet-election-provider-multi-phase",
  "pallet-grandpa",
