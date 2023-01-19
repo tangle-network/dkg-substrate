@@ -28,7 +28,7 @@ frame-system = { git = "https://github.com/paritytech/substrate", branch = "polk
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+pallet-session = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 [dev-dependencies]
 serde = { version = "1.0.119", default-features = false }
@@ -52,4 +52,5 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"libsecp256k1/std",
+	"pallet-session/std"
 ]

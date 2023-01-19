@@ -58,8 +58,10 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"frame-benchmarking/std",
+	"sp-consensus-aura/std",
 	"pallet-balances/std",
 	"dkg-runtime-primitives/std",
+	"pallet-collator-selection/std"
 ]
 runtime-benchmarks = [
   "frame-benchmarking",
