@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use cumulus_primitives_core::ParaId;
-use dkg_rococo_runtime::{AccountId, AuraId, DKGId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_rococo_runtime::{AccountId, AuraId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
 use hex_literal::hex;
 use sc_chain_spec::ChainSpecExtension;
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
 use sp_core::{crypto::UncheckedInto, sr25519, ByteArray, Pair, Public};
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 pub mod rococo;
 
@@ -54,7 +55,7 @@ pub fn get_dkg_keys_from_seed(seed: &str) -> DKGId {
 /// The input must be a tuple of individual keys (a single arg for now since we
 /// have just one key).
 pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> dkg_rococo_runtime::SessionKeys {
-	dkg_rococo_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
+	dkg_rococo_runtime::SessionKeys { aura: keys }
 }
 
 /// The extensions for the [`ChainSpec`].
@@ -291,13 +292,6 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: dkg_rococo_runtime::DKGConfig {
-			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
-			keygen_threshold: 3,
-			signature_threshold: 1,
-			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
-		},
-		dkg_proposals: Default::default(),
 		treasury: Default::default(),
 		vesting: Default::default(),
 	}

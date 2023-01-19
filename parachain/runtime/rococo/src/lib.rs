@@ -44,7 +44,7 @@ use sp_version::RuntimeVersion;
 use frame_support::weights::{
 	ConstantMultiplier, WeightToFeeCoefficient, WeightToFeeCoefficients, WeightToFeePolynomial,
 };
-use pallet_transaction_payment::{CurrencyAdapter, Multiplier, TargetedFeeAdjustment};
+use pallet_transaction_payment::{CurrencyAdapter, Multiplier};
 use sp_runtime::{FixedPointNumber, Perquintill};
 
 pub type AccountIndex = u32;

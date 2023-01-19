@@ -82,7 +82,7 @@ use sp_runtime::generic::Era;
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
-// pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
+pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;

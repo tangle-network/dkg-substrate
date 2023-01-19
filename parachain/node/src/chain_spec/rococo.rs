@@ -14,10 +14,11 @@
 
 use crate::chain_spec::*;
 use cumulus_primitives_core::ParaId;
-use dkg_rococo_runtime::{AccountId, AuraId, DKGId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_rococo_runtime::{AccountId, AuraId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
 use hex_literal::hex;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 pub fn dkg_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
@@ -134,13 +135,6 @@ fn rococo_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
-		dkg: dkg_rococo_runtime::DKGConfig {
-			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
-			keygen_threshold: 3,
-			signature_threshold: 1,
-			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
-		},
-		dkg_proposals: Default::default(),
 		treasury: Default::default(),
 		vesting: Default::default(),
 	}
