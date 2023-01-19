@@ -54,7 +54,7 @@ use sp_runtime::{
 		OpaqueKeys, StaticLookup, Verify,
 	},
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, FixedPointNumber, MultiSignature, Percent, Perquintill,
+	ApplyExtrinsicResult, FixedPointNumber, MultiSignature, Perquintill,
 	SaturatedConversion,
 };
 use sp_std::{convert::TryInto, prelude::*};

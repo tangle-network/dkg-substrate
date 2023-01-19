@@ -2391,6 +2391,7 @@ name = "dkg-standalone-runtime"
 version = "3.0.0"
 dependencies = [
  "cumulus-primitives-core",
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-election-provider-support",
  "frame-executive",
@@ -2402,6 +2403,8 @@ dependencies = [
  "pallet-aura",
  "pallet-bags-list",
  "pallet-balances",
+ "pallet-bridge-registry",
+ "pallet-dkg-proposals",
  "pallet-election-provider-multi-phase",
  "pallet-grandpa",
  "pallet-identity",
