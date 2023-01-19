@@ -61,7 +61,9 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"dkg-runtime-primitives/std",
+	"sp-consensus-aura/std",
 	"pallet-dkg-metadata/std",
 	"webb-proposals/std",
-	"log/std"
+	"log/std",
+	"pallet-aura/std"
 ]
