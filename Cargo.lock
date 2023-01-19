@@ -2255,7 +2255,6 @@ dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-timestamp",
  "cumulus-primitives-utility",
- "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",
@@ -2263,7 +2262,6 @@ dependencies = [
  "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
- "getrandom 0.2.8",
  "hex-literal",
  "log",
  "pallet-asset-tx-payment",
@@ -2273,9 +2271,6 @@ dependencies = [
  "pallet-collator-selection",
  "pallet-collective",
  "pallet-democracy",
- "pallet-dkg-metadata",
- "pallet-dkg-proposal-handler",
- "pallet-dkg-proposals",
  "pallet-identity",
  "pallet-indices",
  "pallet-preimage",
@@ -2396,7 +2391,6 @@ name = "dkg-standalone-runtime"
 version = "3.0.0"
 dependencies = [
  "cumulus-primitives-core",
- "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-election-provider-support",
  "frame-executive",
@@ -2408,10 +2402,6 @@ dependencies = [
  "pallet-aura",
  "pallet-bags-list",
  "pallet-balances",
- "pallet-bridge-registry",
- "pallet-dkg-metadata",
- "pallet-dkg-proposal-handler",
- "pallet-dkg-proposals",
  "pallet-election-provider-multi-phase",
  "pallet-grandpa",
  "pallet-identity",
@@ -3446,10 +3436,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c05aeb6a22b8f62540c194aac980f2115af067bfe15a0734d7277a768d396b31"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]

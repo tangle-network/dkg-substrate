@@ -21,7 +21,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::Encode;
-use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
+// use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
 	traits::{ConstU16, ConstU32, Everything, U128CurrencyToVote},
@@ -33,7 +33,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
+// use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -82,7 +82,7 @@ use sp_runtime::generic::Era;
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
-pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
+// pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -128,7 +128,7 @@ pub mod opaque {
 		pub aura: Aura,
 		pub grandpa: Grandpa,
 		pub im_online: ImOnline,
-		pub dkg: DKG,
+		// pub dkg: DKG,
 	  }
 	}
 }
@@ -319,8 +319,10 @@ impl pallet_session::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_staking::StashOf<Self>;
-	type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+	// type ShouldEndSession = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+	// type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type SessionManager = Staking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
@@ -603,62 +605,62 @@ impl pallet_sudo::Config for Runtime {
 	type RuntimeCall = RuntimeCall;
 }
 
-parameter_types! {
-  pub const DecayPercentage: Percent = Percent::from_percent(50);
-  pub const UnsignedPriority: u64 = 1 << 20;
-  pub const UnsignedInterval: BlockNumber = 3;
-}
+// parameter_types! {
+//   pub const DecayPercentage: Percent = Percent::from_percent(50);
+//   pub const UnsignedPriority: u64 = 1 << 20;
+//   pub const UnsignedInterval: BlockNumber = 3;
+// }
 
-impl pallet_dkg_metadata::Config for Runtime {
-	type DKGId = DKGId;
-	type RuntimeEvent = RuntimeEvent;
-	type OnAuthoritySetChangeHandler = DKGProposals;
-	type OnDKGPublicKeyChangeHandler = ();
-	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type RefreshDelay = RefreshDelay;
-	type UnsignedPriority = UnsignedPriority;
-	type UnsignedInterval = UnsignedInterval;
-	type KeygenJailSentence = Period;
-	type SigningJailSentence = Period;
-	type DecayPercentage = DecayPercentage;
-	type Reputation = Reputation;
-	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
-	type ProposalHandler = DKGProposalHandler;
-	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
-}
+// impl pallet_dkg_metadata::Config for Runtime {
+// 	type DKGId = DKGId;
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type OnAuthoritySetChangeHandler = DKGProposals;
+// 	type OnDKGPublicKeyChangeHandler = ();
+// 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
+// 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+// 	type RefreshDelay = RefreshDelay;
+// 	type UnsignedPriority = UnsignedPriority;
+// 	type UnsignedInterval = UnsignedInterval;
+// 	type KeygenJailSentence = Period;
+// 	type SigningJailSentence = Period;
+// 	type DecayPercentage = DecayPercentage;
+// 	type Reputation = Reputation;
+// 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
+// 	type ProposalHandler = DKGProposalHandler;
+// 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
+// }
 
-parameter_types! {
-  pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
-  pub const ProposalLifetime: BlockNumber = HOURS / 5;
-  pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
-  pub const RefreshDelay: Permill = Permill::from_percent(50);
-  pub const TimeToRestart: BlockNumber = 3;
-  pub const UnsignedProposalExpiry: BlockNumber = Period::get() / 4;
-}
+// parameter_types! {
+//   pub const ChainIdentifier: TypedChainId = TypedChainId::Substrate(5);
+//   pub const ProposalLifetime: BlockNumber = HOURS / 5;
+//   pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
+//   pub const RefreshDelay: Permill = Permill::from_percent(50);
+//   pub const TimeToRestart: BlockNumber = 3;
+//   pub const UnsignedProposalExpiry: BlockNumber = Period::get() / 4;
+// }
 
-impl pallet_dkg_proposal_handler::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
-	type UnsignedProposalExpiry = UnsignedProposalExpiry;
-	type SignedProposalHandler = ();
-	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
-}
+// impl pallet_dkg_proposal_handler::Config for Runtime {
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
+// 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+// 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
+// 	type SignedProposalHandler = ();
+// 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
+// }
 
-impl pallet_dkg_proposals::Config for Runtime {
-	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
-	type DKGId = DKGId;
-	type ChainIdentifier = ChainIdentifier;
-	type RuntimeEvent = RuntimeEvent;
-	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type Proposal = Vec<u8>;
-	type ProposalLifetime = ProposalLifetime;
-	type ProposalHandler = DKGProposalHandler;
-	type Period = Period;
-	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
-}
+// impl pallet_dkg_proposals::Config for Runtime {
+// 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
+// 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+// 	type DKGId = DKGId;
+// 	type ChainIdentifier = ChainIdentifier;
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+// 	type Proposal = Vec<u8>;
+// 	type ProposalLifetime = ProposalLifetime;
+// 	type ProposalHandler = DKGProposalHandler;
+// 	type Period = Period;
+// 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
+// }
 
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
 where
@@ -720,15 +722,15 @@ parameter_types! {
 	pub const MaxResources: u32 = 32;
 }
 
-type BridgeRegistryInstance = pallet_bridge_registry::Instance1;
-impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type BridgeIndex = u32;
-	type MaxAdditionalFields = MaxAdditionalFields;
-	type MaxResources = MaxResources;
-	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
-	type WeightInfo = ();
-}
+// type BridgeRegistryInstance = pallet_bridge_registry::Instance1;
+// impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type BridgeIndex = u32;
+// 	type MaxAdditionalFields = MaxAdditionalFields;
+// 	type MaxResources = MaxResources;
+// 	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+// 	type WeightInfo = ();
+// }
 
 parameter_types! {
 	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
@@ -740,7 +742,8 @@ parameter_types! {
 impl pallet_im_online::Config for Runtime {
 	type AuthorityId = ImOnlineId;
 	type RuntimeEvent = RuntimeEvent;
-	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	// type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = ();
 	type UnsignedPriority = ImOnlineUnsignedPriority;
@@ -764,9 +767,9 @@ construct_runtime!(
 	Aura: pallet_aura,
 	Grandpa: pallet_grandpa,
 	Balances: pallet_balances,
-	DKG: pallet_dkg_metadata,
-	DKGProposals: pallet_dkg_proposals,
-	DKGProposalHandler: pallet_dkg_proposal_handler,
+	// DKG: pallet_dkg_metadata,
+	// DKGProposals: pallet_dkg_proposals,
+	// DKGProposalHandler: pallet_dkg_proposal_handler,
 	TransactionPayment: pallet_transaction_payment,
 	Sudo: pallet_sudo,
 	ElectionProviderMultiPhase: pallet_election_provider_multi_phase,
@@ -775,7 +778,7 @@ construct_runtime!(
 	Staking: pallet_staking,
 	Session: pallet_session,
 	Historical: pallet_session_historical,
-	BridgeRegistry: pallet_bridge_registry::<Instance1>,
+	// BridgeRegistry: pallet_bridge_registry::<Instance1>,
 	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 	ImOnline: pallet_im_online,
   }
@@ -920,104 +923,104 @@ impl_runtime_apis! {
 	}
   }
 
-  impl dkg_runtime_primitives::DKGApi<Block, DKGId, BlockNumber> for Runtime {
-	fn authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
-	  let authorities = DKG::authorities();
-	  let authority_set_id = DKG::authority_set_id();
+//   impl dkg_runtime_primitives::DKGApi<Block, DKGId, BlockNumber> for Runtime {
+// 	fn authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
+// 	  let authorities = DKG::authorities();
+// 	  let authority_set_id = DKG::authority_set_id();
 
-	  dkg_runtime_primitives::AuthoritySet {
-		authorities,
-		id: authority_set_id
-	  }
-	}
+// 	  dkg_runtime_primitives::AuthoritySet {
+// 		authorities,
+// 		id: authority_set_id
+// 	  }
+// 	}
 
-	fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
-	  let queued_authorities = DKG::next_authorities();
-	  let queued_authority_set_id = DKG::authority_set_id() + 1u64;
+// 	fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
+// 	  let queued_authorities = DKG::next_authorities();
+// 	  let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 
-	  dkg_runtime_primitives::AuthoritySet {
-		authorities: queued_authorities,
-		id: queued_authority_set_id
-	  }
-	}
+// 	  dkg_runtime_primitives::AuthoritySet {
+// 		authorities: queued_authorities,
+// 		id: queued_authority_set_id
+// 	  }
+// 	}
 
-	fn signature_threshold() -> u16 {
-	  DKG::signature_threshold()
-	}
+// 	fn signature_threshold() -> u16 {
+// 	  DKG::signature_threshold()
+// 	}
 
-	fn keygen_threshold() -> u16 {
-	  DKG::keygen_threshold()
-	}
+// 	fn keygen_threshold() -> u16 {
+// 	  DKG::keygen_threshold()
+// 	}
 
-	fn next_signature_threshold() -> u16 {
-	  DKG::next_signature_threshold()
-	}
+// 	fn next_signature_threshold() -> u16 {
+// 	  DKG::next_signature_threshold()
+// 	}
 
-	fn next_keygen_threshold() -> u16 {
-	  DKG::next_keygen_threshold()
-	}
+// 	fn next_keygen_threshold() -> u16 {
+// 	  DKG::next_keygen_threshold()
+// 	}
 
-	fn should_refresh(block_number: BlockNumber) -> bool {
-	  DKG::should_refresh(block_number)
-	}
+// 	fn should_refresh(block_number: BlockNumber) -> bool {
+// 	  DKG::should_refresh(block_number)
+// 	}
 
-	fn next_dkg_pub_key() -> Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
-	  DKG::next_dkg_public_key()
-	}
+// 	fn next_dkg_pub_key() -> Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
+// 	  DKG::next_dkg_public_key()
+// 	}
 
-	fn next_pub_key_sig() -> Option<Vec<u8>> {
-	  DKG::next_public_key_signature()
-	}
+// 	fn next_pub_key_sig() -> Option<Vec<u8>> {
+// 	  DKG::next_public_key_signature()
+// 	}
 
-	fn dkg_pub_key() -> (dkg_runtime_primitives::AuthoritySetId, Vec<u8>) {
-	  DKG::dkg_public_key()
-	}
+// 	fn dkg_pub_key() -> (dkg_runtime_primitives::AuthoritySetId, Vec<u8>) {
+// 	  DKG::dkg_public_key()
+// 	}
 
-	fn get_best_authorities() -> Vec<(u16, DKGId)> {
-	  DKG::best_authorities()
-	}
+// 	fn get_best_authorities() -> Vec<(u16, DKGId)> {
+// 	  DKG::best_authorities()
+// 	}
 
-	fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
-	  DKG::next_best_authorities()
-	}
+// 	fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
+// 	  DKG::next_best_authorities()
+// 	}
 
-	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
-		use frame_support::traits::EstimateNextSessionRotation;
-		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
-	}
+// 	fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
+// 		use frame_support::traits::EstimateNextSessionRotation;
+// 		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
+// 	}
 
-	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
-	  DKGProposalHandler::get_unsigned_proposals()
-	}
+// 	fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
+// 	  DKGProposalHandler::get_unsigned_proposals()
+// 	}
 
-	fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
-	  DKG::max_extrinsic_delay(block_number)
-	}
+// 	fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
+// 	  DKG::max_extrinsic_delay(block_number)
+// 	}
 
-	fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
-	  (DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
-	}
+// 	fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
+// 	  (DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
+// 	}
 
-	fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
-	  authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
-	}
+// 	fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
+// 	  authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect()
+// 	}
 
-	fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-	  set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect()
-	}
+// 	fn get_keygen_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+// 	  set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect()
+// 	}
 
-	fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
-	  set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect()
-	}
+// 	fn get_signing_jailed(set: Vec<DKGId>) -> Vec<DKGId> {
+// 	  set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect()
+// 	}
 
-	fn refresh_nonce() -> u32 {
-	  DKG::refresh_nonce()
-	}
+// 	fn refresh_nonce() -> u32 {
+// 	  DKG::refresh_nonce()
+// 	}
 
-	fn should_execute_emergency_keygen() -> bool {
-		DKG::should_execute_emergency_keygen()
-	}
-  }
+// 	fn should_execute_emergency_keygen() -> bool {
+// 		DKG::should_execute_emergency_keygen()
+// 	}
+//   }
 
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
 	fn account_nonce(account: AccountId) -> Index {
@@ -1056,10 +1059,10 @@ impl_runtime_apis! {
 	  list_benchmark!(list, extra, pallet_balances, Balances);
 	  list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 	  list_benchmark!(list, extra, pallet_timestamp, Timestamp);
-	  list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
-	  list_benchmark!(list, extra, pallet_dkg_proposals, DKGProposals);
-	  list_benchmark!(list, extra, pallet_dkg_metadata, DKG);
-	  list_benchmark!(list, extra, pallet_bridge_registry, BridgeRegistry);
+	//   list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
+	//   list_benchmark!(list, extra, pallet_dkg_proposals, DKGProposals);
+	//   list_benchmark!(list, extra, pallet_dkg_metadata, DKG);
+	//   list_benchmark!(list, extra, pallet_bridge_registry, BridgeRegistry);
 
 	  let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -1096,10 +1099,10 @@ impl_runtime_apis! {
 	  add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
 	  add_benchmark!(params, batches, pallet_balances, Balances);
 	  add_benchmark!(params, batches, pallet_timestamp, Timestamp);
-	  add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);
-	  add_benchmark!(params, batches, pallet_dkg_proposals, DKGProposals);
-	  add_benchmark!(params, batches, pallet_dkg_metadata, DKG);
-	  add_benchmark!(params, batches, pallet_bridge_registry, BridgeRegistry);
+	//   add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);
+	//   add_benchmark!(params, batches, pallet_dkg_proposals, DKGProposals);
+	//   add_benchmark!(params, batches, pallet_dkg_metadata, DKG);
+	//   add_benchmark!(params, batches, pallet_bridge_registry, BridgeRegistry);
 
 	  if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 	  Ok(batches)
