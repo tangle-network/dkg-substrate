@@ -39,7 +39,7 @@ jobs:
         uses: Swatinem/rust-cache@v1.3.0
 
       - name: Install Tarpaulin
-        run: cargo add cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
 
       - name: Run Tarpaulin
         run : cargo tarpaulin --out Xml -p pallet-dkg-metadata -p pallet-dkg-proposal-handler -p pallet-dkg-proposals -p dkg-primitives -p dkg-runtime-primitives --locked --jobs 16 --timeout 3600 --skip-clean -- --test-threads 16
