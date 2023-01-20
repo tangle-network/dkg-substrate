@@ -69,7 +69,7 @@ frame-benchmarking-cli = { default-features = false, git = "https://github.com/p
 dkg-gadget = { path = "../../dkg-gadget", default-features = false }
 dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
 dkg-primitives = { path = "../../dkg-primitives", default-features = false }
-dkg-standalone-runtime = { default-features = false, version = "3.0.0", path = "../runtime" }
+dkg-standalone-runtime = { version = "3.0.0", path = "../runtime" }
 
 
 [build-dependencies]

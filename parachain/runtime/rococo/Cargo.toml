@@ -22,10 +22,10 @@ hex-literal = { version = "0.3", optional = true }
 smallvec = { version = "1.6.1", default-features = false }
 
 # DKG Substrate Dependencies
-# pallet-dkg-metadata = { path = "../../../pallets/dkg-metadata", default-features = false }
-# dkg-runtime-primitives = { path = "../../../dkg-runtime-primitives", default-features = false }
-# pallet-dkg-proposals = { path = "../../../pallets/dkg-proposals", default-features = false }
-# pallet-dkg-proposal-handler = { path = "../../../pallets/dkg-proposal-handler", default-features = false }
+pallet-dkg-metadata = { path = "../../../pallets/dkg-metadata", default-features = false }
+dkg-runtime-primitives = { path = "../../../dkg-runtime-primitives", default-features = false }
+pallet-dkg-proposals = { path = "../../../pallets/dkg-proposals", default-features = false }
+pallet-dkg-proposal-handler = { path = "../../../pallets/dkg-proposal-handler", default-features = false }
 
 # Substrate Dependencies
 ## Substrate Primitive Dependencies
@@ -154,10 +154,10 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 
 	# DKG
-	# "pallet-dkg-metadata/std",
-	# "dkg-runtime-primitives/std",
-	# "pallet-dkg-proposals/std",
-	# "pallet-dkg-proposal-handler/std",
+	"pallet-dkg-metadata/std",
+	"dkg-runtime-primitives/std",
+	"pallet-dkg-proposals/std",
+	"pallet-dkg-proposal-handler/std",
 ]
 runtime-benchmarks = [
 	"hex-literal",
@@ -174,9 +174,9 @@ runtime-benchmarks = [
 	"pallet-collective/runtime-benchmarks",
 
 	# DKG deps
-	# "pallet-dkg-metadata/runtime-benchmarks",
-	# "pallet-dkg-proposals/runtime-benchmarks",
-	# "pallet-dkg-proposal-handler/runtime-benchmarks",
+	"pallet-dkg-metadata/runtime-benchmarks",
+	"pallet-dkg-proposals/runtime-benchmarks",
+	"pallet-dkg-proposal-handler/runtime-benchmarks",
 ]
 try-runtime = [
 	"frame-executive/try-runtime",

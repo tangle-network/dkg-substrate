@@ -114,11 +114,11 @@ std = [
 	"cumulus-primitives-core/std",
 
 	# DKG dependencies
-	# "dkg-runtime-primitives/std",
-	# "pallet-bridge-registry/std",
-	# "pallet-dkg-metadata/std",
-	# "pallet-dkg-proposals/std",
-	# "pallet-dkg-proposal-handler/std",
+	"dkg-runtime-primitives/std",
+	"pallet-bridge-registry/std",
+	"pallet-dkg-metadata/std",
+	"pallet-dkg-proposals/std",
+	"pallet-dkg-proposal-handler/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",
@@ -132,10 +132,10 @@ runtime-benchmarks = [
 	"sp-runtime/runtime-benchmarks",
 
 	# DKG dependencies
-	# "pallet-dkg-proposal-handler/runtime-benchmarks",
-	# "pallet-dkg-proposals/runtime-benchmarks",
-	# "pallet-dkg-metadata/runtime-benchmarks",
-	# "pallet-bridge-registry/runtime-benchmarks",
+	"pallet-dkg-proposal-handler/runtime-benchmarks",
+	"pallet-dkg-proposals/runtime-benchmarks",
+	"pallet-dkg-metadata/runtime-benchmarks",
+	"pallet-bridge-registry/runtime-benchmarks",
 ]
 
 integration-tests = []
