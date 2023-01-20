@@ -50,7 +50,7 @@ use sp_runtime::{FixedPointNumber, Perquintill};
 pub type AccountIndex = u32;
 
 // A few exports that help ease life for downstream crates.
-// pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
+pub use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use frame_support::traits::WithdrawReasons;
 pub use frame_support::{
 	construct_runtime,
@@ -287,7 +287,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
-		// pub dkg: DKG,
+		pub dkg: DKGId,
 	}
 }
 

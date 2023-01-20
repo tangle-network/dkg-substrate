@@ -54,8 +54,8 @@ pub fn get_dkg_keys_from_seed(seed: &str) -> DKGId {
 ///
 /// The input must be a tuple of individual keys (a single arg for now since we
 /// have just one key).
-pub fn dkg_session_keys(keys: AuraId, _dkg_keys: DKGId) -> dkg_rococo_runtime::SessionKeys {
-	dkg_rococo_runtime::SessionKeys { aura: keys }
+pub fn dkg_session_keys(keys: AuraId, dkg_keys: DKGId) -> dkg_rococo_runtime::SessionKeys {
+	dkg_rococo_runtime::SessionKeys { aura: keys, dkg: dkg_keys }
 }
 
 /// The extensions for the [`ChainSpec`].
