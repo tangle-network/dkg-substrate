@@ -23,9 +23,8 @@ jobs:
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: nightly
 
       - name: Build documentation
