@@ -14,13 +14,13 @@
 
 use cumulus_primitives_core::ParaId;
 use dkg_rococo_runtime::{AccountId, AuraId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use hex_literal::hex;
 use sc_chain_spec::ChainSpecExtension;
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
 use sp_core::{crypto::UncheckedInto, sr25519, ByteArray, Pair, Public};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 pub mod rococo;
 

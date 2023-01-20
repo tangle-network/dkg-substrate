@@ -14,8 +14,8 @@
 
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
-	AccountId, BalancesConfig, GenesisConfig, ImOnlineConfig,
-	MaxNominations, Perbill, ResourceId, DKGId, SessionConfig, Signature, StakerStatus, StakingConfig,
+	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, ImOnlineConfig,
+	MaxNominations, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig,
 	SudoConfig, SystemConfig, WASM_BINARY,
 };
 use hex_literal::hex;
@@ -74,7 +74,7 @@ fn dkg_session_keys(
 	im_online: ImOnlineId,
 	dkg: DKGId,
 ) -> dkg_standalone_runtime::opaque::SessionKeys {
-	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, im_online }
+	dkg_standalone_runtime::opaque::SessionKeys { grandpa, aura, dkg, im_online }
 }
 
 pub fn development_config() -> Result<ChainSpec, String> {
@@ -362,6 +362,15 @@ fn testnet_genesis(
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
+		dkg: DKGConfig {
+			authorities: initial_authorities.iter().map(|(.., x)| x.clone()).collect::<_>(),
+			keygen_threshold: initial_authorities.len() as _,
+			// 2/3 of the keygen_threshold
+			signature_threshold: (initial_authorities.len() as f64 * 2.0 / 3.0).ceil() as _,
+			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
+		},
+		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
+		bridge_registry: Default::default(),
 		im_online: ImOnlineConfig { keys: vec![] },
 	}
 }

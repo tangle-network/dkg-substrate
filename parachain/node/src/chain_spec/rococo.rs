@@ -15,10 +15,10 @@
 use crate::chain_spec::*;
 use cumulus_primitives_core::ParaId;
 use dkg_rococo_runtime::{AccountId, AuraId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use hex_literal::hex;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519};
-use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 
 pub fn dkg_config(id: ParaId) -> ChainSpec {
 	// Give your base currency a unit name and decimal places
