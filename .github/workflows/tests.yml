@@ -30,13 +30,11 @@ jobs:
           sudo apt-get clean
 
       - name: Install Toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly-2022-12-26
+          toolchain: nightly
           components: rustfmt, clippy
-          target: wasm32-unknown-unknown
-          override: true
-          default: true
+          targets: wasm32-unknown-unknown
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
