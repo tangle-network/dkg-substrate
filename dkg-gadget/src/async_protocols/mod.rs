@@ -300,17 +300,25 @@ where
 	);
 
 	// Spawn the 3 tasks
-	// 1. The outbound task (will stop if the protocol finished, after flushing the messages to the
-	// network.)
-	tokio::spawn(outgoing_to_wire);
-	// 2. The inbound task (we will abort that task if the protocol finished)
+	// 1. The inbound task (we will abort that task if the protocol finished)
 	let handle = tokio::spawn(inbound_signed_message_receiver);
+	// 2. The outbound task (will stop if the protocol finished, after flushing the messages to the
+	// network.)
+	let handle2 = tokio::spawn(outgoing_to_wire);
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
 		log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
 		// Abort the inbound task
 		handle.abort();
+		// Wait for the outbound task to finish
+		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
+		// within a reasonable time, we should abort it.
+		match handle2.await {
+			Ok(Ok(_)) => log::info!(target: "dkg", "🕸️  Outbound task finished"),
+			Ok(Err(err)) => log::error!(target: "dkg", "🕸️  Outbound task errored: {:?}", err),
+			Err(_) => log::error!(target: "dkg", "🕸️  Outbound task aborted"),
+		}
 		res
 	};
 	Ok(GenericAsyncHandler { protocol: Box::pin(protocol) })
@@ -360,6 +368,19 @@ where
 				},
 			};
 
+			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
+
+			// If we ever hit this case, where we can't find our index in the best authority set, we
+			// should probably panic, since we are not supposed to be running the protocol if we
+			// are not in the best authority set.
+			if maybe_party_i.is_none() {
+				log::error!(
+					target: "dkg",
+					"BUG: Could not find our index in the best authority set {:?} at session {session_id}",
+					params.best_authorities,
+				);
+				break
+			}
 			log::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
@@ -369,7 +390,6 @@ where
 					continue
 				},
 			};
-			let (_, session_id, id) = get_party_session_id(&params);
 
 			let payload = match &proto_ty {
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {

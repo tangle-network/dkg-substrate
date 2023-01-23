@@ -49,7 +49,7 @@ where
 			})?;
 
 		let protocol = async move {
-			let (keygen_id, _b, _c) = get_party_session_id(&params);
+			let (keygen_id, ..) = get_party_session_id(&params);
 			if let Some(keygen_id) = keygen_id {
 				log::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;
@@ -61,7 +61,7 @@ where
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, 0, status)?.await?;
+				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, status)?.await?;
 				log::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
 			} else {
 				log::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
@@ -102,7 +102,6 @@ where
 		i: u16,
 		t: u16,
 		n: u16,
-		async_index: u8,
 		status: DKGMsgStatus,
 	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler>::Return>, DKGError> {
 		let ty = match status {
@@ -115,7 +114,7 @@ where
 			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
 			params,
 			channel_type,
-			async_index,
+			0,
 			status,
 		)
 	}

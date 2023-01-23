@@ -194,7 +194,14 @@ where
 			// the below wrapper will map signed messages into unsigned messages
 			let incoming = rx;
 			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
-			let (_, session_id, id) = get_party_session_id(&params);
+			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
+			// Looks like we are not in the best authority set, so we will skip this keygen.
+			if maybe_party_i.is_none() {
+				log::error!(target: "dkg", "🕸️  We are not among signers, skipping");
+				return Err(DKGError::CriticalError {
+					reason: "We are not among signers, skipping".to_string(),
+				})
+			}
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
