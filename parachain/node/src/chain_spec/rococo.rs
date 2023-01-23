@@ -137,5 +137,12 @@ fn rococo_genesis(
 		parachain_system: Default::default(),
 		treasury: Default::default(),
 		vesting: Default::default(),
+		dkg: dkg_rococo_runtime::DKGConfig {
+			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
+			keygen_threshold: 3,
+			signature_threshold: 1,
+			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
+		},
+		dkg_proposals: Default::default(),
 	}
 }

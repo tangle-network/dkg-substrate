@@ -287,7 +287,7 @@ parameter_types! {
 impl_opaque_keys! {
 	pub struct SessionKeys {
 		pub aura: Aura,
-		pub dkg: DKGId,
+		pub dkg: DKG,
 	}
 }
 
