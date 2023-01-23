@@ -181,7 +181,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				wasm_binary,
 				// Initial PoA authorities
 				initial_authorities
-					.into_iter()
+					.iter()
 					.map(|x| authority_keys_from_seed(x, &format!("{x}//stash")))
 					.collect(),
 				vec![],
@@ -189,9 +189,9 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
 				initial_authorities
-					.into_iter()
+					.iter()
 					.map(|x| get_account_id_from_seed::<sr25519::Public>(x))
-					.chain(initial_authorities.into_iter().map(|x| {
+					.chain(initial_authorities.iter().map(|x| {
 						get_account_id_from_seed::<sr25519::Public>(&format!("{x}//stash"))
 					}))
 					.collect(),
