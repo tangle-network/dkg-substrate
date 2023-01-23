@@ -159,6 +159,16 @@ pub fn development_config() -> Result<ChainSpec, String> {
 
 pub fn local_testnet_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+	// This maybe weird at first, but now we can control how many authorities we want to have in the
+	// local testnet. during the build process, using the environment variable below.
+	// it defaults to 3 if not set.
+	let initial_authorities_count = option_env!("INITIAL_AUTHORITIES_COUNT")
+		.and_then(|v| v.parse::<usize>().ok())
+		.unwrap_or(3);
+	const ALL_DEV_AUTHORITIES: [&str; 6] = ["Alice", "Bob", "Charlie", "Dave", "Eve", "Ferdie"];
+	let initial_authorities_count =
+		core::cmp::min(initial_authorities_count, ALL_DEV_AUTHORITIES.len());
+	let initial_authorities = &ALL_DEV_AUTHORITIES[0..initial_authorities_count];
 
 	Ok(ChainSpec::from_genesis(
 		// Name
@@ -170,29 +180,21 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			testnet_genesis(
 				wasm_binary,
 				// Initial PoA authorities
-				vec![
-					authority_keys_from_seed("Alice", "Alice//stash"),
-					authority_keys_from_seed("Bob", "Bob//stash"),
-					authority_keys_from_seed("Charlie", "Charlie//stash"),
-				],
+				initial_authorities
+					.into_iter()
+					.map(|x| authority_keys_from_seed(x, &format!("{x}//stash")))
+					.collect(),
 				vec![],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				// Pre-funded accounts
-				vec![
-					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					get_account_id_from_seed::<sr25519::Public>("Bob"),
-					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					get_account_id_from_seed::<sr25519::Public>("Dave"),
-					get_account_id_from_seed::<sr25519::Public>("Eve"),
-					get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-					get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
-					get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
-					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
-					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
-				],
+				initial_authorities
+					.into_iter()
+					.map(|x| get_account_id_from_seed::<sr25519::Public>(x))
+					.chain(initial_authorities.into_iter().map(|x| {
+						get_account_id_from_seed::<sr25519::Public>(&format!("{x}//stash"))
+					}))
+					.collect(),
 				// Initial Chain Ids
 				vec![
 					hex_literal::hex!("010000001389"), // Hermis (Evm, 5001)
