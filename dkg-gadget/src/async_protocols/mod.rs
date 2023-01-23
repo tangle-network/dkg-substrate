@@ -368,6 +368,19 @@ where
 				},
 			};
 
+			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
+
+			// If we ever hit this case, where we can't find our index in the best authority set, we
+			// should probably panic, since we are not supposed to be running the protocol if we
+			// are not in the best authority set.
+			if maybe_party_i.is_none() {
+				log::error!(
+					target: "dkg",
+					"BUG: Could not find our index in the best authority set {:?} at session {session_id}",
+					params.best_authorities,
+				);
+				break
+			}
 			log::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
@@ -377,7 +390,6 @@ where
 					continue
 				},
 			};
-			let (_, session_id, id) = get_party_session_id(&params);
 
 			let payload = match &proto_ty {
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
