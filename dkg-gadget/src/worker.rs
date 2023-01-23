@@ -297,8 +297,15 @@ where
 		let status_handle = AsyncProtocolRemote::new(now, session_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
-		let optional_session_id = Some(session_id);
-		let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
+		let active_local_key = match stage {
+			ProtoStageType::Genesis => None,
+			ProtoStageType::Queued => None,
+			ProtoStageType::Signing => {
+				let optional_session_id = Some(session_id);
+				let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
+				active_local_key
+			},
+		};
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
 				backend: self.backend.clone(),
