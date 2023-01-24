@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use cumulus_primitives_core::ParaId;
-use dkg_rococo_runtime::{AccountId, AuraId, DKGId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_rococo_runtime::{AccountId, AuraId, Signature, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use hex_literal::hex;
 use sc_chain_spec::ChainSpecExtension;
 use sc_service::ChainType;
@@ -291,6 +292,8 @@ fn testnet_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
+		treasury: Default::default(),
+		vesting: Default::default(),
 		dkg: dkg_rococo_runtime::DKGConfig {
 			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
 			keygen_threshold: 3,
@@ -298,7 +301,5 @@ fn testnet_genesis(
 			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
 		},
 		dkg_proposals: Default::default(),
-		treasury: Default::default(),
-		vesting: Default::default(),
 	}
 }

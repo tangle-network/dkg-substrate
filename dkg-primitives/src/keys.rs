@@ -15,7 +15,7 @@
 use crate::types::{FE, GE};
 use curv::{arithmetic::Converter, BigInt};
 use hex::{self};
-use secp256k1::curve::{Affine, Field};
+use libsecp256k1::curve::{Affine, Field};
 use sha3::{Digest, Keccak256};
 use std::convert::TryInto;
 

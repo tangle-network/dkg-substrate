@@ -364,7 +364,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::set_threshold(*threshold))]
+		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::set_proposer_threshold(threshold)
@@ -375,7 +376,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) write
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::set_resource(method.len() as u32))]
+		#[pallet::weight(1)]
+		#[pallet::call_index(1)]
 		pub fn set_resource(
 			origin: OriginFor<T>,
 			id: ResourceId,
@@ -393,7 +395,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) removal
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::remove_resource())]
+		#[pallet::weight(2)]
+		#[pallet::call_index(2)]
 		pub fn remove_resource(origin: OriginFor<T>, id: ResourceId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
 			Self::unregister_resource(id)
@@ -404,7 +407,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::whitelist_chain())]
+		#[pallet::weight(3)]
+		#[pallet::call_index(3)]
 		pub fn whitelist_chain(
 			origin: OriginFor<T>,
 			chain_id: TypedChainId,
@@ -418,7 +422,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
+		#[pallet::weight(4)]
+		#[pallet::call_index(4)]
 		pub fn add_proposer(
 			origin: OriginFor<T>,
 			native_account: T::AccountId,
@@ -433,7 +438,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and removal
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::remove_proposer())]
+		#[pallet::weight(5)]
+		#[pallet::call_index(5)]
 		pub fn remove_proposer(
 			origin: OriginFor<T>,
 			v: T::AccountId,
@@ -451,7 +457,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal(prop.as_ref().len().try_into().unwrap()))]
+		#[pallet::weight(6)]
+		#[pallet::call_index(6)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -472,7 +479,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal(prop.as_ref().len().try_into().unwrap()))]
+		#[pallet::weight(7)]
+		#[pallet::call_index(7)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -496,7 +504,8 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.as_ref().len().try_into().unwrap()))]
+		#[pallet::weight(8)]
+		#[pallet::call_index(8)]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -895,11 +904,8 @@ pub struct DKGEcdsaToEthereum;
 impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
 		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
-		use sp_core::crypto::ByteArray;
-		let _x = VerifyingKey::from_sec1_bytes(
-			dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a),
-		);
-		VerifyingKey::from_sec1_bytes(dkg_runtime_primitives::crypto::AuthorityId::as_slice(&a))
+		let _x = VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a));
+		VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a))
 			.map(|pub_key| {
 				// uncompress the key
 				let uncompressed = pub_key.to_encoded_point(false);

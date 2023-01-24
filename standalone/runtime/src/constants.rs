@@ -32,12 +32,13 @@ pub mod currency {
 }
 
 pub mod time {
+	use frame_support::weights::constants::WEIGHT_REF_TIME_PER_SECOND;
 	/// An index to a block.
 	pub type BlockNumber = u32;
 	/// Type used for expressing timestamp.
 	pub type Moment = u64;
 
-	use frame_support::weights::{constants::WEIGHT_PER_SECOND, Weight};
+	use frame_support::weights::Weight;
 	use sp_runtime::Perbill;
 	/// We assume that ~5% of the block weight is consumed by `on_initialize`
 	/// handlers. This is used to limit the maximal weight of a single
@@ -48,7 +49,8 @@ pub mod time {
 	pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
 	/// We allow for 0.5 seconds of compute with a 6 second average block time.
-	pub const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND.saturating_div(2);
+	pub const MAXIMUM_BLOCK_WEIGHT: Weight =
+		Weight::from_ref_time(WEIGHT_REF_TIME_PER_SECOND.saturating_div(2));
 
 	/// Since BABE is probabilistic this is the average expected block time that
 	/// we are targeting. Blocks will be produced at a minimum duration defined

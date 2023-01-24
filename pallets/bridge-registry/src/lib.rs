@@ -54,7 +54,7 @@ use weights::WeightInfo;
 
 use types::*;
 
-use sp_std::{convert::TryInto, prelude::*};
+use sp_std::{convert::TryInto, prelude::*, vec};
 
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
@@ -181,7 +181,8 @@ pub mod pallet {
 		/// - `info`: The identity information.
 		///
 		/// Emits `ResourceSet` if successful.
-		#[pallet::weight(T::WeightInfo::set_metadata())]
+		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
 		pub fn set_metadata(
 			origin: OriginFor<T>,
 			bridge_index: T::BridgeIndex,
@@ -204,7 +205,8 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(T::WeightInfo::force_reset_indices())]
+		#[pallet::weight(1)]
+		#[pallet::call_index(1)]
 		pub fn force_reset_indices(
 			origin: OriginFor<T>,
 			resource_ids: Vec<ResourceId>,

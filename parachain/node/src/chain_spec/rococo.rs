@@ -14,7 +14,8 @@
 
 use crate::chain_spec::*;
 use cumulus_primitives_core::ParaId;
-use dkg_rococo_runtime::{AccountId, AuraId, DKGId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_rococo_runtime::{AccountId, AuraId, EXISTENTIAL_DEPOSIT, MILLIUNIT};
+use dkg_runtime_primitives::crypto::AuthorityId as DKGId;
 use hex_literal::hex;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519};
@@ -134,6 +135,8 @@ fn rococo_genesis(
 		aura: Default::default(),
 		aura_ext: Default::default(),
 		parachain_system: Default::default(),
+		treasury: Default::default(),
+		vesting: Default::default(),
 		dkg: dkg_rococo_runtime::DKGConfig {
 			authorities: invulnerables.iter().map(|x| x.2.clone()).collect::<_>(),
 			keygen_threshold: 3,
@@ -141,7 +144,5 @@ fn rococo_genesis(
 			authority_ids: invulnerables.iter().map(|x| x.0.clone()).collect::<_>(),
 		},
 		dkg_proposals: Default::default(),
-		treasury: Default::default(),
-		vesting: Default::default(),
 	}
 }

@@ -102,10 +102,29 @@ If you do not have it installed open the Terminal application and execute the fo
 # Install Homebrew if necessary https://brew.sh/
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
-# Make sure Homebrew is up-to-date, install openssl
+# Make sure Homebrew is up-to-date, install openssl and llvm
 brew update
 brew install openssl
+brew install llvm
 ```
+
+Before compiling, you should point CC and AR to use llvm in your environment (run `ls /opt/homebrew/Cellar/llvm/` to get a list of LLVM_VERSIONs):
+
+```bash
+export CC=/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/clang
+export AR=/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/llvm-ar
+export PATH="/opt/homebrew/Cellar/llvm/<LLVM_VERSION>/bin/:$PATH"
+
+```
+
+The linking phase may fail due to not finding libgmp (i.e., "could not find library -lgmp") when building on a mac M1. To fix this problem, run:
+
+```bash
+xcode-select --reset && xcode-select --install
+brew install gmp
+# make sure to run the commands below each time when starting a new env, or, append them to .zshrc
+export LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib
+export INCLUDE_PATH=$INCLUDE_PATH:/opt/homebrew/include
 
 ❗ **Note:** Native ARM Homebrew installations are only going to be supported at `/opt/homebrew`. After Homebrew installs, make sure to add `/opt/homebrew/bin` to your PATH.
 
