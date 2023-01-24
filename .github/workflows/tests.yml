@@ -23,7 +23,14 @@ jobs:
       - name: Checkout Sources
         uses: actions/checkout@v2
 
-      - name: Clear up disk space
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 512
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+
+      - name: Clear up disk space (2)
         run: |
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
@@ -35,9 +42,6 @@ jobs:
           toolchain: nightly
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v1.3.0
 
       - name: Install cargo-nextest
         run: cargo +stable install cargo-nextest
