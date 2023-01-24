@@ -69,7 +69,7 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 	where
 		DKGMessage<AuthorityId>: Encode,
 	{
-		<<B::Header as Header>::Hashing as Hash>::hash_of(&self.msg)
+		<<B::Header as Header>::Hashing as Hash>::hash_of(&self.msg.payload)
 	}
 }
 
