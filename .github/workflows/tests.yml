@@ -23,11 +23,6 @@ jobs:
       - name: Checkout Sources
         uses: actions/checkout@v2
 
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          remove-dotnet: 'true'
-
       - name: Clear up disk space (2)
         run: |
           sudo rm -rf "/usr/local/share/boost"
