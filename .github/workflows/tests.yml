@@ -20,14 +20,19 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Checkout Sources
-        uses: actions/checkout@v2
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          remove-dotnet: 'true'
 
       - name: Clear up disk space (2)
         run: |
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
+
+      - name: Checkout Sources
+        uses: actions/checkout@v2
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
