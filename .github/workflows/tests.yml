@@ -34,9 +34,6 @@ jobs:
       - name: Checkout Sources
         uses: actions/checkout@v2
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v1.3.0
-
       - name: Install Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
