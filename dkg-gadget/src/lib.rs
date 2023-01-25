@@ -122,6 +122,9 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
+	// ensure logging-related statics are initialized
+	dkg_logging::setup_log();
+
 	let DKGParams {
 		client,
 		backend,

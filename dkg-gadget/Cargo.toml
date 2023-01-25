@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 
 [features]
 outbound-inspection = []
+tracing = []
 
 [dependencies]
 fnv = "1.0.6"
@@ -54,6 +55,7 @@ atomic = "0.5.1"
 async-trait = "0.1.53"
 auto_impl = "1.0.0"
 itertools = "0.10.3"
+tracing = "0.1.37"
 
 webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
 

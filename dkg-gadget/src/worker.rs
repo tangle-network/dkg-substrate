@@ -19,11 +19,11 @@ use crate::{
 };
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
+use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::StreamExt;
 use itertools::Itertools;
-use dkg_logging::{debug, error, info, trace};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
@@ -464,6 +464,15 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+	#[cfg_attr(
+		feature = "tracing",
+		dkg_logging::instrument(
+			target = "dkg",
+			skip_all,
+			err,
+			fields(session_id, threshold, stage, async_index)
+		)
+	)]
 	fn create_signing_protocol(
 		&self,
 		best_authorities: Vec<Public>,
@@ -1011,6 +1020,10 @@ where
 		self.process_block_notification(&notification.header);
 	}
 
+	#[cfg_attr(
+		feature = "tracing",
+		dkg_logging::instrument(target = "dkg", skip_all, ret, err, fields(signed_dkg_message))
+	)]
 	fn verify_signature_against_authorities(
 		&self,
 		signed_dkg_msg: SignedDKGMessage<Public>,
@@ -1070,6 +1083,10 @@ where
 		}
 	}
 
+	#[cfg_attr(
+		feature = "tracing",
+		dkg_logging::instrument(target = "dkg", skip_all, fields(dkg_error))
+	)]
 	pub fn handle_dkg_error(&self, dkg_error: DKGError) {
 		dkg_logging::error!(target: "dkg_gadget::worker", "Received error: {:?}", dkg_error);
 		metric_inc!(self, dkg_error_counter);
@@ -1111,6 +1128,10 @@ where
 	}
 
 	/// Route messages internally where they need to be routed
+	#[cfg_attr(
+		feature = "tracing",
+		dkg_logging::instrument(target = "dkg", skip_all, ret, err, fields(dkg_msg))
+	)]
 	fn process_incoming_dkg_message(
 		&self,
 		dkg_msg: SignedDKGMessage<Public>,

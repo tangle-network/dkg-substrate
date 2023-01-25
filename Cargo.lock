@@ -2221,6 +2221,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tracing",
  "wasm-timer",
  "webb-proposals",
 ]

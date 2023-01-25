@@ -47,10 +47,8 @@ fn match_consensus_log(
 	log: ConsensusLog<AuthorityId>,
 ) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
 	match log {
-		ConsensusLog::AuthoritiesChange {
-			active: authority_set,
-			queued: queued_authority_set,
-		} => Some((authority_set, queued_authority_set)),
+		ConsensusLog::AuthoritiesChange { active: authority_set, queued: queued_authority_set } =>
+			Some((authority_set, queued_authority_set)),
 		_ => None,
 	}
 }
