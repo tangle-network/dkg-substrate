@@ -83,17 +83,18 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 							.verify_signature_against_authorities(self)
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
-						log::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id);
+						dkg_logging::warn!(target: "dkg", "Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id);
 						Ok(None)
 					}
 				} else {
-					log::trace!(target: "dkg", "Will skip passing message to state machine since sender is self");
+					dkg_logging::trace!(target: "dkg", "Will skip passing message to state machine since sender is self");
 					Ok(None)
 				}
 			},
 
 			(_l, _r) => {
-				// log::warn!("Received message for mixed stage: Local: {:?}, payload: {:?}", l, r);
+				// dkg_logging::warn!("Received message for mixed stage: Local: {:?}, payload:
+				// {:?}", l, r);
 				Ok(None)
 			},
 		}
@@ -119,12 +120,12 @@ where
 					Ok(None) => continue,
 
 					Err(err) => {
-						log::warn!(target: "dkg", "While mapping signed message, received an error: {:?}", err);
+						dkg_logging::warn!(target: "dkg", "While mapping signed message, received an error: {:?}", err);
 						continue
 					},
 				},
 				Some(Err(err)) => {
-					log::error!(target: "dkg", "Stream RECV error: {:?}", err);
+					dkg_logging::error!(target: "dkg", "Stream RECV error: {:?}", err);
 					continue
 				},
 				None => return Poll::Ready(None),

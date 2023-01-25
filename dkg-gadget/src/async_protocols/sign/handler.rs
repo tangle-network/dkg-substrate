@@ -80,10 +80,10 @@ where
 				let count_in_batch = unsigned_proposals.len();
 				let batch_key = params.get_next_batch_key(&unsigned_proposals);
 
-				log::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
+				dkg_logging::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
 				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
-					log::info!(target: "dkg", "Offline stage index: {}", offline_i);
+					dkg_logging::info!(target: "dkg", "Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -104,19 +104,19 @@ where
 					// TODO: Consider not blocking here and allowing processing of
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
-					log::info!(
+					dkg_logging::info!(
 						target: "dkg",
 						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
 						count_in_batch
 					);
 				} else {
-					log::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
+					dkg_logging::warn!(target: "dkg", "🕸️  We are not among signers, skipping");
 					return Err(DKGError::GenericError {
 						reason: "We are not among signers, skipping".to_string(),
 					})
 				}
 			} else {
-				log::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
+				dkg_logging::info!(target: "dkg", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())
@@ -124,7 +124,7 @@ where
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
 			// print the res value.
-			log::info!(target: "dkg", "🕸️  Signing protocol concluded with {:?}", res);
+			dkg_logging::info!(target: "dkg", "🕸️  Signing protocol concluded with {:?}", res);
 			res
 		});
 
@@ -132,7 +132,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					log::info!(target: "dkg", "Stopper has been called {:?}", res1);
+					dkg_logging::info!(target: "dkg", "Stopper has been called {:?}", res1);
 					Err(DKGError::GenericError {
 						reason: format!("Stopper has been called {res1:?}")
 					})
@@ -197,7 +197,7 @@ where
 			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
 			// Looks like we are not in the best authority set, so we will skip this keygen.
 			if maybe_party_i.is_none() {
-				log::error!(target: "dkg", "🕸️  We are not among signers, skipping");
+				dkg_logging::error!(target: "dkg", "🕸️  We are not among signers, skipping");
 				return Err(DKGError::CriticalError {
 					reason: "We are not among signers, skipping".to_string(),
 				})
@@ -205,7 +205,7 @@ where
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
-			log::info!(target: "dkg", "Will now begin the voting stage with n={} parties for idx={}", number_of_parties, party_ind);
+			dkg_logging::info!(target: "dkg", "Will now begin the voting stage with n={} parties for idx={}", number_of_parties, party_ind);
 
 			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
 				reason: "The unsigned proposal for this stage is invalid".to_string(),
@@ -240,49 +240,49 @@ where
 			let number_of_partial_sigs = threshold as usize;
 			let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
-			log::info!(target: "dkg", "Must obtain {} partial sigs to continue ...", number_of_partial_sigs);
+			dkg_logging::info!(target: "dkg", "Must obtain {} partial sigs to continue ...", number_of_partial_sigs);
 
 			while let Some(msg) = incoming_wrapper.next().await {
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
-						log::info!(target: "dkg", "Found matching round key!");
+						dkg_logging::info!(target: "dkg", "Found matching round key!");
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)
 						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 						sigs.push(partial);
-						log::info!(target: "dkg", "There are now {} partial sigs ...", sigs.len());
+						dkg_logging::info!(target: "dkg", "There are now {} partial sigs ...", sigs.len());
 						if sigs.len() == number_of_partial_sigs {
 							break
 						}
 					} else {
-						//log::info!(target: "dkg", "Skipping DKG vote message since round
+						//dkg_logging::info!(target: "dkg", "Skipping DKG vote message since round
 						// keys did not match");
 					}
 				}
 			}
 
-			log::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
+			dkg_logging::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
 
 			if sigs.len() != number_of_partial_sigs {
-				log::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
+				dkg_logging::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
 				return Err(DKGError::Vote {
 					reason: "Invalid number of received partial sigs".to_string(),
 				})
 			}
 
-			log::info!("RD1");
+			dkg_logging::info!("RD1");
 			let signature = signing
 				.complete(&sigs)
 				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
 
-			log::info!("RD2");
+			dkg_logging::info!("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
 				reason: format!("Verification of voting stage failed with error : {err:?}"),
 			})?;
 
-			log::info!("RD3");
+			dkg_logging::info!("RD3");
 			params.engine.process_vote_result(
 				signature,
 				unsigned_proposal,

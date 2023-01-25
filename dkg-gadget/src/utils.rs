@@ -47,8 +47,10 @@ fn match_consensus_log(
 	log: ConsensusLog<AuthorityId>,
 ) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
 	match log {
-		ConsensusLog::AuthoritiesChange { active: authority_set, queued: queued_authority_set } =>
-			Some((authority_set, queued_authority_set)),
+		ConsensusLog::AuthoritiesChange {
+			active: authority_set,
+			queued: queued_authority_set,
+		} => Some((authority_set, queued_authority_set)),
 		_ => None,
 	}
 }
@@ -70,7 +72,7 @@ pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
 	map.entry(ty).or_default().push(serialized_len as u32);
 
 	for (ty, history) in map.iter() {
-		log::debug!(target: "dkg", "History for {}: \
+		dkg_logging::debug!(target: "dkg", "History for {}: \
 			total count={}, \
 			first={:?}, \
 			latest={:?}, \

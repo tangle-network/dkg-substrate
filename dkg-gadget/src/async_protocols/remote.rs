@@ -133,7 +133,7 @@ impl<C> AsyncProtocolRemote<C> {
 			self.status_history.lock().push(status);
 			self.status.store(status, Ordering::SeqCst);
 		} else {
-			log::error!(target: "dkg", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
+			dkg_logging::error!(target: "dkg", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
 		}
 	}
 
@@ -178,14 +178,14 @@ impl<C> AsyncProtocolRemote<C> {
 		let tx = match self.stop_tx.lock().take() {
 			Some(tx) => tx,
 			None => {
-				log::warn!(
+				dkg_logging::warn!(
 					target: "dkg", "Unable to shutdown meta handler since it is already {:?}, ignoring...",
 					self.get_status()
 				);
 				return Ok(())
 			},
 		};
-		log::info!("Shutting down meta handler: {}", reason.as_ref());
+		dkg_logging::info!("Shutting down meta handler: {}", reason.as_ref());
 		tx.send(()).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
@@ -222,7 +222,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
-				log::info!(
+				dkg_logging::info!(
 					target: "dkg",
 					"[drop code] MetaAsyncProtocol is ending: {:?}, History: {:?}",
 					self.get_status(),

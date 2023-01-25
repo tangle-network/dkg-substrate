@@ -20,6 +20,7 @@ use crate::{
 	Client, DKGKeystore,
 };
 use codec::Encode;
+use dkg_logging::{debug, error};
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, SessionId,
 	SignedDKGMessage,
@@ -28,7 +29,6 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	AggregatedPublicKeys, DKGApi,
 };
-use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
@@ -82,7 +82,7 @@ where
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
-		log::debug!(
+		dkg_logging::debug!(
 			target: "dkg",
 			"SESSION {:?} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id, threshold,
@@ -97,7 +97,7 @@ where
 				current_block_number,
 			)?;
 		} else {
-			log::debug!(
+			dkg_logging::debug!(
 				target: "dkg",
 				"SESSION {:?} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,

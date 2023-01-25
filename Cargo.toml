@@ -10,4 +10,5 @@ members = [
 	'dkg-primitives',
 	'dkg-runtime-primitives',
 	'dkg-gadget',
+	'dkg-logging'
 ]

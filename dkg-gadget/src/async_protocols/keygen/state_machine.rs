@@ -39,30 +39,31 @@ impl StateMachineHandler for Keygen {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				log::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, session={}", msg.sender_id, session_id);
-				let message: Msg<ProtocolMessage> =
-					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
-						Ok(message) => message,
-						Err(err) => {
-							log::error!(target: "dkg_gadget::async_protocol::keygen", "Error deserializing message: {}", err);
-							// Skip this message.
-							return Ok(())
-						},
-					};
+				dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, session={}", msg.sender_id, session_id);
+				let message: Msg<ProtocolMessage> = match serde_json::from_slice(
+					msg.keygen_msg.as_slice(),
+				) {
+					Ok(message) => message,
+					Err(err) => {
+						dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error deserializing message: {}", err);
+						// Skip this message.
+						return Ok(())
+					},
+				};
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						log::info!("Skipping passing of message to async proto since not intended for local");
+						dkg_logging::info!("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
 				if let Err(e) = to_async_proto.unbounded_send(message) {
-					log::error!(target: "dkg_gadget::async_protocol::keygen", "Error sending message to async proto: {}", e);
+					dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error sending message to async proto: {}", e);
 				}
 			},
 
 			err =>
-				log::debug!(target: "dkg_gadget::async_protocol::keygen", "Invalid payload received: {:?}", err),
+				dkg_logging::debug!(target: "dkg_gadget::async_protocol::keygen", "Invalid payload received: {:?}", err),
 		}
 
 		Ok(())
@@ -74,7 +75,7 @@ impl StateMachineHandler for Keygen {
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		log::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
+		dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in

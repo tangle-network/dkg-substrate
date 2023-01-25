@@ -14,7 +14,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use log::debug;
+use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
 
