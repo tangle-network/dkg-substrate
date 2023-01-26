@@ -253,6 +253,13 @@ cargo test
 
 **Note:** You may also run individual E2E tests. Please review test script commands in `dkg-test-suite/package.json` for verbose list of test cases. See below examples.
 
+### E2E tests w/tracing
+`tracing` is a feature that can be useful for analyzing causality inside the DKG. To enable tracing, the `dkg-standalone-node` must be compiled with the feature `tracing` enabled.
+```
+1. Compile dkg-standalone-node with tracing: `cargo build --package dkg-standalone-node --release --features=tracing,integration-tests`
+2. Run the nodes, setting the env-vars to trace: `RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice`
+```
+
 ### Anchor Proposal tests:
 
 **From terminal 1:**
