@@ -72,11 +72,11 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 		// in case of Keygen or Offline, we only need to hash the inner raw message bytes that
 		// are going to be sent to the state machine.
 		let bytes_to_hash = match self.msg.payload {
-			DKGMsgPayload::Keygen(m) => m.keygen_msg,
-			DKGMsgPayload::Offline(m) => m.offline_msg,
-			DKGMsgPayload::Vote(m) => m.encode(),
-			DKGMsgPayload::PublicKeyBroadcast(m) => m.encode(),
-			DKGMsgPayload::MisbehaviourBroadcast(m) => m.encode(),
+			DKGMsgPayload::Keygen(ref m) => m.keygen_msg.clone(),
+			DKGMsgPayload::Offline(ref m) => m.offline_msg.clone(),
+			DKGMsgPayload::Vote(ref m) => m.encode(),
+			DKGMsgPayload::PublicKeyBroadcast(ref m) => m.encode(),
+			DKGMsgPayload::MisbehaviourBroadcast(ref m) => m.encode(),
 		};
 		<<B::Header as Header>::Hashing as Hash>::hash_of(&bytes_to_hash)
 	}
