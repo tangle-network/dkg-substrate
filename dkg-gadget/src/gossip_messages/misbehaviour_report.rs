@@ -19,13 +19,13 @@ use crate::{
 	Client,
 };
 use codec::Encode;
+use dkg_logging::{debug, error};
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
 };
-use log::{debug, error};
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, NumberFor};
 
@@ -143,9 +143,9 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				log::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.session_id, encoded_signed_dkg_message.len());
+				dkg_logging::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.session_id, encoded_signed_dkg_message.len());
 				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
-					log::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.session_id, e);
+					dkg_logging::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.session_id, e);
 				}
 			},
 			Err(e) => error!(

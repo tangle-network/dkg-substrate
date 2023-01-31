@@ -148,7 +148,7 @@ where
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
-		log::info!(target: "dkg", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
+		dkg_logging::info!(target: "dkg", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
@@ -169,7 +169,7 @@ where
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
-				log::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
+				dkg_logging::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
 				save_signed_proposals_in_storage::<B, C, BE>(
@@ -180,7 +180,7 @@ where
 					proposals,
 				);
 			} else {
-				log::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				dkg_logging::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
 			}
 		}
 

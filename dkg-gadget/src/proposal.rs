@@ -15,12 +15,12 @@ use std::sync::Arc;
 //
 use crate::Client;
 use codec::Encode;
+use dkg_logging::{info, trace};
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
 	RefreshProposalSigned,
 };
-use log::{info, trace};
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;

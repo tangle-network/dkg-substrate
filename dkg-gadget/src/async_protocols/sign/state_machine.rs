@@ -52,31 +52,31 @@ impl StateMachineHandler for OfflineStage {
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,
 						Err(err) => {
-							log::error!("Error deserializing offline message: {:?}", err);
+							dkg_logging::error!("Error deserializing offline message: {:?}", err);
 							// Skip this message.
 							return Ok(())
 						},
 					};
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						//log::info!("Skipping passing of message to async proto since not
+						//dkg_logging::info!("Skipping passing of message to async proto since not
 						// intended for local");
 						return Ok(())
 					}
 				}
 
 				if local_ty.get_unsigned_proposal().unwrap().hash().unwrap() != msg.key.as_slice() {
-					//log::info!("Skipping passing of message to async proto since not correct
-					// unsigned proposal");
+					//dkg_logging::info!("Skipping passing of message to async proto since not
+					// correct unsigned proposal");
 					return Ok(())
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
-					log::error!(target: "dkg_gadget::async_protocol::sign", "Error sending message to async proto: {}", err);
+					dkg_logging::error!(target: "dkg_gadget::async_protocol::sign", "Error sending message to async proto: {}", err);
 				}
 			},
 
-			err => log::debug!(target: "dkg", "Invalid payload received: {:?}", err),
+			err => dkg_logging::debug!(target: "dkg", "Invalid payload received: {:?}", err),
 		}
 
 		Ok(())
@@ -88,7 +88,7 @@ impl StateMachineHandler for OfflineStage {
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<(), DKGError> {
-		log::info!(target: "dkg", "Completed offline stage successfully!");
+		dkg_logging::info!(target: "dkg", "Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
@@ -106,15 +106,15 @@ impl StateMachineHandler for OfflineStage {
 			async_index,
 		) {
 			Ok(voting_stage) => {
-				log::info!(target: "dkg", "Starting voting stage...");
+				dkg_logging::info!(target: "dkg", "Starting voting stage...");
 				if let Err(e) = voting_stage.await {
-					log::error!(target: "dkg", "Error starting voting stage: {:?}", e);
+					dkg_logging::error!(target: "dkg", "Error starting voting stage: {:?}", e);
 					return Err(e)
 				}
 				Ok(())
 			},
 			Err(err) => {
-				log::error!(target: "dkg", "Error starting voting stage: {:?}", err);
+				dkg_logging::error!(target: "dkg", "Error starting voting stage: {:?}", err);
 				Err(err)
 			},
 		}

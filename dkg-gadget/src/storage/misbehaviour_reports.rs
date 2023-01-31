@@ -16,12 +16,12 @@
 // limitations under the License.
 use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use codec::Encode;
+use dkg_logging::trace;
 use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::AGGREGATED_MISBEHAVIOUR_REPORTS,
 	AggregatedMisbehaviourReports, DKGApi,
 };
-use log::trace;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, NumberFor};

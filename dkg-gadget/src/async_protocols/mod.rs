@@ -80,17 +80,17 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 	fn drop(&mut self) {
 		if self.handle.is_active() && self.handle.is_primary_remote {
-			log::warn!(
+			dkg_logging::warn!(
 				"AsyncProtocolParameters({})'s handler is still active and now will be dropped!!!",
 				self.session_id
 			);
 		} else if self.handle.is_primary_remote {
-			log::debug!(
+			dkg_logging::debug!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
 				self.session_id
 			);
 		} else {
-			log::debug!(
+			dkg_logging::debug!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
 				self.session_id
 			);
@@ -275,7 +275,7 @@ where
 		match res {
 			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param, async_index).await,
 			Err(err) => {
-				log::error!(target: "dkg", "Async Proto Errored: {:?}", err);
+				dkg_logging::error!(target: "dkg", "Async Proto Errored: {:?}", err);
 				Err(err)
 			},
 		}
@@ -308,16 +308,17 @@ where
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
-		log::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
+		dkg_logging::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
 		// Abort the inbound task
 		handle.abort();
 		// Wait for the outbound task to finish
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
 		// within a reasonable time, we should abort it.
 		match handle2.await {
-			Ok(Ok(_)) => log::info!(target: "dkg", "🕸️  Outbound task finished"),
-			Ok(Err(err)) => log::error!(target: "dkg", "🕸️  Outbound task errored: {:?}", err),
-			Err(_) => log::error!(target: "dkg", "🕸️  Outbound task aborted"),
+			Ok(Ok(_)) => dkg_logging::info!(target: "dkg", "🕸️  Outbound task finished"),
+			Ok(Err(err)) =>
+				dkg_logging::error!(target: "dkg", "🕸️  Outbound task errored: {:?}", err),
+			Err(_) => dkg_logging::error!(target: "dkg", "🕸️  Outbound task aborted"),
 		}
 		res
 	};
@@ -363,7 +364,7 @@ where
 			let unsigned_message = match outgoing_rx.next().await {
 				Some(msg) => msg,
 				None => {
-					log::debug!(target: "dkg", "🕸️  Outgoing Receiver Ended");
+					dkg_logging::debug!(target: "dkg", "🕸️  Outgoing Receiver Ended");
 					break
 				},
 			};
@@ -374,19 +375,19 @@ where
 			// should probably panic, since we are not supposed to be running the protocol if we
 			// are not in the best authority set.
 			if maybe_party_i.is_none() {
-				log::error!(
+				dkg_logging::error!(
 					target: "dkg",
 					"BUG: Could not find our index in the best authority set {:?} at session {session_id}",
 					params.best_authorities,
 				);
 				break
 			}
-			log::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
+			dkg_logging::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
 				Err(err) => {
-					log::error!(target: "dkg", "Failed to serialize message: {:?}, Skipping..", err);
+					dkg_logging::error!(target: "dkg", "Failed to serialize message: {:?}, Skipping..", err);
 					continue
 				},
 			};
@@ -412,15 +413,15 @@ where
 
 			let unsigned_dkg_message = DKGMessage { sender_id: id, status, payload, session_id };
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
-				log::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
+				dkg_logging::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {
-				log::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
+				dkg_logging::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
 			}
 
 			// check the status of the async protocol.
 			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
-				log::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
+				dkg_logging::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
 				break
 			}
 		}
@@ -454,7 +455,7 @@ where
 			let unsigned_message = match incoming_wrapper.next().await {
 				Some(msg) => msg,
 				None => {
-					log::debug!(target: "dkg", "🕸️  Inbound Receiver Ended");
+					dkg_logging::debug!(target: "dkg", "🕸️  Inbound Receiver Ended");
 					break
 				},
 			};
@@ -462,13 +463,13 @@ where
 			if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type)
 				.is_err()
 			{
-				log::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
+				dkg_logging::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
 				break
 			}
 
 			// check the status of the async protocol.
 			if params.handle.is_completed() || params.handle.is_terminated() {
-				log::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of inbound loop");
+				dkg_logging::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of inbound loop");
 				break
 			}
 		}

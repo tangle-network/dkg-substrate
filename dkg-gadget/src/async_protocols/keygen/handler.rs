@@ -51,7 +51,7 @@ where
 		let protocol = async move {
 			let (keygen_id, ..) = get_party_session_id(&params);
 			if let Some(keygen_id) = keygen_id {
-				log::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
+				dkg_logging::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;
 				let n = params.best_authorities.len() as u16;
 				// wait for the start signal
@@ -62,9 +62,9 @@ where
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
 				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, status)?.await?;
-				log::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
+				dkg_logging::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
 			} else {
-				log::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
+				dkg_logging::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
 			}
 
 			Ok(())
@@ -74,11 +74,11 @@ where
 				Ok(_) => {
 					// Set the status as complete.
 					status_handle.set_status(MetaHandlerStatus::Complete);
-					log::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
+					dkg_logging::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
 				}
 				Err(ref err) => {
 					// Do not update the status here, evetually the Keygen will fail and timeout.
-					log::error!(target: "dkg_gadget::keygen", "Keygen failed with error: {:?}", err);
+					dkg_logging::error!(target: "dkg_gadget::keygen", "Keygen failed with error: {:?}", err);
 				}
 			};
 			res
@@ -88,7 +88,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					log::info!(target: "dkg_gadget::keygen", "Stopper has been called {:?}", res1);
+					dkg_logging::info!(target: "dkg_gadget::keygen", "Stopper has been called {:?}", res1);
 					Ok(())
 				}
 			}

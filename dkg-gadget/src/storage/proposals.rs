@@ -17,12 +17,12 @@ use crate::{
 	Client,
 };
 use codec::{Decode, Encode};
+use dkg_logging::debug;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
 	AuthoritySet, DKGApi, OffchainSignedProposals,
 };
-use log::debug;
 use parking_lot::RwLock;
 use rand::Rng;
 use sc_client_api::Backend;

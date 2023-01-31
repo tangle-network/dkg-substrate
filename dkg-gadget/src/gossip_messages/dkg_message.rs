@@ -30,9 +30,9 @@ use std::sync::Arc;
 //
 use crate::{worker::KeystoreExt, DKGKeystore};
 use codec::Encode;
+use dkg_logging::trace;
 use dkg_primitives::types::{DKGMessage, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
-use log::trace;
 
 pub(crate) fn sign_and_send_messages<GE>(
 	gossip_engine: Arc<GE>,
@@ -55,7 +55,7 @@ pub(crate) fn sign_and_send_messages<GE>(
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					log::error!(target: "dkg_gadget::gossip", "Error sending message: {:?}", e);
+					dkg_logging::error!(target: "dkg_gadget::gossip", "Error sending message: {:?}", e);
 				}
 			},
 			Err(e) => trace!(
