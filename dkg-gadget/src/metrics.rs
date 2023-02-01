@@ -38,11 +38,11 @@ pub struct Metrics {
 	pub dkg_unsigned_proposal_counter: Counter<U64>,
 	/// The total number of signed proposals
 	pub dkg_signed_proposal_counter: Counter<U64>,
-	/// The total number of signed proposals seen
+	/// The total number of signed DKG messages seen
 	pub dkg_signed_messages: Counter<U64>,
-	/// The total number of signed proposals seen marked as old
+	/// The total number of signed DKG messages seen marked as old
 	pub dkg_old_signed_messages: Counter<U64>,
-	/// The total number of signed proposals seen marked as new
+	/// The total number of signed DKG messages seen marked as new
 	pub dkg_new_signed_messages: Counter<U64>,
 	/// The total number of keygen misbehaviour errors seen
 	pub dkg_keygen_misbehaviour_error: Counter<U64>,
