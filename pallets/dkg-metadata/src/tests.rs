@@ -14,13 +14,18 @@
 
 use std::vec;
 
-use frame_support::{assert_ok, traits::OnInitialize};
+use frame_support::{assert_ok, traits::Hooks, weights::Weight};
+use sp_core::ByteArray;
+use sp_runtime::traits::Bounded;
 
 use crate::mock::*;
 
 fn init_block(block: u64) {
 	System::set_block_number(block);
 	Session::on_initialize(block);
+	DKGMetadata::on_initialize(block);
+	DKGMetadata::on_idle(block, Weight::max_value());
+	DKGMetadata::on_finalize(block);
 }
 
 #[test]
@@ -117,5 +122,26 @@ fn trigger_emergency_keygen_works() {
 		DKGMetadata::on_initialize(2);
 		// it should be reset to false after the block is initialized
 		assert!(!DKGMetadata::should_execute_emergency_keygen());
+	});
+}
+
+#[test]
+fn refresh_nonce_should_increment_by_one() {
+	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
+		init_block(1);
+		let refresh_nonce = DKGMetadata::refresh_nonce();
+		assert_eq!(refresh_nonce, 0);
+
+		crate::pallet::NextDKGPublicKey::<Test>::put((1, mock_dkg_id(1).to_raw_vec()));
+		crate::pallet::NextPublicKeySignature::<Test>::put(vec![1u8; 64]);
+		init_block(2);
+		let refresh_nonce = DKGMetadata::refresh_nonce();
+		assert_eq!(refresh_nonce, 1);
+
+		crate::pallet::NextDKGPublicKey::<Test>::put((2, mock_dkg_id(2).to_raw_vec()));
+		crate::pallet::NextPublicKeySignature::<Test>::put(vec![2u8; 64]);
+		init_block(3);
+		let refresh_nonce = DKGMetadata::refresh_nonce();
+		assert_eq!(refresh_nonce, 2);
 	});
 }

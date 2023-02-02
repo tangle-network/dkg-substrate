@@ -859,19 +859,20 @@ pub mod pallet {
 				Error::<T>::AlreadySubmittedSignature
 			);
 			let used_signatures = Self::used_signatures();
+			let last_used_nonce = Self::refresh_nonce();
+			let next_nonce = last_used_nonce.saturating_add(1);
 			// Deconstruct the signature and nonce for easier access
 			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
-			ensure!(
-				nonce == Self::refresh_nonce().into() || !signature.is_empty(),
-				Error::<T>::InvalidSignature
-			);
+			ensure!(u32::from(nonce) == next_nonce, Error::<T>::InvalidNonce);
+			ensure!(!signature.is_empty(), Error::<T>::InvalidSignature);
 			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
 			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.clone()).unwrap_or_default();
 			let data = RefreshProposal {
-				nonce: Self::refresh_nonce().into(),
+				// We ensure that the nonce is valid above, so this is safe.
+				nonce,
 				pub_key: uncompressed_pub_key.clone(),
 			};
 			// Verify signature against the `RefreshProposal`
@@ -882,8 +883,10 @@ pub mod pallet {
 						"Invalid signature for RefreshProposal
 						**********************************************************
 						signature: {:?}
+						nonce: {}
 						**********************************************************",
 						hex::encode(signature.clone()),
+						u32::from(nonce),
 					);
 					Error::<T>::InvalidSignature
 				})?;
@@ -1344,9 +1347,8 @@ impl<T: Config> Pallet<T> {
 
 	pub fn do_refresh(pub_key: (u64, Vec<u8>)) {
 		let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-		// the nonce will be auto incremented once we rotate the keys successfully.
 		let data = dkg_runtime_primitives::RefreshProposal {
-			nonce: Self::refresh_nonce().into(),
+			nonce: Self::refresh_nonce().saturating_add(1).into(),
 			pub_key: uncompressed_pub_key,
 		};
 		match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
