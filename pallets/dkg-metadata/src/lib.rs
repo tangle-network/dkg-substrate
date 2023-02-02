@@ -539,6 +539,8 @@ pub mod pallet {
 		UsedSignature,
 		/// Invalid public key signature submission
 		InvalidSignature,
+		/// Invalid Nonece used, must be greater than [`refresh_nonce`].
+		InvalidNonce,
 		/// Invalid misbehaviour reports
 		InvalidMisbehaviourReports,
 		/// DKG Refresh is already in progress.
