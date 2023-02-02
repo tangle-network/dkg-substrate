@@ -1553,7 +1553,7 @@ impl<T: Config> Pallet<T> {
 				uncompressed_pub_key,
 				compressed_pub_key,
 				pub_key_sig: next_pub_key_signature,
-				nonce: current_nonce,
+				nonce: next_nonce,
 			});
 		}
 	}
