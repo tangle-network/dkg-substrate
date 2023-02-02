@@ -564,6 +564,7 @@ pub mod pallet {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
 			uncompressed_pub_key: Vec<u8>,
+			nonce: u32,
 		},
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
@@ -572,6 +573,7 @@ pub mod pallet {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
 			uncompressed_pub_key: Vec<u8>,
+			nonce: u32,
 		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
@@ -897,6 +899,7 @@ pub mod pallet {
 				uncompressed_pub_key,
 				compressed_pub_key: next_pub_key,
 				pub_key_sig: signature,
+				nonce: u32::from(nonce),
 			});
 
 			// now increment the block number at which we expect next unsigned transaction.
@@ -1534,7 +1537,8 @@ impl<T: Config> Pallet<T> {
 				val.push(pub_key_signature.clone());
 			});
 			// and increment the nonce
-			let next_nonce = Self::refresh_nonce().saturating_add(1);
+			let current_nonce = Self::refresh_nonce();
+			let next_nonce = current_nonce.saturating_add(1);
 			RefreshNonce::<T>::put(next_nonce);
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.1.clone()).unwrap_or_default();
@@ -1549,6 +1553,7 @@ impl<T: Config> Pallet<T> {
 				uncompressed_pub_key,
 				compressed_pub_key,
 				pub_key_sig: next_pub_key_signature,
+				nonce: current_nonce,
 			});
 		}
 	}
