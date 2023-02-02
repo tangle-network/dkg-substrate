@@ -143,7 +143,6 @@ impl Metrics {
 		self.dkg_inbound_messages.reset();
 		self.dkg_error_counter.reset();
 		self.dkg_keygen_retry_counter.reset();
-		self.dkg_signing_sets.reset();
 		self.dkg_unsigned_proposal_counter.reset();
 		self.dkg_signed_proposal_counter.reset();
 		self.dkg_signed_messages.reset();
