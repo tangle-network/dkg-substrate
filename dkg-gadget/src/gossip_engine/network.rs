@@ -552,6 +552,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		debug!(target: "dkg", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
+
+		if let Some(metrics) = self.metrics.as_ref() {
+			metrics.dkg_signed_messages.inc();
+		}
+
 		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			let mut pending_messages_peers = self.pending_messages_peers.write();
@@ -572,6 +577,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 			match pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
 					dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
+					if let Some(metrics) = self.metrics.as_ref() {
+						metrics.dkg_new_signed_messages.inc();
+					}
 					enqueue_the_message();
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
@@ -580,6 +588,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 				},
 				Entry::Occupied(mut entry) => {
 					dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "OLD DKG MESSAGE FROM {}", who);
+					if let Some(metrics) = self.metrics.as_ref() {
+						metrics.dkg_old_signed_messages.inc();
+					}
 					// if we are here, that means this peer sent us a message we already know.
 					let inserted = entry.get_mut().insert(who);
 					// and if inserted is `false` that means this peer was already in the set

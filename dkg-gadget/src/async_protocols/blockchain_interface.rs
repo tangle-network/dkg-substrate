@@ -16,6 +16,7 @@ use crate::{
 	async_protocols::BatchKey,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
+	metrics::Metrics,
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
@@ -88,6 +89,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub is_genesis: bool,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
+	pub metrics: Arc<Option<Metrics>>,
 	pub _pd: PhantomData<BE>,
 }
 
@@ -172,6 +174,11 @@ where
 				dkg_logging::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
+
+				if let Some(metrics) = self.metrics.as_ref() {
+					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
+				}
+
 				save_signed_proposals_in_storage::<B, C, BE>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,

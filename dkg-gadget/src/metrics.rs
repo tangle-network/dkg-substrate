@@ -17,7 +17,7 @@ use prometheus::{register, Counter, Gauge, PrometheusError, Registry, U64};
 
 /// DKG metrics exposed through Prometheus
 #[derive(Clone)]
-pub(crate) struct Metrics {
+pub struct Metrics {
 	/// Count to total propogated messages
 	pub dkg_propagated_messages: Counter<U64>,
 	/// Current active validator set id
@@ -34,6 +34,22 @@ pub(crate) struct Metrics {
 	pub dkg_latest_block_height: Gauge<U64>,
 	/// The signing sets for dkg worker
 	pub dkg_signing_sets: Gauge<U64>,
+	/// The total number of unsigned proposals seen
+	pub dkg_unsigned_proposal_counter: Counter<U64>,
+	/// The total number of signed proposals
+	pub dkg_signed_proposal_counter: Counter<U64>,
+	/// The total number of signed DKG messages seen
+	pub dkg_signed_messages: Counter<U64>,
+	/// The total number of signed DKG messages seen marked as old
+	pub dkg_old_signed_messages: Counter<U64>,
+	/// The total number of signed DKG messages seen marked as new
+	pub dkg_new_signed_messages: Counter<U64>,
+	/// The total number of keygen misbehaviour errors seen
+	pub dkg_keygen_misbehaviour_error: Counter<U64>,
+	/// The total number of keygen timeout errors seen
+	pub dkg_keygen_timeout_error: Counter<U64>,
+	/// The total number of sign misbehaviour errors seen
+	pub dkg_sign_misbehaviour_error: Counter<U64>,
 }
 
 impl Metrics {
@@ -77,7 +93,64 @@ impl Metrics {
 				Gauge::new("dkg_signing_sets", "The number of signing sets created")?,
 				registry,
 			)?,
+			dkg_unsigned_proposal_counter: register(
+				Counter::new("dkg_unsigned_proposal_counter", "Number of Unsigned proposals seen")?,
+				registry,
+			)?,
+			dkg_signed_proposal_counter: register(
+				Counter::new("dkg_signed_proposal_counter", "Number of signed proposals")?,
+				registry,
+			)?,
+			dkg_signed_messages: register(
+				Counter::new("dkg_signed_messages", "Number of signed DKG messages received")?,
+				registry,
+			)?,
+			dkg_old_signed_messages: register(
+				Counter::new(
+					"dkg_old_signed_messages",
+					"Number of OLD signed DKG messages received",
+				)?,
+				registry,
+			)?,
+			dkg_new_signed_messages: register(
+				Counter::new(
+					"dkg_new_signed_messages",
+					"Number of NEW signed DKG messages received",
+				)?,
+				registry,
+			)?,
+			dkg_keygen_misbehaviour_error: register(
+				Counter::new(
+					"dkg_keygen_misbehaviour_error",
+					"Number of KeygenMisbehaviour reports",
+				)?,
+				registry,
+			)?,
+			dkg_keygen_timeout_error: register(
+				Counter::new("dkg_keygen_timeout_error", "Number of Keygentimeout reports")?,
+				registry,
+			)?,
+			dkg_sign_misbehaviour_error: register(
+				Counter::new("dkg_sign_misbehaviour_error", "Number of SignMisbehaviour reports")?,
+				registry,
+			)?,
 		})
+	}
+
+	pub(crate) fn reset_session_metrics(&self) {
+		// reset all counters that have to be reset per session
+		self.dkg_propagated_messages.reset();
+		self.dkg_inbound_messages.reset();
+		self.dkg_error_counter.reset();
+		self.dkg_keygen_retry_counter.reset();
+		self.dkg_unsigned_proposal_counter.reset();
+		self.dkg_signed_proposal_counter.reset();
+		self.dkg_signed_messages.reset();
+		self.dkg_old_signed_messages.reset();
+		self.dkg_new_signed_messages.reset();
+		self.dkg_keygen_misbehaviour_error.reset();
+		self.dkg_keygen_timeout_error.reset();
+		self.dkg_sign_misbehaviour_error.reset();
 	}
 }
 

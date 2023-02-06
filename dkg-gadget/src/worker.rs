@@ -321,6 +321,7 @@ where
 				local_keystore: self.local_keystore.clone(),
 				vote_results: Arc::new(Default::default()),
 				is_genesis: stage == ProtoStageType::Genesis,
+				metrics: self.metrics.clone(),
 				_pd: Default::default(),
 			}),
 			session_id,
@@ -1011,6 +1012,10 @@ where
 				}
 				*v = None;
 			});
+			// Reset per session metrics
+			if let Some(metrics) = self.metrics.as_ref() {
+				metrics.reset_session_metrics();
+			}
 		}
 	}
 
@@ -1094,11 +1099,19 @@ where
 			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
 
 		let (bad_actors, session_id) = match dkg_error {
-			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
-			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } =>
-				(bad_actors.clone(), session_id),
+			DKGError::KeygenMisbehaviour { ref bad_actors, .. } => {
+				metric_inc!(self, dkg_keygen_misbehaviour_error);
+				(bad_actors.clone(), 0)
+			},
+			DKGError::KeygenTimeout { ref bad_actors, session_id, .. } => {
+				metric_inc!(self, dkg_keygen_timeout_error);
+				(bad_actors.clone(), session_id)
+			},
 			// Todo: Handle Signing Timeout as a separate case
-			DKGError::SignMisbehaviour { ref bad_actors, .. } => (bad_actors.clone(), 0),
+			DKGError::SignMisbehaviour { ref bad_actors, .. } => {
+				metric_inc!(self, dkg_sign_misbehaviour_error);
+				(bad_actors.clone(), 0)
+			},
 			_ => Default::default(),
 		};
 
@@ -1331,6 +1344,8 @@ where
 				for proposal in res {
 					if let Some(hash) = proposal.hash() {
 						if !self.currently_signing_proposals.read().contains(&hash) {
+							// update unsigned proposal counter
+							metric_inc!(self, dkg_unsigned_proposal_counter);
 							filtered_unsigned_proposals.push(proposal);
 						}
 					}
