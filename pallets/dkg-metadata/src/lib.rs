@@ -539,6 +539,8 @@ pub mod pallet {
 		UsedSignature,
 		/// Invalid public key signature submission
 		InvalidSignature,
+		/// Invalid Nonece used, must be greater than [`refresh_nonce`].
+		InvalidNonce,
 		/// Invalid misbehaviour reports
 		InvalidMisbehaviourReports,
 		/// DKG Refresh is already in progress.
@@ -562,6 +564,7 @@ pub mod pallet {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
 			uncompressed_pub_key: Vec<u8>,
+			nonce: u32,
 		},
 		/// Current Public Key Changed.
 		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
@@ -570,6 +573,7 @@ pub mod pallet {
 			pub_key_sig: Vec<u8>,
 			compressed_pub_key: Vec<u8>,
 			uncompressed_pub_key: Vec<u8>,
+			nonce: u32,
 		},
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
@@ -857,19 +861,20 @@ pub mod pallet {
 				Error::<T>::AlreadySubmittedSignature
 			);
 			let used_signatures = Self::used_signatures();
+			let last_used_nonce = Self::refresh_nonce();
+			let next_nonce = last_used_nonce.saturating_add(1);
 			// Deconstruct the signature and nonce for easier access
 			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
-			ensure!(
-				nonce == Self::refresh_nonce().into() || !signature.is_empty(),
-				Error::<T>::InvalidSignature
-			);
+			ensure!(u32::from(nonce) == next_nonce, Error::<T>::InvalidNonce);
+			ensure!(!signature.is_empty(), Error::<T>::InvalidSignature);
 			ensure!(!used_signatures.contains(&signature), Error::<T>::UsedSignature);
 
 			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.clone()).unwrap_or_default();
 			let data = RefreshProposal {
-				nonce: Self::refresh_nonce().into(),
+				// We ensure that the nonce is valid above, so this is safe.
+				nonce,
 				pub_key: uncompressed_pub_key.clone(),
 			};
 			// Verify signature against the `RefreshProposal`
@@ -880,8 +885,10 @@ pub mod pallet {
 						"Invalid signature for RefreshProposal
 						**********************************************************
 						signature: {:?}
+						nonce: {}
 						**********************************************************",
 						hex::encode(signature.clone()),
+						u32::from(nonce),
 					);
 					Error::<T>::InvalidSignature
 				})?;
@@ -892,6 +899,7 @@ pub mod pallet {
 				uncompressed_pub_key,
 				compressed_pub_key: next_pub_key,
 				pub_key_sig: signature,
+				nonce: u32::from(nonce),
 			});
 
 			// now increment the block number at which we expect next unsigned transaction.
@@ -1342,9 +1350,8 @@ impl<T: Config> Pallet<T> {
 
 	pub fn do_refresh(pub_key: (u64, Vec<u8>)) {
 		let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-		// the nonce will be auto incremented once we rotate the keys successfully.
 		let data = dkg_runtime_primitives::RefreshProposal {
-			nonce: Self::refresh_nonce().into(),
+			nonce: Self::refresh_nonce().saturating_add(1).into(),
 			pub_key: uncompressed_pub_key,
 		};
 		match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
@@ -1530,7 +1537,8 @@ impl<T: Config> Pallet<T> {
 				val.push(pub_key_signature.clone());
 			});
 			// and increment the nonce
-			let next_nonce = Self::refresh_nonce().saturating_add(1);
+			let current_nonce = Self::refresh_nonce();
+			let next_nonce = current_nonce.saturating_add(1);
 			RefreshNonce::<T>::put(next_nonce);
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.1.clone()).unwrap_or_default();
@@ -1545,6 +1553,7 @@ impl<T: Config> Pallet<T> {
 				uncompressed_pub_key,
 				compressed_pub_key,
 				pub_key_sig: next_pub_key_signature,
+				nonce: next_nonce,
 			});
 		}
 	}
