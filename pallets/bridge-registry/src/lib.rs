@@ -69,10 +69,10 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
+	use codec::MaxEncodedLen;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T, I = ()>(_);
 
 	#[pallet::config]
@@ -87,7 +87,7 @@ pub mod pallet {
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Bridge index type
-		type BridgeIndex: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+		type BridgeIndex: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy + MaxEncodedLen;
 
 		/// Maximum number of additional fields that may be stored in a bridge's metadata. Needed to
 		/// bound the I/O required to access an identity, but can be pretty high.
