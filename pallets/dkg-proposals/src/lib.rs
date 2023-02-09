@@ -127,13 +127,13 @@ pub mod pallet {
 		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
 		weights::WeightInfo,
 	};
+	use codec::MaxEncodedLen;
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -146,7 +146,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
+		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]> + MaxEncodedLen;
 
 		/// Estimate next session rotation
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
@@ -173,6 +173,10 @@ pub mod pallet {
 		/// The session period
 		#[pallet::constant]
 		type Period: Get<Self::BlockNumber>;
+
+		/// The max votes to store for for and against
+		#[pallet::constant]
+		type MaxVotes: Get<u32>;
 
 		type ProposalHandler: ProposalHandlerTrait;
 
@@ -240,7 +244,7 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_256,
 		(ProposalNonce, T::Proposal),
-		ProposalVotes<T::AccountId, T::BlockNumber>,
+		ProposalVotes<T::AccountId, T::BlockNumber, T::MaxVotes>,
 	>;
 
 	/// Utilized by the bridge software to map resource IDs to actual methods
@@ -621,6 +625,7 @@ impl<T: Config> Pallet<T> {
 			None => ProposalVotes::<
 				<T as frame_system::Config>::AccountId,
 				<T as frame_system::Config>::BlockNumber,
+				<T as Config>::MaxVotes,
 			> {
 				expiry: now + T::ProposalLifetime::get(),
 				..Default::default()
