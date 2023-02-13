@@ -20,6 +20,7 @@ pub mod handlers;
 pub mod offchain;
 pub mod proposal;
 pub mod traits;
+pub mod nonce;
 pub mod utils;
 
 use crypto::AuthorityId;

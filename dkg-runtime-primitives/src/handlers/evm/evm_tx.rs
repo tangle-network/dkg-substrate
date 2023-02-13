@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{handlers::validate_proposals::ValidationError, ProposalNonce};
+use crate::{handlers::validate_proposals::ValidationError};
+use crate::nonce::ProposalNonce;
 use codec::{alloc::string::ToString, Decode};
 use ethereum::{
 	EIP1559TransactionMessage, EIP2930TransactionMessage, LegacyTransactionMessage, TransactionV2,
