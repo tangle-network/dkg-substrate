@@ -139,6 +139,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type SessionPeriod = Period;
 	type WeightInfo = ();
 }
 

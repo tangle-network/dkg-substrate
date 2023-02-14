@@ -234,6 +234,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type UnsignedPriority: Get<TransactionPriority>;
 
+		/// Session length helper allowing to query session length across runtime upgrades.
+		#[pallet::constant]
+		type SessionPeriod: Get<Self::BlockNumber>;
+
 		type WeightInfo: WeightInfo;
 	}
 
