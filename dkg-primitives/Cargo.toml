@@ -6,25 +6,25 @@ homepage = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-log = "0.4"
-libsecp256k1 = { version = "0.7.1", default-features = false }
+log = { workspace = true }
+libsecp256k1 = { workspace = true }
 sha3 = "0.9"
-hex = "0.4"
-serde_json = "1.0"
+hex = { workspace = true }
+serde_json = { workspace = true }
 
 codec = { version = "3", package = "parity-scale-codec", features = ["derive"] }
-rand = "0.8.4"
+rand = { workspace = true }
 chacha20poly1305 = "0.9.0"
-clap = { version = "4.0.29", features = ["derive"] }
-curv = { package = "curv-kzen", version = "0.10.0" }
+clap = { workspace = true }
+curv = { workspace = true }
 
-multi-party-ecdsa = { default-features = false, git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-dkg-runtime-primitives = { path = "../dkg-runtime-primitives" }
-sc-cli = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+multi-party-ecdsa = { workspace = true }
+sp-core = { workspace = true }
+sc-service = { workspace = true }
+sp-runtime = { workspace = true }
+sp-keystore = { workspace = true }
+dkg-runtime-primitives = { workspace = true }
+sc-cli = { workspace = true }
 
 [dev-dependencies]
-sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-keyring = { workspace = true }
