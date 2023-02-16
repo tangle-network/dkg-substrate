@@ -166,6 +166,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
+	type SessionPeriod = Period;
 	type Reputation = u128;
 	type UnsignedInterval = frame_support::traits::ConstU64<0>;
 	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;

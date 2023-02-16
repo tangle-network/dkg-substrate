@@ -2,11 +2,14 @@ name: run
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]  
+    branches: [master]
 
   workflow_dispatch:
+
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
 
 jobs:
   # dkg-substrate integration tests
@@ -42,7 +45,7 @@ jobs:
 
       - name: Populate fixtures
         run: dvc pull
-      
+
       - name: Install Protobuf
         run: sudo apt-get install protobuf-compiler
 
@@ -60,7 +63,7 @@ jobs:
 
       - name: Run E2E Tests
         run: cd dkg-test-suite && yarn test:e2e
-      
+
   integration-tests:
     name: integration-tests
     runs-on: ubuntu-latest
