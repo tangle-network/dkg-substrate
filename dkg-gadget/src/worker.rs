@@ -886,7 +886,7 @@ where
 				return
 			}
 		} else {
-			debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+			debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrieve session progress percentage!");
 			return
 		}
 		// Get the active and queued validators to check for updates
@@ -905,14 +905,14 @@ where
 				return
 			}
 
-			let has_keygen = self.next_rounds.read().is_some();
-			debug!(target: "dkg_gadget::worker", "🕸️  HAS KEYGEN: {:?}", has_keygen);
+			let has_next_rounds = self.next_rounds.read().is_some();
+			debug!(target: "dkg_gadget::worker", "🕸️  HAS KEYGEN: {:?}", has_next_rounds);
 			// Check if there is a next DKG Key on-chain.
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
 			// Start a keygen if we don't have one.
 			// only if there is no queued key on chain.
-			if !has_keygen && next_dkg_key.is_none() {
+			if !has_next_rounds && next_dkg_key.is_none() {
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Reset the Retry counter.
@@ -920,13 +920,16 @@ where
 				return
 			}
 
+			// If the party_index is returned as 0, it means that this actor is not in the best authorities
+			let maybe_party_index = self.get_next_party_index(header).unwrap_or(0);
+
 			// Check if we are stalled:
 			// a read only clone, to avoid holding the lock for the whole duration of the function
 			let lock = self.next_rounds.read();
 			let next_rounds_clone = (*lock).clone();
 			drop(lock);
 			if let Some(ref rounds) = next_rounds_clone {
-				debug!(target: "dkg_gadget::worker", "🕸️  Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
+				debug!(target: "dkg_gadget::worker", "🕸️  My Index: {my_index}, Status: {:?}, Now: {:?}, Started At: {:?}, Timeout length: {:?}", rounds.status, header.number(), rounds.started_at, KEYGEN_TIMEOUT);
 				let keygen_stalled = rounds.keygen_has_stalled(*header.number());
 				let (current_attmp, max, should_retry) = {
 					// check how many authorities are in the next best authorities
@@ -946,7 +949,7 @@ where
 					if keygen_stalled {
 						debug!(
 							target: "dkg_gadget::worker",
-							"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}"
+							"Calculated retry conditions => n: {n}, t: {t}, current_attempt: {v}, max: {max_retries}, should_retry: {should_retry}, my_index: {my_index}",
 						);
 					}
 					(v, max_retries, should_retry)
@@ -965,6 +968,7 @@ where
 							rounds.current_round_blame().blamed_parties,
 						),
 						session_id: rounds.session_id,
+						my_index: maybe_party_index.into(),
 					})
 				}
 			}

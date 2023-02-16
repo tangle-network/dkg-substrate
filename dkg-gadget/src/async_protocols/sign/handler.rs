@@ -74,7 +74,7 @@ where
 
 				start_rx
 					.await
-					.map_err(|err| DKGError::StartOffline { reason: err.to_string() })?;
+					.map_err(|err| DKGError::StartOffline { reason: err.to_string(), my_index: keygen_id.into() })?;
 
 				params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 				let count_in_batch = unsigned_proposals.len();
@@ -216,7 +216,7 @@ where
 
 			let (signing, partial_signature) =
 				SignManual::new(message.clone(), completed_offline_stage)
-					.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
+					.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(maybe_party_i.unwrap().into(), err))?;
 
 			let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
 
@@ -275,7 +275,7 @@ where
 			dkg_logging::info!("RD1");
 			let signature = signing
 				.complete(&sigs)
-				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
+				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(party_ind.into(), err))?;
 
 			dkg_logging::info!("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
@@ -309,36 +309,37 @@ where
 	/// The aim of the function is to filter out the bad_actors from the mp_ecdsa errors that
 	/// contain them
 	fn convert_mpc_sign_error_to_dkg_error(
+		i: usize,
 		error: multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::SignError,
 	) -> DKGError {
 		use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::ProceedError::*;
 		match error {
 			LocalSigning(Round1(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 			CompleteSigning(Round1(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 
 			LocalSigning(Round2Stage4(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 			CompleteSigning(Round2Stage4(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 
 			LocalSigning(Round3(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 			CompleteSigning(Round3(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 
 			LocalSigning(Round5(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 			CompleteSigning(Round5(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 
 			LocalSigning(Round6VerifyProof(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 			CompleteSigning(Round6VerifyProof(e)) =>
-				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors },
+				DKGError::SignMisbehaviour { reason: e.error_type, bad_actors: e.bad_actors, my_index: i },
 
-			_ => DKGError::SignMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+			_ => DKGError::SignMisbehaviour { reason: error.to_string(), bad_actors: vec![], my_index: i },
 		}
 	}
 }

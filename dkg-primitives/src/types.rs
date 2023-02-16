@@ -250,37 +250,37 @@ pub enum DKGResult {
 
 #[derive(Debug, Clone)]
 pub enum DKGError {
-	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize> },
-	KeygenTimeout { session_id: SessionId, bad_actors: Vec<usize> },
-	StartKeygen { reason: String },
-	StartOffline { reason: String },
+	KeygenMisbehaviour { reason: String, bad_actors: Vec<usize>, my_index: usize },
+	KeygenTimeout { session_id: SessionId, bad_actors: Vec<usize>, my_index: usize },
+	StartKeygen { reason: String, my_index: usize },
+	StartOffline { reason: String, my_index: usize },
 	CreateOfflineStage { reason: String },
 	Vote { reason: String },
 	CriticalError { reason: String },
 	GenericError { reason: String }, // TODO: handle other
 	NoAuthorityAccounts,
 	NoHeader,
-	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	SignMisbehaviour { reason: String, bad_actors: Vec<usize>, my_index: usize },
 }
 
 impl fmt::Display for DKGError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use DKGError::*;
 		let label = match self {
-			KeygenMisbehaviour { bad_actors, reason } =>
-				format!("Keygen misbehaviour: reason: {reason} bad actors: {bad_actors:?}"),
-			KeygenTimeout { bad_actors, session_id } =>
-				format!("Keygen timeout @ Session({session_id}): bad actors: {bad_actors:?}"),
+			KeygenMisbehaviour { bad_actors, reason, my_index } =>
+				format!("Keygen misbehaviour: reason: {reason} bad actors: {bad_actors:?}, my_index: {my_index:?}"),
+			KeygenTimeout { bad_actors, session_id, my_index } =>
+				format!("Keygen timeout @ Session({session_id}): bad actors: {bad_actors:?}, my_index: {my_index:?}"),
 			Vote { reason } => format!("Vote: {reason}"),
-			StartKeygen { reason } => format!("Start keygen: {reason}"),
+			StartKeygen { reason, my_index } => format!("Start keygen: {reason}, my_index: {my_index:?}"),
 			CreateOfflineStage { reason } => format!("Create offline stage: {reason}"),
 			CriticalError { reason } => format!("Critical error: {reason}"),
 			GenericError { reason } => format!("Generic error: {reason}"),
-			StartOffline { reason } => format!("Unable to start Offline Signing: {reason}"),
+			StartOffline { reason, my_index } => format!("Unable to start Offline Signing: {reason}, my_index: {my_index:?}"),
 			NoAuthorityAccounts => "No Authority accounts found!".to_string(),
 			NoHeader => "No Header!".to_string(),
-			SignMisbehaviour { reason, bad_actors } =>
-				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
+			SignMisbehaviour { reason, bad_actors, my_index } =>
+				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}, my_index: {my_index:?}"),
 		};
 		write!(f, "DKGError of type {label}")
 	}

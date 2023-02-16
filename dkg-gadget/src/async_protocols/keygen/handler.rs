@@ -57,7 +57,7 @@ where
 				// wait for the start signal
 				start_rx
 					.await
-					.map_err(|err| DKGError::StartKeygen { reason: err.to_string() })?;
+					.map_err(|err| DKGError::StartKeygen { reason: err.to_string(), my_index: keygen_id.into() })?;
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
@@ -111,7 +111,7 @@ where
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
-			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
+			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(i.into(), err))?,
 			params,
 			channel_type,
 			0,
@@ -120,6 +120,7 @@ where
 	}
 
 	fn map_keygen_error_to_dkg_error(
+		i: usize,
 		error : multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error,
 	) -> DKGError {
 		match error {
@@ -128,17 +129,24 @@ where
 				DKGError::KeygenMisbehaviour {
 					reason: e.error_type.to_string(),
 					bad_actors: e.bad_actors,
+					my_index: i,
 				},
 			ProceedRound(ProceedError::Round3VerifyVssConstruct(e)) =>
 				DKGError::KeygenMisbehaviour {
 					reason: e.error_type.to_string(),
 					bad_actors: e.bad_actors,
+					my_index: i,
 				},
 			ProceedRound(ProceedError::Round4VerifyDLogProof(e)) => DKGError::KeygenMisbehaviour {
 				reason: e.error_type.to_string(),
 				bad_actors: e.bad_actors,
+				my_index: i,
 			},
-			_ => DKGError::KeygenMisbehaviour { reason: error.to_string(), bad_actors: vec![] },
+			_ => DKGError::KeygenMisbehaviour {
+				reason: error.to_string(),
+				bad_actors: vec![],
+				my_index: i,
+			},
 		}
 	}
 }
