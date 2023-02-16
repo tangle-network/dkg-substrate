@@ -1,12 +1,13 @@
 [package]
 name = "dkg-rococo-runtime"
-authors = ["Webb tools"]
 description = "Webb Protocol DKG Network runtime"
-license = "Unlicense"
 version = "3.0.0"
-homepage = "https://webb.tools"
-repository = "https://github.com/webb-tools/dkg-substrate"
-edition = "2021"
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 

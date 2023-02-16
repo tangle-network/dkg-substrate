@@ -1,7 +1,9 @@
 [package]
 name = "dkg-primitives"
 version = "0.0.1"
-edition = "2021"
+repository = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
 log = "0.4"

@@ -1,12 +1,13 @@
 [package]
-authors = ["Webb Technologies Inc."]
 description = "FRAME pallet for proposing and reporting signed transaction blobs."
-edition = "2021"
-homepage = "https://substrate.dev"
-license = "Unlicense"
 name = "pallet-dkg-proposals"
-repository = "https://github.com/substrate-developer-hub/substrate-darkwebb-node/"
 version = "1.0.0"
+authors = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

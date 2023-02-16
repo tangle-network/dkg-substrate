@@ -1,18 +1,25 @@
 [package]
 name = "dkg-standalone-runtime"
 version = "3.0.0"
-description = "A fresh FRAME-based Substrate runtime, ready for hacking."
-authors = ["Webb tools"]
-homepage = "https://webb.tools/"
-edition = "2021"
-license = "Unlicense"
-publish = false
-repository = "https://github.com/webb-tools/dkg-substrate"
+description = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
+# Local dependencies
+dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
+pallet-dkg-metadata = { path = "../../pallets/dkg-metadata", default-features = false }
+pallet-dkg-proposals = { path = "../../pallets/dkg-proposals", default-features = false }
+pallet-dkg-proposal-handler = { path = "../../pallets/dkg-proposal-handler", default-features = false }
+pallet-bridge-registry = { path = "../../pallets/bridge-registry", default-features = false }
+
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 
@@ -49,13 +56,6 @@ sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkad
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
 pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
 cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus.git", branch = "polkadot-v0.9.36", default-features = false }
-
-# Local dependencies
-dkg-runtime-primitives = { path = "../../dkg-runtime-primitives", default-features = false }
-pallet-dkg-metadata = { path = "../../pallets/dkg-metadata", default-features = false }
-pallet-dkg-proposals = { path = "../../pallets/dkg-proposals", default-features = false }
-pallet-dkg-proposal-handler = { path = "../../pallets/dkg-proposal-handler", default-features = false }
-pallet-bridge-registry = { path = "../../pallets/bridge-registry", default-features = false }
 
 # Used for the node template"s RPCs
 frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }

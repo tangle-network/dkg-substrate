@@ -1,5 +1,11 @@
-[profile.release]
-panic = 'unwind'
+[workspace.package]
+description = "A fresh FRAME-based Substrate runtime, ready for hacking."
+authors = ["Webb tools"]
+license = "Unlicense"
+publish = false
+homepage = "https://webb.tools/"
+repository = "https://github.com/webb-tools/dkg-substrate"
+edition = "2021"
 
 [workspace]
 members = [
@@ -12,3 +18,6 @@ members = [
 	'dkg-gadget',
 	'dkg-logging'
 ]
+
+[profile.release]
+panic = 'unwind'
