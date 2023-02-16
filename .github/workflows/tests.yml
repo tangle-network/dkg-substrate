@@ -9,6 +9,9 @@ on:
 
   workflow_dispatch:
 
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
+
 jobs:
   # dkg-substrate base unit tests
   tests:
@@ -23,7 +26,7 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
-          remove-dotnet: 'true'
+          remove-dotnet: "true"
 
       - name: Clear up disk space (2)
         run: |

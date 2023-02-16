@@ -238,6 +238,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type SessionPeriod = Period;
 	type DecayPercentage = DecayPercentage;
 	type Reputation = u128;
 	type UnsignedInterval = frame_support::traits::ConstU64<0>;
