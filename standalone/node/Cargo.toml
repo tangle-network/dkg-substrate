@@ -20,8 +20,6 @@ name = "dkg-standalone-node"
 futures = "0.3.15"
 clap = { version = "4.0.32", features = ["derive"] }
 rand = "0.7.2"
-serde_json = "1.0"
-codec = { package = "parity-scale-codec", version = "3" }
 hex-literal = { package = "hex-literal", version = "0.3.3" }
 
 sc-cli = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
@@ -35,21 +33,17 @@ sc-transaction-pool-api = { default-features = false, git = "https://github.com/
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-consensus-aura = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-consensus = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sc-consensus-manual-seal = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-inherents = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-finality-grandpa = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-finality-grandpa = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-client-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sc-network = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-network-common = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 pallet-im-online = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
 # These dependencies are used for the node template's RPCs
 jsonrpsee = { version = "0.16.2", features = ["server"] }
-sc-rpc = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-keyring = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-rpc-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }

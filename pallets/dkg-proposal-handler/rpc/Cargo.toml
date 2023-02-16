@@ -6,22 +6,14 @@ authors = ["Webb Tools"]
 
 [dependencies]
 jsonrpsee = { version = "0.16.2", features = ["server"] }
-sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
-codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-sp-core = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-blockchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
-pallet-dkg-proposal-handler-runtime-api = { path = "./runtime-api", default-features = false }
-
 [features]
 default = ["std"]
 std = [
-    "codec/std",
-    "pallet-dkg-proposal-handler-runtime-api/std",
-    "sp-core/std",
     "sp-runtime/std",
     "sp-api/std"
 ]

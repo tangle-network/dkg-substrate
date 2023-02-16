@@ -10,4 +10,3 @@ license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 [dependencies]
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
-log = "0.4.17"

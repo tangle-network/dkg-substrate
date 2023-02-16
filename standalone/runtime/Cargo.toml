@@ -44,10 +44,8 @@ sp-transaction-pool = { git = "https://github.com/paritytech/substrate", branch 
 sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-staking-reward-curve = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-election-provider-multi-phase = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-npos-elections = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 frame-election-provider-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-staking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 pallet-identity = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
 pallet-im-online = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", default-features = false }
 cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus.git", branch = "polkadot-v0.9.36", default-features = false }
@@ -107,10 +105,8 @@ std = [
 	"pallet-staking/std",
 	"pallet-im-online/std",
 	"pallet-election-provider-multi-phase/std",
-	"sp-npos-elections/std",
 	"frame-election-provider-support/std",
 	"sp-staking/std",
-	"sp-io/std",
 	"cumulus-primitives-core/std",
 
 	# DKG dependencies
