@@ -24,10 +24,9 @@ use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_session_id,
-	incoming::IncomingAsyncProtocolWrapper, new_inner, remote::MetaHandlerStatus,
-	state_machine::StateMachineHandler, AsyncProtocolParameters, BatchKey, GenericAsyncHandler,
-	PartyIndex, ProtocolType, Threshold,
+	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
+	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
+	BatchKey, GenericAsyncHandler, PartyIndex, ProtocolType, Threshold,
 };
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
@@ -68,8 +67,7 @@ where
 
 		let protocol = async move {
 			let maybe_local_key = params.local_key.clone();
-			let (keygen_id, _b, _c) = get_party_session_id(&params);
-			if let (Some(keygen_id), Some(local_key)) = (keygen_id, maybe_local_key) {
+			if let Some(local_key) = maybe_local_key {
 				let t = threshold;
 
 				start_rx
@@ -82,7 +80,8 @@ where
 
 				dkg_logging::debug!(target: "dkg", "Got unsigned proposals count {}", unsigned_proposals.len());
 
-				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, keygen_id) {
+				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, params.party_i)
+				{
 					dkg_logging::info!(target: "dkg", "Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
@@ -184,6 +183,8 @@ where
 		batch_key: BatchKey,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
+		assert_eq!(party_ind, params.party_i);
+
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
@@ -194,18 +195,10 @@ where
 			// the below wrapper will map signed messages into unsigned messages
 			let incoming = rx;
 			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
-			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
-			// Looks like we are not in the best authority set, so we will skip this keygen.
-			if maybe_party_i.is_none() {
-				dkg_logging::error!(target: "dkg", "🕸️  We are not among signers, skipping");
-				return Err(DKGError::CriticalError {
-					reason: "We are not among signers, skipping".to_string(),
-				})
-			}
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
-			dkg_logging::info!(target: "dkg", "Will now begin the voting stage with n={} parties for idx={}", number_of_parties, party_ind);
+			dkg_logging::info!(target: "dkg", "Will now begin the voting stage with n={} parties with party_index={}", number_of_parties, party_ind);
 
 			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
 				reason: "The unsigned proposal for this stage is invalid".to_string(),
@@ -231,9 +224,14 @@ where
 				async_index,
 			});
 
+			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
-			let unsigned_dkg_message =
-				DKGMessage { sender_id: id, status: DKGMsgStatus::ACTIVE, payload, session_id };
+			let unsigned_dkg_message = DKGMessage {
+				sender_id: id,
+				status: DKGMsgStatus::ACTIVE,
+				payload,
+				session_id: params.session_id,
+			};
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 
 			// we only need a threshold count of sigs
@@ -286,7 +284,7 @@ where
 			params.engine.process_vote_result(
 				signature,
 				unsigned_proposal,
-				session_id,
+				params.session_id,
 				batch_key,
 				message,
 			)
