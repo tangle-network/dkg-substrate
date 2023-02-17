@@ -183,8 +183,6 @@ where
 		batch_key: BatchKey,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
-		assert_eq!(party_ind, params.party_i);
-
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
