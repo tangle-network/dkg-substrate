@@ -5216,7 +5216,7 @@ dependencies = [
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.8.2"
-source = "git+https://github.com/webb-tools/multi-party-ecdsa.git#dbfa21f13d4f75283a1cccd47213e49146a17d4d"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git#fafc0dc4c9236d2bf1d907a0e233ce2de1cd61e2"
 dependencies = [
  "centipede",
  "curv-kzen",
