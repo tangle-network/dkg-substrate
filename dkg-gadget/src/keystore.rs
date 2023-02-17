@@ -19,7 +19,7 @@ use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, R
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
-use dkg_logging::trace;
+use dkg_logging::warn;
 
 use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
