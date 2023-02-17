@@ -26,7 +26,7 @@ use tokio::sync::broadcast::Receiver;
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, PartyIndex, ProtocolType, Threshold,
+	BatchKey, GenericAsyncHandler, ProtocolType, Threshold,
 };
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
@@ -146,7 +146,7 @@ where
 	fn new_offline<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal,
-		i: u16,
+		offline_i: u16,
 		s_l: Vec<u16>,
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
@@ -156,14 +156,14 @@ where
 	{
 		let channel_type = ProtocolType::Offline {
 			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
-			i,
+			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
 		new_inner(
-			(unsigned_proposal, i, early_handle, threshold, batch_key),
-			OfflineStage::new(i, s_l, local_key)
+			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
+			OfflineStage::new(offline_i, s_l, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
@@ -177,19 +177,18 @@ where
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal,
-		party_ind: PartyIndex,
+		// offline_i is the index of a party’s party_index in the signing list s_l
+		offline_i: u16,
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
-		assert_eq!(party_ind, params.party_i);
-
 		let protocol = Box::pin(async move {
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
-				i: party_ind,
+				i: offline_i,
 			};
 
 			// the below wrapper will map signed messages into unsigned messages
@@ -198,7 +197,7 @@ where
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
-			dkg_logging::info!(target: "dkg", "Will now begin the voting stage with n={} parties with party_index={}", number_of_parties, party_ind);
+			dkg_logging::info!(target: "dkg", "Will now begin the voting stage with n={} parties with offline_i={}", number_of_parties, offline_i);
 
 			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
 				reason: "The unsigned proposal for this stage is invalid".to_string(),
@@ -214,7 +213,7 @@ where
 			let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
 
 			let payload = DKGMsgPayload::Vote(DKGVoteMessage {
-				party_ind,
+				party_ind: offline_i,
 				// use the hash of proposal as "round key" ONLY for purposes of ensuring
 				// uniqueness We only want voting to happen amongst voters under the SAME
 				// proposal, not different proposals This is now especially necessary since we
@@ -261,7 +260,7 @@ where
 				}
 			}
 
-			dkg_logging::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
+			dkg_logging::info!("RD0 on {} for {:?}", offline_i, hash_of_proposal);
 
 			if sigs.len() != number_of_partial_sigs {
 				dkg_logging::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
