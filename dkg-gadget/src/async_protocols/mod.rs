@@ -41,7 +41,10 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey, sign::CompletedOfflineStage,
 };
 use parking_lot::RwLock;
-use round_based::{async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg, StateMachine};
+use round_based::{
+	async_runtime::{self, watcher::StderrWatcher},
+	AsyncProtocol, IsCritical, Msg, StateMachine,
+};
 use serde::Serialize;
 use std::{
 	fmt::{Debug, Formatter},
@@ -268,16 +271,57 @@ where
 	let params_for_end_of_proto = params.clone();
 
 	let async_proto = Box::pin(async move {
-		let res = async_proto
-			.run()
-			.await
-			.map_err(|err| DKGError::GenericError { reason: format!("{err:?}") });
-		match res {
-			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param, async_index).await,
-			Err(err) => {
-				dkg_logging::error!(target: "dkg", "Async Proto Errored: {:?}", err);
-				Err(err)
-			},
+		// Loop and wait for the protocol to finish.
+		loop {
+			let res = async_proto.run().await;
+			match res {
+				Ok(v) =>
+					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
+						.await,
+				Err(err) => match err {
+					async_runtime::Error::Recv(e) |
+					async_runtime::Error::Proceed(e) |
+					async_runtime::Error::HandleIncoming(e) |
+					async_runtime::Error::HandleIncomingTimeout(e) |
+					async_runtime::Error::Finish(e)
+						if e.is_critical() =>
+					{
+						dkg_logging::error!(target: "dkg", "Async Proto Cought Critical Error: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::Send(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Failed to send outgoing messages: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::ProceedPanicked(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto `proceed` method panicked: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::InternalError(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Internal Error: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::Exhausted => {
+						dkg_logging::error!(target: "dkg", "Async Proto Exhausted");
+						return Err(DKGError::GenericError { reason: String::from("Exhausted") })
+					},
+					async_runtime::Error::RecvEof => {
+						dkg_logging::error!(target: "dkg", "Async Proto Incoming channel closed");
+						return Err(DKGError::GenericError {
+							reason: String::from("RecvEof: Incomming channel closed"),
+						})
+					},
+					async_runtime::Error::BadStateMachine(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Bad State Machine: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					_ => {
+						// If the protocol errored, but it's not a critical error, then we
+						// should continue to run the protocol.
+						dkg_logging::error!(target: "dkg", "Async Proto Cought Non-Critical Error: {err:?}");
+					},
+				},
+			};
 		}
 	});
 

@@ -16,7 +16,6 @@ use crate::{mock::*, UnsignedProposalQueue};
 use codec::Encode;
 use frame_support::{
 	assert_err, assert_ok,
-	dispatch::DispatchClass,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 };
