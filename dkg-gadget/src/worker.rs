@@ -437,7 +437,7 @@ where
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
-									dkg_logging::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
+									info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 								},
 
 								Err(err) => {
@@ -508,7 +508,7 @@ where
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
-					dkg_logging::info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
+					info!(target: "dkg_gadget::worker", "The meta handler has executed successfully");
 					Ok(async_index)
 				},
 
@@ -743,11 +743,11 @@ where
 		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
 		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id:?}");
 			*self.rounds.write() = None;
 			return
 		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session {:?}", session_id);
+			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id:?}, party_index: {maybe_party_index:?}");
 		}
 
 		let best_authorities: Vec<Public> =
@@ -776,8 +776,8 @@ where
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
 				return
 			} else {
+				// Proceed to clear the next rounds.
 				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
-				// clear the next rounds.
 			}
 		}
 		// Get the best next authorities using the keygen threshold
@@ -793,7 +793,7 @@ where
 		}
 
 		*self.best_next_authorities.write() = self.get_next_best_authorities(header);
-		let best_authorities: Vec<Public> =
+		let next_best_authorities: Vec<Public> =
 			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_next_signature_threshold(header);
 
@@ -801,7 +801,7 @@ where
 		// spawn the Keygen protocol for the Queued DKG.
 		debug!(target: "dkg_gadget::worker", "🕸️  Spawning keygen protocol for queued DKG");
 		self.spawn_keygen_protocol(
-			best_authorities,
+			next_best_authorities,
 			authority_public_key,
 			session_id,
 			threshold,
@@ -905,14 +905,14 @@ where
 				return
 			}
 
-			let has_keygen = self.next_rounds.read().is_some();
-			debug!(target: "dkg_gadget::worker", "🕸️  HAS KEYGEN: {:?}", has_keygen);
+			let has_next_rounds = self.next_rounds.read().is_some();
+			debug!(target: "dkg_gadget::worker", "🕸️  HAS NEXT ROUND KEYGEN: {:?}", has_next_rounds);
 			// Check if there is a next DKG Key on-chain.
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
 			// Start a keygen if we don't have one.
 			// only if there is no queued key on chain.
-			if !has_keygen && next_dkg_key.is_none() {
+			if !has_next_rounds && next_dkg_key.is_none() {
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Reset the Retry counter.
@@ -1411,7 +1411,7 @@ where
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
 			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
-				dkg_logging::info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
+				info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
@@ -1450,7 +1450,7 @@ where
 				// has logic to handle errors internally, including misbehaviour monitors
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
-					dkg_logging::info!(target: "dkg_gadget::worker", "*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***", _success);
+					info!(target: "dkg_gadget::worker", "*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***", _success);
 				} else {
 					dkg_logging::warn!(target: "dkg_gadget::worker", "*** UNSUCCESSFULLY EXECUTED meta signing protocol");
 				}
