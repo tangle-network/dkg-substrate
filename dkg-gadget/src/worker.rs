@@ -285,6 +285,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
+		party_i: u16,
 		session_id: SessionId,
 		stage: ProtoStageType,
 		async_index: u8,
@@ -329,6 +330,7 @@ where
 			keystore: self.key_store.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities,
+			party_i,
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
 			handle: status_handle.clone(),
@@ -401,6 +403,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
+		party_i: u16,
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
@@ -408,6 +411,7 @@ where
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
+			party_i,
 			session_id,
 			stage,
 			0u8,
@@ -478,6 +482,7 @@ where
 		&self,
 		best_authorities: Vec<Public>,
 		authority_public_key: Public,
+		party_i: u16,
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
@@ -488,6 +493,7 @@ where
 		let async_proto_params = self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
+			party_i,
 			session_id,
 			stage,
 			async_index,
@@ -740,15 +746,18 @@ where
 
 		// DKG keygen authorities are always taken from the best set of authorities
 		let session_id = genesis_authority_set.id;
-		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
-		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id:?}");
-			*self.rounds.write() = None;
-			return
-		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id:?}, party_index: {maybe_party_index:?}");
-		}
+		let party_i = match self.get_party_index(header) {
+			Some(party_index) => {
+				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}, party_index: {party_index}");
+				party_index
+			},
+			None => {
+				info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}");
+				*self.rounds.write() = None;
+				return
+			},
+		};
 
 		let best_authorities: Vec<Public> =
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
@@ -757,6 +766,7 @@ where
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
+			party_i,
 			session_id,
 			threshold,
 			ProtoStageType::Genesis,
@@ -782,15 +792,18 @@ where
 		}
 		// Get the best next authorities using the keygen threshold
 		let session_id = queued.id;
-		let maybe_party_index = self.get_next_party_index(header);
 		// Check whether the worker is in the best set or return
-		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
-			*self.next_rounds.write() = None;
-			return
-		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
-		}
+		let party_i = match self.get_next_party_index(header) {
+			Some(party_index) => {
+				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
+				party_index
+			},
+			None => {
+				info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
+				*self.next_rounds.write() = None;
+				return
+			},
+		};
 
 		*self.best_next_authorities.write() = self.get_next_best_authorities(header);
 		let next_best_authorities: Vec<Public> =
@@ -803,6 +816,7 @@ where
 		self.spawn_keygen_protocol(
 			next_best_authorities,
 			authority_public_key,
+			party_i,
 			session_id,
 			threshold,
 			ProtoStageType::Queued,
@@ -1308,14 +1322,17 @@ where
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		let maybe_party_index = self.get_party_index(header);
 		// Check whether the worker is in the best set or return
-		if maybe_party_index.is_none() {
-			info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
-			return
-		} else {
-			info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {:?}", session_id);
-		}
+		let party_i = match self.get_party_index(header) {
+			Some(party_index) => {
+				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {session_id}, party_index: {party_index}");
+				party_index
+			},
+			None => {
+				info!(target: "dkg_gadget::worker", "🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {session_id}");
+				return
+			},
+		};
 
 		// check if we should clear our proposal hash cache,
 		// the condition is that `PROPOSAL_HASH_LIFETIME` blocks have passed since the last
@@ -1410,11 +1427,12 @@ where
 		#[allow(clippy::needless_range_loop)]
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
-			if signing_sets[i].contains(&maybe_party_index.unwrap()) {
+			if signing_sets[i].contains(&party_i) {
 				info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
 					authority_public_key.clone(),
+					party_i,
 					session_id,
 					threshold,
 					ProtoStageType::Signing,
