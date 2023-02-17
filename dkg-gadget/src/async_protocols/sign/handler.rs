@@ -260,7 +260,7 @@ where
 				}
 			}
 
-			dkg_logging::info!("RD0 on {} for {:?}", party_ind, hash_of_proposal);
+			dkg_logging::info!("RD0 on {} for {:?}", offline_i, hash_of_proposal);
 
 			if sigs.len() != number_of_partial_sigs {
 				dkg_logging::error!(target: "dkg", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
