@@ -241,6 +241,8 @@ pub mod pallet {
 			key: DKGPayloadKey,
 			/// The Target Chain.
 			target_chain: TypedChainId,
+			/// Whether the proposal is due to expiration
+			expired: bool,
 		},
 		/// RuntimeEvent When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -316,6 +318,7 @@ pub mod pallet {
 				Self::deposit_event(Event::<T>::ProposalRemoved {
 					target_chain: expired_proposal.0,
 					key: expired_proposal.1,
+					expired: true,
 				});
 				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
 			}
@@ -616,6 +619,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					proposal.nonce.saturating_sub(ProposalNonce(index)),
 				),
 				target_chain: TypedChainId::None,
+				expired: false,
 			});
 		}
 
