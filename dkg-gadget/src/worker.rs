@@ -134,7 +134,7 @@ where
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
-	pub best_next_authorities: Shared<Vec<(u16, Public)>>,
+	pub next_best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Latest block header
 	pub latest_header: Shared<Option<B::Header>>,
 	/// Current validator set
@@ -183,7 +183,7 @@ where
 			next_rounds: self.next_rounds.clone(),
 			signing_rounds: self.signing_rounds.clone(),
 			best_authorities: self.best_authorities.clone(),
-			best_next_authorities: self.best_next_authorities.clone(),
+			next_best_authorities: self.next_best_authorities.clone(),
 			latest_header: self.latest_header.clone(),
 			current_validator_set: self.current_validator_set.clone(),
 			queued_validator_set: self.queued_validator_set.clone(),
@@ -246,7 +246,7 @@ where
 			next_rounds: Arc::new(RwLock::new(None)),
 			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
 			best_authorities: Arc::new(RwLock::new(vec![])),
-			best_next_authorities: Arc::new(RwLock::new(vec![])),
+			next_best_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			queued_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
 			latest_header,
@@ -749,7 +749,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match self.get_party_index(header) {
 			Some(party_index) => {
-				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}, party_index: {party_index}");
+				info!(target: "dkg_gadget::worker", "🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}");
 				party_index
 			},
 			None => {
@@ -763,6 +763,7 @@ where
 			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
+		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for genesis DKG");
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
@@ -795,7 +796,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match self.get_next_party_index(header) {
 			Some(party_index) => {
-				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST NEXT AUTHORITIES: session {:?}", session_id);
+				info!(target: "dkg_gadget::worker", "🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST NEXT AUTHORITIES");
 				party_index
 			},
 			None => {
@@ -805,14 +806,14 @@ where
 			},
 		};
 
-		*self.best_next_authorities.write() = self.get_next_best_authorities(header);
+		*self.next_best_authorities.write() = self.get_next_best_authorities(header);
 		let next_best_authorities: Vec<Public> =
 			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
 		let threshold = self.get_next_signature_threshold(header);
 
 		let authority_public_key = self.get_authority_public_key();
 		// spawn the Keygen protocol for the Queued DKG.
-		debug!(target: "dkg_gadget::worker", "🕸️  Spawning keygen protocol for queued DKG");
+		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for queued DKG");
 		self.spawn_keygen_protocol(
 			next_best_authorities,
 			authority_public_key,
@@ -870,7 +871,7 @@ where
 				// Setting new validator set id as current
 				*self.current_validator_set.write() = active.clone();
 				*self.best_authorities.write() = self.get_best_authorities(header);
-				*self.best_next_authorities.write() = self.get_next_best_authorities(header);
+				*self.next_best_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				self.handle_genesis_dkg_setup(header, active);
 			}
@@ -1013,8 +1014,8 @@ where
 			};
 			*self.rounds.write() = self.next_rounds.write().take();
 			// We also rotate the best authority caches
-			*self.best_authorities.write() = self.best_next_authorities.read().clone();
-			*self.best_next_authorities.write() = self.get_next_best_authorities(header);
+			*self.best_authorities.write() = self.next_best_authorities.read().clone();
+			*self.next_best_authorities.write() = self.get_next_best_authorities(header);
 			// since we just rotate, we reset the keygen retry counter
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
 			// clear the currently being signing proposals cache.
@@ -1325,7 +1326,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match self.get_party_index(header) {
 			Some(party_index) => {
-				info!(target: "dkg_gadget::worker", "🕸️  IN THE SET OF BEST AUTHORITIES: session {session_id}, party_index: {party_index}");
+				info!(target: "dkg_gadget::worker", "🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES");
 				party_index
 			},
 			None => {
@@ -1374,7 +1375,7 @@ where
 		if unsigned_proposals.is_empty() {
 			return
 		} else {
-			debug!(target: "dkg_gadget::worker", "Got unsigned proposals count {}", unsigned_proposals.len());
+			debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Got unsigned proposals count {}", unsigned_proposals.len());
 		}
 
 		let best_authorities: Vec<Public> =
@@ -1400,13 +1401,12 @@ where
 			0 => 1,
 			1.. => (1..num + 1).product(),
 		};
-		// TODO: Modify this to not blow up as n, t grow.
 		let mut signing_sets = Vec::new();
 		let n = factorial(best_authorities.len() as u64);
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
-		debug!(target: "dkg_gadget::worker", "Generating {} signing sets", num_combinations);
+		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Generating {} signing sets", num_combinations);
 		metric_set!(self, dkg_signing_sets, signing_sets.len());
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
