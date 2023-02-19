@@ -25,12 +25,12 @@ pub mod test_utils;
 
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
-	crypto::{AuthorityId, Public},
+	crypto::Public,
 	types::{
 		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
 		SessionId,
 	},
-	AuthoritySet, AuthoritySetId,
+	AuthoritySet,
 };
 use dkg_runtime_primitives::UnsignedProposal;
 use futures::{
@@ -41,7 +41,10 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey, sign::CompletedOfflineStage,
 };
 use parking_lot::RwLock;
-use round_based::{async_runtime::watcher::StderrWatcher, AsyncProtocol, Msg, StateMachine};
+use round_based::{
+	async_runtime::{self, watcher::StderrWatcher},
+	AsyncProtocol, IsCritical, Msg, StateMachine,
+};
 use serde::Serialize;
 use std::{
 	fmt::{Debug, Formatter},
@@ -57,11 +60,7 @@ use self::{
 	blockchain_interface::BlockchainInterface, remote::AsyncProtocolRemote,
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
-use crate::{
-	utils::{find_index, SendFuture},
-	worker::KeystoreExt,
-	DKGKeystore,
-};
+use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore};
 use incoming::IncomingAsyncProtocolWrapper;
 
 pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
@@ -70,6 +69,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
+	pub party_i: u16,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -120,6 +120,7 @@ impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 			current_validator_set: self.current_validator_set.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
+			party_i: self.party_i,
 			batch_id_gen: self.batch_id_gen.clone(),
 			handle: self.handle.clone(),
 			local_key: self.local_key.clone(),
@@ -268,16 +269,58 @@ where
 	let params_for_end_of_proto = params.clone();
 
 	let async_proto = Box::pin(async move {
-		let res = async_proto
-			.run()
-			.await
-			.map_err(|err| DKGError::GenericError { reason: format!("{err:?}") });
-		match res {
-			Ok(v) => SM::on_finish(v, params_for_end_of_proto, additional_param, async_index).await,
-			Err(err) => {
-				dkg_logging::error!(target: "dkg", "Async Proto Errored: {:?}", err);
-				Err(err)
-			},
+		// Loop and wait for the protocol to finish.
+		loop {
+			dkg_logging::info!(target: "dkg", "Running AsyncProtocol with party_index: {}", params.party_i);
+			let res = async_proto.run().await;
+			match res {
+				Ok(v) =>
+					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
+						.await,
+				Err(err) => match err {
+					async_runtime::Error::Recv(e) |
+					async_runtime::Error::Proceed(e) |
+					async_runtime::Error::HandleIncoming(e) |
+					async_runtime::Error::HandleIncomingTimeout(e) |
+					async_runtime::Error::Finish(e)
+						if e.is_critical() =>
+					{
+						dkg_logging::error!(target: "dkg", "Async Proto Cought Critical Error: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::Send(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Failed to send outgoing messages: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::ProceedPanicked(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto `proceed` method panicked: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::InternalError(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Internal Error: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					async_runtime::Error::Exhausted => {
+						dkg_logging::error!(target: "dkg", "Async Proto Exhausted");
+						return Err(DKGError::GenericError { reason: String::from("Exhausted") })
+					},
+					async_runtime::Error::RecvEof => {
+						dkg_logging::error!(target: "dkg", "Async Proto Incoming channel closed");
+						return Err(DKGError::GenericError {
+							reason: String::from("RecvEof: Incomming channel closed"),
+						})
+					},
+					async_runtime::Error::BadStateMachine(e) => {
+						dkg_logging::error!(target: "dkg", "Async Proto Bad State Machine: {e:?}");
+						return Err(DKGError::GenericError { reason: format!("{e:?}") })
+					},
+					_ => {
+						// If the protocol errored, but it's not a critical error, then we
+						// should continue to run the protocol.
+						dkg_logging::error!(target: "dkg", "Async Proto Cought Non-Critical Error: {err:?}");
+					},
+				},
+			};
 		}
 	});
 
@@ -325,18 +368,6 @@ where
 	Ok(GenericAsyncHandler { protocol: Box::pin(protocol) })
 }
 
-fn get_party_session_id<'a, BI: BlockchainInterface + 'a>(
-	params: &AsyncProtocolParameters<BI>,
-) -> (Option<u16>, AuthoritySetId, Public) {
-	let party_ind =
-		find_index::<AuthorityId>(&params.best_authorities, &params.authority_public_key)
-			.map(|r| r as u16 + 1);
-	let session_id = params.session_id;
-	let id = params.get_authority_public_key();
-
-	(party_ind, session_id, id)
-}
-
 fn generate_outgoing_to_wire_fn<
 	SM: StateMachineHandler + 'static,
 	BI: BlockchainInterface + 'static,
@@ -369,19 +400,6 @@ where
 				},
 			};
 
-			let (maybe_party_i, session_id, id) = get_party_session_id(&params);
-
-			// If we ever hit this case, where we can't find our index in the best authority set, we
-			// should probably panic, since we are not supposed to be running the protocol if we
-			// are not in the best authority set.
-			if maybe_party_i.is_none() {
-				dkg_logging::error!(
-					target: "dkg",
-					"BUG: Could not find our index in the best authority set {:?} at session {session_id}",
-					params.best_authorities,
-				);
-				break
-			}
 			dkg_logging::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
@@ -411,7 +429,9 @@ where
 				},
 			};
 
-			let unsigned_dkg_message = DKGMessage { sender_id: id, status, payload, session_id };
+			let id = params.authority_public_key.as_ref().clone();
+			let unsigned_dkg_message =
+				DKGMessage { sender_id: id, status, payload, session_id: params.session_id };
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				dkg_logging::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {

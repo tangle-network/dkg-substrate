@@ -19,7 +19,7 @@ use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, R
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
-use dkg_logging::trace;
+use dkg_logging::warn;
 
 use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
@@ -52,7 +52,7 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			trace!(target: "dkg", "🕸️  Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg", "🕸️  (authority_id) Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()
@@ -75,7 +75,7 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			trace!(target: "dkg", "🕸️  Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg", "🕸️  (sr25519_public_key) Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()

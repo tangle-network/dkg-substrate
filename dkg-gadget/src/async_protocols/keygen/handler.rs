@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, get_party_session_id, new_inner,
-	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	GenericAsyncHandler, KeygenRound, ProtocolType,
+	blockchain_interface::BlockchainInterface, new_inner, remote::MetaHandlerStatus,
+	state_machine::StateMachineHandler, AsyncProtocolParameters, GenericAsyncHandler, KeygenRound,
+	ProtocolType,
 };
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
@@ -49,8 +49,6 @@ where
 			})?;
 
 		let protocol = async move {
-			let (keygen_id, ..) = get_party_session_id(&params);
-			if let Some(keygen_id) = keygen_id {
 				dkg_logging::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
 				let t = threshold;
 				let n = params.best_authorities.len() as u16;
@@ -61,11 +59,8 @@ where
 				// Set status of the handle
 				params.handle.set_status(MetaHandlerStatus::Keygen);
 				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params, keygen_id, t, n, status)?.await?;
+				GenericAsyncHandler::new_keygen(params, t, n, status)?.await?;
 				dkg_logging::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
-			} else {
-				dkg_logging::info!(target: "dkg_gadget::keygen", "Will skip keygen since local is NOT in best authority set");
-			}
 
 			Ok(())
 		}
@@ -99,7 +94,6 @@ where
 
 	fn new_keygen<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
-		i: u16,
 		t: u16,
 		n: u16,
 		status: DKGMsgStatus,
@@ -108,6 +102,7 @@ where
 			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
 		};
+		let i = params.party_i;
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
