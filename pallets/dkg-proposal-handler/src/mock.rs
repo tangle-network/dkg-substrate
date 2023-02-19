@@ -280,7 +280,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	let keystore = KeyStore::new();
 	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
-	let dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
+	let mock_dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
 		Some(PHRASE),
@@ -300,7 +300,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	t.register_extension(TransactionPoolExt::new(pool));
 
 	t.execute_with(|| {
-		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, dkg_pub_key.encode()));
+		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, mock_dkg_pub_key.encode()));
 		execute()
 	})
 }

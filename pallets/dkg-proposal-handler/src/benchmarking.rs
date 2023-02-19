@@ -91,7 +91,8 @@ benchmarks! {
 
 		let proposal = Proposal::Unsigned {
 			kind: ProposalKind::TokenAdd,
-			data: buf};
+			data: buf
+		};
 
 	}: _(RawOrigin::Root, proposal)
 

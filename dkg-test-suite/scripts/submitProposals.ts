@@ -2,23 +2,23 @@
 
 /// This a script to run and setup the dkg network parachain.
 
-import { ApiPromise, WsProvider, Keyring } from "@polkadot/api";
-import { ProposalHeader, ResourceId, ChainType, AnchorUpdateProposal } from "@webb-tools/sdk-core";
-import { localChain } from "../tests/utils/util";
+import { ApiPromise, WsProvider, Keyring } from '@polkadot/api';
+import { assert } from '@polkadot/util';
+import { ProposalHeader, ResourceId, ChainType, AnchorUpdateProposal } from '@webb-tools/sdk-core';
 
 async function run() {
   const api = await ApiPromise.create({
-    provider: new WsProvider("ws://127.0.0.1:9944"),
+    provider: new WsProvider('ws://127.0.0.1:9944'),
   });
   await api.isReady;
-  const keyring = new Keyring({ type: "sr25519" });
-  const alice = keyring.addFromUri("//Alice");
+  const keyring = new Keyring({ type: 'sr25519' });
+  const alice = keyring.addFromUri('//Alice');
 
-  // 000000000000d30c8839c1145609e564b986f667b273ddcb8496100000001389
+  // 000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389
   const resourceId = ResourceId.newFromContractAddress(
-    "0xd30c8839c1145609e564b986f667b273ddcb8496",
+    '0xd30c8839c1145609e564b986f667b273ddcb8496',
     ChainType.EVM,
-    5002,
+    5001,
   );
 
   const createHeader = (nonce: number) => new ProposalHeader(
@@ -29,9 +29,9 @@ async function run() {
 
   // 000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b66701000000138a
   const srcResourceId = ResourceId.newFromContractAddress(
-    "0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667",
+    '0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
     ChainType.EVM,
-    5001,
+    5002,
   );
 
   // Print resource IDs
@@ -44,13 +44,23 @@ async function run() {
   setInterval(async () => {
     // Create the header
     const proposalHeader = createHeader(nonce);
+    console.log(proposalHeader.toString());
+    assert(
+      proposalHeader.toU8a().length === 40,
+      `Proposal header should be 40 bytes, instead it is ${proposalHeader.toString().length} bytes`
+    );
     // Create the anchor proposal data structure
     const anchorUpdateProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
       proposalHeader,
-      '0x00',
+      '0x0000000000000000000000000000000000000000000000000000000000000000',
       srcResourceId
     );
-    console.log('Created anchor update proposal: ', anchorUpdateProposal);
+    console.log(anchorUpdateProposal.toU8a());
+    assert(
+      anchorUpdateProposal.toU8a().length === 104,
+      `Anchor update proposal should be 104 bytes, instead it is ${anchorUpdateProposal.toString().length} bytes`
+    );
+    console.log(anchorUpdateProposal.toU8a().toString())
     // Submit the unsigned proposal to the chain
     const call = api.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
       {

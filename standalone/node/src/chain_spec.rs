@@ -133,7 +133,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					// Resource ID for Chain Athena => Hermis
 					(
 						hex_literal::hex!(
-							"000000000000d30c8839c1145609e564b986f667b273ddcb8496100000001389"
+							"000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389"
 						),
 						Default::default(),
 					),

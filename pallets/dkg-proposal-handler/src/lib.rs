@@ -266,6 +266,8 @@ pub mod pallet {
 		StorageOverflow,
 		/// Proposal format is invalid
 		ProposalFormatInvalid,
+		/// Proposal must be unsigned
+		ProposalMustBeUnsigned,
 		/// Proposal signature is invalid
 		ProposalSignatureInvalid,
 		/// No proposal with the ID was found
@@ -435,7 +437,7 @@ pub mod pallet {
 					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
 				}
 			} else {
-				Err(Error::<T>::ProposalFormatInvalid.into())
+				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
 		}
 	}
