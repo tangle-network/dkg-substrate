@@ -34,6 +34,10 @@ async function run() {
     5001,
   );
 
+  // Print resource IDs
+  console.log('Resource ID: ', resourceId.toString());
+  console.log('Source Resource ID: ', srcResourceId.toString());
+
   // Create a new anchor proposal every 10 seconds.
   // Each time increment the nonce by 1.
   let nonce = 0;
