@@ -40,13 +40,12 @@ async function run() {
 	console.log('Resource ID: ', resourceId.toString());
 	console.log('Source Resource ID: ', srcResourceId.toString());
 
-	// Create a new anchor proposal every 10 seconds.
+	// Create a new anchor proposal every 20 seconds.
 	// Each time increment the nonce by 1.
 	let nonce = 0;
 	setInterval(async () => {
 		// Create the header
 		const proposalHeader = createHeader(nonce);
-		console.log(proposalHeader.toString());
 		assert(
 			proposalHeader.toU8a().length === 40,
 			`Proposal header should be 40 bytes, instead it is ${
@@ -83,13 +82,47 @@ async function run() {
 		// Sign and send the transaction
 		const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, (result) => {
 			if (result.isFinalized || result.isError) {
-				console.log(result.txHash.toHex(), 'is', result.status.toHuman());
+				console.log(result.txHash.toHex(), 'is', result.status.type);
 				unsub();
 			}
 		});
 
 		nonce += 1;
-	}, 10_000);
+	}, 20_000);
+
+	// a perodic task to print How many proposals that have been submitted, unsigned and signed.
+	// This is just for debugging purpose.
+	// on each new block header, we should print the number of proposals inside the unsigned queue,
+	// the number of proposals inside the signed queue, and the ratio between them in percentage.
+	await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
+		console.log('Current Block Number: ', header.number.toNumber());
+		const ourApi = await api.at(header.hash);
+		const lastRotation = await ourApi.query.dkg.lastSessionRotationBlock();
+		const prevBlockHash = await api.rpc.chain.getBlockHash(
+			lastRotation.toPrimitive() as number
+		);
+		const prevApi = await api.at(prevBlockHash);
+		const prevSignedProposalKeys =
+			await prevApi.query.dkgProposalHandler.signedProposals.keys({
+				Evm: 5001,
+			});
+		const [unsignedProposalQueueKeys, signedProposalKeys] = await Promise.all([
+			ourApi.query.dkgProposalHandler.unsignedProposalQueue.keys({ Evm: 5001 }),
+			ourApi.query.dkgProposalHandler.signedProposals.keys({ Evm: 5001 }),
+		]);
+		const unsignedProposalQueueSize = unsignedProposalQueueKeys.length;
+		const signedProposalSize =
+			signedProposalKeys.length - prevSignedProposalKeys.length;
+		const ratio = (
+			(unsignedProposalQueueSize / (signedProposalSize || 1)) *
+			100
+		).toFixed(2);
+		console.log({
+			unsignedProposalQueueSize,
+			signedProposalSize,
+			ratio,
+		});
+	});
 }
 
 run();
