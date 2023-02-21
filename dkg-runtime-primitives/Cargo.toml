@@ -1,16 +1,20 @@
 [package]
 name = "dkg-runtime-primitives"
 version = "0.0.1"
-edition = "2021"
+description = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
 impl-trait-for-tuples = { version = "0.2.2", default-features = false }
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = [
 	"derive",
 ] }
-scale-info = { version = "2.1.1", default-features = false, features = [
-	"derive",
-] }
+scale-info = { workspace = true }
 tiny-keccak = { version = "2.0.1", default-features = false, features = [
 	"keccak",
 ] }
@@ -18,23 +22,21 @@ ethereum = { version = "0.14.0", default-features = false, features = [
 	"with-codec",
 ] }
 ethereum-types = { version = "0.14.1", default-features = false }
-webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
+webb-proposals = { workspace = true }
 
-hex = { version = "0.4", default-features = false }
-sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-application-crypto = { git = "https://github.com/paritytech/substrate", branch = 'polkadot-v0.9.36', default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-api = { workspace = true }
+sp-io = { workspace = true }
+sp-std = { workspace = true }
+sp-core = { workspace = true }
+sp-application-crypto = { workspace = true }
+sp-runtime = { workspace = true }
+frame-system = { workspace = true }
+frame-support = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
 	"codec/std",
-	"hex/std",
 	"scale-info/std",
 	"webb-proposals/std",
 	"sp-io/std",

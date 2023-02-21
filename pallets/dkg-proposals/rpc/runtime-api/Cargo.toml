@@ -1,17 +1,21 @@
 [package]
 name = "dkg-proposals-runtime-api"
 version = "1.0.0"
-authors = ["Webb"]
-edition = "2021"
 license = "Apache-2.0"
 description = "RPC runtime API for DKG proposals"
 readme = "README.md"
+description = { workspace = true }
+authors = { workspace = true }
+publish = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+sp-api = { workspace = true }
 
 [features]
 default = ["std"]
