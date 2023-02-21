@@ -40,9 +40,13 @@ async function run() {
 	console.log('Resource ID: ', resourceId.toString());
 	console.log('Source Resource ID: ', srcResourceId.toString());
 
-	// Create a new anchor proposal every 20 seconds.
-	// Each time increment the nonce by 1.
-	let nonce = 0;
+	// Create a new anchor proposal every 2 blocks.
+
+	// Fetch account nonce as a starting nonce for the proposals
+	const accountNonce = await api.rpc.system.accountNextIndex(
+		sudoAccount.address
+	);
+	let nonce = accountNonce.toNumber();
 	setInterval(async () => {
 		// Create the header
 		const proposalHeader = createHeader(nonce);
