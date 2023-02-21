@@ -461,6 +461,7 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Pro
 
 	if let Proposal::Unsigned { kind, .. } = prop {
 		return match kind {
+			ProposalKind::Refresh => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::TokenAdd => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::TokenRemove => Proposal::Unsigned { kind, data: buf },
 			ProposalKind::WrappingFeeUpdate => Proposal::Unsigned { kind, data: buf },
@@ -481,14 +482,52 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Pro
 }
 
 #[test]
-fn force_submit_should_fail_with_invalid_proposal_type() {
+fn force_submit_should_fail_with_invalid_proposal_header_bytes() {
 	execute_test_with(|| {
 		assert_err!(
 			DKGProposalHandler::force_submit_unsigned_proposal(
 				RuntimeOrigin::root(),
 				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] }
 			),
+			crate::Error::<Test>::InvalidProposalBytesLength
+		);
+	});
+}
+
+#[test]
+fn force_submit_should_fail_with_invalid_proposal_type() {
+	execute_test_with(|| {
+		assert_err!(
+			DKGProposalHandler::force_submit_unsigned_proposal(
+				RuntimeOrigin::root(),
+				make_proposal::<20>(
+					Proposal::Unsigned { kind: ProposalKind::Refresh, data: vec![] },
+					TypedChainId::None,
+				)
+			),
 			crate::Error::<Test>::ProposalFormatInvalid
+		);
+	});
+}
+
+#[test]
+fn force_submit_should_work_with_anchor_update() {
+	execute_test_with(|| {
+		assert_ok!(
+			DKGProposalHandler::force_submit_unsigned_proposal(
+				RuntimeOrigin::root(),
+				Proposal::Unsigned {
+					kind: ProposalKind::AnchorUpdate,
+					data: vec![
+						0, 0, 0, 0, 0, 0, 211, 12, 136, 57, 193, 20, 86, 9, 229, 100, 185, 134,
+						246, 103, 178, 115, 221, 203, 132, 150, 1, 0, 0, 0, 19, 137, 0, 0, 0, 0, 0,
+						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 154, 132, 124, 213,
+						188, 12, 148, 128, 173, 160, 179, 57, 215, 240, 168, 202, 194, 182, 103, 1,
+						0, 0, 0, 19, 138
+					]
+				}
+			)
 		);
 	});
 }

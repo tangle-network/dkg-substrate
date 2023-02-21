@@ -253,22 +253,12 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> {
-		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
-	}
-	.assimilate_storage(&mut t)
-	.unwrap();
 	t.into()
 }
 
 #[allow(dead_code)]
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> {
-		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
-	}
-	.assimilate_storage(&mut t)
-	.unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
 	let keystore = KeyStore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));
