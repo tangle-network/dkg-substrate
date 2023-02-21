@@ -1214,10 +1214,10 @@ where
 							})
 						}
 					} else {
-						dkg_logging::warn!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
+						dkg_logging::debug!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
 					}
 				} else {
-					dkg_logging::warn!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
+					dkg_logging::trace!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
 				}
 				Ok(())
 			},
