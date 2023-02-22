@@ -82,7 +82,7 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 32;
+pub const MAX_SIGNING_SETS: u64 = 8;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
@@ -1406,8 +1406,7 @@ where
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
-		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Generating {} signing sets", num_combinations);
-		metric_set!(self, dkg_signing_sets, signing_sets.len());
+		debug!(target: "dkg_gadget::worker", "Generating {} signing sets", num_combinations);
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
@@ -1422,6 +1421,7 @@ where
 
 			count += 1;
 		}
+		metric_set!(self, dkg_signing_sets, signing_sets.len());
 
 		let mut futures = Vec::with_capacity(signing_sets.len());
 		#[allow(clippy::needless_range_loop)]
