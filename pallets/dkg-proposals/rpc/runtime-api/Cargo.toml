@@ -4,7 +4,6 @@ version = "1.0.0"
 license = "Apache-2.0"
 description = "RPC runtime API for DKG proposals"
 readme = "README.md"
-description = { workspace = true }
 authors = { workspace = true }
 publish = { workspace = true }
 homepage = { workspace = true }
