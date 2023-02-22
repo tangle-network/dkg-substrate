@@ -513,22 +513,19 @@ fn force_submit_should_fail_with_invalid_proposal_type() {
 #[test]
 fn force_submit_should_work_with_anchor_update() {
 	execute_test_with(|| {
-		assert_ok!(
-			DKGProposalHandler::force_submit_unsigned_proposal(
-				RuntimeOrigin::root(),
-				Proposal::Unsigned {
-					kind: ProposalKind::AnchorUpdate,
-					data: vec![
-						0, 0, 0, 0, 0, 0, 211, 12, 136, 57, 193, 20, 86, 9, 229, 100, 185, 134,
-						246, 103, 178, 115, 221, 203, 132, 150, 1, 0, 0, 0, 19, 137, 0, 0, 0, 0, 0,
-						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 154, 132, 124, 213,
-						188, 12, 148, 128, 173, 160, 179, 57, 215, 240, 168, 202, 194, 182, 103, 1,
-						0, 0, 0, 19, 138
-					]
-				}
-			)
-		);
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::AnchorUpdate,
+				data: vec![
+					0, 0, 0, 0, 0, 0, 211, 12, 136, 57, 193, 20, 86, 9, 229, 100, 185, 134, 246,
+					103, 178, 115, 221, 203, 132, 150, 1, 0, 0, 0, 19, 137, 0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 154, 132, 124, 213, 188, 12, 148, 128,
+					173, 160, 179, 57, 215, 240, 168, 202, 194, 182, 103, 1, 0, 0, 0, 19, 138
+				]
+			}
+		));
 	});
 }
 
