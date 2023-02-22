@@ -1,27 +1,24 @@
 [package]
 name = "pallet-dkg-proposal-handler-rpc-primitives"
 version = "0.1.0"
-edition = "2021"
-authors = ["Webb Tools"]
+description = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
-jsonrpsee = { version = "0.16.2", features = ["server"] }
-sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
+jsonrpsee = { workspace = true }
 
-codec = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-sp-core = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-blockchain = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
-
-pallet-dkg-proposal-handler-runtime-api = { path = "./runtime-api", default-features = false }
+sp-api = { workspace = true }
+sp-blockchain = { workspace = true }
+sp-runtime = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-    "codec/std",
-    "pallet-dkg-proposal-handler-runtime-api/std",
-    "sp-core/std",
     "sp-runtime/std",
     "sp-api/std"
 ]
