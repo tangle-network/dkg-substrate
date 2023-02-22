@@ -544,7 +544,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					v.key,
 					Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
 				);
-				return Ok(())
+				Ok(())
 			},
 			Err(e) => Err(Self::handle_validation_error(e).into()),
 		}
@@ -570,7 +570,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
 				);
 
-				return Ok(())
+				Ok(())
 			},
 			Err(e) => Err(Self::handle_validation_error(e).into()),
 		}
