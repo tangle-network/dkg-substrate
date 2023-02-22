@@ -93,7 +93,7 @@ fn handle_empty_proposal() {
 
 		assert_err!(
 			DKGProposalHandler::handle_unsigned_proposal(prop, ProposalAction::Sign(0)),
-			crate::Error::<Test>::ProposalFormatInvalid
+			crate::Error::<Test>::InvalidProposalBytesLength
 		);
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 0);
