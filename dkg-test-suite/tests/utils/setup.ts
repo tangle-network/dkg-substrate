@@ -140,7 +140,7 @@ const __NODE_STATE: {
 };
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie' | 'dave' | 'eve' | 'ferdie',
-	options: { tmp: boolean; printLogs: boolean, chain: string } = {
+	options: { tmp: boolean; printLogs: boolean, chain?: string } = {
 		tmp: true,
 		printLogs: false,
 		chain: "local"
