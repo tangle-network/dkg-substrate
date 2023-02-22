@@ -140,9 +140,10 @@ const __NODE_STATE: {
 };
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie' | 'dave' | 'eve' | 'ferdie',
-	options: { tmp: boolean; printLogs: boolean } = {
+	options: { tmp: boolean; printLogs: boolean, chain: String } = {
 		tmp: true,
 		printLogs: false,
+		chain: "local"
 	}
 ): child.ChildProcess {
 	if (__NODE_STATE[authority].isRunning) {
@@ -167,6 +168,7 @@ export function startStandaloneNode(
 			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
 			options.tmp ? '--tmp' : '',
+			`--chain=${options.chain}`,
 			`--ws-port=${ports[authority].ws}`,
 			`--rpc-port=${ports[authority].http}`,
 			`--port=${ports[authority].p2p}`,
