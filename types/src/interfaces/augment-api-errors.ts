@@ -35,7 +35,7 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       ExistingVestingSchedule: AugmentedError<ApiType>;
       /**
-       * Balance too low to send value
+       * Balance too low to send value.
        **/
       InsufficientBalance: AugmentedError<ApiType>;
       /**
@@ -111,6 +111,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       InvalidMisbehaviourReports: AugmentedError<ApiType>;
       /**
+       * Invalid Nonece used, must be greater than [`refresh_nonce`].
+       **/
+      InvalidNonce: AugmentedError<ApiType>;
+      /**
        * Invalid public key submission
        **/
       InvalidPublicKeys: AugmentedError<ApiType>;
@@ -126,10 +130,6 @@ declare module '@polkadot/api-base/types/errors' {
        * Invalid threshold
        **/
       InvalidThreshold: AugmentedError<ApiType>;
-      /**
-       * Manual DKG Refresh failed to progress.
-       **/
-      ManualRefreshFailed: AugmentedError<ApiType>;
       /**
        * Must be an an authority
        **/
@@ -273,6 +273,10 @@ declare module '@polkadot/api-base/types/errors' {
     };
     electionProviderMultiPhase: {
       /**
+       * Some bound not met
+       **/
+      BoundNotMet: AugmentedError<ApiType>;
+      /**
        * The call is not allowed at this point.
        **/
       CallNotAllowed: AugmentedError<ApiType>;
@@ -321,6 +325,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       SignedTooMuchWeight: AugmentedError<ApiType>;
       /**
+       * Submitted solution has too many winners
+       **/
+      TooManyWinners: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
@@ -356,6 +364,98 @@ declare module '@polkadot/api-base/types/errors' {
        * Cannot signal forced change so soon after last.
        **/
       TooSoon: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    identity: {
+      /**
+       * Account ID is already named.
+       **/
+      AlreadyClaimed: AugmentedError<ApiType>;
+      /**
+       * Empty index.
+       **/
+      EmptyIndex: AugmentedError<ApiType>;
+      /**
+       * Fee is changed.
+       **/
+      FeeChanged: AugmentedError<ApiType>;
+      /**
+       * The index is invalid.
+       **/
+      InvalidIndex: AugmentedError<ApiType>;
+      /**
+       * Invalid judgement.
+       **/
+      InvalidJudgement: AugmentedError<ApiType>;
+      /**
+       * The target is invalid.
+       **/
+      InvalidTarget: AugmentedError<ApiType>;
+      /**
+       * The provided judgement was for a different identity.
+       **/
+      JudgementForDifferentIdentity: AugmentedError<ApiType>;
+      /**
+       * Judgement given.
+       **/
+      JudgementGiven: AugmentedError<ApiType>;
+      /**
+       * Error that occurs when there is an issue paying for judgement.
+       **/
+      JudgementPaymentFailed: AugmentedError<ApiType>;
+      /**
+       * No identity found.
+       **/
+      NoIdentity: AugmentedError<ApiType>;
+      /**
+       * Account isn't found.
+       **/
+      NotFound: AugmentedError<ApiType>;
+      /**
+       * Account isn't named.
+       **/
+      NotNamed: AugmentedError<ApiType>;
+      /**
+       * Sub-account isn't owned by sender.
+       **/
+      NotOwned: AugmentedError<ApiType>;
+      /**
+       * Sender is not a sub-account.
+       **/
+      NotSub: AugmentedError<ApiType>;
+      /**
+       * Sticky judgement.
+       **/
+      StickyJudgement: AugmentedError<ApiType>;
+      /**
+       * Too many additional fields.
+       **/
+      TooManyFields: AugmentedError<ApiType>;
+      /**
+       * Maximum amount of registrars reached. Cannot add any more.
+       **/
+      TooManyRegistrars: AugmentedError<ApiType>;
+      /**
+       * Too many subs-accounts.
+       **/
+      TooManySubAccounts: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    imOnline: {
+      /**
+       * Duplicated heartbeat.
+       **/
+      DuplicatedHeartbeat: AugmentedError<ApiType>;
+      /**
+       * Non existent public key.
+       **/
+      InvalidKey: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -416,6 +516,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       FullyUnbonding: AugmentedError<ApiType>;
       /**
+       * Pool id provided is not correct/usable.
+       **/
+      InvalidPoolId: AugmentedError<ApiType>;
+      /**
        * Too many members in the pool or system.
        **/
       MaxPoolMembers: AugmentedError<ApiType>;
@@ -464,6 +568,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Partial unbonding now allowed permissionlessly.
        **/
       PartialUnbondNotAllowedPermissionlessly: AugmentedError<ApiType>;
+      /**
+       * Pool id currently in use.
+       **/
+      PoolIdInUse: AugmentedError<ApiType>;
       /**
        * An account is not a member.
        **/
@@ -532,6 +640,10 @@ declare module '@polkadot/api-base/types/errors' {
        * A nomination target was supplied that was blocked or otherwise not a validator.
        **/
       BadTarget: AugmentedError<ApiType>;
+      /**
+       * Some bound is not met.
+       **/
+      BoundNotMet: AugmentedError<ApiType>;
       /**
        * The user has enough bond and thus cannot be chilled forcefully by an external person.
        **/
@@ -608,8 +720,8 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       TooManyTargets: AugmentedError<ApiType>;
       /**
-       * There are too many validators in the system. Governance needs to adjust the staking
-       * settings to keep things safe for the runtime.
+       * There are too many validator candidates in the system. Governance needs to adjust the
+       * staking settings to keep things safe for the runtime.
        **/
       TooManyValidators: AugmentedError<ApiType>;
       /**

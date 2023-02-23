@@ -106,7 +106,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal_identifier,
+	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce,
 	StoredUnsignedProposal, TypedChainId,
@@ -241,6 +241,8 @@ pub mod pallet {
 			key: DKGPayloadKey,
 			/// The Target Chain.
 			target_chain: TypedChainId,
+			/// Whether the proposal is due to expiration
+			expired: bool,
 		},
 		/// RuntimeEvent When a Proposal Gets Signed by DKG.
 		ProposalSigned {
@@ -264,6 +266,10 @@ pub mod pallet {
 		StorageOverflow,
 		/// Proposal format is invalid
 		ProposalFormatInvalid,
+		/// Proposal must be unsigned
+		ProposalMustBeUnsigned,
+		/// Proposal bytes length is invalid
+		InvalidProposalBytesLength,
 		/// Proposal signature is invalid
 		ProposalSignatureInvalid,
 		/// No proposal with the ID was found
@@ -316,6 +322,7 @@ pub mod pallet {
 				Self::deposit_event(Event::<T>::ProposalRemoved {
 					target_chain: expired_proposal.0,
 					key: expired_proposal.1,
+					expired: true,
 				});
 				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
 			}
@@ -412,7 +419,8 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
 			ensure_root(origin)?;
-
+			#[cfg(feature = "std")]
+			println!("force_submit_unsigned_proposal: {:?}, {:?}", prop.data().len(), prop);
 			// We ensure that only certain proposals are valid this way
 			if prop.is_unsigned() {
 				match decode_proposal_identifier(&prop) {
@@ -429,10 +437,10 @@ pub mod pallet {
 						);
 						Ok(().into())
 					},
-					Err(_) => Err(Error::<T>::ProposalFormatInvalid.into()),
+					Err(e) => Err(Self::handle_validation_error(e).into()),
 				}
 			} else {
-				Err(Error::<T>::ProposalFormatInvalid.into())
+				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
 		}
 	}
@@ -524,21 +532,22 @@ pub mod pallet {
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
 		let proposal = Proposal::Unsigned { data: proposal, kind: ProposalKind::AnchorUpdate };
-		if let Ok(v) = decode_proposal_identifier(&proposal) {
-			Self::deposit_event(Event::<T>::ProposalAdded {
-				key: v.key,
-				target_chain: v.typed_chain_id,
-				data: proposal.data().clone(),
-			});
-			UnsignedProposalQueue::<T>::insert(
-				v.typed_chain_id,
-				v.key,
-				Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
-			);
-			return Ok(())
+		match decode_proposal_identifier(&proposal) {
+			Ok(v) => {
+				Self::deposit_event(Event::<T>::ProposalAdded {
+					key: v.key,
+					target_chain: v.typed_chain_id,
+					data: proposal.data().clone(),
+				});
+				UnsignedProposalQueue::<T>::insert(
+					v.typed_chain_id,
+					v.key,
+					Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
+				);
+				Ok(())
+			},
+			Err(e) => Err(Self::handle_validation_error(e).into()),
 		}
-
-		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_proposer_set_update_proposal(
@@ -547,23 +556,24 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	) -> DispatchResult {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: proposal, kind: ProposalKind::ProposerSetUpdate };
-		if let Ok(v) = decode_proposal_identifier(&unsigned_proposal) {
-			Self::deposit_event(Event::<T>::ProposalAdded {
-				key: v.key,
-				target_chain: v.typed_chain_id,
-				data: unsigned_proposal.data().clone(),
-			});
+		match decode_proposal_identifier(&unsigned_proposal) {
+			Ok(v) => {
+				Self::deposit_event(Event::<T>::ProposalAdded {
+					key: v.key,
+					target_chain: v.typed_chain_id,
+					data: unsigned_proposal.data().clone(),
+				});
 
-			UnsignedProposalQueue::<T>::insert(
-				v.typed_chain_id,
-				v.key,
-				Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
-			);
+				UnsignedProposalQueue::<T>::insert(
+					v.typed_chain_id,
+					v.key,
+					Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
+				);
 
-			return Ok(())
+				Ok(())
+			},
+			Err(e) => Err(Self::handle_validation_error(e).into()),
 		}
-
-		Err(Error::<T>::ProposalFormatInvalid.into())
 	}
 
 	fn handle_unsigned_refresh_proposal(
@@ -616,6 +626,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					proposal.nonce.saturating_sub(ProposalNonce(index)),
 				),
 				target_chain: TypedChainId::None,
+				expired: false,
 			});
 		}
 
@@ -623,8 +634,10 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
-		let id =
-			decode_proposal_identifier(&prop).map_err(|_e| Error::<T>::ProposalFormatInvalid)?;
+		let id = match decode_proposal_identifier(&prop) {
+			Ok(v) => v,
+			Err(e) => return Err(Self::handle_validation_error(e).into()),
+		};
 		// Log the chain id and nonce
 		log::debug!(
 			target: "runtime::dkg_proposal_handler",
@@ -855,6 +868,14 @@ impl<T: Config> Pallet<T> {
 
 	fn validate_proposal_signature(data: &[u8], signature: &[u8]) -> bool {
 		dkg_runtime_primitives::utils::validate_ecdsa_signature(data, signature)
+	}
+
+	fn handle_validation_error(error: ValidationError) -> Error<T> {
+		match error {
+			ValidationError::InvalidParameter(_) => Error::<T>::ProposalFormatInvalid,
+			ValidationError::UnimplementedProposalKind => Error::<T>::ProposalFormatInvalid,
+			ValidationError::InvalidProposalBytesLength => Error::<T>::InvalidProposalBytesLength,
+		}
 	}
 
 	// *** Utility methods ***

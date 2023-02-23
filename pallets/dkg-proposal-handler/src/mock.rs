@@ -253,22 +253,12 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> {
-		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
-	}
-	.assimilate_storage(&mut t)
-	.unwrap();
 	t.into()
 }
 
 #[allow(dead_code)]
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> {
-		balances: vec![(sr25519::Public::from_raw([1; 32]), 1_000_000_000)],
-	}
-	.assimilate_storage(&mut t)
-	.unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
 	let keystore = KeyStore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));
@@ -280,7 +270,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	let keystore = KeyStore::new();
 	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
-	let dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
+	let mock_dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
 		Some(PHRASE),
@@ -300,7 +290,7 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	t.register_extension(TransactionPoolExt::new(pool));
 
 	t.execute_with(|| {
-		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, dkg_pub_key.encode()));
+		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, mock_dkg_pub_key.encode()));
 		execute()
 	})
 }

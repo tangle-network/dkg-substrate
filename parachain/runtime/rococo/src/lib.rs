@@ -523,8 +523,7 @@ parameter_types! {
 	pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
 	pub const RefreshDelay: Permill = Permill::from_percent(50);
 	pub const TimeToRestart: BlockNumber = 3;
-	 // 1 hr considering block time of 12 sec
-	 pub const UnsignedProposalExpiry : BlockNumber = 300;
+	pub const UnsignedProposalExpiry : BlockNumber = Period::get() * 2;
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
