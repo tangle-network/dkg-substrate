@@ -925,9 +925,8 @@ where
 			// Check if there is a next DKG Key on-chain.
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
-			// Start a keygen if we don't have one.
-			// only if there is no queued key on chain.
-			if !has_next_rounds && next_dkg_key.is_none() {
+			// Start a keygen if we don't have one OR if there is no queued key on chain.
+			if !has_next_rounds || next_dkg_key.is_none() {
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Reset the Retry counter.
