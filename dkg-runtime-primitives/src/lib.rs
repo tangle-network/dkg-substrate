@@ -61,7 +61,7 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
 
 /// The keygen timeout limit in blocks before we consider misbehaviours
-pub const KEYGEN_TIMEOUT: u32 = 5;
+pub const KEYGEN_TIMEOUT: u32 = 10;
 
 /// The offline timeout limit in blocks before we consider misbehaviours
 pub const OFFLINE_TIMEOUT: u32 = 2;

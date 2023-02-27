@@ -452,6 +452,7 @@ where
 						};
 
 						// spawn on parallel thread
+						info!(target: "dkg_gadget::worker", "Started a new thread for task");
 						let _handle = tokio::task::spawn(task);
 					},
 
@@ -777,7 +778,7 @@ where
 	fn handle_queued_dkg_setup(&self, header: &B::Header, queued: AuthoritySet<Public>) {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
-			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
+			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty, exiting from queued dkg initialization");
 			return
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
@@ -814,6 +815,7 @@ where
 		let authority_public_key = self.get_authority_public_key();
 		// spawn the Keygen protocol for the Queued DKG.
 		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for queued DKG");
+		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol | Next best authorities {:?}", next_best_authorities);
 		self.spawn_keygen_protocol(
 			next_best_authorities,
 			authority_public_key,
@@ -927,7 +929,8 @@ where
 
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
 			// Start a keygen if we don't have one OR if there is no queued key on chain.
-			if !has_next_rounds {
+			if !has_next_rounds && next_dkg_key.is_none() {
+				debug!(target: "dkg_gadget::worker", "🕸️  NO NEXT ROUND KEYGEN AND NO NEXT DKG | STARTING A NEW QUEUED DKG: {}", next_dkg_key.is_some());
 				// Start the queued DKG setup for the new queued authorities
 				self.handle_queued_dkg_setup(header, queued);
 				// Reset the Retry counter.
