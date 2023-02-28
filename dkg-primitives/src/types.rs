@@ -261,6 +261,8 @@ pub enum DKGError {
 	NoAuthorityAccounts,
 	NoHeader,
 	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	InvalidPeerId,
+	InvalidSignature,
 }
 
 impl fmt::Display for DKGError {
@@ -281,6 +283,8 @@ impl fmt::Display for DKGError {
 			NoHeader => "No Header!".to_string(),
 			SignMisbehaviour { reason, bad_actors } =>
 				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
+			InvalidPeerId => "Invalid PeerId!".to_string(),
+			InvalidSignature => "Invalid Signature!".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}
