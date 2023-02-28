@@ -258,5 +258,7 @@ sp_api::decl_runtime_apis! {
 		fn refresh_nonce() -> u32;
 		/// Returns true if we should execute an emergency keygen.
 		fn should_execute_emergency_keygen() -> bool;
+		/// Returns true if we should execute an new keygen.
+		fn should_execute_new_keygen() -> bool;
 	}
 }

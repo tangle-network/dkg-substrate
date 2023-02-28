@@ -1018,6 +1018,10 @@ impl_runtime_apis! {
 	fn should_execute_emergency_keygen() -> bool {
 		DKG::should_execute_emergency_keygen()
 	}
+
+	fn should_execute_new_keygen() -> bool {
+		DKG::should_execute_new_keygen()
+	}
   }
 
   impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {

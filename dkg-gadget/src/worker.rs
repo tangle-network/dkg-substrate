@@ -895,17 +895,23 @@ where
 	fn maybe_enact_next_authorities(&self, header: &B::Header) {
 		// Query the current state of session progress, we will proceed with enact next
 		// authorities if the session progress has passed threshold
-		if let Some(session_progress) = self.get_current_session_progress(header) {
-			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-			metric_set!(self, dkg_session_progress, session_progress.deconstruct());
-			if session_progress < SESSION_PROGRESS_THRESHOLD {
-				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
-				return
-			}
-		} else {
-			debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+		// if let Some(session_progress) = self.get_current_session_progress(header) {
+		// 	debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
+		// 	metric_set!(self, dkg_session_progress, session_progress.deconstruct());
+		// 	if session_progress < SESSION_PROGRESS_THRESHOLD {
+		// 		debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
+		// 		return
+		// 	}
+		// } else {
+		// 	debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+		// 	return
+		// }
+
+		if !self.should_execute_new_keygen(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Not executing new keygen protocol");
 			return
 		}
+
 		// Get the active and queued validators to check for updates
 		if let Some((_active, queued)) = self.validator_set(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
@@ -1549,6 +1555,15 @@ where
 		self.client
 			.runtime_api()
 			.should_execute_emergency_keygen(&at)
+			.unwrap_or_default()
+	}
+
+	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
+		// query runtime api to check if we should execute new keygen.
+		let at: BlockId<B> = BlockId::hash(header.hash());
+		self.client
+			.runtime_api()
+			.should_execute_new_keygen(&at)
 			.unwrap_or_default()
 	}
 
