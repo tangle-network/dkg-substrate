@@ -131,6 +131,7 @@ impl HandshakeMessage {
 		})?;
 		Ok(Self { authority_id, peer_id, signature })
 	}
+
 	/// Verify that the handshake message is valid.
 	///
 	/// This will check that:

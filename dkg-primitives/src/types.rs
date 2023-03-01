@@ -263,6 +263,7 @@ pub enum DKGError {
 	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
 	InvalidPeerId,
 	InvalidSignature,
+	InvalidKeygenPartyId,
 }
 
 impl fmt::Display for DKGError {
@@ -285,6 +286,7 @@ impl fmt::Display for DKGError {
 				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
 			InvalidPeerId => "Invalid PeerId!".to_string(),
 			InvalidSignature => "Invalid Signature!".to_string(),
+			InvalidKeygenPartyId => "Invalid Keygen Party Id!".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}
