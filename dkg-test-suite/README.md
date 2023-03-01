@@ -1,21 +1,16 @@
-## Execute tests:
+## Prepare tests:
 
-1. Run cd dkg-test-suite
+1. Run `cd dkg-test-suite`
 2. Run `yarn install`
+3. Install [ts-node](https://typestrong.org/ts-node/)
 
-# Anchor Proposal tests:
+# Anchor Update tests:
 
 From terminal 1:
 
-1. Run ./scripts/run-standalone.sh
+1. Run `./scripts/run-standalone.sh`
 2. Wait until Keygen completes
-
-From terminal 2: 5. Run `yarn anchor-proposals` for anchor proposal tests
-
-# DKG Refresh tests:
-
-1. Run ./scripts/run-standalone.sh
 
 From terminal 2:
 
-1. Run `yarn dkg-refresh` for DKG refresh tests immediately the node starts
+1. Run `ts-node https://typestrong.org/ts-node/` for anchor proposal tests
