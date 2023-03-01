@@ -433,7 +433,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				match message {
 					Ok(ToHandler::SendMessage { recipient, message }) =>
 						self0.send_signed_dkg_message(recipient, message),
-					Ok(ToHandler::Gossip(v)) => self0.gossip_message(v),
+					Ok(ToHandler::Gossip(v)) => self0.gossip_dkg_signed_message(v),
 					_ => {},
 				}
 			}
@@ -497,13 +497,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if let Err(err) = result {
 					dkg_logging::error!(target: "dkg-gossip", "Add reserved peer failed: {}", err);
 				}
-
-				// Send our Handshake message to that peer.
-				if let Err(err) = self.send_handshake_message(remote).await {
-					dkg_logging::error!(target: "dkg-gossip", "Send handshake message to peer {remote} failed: {err:?}");
-				} else {
-					dkg_logging::debug!(target: "dkg-gossip", "Send handshake message to peer {remote} succeeded");
-				}
 			},
 			Event::SyncDisconnected { remote } => {
 				self.service.remove_peers_from_reserved_set(
@@ -516,6 +509,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if protocol == self.protocol_name =>
 			{
 				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
+				// Send our Handshake message to that peer.
+				if let Err(err) = self.send_handshake_message(remote).await {
+					dkg_logging::error!(target: "dkg-gossip", "Send handshake message to peer {remote} failed: {err:?}");
+				} else {
+					dkg_logging::debug!(target: "dkg-gossip", "Send handshake message to peer {remote} succeeded");
+				}
 				let mut lock = self.peers.write();
 				let _was_in = lock.insert(
 					remote,
@@ -677,7 +676,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 		// if the gossip is enabled, we send the message to the gossiping peers
 		if self.gossip_enabled.load(Ordering::Relaxed) {
-			self.gossip_message(message);
+			self.gossip_dkg_signed_message(message);
 		}
 	}
 
@@ -688,6 +687,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			if already_propagated {
 				return
 			}
+			let message = super::DKGNetworkMessage::DKGMessage(message);
 			let msg = Encode::encode(&message);
 			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
 		} else {
@@ -695,13 +695,14 @@ impl<B: Block + 'static> GossipHandler<B> {
 		}
 	}
 
-	fn gossip_message(&self, message: SignedDKGMessage<AuthorityId>) {
+	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
 		let mut propagated_messages = 0;
 		let message_hash = message.message_hash::<B>();
 		let mut peers = self.peers.write();
 		if peers.is_empty() {
 			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
 		}
+		let message = super::DKGNetworkMessage::DKGMessage(message);
 		let msg = Encode::encode(&message);
 		for (who, peer) in peers.iter_mut() {
 			let new_to_them = peer.known_messages.insert(message_hash);

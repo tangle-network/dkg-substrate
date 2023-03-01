@@ -47,7 +47,7 @@ use round_based::{
 };
 use serde::Serialize;
 use std::{
-	fmt::{Debug, Formatter},
+	fmt::{self, Debug, Formatter},
 	pin::Pin,
 	sync::{
 		atomic::{AtomicU64, Ordering},
@@ -69,7 +69,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub best_authorities: Arc<Vec<Public>>,
 	pub authority_public_key: Arc<Public>,
-	pub party_i: u16,
+	pub party_i: KeygenPartyId,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -186,6 +186,12 @@ impl AsRef<u16> for KeygenPartyId {
 	}
 }
 
+impl fmt::Display for KeygenPartyId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
 impl KeygenPartyId {
 	/// Try to convert a KeygenPartyId to an OfflinePartyId.
 	pub fn try_to_offline_party_id(&self, s_l: &[u16]) -> Result<OfflinePartyId, DKGError> {
@@ -203,6 +209,12 @@ impl KeygenPartyId {
 impl AsRef<u16> for OfflinePartyId {
 	fn as_ref(&self) -> &u16 {
 		&self.0
+	}
+}
+
+impl fmt::Display for OfflinePartyId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
 	}
 }
 
@@ -250,30 +262,31 @@ pub enum KeygenRound {
 pub enum ProtocolType {
 	Keygen {
 		ty: KeygenRound,
-		i: u16,
+		i: KeygenPartyId,
 		t: u16,
 		n: u16,
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal>,
-		i: u16,
+		i: OfflinePartyId,
 		s_l: Vec<u16>,
 		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
 		unsigned_proposal: Arc<UnsignedProposal>,
-		i: u16,
+		i: OfflinePartyId,
 	},
 }
 
 impl ProtocolType {
-	pub fn get_i(&self) -> PartyIndex {
+	pub const fn get_i(&self) -> u16 {
 		match self {
-			Self::Keygen { i, .. } | Self::Offline { i, .. } | Self::Voting { i, .. } => *i,
+			Self::Keygen { i, .. } => i.0,
+			Self::Offline { i, .. } => i.0,
+			Self::Voting { i, .. } => i.0,
 		}
 	}
-
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
