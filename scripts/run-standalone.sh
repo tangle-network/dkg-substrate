@@ -31,17 +31,17 @@ cd "$PROJECT_ROOT"
 
 echo "*** Start Webb DKG Node ***"
 # Alice
-./target/release/dkg-standalone-node --base-path=./tmp/alice -lerror --alice \
+./target/release/dkg-standalone-node --base-path=./tmp/alice --chain local -lerror --alice \
   --rpc-cors all --ws-external \
   --port 30304 \
   --ws-port 9944 &
 # Bob
-./target/release/dkg-standalone-node --base-path=./tmp/bob -lerror --bob \
+./target/release/dkg-standalone-node --base-path=./tmp/bob --chain local -lerror --bob \
   --rpc-cors all --ws-external \
   --port 30305 \
   --ws-port 9945 &
 # Charlie
-./target/release/dkg-standalone-node --base-path=./tmp/charlie -linfo --charlie \
+./target/release/dkg-standalone-node --base-path=./tmp/charlie --chain local -linfo --charlie \
     --rpc-cors all --ws-external \
     --ws-port 9948 \
     --port 30308 \

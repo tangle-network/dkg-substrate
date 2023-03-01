@@ -17,7 +17,7 @@ async function run() {
 	});
 	await api.isReady;
 	const keyring = new Keyring({ type: 'sr25519' });
-	const alice = keyring.addFromUri('//Alice');
+	const sudoAccount = keyring.addFromUri('//Alice');
 
 	// 000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389
 	const resourceId = ResourceId.newFromContractAddress(
@@ -84,7 +84,7 @@ async function run() {
 			prop.toU8a()
 		);
 		// Sign and send the transaction
-		const unsub = await api.tx.sudo.sudo(call).signAndSend(alice, (result) => {
+		const unsub = await api.tx.sudo.sudo(call).signAndSend(sudoAccount, (result) => {
 			if (result.isFinalized || result.isError) {
 				console.log(result.txHash.toHex(), 'is', result.status.type);
 				unsub();
