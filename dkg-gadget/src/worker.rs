@@ -1040,7 +1040,10 @@ where
 			if let Some(metrics) = self.metrics.as_ref() {
 				metrics.reset_session_metrics();
 			}
+		} else {
+			dkg_logging::info!(target: "dkg_gadget::worker", "🕸️  No update to local session found, not rotation local session");
 		}
+
 	}
 
 	fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
@@ -1108,6 +1111,7 @@ where
 	pub fn handle_emergency_keygen(&self, header: &B::Header) {
 		// Start the queued DKG setup for the new queued authorities
 		if let Some((_active, queued)) = self.validator_set(header) {
+			dkg_logging::warn!(target: "dkg_gadget::worker", "EMERGENCY keygen triggered, running QUEUED dkg setup now!");
 			self.handle_queued_dkg_setup(header, queued);
 		}
 	}

@@ -199,7 +199,7 @@ pub fn convert_signature(sig_recid: &SignatureRecid) -> Option<Signature> {
 	sig_vec.extend([v]);
 
 	if 65 != sig_vec.len() {
-		log::warn!(target: "dkg", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
+		log::warn!(target: "dkg_gadget", "🕸️  Invalid signature len: {}, expected 65", sig_vec.len());
 		return None
 	}
 

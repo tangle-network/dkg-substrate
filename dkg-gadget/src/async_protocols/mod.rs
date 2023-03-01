@@ -271,7 +271,7 @@ where
 	let async_proto = Box::pin(async move {
 		// Loop and wait for the protocol to finish.
 		loop {
-			dkg_logging::info!(target: "dkg", "Running AsyncProtocol with party_index: {}", params.party_i);
+			dkg_logging::info!(target: "dkg_gadget", "Running AsyncProtocol with party_index: {}", params.party_i);
 			let res = async_proto.run().await;
 			match res {
 				Ok(v) =>
@@ -285,39 +285,39 @@ where
 					async_runtime::Error::Finish(e)
 						if e.is_critical() =>
 					{
-						dkg_logging::error!(target: "dkg", "Async Proto Cought Critical Error: {e:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Cought Critical Error: {e:?}");
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::Send(e) => {
-						dkg_logging::error!(target: "dkg", "Async Proto Failed to send outgoing messages: {e:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Failed to send outgoing messages: {e:?}");
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::ProceedPanicked(e) => {
-						dkg_logging::error!(target: "dkg", "Async Proto `proceed` method panicked: {e:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto `proceed` method panicked: {e:?}");
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::InternalError(e) => {
-						dkg_logging::error!(target: "dkg", "Async Proto Internal Error: {e:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Internal Error: {e:?}");
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::Exhausted => {
-						dkg_logging::error!(target: "dkg", "Async Proto Exhausted");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Exhausted");
 						return Err(DKGError::GenericError { reason: String::from("Exhausted") })
 					},
 					async_runtime::Error::RecvEof => {
-						dkg_logging::error!(target: "dkg", "Async Proto Incoming channel closed");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Incoming channel closed");
 						return Err(DKGError::GenericError {
 							reason: String::from("RecvEof: Incomming channel closed"),
 						})
 					},
 					async_runtime::Error::BadStateMachine(e) => {
-						dkg_logging::error!(target: "dkg", "Async Proto Bad State Machine: {e:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Bad State Machine: {e:?}");
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					_ => {
 						// If the protocol errored, but it's not a critical error, then we
 						// should continue to run the protocol.
-						dkg_logging::error!(target: "dkg", "Async Proto Cought Non-Critical Error: {err:?}");
+						dkg_logging::error!(target: "dkg_gadget", "Async Proto Cought Non-Critical Error: {err:?}");
 					},
 				},
 			};
@@ -351,17 +351,17 @@ where
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
-		dkg_logging::info!(target: "dkg", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
+		dkg_logging::info!(target: "dkg_gadget", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
 		// Abort the inbound task
 		handle.abort();
 		// Wait for the outbound task to finish
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
 		// within a reasonable time, we should abort it.
 		match handle2.await {
-			Ok(Ok(_)) => dkg_logging::info!(target: "dkg", "🕸️  Outbound task finished"),
+			Ok(Ok(_)) => dkg_logging::info!(target: "dkg_gadget", "🕸️  Outbound task finished"),
 			Ok(Err(err)) =>
-				dkg_logging::error!(target: "dkg", "🕸️  Outbound task errored: {:?}", err),
-			Err(_) => dkg_logging::error!(target: "dkg", "🕸️  Outbound task aborted"),
+				dkg_logging::error!(target: "dkg_gadget", "🕸️  Outbound task errored: {:?}", err),
+			Err(_) => dkg_logging::error!(target: "dkg_gadget", "🕸️  Outbound task aborted"),
 		}
 		res
 	};
@@ -395,17 +395,17 @@ where
 			let unsigned_message = match outgoing_rx.next().await {
 				Some(msg) => msg,
 				None => {
-					dkg_logging::debug!(target: "dkg", "🕸️  Outgoing Receiver Ended");
+					dkg_logging::debug!(target: "dkg_gadget", "🕸️  Outgoing Receiver Ended");
 					break
 				},
 			};
 
-			dkg_logging::info!(target: "dkg", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
+			dkg_logging::info!(target: "dkg_gadget", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
 				Err(err) => {
-					dkg_logging::error!(target: "dkg", "Failed to serialize message: {:?}, Skipping..", err);
+					dkg_logging::error!(target: "dkg_gadget", "Failed to serialize message: {:?}, Skipping..", err);
 					continue
 				},
 			};
@@ -433,15 +433,15 @@ where
 			let unsigned_dkg_message =
 				DKGMessage { sender_id: id, status, payload, session_id: params.session_id };
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
-				dkg_logging::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
+				dkg_logging::error!(target: "dkg_gadget", "Async proto failed to send outbound message: {:?}", err);
 			} else {
-				dkg_logging::info!(target: "dkg", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
+				dkg_logging::info!(target: "dkg_gadget", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
 			}
 
 			// check the status of the async protocol.
 			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
-				dkg_logging::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
+				dkg_logging::debug!(target: "dkg_gadget", "🕸️  Async proto is completed or terminated, breaking out of incoming loop");
 				break
 			}
 		}
@@ -475,7 +475,7 @@ where
 			let unsigned_message = match incoming_wrapper.next().await {
 				Some(msg) => msg,
 				None => {
-					dkg_logging::debug!(target: "dkg", "🕸️  Inbound Receiver Ended");
+					dkg_logging::debug!(target: "dkg_gadget", "🕸️  Inbound Receiver Ended");
 					break
 				},
 			};
@@ -483,13 +483,13 @@ where
 			if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type)
 				.is_err()
 			{
-				dkg_logging::error!(target: "dkg", "Error handling unsigned inbound message. Returning");
+				dkg_logging::error!(target: "dkg_gadget", "Error handling unsigned inbound message. Returning");
 				break
 			}
 
 			// check the status of the async protocol.
 			if params.handle.is_completed() || params.handle.is_terminated() {
-				dkg_logging::debug!(target: "dkg", "🕸️  Async proto is completed or terminated, breaking out of inbound loop");
+				dkg_logging::debug!(target: "dkg_gadget", "🕸️  Async proto is completed or terminated, breaking out of inbound loop");
 				break
 			}
 		}

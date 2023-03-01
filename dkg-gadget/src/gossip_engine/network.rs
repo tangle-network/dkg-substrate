@@ -551,7 +551,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
+		debug!(target: "dkg_gadget", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
 
 		if let Some(metrics) = self.metrics.as_ref() {
 			metrics.dkg_signed_messages.inc();
@@ -566,12 +566,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 				drop(queue_lock);
 				let recv_count = self.message_notifications_channel.receiver_count();
 				if recv_count == 0 {
-					dkg_logging::warn!(target: "dkg", "No one is going to process the message notification!!!");
+					dkg_logging::warn!(target: "dkg_gadget", "No one is going to process the message notification!!!");
 				}
 				if let Err(e) = self.message_notifications_channel.send(()) {
-					dkg_logging::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
+					dkg_logging::error!(target: "dkg_gadget", "Failed to send message notification to DKG controller: {:?}", e);
 				} else {
-					dkg_logging::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
+					dkg_logging::debug!(target: "dkg_gadget", "Message Notification sent to {recv_count} DKG controller listeners");
 				}
 			};
 			match pending_messages_peers.entry(message.message_hash::<B>()) {

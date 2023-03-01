@@ -48,7 +48,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		return
 	}
 
-	debug!(target: "dkg", "🕸️  saving signed proposal in offchain storage");
+	debug!(target: "dkg_gadget", "🕸️  saving signed proposal in offchain storage");
 
 	if find_index::<AuthorityId>(
 		&current_validator_set.read().authorities[..],
@@ -97,7 +97,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 				old_val.as_deref(),
 				&prop_wrapper.encode(),
 			) {
-				debug!(target: "dkg", "🕸️  Successfully saved signed proposals in offchain storage");
+				debug!(target: "dkg_gadget", "🕸️  Successfully saved signed proposals in offchain storage");
 				break
 			}
 		}
