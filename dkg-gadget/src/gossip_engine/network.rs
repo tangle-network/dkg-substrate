@@ -121,7 +121,7 @@ impl NetworkGossipEngineBuilder {
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
-			protocol_name: self.protocol_name,
+			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),
@@ -135,6 +135,7 @@ impl NetworkGossipEngineBuilder {
 		};
 
 		let controller = GossipHandlerController {
+			protocol_name: self.protocol_name,
 			handler_channel,
 			message_notifications_channel,
 			gossip_enabled,
@@ -220,6 +221,7 @@ impl DKGMessageWrapper<AuthorityId> {
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
+	protocol_name: ProtocolName,
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
 	/// A simple channel to send notifications whenever we receive a message from a peer.
@@ -243,7 +245,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		recipient: PeerId,
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to {}", recipient);
+		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to {}", self.protocol_name, recipient);
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
@@ -253,7 +255,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to all peers");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to all peers", self.protocol_name);
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
@@ -279,11 +281,11 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		};
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Dequeuing message: {}", msg.message_hash::<B>());
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Dequeuing message: {}", self.protocol_name, msg.message_hash::<B>());
 				Some(msg)
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Message already read too many times, ignoring");
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Message already read too many times, ignoring", self.protocol_name);
 				// We have already read this message too many times, so we remove it from the queue.
 				let _ = lock.pop_front();
 				None
@@ -296,16 +298,16 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		let msg = lock.pop_front().map(|m| m.unwrap());
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Acknowledging message: {}", msg.message_hash::<B>());
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Acknowledging message: {}", self.protocol_name, msg.message_hash::<B>());
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "No message to acknowledge");
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | No message to acknowledge", self.protocol_name);
 			},
 		}
 	}
 
 	fn clear_queue(&self) {
-		dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Clearing message queue");
+		dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Clearing message queue", self.protocol_name);
 		let mut lock = self.message_queue.write();
 		lock.clear();
 	}
@@ -501,7 +503,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{
-				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
+				debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Peer {} connected to gossip protocol", protocol, remote);
 				let mut lock = self.peers.write();
 				let _was_in = lock.insert(
 					remote,
