@@ -52,7 +52,7 @@ use dkg_primitives::{
 		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
 		SignedDKGMessage,
 	},
-	AuthoritySetId, DKGReport, MisbehaviourType, GOSSIP_MESSAGE_RESENDING_LIMIT,
+	AuthoritySetId, DKGReport, MisbehaviourType,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
@@ -149,9 +149,6 @@ where
 	/// A HashSet of the currently being signed proposals.
 	/// Note: we only store the hash of the proposal here, not the full proposal.
 	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
-	/// Tracking for sent gossip messages: using blake2_128 for message hashes
-	/// The value is the number of times the message has been sent.
-	pub has_sent_gossip_msg: Shared<HashMap<[u8; 16], u8>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -190,7 +187,6 @@ where
 			aggregated_public_keys: self.aggregated_public_keys.clone(),
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
-			has_sent_gossip_msg: self.has_sent_gossip_msg.clone(),
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
@@ -252,7 +248,6 @@ where
 			latest_header,
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
-			has_sent_gossip_msg: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
@@ -1273,13 +1268,7 @@ where
 
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
-		let hash = sp_core::blake2_128(&misbehaviour_msg.encode());
-		let count = *self.has_sent_gossip_msg.read().get(&hash).unwrap_or(&0u8);
-		if count > GOSSIP_MESSAGE_RESENDING_LIMIT {
-			return
-		}
 		gossip_misbehaviour_report(self, misbehaviour_msg);
-		self.has_sent_gossip_msg.write().insert(hash, count + 1);
 	}
 
 	pub fn authenticate_msg_origin(
