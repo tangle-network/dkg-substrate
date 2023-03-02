@@ -128,6 +128,7 @@ impl NetworkGossipEngineBuilder {
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),
 			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
+			authority_id_to_peer_id: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
 			processing_already_seen_messages_enabled: processing_already_seen_messages_enabled
 				.clone(),
@@ -359,6 +360,10 @@ pub struct GossipHandler<B: Block + 'static> {
 	service: Arc<NetworkService<B, B::Hash>>,
 	// All connected peers
 	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
+	/// A mapping from authority id to peer id.
+	///
+	/// This is used to send messages to specific peer by knowing the authority id.
+	authority_id_to_peer_id: Arc<RwLock<HashMap<AuthorityId, PeerId>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
 	/// Whether we should process already seen messages or not.
@@ -380,6 +385,7 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 			pending_messages_peers: self.pending_messages_peers.clone(),
 			service: self.service.clone(),
 			peers: self.peers.clone(),
+			authority_id_to_peer_id: self.authority_id_to_peer_id.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
 			processing_already_seen_messages_enabled: self
 				.processing_already_seen_messages_enabled
@@ -411,6 +417,11 @@ struct Peer<B: Block> {
 	/// If the same message is received from this peer more than
 	/// `MAX_DUPLICATED_MESSAGES_PER_PEER`, we will flag this peer as malicious.
 	message_counter: LruHashMap<B::Hash, usize>,
+
+	/// The Known AuthorityId of that Peer.
+	///
+	/// Could be None if that peer did not handshake with us yet.
+	authority_id: Option<AuthorityId>,
 }
 
 impl<B: Block + 'static> GossipHandler<B> {
@@ -525,6 +536,10 @@ impl<B: Block + 'static> GossipHandler<B> {
 						message_counter: LruHashMap::new(
 							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
 						),
+						// At this point we don't know the authority id of the peer, so we set it to
+						// None. We will update it once we receive the handshake message from that
+						// peer.
+						authority_id: None,
 					},
 				);
 				debug_assert!(_was_in.is_none());
@@ -533,9 +548,23 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if protocol == self.protocol_name =>
 			{
 				let mut lock = self.peers.write();
-				let _peer = lock.remove(&remote);
-				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} disconnected from gossip protocol", remote);
-				debug_assert!(_peer.is_some());
+				let peer = lock.remove(&remote);
+				debug_assert!(peer.is_some());
+				// remove that peer's authority id from the authority id to peer id map (if any).
+				match peer {
+					Some(peer) =>
+						if let Some(authority_id) = peer.authority_id {
+							let expected_remote =
+								self.authority_id_to_peer_id.write().remove(&authority_id);
+							// This should always be valid, if it isn't, it means that we have a bug
+							// and somehow we have two peers with the same authority id.
+							debug_assert_eq!(expected_remote, Some(remote));
+						},
+					None => {
+						debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected without sending handshake message");
+					},
+				}
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected from gossip protocol");
 			},
 
 			Event::NotificationsReceived { remote, messages } => {
@@ -593,8 +622,13 @@ impl<B: Block + 'static> GossipHandler<B> {
 			},
 		};
 		debug!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is now connected as {}", message.authority_id);
-		// TODO: build the mapping between the peer id and the authority id, so that we can use the
-		// authority id to send messages
+		let mut lock = self.peers.write();
+		if let Some(peer) = lock.get_mut(&who) {
+			peer.authority_id = Some(message.authority_id.clone());
+		} else {
+			warn!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is not connected, but sent us a handshake message!!");
+		}
+		self.authority_id_to_peer_id.write().insert(message.authority_id, who);
 	}
 
 	/// Called when peer sends us new signed DKG message.
@@ -700,12 +734,24 @@ impl<B: Block + 'static> GossipHandler<B> {
 	}
 
 	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
-		let message_hash = message.message_hash::<B>();
+		// Check if the message has a recipient
+		let maybe_peer_id = match &message.msg.recipient_id {
+			Some(recipient_id) => self.authority_id_to_peer_id.read().get(recipient_id).cloned(),
+			None => None,
+		};
+		// If we have a peer id, we send the message to that peer directly.
+		if let Some(peer_id) = maybe_peer_id {
+			debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to recipient {peer_id} using p2p");
+			self.send_signed_dkg_message(peer_id, message);
+			return
+		}
+		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
 			let peers_map = self.peers.read();
 			peers_map.keys().into_iter().cloned().collect::<Vec<_>>()
 		};
 		if peer_ids.is_empty() {
+			let message_hash = message.message_hash::<B>();
 			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
 			return
 		}
