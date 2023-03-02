@@ -268,6 +268,7 @@ pub enum DKGError {
 	InvalidPeerId,
 	InvalidSignature,
 	InvalidKeygenPartyId,
+	InvalidSigningSet,
 }
 
 impl fmt::Display for DKGError {
@@ -291,6 +292,7 @@ impl fmt::Display for DKGError {
 			InvalidPeerId => "Invalid PeerId!".to_string(),
 			InvalidSignature => "Invalid Signature!".to_string(),
 			InvalidKeygenPartyId => "Invalid Keygen Party Id!".to_string(),
+			InvalidSigningSet => "Invalid Signing Set!".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}

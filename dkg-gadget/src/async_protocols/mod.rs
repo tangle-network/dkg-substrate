@@ -237,10 +237,12 @@ impl OfflinePartyId {
 		Ok(Self(offline_id))
 	}
 
-	/// Try to Converts the `OfflinePartyId` to `KeygenPartyId`.
+	/// Tries to Converts the `OfflinePartyId` to a `KeygenPartyId`.
+	///
+	/// Returns an error if the `OfflinePartyId` is not in the list of signing parties.
 	pub fn try_to_keygen_party_id(&self, s_l: &[KeygenPartyId]) -> Result<KeygenPartyId, DKGError> {
 		let idx = self.to_index();
-		let party_i = s_l[idx];
+		let party_i = s_l.get(idx).cloned().ok_or(DKGError::InvalidSigningSet)?;
 		Ok(party_i)
 	}
 
