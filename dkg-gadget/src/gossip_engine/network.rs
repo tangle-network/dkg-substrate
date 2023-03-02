@@ -683,37 +683,34 @@ impl<B: Block + 'static> GossipHandler<B> {
 	pub fn send_signed_dkg_message(&self, to_who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		let message_hash = message.message_hash::<B>();
 		if let Some(ref mut peer) = self.peers.write().get_mut(&to_who) {
-			let already_propagated = peer.known_messages.insert(message_hash);
-			if already_propagated {
+			let new_to_them = peer.known_messages.insert(message_hash);
+			if !new_to_them {
 				return
 			}
 			let message = super::DKGNetworkMessage::DKGMessage(message);
 			let msg = Encode::encode(&message);
 			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
+
+			if let Some(metrics) = self.metrics.as_ref() {
+				metrics.dkg_propagated_messages.inc_by(1);
+			}
 		} else {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
 	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
-		let mut propagated_messages = 0;
 		let message_hash = message.message_hash::<B>();
-		let mut peers = self.peers.write();
-		if peers.is_empty() {
+		let peer_ids = {
+			let peers_map = self.peers.read();
+			peers_map.keys().into_iter().cloned().collect::<Vec<_>>()
+		};
+		if peer_ids.is_empty() {
 			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
+			return
 		}
-		let message = super::DKGNetworkMessage::DKGMessage(message);
-		let msg = Encode::encode(&message);
-		for (who, peer) in peers.iter_mut() {
-			let new_to_them = peer.known_messages.insert(message_hash);
-			if !new_to_them {
-				continue
-			}
-			self.service.write_notification(*who, self.protocol_name.clone(), msg.clone());
-			propagated_messages += 1;
-		}
-		if let Some(metrics) = self.metrics.as_ref() {
-			metrics.dkg_propagated_messages.inc_by(propagated_messages);
+		for peer in peer_ids {
+			self.send_signed_dkg_message(peer, message.clone());
 		}
 	}
 }
