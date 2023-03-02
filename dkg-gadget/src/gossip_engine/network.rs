@@ -694,7 +694,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
 							dkg_logging::warn!(
 								target: "dkg_gadget::gossip_engine::network",
-								"reporting peer {} as they are sending us the same message over and over again", who
+								"reporting peer {who} as they are sending us the same message over and over again"
 							);
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
@@ -726,7 +726,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
 
 			if let Some(metrics) = self.metrics.as_ref() {
-				metrics.dkg_propagated_messages.inc_by(1);
+				metrics.dkg_propagated_messages.inc();
 			}
 		} else {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
@@ -744,6 +744,10 @@ impl<B: Block + 'static> GossipHandler<B> {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to recipient {peer_id} using p2p");
 			self.send_signed_dkg_message(peer_id, message);
 			return
+		} else if let Some(recipient_id) = &message.msg.recipient_id {
+			debug!(target: "dkg_gadget::gossip_engine::network", "No direct connection to {recipient_id}, falling back to gossiping");
+		} else {
+			debug!(target: "dkg_gadget::gossip_engine::network", "No specific recipient, broadcasting message to all peers");
 		}
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
