@@ -541,13 +541,10 @@ where
 	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
 		let current_session_id =
 			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id);
-		debug!(target: "dkg_gadget::worker", "🕸️  Fetching local keys for session id : {:?}", current_session_id);
 		let next_session_id = current_session_id.map(|s| s + 1);
 		let active_local_key =
 			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
 		let next_local_key = next_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
-		debug!(target: "dkg_gadget::worker", "🕸️  Fetched active-local-key : {:?}", active_local_key);
-		debug!(target: "dkg_gadget::worker", "🕸️  Fetched next-local-key : {:?}", next_local_key);
 		(active_local_key, next_local_key)
 	}
 
