@@ -47,6 +47,10 @@ pub enum DKGMsgStatus {
 pub struct DKGMessage<AuthorityId> {
 	/// Node authority id
 	pub sender_id: AuthorityId,
+	/// Authority id of the recipient.
+	///
+	/// If None, the message is broadcasted to all nodes.
+	pub recipient_id: Option<AuthorityId>,
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message

@@ -223,6 +223,8 @@ where
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
 				sender_id: id,
+				// No recipient for this message, it is broadcasted
+				recipient_id: None,
 				status: DKGMsgStatus::ACTIVE,
 				payload,
 				session_id: params.session_id,

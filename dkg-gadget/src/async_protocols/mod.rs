@@ -67,7 +67,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub engine: Arc<BI>,
 	pub keystore: DKGKeystore,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
-	pub best_authorities: Arc<Vec<Public>>,
+	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
 	pub batch_id_gen: Arc<AtomicU64>,
@@ -518,18 +518,43 @@ where
 				},
 			};
 
-			let payload = match &proto_ty {
-				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
-					sender_id: party_id,
-					keygen_msg: serialized_body,
-				}),
-				ProtocolType::Offline { unsigned_proposal, .. } =>
-					DKGMsgPayload::Offline(DKGOfflineMessage {
+			let (recipient_id, payload) = match &proto_ty {
+				ProtocolType::Keygen { .. } => {
+					let payload = DKGMsgPayload::Keygen(DKGKeygenMessage {
+						sender_id: party_id,
+						keygen_msg: serialized_body,
+					});
+					// Keygen messages are sent to all parties
+					(None, payload)
+				},
+				ProtocolType::Offline { unsigned_proposal, .. } => {
+					let payload = DKGMsgPayload::Offline(DKGOfflineMessage {
 						key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
 						signer_set_id: party_id as u64,
 						offline_msg: serialized_body,
 						async_index,
-					}),
+					});
+					// we need to calculate the recipient id from the receiver.
+					let maybe_recipient_id = match unsigned_message.receiver {
+						Some(party_i) => {
+							// Here we need to calculate the authority id of the recipient
+							// using the KeygenPartyId.
+							let keygen_party_id = KeygenPartyId::try_from(party_i)
+								.expect("message receiver should be a valid KeygenPartyId");
+							// try to find the authority id in the list of authorities by the
+							// KeygenPartyId
+							params.best_authorities.iter().find_map(|(id, p)| {
+								if id == &keygen_party_id {
+									Some(p.clone())
+								} else {
+									None
+								}
+							})
+						},
+						None => None,
+					};
+					(maybe_recipient_id, payload)
+				},
 				_ => {
 					unreachable!(
 						"Should not happen since voting is handled with a custom subroutine"
@@ -538,8 +563,13 @@ where
 			};
 
 			let id = params.authority_public_key.as_ref().clone();
-			let unsigned_dkg_message =
-				DKGMessage { sender_id: id, status, payload, session_id: params.session_id };
+			let unsigned_dkg_message = DKGMessage {
+				sender_id: id,
+				recipient_id,
+				status,
+				payload,
+				session_id: params.session_id,
+			};
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				dkg_logging::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {

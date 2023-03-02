@@ -279,7 +279,7 @@ where
 	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 	fn generate_async_proto_params(
 		&self,
-		best_authorities: Vec<Public>,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
@@ -397,7 +397,7 @@ where
 
 	fn spawn_keygen_protocol(
 		&self,
-		best_authorities: Vec<Public>,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
@@ -476,7 +476,7 @@ where
 	)]
 	fn create_signing_protocol(
 		&self,
-		best_authorities: Vec<Public>,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
@@ -761,8 +761,11 @@ where
 			},
 		};
 
-		let best_authorities: Vec<Public> =
-			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		let best_authorities = self
+			.get_best_authorities(header)
+			.into_iter()
+			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
+			.collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
 		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for genesis DKG");
@@ -814,8 +817,11 @@ where
 		};
 
 		*self.next_best_authorities.write() = self.get_next_best_authorities(header);
-		let next_best_authorities: Vec<Public> =
-			self.get_next_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		let next_best_authorities = self
+			.get_next_best_authorities(header)
+			.into_iter()
+			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
+			.collect();
 		let threshold = self.get_next_signature_threshold(header);
 
 		let authority_public_key = self.get_authority_public_key();
@@ -1401,8 +1407,11 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Got unsigned proposals count {}", unsigned_proposals.len());
 		}
 
-		let best_authorities: Vec<Public> =
-			self.get_best_authorities(header).iter().map(|x| x.1.clone()).collect();
+		let best_authorities: Vec<_> = self
+			.get_best_authorities(header)
+			.into_iter()
+			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
+			.collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
 		let mut count = 0;
@@ -1513,12 +1522,13 @@ where
 		&self,
 		seed: &[u8],
 		t: u16,
-		best_authorities: Vec<Public>,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
 	) -> Result<Vec<KeygenPartyId>, DKGError> {
-		let mut final_set = self.get_unjailed_signers(&best_authorities)?;
+		let only_public_keys = best_authorities.iter().map(|(_, p)| p).cloned().collect::<Vec<_>>();
+		let mut final_set = self.get_unjailed_signers(&only_public_keys)?;
 		// Mutate the final set if we don't have enough unjailed signers
 		if final_set.len() <= t as usize {
-			let jailed_set = self.get_jailed_signers(&best_authorities)?;
+			let jailed_set = self.get_jailed_signers(&only_public_keys)?;
 			let diff = t as usize + 1 - final_set.len();
 			final_set = final_set
 				.iter()
