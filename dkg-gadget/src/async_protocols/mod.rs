@@ -194,7 +194,7 @@ impl fmt::Display for KeygenPartyId {
 
 impl KeygenPartyId {
 	/// Try to convert a KeygenPartyId to an OfflinePartyId.
-	pub fn try_to_offline_party_id(&self, s_l: &[u16]) -> Result<OfflinePartyId, DKGError> {
+	pub fn try_to_offline_party_id(&self, s_l: &[Self]) -> Result<OfflinePartyId, DKGError> {
 		OfflinePartyId::try_from_keygen_party_id(*self, s_l)
 	}
 
@@ -227,19 +227,21 @@ impl OfflinePartyId {
 	/// This is safe because the KeygenPartyId is guaranteed to be in the range `[1, n]`, and the
 	/// OfflinePartyId is guaranteed to be in the range `[1, t+1]`. if the KeygenPartyId is not in
 	/// the list of signing parties, then we return an error.
-	pub fn try_from_keygen_party_id(i: KeygenPartyId, s_l: &[u16]) -> Result<Self, DKGError> {
-		let party_i = *i.as_ref();
+	pub fn try_from_keygen_party_id(
+		i: KeygenPartyId,
+		s_l: &[KeygenPartyId],
+	) -> Result<Self, DKGError> {
 		// find the index of the party in the list of signing parties
-		let index = s_l.iter().position(|&x| x == party_i).ok_or(DKGError::InvalidKeygenPartyId)?;
+		let index = s_l.iter().position(|&x| x == i).ok_or(DKGError::InvalidKeygenPartyId)?;
 		let offline_id = index as u16 + 1;
 		Ok(Self(offline_id))
 	}
 
 	/// Try to Converts the `OfflinePartyId` to `KeygenPartyId`.
-	pub fn try_to_keygen_party_id(&self, s_l: &[u16]) -> Result<KeygenPartyId, DKGError> {
+	pub fn try_to_keygen_party_id(&self, s_l: &[KeygenPartyId]) -> Result<KeygenPartyId, DKGError> {
 		let idx = self.to_index();
 		let party_i = s_l[idx];
-		KeygenPartyId::try_from(party_i)
+		Ok(party_i)
 	}
 
 	/// Converts the OfflinePartyId to an index.
@@ -269,7 +271,7 @@ pub enum ProtocolType {
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal>,
 		i: OfflinePartyId,
-		s_l: Vec<u16>,
+		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
@@ -632,11 +634,11 @@ mod tests {
 	fn should_create_offline_id_from_keygen_id() {
 		let party_id = 1;
 		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = vec![1, 2, 3];
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		assert_eq!(*offline_id.as_ref(), 1);
 		assert_eq!(offline_id.to_index(), 0);
-		let s_l = vec![2, 3, 1];
+		let s_l = vec![2, 3, 1].into_iter().map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		assert_eq!(*offline_id.as_ref(), 3);
 		assert_eq!(offline_id.to_index(), 2);
@@ -646,14 +648,16 @@ mod tests {
 	fn should_return_the_correct_offline_id() {
 		let party_id = 1;
 		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = vec![1, 2, 3];
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l_raw = s_l.iter().map(|id| id.0).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
-		let expected_offline_id = get_offline_stage_index(&s_l, party_id).unwrap();
+		let expected_offline_id = get_offline_stage_index(&s_l_raw, party_id).unwrap();
 		assert_eq!(*offline_id.as_ref(), expected_offline_id);
 
-		let s_l = vec![2, 3, 1];
+		let s_l = vec![2, 3, 1].into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l_raw = s_l.iter().map(|id| id.0).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
-		let expected_offline_id = get_offline_stage_index(&s_l, party_id).unwrap();
+		let expected_offline_id = get_offline_stage_index(&s_l_raw, party_id).unwrap();
 		assert_eq!(*offline_id.as_ref(), expected_offline_id);
 	}
 
@@ -661,7 +665,7 @@ mod tests {
 	fn should_convert_from_keygen_id_to_offline_id_and_back() {
 		let party_id = 1;
 		let orig_keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = vec![1, 2, 3];
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(orig_keygen_id, &s_l).unwrap();
 		let keygen_id = offline_id.try_to_keygen_party_id(&s_l).unwrap();
 		assert_eq!(keygen_id, orig_keygen_id);
@@ -683,7 +687,7 @@ mod tests {
 			.unwrap();
 		assert_eq!(party_i, 2);
 		let keygen_id = KeygenPartyId::try_from(party_i).unwrap();
-		let s_l = vec![1, 2, 3];
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		assert_eq!(offline_id.to_index(), 1);
 		assert_eq!(*offline_id.as_ref(), 2);

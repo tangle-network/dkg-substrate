@@ -483,7 +483,7 @@ where
 		threshold: u16,
 		stage: ProtoStageType,
 		unsigned_proposals: Vec<UnsignedProposal>,
-		signing_set: Vec<u16>,
+		signing_set: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
 		let async_proto_params = self.generate_async_proto_params(
@@ -1436,7 +1436,7 @@ where
 			}
 			let maybe_set = self.generate_signers(&seed, threshold, best_authorities.clone()).ok();
 			if let Some(set) = maybe_set {
-				let set = HashSet::<u16>::from_iter(set.iter().cloned());
+				let set = HashSet::<_>::from_iter(set.iter().cloned());
 				if !signing_sets.contains(&set) {
 					signing_sets.push(set);
 				}
@@ -1450,7 +1450,7 @@ where
 		#[allow(clippy::needless_range_loop)]
 		for i in 0..signing_sets.len() {
 			// Filter for only the signing sets that contain our party index.
-			if signing_sets[i].contains(party_i.as_ref()) {
+			if signing_sets[i].contains(&party_i) {
 				info!(target: "dkg_gadget::worker", "🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})", session_id, i, threshold, best_authorities.len(), signing_sets[i].clone());
 				match self.create_signing_protocol(
 					best_authorities.clone(),
@@ -1514,7 +1514,7 @@ where
 		seed: &[u8],
 		t: u16,
 		best_authorities: Vec<Public>,
-	) -> Result<Vec<u16>, DKGError> {
+	) -> Result<Vec<KeygenPartyId>, DKGError> {
 		let mut final_set = self.get_unjailed_signers(&best_authorities)?;
 		// Mutate the final set if we don't have enough unjailed signers
 		if final_set.len() <= t as usize {
@@ -1524,12 +1524,14 @@ where
 				.iter()
 				.chain(jailed_set.iter().take(diff))
 				.cloned()
-				.collect::<Vec<u16>>();
+				.collect::<Vec<_>>();
 		}
 
-		select_random_set(seed, final_set, t + 1).map_err(|err| DKGError::CreateOfflineStage {
-			reason: format!("generate_signers failed, reason: {err}"),
-		})
+		select_random_set(seed, final_set, t + 1)
+			.map(|set| set.into_iter().flat_map(KeygenPartyId::try_from).collect::<Vec<_>>())
+			.map_err(|err| DKGError::CreateOfflineStage {
+				reason: format!("generate_signers failed, reason: {err}"),
+			})
 	}
 
 	fn get_jailed_signers_inner(

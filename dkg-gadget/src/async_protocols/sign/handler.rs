@@ -26,7 +26,7 @@ use tokio::sync::broadcast::Receiver;
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType, Threshold,
+	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
 };
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
@@ -47,7 +47,7 @@ where
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal>,
-		s_l: Vec<u16>,
+		s_l: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
@@ -143,7 +143,7 @@ where
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal,
 		offline_i: OfflinePartyId,
-		s_l: Vec<u16>,
+		s_l: Vec<KeygenPartyId>,
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
@@ -157,9 +157,10 @@ where
 			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
+		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
 			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
-			OfflineStage::new(*offline_i.as_ref(), s_l, local_key)
+			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
