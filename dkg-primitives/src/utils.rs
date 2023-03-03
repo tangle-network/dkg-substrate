@@ -16,14 +16,13 @@ use chacha20poly1305::{
 	aead::{Aead, NewAead},
 	XChaCha20Poly1305,
 };
-use codec::Encode;
 use curv::arithmetic::Converter;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
 
 use sc_service::{ChainType, Configuration};
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{ecdsa, sr25519, ByteArray, Pair, Public};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
-use sp_runtime::key_types::ACCOUNT;
+use sp_runtime::{key_types::ACCOUNT, KeyTypeId};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use sp_core::ecdsa::Signature;
@@ -43,6 +42,30 @@ pub fn insert_controller_account_keys_into_keystore(
 	config: &Configuration,
 	key_store: Option<SyncCryptoStorePtr>,
 ) {
+	insert_account_keys_into_keystore::<sr25519::Public>(config, ACCOUNT, key_store);
+}
+
+/// Inserts a key of type `dkg_runtime_primitives::KEY_TYPE` into the keystore for
+/// development/testing.
+///
+/// Currently, this only successfully inserts keys if the seed is development related.
+/// i.e. for Alice, Bob, Charlie, etc.
+pub fn insert_dkg_account_keys_into_keystore(
+	config: &Configuration,
+	key_store: Option<SyncCryptoStorePtr>,
+) {
+	insert_account_keys_into_keystore::<ecdsa::Public>(
+		config,
+		dkg_runtime_primitives::KEY_TYPE,
+		key_store,
+	);
+}
+
+fn insert_account_keys_into_keystore<TPublic: Public>(
+	config: &Configuration,
+	key_type: KeyTypeId,
+	key_store: Option<SyncCryptoStorePtr>,
+) {
 	let chain_type = config.chain_spec.chain_type();
 	let seed = &config.network.node_name[..];
 
@@ -52,11 +75,11 @@ pub fn insert_controller_account_keys_into_keystore(
 		// of the predefined nodes Alice, Bob, Charlie, Dave, Eve or Ferdie
 		"Alice" | "Bob" | "Charlie" | "Dave" | "Eve" | "Ferdie" => {
 			if chain_type == ChainType::Development || chain_type == ChainType::Local {
-				let pub_key = get_from_seed::<sr25519::Public>(seed).encode();
+				let pub_key = get_from_seed::<TPublic>(seed).to_raw_vec();
 				if let Some(keystore) = key_store {
 					let _ = SyncCryptoStore::insert_unknown(
 						&*keystore,
-						ACCOUNT,
+						key_type,
 						&format!("//{seed}"),
 						&pub_key,
 					);

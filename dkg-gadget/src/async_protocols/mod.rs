@@ -47,7 +47,7 @@ use round_based::{
 };
 use serde::Serialize;
 use std::{
-	fmt::{Debug, Formatter},
+	fmt::{self, Debug, Formatter},
 	pin::Pin,
 	sync::{
 		atomic::{AtomicU64, Ordering},
@@ -67,9 +67,9 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub engine: Arc<BI>,
 	pub keystore: DKGKeystore,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
-	pub best_authorities: Arc<Vec<Public>>,
+	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
-	pub party_i: u16,
+	pub party_i: KeygenPartyId,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -143,6 +143,115 @@ impl CurrentRoundBlame {
 	}
 }
 
+/// A Keygen Party Id, in the range [1, n]
+///
+/// This is a wrapper around u16 to ensure that the party id is in the range [1, n] and to prevent
+/// the misuse of the party id as an offline party id, for example.
+///
+/// To construct a KeygenPartyId, use the `try_from` method.
+#[derive(
+	Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, codec::Encode, codec::Decode,
+)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct KeygenPartyId(u16);
+
+/// A Offline Party Id, in the range [1, t+1], where t is the signing threshold.
+///
+/// This is a wrapper around u16 to prevent the misuse of the party id as a keygen party id, for
+/// example.
+///
+/// To construct a OfflinePartyId, use the [`Self::try_from_keygen_party_id`] method.
+#[derive(
+	Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, codec::Encode, codec::Decode,
+)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct OfflinePartyId(u16);
+
+impl TryFrom<u16> for KeygenPartyId {
+	type Error = DKGError;
+	/// This the only where you can construct a KeygenPartyId
+	fn try_from(value: u16) -> Result<Self, Self::Error> {
+		// party_i starts from 1
+		if value == 0 {
+			Err(DKGError::InvalidKeygenPartyId)
+		} else {
+			Ok(Self(value))
+		}
+	}
+}
+
+impl AsRef<u16> for KeygenPartyId {
+	fn as_ref(&self) -> &u16 {
+		&self.0
+	}
+}
+
+impl fmt::Display for KeygenPartyId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+impl KeygenPartyId {
+	/// Try to convert a KeygenPartyId to an OfflinePartyId.
+	pub fn try_to_offline_party_id(&self, s_l: &[Self]) -> Result<OfflinePartyId, DKGError> {
+		OfflinePartyId::try_from_keygen_party_id(*self, s_l)
+	}
+
+	/// Converts the PartyId to an index in the range [0, n-1].
+	///
+	/// The implementation is safe because the party id is guaranteed to be in the range [1, n].
+	pub const fn to_index(&self) -> usize {
+		self.0 as usize - 1
+	}
+}
+
+impl AsRef<u16> for OfflinePartyId {
+	fn as_ref(&self) -> &u16 {
+		&self.0
+	}
+}
+
+impl fmt::Display for OfflinePartyId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+impl OfflinePartyId {
+	/// Creates a OfflinePartyId from a KeygenPartyId and a list of the signing parties.
+	///
+	/// This finds the index of the KeygenPartyId in the list of signing parties, then we use that
+	/// index as OfflinePartyId.
+	///
+	/// This is safe because the KeygenPartyId is guaranteed to be in the range `[1, n]`, and the
+	/// OfflinePartyId is guaranteed to be in the range `[1, t+1]`. if the KeygenPartyId is not in
+	/// the list of signing parties, then we return an error.
+	pub fn try_from_keygen_party_id(
+		i: KeygenPartyId,
+		s_l: &[KeygenPartyId],
+	) -> Result<Self, DKGError> {
+		// find the index of the party in the list of signing parties
+		let index = s_l.iter().position(|&x| x == i).ok_or(DKGError::InvalidKeygenPartyId)?;
+		let offline_id = index as u16 + 1;
+		Ok(Self(offline_id))
+	}
+
+	/// Tries to Converts the `OfflinePartyId` to a `KeygenPartyId`.
+	///
+	/// Returns an error if the `OfflinePartyId` is not in the list of signing parties.
+	pub fn try_to_keygen_party_id(&self, s_l: &[KeygenPartyId]) -> Result<KeygenPartyId, DKGError> {
+		let idx = self.to_index();
+		let party_i = s_l.get(idx).cloned().ok_or(DKGError::InvalidSigningSet)?;
+		Ok(party_i)
+	}
+
+	/// Converts the OfflinePartyId to an index.
+	pub const fn to_index(&self) -> usize {
+		self.0 as usize - 1
+	}
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum KeygenRound {
 	/// Keygen round is active
@@ -157,30 +266,31 @@ pub enum KeygenRound {
 pub enum ProtocolType {
 	Keygen {
 		ty: KeygenRound,
-		i: u16,
+		i: KeygenPartyId,
 		t: u16,
 		n: u16,
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal>,
-		i: u16,
-		s_l: Vec<u16>,
+		i: OfflinePartyId,
+		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
 		unsigned_proposal: Arc<UnsignedProposal>,
-		i: u16,
+		i: OfflinePartyId,
 	},
 }
 
 impl ProtocolType {
-	pub fn get_i(&self) -> PartyIndex {
+	pub const fn get_i(&self) -> u16 {
 		match self {
-			Self::Keygen { i, .. } | Self::Offline { i, .. } | Self::Voting { i, .. } => *i,
+			Self::Keygen { i, .. } => i.0,
+			Self::Offline { i, .. } => i.0,
+			Self::Voting { i, .. } => i.0,
 		}
 	}
-
 	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
@@ -410,6 +520,25 @@ where
 				},
 			};
 
+			// we need to calculate the recipient id from the receiver.
+			let maybe_recipient_id = match unsigned_message.receiver {
+				Some(party_i) => {
+					// Here we need to calculate the authority id of the recipient
+					// using the KeygenPartyId.
+					let keygen_party_id = KeygenPartyId::try_from(party_i)
+						.expect("message receiver should be a valid KeygenPartyId");
+					// try to find the authority id in the list of authorities by the
+					// KeygenPartyId
+					params.best_authorities.iter().find_map(|(id, p)| {
+						if id == &keygen_party_id {
+							Some(p.clone())
+						} else {
+							None
+						}
+					})
+				},
+				None => None,
+			};
 			let payload = match &proto_ty {
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
 					sender_id: party_id,
@@ -430,8 +559,13 @@ where
 			};
 
 			let id = params.authority_public_key.as_ref().clone();
-			let unsigned_dkg_message =
-				DKGMessage { sender_id: id, status, payload, session_id: params.session_id };
+			let unsigned_dkg_message = DKGMessage {
+				sender_id: id,
+				recipient_id: maybe_recipient_id,
+				status,
+				payload,
+				session_id: params.session_id,
+			};
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				dkg_logging::error!(target: "dkg", "Async proto failed to send outbound message: {:?}", err);
 			} else {
@@ -495,4 +629,101 @@ where
 		}
 		Ok(())
 	})
+}
+
+#[cfg(test)]
+mod tests {
+	use dkg_primitives::crypto::AuthorityId;
+	use sp_application_crypto::ByteArray;
+
+	use super::*;
+
+	/// The Original Implementation of the Offline Index
+	fn get_offline_stage_index(s_l: &[u16], keygen_party_idx: u16) -> Option<u16> {
+		(1..)
+			.zip(s_l)
+			.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
+			.map(|r| r.0)
+	}
+
+	#[test]
+	fn should_create_keygen_id_from_u16() {
+		let party_id = 1;
+		assert!(KeygenPartyId::try_from(party_id).is_ok());
+		let party_id = 2;
+		assert!(KeygenPartyId::try_from(party_id).is_ok());
+		let party_id = 0;
+		assert!(KeygenPartyId::try_from(party_id).is_err());
+	}
+
+	#[test]
+	fn should_create_offline_id_from_keygen_id() {
+		let party_id = 1;
+		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
+		assert_eq!(*offline_id.as_ref(), 1);
+		assert_eq!(offline_id.to_index(), 0);
+		let s_l = vec![2, 3, 1].into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
+		assert_eq!(*offline_id.as_ref(), 3);
+		assert_eq!(offline_id.to_index(), 2);
+	}
+
+	#[test]
+	fn should_return_the_correct_offline_id() {
+		let party_id = 1;
+		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l_raw = s_l.iter().map(|id| id.0).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
+		let expected_offline_id = get_offline_stage_index(&s_l_raw, party_id).unwrap();
+		assert_eq!(*offline_id.as_ref(), expected_offline_id);
+
+		let s_l = vec![2, 3, 1].into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l_raw = s_l.iter().map(|id| id.0).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
+		let expected_offline_id = get_offline_stage_index(&s_l_raw, party_id).unwrap();
+		assert_eq!(*offline_id.as_ref(), expected_offline_id);
+	}
+
+	#[test]
+	fn should_convert_from_keygen_id_to_offline_id_and_back() {
+		let party_id = 1;
+		let orig_keygen_id = KeygenPartyId::try_from(party_id).unwrap();
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(orig_keygen_id, &s_l).unwrap();
+		let keygen_id = offline_id.try_to_keygen_party_id(&s_l).unwrap();
+		assert_eq!(keygen_id, orig_keygen_id);
+	}
+
+	#[test]
+	fn should_convert_offline_id_to_authority_id() {
+		let authorities = vec![
+			AuthorityId::from_slice(&[1; 33]),
+			AuthorityId::from_slice(&[2; 33]),
+			AuthorityId::from_slice(&[3; 33]),
+			AuthorityId::from_slice(&[4; 33]),
+		];
+		let my_authority_id = AuthorityId::from_slice(&[2; 33]);
+		let party_i = authorities
+			.iter()
+			.position(|id| id == &my_authority_id)
+			.and_then(|i| u16::try_from(i + 1).ok())
+			.unwrap();
+		assert_eq!(party_i, 2);
+		let keygen_id = KeygenPartyId::try_from(party_i).unwrap();
+		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
+		assert_eq!(offline_id.to_index(), 1);
+		assert_eq!(*offline_id.as_ref(), 2);
+
+		// Convert offline id back to keygen id
+		let my_keygen_id = offline_id.try_to_keygen_party_id(&s_l).unwrap();
+		assert_eq!(my_keygen_id, keygen_id);
+		// Convert keygen id to authority id
+		let authority_id =
+			authorities.get(my_keygen_id.to_index()).expect("authority id should exist");
+		assert_eq!(authority_id, &my_authority_id);
+	}
 }

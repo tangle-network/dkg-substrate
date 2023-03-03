@@ -47,6 +47,10 @@ pub enum DKGMsgStatus {
 pub struct DKGMessage<AuthorityId> {
 	/// Node authority id
 	pub sender_id: AuthorityId,
+	/// Authority id of the recipient.
+	///
+	/// If None, the message is broadcasted to all nodes.
+	pub recipient_id: Option<AuthorityId>,
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
@@ -261,6 +265,10 @@ pub enum DKGError {
 	NoAuthorityAccounts,
 	NoHeader,
 	SignMisbehaviour { reason: String, bad_actors: Vec<usize> },
+	InvalidPeerId,
+	InvalidSignature,
+	InvalidKeygenPartyId,
+	InvalidSigningSet,
 }
 
 impl fmt::Display for DKGError {
@@ -281,6 +289,10 @@ impl fmt::Display for DKGError {
 			NoHeader => "No Header!".to_string(),
 			SignMisbehaviour { reason, bad_actors } =>
 				format!("SignMisbehaviour: reason: {reason},  bad actors: {bad_actors:?}"),
+			InvalidPeerId => "Invalid PeerId!".to_string(),
+			InvalidSignature => "Invalid Signature!".to_string(),
+			InvalidKeygenPartyId => "Invalid Keygen Party Id!".to_string(),
+			InvalidSigningSet => "Invalid Signing Set!".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}

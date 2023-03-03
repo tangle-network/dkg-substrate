@@ -54,6 +54,10 @@ pub(crate) fn sign_and_send_messages<GE>(
 
 				crate::utils::inspect_outbound(ty, encoded_signed_dkg_message.len());
 
+				// This method name here is a little bit misleading, as it could actually be a peer
+				// to peer message not a gossiping, depends on whether the message contains a
+				// recipient or not. So it is up to the underlying gossip engine to decide
+				// whether to gossip or not.
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
 					dkg_logging::error!(target: "dkg_gadget::gossip", "Error sending message: {:?}", e);
 				}

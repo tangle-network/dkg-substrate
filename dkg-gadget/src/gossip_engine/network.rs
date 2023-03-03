@@ -40,7 +40,7 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{metrics::Metrics, worker::HasLatestHeader};
+use crate::{metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
 use codec::{Decode, Encode};
 use dkg_logging::{debug, warn};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -48,7 +48,7 @@ use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
 use parking_lot::RwLock;
-use sc_network::{multiaddr, Event, NetworkService, PeerId, ProtocolName};
+use sc_network::{multiaddr, Event, NetworkService, NetworkStateInfo, PeerId, ProtocolName};
 use sc_network_common::{
 	config, error,
 	service::{NetworkEventStream, NetworkNotification, NetworkPeers},
@@ -68,15 +68,16 @@ use std::{
 };
 use tokio::sync::broadcast;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NetworkGossipEngineBuilder {
 	protocol_name: ProtocolName,
+	keystore: DKGKeystore,
 }
 
 impl NetworkGossipEngineBuilder {
 	/// Create a new network gossip engine.
-	pub fn new(protocol_name: ProtocolName) -> Self {
-		Self { protocol_name }
+	pub fn new(protocol_name: ProtocolName, keystore: DKGKeystore) -> Self {
+		Self { protocol_name, keystore }
 	}
 
 	/// Returns the configuration of the set to put in the network configuration.
@@ -121,11 +122,13 @@ impl NetworkGossipEngineBuilder {
 		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
+			keystore: self.keystore,
 			protocol_name: self.protocol_name,
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),
 			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
+			authority_id_to_peer_id: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
 			processing_already_seen_messages_enabled: processing_already_seen_messages_enabled
 				.clone(),
@@ -168,6 +171,8 @@ mod rep {
 	pub const GOOD_MESSAGE: Rep = Rep::new(1 << 7, "Good message");
 	/// We received an unexpected message packet.
 	pub const UNEXPECTED_MESSAGE: Rep = Rep::new_fatal("Unexpected message packet");
+	/// When a peer tries to impersonate another peer, by claiming another authority id.
+	pub const PEER_IMPIRSONATED: Rep = Rep::new_fatal("Peer is impersonating another peer");
 	/// Reputation change when a peer sends us the same message over and over.
 	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
@@ -340,6 +345,8 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// Used as an identifier for the gossip protocol.
 	protocol_name: ProtocolName,
 	latest_header: Arc<RwLock<Option<B::Header>>>,
+	/// The DKG Keystore.
+	keystore: DKGKeystore,
 	/// A Buffer of messages that we have received from the network, but not yet processed.
 	message_queue: Arc<RwLock<VecDeque<DKGMessageWrapper<AuthorityId>>>>,
 	/// A Simple notification stream to notify the caller that we have messages in the queue.
@@ -353,6 +360,10 @@ pub struct GossipHandler<B: Block + 'static> {
 	service: Arc<NetworkService<B, B::Hash>>,
 	// All connected peers
 	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
+	/// A mapping from authority id to peer id.
+	///
+	/// This is used to send messages to specific peer by knowing the authority id.
+	authority_id_to_peer_id: Arc<RwLock<HashMap<AuthorityId, PeerId>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
 	/// Whether we should process already seen messages or not.
@@ -368,11 +379,13 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 		Self {
 			protocol_name: self.protocol_name.clone(),
 			latest_header: self.latest_header.clone(),
+			keystore: self.keystore.clone(),
 			message_queue: self.message_queue.clone(),
 			message_notifications_channel: self.message_notifications_channel.clone(),
 			pending_messages_peers: self.pending_messages_peers.clone(),
 			service: self.service.clone(),
 			peers: self.peers.clone(),
+			authority_id_to_peer_id: self.authority_id_to_peer_id.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
 			processing_already_seen_messages_enabled: self
 				.processing_already_seen_messages_enabled
@@ -404,6 +417,11 @@ struct Peer<B: Block> {
 	/// If the same message is received from this peer more than
 	/// `MAX_DUPLICATED_MESSAGES_PER_PEER`, we will flag this peer as malicious.
 	message_counter: LruHashMap<B::Hash, usize>,
+
+	/// The Known AuthorityId of that Peer.
+	///
+	/// Could be None if that peer did not handshake with us yet.
+	authority_id: Option<AuthorityId>,
 }
 
 impl<B: Block + 'static> GossipHandler<B> {
@@ -426,7 +444,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				match message {
 					Ok(ToHandler::SendMessage { recipient, message }) =>
 						self0.send_signed_dkg_message(recipient, message),
-					Ok(ToHandler::Gossip(v)) => self0.gossip_message(v),
+					Ok(ToHandler::Gossip(v)) => self0.gossip_dkg_signed_message(v),
 					_ => {},
 				}
 			}
@@ -502,6 +520,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if protocol == self.protocol_name =>
 			{
 				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
+				// Send our Handshake message to that peer.
+				if let Err(err) = self.send_handshake_message(remote).await {
+					dkg_logging::error!(target: "dkg-gossip", "Send handshake message to peer {remote} failed: {err:?}");
+				} else {
+					dkg_logging::debug!(target: "dkg-gossip", "Send handshake message to peer {remote} succeeded");
+				}
 				let mut lock = self.peers.write();
 				let _was_in = lock.insert(
 					remote,
@@ -512,6 +536,10 @@ impl<B: Block + 'static> GossipHandler<B> {
 						message_counter: LruHashMap::new(
 							NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
 						),
+						// At this point we don't know the authority id of the peer, so we set it to
+						// None. We will update it once we receive the handshake message from that
+						// peer.
+						authority_id: None,
 					},
 				);
 				debug_assert!(_was_in.is_none());
@@ -520,9 +548,23 @@ impl<B: Block + 'static> GossipHandler<B> {
 				if protocol == self.protocol_name =>
 			{
 				let mut lock = self.peers.write();
-				let _peer = lock.remove(&remote);
-				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} disconnected from gossip protocol", remote);
-				debug_assert!(_peer.is_some());
+				let peer = lock.remove(&remote);
+				debug_assert!(peer.is_some());
+				// remove that peer's authority id from the authority id to peer id map (if any).
+				match peer {
+					Some(peer) =>
+						if let Some(authority_id) = peer.authority_id {
+							let expected_remote =
+								self.authority_id_to_peer_id.write().remove(&authority_id);
+							// This should always be valid, if it isn't, it means that we have a bug
+							// and somehow we have two peers with the same authority id.
+							debug_assert_eq!(expected_remote, Some(remote));
+						},
+					None => {
+						debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected without sending handshake message");
+					},
+				}
+				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected from gossip protocol");
 			},
 
 			Event::NotificationsReceived { remote, messages } => {
@@ -531,20 +573,62 @@ impl<B: Block + 'static> GossipHandler<B> {
 						continue
 					}
 					debug!(target: "dkg_gadget::gossip_engine::network", "Received message from {} from gossiping", remote);
-
-					if let Ok(m) =
-						<SignedDKGMessage<AuthorityId> as Decode>::decode(&mut message.as_ref())
-					{
-						self.on_signed_dkg_message(remote, m).await;
-					} else {
-						warn!(target: "dkg_gadget::gossip_engine::network", "Failed to decode signed DKG message");
-						self.service.report_peer(remote, rep::UNEXPECTED_MESSAGE);
-					}
+					let maybe_dkg_network_message =
+						<super::DKGNetworkMessage as Decode>::decode(&mut message.as_ref());
+					let m = match maybe_dkg_network_message {
+						Ok(m) => m,
+						Err(e) => {
+							warn!(target: "dkg_gadget::gossip_engine::network", "Failed to decode DKG Network message from peer {remote} with error: {e:?}");
+							self.service.report_peer(remote, rep::UNEXPECTED_MESSAGE);
+							return
+						},
+					};
+					match m {
+						super::DKGNetworkMessage::Handshake(h) =>
+							self.on_handshake_message(remote, h).await,
+						super::DKGNetworkMessage::DKGMessage(s) =>
+							self.on_signed_dkg_message(remote, s).await,
+					};
 				}
 			},
 			Event::NotificationStreamOpened { .. } => {},
 			Event::NotificationStreamClosed { .. } => {},
 		}
+	}
+
+	/// Creates and sends handshake message to the peer.
+	async fn send_handshake_message(&self, to_who: PeerId) -> Result<(), DKGError> {
+		let my_peer_id = self.service.local_peer_id();
+		let handshake_message = super::HandshakeMessage::try_new(&self.keystore, my_peer_id)?;
+		let message = super::DKGNetworkMessage::Handshake(handshake_message);
+		let msg = Encode::encode(&message);
+		self.service.write_notification(to_who, self.protocol_name.clone(), msg);
+		Ok(())
+	}
+
+	async fn on_handshake_message(&self, who: PeerId, message: super::HandshakeMessage) {
+		// verifiy the handshake message
+		match message.is_valid(who) {
+			Ok(v) =>
+				if v {
+					debug!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is valid");
+				} else {
+					warn!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is invalid");
+					self.service.report_peer(who, rep::PEER_IMPIRSONATED);
+				},
+			Err(e) => {
+				warn!(target: "dkg_gadget::gossip_engine::network", "Failed to verify handshake message from peer {who} with error: {e:?}");
+				self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
+			},
+		};
+		debug!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is now connected as {}", message.authority_id);
+		let mut lock = self.peers.write();
+		if let Some(peer) = lock.get_mut(&who) {
+			peer.authority_id = Some(message.authority_id.clone());
+		} else {
+			warn!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is not connected, but sent us a handshake message!!");
+		}
+		self.authority_id_to_peer_id.write().insert(message.authority_id, who);
 	}
 
 	/// Called when peer sends us new signed DKG message.
@@ -610,7 +694,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
 							dkg_logging::warn!(
 								target: "dkg_gadget::gossip_engine::network",
-								"reporting peer {} as they are sending us the same message over and over again", who
+								"reporting peer {who} as they are sending us the same message over and over again"
 							);
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
@@ -626,42 +710,57 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 		// if the gossip is enabled, we send the message to the gossiping peers
 		if self.gossip_enabled.load(Ordering::Relaxed) {
-			self.gossip_message(message);
+			self.gossip_dkg_signed_message(message);
 		}
 	}
 
 	pub fn send_signed_dkg_message(&self, to_who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		let message_hash = message.message_hash::<B>();
 		if let Some(ref mut peer) = self.peers.write().get_mut(&to_who) {
-			let already_propagated = peer.known_messages.insert(message_hash);
-			if already_propagated {
+			let new_to_them = peer.known_messages.insert(message_hash);
+			if !new_to_them {
 				return
 			}
+			let message = super::DKGNetworkMessage::DKGMessage(message);
 			let msg = Encode::encode(&message);
 			self.service.write_notification(to_who, self.protocol_name.clone(), msg);
+
+			if let Some(metrics) = self.metrics.as_ref() {
+				metrics.dkg_propagated_messages.inc();
+			}
 		} else {
 			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
 		}
 	}
 
-	fn gossip_message(&self, message: SignedDKGMessage<AuthorityId>) {
-		let mut propagated_messages = 0;
-		let message_hash = message.message_hash::<B>();
-		let mut peers = self.peers.write();
-		if peers.is_empty() {
+	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
+		// Check if the message has a recipient
+		let maybe_peer_id = match &message.msg.recipient_id {
+			Some(recipient_id) => self.authority_id_to_peer_id.read().get(recipient_id).cloned(),
+			None => None,
+		};
+		// If we have a peer id, we send the message to that peer directly.
+		if let Some(peer_id) = maybe_peer_id {
+			debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to recipient {peer_id} using p2p");
+			self.send_signed_dkg_message(peer_id, message);
+			return
+		} else if let Some(recipient_id) = &message.msg.recipient_id {
+			debug!(target: "dkg_gadget::gossip_engine::network", "No direct connection to {recipient_id}, falling back to gossiping");
+		} else {
+			debug!(target: "dkg_gadget::gossip_engine::network", "No specific recipient, broadcasting message to all peers");
+		}
+		// Otherwise, we fallback to sending the message to all peers.
+		let peer_ids = {
+			let peers_map = self.peers.read();
+			peers_map.keys().into_iter().cloned().collect::<Vec<_>>()
+		};
+		if peer_ids.is_empty() {
+			let message_hash = message.message_hash::<B>();
 			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
+			return
 		}
-		let msg = Encode::encode(&message);
-		for (who, peer) in peers.iter_mut() {
-			let new_to_them = peer.known_messages.insert(message_hash);
-			if !new_to_them {
-				continue
-			}
-			self.service.write_notification(*who, self.protocol_name.clone(), msg.clone());
-			propagated_messages += 1;
-		}
-		if let Some(metrics) = self.metrics.as_ref() {
-			metrics.dkg_propagated_messages.inc_by(propagated_messages);
+		for peer in peer_ids {
+			self.send_signed_dkg_message(peer, message.clone());
 		}
 	}
 }

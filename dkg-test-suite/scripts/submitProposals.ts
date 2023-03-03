@@ -84,12 +84,14 @@ async function run() {
 			prop.toU8a()
 		);
 		// Sign and send the transaction
-		const unsub = await api.tx.sudo.sudo(call).signAndSend(sudoAccount, (result) => {
-			if (result.isFinalized || result.isError) {
-				console.log(result.txHash.toHex(), 'is', result.status.type);
-				unsub();
-			}
-		});
+		const unsub = await api.tx.sudo
+			.sudo(call)
+			.signAndSend(sudoAccount, (result) => {
+				if (result.isFinalized || result.isError) {
+					console.log(result.txHash.toHex(), 'is', result.status.type);
+					unsub();
+				}
+			});
 
 		nonce += 1;
 	}, 20_000);
