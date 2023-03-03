@@ -896,15 +896,15 @@ where
 		// Query the current state of session progress, we will proceed with enact next
 		// authorities if the session progress has passed threshold
 		// if let Some(session_progress) = self.get_current_session_progress(header) {
-		// 	debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-		// 	metric_set!(self, dkg_session_progress, session_progress.deconstruct());
-		// 	if session_progress < SESSION_PROGRESS_THRESHOLD {
+		// 	debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}",
+		// session_progress); 	metric_set!(self, dkg_session_progress,
+		// session_progress.deconstruct()); 	if session_progress < SESSION_PROGRESS_THRESHOLD {
 		// 		debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
 		// 		return
 		// 	}
 		// } else {
-		// 	debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
-		// 	return
+		// 	debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress
+		// percentage!"); 	return
 		// }
 
 		if !self.should_execute_new_keygen(header) {
@@ -1043,7 +1043,6 @@ where
 		} else {
 			dkg_logging::info!(target: "dkg_gadget::worker", "🕸️  No update to local session found, not rotation local session");
 		}
-
 	}
 
 	fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
@@ -1565,10 +1564,7 @@ where
 	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
 		// query runtime api to check if we should execute new keygen.
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		self.client
-			.runtime_api()
-			.should_execute_new_keygen(&at)
-			.unwrap_or_default()
+		self.client.runtime_api().should_execute_new_keygen(&at).unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block

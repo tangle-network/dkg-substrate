@@ -307,7 +307,7 @@ pub mod pallet {
 			// `on_finality_notification` call.
 			if ShouldExecuteEmergencyKeygen::<T>::get() {
 				ShouldExecuteEmergencyKeygen::<T>::put(false);
-			} 
+			}
 
 			// reset the `ShouldExecuteNewKeygen` flag if it is set to true
 			if ShouldExecuteNewKeygen::<T>::get() {
@@ -315,12 +315,16 @@ pub mod pallet {
 			}
 
 			// check if we have passed exactly `Period` blocks from the last session rotation
-			let blocks_passed_since_last_session_rotation = n - LastSessionRotationBlock::<T>::get();
-			if blocks_passed_since_last_session_rotation == T::SessionPeriod::get() {
-				// lets set the ShouldStartDKG to true
-				ShouldExecuteNewKeygen::<T>::put(true);
+			let blocks_passed_since_last_session_rotation =
+				n - LastSessionRotationBlock::<T>::get();
+
+			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() {
+				if blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into() {
+					// lets set the ShouldStartDKG to true
+					ShouldExecuteNewKeygen::<T>::put(true);
+				}
 			}
-			
+
 			// Check if we shall refresh the DKG.
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
@@ -2041,6 +2045,7 @@ impl<T: Config> GetDKGPublicKey for Pallet<T> {
 		Self::previous_public_key().1
 	}
 }
+
 
 /// Periodic Session manager for DKGMetadata
 /// To rotate a session we require three conditions

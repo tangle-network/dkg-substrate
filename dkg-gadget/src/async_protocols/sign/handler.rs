@@ -254,8 +254,8 @@ where
 							break
 						}
 					} else {
-						//dkg_logging::info!(target: "dkg_gadget", "Skipping DKG vote message since round
-						// keys did not match");
+						//dkg_logging::info!(target: "dkg_gadget", "Skipping DKG vote message since
+						// round keys did not match");
 					}
 				}
 			}
