@@ -605,6 +605,7 @@ pub mod pallet {
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
 			reporters: Vec<T::DKGId>,
+			offender: T::DKGId,
 		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
@@ -612,8 +613,16 @@ pub mod pallet {
 		NextKeygenThresholdUpdated { next_keygen_threshold: u16 },
 		/// NextSignatureThreshold updated
 		NextSignatureThresholdUpdated { next_signature_threshold: u16 },
+		/// PendingKeygenThreshold updated
+		PendingKeygenThresholdUpdated { pending_keygen_threshold: u16 },
+		/// PendingSignatureThreshold updated
+		PendingSignatureThresholdUpdated { pending_signature_threshold: u16 },
 		/// An Emergency Keygen Protocol was triggered.
 		EmergencyKeygenTriggered,
+		/// An authority has been jailed for misbehaviour
+		AuthorityJailed { misbehaviour_type: MisbehaviourType, authority: T::DKGId },
+		/// An authority has been unjailed
+		AuthorityUnJailed { authority: T::DKGId },
 	}
 
 	#[cfg(feature = "std")]
@@ -678,6 +687,9 @@ pub mod pallet {
 			);
 			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
 				*threshold = new_threshold;
+				Self::deposit_event(Event::PendingSignatureThresholdUpdated {
+					pending_signature_threshold: new_threshold,
+				});
 				Ok(().into())
 			})
 		}
@@ -706,10 +718,18 @@ pub mod pallet {
 			);
 
 			if new_threshold <= PendingSignatureThreshold::<T>::get() {
-				Self::update_signature_threshold(new_threshold.saturating_sub(1))?;
+				let pending_signature_threshold = new_threshold.saturating_sub(1);
+				Self::update_signature_threshold(pending_signature_threshold)?;
+				Self::deposit_event(Event::PendingSignatureThresholdUpdated {
+					pending_signature_threshold,
+				});
 			}
 
-			Self::update_keygen_threshold(new_threshold)
+			Self::update_keygen_threshold(new_threshold)?;
+			Self::deposit_event(Event::PendingKeygenThresholdUpdated {
+				pending_keygen_threshold: new_threshold,
+			});
+			Ok(().into())
 		}
 
 		/// Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
@@ -1001,6 +1021,11 @@ pub mod pallet {
 							// Jail the offender
 							JailedKeygenAuthorities::<T>::insert(&offender, now);
 
+							Self::deposit_event(Event::AuthorityJailed {
+								misbehaviour_type,
+								authority: offender.clone(),
+							});
+
 							// Check for authorities that are
 							// 1. Not jailed
 							// 2. Not already included in the next_best_authorities
@@ -1076,7 +1101,7 @@ pub mod pallet {
 						if unjailed_authorities.len() < signature_threshold.into() {
 							// Handle edge case properly (can't have -1 signers)
 							if !unjailed_authorities.is_empty() {
-								JailedSigningAuthorities::<T>::insert(offender, now);
+								JailedSigningAuthorities::<T>::insert(offender.clone(), now);
 								// Update the next and pending threshold
 								// Since this updates the signature threshold it likely means that
 								// all signing under the active DKG is failing. We have to ensure
@@ -1088,7 +1113,11 @@ pub mod pallet {
 								PendingSignatureThreshold::<T>::put(new_val);
 							}
 						} else {
-							JailedSigningAuthorities::<T>::insert(offender, now)
+							JailedSigningAuthorities::<T>::insert(offender.clone(), now);
+							Self::deposit_event(Event::AuthorityJailed {
+								misbehaviour_type,
+								authority: offender.clone(),
+							});
 						}
 					},
 				};
@@ -1096,6 +1125,7 @@ pub mod pallet {
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
 					misbehaviour_type,
 					reporters: valid_reporters,
+					offender,
 				});
 
 				// now increment the block number at which we expect next unsigned transaction.
@@ -1150,7 +1180,8 @@ pub mod pallet {
 			authority: T::DKGId,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			JailedKeygenAuthorities::<T>::remove(authority);
+			JailedKeygenAuthorities::<T>::remove(authority.clone());
+			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
 		}
 
@@ -1167,7 +1198,8 @@ pub mod pallet {
 			authority: T::DKGId,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			JailedSigningAuthorities::<T>::remove(authority);
+			JailedSigningAuthorities::<T>::remove(authority.clone());
+			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
 		}
 
