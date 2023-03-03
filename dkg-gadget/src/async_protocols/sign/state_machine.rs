@@ -14,7 +14,8 @@
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, PartyIndex, ProtocolType, Threshold,
+	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
+	Threshold,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
@@ -31,7 +32,7 @@ use tokio::sync::broadcast::Receiver;
 impl StateMachineHandler for OfflineStage {
 	type AdditionalReturnParam = (
 		UnsignedProposal,
-		PartyIndex,
+		OfflinePartyId,
 		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
 		BatchKey,

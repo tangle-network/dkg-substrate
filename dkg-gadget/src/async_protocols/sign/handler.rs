@@ -26,7 +26,7 @@ use tokio::sync::broadcast::Receiver;
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, ProtocolType, Threshold,
+	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
 };
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
@@ -47,13 +47,10 @@ where
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal>,
-		signing_set: Vec<u16>,
+		s_l: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
-		assert!(
-			threshold + 1 == signing_set.len() as u16,
-			"Signing set must be of size threshold + 1"
-		);
+		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
 			status_handle.stop_rx.lock().take().ok_or_else(|| DKGError::GenericError {
@@ -80,9 +77,8 @@ where
 
 				dkg_logging::debug!(target: "dkg_gadget", "Got unsigned proposals count {}", unsigned_proposals.len());
 
-				if let Some(offline_i) = Self::get_offline_stage_index(&signing_set, params.party_i)
-				{
-					dkg_logging::info!(target: "dkg_gadget", "Offline stage index: {}", offline_i);
+				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
+					dkg_logging::info!(target: "dkg", "Offline stage index: {}", offline_i);
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -91,7 +87,7 @@ where
 							params.clone(),
 							unsigned_proposal,
 							offline_i,
-							signing_set.clone(),
+							s_l.clone(),
 							local_key.clone(),
 							t,
 							batch_key,
@@ -146,8 +142,8 @@ where
 	fn new_offline<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal,
-		offline_i: u16,
-		s_l: Vec<u16>,
+		offline_i: OfflinePartyId,
+		s_l: Vec<KeygenPartyId>,
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
@@ -161,9 +157,10 @@ where
 			local_key: Arc::new(local_key.clone()),
 		};
 		let early_handle = params.handle.broadcaster.subscribe();
+		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
 			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
-			OfflineStage::new(offline_i, s_l, local_key)
+			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
@@ -177,8 +174,7 @@ where
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal,
-		// offline_i is the index of a party’s party_index in the signing list s_l
-		offline_i: u16,
+		offline_i: OfflinePartyId,
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
@@ -213,7 +209,7 @@ where
 			let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
 
 			let payload = DKGMsgPayload::Vote(DKGVoteMessage {
-				party_ind: offline_i,
+				party_ind: *offline_i.as_ref(),
 				// use the hash of proposal as "round key" ONLY for purposes of ensuring
 				// uniqueness We only want voting to happen amongst voters under the SAME
 				// proposal, not different proposals This is now especially necessary since we
@@ -227,6 +223,8 @@ where
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
 				sender_id: id,
+				// No recipient for this message, it is broadcasted
+				recipient_id: None,
 				status: DKGMsgStatus::ACTIVE,
 				payload,
 				session_id: params.session_id,
@@ -290,16 +288,6 @@ where
 		});
 
 		Ok(GenericAsyncHandler { protocol })
-	}
-
-	/// Returns our party's index in signers vec if any.
-	/// Indexing starts from 1.
-	/// OfflineStage must be created using this index if present (not the original keygen index)
-	fn get_offline_stage_index(s_l: &[u16], keygen_party_idx: u16) -> Option<u16> {
-		(1..)
-			.zip(s_l)
-			.find(|(_i, keygen_i)| keygen_party_idx == **keygen_i)
-			.map(|r| r.0)
 	}
 
 	/// Converts the multi_party_ecdsa SignError to DKG error

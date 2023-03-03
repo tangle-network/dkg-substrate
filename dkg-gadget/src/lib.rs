@@ -134,12 +134,16 @@ where
 		local_keystore,
 		_block,
 	} = dkg_params;
+	let dkg_keystore: DKGKeystore = key_store.into();
+	let keygen_gossip_protocol = NetworkGossipEngineBuilder::new(
+		DKG_KEYGEN_PROTOCOL_NAME.to_string().into(),
+		dkg_keystore.clone(),
+	);
 
-	let keygen_gossip_protocol =
-		NetworkGossipEngineBuilder::new(DKG_KEYGEN_PROTOCOL_NAME.to_string().into());
-
-	let signing_gossip_protocol =
-		NetworkGossipEngineBuilder::new(DKG_SIGNING_PROTOCOL_NAME.to_string().into());
+	let signing_gossip_protocol = NetworkGossipEngineBuilder::new(
+		DKG_SIGNING_PROTOCOL_NAME.to_string().into(),
+		dkg_keystore.clone(),
+	);
 
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
@@ -178,7 +182,7 @@ where
 	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
 	let offchain_db_backend = db::DKGOffchainStorageDb::new(
 		backend.clone(),
-		key_store.clone().into(),
+		dkg_keystore.clone(),
 		local_keystore.clone(),
 	);
 	let db_backend = Arc::new(offchain_db_backend);
@@ -186,7 +190,7 @@ where
 		latest_header,
 		client,
 		backend,
-		key_store: key_store.into(),
+		key_store: dkg_keystore,
 		keygen_gossip_engine,
 		signing_gossip_engine,
 		db_backend,
