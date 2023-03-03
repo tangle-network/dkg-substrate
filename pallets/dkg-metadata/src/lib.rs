@@ -583,7 +583,7 @@ pub mod pallet {
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
 			reporters: Vec<T::DKGId>,
-			offender: T::DKGId
+			offender: T::DKGId,
 		},
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
@@ -598,14 +598,9 @@ pub mod pallet {
 		/// An Emergency Keygen Protocol was triggered.
 		EmergencyKeygenTriggered,
 		/// An authority has been jailed for misbehaviour
-		AuthorityJailed {
-			misbehaviour_type: MisbehaviourType,
-			authority: T::DKGId
-		},
+		AuthorityJailed { misbehaviour_type: MisbehaviourType, authority: T::DKGId },
 		/// An authority has been unjailed
-		AuthorityUnJailed {
-			authority: T::DKGId
-		},
+		AuthorityUnJailed { authority: T::DKGId },
 	}
 
 	#[cfg(feature = "std")]
@@ -671,7 +666,7 @@ pub mod pallet {
 			PendingSignatureThreshold::<T>::try_mutate(|threshold| {
 				*threshold = new_threshold;
 				Self::deposit_event(Event::PendingSignatureThresholdUpdated {
-					pending_signature_threshold: new_threshold
+					pending_signature_threshold: new_threshold,
 				});
 				Ok(().into())
 			})
@@ -704,13 +699,13 @@ pub mod pallet {
 				let pending_signature_threshold = new_threshold.saturating_sub(1);
 				Self::update_signature_threshold(pending_signature_threshold)?;
 				Self::deposit_event(Event::PendingSignatureThresholdUpdated {
-					pending_signature_threshold
+					pending_signature_threshold,
 				});
 			}
 
 			Self::update_keygen_threshold(new_threshold)?;
 			Self::deposit_event(Event::PendingKeygenThresholdUpdated {
-				pending_keygen_threshold: new_threshold
+				pending_keygen_threshold: new_threshold,
 			});
 			Ok(().into())
 		}
@@ -1006,7 +1001,7 @@ pub mod pallet {
 
 							Self::deposit_event(Event::AuthorityJailed {
 								misbehaviour_type,
-								authority: offender.clone()
+								authority: offender.clone(),
 							});
 
 							// Check for authorities that are
@@ -1099,7 +1094,7 @@ pub mod pallet {
 							JailedSigningAuthorities::<T>::insert(offender.clone(), now);
 							Self::deposit_event(Event::AuthorityJailed {
 								misbehaviour_type,
-								authority: offender.clone()
+								authority: offender.clone(),
 							});
 						}
 					},
@@ -1108,7 +1103,7 @@ pub mod pallet {
 				Self::deposit_event(Event::MisbehaviourReportsSubmitted {
 					misbehaviour_type,
 					reporters: valid_reporters,
-					offender
+					offender,
 				});
 
 				// now increment the block number at which we expect next unsigned transaction.
@@ -1164,9 +1159,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			JailedKeygenAuthorities::<T>::remove(authority.clone());
-			Self::deposit_event(Event::AuthorityUnJailed {
-				authority
-			});
+			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
 		}
 
@@ -1184,9 +1177,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			JailedSigningAuthorities::<T>::remove(authority.clone());
-			Self::deposit_event(Event::AuthorityUnJailed {
-				authority
-			});
+			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
 		}
 
