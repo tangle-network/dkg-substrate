@@ -850,12 +850,7 @@ where
 		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
-		// Check if we should execute emergency Keygen Protocol.
-		if self.should_execute_emergency_keygen(header) {
-			debug!(target: "dkg_gadget::worker", "🕸️  Should execute emergency keygen");
-			self.handle_emergency_keygen(header);
-			return
-		}
+
 		// Attempt to enact new DKG authorities if sessions have changed
 
 		// The Steps for enacting new DKG authorities are:
@@ -1123,21 +1118,6 @@ where
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
-		}
-	}
-
-	pub fn handle_emergency_keygen(&self, header: &B::Header) {
-		// Start the queued DKG setup for the new queued authorities
-		let result = match self.validator_set(header) {
-			Some((_active, queued)) => self.handle_queued_dkg_setup(header, queued),
-			None => {
-				dkg_logging::error!(target: "dkg_gadget::worker", "🕸️  Failed to get validator set for emergency keygen");
-				return
-			},
-		};
-
-		if let Err(e) = result {
-			dkg_logging::error!(target: "dkg_gadget::worker", "🕸️  Failed to handle emergency keygen: {:?}", e);
 		}
 	}
 
@@ -1585,15 +1565,6 @@ where
 			.filter(|(_, key)| jailed_signers.contains(key))
 			.map(|(i, _)| u16::try_from(i + 1).unwrap_or_default())
 			.collect())
-	}
-
-	fn should_execute_emergency_keygen(&self, header: &B::Header) -> bool {
-		// query runtime api to check if we should execute emergency keygen.
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		self.client
-			.runtime_api()
-			.should_execute_emergency_keygen(&at)
-			.unwrap_or_default()
 	}
 
 	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {

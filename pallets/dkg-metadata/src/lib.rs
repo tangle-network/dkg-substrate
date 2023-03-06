@@ -302,14 +302,9 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
-			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
+			// reset the `ShouldExecuteNewKeygen` flag if it is set to true.
 			// this is done to ensure that the flag is reset and only read once per DKG
 			// `on_finality_notification` call.
-			if ShouldExecuteEmergencyKeygen::<T>::get() {
-				ShouldExecuteEmergencyKeygen::<T>::put(false);
-			}
-
-			// reset the `ShouldExecuteNewKeygen` flag if it is set to true
 			if ShouldExecuteNewKeygen::<T>::get() {
 				ShouldExecuteNewKeygen::<T>::put(false);
 			}
@@ -363,11 +358,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn refresh_in_progress)]
 	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
-
-	/// Should we execute emergency keygen protocol.
-	#[pallet::storage]
-	#[pallet::getter(fn should_execute_emergency_keygen)]
-	pub type ShouldExecuteEmergencyKeygen<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Should we start a new Keygen
 	#[pallet::storage]
@@ -1268,7 +1258,7 @@ pub mod pallet {
 			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
 			// trigger the keygen protocol.
-			<ShouldExecuteEmergencyKeygen<T>>::put(true);
+			<ShouldExecuteNewKeygen<T>>::put(true);
 			Ok(().into())
 		}
 	}

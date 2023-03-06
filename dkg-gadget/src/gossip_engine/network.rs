@@ -123,7 +123,7 @@ impl NetworkGossipEngineBuilder {
 		let handler = GossipHandler {
 			latest_header,
 			keystore: self.keystore,
-			protocol_name: self.protocol_name,
+			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),
