@@ -309,10 +309,12 @@ pub mod pallet {
 				ShouldExecuteNewKeygen::<T>::put(false);
 			}
 
+			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
+			// true : 1. A SessionPeriod of blocks have passed from the LastSessionRotationBlock
+			// 2. If 1 is true and we have not yet seen NextKey on chain for the last 10 blocks
 			// check if we have passed exactly `Period` blocks from the last session rotation
 			let blocks_passed_since_last_session_rotation =
 				n - LastSessionRotationBlock::<T>::get();
-
 			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() {
 				if blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into() {
 					// lets set the ShouldStartDKG to true
