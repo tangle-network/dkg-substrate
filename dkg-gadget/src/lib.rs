@@ -18,7 +18,7 @@ use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
 
-use sc_client_api::{Backend, BlockchainEvents, Finalizer};
+use sc_client_api::{Backend, BlockchainEvents};
 
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
@@ -41,6 +41,7 @@ mod metrics;
 mod proposal;
 mod utils;
 mod worker;
+mod testing;
 
 pub mod async_protocols;
 pub mod gossip_messages;
@@ -65,7 +66,7 @@ pub fn dkg_peers_set_config(
 /// of today, Rust does not allow a type alias to be used as a trait bound. Tracking
 /// issue is <https://github.com/rust-lang/rust/issues/41517>.
 pub trait Client<B, BE>:
-	BlockchainEvents<B> + HeaderBackend<B> + Finalizer<B, BE> + ProvideRuntimeApi<B> + Send + Sync
+	BlockchainEvents<B> + HeaderBackend<B> + ProvideRuntimeApi<B> + Send + Sync
 where
 	B: Block,
 	BE: Backend<B>,
@@ -78,7 +79,6 @@ where
 	BE: Backend<B>,
 	T: BlockchainEvents<B>
 		+ HeaderBackend<B>
-		+ Finalizer<B, BE>
 		+ ProvideRuntimeApi<B>
 		+ Send
 		+ Sync,
