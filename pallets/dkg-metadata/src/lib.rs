@@ -2068,7 +2068,6 @@ impl<T: Config> GetDKGPublicKey for Pallet<T> {
 	}
 }
 
-
 /// Periodic Session manager for DKGMetadata
 /// To rotate a session we require three conditions
 /// 1. The Period has passed
