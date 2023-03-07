@@ -87,8 +87,6 @@ pub const MAX_SIGNING_SETS: u64 = 8;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(100);
-
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
@@ -625,16 +623,6 @@ where
 	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
-	}
-
-	/// Returns the progress of current session
-	pub fn get_current_session_progress(&self, header: &B::Header) -> Option<sp_runtime::Permill> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self
-			.client
-			.runtime_api()
-			.get_current_session_progress(&at, *header.number())
-			.unwrap_or_default()
 	}
 
 	/// Return the next and queued validator set at header `header`.

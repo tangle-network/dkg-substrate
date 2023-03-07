@@ -315,11 +315,11 @@ pub mod pallet {
 			// check if we have passed exactly `Period` blocks from the last session rotation
 			let blocks_passed_since_last_session_rotation =
 				n - LastSessionRotationBlock::<T>::get();
-			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() {
-				if blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into() {
-					// lets set the ShouldStartDKG to true
-					ShouldExecuteNewKeygen::<T>::put(true);
-				}
+			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() &&
+				blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into()
+			{
+				// lets set the ShouldStartDKG to true
+				ShouldExecuteNewKeygen::<T>::put(true);
 			}
 
 			// Check if we shall refresh the DKG.
