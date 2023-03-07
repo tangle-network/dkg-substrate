@@ -30,6 +30,7 @@ pub use proposal::*;
 
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
+use frame_support::pallet_prelude::Get;
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
@@ -79,8 +80,8 @@ pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::Ke
 pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals<BlockNumber> {
-	pub proposals: Vec<(Vec<Proposal>, BlockNumber)>,
+pub struct OffchainSignedProposals<BlockNumber, MaxLength: Get<u32>> {
+	pub proposals: Vec<(Vec<Proposal<MaxLength>>, BlockNumber)>,
 }
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
@@ -112,9 +113,9 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	pub signatures: Vec<Vec<u8>>,
 }
 
-impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
+impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
 	fn default() -> Self {
-		Self { proposals: Vec::default() }
+		Self { proposals: Default::default() }
 	}
 }
 
@@ -188,13 +189,13 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct UnsignedProposal {
+pub struct UnsignedProposal<MaxLength: Get<u32>> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
-	pub proposal: Proposal,
+	pub proposal: Proposal<MaxLength>,
 }
 
-impl UnsignedProposal {
+impl<MaxLength: Get<u32>> UnsignedProposal<MaxLength> {
 	pub fn hash(&self) -> Option<[u8; 32]> {
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
 			Some(keccak_256(data))
@@ -212,8 +213,9 @@ impl UnsignedProposal {
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DKGApi<AuthorityId, N> where
+	pub trait DKGApi<AuthorityId, N, MaxProposalLength> where
 		AuthorityId: Codec + PartialEq,
+		MaxProposalLength: Get<u32>,
 		N: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned,
 	{
 		/// Return the current active authority set
@@ -241,7 +243,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal>;
+		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

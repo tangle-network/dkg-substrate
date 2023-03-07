@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use frame_support::RuntimeDebug;
+use frame_support::{pallet_prelude::Get, RuntimeDebug};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -146,7 +146,9 @@ pub trait ProposalHandlerTrait {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_signed_proposal<MaxLength: Get<u32>>(
+		_prop: Proposal<MaxLength>,
+	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 
@@ -168,9 +170,9 @@ impl ProposalHandlerTrait for () {}
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub struct StoredUnsignedProposal<Timestamp> {
+pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
 	/// Proposal data
-	pub proposal: Proposal,
+	pub proposal: Proposal<MaxLength>,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }
