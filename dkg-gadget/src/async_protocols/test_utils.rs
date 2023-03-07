@@ -18,13 +18,15 @@ use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use webb_proposals::{Proposal, ProposalKind};
 
+use super::KeygenPartyId;
+
 pub(crate) type VoteResults =
 	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>;
 
 #[derive(Clone)]
 pub struct TestDummyIface {
 	pub sender: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
-	pub best_authorities: Arc<Vec<Public>>,
+	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	// key is party_index, hash of data. Needed especially for local unit tests
 	pub vote_results: VoteResults,
@@ -90,8 +92,8 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn get_authority_set(&self) -> &Vec<Public> {
-		&self.best_authorities
+	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)> {
+		(*self.best_authorities).clone()
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {

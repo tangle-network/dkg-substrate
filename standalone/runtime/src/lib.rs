@@ -635,7 +635,7 @@ parameter_types! {
   pub const DKGAccountId: PalletId = PalletId(*b"dw/dkgac");
   pub const RefreshDelay: Permill = Permill::from_percent(50);
   pub const TimeToRestart: BlockNumber = 3;
-  pub const UnsignedProposalExpiry: BlockNumber = Period::get() / 4;
+  pub const UnsignedProposalExpiry: BlockNumber = Period::get() * 2;
 }
 
 impl pallet_dkg_proposal_handler::Config for Runtime {
@@ -643,7 +643,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
-	type SignedProposalHandler = ();
+	type SignedProposalHandler = BridgeRegistry;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 

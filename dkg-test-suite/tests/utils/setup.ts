@@ -138,13 +138,24 @@ const __NODE_STATE: {
 	eve: { isRunning: false, process: null },
 	ferdie: { isRunning: false, process: null },
 };
+
+type StartOption = {
+	tmp: boolean;
+	printLogs: boolean;
+	chain?: 'dev' | 'local';
+};
+
+const defaultOptions: StartOption = {
+	tmp: true,
+	printLogs: false,
+	chain: 'local',
+};
 export function startStandaloneNode(
 	authority: 'alice' | 'bob' | 'charlie' | 'dave' | 'eve' | 'ferdie',
-	options: { tmp: boolean; printLogs: boolean } = {
-		tmp: true,
-		printLogs: false,
-	}
+	options: StartOption = defaultOptions
 ): child.ChildProcess {
+	options.chain ??= 'local';
+
 	if (__NODE_STATE[authority].isRunning) {
 		return __NODE_STATE[authority].process!;
 	}
@@ -167,6 +178,7 @@ export function startStandaloneNode(
 			`--${authority}`,
 			options.printLogs ? '-linfo' : '-lerror',
 			options.tmp ? '--tmp' : '',
+			`--chain=${options.chain}`,
 			`--ws-port=${ports[authority].ws}`,
 			`--rpc-port=${ports[authority].http}`,
 			`--port=${ports[authority].p2p}`,

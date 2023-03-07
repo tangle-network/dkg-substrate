@@ -9,7 +9,7 @@ import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
 import type { Vec, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { Codec } from '@polkadot/types-codec/types';
 import type { Perbill, Permill } from '@polkadot/types/interfaces/runtime';
-import type { FrameSupportPalletId, FrameSupportWeightsRuntimeDbWeight, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, WebbProposalsHeaderTypedChainId } from '@polkadot/types/lookup';
+import type { FrameSupportPalletId, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight, WebbProposalsHeaderTypedChainId } from '@polkadot/types/lookup';
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 
@@ -58,7 +58,7 @@ declare module '@polkadot/api-base/types/consts' {
        * 
        * # Migration
        * 
-       * In the RuntimeEvent that this list ever changes, a copy of the old bags list must be retained.
+       * In the event that this list ever changes, a copy of the old bags list must be retained.
        * With that `List::migrate` can be called, which will perform the appropriate migration.
        **/
       bagThresholds: Vec<u64> & AugmentedConst<ApiType>;
@@ -108,6 +108,24 @@ declare module '@polkadot/api-base/types/consts' {
        * Percentage session should have progressed for refresh to begin
        **/
       refreshDelay: Permill & AugmentedConst<ApiType>;
+      /**
+       * Session length helper allowing to query session length across runtime upgrades.
+       **/
+      sessionPeriod: u32 & AugmentedConst<ApiType>;
+      /**
+       * Number of blocks of cooldown after unsigned transaction is included.
+       * 
+       * This ensures that we only accept unsigned transactions once, every `UnsignedInterval`
+       * blocks.
+       **/
+      unsignedInterval: u32 & AugmentedConst<ApiType>;
+      /**
+       * A configuration for base priority of unsigned transactions.
+       * 
+       * This is exposed so that it can be tuned for particular runtime, when
+       * multiple pallets send unsigned transactions.
+       **/
+      unsignedPriority: u64 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
@@ -166,6 +184,16 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       maxElectingVoters: u32 & AugmentedConst<ApiType>;
       /**
+       * The maximum number of winners that can be elected by this `ElectionProvider`
+       * implementation.
+       * 
+       * Note: This must always be greater or equal to `T::DataProvider::desired_targets()`.
+       **/
+      maxWinners: u32 & AugmentedConst<ApiType>;
+      minerMaxLength: u32 & AugmentedConst<ApiType>;
+      minerMaxVotesPerVoter: u32 & AugmentedConst<ApiType>;
+      minerMaxWeight: SpWeightsWeightV2Weight & AugmentedConst<ApiType>;
+      /**
        * The priority of the unsigned transaction submitted in the unsigned-phase
        **/
       minerTxPriority: u64 & AugmentedConst<ApiType>;
@@ -209,7 +237,7 @@ declare module '@polkadot/api-base/types/consts' {
        * this pallet), then [`MinerConfig::solution_weight`] is used to compare against
        * this value.
        **/
-      signedMaxWeight: u64 & AugmentedConst<ApiType>;
+      signedMaxWeight: SpWeightsWeightV2Weight & AugmentedConst<ApiType>;
       /**
        * Duration of the signed phase.
        **/
@@ -237,6 +265,53 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       [key: string]: Codec;
     };
+    identity: {
+      /**
+       * The amount held on deposit for a registered identity
+       **/
+      basicDeposit: u128 & AugmentedConst<ApiType>;
+      /**
+       * The amount held on deposit per additional field for a registered identity.
+       **/
+      fieldDeposit: u128 & AugmentedConst<ApiType>;
+      /**
+       * Maximum number of additional fields that may be stored in an ID. Needed to bound the I/O
+       * required to access an identity, but can be pretty high.
+       **/
+      maxAdditionalFields: u32 & AugmentedConst<ApiType>;
+      /**
+       * Maxmimum number of registrars allowed in the system. Needed to bound the complexity
+       * of, e.g., updating judgements.
+       **/
+      maxRegistrars: u32 & AugmentedConst<ApiType>;
+      /**
+       * The maximum number of sub-accounts allowed per identified account.
+       **/
+      maxSubAccounts: u32 & AugmentedConst<ApiType>;
+      /**
+       * The amount held on deposit for a registered subaccount. This should account for the fact
+       * that one storage item's value will increase by the size of an account ID, and there will
+       * be another trie item whose value is the size of an account ID plus 32 bytes.
+       **/
+      subAccountDeposit: u128 & AugmentedConst<ApiType>;
+      /**
+       * Generic const
+       **/
+      [key: string]: Codec;
+    };
+    imOnline: {
+      /**
+       * A configuration for base priority of unsigned transactions.
+       * 
+       * This is exposed so that it can be tuned for particular runtime, when
+       * multiple pallets send unsigned transactions.
+       **/
+      unsignedPriority: u64 & AugmentedConst<ApiType>;
+      /**
+       * Generic const
+       **/
+      [key: string]: Codec;
+    };
     indices: {
       /**
        * The deposit needed for reserving an index.
@@ -251,7 +326,7 @@ declare module '@polkadot/api-base/types/consts' {
       /**
        * The maximum pool points-to-balance ratio that an `open` pool can have.
        * 
-       * This is important in the RuntimeEvent slashing takes place and the pool's points-to-balance
+       * This is important in the event slashing takes place and the pool's points-to-balance
        * ratio becomes disproportional.
        * 
        * Moreover, this relates to the `RewardCounter` type as well, as the arithmetic operations
@@ -278,6 +353,29 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       bondingDuration: u32 & AugmentedConst<ApiType>;
       /**
+       * Number of eras to keep in history.
+       * 
+       * Following information is kept for eras in `[current_era -
+       * HistoryDepth, current_era]`: `ErasStakers`, `ErasStakersClipped`,
+       * `ErasValidatorPrefs`, `ErasValidatorReward`, `ErasRewardPoints`,
+       * `ErasTotalStake`, `ErasStartSessionIndex`,
+       * `StakingLedger.claimed_rewards`.
+       * 
+       * Must be more than the number of eras delayed by session.
+       * I.e. active era must always be in history. I.e. `active_era >
+       * current_era - history_depth` must be guaranteed.
+       * 
+       * If migrating an existing pallet from storage value to config value,
+       * this should be set to same value or greater as in storage.
+       * 
+       * Note: `HistoryDepth` is used as the upper bound for the `BoundedVec`
+       * item `StakingLedger.claimed_rewards`. Setting this value lower than
+       * the existing value can lead to inconsistencies in the
+       * `StakingLedger` and will need to be handled properly in a migration.
+       * The test `reducing_history_depth_abrupt` shows this effect.
+       **/
+      historyDepth: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum number of nominations per nominator.
        **/
       maxNominations: u32 & AugmentedConst<ApiType>;
@@ -289,8 +387,16 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       maxNominatorRewardedPerValidator: u32 & AugmentedConst<ApiType>;
       /**
-       * The maximum number of `unlocking` chunks a [`StakingLedger`] can have. Effectively
-       * determines how many unique eras a staker may be unbonding in.
+       * The maximum number of `unlocking` chunks a [`StakingLedger`] can
+       * have. Effectively determines how many unique eras a staker may be
+       * unbonding in.
+       * 
+       * Note: `MaxUnlockingChunks` is used as the upper bound for the
+       * `BoundedVec` item `StakingLedger.unlocking`. Setting this value
+       * lower than the existing value can lead to inconsistencies in the
+       * `StakingLedger` and will need to be handled properly in a runtime
+       * migration. The test `reducing_max_unlocking_chunks_abrupt` shows
+       * this effect.
        **/
       maxUnlockingChunks: u32 & AugmentedConst<ApiType>;
       /**
@@ -325,9 +431,9 @@ declare module '@polkadot/api-base/types/consts' {
       /**
        * The weight of runtime database operations the runtime can invoke.
        **/
-      dbWeight: FrameSupportWeightsRuntimeDbWeight & AugmentedConst<ApiType>;
+      dbWeight: SpWeightsRuntimeDbWeight & AugmentedConst<ApiType>;
       /**
-       * The designated SS85 prefix of this chain.
+       * The designated SS58 prefix of this chain.
        * 
        * This replaces the "ss58Format" property declared in the chain spec. Reason is
        * that the runtime should know about the prefix in order to make use of it as

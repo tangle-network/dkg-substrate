@@ -2,69 +2,62 @@
 name = "dkg-gadget"
 version = "0.0.1"
 authors = ["Parity Technologies <admin@parity.io>"]
-edition = "2021"
 license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [features]
 outbound-inspection = []
 tracing = []
 
 [dependencies]
-fnv = "1.0.6"
-futures = "0.3"
-parking_lot = "0.11"
-thiserror = "1.0"
-wasm-timer = "0.2.5"
-libsecp256k1 = { version = "0.7.1", default-features = false }
-sha3 = "0.9"
-hex = "0.4"
-rand = "0.8.4"
-strum = { version = "0.21", features = ["derive"] }
-linked-hash-map = "0.5.4"
-lru = "0.7.0"
+futures = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+strum = { workspace = true }
+linked-hash-map = { workspace = true }
 
-curv = { package = "curv-kzen", version = "0.10.0", default-features = false }
+curv = { workspace = true }
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
-scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 prometheus = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 
-sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-application-crypto = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-api = { workspace = true }
+sp-application-crypto = { workspace = true }
+sp-arithmetic = { workspace = true }
+sp-blockchain = { workspace = true }
+sp-core = { workspace = true }
+sp-keystore = { workspace = true }
+sp-runtime = { workspace = true }
 
-sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sc-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sc-network-common = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sc-service = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sc-peerset = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sc-client-api = { workspace = true }
+sc-keystore = { workspace = true }
+sc-network = { workspace = true }
+sc-network-common = { workspace = true }
+sc-peerset = { workspace = true }
 
-round-based = { version = "0.1.7", features = [] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json = "1.0.59"
-multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
-tokio = { version = "1.17.0", default-features = false, features = ["sync", "macros"] }
-tokio-stream = { version = "0.1.8", features = ["sync"] }
-atomic = "0.5.1"
-async-trait = "0.1.53"
-auto_impl = "1.0.0"
-itertools = "0.10.3"
-tracing = "0.1.37"
+round-based = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+multi-party-ecdsa = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+atomic = { workspace = true }
+async-trait = { workspace = true }
+auto_impl = { workspace = true }
+itertools = { workspace = true }
 
-webb-proposals = { version = "0.5.4", default-features = false, features = ["scale", "evm", "substrate"] }
+webb-proposals = { workspace = true }
 
 # Local dependencies
-dkg-runtime-primitives = { path = "../dkg-runtime-primitives" }
-dkg-primitives = { path = "../dkg-primitives", default-features = false }
-dkg-logging = { path = "../dkg-logging" }
+dkg-runtime-primitives = { workspace = true }
+dkg-primitives = { workspace = true }
+dkg-logging = { workspace = true }
 
 [dev-dependencies]
-sc-network-test = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-rstest = "0.12.0"
-env_logger = "0.9.0"
+sc-network-test = { workspace = true }
+rstest = { workspace = true }
+env_logger = { workspace = true }

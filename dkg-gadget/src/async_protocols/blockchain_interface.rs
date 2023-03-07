@@ -45,6 +45,8 @@ use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use webb_proposals::Proposal;
 
+use super::KeygenPartyId;
+
 #[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
@@ -69,7 +71,7 @@ pub trait BlockchainInterface: Send + Sync {
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError>;
-	fn get_authority_set(&self) -> &Vec<Public>;
+	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)>;
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 	/// Returns the present time
 	fn now(&self) -> Self::Clock;
@@ -83,7 +85,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
-	pub best_authorities: Arc<Vec<Public>>,
+	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
 	pub is_genesis: bool,
@@ -212,8 +214,8 @@ where
 		self.db.store_local_key(session_id, key)
 	}
 
-	fn get_authority_set(&self) -> &Vec<Public> {
-		&self.best_authorities
+	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)> {
+		(*self.best_authorities).clone()
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {
