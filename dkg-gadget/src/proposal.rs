@@ -13,6 +13,7 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+use sp_runtime::traits::Get;
 use crate::Client;
 use codec::Encode;
 use dkg_logging::{info, trace};
@@ -28,7 +29,7 @@ use sp_runtime::traits::{Block, Header};
 use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE>(
+pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
@@ -37,7 +38,8 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength : Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let signed_proposal = match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {

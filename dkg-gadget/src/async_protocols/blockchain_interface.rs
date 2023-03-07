@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use sp_runtime::traits::Get;
 use crate::{
 	async_protocols::BatchKey,
 	gossip_engine::GossipEngineIface,
@@ -77,7 +77,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
+pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength : Get<u32>> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -87,7 +87,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
-	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
+	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal<MaxProposalLength>>>>>,
 	pub is_genesis: bool,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,

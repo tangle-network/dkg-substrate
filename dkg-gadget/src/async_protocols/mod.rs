@@ -19,7 +19,7 @@ pub mod remote;
 pub mod sign;
 pub mod state_machine;
 pub mod state_machine_wrapper;
-
+use sp_runtime::traits::Get;
 #[cfg(test)]
 pub mod test_utils;
 
@@ -263,7 +263,7 @@ pub enum KeygenRound {
 }
 
 #[derive(Clone)]
-pub enum ProtocolType {
+pub enum ProtocolType<MaxProposalLength : Get<u32>> {
 	Keygen {
 		ty: KeygenRound,
 		i: KeygenPartyId,
@@ -271,19 +271,19 @@ pub enum ProtocolType {
 		n: u16,
 	},
 	Offline {
-		unsigned_proposal: Arc<UnsignedProposal>,
+		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
-		unsigned_proposal: Arc<UnsignedProposal>,
+		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 	},
 }
 
-impl ProtocolType {
+impl <MaxProposalLength : Get<u32>> ProtocolType<MaxProposalLength> {
 	pub const fn get_i(&self) -> u16 {
 		match self {
 			Self::Keygen { i, .. } => i.0,
@@ -291,7 +291,7 @@ impl ProtocolType {
 			Self::Voting { i, .. } => i.0,
 		}
 	}
-	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
+	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal<MaxProposalLength>> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
 				Some(unsigned_proposal),

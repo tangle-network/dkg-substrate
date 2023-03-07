@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 use frame_support::{pallet_prelude::Get, RuntimeDebug};
+use frame_support::pallet_prelude::ConstU32;
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -132,6 +133,8 @@ pub enum ProposalAction {
 	Sign(u8),
 }
 pub trait ProposalHandlerTrait {
+	type MaxProposalLength : Get<u32>;
+
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
@@ -146,8 +149,8 @@ pub trait ProposalHandlerTrait {
 		Ok(())
 	}
 
-	fn handle_signed_proposal<MaxLength: Get<u32>>(
-		_prop: Proposal<MaxLength>,
+	fn handle_signed_proposal(
+		_prop: Proposal<Self::MaxProposalLength>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
@@ -165,7 +168,9 @@ pub trait ProposalHandlerTrait {
 	}
 }
 
-impl ProposalHandlerTrait for () {}
+impl ProposalHandlerTrait for () {
+	type MaxProposalLength = ConstU32<0>;
+}
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals

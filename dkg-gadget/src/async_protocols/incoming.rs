@@ -22,15 +22,16 @@ use std::{
 	task::{Context, Poll},
 };
 use tokio_stream::wrappers::BroadcastStream;
+use sp_runtime::traits::Get;
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 /// Used to filter and transform incoming messages from the DKG worker
-pub struct IncomingAsyncProtocolWrapper<T, BI> {
+pub struct IncomingAsyncProtocolWrapper<T, BI, MaxLength : Get<u32>> {
 	pub receiver: BroadcastStream<T>,
 	session_id: SessionId,
 	engine: Arc<BI>,
-	ty: ProtocolType,
+	ty: ProtocolType<MaxLength>,
 }
 
 impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper<T, BI> {
