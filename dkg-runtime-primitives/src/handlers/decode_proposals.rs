@@ -15,19 +15,19 @@
 use super::substrate;
 use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
-	DKGPayloadKey, Proposal
+	DKGPayloadKey,
 };
-use webb_proposals::{ProposalKind};
+use webb_proposals::{Proposal, ProposalKind};
 
 pub fn decode_proposal_header(
 	data: &[u8],
-) -> Result<crate::ProposalHeader, ValidationError> {
-	if data.len() < crate::ProposalHeader::LENGTH {
+) -> Result<webb_proposals::ProposalHeader, ValidationError> {
+	if data.len() < webb_proposals::ProposalHeader::LENGTH {
 		return Err(ValidationError::InvalidProposalBytesLength)
 	}
-	let mut bytes = [0u8; crate::ProposalHeader::LENGTH];
-	bytes.copy_from_slice(data[..crate::ProposalHeader::LENGTH].as_ref());
-	let header = crate::ProposalHeader::from(bytes);
+	let mut bytes = [0u8; webb_proposals::ProposalHeader::LENGTH];
+	bytes.copy_from_slice(data[..webb_proposals::ProposalHeader::LENGTH].as_ref());
+	let header = webb_proposals::ProposalHeader::from(bytes);
 	Ok(header)
 }
 

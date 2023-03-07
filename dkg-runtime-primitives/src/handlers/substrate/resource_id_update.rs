@@ -19,7 +19,7 @@ use crate::{
 use codec::alloc::string::ToString;
 
 pub struct ResourceIdProposal {
-	pub header: crate::ProposalHeader,
+	pub header: webb_proposals::ProposalHeader,
 	pub r_id_to_register: [u8; 32],
 	pub method_name: Vec<u8>,
 }

@@ -19,7 +19,7 @@ use crate::{
 use codec::alloc::string::ToString;
 
 pub struct AnchorCreateProposal {
-	pub header: crate::ProposalHeader,
+	pub header: webb_proposals::ProposalHeader,
 	pub encoded_call: Vec<u8>,
 }
 

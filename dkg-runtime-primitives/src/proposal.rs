@@ -14,18 +14,16 @@
 //
 use frame_support::RuntimeDebug;
 use sp_std::hash::{Hash, Hasher};
-use frame_support::pallet_prelude::Get;
+
 use codec::{Decode, Encode};
 use sp_std::vec::Vec;
-use frame_support::BoundedVec;
 
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
 
 pub use webb_proposals::{
-	FunctionSignature, ProposalKind, ResourceId,
+	FunctionSignature, Nonce as ProposalNonce, Proposal, ProposalHeader, ProposalKind, ResourceId,
 	TypedChainId,
 };
-use crate::nonce::ProposalNonce;
 
 #[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
 pub struct RefreshProposal {
@@ -133,7 +131,7 @@ pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
 }
-pub trait ProposalHandlerTrait<MaxLength : Get<u32>> {
+pub trait ProposalHandlerTrait {
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
@@ -148,7 +146,7 @@ pub trait ProposalHandlerTrait<MaxLength : Get<u32>> {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(_prop: Proposal<MaxLength>) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 
@@ -165,58 +163,14 @@ pub trait ProposalHandlerTrait<MaxLength : Get<u32>> {
 	}
 }
 
-impl <MaxLength : Get<u32>>  ProposalHandlerTrait<MaxLength>  for () {}
+impl ProposalHandlerTrait for () {}
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
+pub struct StoredUnsignedProposal<Timestamp> {
 	/// Proposal data
-	pub proposal: Proposal<MaxLength>,
+	pub proposal: Proposal,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(
-    feature = "scale",
-    derive(scale_info::TypeInfo, scale_codec::Encode, scale_codec::Decode, scale_codec::MaxEncodedLen)
-)]
-/// Proposal enum
-pub enum Proposal<MaxLength: Get<u32>> {
-    /// Represents a signed proposal
-    Signed {
-        /// Kind of the proposal
-        kind: ProposalKind,
-        /// Proposal data
-        data: BoundedVec<u8, MaxLength>,
-        /// Proposal signature
-        signature: BoundedVec<u8, MaxLength>,
-    },
-    /// Represent an unsigned proposal
-    Unsigned {
-        /// Kind of the proposal
-        kind: ProposalKind,
-        /// Proposal data
-        data: BoundedVec<u8, MaxLength>,
-    },
-}
-
-/// Proposal Header (40 bytes).
-/// ┌────────────────────┬─────────────────┬───────────────┐
-/// │                    │                 │               │
-/// │   Resource ID 32B  │ Function Sig 4B │    Nonce 4B   │
-/// │                    │                 │               │
-/// └────────────────────┴─────────────────┴───────────────┘
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-#[allow(clippy::module_name_repetitions)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
-pub struct ProposalHeader {
-    /// Resource ID of the execution context
-    pub resource_id: ResourceId,
-    /// Function signature / identifier
-    pub function_signature: FunctionSignature,
-    /// Nonce for proposal execution
-    pub nonce: ProposalNonce,
-}
-

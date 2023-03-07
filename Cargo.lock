@@ -2264,10 +2264,8 @@ dependencies = [
  "frame-support",
  "frame-system",
  "impl-trait-for-tuples",
- "num-traits",
  "parity-scale-codec",
  "scale-info",
- "serde",
  "sp-api",
  "sp-application-crypto",
  "sp-core",
@@ -12740,8 +12738,9 @@ dependencies = [
 [[package]]
 name = "webb-proposals"
 version = "0.5.5"
-source = "git+https://github.com/webb-tools/webb-rs#ee6cd26cd4171af68963d5429ab3c150bb176526"
+source = "git+https://github.com/webb-tools/webb-rs?branch=patch/sbp-fixes#23a3dec1c755e01847c1ff44121b227ee2101efb"
 dependencies = [
+ "frame-support",
  "num-traits",
  "parity-scale-codec",
  "scale-info",
