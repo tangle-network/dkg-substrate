@@ -52,7 +52,7 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "dkg", "🕸️  (authority_id) Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg_gadget", "🕸️  (authority_id) Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()
@@ -75,7 +75,7 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "dkg", "🕸️  (sr25519_public_key) Multiple private keys found for: {:?} ({})", public, public.len());
+			warn!(target: "dkg_gadget", "🕸️  (sr25519_public_key) Multiple private keys found for: {:?} ({})", public, public.len());
 		}
 
 		public.get(0).cloned()

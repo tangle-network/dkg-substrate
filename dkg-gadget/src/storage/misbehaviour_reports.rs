@@ -46,7 +46,7 @@ where
 	let mut offchain = maybe_offchain.unwrap();
 	offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
 	trace!(
-		target: "dkg",
+		target: "dkg_gadget",
 		"Stored aggregated misbehaviour reports {:?}",
 		reports.encode()
 	);

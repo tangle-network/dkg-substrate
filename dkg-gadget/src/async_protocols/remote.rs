@@ -133,7 +133,7 @@ impl<C> AsyncProtocolRemote<C> {
 			self.status_history.lock().push(status);
 			self.status.store(status, Ordering::SeqCst);
 		} else {
-			dkg_logging::error!(target: "dkg", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
+			dkg_logging::error!(target: "dkg_gadget", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
 		}
 	}
 
@@ -179,7 +179,7 @@ impl<C> AsyncProtocolRemote<C> {
 			Some(tx) => tx,
 			None => {
 				dkg_logging::warn!(
-					target: "dkg", "Unable to shutdown meta handler since it is already {:?}, ignoring...",
+					target: "dkg_gadget", "Unable to shutdown meta handler since it is already {:?}, ignoring...",
 					self.get_status()
 				);
 				return Ok(())
@@ -223,7 +223,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
 				dkg_logging::info!(
-					target: "dkg",
+					target: "dkg_gadget",
 					"[drop code] MetaAsyncProtocol is ending: {:?}, History: {:?}",
 					self.get_status(),
 					self.status_history.lock(),
