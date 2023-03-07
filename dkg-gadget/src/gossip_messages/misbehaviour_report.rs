@@ -27,10 +27,10 @@ use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
 };
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{Block, Get, NumberFor};
 
-pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -38,7 +38,8 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// Get authority accounts
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
@@ -99,15 +100,16 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let public = dkg_worker.get_authority_public_key();
 
@@ -188,8 +190,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 	}
 }
 
-pub(crate) fn try_store_offchain<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn try_store_offchain<B, BE, C, GE, MaxProposalLength>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -197,7 +199,8 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	// Fetch the current threshold for the DKG. We will use the

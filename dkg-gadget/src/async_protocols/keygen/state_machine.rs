@@ -24,16 +24,17 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 	Keygen, ProtocolMessage,
 };
 use round_based::{Msg, StateMachine};
+use sp_runtime::traits::Get;
 
 #[async_trait]
 impl StateMachineHandler for Keygen {
 	type AdditionalReturnParam = ();
 	type Return = <Self as StateMachine>::Output;
 
-	fn handle_unsigned_message(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols

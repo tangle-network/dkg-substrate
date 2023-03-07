@@ -61,7 +61,7 @@ std = [
 	"dkg-runtime-primitives/std",
 	"sp-consensus-aura/std",
 	"pallet-dkg-metadata/std",
-	"webb-proposals/std",
+	"webb-proposals/substrate",
 	"log/std",
 	"pallet-aura/std"
 ]

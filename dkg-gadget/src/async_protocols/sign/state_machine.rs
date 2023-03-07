@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
 	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
@@ -25,13 +24,14 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 	OfflineProtocolMessage, OfflineStage,
 };
 use round_based::{Msg, StateMachine};
+use sp_runtime::traits::Get;
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
 #[async_trait]
 impl StateMachineHandler for OfflineStage {
 	type AdditionalReturnParam = (
-		UnsignedProposal,
+		UnsignedProposal<MaxProposalLength>,
 		OfflinePartyId,
 		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
@@ -39,10 +39,10 @@ impl StateMachineHandler for OfflineStage {
 	);
 	type Return = ();
 
-	fn handle_unsigned_message(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, .. } = msg.body;
 

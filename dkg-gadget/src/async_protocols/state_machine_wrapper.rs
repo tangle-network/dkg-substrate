@@ -15,22 +15,25 @@
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
+use sp_runtime::traits::Get;
 use std::sync::Arc;
 
 use super::{CurrentRoundBlame, ProtocolType};
 
-pub(crate) struct StateMachineWrapper<T: StateMachine> {
+pub(crate) struct StateMachineWrapper<T: StateMachine, MaxProposalLength: Get<u32>> {
 	sm: T,
 	session_id: SessionId,
-	channel_type: ProtocolType,
+	channel_type: ProtocolType<MaxProposalLength>,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 }
 
-impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
+impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32>>
+	StateMachineWrapper<T, MaxProposalLength>
+{
 	pub fn new(
 		sm: T,
 		session_id: SessionId,
-		channel_type: ProtocolType,
+		channel_type: ProtocolType<MaxProposalLength>,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	) -> Self {
 		Self { sm, session_id, channel_type, current_round_blame }
@@ -44,7 +47,7 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	}
 }
 
-impl<T> StateMachine for StateMachineWrapper<T>
+impl<T, MaxProposalLength: Get<u32>> StateMachine for StateMachineWrapper<T, MaxProposalLength>
 where
 	T: StateMachine + RoundBlame,
 {
@@ -132,7 +135,9 @@ where
 	}
 }
 
-impl<T: StateMachine + RoundBlame> RoundBlame for StateMachineWrapper<T> {
+impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32>> RoundBlame
+	for StateMachineWrapper<T, MaxProposalLength>
+{
 	fn round_blame(&self) -> (u16, Vec<u16>) {
 		self.sm.round_blame()
 	}

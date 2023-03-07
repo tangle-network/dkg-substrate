@@ -27,22 +27,23 @@ use parking_lot::RwLock;
 use rand::Rng;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::sync::Arc;
 use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
-pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
+pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
 	authority_public_key: &Public,
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	signed_proposals: Vec<Proposal>,
+	signed_proposals: Vec<Proposal<MaxProposalLength>>,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	if signed_proposals.is_empty() {
 		return

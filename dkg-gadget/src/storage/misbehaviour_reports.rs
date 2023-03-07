@@ -24,11 +24,11 @@ use dkg_runtime_primitives::{
 };
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{Block, Get, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE, MaxProposalLength>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -36,7 +36,8 @@ where
 	GE: GossipEngineIface + 'static,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
 	if maybe_offchain.is_none() {

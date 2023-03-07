@@ -15,11 +15,11 @@
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use dkg_runtime_primitives::UnsignedProposal;
 use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
-
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
+use sp_runtime::traits::Get;
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 
@@ -43,10 +43,10 @@ where
 	(): Extend<Out>,
 {
 	/// Top level function for setting up signing
-	pub fn setup_signing<BI: BlockchainInterface + 'static>(
+	pub fn setup_signing<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
-		unsigned_proposals: Vec<UnsignedProposal>,
+		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
 		s_l: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
@@ -139,9 +139,9 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	fn new_offline<BI: BlockchainInterface + 'static>(
+	fn new_offline<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
 		params: AsyncProtocolParameters<BI>,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		offline_i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: LocalKey<Secp256k1>,
@@ -170,10 +170,10 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
+	pub(crate) fn new_voting<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		offline_i: OfflinePartyId,
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,

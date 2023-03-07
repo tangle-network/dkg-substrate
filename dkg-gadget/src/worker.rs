@@ -28,6 +28,7 @@ use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
+use sp_runtime::traits::Get;
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
@@ -112,12 +113,13 @@ where
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, BE, C, GE>
+pub(crate) struct DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
+	MaxProposalLength : Get<u32>
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -157,16 +159,17 @@ where
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
 	// keep rustc happy
-	_backend: PhantomData<BE>,
+	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
-impl<B, BE, C, GE> Clone for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength> Clone for DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
+	MaxProposalLength : Get<u32>,
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -200,13 +203,14 @@ where
 pub type AggregatedMisbehaviourReportStore =
 	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
 
-impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block + Codec,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -265,13 +269,14 @@ enum ProtoStageType {
 	Signing,
 }
 
-impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32> + Send + Sync,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -286,7 +291,8 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
+	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>>, DKGError>
+	{
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -482,7 +488,7 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposals: Vec<UnsignedProposal>,
+		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
 		signing_set: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
@@ -1724,12 +1730,13 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C, GE> KeystoreExt for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE,MaxProposalLength> KeystoreExt for DKGWorker<B, BE, C, GE,MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength: Get<u32>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1755,12 +1762,13 @@ pub trait HasLatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength> HasLatestHeader<B> for DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength : Get<u32>
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

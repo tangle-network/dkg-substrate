@@ -18,7 +18,7 @@ use dkg_runtime_primitives::crypto::Public;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use std::fmt::Debug;
-
+use sp_runtime::traits::Get;
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 pub(crate) type StateMachineTxRx<T> = (
@@ -39,12 +39,12 @@ where
 		futures::channel::mpsc::unbounded()
 	}
 
-	fn handle_unsigned_message(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
 		to_async_proto: &futures::channel::mpsc::UnboundedSender<
 			Msg<<Self as StateMachine>::MessageBody>,
 		>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err>;
 
 	async fn on_finish<BI: BlockchainInterface + 'static>(

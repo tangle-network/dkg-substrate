@@ -16,7 +16,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{pallet_prelude::Get, BoundedVec};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
-use sp_std::{prelude::*};
+use sp_std::prelude::*;
 
 pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 

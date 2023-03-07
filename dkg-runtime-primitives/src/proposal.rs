@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use frame_support::{pallet_prelude::Get, RuntimeDebug};
-use frame_support::pallet_prelude::ConstU32;
+use frame_support::{
+	pallet_prelude::{ConstU32, Get},
+	RuntimeDebug,
+};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -133,7 +135,7 @@ pub enum ProposalAction {
 	Sign(u8),
 }
 pub trait ProposalHandlerTrait {
-	type MaxProposalLength : Get<u32>;
+	type MaxProposalLength: Get<u32>;
 
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,

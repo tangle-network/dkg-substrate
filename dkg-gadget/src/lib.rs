@@ -17,8 +17,8 @@ use std::{marker::PhantomData, sync::Arc};
 use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
-use sp_runtime::traits::Get;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
+use sp_runtime::traits::Get;
 
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
@@ -87,14 +87,14 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, MaxLength>
+pub struct DKGParams<B, BE, C, MaxProposalLength>
 where
 	B: Block,
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxLength : Get<u32>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxLength>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -110,18 +110,19 @@ where
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Phantom block type
-	pub _block: PhantomData<B>,
+	pub _block: PhantomData<(B, MaxProposalLength)>,
 }
 
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(dkg_params: DKGParams<B, BE, C, MaxProposalLength>)
-where
+pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
+	dkg_params: DKGParams<B, BE, C, MaxProposalLength>,
+) where
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength : Get<u32>,
+	MaxProposalLength: Get<u32>,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// ensure logging-related statics are initialized

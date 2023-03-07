@@ -30,11 +30,11 @@ use dkg_runtime_primitives::{
 	AggregatedPublicKeys, DKGApi,
 };
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
-	dkg_worker: &DKGWorker<B, BE, C, GE>,
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE, MaxProposalLength: Get<u32>>(
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
@@ -42,7 +42,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
@@ -109,7 +109,7 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE, GE>(
+pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
@@ -119,7 +119,8 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength: Get<u32>,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let public = key_store.get_authority_public_key();
 

@@ -13,7 +13,6 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use sp_runtime::traits::Get;
 use crate::Client;
 use codec::Encode;
 use dkg_logging::{info, trace};
@@ -25,20 +24,20 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::{Block, Get, Header};
 use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength>(
+pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength: Get<u32>>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
-) -> Option<Proposal>
+) -> Option<Proposal<MaxProposalLength>>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength : Get<u32>,
+	MaxProposalLength: Get<u32>,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let signed_proposal = match payload_key {
@@ -90,10 +89,10 @@ where
 }
 
 /// make an unsigned proposal a signed one
-pub(crate) fn make_signed_proposal(
+pub(crate) fn make_signed_proposal<MaxProposalLength: Get<u32>>(
 	kind: ProposalKind,
 	finished_round: DKGSignedPayload,
-) -> Option<Proposal> {
+) -> Option<Proposal<MaxProposalLength>> {
 	Some(Proposal::Signed {
 		kind,
 		data: finished_round.payload,

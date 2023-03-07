@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use sp_runtime::traits::Get;
 use crate::{
 	async_protocols::BatchKey,
 	gossip_engine::GossipEngineIface,
@@ -41,7 +40,7 @@ use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use webb_proposals::Proposal;
 
@@ -51,6 +50,7 @@ use super::KeygenPartyId;
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
+	type MaxProposalLength: Get<u32>;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -60,7 +60,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<Self::MaxProposalLength>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
@@ -77,7 +77,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength : Get<u32>> {
+pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -95,13 +95,16 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength : Get<u32>> 
 	pub _pd: PhantomData<BE>,
 }
 
-impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
+impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> KeystoreExt
+	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+{
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<B, BE, C, GE> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength: Get<u32>> HasLatestHeader<B>
+	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -113,12 +116,14 @@ where
 	}
 }
 
-impl<B, BE, C, GE> BlockchainInterface for DKGProtocolEngine<B, BE, C, GE>
+impl<B, BE, C, GE, MaxProposalLength> BlockchainInterface
+	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 	BE: Backend<B> + 'static,
+	MaxProposalLength: Get<u32> + Send + Sync,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
@@ -145,7 +150,7 @@ where
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		_message: BigInt,

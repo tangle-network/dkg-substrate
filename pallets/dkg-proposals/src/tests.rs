@@ -224,7 +224,7 @@ fn add_remove_relayer() {
 	})
 }
 
-pub fn make_proposal<const N: usize>(prop: Proposal) -> Vec<u8> {
+pub fn make_proposal<const N: usize>(prop: Proposal<T::MaxProposalLength>) -> Vec<u8> {
 	// Create the proposal Header
 	let r_id = ResourceId::from([
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
