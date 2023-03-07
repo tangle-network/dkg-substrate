@@ -43,7 +43,7 @@ where
 	(): Extend<Out>,
 {
 	/// Top level function for setting up signing
-	pub fn setup_signing<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
+	pub fn setup_signing<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
@@ -139,7 +139,7 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	fn new_offline<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
+	fn new_offline<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		offline_i: OfflinePartyId,
@@ -170,7 +170,7 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	pub(crate) fn new_voting<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32>>(
+	pub(crate) fn new_voting<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal<MaxProposalLength>,

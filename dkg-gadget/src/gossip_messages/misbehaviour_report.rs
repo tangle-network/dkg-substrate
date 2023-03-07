@@ -38,7 +38,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// Get authority accounts
@@ -108,7 +108,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let public = dkg_worker.get_authority_public_key();
@@ -199,7 +199,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);

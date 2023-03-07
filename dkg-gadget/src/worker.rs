@@ -209,7 +209,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// Return a new DKG worker instance.
@@ -275,7 +275,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change

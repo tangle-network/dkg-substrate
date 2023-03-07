@@ -93,7 +93,7 @@ where
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// DKG client
@@ -122,7 +122,7 @@ pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// ensure logging-related statics are initialized
@@ -202,7 +202,7 @@ pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _, _>::new(worker_params);
 
 	worker.run().await;
 	keygen_handle.abort();

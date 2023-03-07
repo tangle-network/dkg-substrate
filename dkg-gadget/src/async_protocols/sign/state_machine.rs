@@ -39,7 +39,7 @@ impl StateMachineHandler for OfflineStage {
 	);
 	type Return = ();
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<MaxProposalLength>,

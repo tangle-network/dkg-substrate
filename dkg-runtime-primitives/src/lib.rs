@@ -192,13 +192,13 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct UnsignedProposal<MaxLength: Get<u32>> {
+pub struct UnsignedProposal<MaxLength: Get<u32> + Clone> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
 	pub proposal: Proposal<MaxLength>,
 }
 
-impl<MaxLength: Get<u32>> UnsignedProposal<MaxLength> {
+impl<MaxLength: Get<u32> + Clone> UnsignedProposal<MaxLength> {
 	pub fn hash(&self) -> Option<[u8; 32]> {
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
 			Some(keccak_256(data))
@@ -218,7 +218,7 @@ sp_api::decl_runtime_apis! {
 
 	pub trait DKGApi<AuthorityId, N, MaxProposalLength> where
 		AuthorityId: Codec + PartialEq,
-		MaxProposalLength: Get<u32>,
+		MaxProposalLength: Get<u32> +Clone,
 		N: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned,
 	{
 		/// Return the current active authority set

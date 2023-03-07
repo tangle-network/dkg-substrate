@@ -42,7 +42,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	if signed_proposals.is_empty() {

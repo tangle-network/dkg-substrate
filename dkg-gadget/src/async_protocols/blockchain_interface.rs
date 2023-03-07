@@ -50,7 +50,7 @@ use super::KeygenPartyId;
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
-	type MaxProposalLength: Get<u32>;
+	type MaxProposalLength: Get<u32> + Clone + Send + Sync;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -77,7 +77,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> {
+pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -95,7 +95,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> {
 	pub _pd: PhantomData<BE>,
 }
 
-impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> KeystoreExt
+impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> KeystoreExt
 	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
@@ -103,7 +103,7 @@ impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32>> KeystoreExt
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength: Get<u32>> HasLatestHeader<B>
+impl<B, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> HasLatestHeader<B>
 	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
@@ -123,7 +123,7 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 	BE: Backend<B> + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
@@ -135,7 +135,7 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
-		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
+		DKGWorker::<_, _, _, GE, _>::verify_signature_against_authorities_inner(
 			(*msg).clone(),
 			&self.latest_header,
 			client,
@@ -173,7 +173,7 @@ where
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 		if let Some(proposal) =
-			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
+			get_signed_proposal::<B, C, BE, MaxProposalLength>(&self.backend, finished_round, payload_key)
 		{
 			proposals_for_this_batch.push(proposal);
 
@@ -186,7 +186,7 @@ where
 					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 				}
 
-				save_signed_proposals_in_storage::<B, C, BE>(
+				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,
 					&self.latest_header,
@@ -202,7 +202,7 @@ where
 	}
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
-		gossip_public_key::<B, C, BE, GE>(
+		gossip_public_key::<B, C, BE, GE, MaxProposalLength>(
 			&self.keystore,
 			self.gossip_engine.clone(),
 			&mut self.aggregated_public_keys.write(),

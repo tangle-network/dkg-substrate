@@ -105,7 +105,7 @@ impl<BI: BlockchainInterface> KeystoreExt for AsyncProtocolParameters<BI> {
 }
 
 impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
-	pub fn get_next_batch_key<MaxProposalLength: Get<u32>>(
+	pub fn get_next_batch_key<MaxProposalLength: Get<u32> + Clone + Send + Sync>(
 		&self,
 		batch: &[UnsignedProposal<MaxProposalLength>],
 	) -> BatchKey {
@@ -266,7 +266,7 @@ pub enum KeygenRound {
 }
 
 #[derive(Clone)]
-pub enum ProtocolType<MaxProposalLength: Get<u32>> {
+pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync> {
 	Keygen {
 		ty: KeygenRound,
 		i: KeygenPartyId,
@@ -286,7 +286,7 @@ pub enum ProtocolType<MaxProposalLength: Get<u32>> {
 	},
 }
 
-impl<MaxProposalLength: Get<u32>> ProtocolType<MaxProposalLength> {
+impl<MaxProposalLength: Get<u32> + Clone + Send + Sync> ProtocolType<MaxProposalLength> {
 	pub const fn get_i(&self) -> u16 {
 		match self {
 			Self::Keygen { i, .. } => i.0,
@@ -303,7 +303,7 @@ impl<MaxProposalLength: Get<u32>> ProtocolType<MaxProposalLength> {
 	}
 }
 
-impl<MaxProposalLength : Get<u32>> Debug for ProtocolType<MaxProposalLength> {
+impl<MaxProposalLength : Get<u32> + Clone +Send + Sync> Debug for ProtocolType<MaxProposalLength> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
 			ProtocolType::Keygen { ty, i, t, n } => {
@@ -350,7 +350,7 @@ impl<Out> Future for GenericAsyncHandler<'_, Out> {
 pub fn new_inner<
 	SM: StateMachineHandler + 'static,
 	BI: BlockchainInterface + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 >(
 	additional_param: SM::AdditionalReturnParam,
 	sm: SM,
@@ -488,7 +488,7 @@ where
 fn generate_outgoing_to_wire_fn<
 	SM: StateMachineHandler + 'static,
 	BI: BlockchainInterface + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static,
 >(
 	params: AsyncProtocolParameters<BI>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
@@ -594,7 +594,7 @@ where
 pub fn generate_inbound_signed_message_receiver_fn<
 	SM: StateMachineHandler + 'static,
 	BI: BlockchainInterface + 'static,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 >(
 	params: AsyncProtocolParameters<BI>,
 	channel_type: ProtocolType<MaxProposalLength>,

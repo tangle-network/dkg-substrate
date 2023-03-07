@@ -33,7 +33,7 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<B, BE, C, GE, MaxProposalLength: Get<u32>>(
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
@@ -119,7 +119,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength>(
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>,
+	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let public = key_store.get_authority_public_key();

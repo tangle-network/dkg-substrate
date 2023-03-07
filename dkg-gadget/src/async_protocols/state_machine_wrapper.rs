@@ -20,14 +20,14 @@ use std::sync::Arc;
 
 use super::{CurrentRoundBlame, ProtocolType};
 
-pub(crate) struct StateMachineWrapper<T: StateMachine, MaxProposalLength: Get<u32>> {
+pub(crate) struct StateMachineWrapper<T: StateMachine, MaxProposalLength: Get<u32> + Clone + Send + Sync> {
 	sm: T,
 	session_id: SessionId,
 	channel_type: ProtocolType<MaxProposalLength>,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 }
 
-impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32>>
+impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32> + Clone + Send + Sync>
 	StateMachineWrapper<T, MaxProposalLength>
 {
 	pub fn new(
@@ -47,7 +47,7 @@ impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32>>
 	}
 }
 
-impl<T, MaxProposalLength: Get<u32>> StateMachine for StateMachineWrapper<T, MaxProposalLength>
+impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync> StateMachine for StateMachineWrapper<T, MaxProposalLength>
 where
 	T: StateMachine + RoundBlame,
 {
@@ -135,7 +135,7 @@ where
 	}
 }
 
-impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32>> RoundBlame
+impl<T: StateMachine + RoundBlame, MaxProposalLength: Get<u32> + Clone + Send + Sync> RoundBlame
 	for StateMachineWrapper<T, MaxProposalLength>
 {
 	fn round_blame(&self) -> (u16, Vec<u16>) {

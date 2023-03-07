@@ -39,7 +39,7 @@ where
 		futures::channel::mpsc::unbounded()
 	}
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
 		to_async_proto: &futures::channel::mpsc::UnboundedSender<
 			Msg<<Self as StateMachine>::MessageBody>,
 		>,

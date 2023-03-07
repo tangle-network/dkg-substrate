@@ -31,7 +31,7 @@ impl StateMachineHandler for Keygen {
 	type AdditionalReturnParam = ();
 	type Return = <Self as StateMachine>::Output;
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32>>(
+	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<MaxProposalLength>,
