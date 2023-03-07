@@ -39,9 +39,9 @@ mod gossip_engine;
 mod db;
 mod metrics;
 mod proposal;
+mod testing;
 mod utils;
 mod worker;
-mod testing;
 
 pub mod async_protocols;
 pub mod gossip_messages;
@@ -77,11 +77,7 @@ impl<B, BE, T> Client<B, BE> for T
 where
 	B: Block,
 	BE: Backend<B>,
-	T: BlockchainEvents<B>
-		+ HeaderBackend<B>
-		+ ProvideRuntimeApi<B>
-		+ Send
-		+ Sync,
+	T: BlockchainEvents<B> + HeaderBackend<B> + ProvideRuntimeApi<B> + Send + Sync,
 {
 	// empty
 }
