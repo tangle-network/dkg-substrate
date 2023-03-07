@@ -148,7 +148,7 @@ pub mod pallet {
 
 	/// Unsigned proposal for this pallet
 	pub type StoredUnsignedProposalOf<T> =
-		StoredUnsignedProposal<<T as frame_system::Config>::BlockNumber>;
+		StoredUnsignedProposal<<T as frame_system::Config>::BlockNumber, <T as Config>::MaxProposalLength>;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -168,6 +168,9 @@ pub mod pallet {
 		/// Max blocks to store an unsigned proposal
 		#[pallet::constant]
 		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
+		/// Max length of a proposal
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>;
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
 	}
@@ -633,7 +636,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(prop: Proposal) -> DispatchResult {
+	fn handle_signed_proposal(prop: Proposal<T::MaxProposalLength>) -> DispatchResult {
 		let id = match decode_proposal_identifier(&prop) {
 			Ok(v) => v,
 			Err(e) => return Err(Self::handle_validation_error(e).into()),
@@ -687,7 +690,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
-	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal> {
+	pub fn get_unsigned_proposals() -> Vec<dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>> {
 		UnsignedProposalQueue::<T>::iter()
 			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
 				dkg_runtime_primitives::UnsignedProposal {
@@ -700,7 +703,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Checks whether a signed proposal exists in the `SignedProposals` storage
-	pub fn is_not_existing_proposal(prop: &Proposal) -> bool {
+	pub fn is_not_existing_proposal(prop: &Proposal<T::MaxProposalLength>) -> bool {
 		if prop.is_signed() {
 			match decode_proposal_identifier(prop) {
 				Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
@@ -713,7 +716,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Returns `StoredUnsignedProposal` from proposal by inserting current BlockNumber
 	pub fn stored_unsigned_proposal_from_unsigned_proposal(
-		proposal: Proposal,
+		proposal: Proposal<T::MaxProposalLength>,
 	) -> StoredUnsignedProposalOf<T> {
 		let timestamp = <frame_system::Pallet<T>>::block_number();
 		StoredUnsignedProposalOf::<T> { proposal, timestamp }
@@ -805,7 +808,7 @@ impl<T: Config> Pallet<T> {
 	/// `block_number`
 	fn get_next_offchain_signed_proposal(
 		block_number: T::BlockNumber,
-	) -> Result<Vec<Proposal>, &'static str> {
+	) -> Result<Vec<Proposal<T::MaxProposalLength>>, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut all_proposals = Vec::new();

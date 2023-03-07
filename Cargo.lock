@@ -12186,7 +12186,7 @@ checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
  "digest 0.10.6",
- "rand 0.8.5",
+ "rand 0.4.6",
  "static_assertions",
 ]
 
@@ -12738,7 +12738,7 @@ dependencies = [
 [[package]]
 name = "webb-proposals"
 version = "0.5.5"
-source = "git+https://github.com/webb-tools/webb-rs?branch=patch/sbp-fixes#23a3dec1c755e01847c1ff44121b227ee2101efb"
+source = "git+https://github.com/webb-tools/webb-rs?branch=patch/sbp-fixes#d8b20276a11e3c5a2ae278c5742731f8926dcdbb"
 dependencies = [
  "frame-support",
  "num-traits",

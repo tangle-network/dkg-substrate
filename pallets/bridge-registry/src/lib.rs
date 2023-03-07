@@ -99,6 +99,10 @@ pub mod pallet {
 		/// required to access a metadata object, but can be pretty high.
 		#[pallet::constant]
 		type MaxResources: Get<u32>;
+		
+		/// Max length of a proposal
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>;
 
 		/// Weight information for the extrinsics
 		type WeightInfo: WeightInfo;
@@ -231,8 +235,8 @@ pub mod pallet {
 ///
 /// Note: There MUST only be a single connected component unless the end-user/developer wants
 /// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
-impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> {
-	fn on_signed_proposal(proposal: Proposal) -> Result<(), DispatchError> {
+impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLength> for Pallet<T, I> {
+	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
 		ensure!(proposal.is_signed(), Error::<T, I>::ProposalNotSigned);
 
 		if proposal.kind() == ProposalKind::AnchorUpdate {

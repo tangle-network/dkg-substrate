@@ -13,11 +13,10 @@
 // limitations under the License.
 //
 use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::{pallet_prelude::Get, BoundedVec};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
-use sp_std::{prelude::*, vec};
-use frame_support::BoundedVec;
-use frame_support::pallet_prelude::Get;
+use sp_std::{prelude::*};
 
 pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 
@@ -29,14 +28,16 @@ pub enum ProposalStatus {
 }
 
 #[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct ProposalVotes<AccountId, BlockNumber, MaxVotes : Get<u32>> {
+pub struct ProposalVotes<AccountId, BlockNumber, MaxVotes: Get<u32> + Clone> {
 	pub votes_for: BoundedVec<AccountId, MaxVotes>,
 	pub votes_against: BoundedVec<AccountId, MaxVotes>,
 	pub status: ProposalStatus,
 	pub expiry: BlockNumber,
 }
 
-impl<A: PartialEq, B: PartialOrd + Default, MaxVotes : Get<u32>> ProposalVotes<A, B, MaxVotes> {
+impl<A: PartialEq, B: PartialOrd + Default, MaxVotes: Get<u32> + Clone>
+	ProposalVotes<A, B, MaxVotes>
+{
 	/// Attempts to mark the proposal as approve or rejected.
 	/// Returns true if the status changes from active.
 	pub fn try_to_complete(&mut self, threshold: u32, total: u32) -> ProposalStatus {
@@ -68,11 +69,13 @@ impl<A: PartialEq, B: PartialOrd + Default, MaxVotes : Get<u32>> ProposalVotes<A
 	}
 }
 
-impl<AccountId, BlockNumber: Default, MaxVotes : Get<u32>> Default for ProposalVotes<AccountId, BlockNumber, MaxVotes> {
+impl<AccountId, BlockNumber: Default, MaxVotes: Get<u32> + Clone> Default
+	for ProposalVotes<AccountId, BlockNumber, MaxVotes>
+{
 	fn default() -> Self {
 		Self {
 			votes_for: Default::default(),
-			votes_against: Default:default(),
+			votes_against: Default::default(),
 			status: ProposalStatus::Initiated,
 			expiry: BlockNumber::default(),
 		}
