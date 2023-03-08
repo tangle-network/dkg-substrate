@@ -21,7 +21,8 @@ pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
-
+use frame_support::BoundedVec;
+use codec::MaxEncodedLen;
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
@@ -77,7 +78,7 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
 // Max length for proposals
-pub const MaxProposalLength: u32 = 10_000;
+pub const MAX_PROPOSAL_LENGTH: u32 = 10_000;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
@@ -95,7 +96,7 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
-#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash)]
+#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash, MaxEncodedLen)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub enum MisbehaviourType {
 	Keygen,
@@ -103,7 +104,7 @@ pub enum MisbehaviourType {
 }
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
+pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>, MaxSignatureLength : Get<u32>, MaxReporters : Get<u32>> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
@@ -111,9 +112,9 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// The offending authority
 	pub offender: DKGId,
 	/// A list of reporters
-	pub reporters: Vec<DKGId>,
+	pub reporters: BoundedVec<DKGId, MaxReporters>,
 	/// A list of signed reports
-	pub signatures: Vec<Vec<u8>>,
+	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxReporters>,
 }
 
 impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
@@ -136,23 +137,23 @@ pub mod crypto {
 pub type AuthoritySetId = u64;
 
 #[derive(Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
-pub struct AuthoritySet<AuthorityId> {
+pub struct AuthoritySet<AuthorityId, MaxAuthorities : Get<u32>> {
 	/// Public keys of the validator set elements
-	pub authorities: Vec<AuthorityId>,
+	pub authorities: BoundedVec<AuthorityId, MaxAuthorities>,
 	/// Identifier of the validator set
 	pub id: AuthoritySetId,
 }
 
-impl Default for AuthoritySet<AuthorityId> {
+impl<MaxAuthorities : Get<u32>> Default for AuthoritySet<AuthorityId, MaxAuthorities> {
 	fn default() -> Self {
-		Self { authorities: vec![], id: Default::default() }
+		Self { authorities: Default::default(), id: Default::default() }
 	}
 }
 
-impl<AuthorityId> AuthoritySet<AuthorityId> {
+impl<AuthorityId, MaxAuthorities : Get<u32>> AuthoritySet<AuthorityId, MaxAuthorities> {
 	/// Return an empty validator set with id of 0.
 	pub fn empty() -> Self {
-		Self { authorities: vec![], id: Default::default() }
+		Self { authorities: Default::default(), id: Default::default() }
 	}
 }
 
@@ -172,10 +173,10 @@ pub struct Commitment<TBlockNumber, TPayload> {
 pub type AuthorityIndex = u32;
 
 #[derive(Decode, Encode)]
-pub enum ConsensusLog<AuthorityId: Codec> {
+pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities : Get<u32>> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange { active: AuthoritySet<AuthorityId>, queued: AuthoritySet<AuthorityId> },
+	AuthoritiesChange { active: AuthoritySet<AuthorityId, MaxAuthorities>, queued: AuthoritySet<AuthorityId, MaxAuthorities> },
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
@@ -216,13 +217,14 @@ impl<MaxLength: Get<u32> + Clone> UnsignedProposal<MaxLength> {
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DKGApi<AuthorityId, N, MaxProposalLength> where
+	pub trait DKGApi<AuthorityId, N, MaxProposalLength, MaxAuthorities> where
 		AuthorityId: Codec + PartialEq,
-		MaxProposalLength: Get<u32> +Clone,
+		MaxProposalLength: Get<u32> + Clone,
+		MaxAuthorities : Get<u32> + Clone,
 		N: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned,
 	{
 		/// Return the current active authority set
-		fn authority_set() -> AuthoritySet<AuthorityId>;
+		fn authority_set() -> AuthoritySet<AuthorityId, MaxAuthorities>;
 		/// Return the current best authority set chosen for keygen
 		fn get_best_authorities() -> Vec<(u16, AuthorityId)>;
 		/// Return the next best authority set chosen for the queued keygen
@@ -238,7 +240,7 @@ sp_api::decl_runtime_apis! {
 		/// Return the next keygen threshold for the DKG
 		fn next_keygen_threshold() -> u16;
 		/// Return the next authorities active authority set
-		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
+		fn queued_authority_set() -> AuthoritySet<AuthorityId, MaxAuthorities>;
 		/// Check if refresh process should start
 		fn should_refresh(_block_number: N) -> bool;
 		/// Fetch DKG public key for queued authorities

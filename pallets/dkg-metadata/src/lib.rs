@@ -112,6 +112,7 @@ use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::{Get, Weight},
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
+	BoundedVec,
 };
 use frame_system::offchain::{Signer, SubmitTransaction};
 pub use pallet::*;
@@ -182,7 +183,8 @@ pub mod pallet {
 			+ MaybeSerializeDeserialize
 			+ AsRef<[u8]>
 			+ Into<ecdsa::Public>
-			+ From<ecdsa::Public>;
+			+ From<ecdsa::Public>
+			+ MaxEncodedLen;
 		/// Jail lengths for misbehaviours
 		type KeygenJailSentence: Get<Self::BlockNumber>;
 		type SigningJailSentence: Get<Self::BlockNumber>;
@@ -195,6 +197,7 @@ pub mod pallet {
 			+ Encode
 			+ Decode
 			+ AtLeast32BitUnsigned
+			+ MaxEncodedLen
 			+ Copy;
 		/// The reputation decay percentage
 		type DecayPercentage: Get<Percent>;
@@ -238,12 +241,27 @@ pub mod pallet {
 		#[pallet::constant]
 		type SessionPeriod: Get<Self::BlockNumber>;
 
+		/// MaxLength for keys
+		#[pallet::constant]
+		type MaxKeyLength: Get<u32> + Default;
+
+		/// MaxLength for signature
+		#[pallet::constant]
+		type MaxSignatureLength: Get<u32> + Default;
+
+		/// Max authorities to store
+		#[pallet::constant]
+		type MaxAuthorities: Get<u32> + Default;
+
+		/// Max reporters to store
+		#[pallet::constant]
+		type MaxReporters: Get<u32> + Default;
+
 		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::hooks]
@@ -284,7 +302,7 @@ pub mod pallet {
 				**********************************************************",
 				authority_id,
 				hex::encode(pk.clone()),
-				hex::encode(Self::decompress_public_key(pk).unwrap_or_default()),
+				hex::encode(Self::decompress_public_key(pk.into()).unwrap_or_default()),
 			);
 			if let Some((next_authority_id, next_pk)) = maybe_next_key {
 				log::debug!(
@@ -296,7 +314,7 @@ pub mod pallet {
 					**********************************************************",
 					next_authority_id,
 					hex::encode(next_pk.clone()),
-					hex::encode(Self::decompress_public_key(next_pk).unwrap_or_default()),
+					hex::encode(Self::decompress_public_key(next_pk.into()).unwrap_or_default()),
 				);
 			}
 		}
@@ -311,7 +329,7 @@ pub mod pallet {
 			// Check if we shall refresh the DKG.
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
-					Self::do_refresh(pub_key);
+					Self::do_refresh((pub_key.0, pub_key.1.into()));
 					return Weight::from_ref_time(1_u64)
 				}
 			}
@@ -355,30 +373,41 @@ pub mod pallet {
 	/// Holds public key for next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_dkg_public_key)]
-	pub type NextDKGPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), OptionQuery>;
+	pub type NextDKGPublicKey<T: Config> = StorageValue<
+		_,
+		(dkg_runtime_primitives::AuthoritySetId, BoundedVec<u8, T::MaxKeyLength>),
+		OptionQuery,
+	>;
 
 	/// Signature of the DKG public key for the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_public_key_signature)]
-	pub type NextPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, OptionQuery>;
+	pub type NextPublicKeySignature<T: Config> =
+		StorageValue<_, BoundedVec<u8, T::MaxSignatureLength>, OptionQuery>;
 
 	/// Holds active public key for ongoing session
 	#[pallet::storage]
 	#[pallet::getter(fn dkg_public_key)]
-	pub type DKGPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
+	pub type DKGPublicKey<T: Config> = StorageValue<
+		_,
+		(dkg_runtime_primitives::AuthoritySetId, BoundedVec<u8, T::MaxKeyLength>),
+		ValueQuery,
+	>;
 
 	/// Signature of the current DKG public key
 	#[pallet::storage]
 	#[pallet::getter(fn public_key_signature)]
-	pub type DKGPublicKeySignature<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
+	pub type DKGPublicKeySignature<T: Config> =
+		StorageValue<_, BoundedVec<u8, T::MaxSignatureLength>, ValueQuery>;
 
 	/// Holds public key for immediate past session
 	#[pallet::storage]
 	#[pallet::getter(fn previous_public_key)]
-	pub type PreviousPublicKey<T: Config> =
-		StorageValue<_, (dkg_runtime_primitives::AuthoritySetId, Vec<u8>), ValueQuery>;
+	pub type PreviousPublicKey<T: Config> = StorageValue<
+		_,
+		(dkg_runtime_primitives::AuthoritySetId, BoundedVec<u8, T::MaxKeyLength>),
+		ValueQuery,
+	>;
 
 	/// Tracks current proposer set
 	#[pallet::storage]
@@ -387,7 +416,7 @@ pub mod pallet {
 		_,
 		Blake2_256,
 		dkg_runtime_primitives::AuthoritySetId,
-		RoundMetadata,
+		RoundMetadata<T>,
 		ValueQuery,
 	>;
 
@@ -424,7 +453,8 @@ pub mod pallet {
 	/// The current authorities set
 	#[pallet::storage]
 	#[pallet::getter(fn authorities)]
-	pub(super) type Authorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
+	pub(super) type Authorities<T: Config> =
+		StorageValue<_, BoundedVec<T::DKGId, T::MaxAuthorities>, ValueQuery>;
 
 	/// The current authority set id
 	#[pallet::storage]
@@ -441,19 +471,20 @@ pub mod pallet {
 	/// Authorities set scheduled to be used with the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities)]
-	pub(super) type NextAuthorities<T: Config> = StorageValue<_, Vec<T::DKGId>, ValueQuery>;
+	pub(super) type NextAuthorities<T: Config> =
+		StorageValue<_, BoundedVec<T::DKGId, T::MaxAuthorities>, ValueQuery>;
 
 	/// Accounts for the current authorities
 	#[pallet::storage]
 	#[pallet::getter(fn current_authorities_accounts)]
 	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
-		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+		StorageValue<_, BoundedVec<T::AccountId, T::MaxAuthorities>, ValueQuery>;
 
 	/// Authority account ids scheduled for the next session
 	#[pallet::storage]
 	#[pallet::getter(fn next_authorities_accounts)]
 	pub(super) type NextAuthoritiesAccounts<T: Config> =
-		StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+		StorageValue<_, BoundedVec<T::AccountId, T::MaxAuthorities>, ValueQuery>;
 
 	/// Authority account ids scheduled for the next session
 	#[pallet::storage]
@@ -472,7 +503,7 @@ pub mod pallet {
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
 		),
-		AggregatedMisbehaviourReports<T::DKGId>,
+		AggregatedMisbehaviourReports<T::DKGId, T::MaxSignatureLength, T::MaxReporters>,
 		OptionQuery,
 	>;
 
@@ -499,13 +530,14 @@ pub mod pallet {
 	/// The current best authorities of the active keygen set
 	#[pallet::storage]
 	#[pallet::getter(fn best_authorities)]
-	pub(super) type BestAuthorities<T: Config> = StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
+	pub(super) type BestAuthorities<T: Config> =
+		StorageValue<_, BoundedVec<(u16, T::DKGId), T::MaxAuthorities>, ValueQuery>;
 
 	/// The next best authorities of the active keygen set
 	#[pallet::storage]
 	#[pallet::getter(fn next_best_authorities)]
 	pub(super) type NextBestAuthorities<T: Config> =
-		StorageValue<_, Vec<(u16, T::DKGId)>, ValueQuery>;
+		StorageValue<_, BoundedVec<(u16, T::DKGId), T::MaxAuthorities>, ValueQuery>;
 
 	/// The last BlockNumber at which the session rotation happened
 	#[pallet::storage]
@@ -553,6 +585,8 @@ pub mod pallet {
 		NoNextPublicKey,
 		/// Must be calling from the controller account
 		InvalidControllerAccount,
+		/// Input is out of bounds
+		OutOfBounds,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -762,7 +796,9 @@ pub mod pallet {
 			let mut accepted = false;
 			for (key, reporters) in dict.iter() {
 				if reporters.len() > threshold.into() {
-					DKGPublicKey::<T>::put((Self::authority_set_id(), key.clone()));
+					let bounded_key: BoundedVec<_, _> =
+						key.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
+					DKGPublicKey::<T>::put((Self::authority_set_id(), bounded_key));
 					Self::deposit_event(Event::PublicKeySubmitted {
 						compressed_pub_key: key.clone(),
 						uncompressed_pub_key: Self::decompress_public_key(key.clone())
@@ -825,7 +861,9 @@ pub mod pallet {
 			let accepted_key = loop {
 				if let Some((key, accounts)) = keys.next() {
 					if accounts.len() > threshold.into() {
-						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), key.clone()));
+						let bounded_key: BoundedVec<_, _> =
+							key.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
+						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), bounded_key));
 						Self::deposit_event(Event::NextPublicKeySubmitted {
 							compressed_pub_key: key.clone(),
 							uncompressed_pub_key: Self::decompress_public_key(key.clone())
@@ -895,7 +933,7 @@ pub mod pallet {
 
 			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
 			let uncompressed_pub_key =
-				Self::decompress_public_key(next_pub_key.clone()).unwrap_or_default();
+				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
 			let data = RefreshProposal {
 				// We ensure that the nonce is valid above, so this is safe.
 				nonce,
@@ -918,10 +956,12 @@ pub mod pallet {
 				})?;
 			// Remove unsigned refresh proposal from queue
 			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
-			NextPublicKeySignature::<T>::put(signature.clone());
+			let bounded_signature: BoundedVec<_, _> =
+				signature.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
+			NextPublicKeySignature::<T>::put(bounded_signature);
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 				uncompressed_pub_key,
-				compressed_pub_key: next_pub_key,
+				compressed_pub_key: next_pub_key.into(),
 				pub_key_sig: signature,
 				nonce: u32::from(nonce),
 			});
@@ -956,7 +996,11 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
-			reports: AggregatedMisbehaviourReports<T::DKGId>,
+			reports: AggregatedMisbehaviourReports<
+				T::DKGId,
+				T::MaxSignatureLength,
+				T::MaxReporters,
+			>,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 			let offender = reports.offender.clone();
@@ -968,7 +1012,7 @@ pub mod pallet {
 				// Signing misbehaviours are from current authorities
 				MisbehaviourType::Sign => Self::authorities(),
 			};
-			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities);
+			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities.into());
 			// Get the threshold for the misbehaviour type
 			let signature_threshold = match misbehaviour_type {
 				// Keygen misbehaviours are from next keygen authorities
@@ -1042,7 +1086,7 @@ pub mod pallet {
 										.filter(|id| *id != offender)
 										.chain(vec![highest_reputation_authority])
 										.collect::<Vec<_>>(),
-								));
+								).try_into().unwrap());
 
 								return Ok(().into())
 							}
@@ -1065,7 +1109,7 @@ pub mod pallet {
 								.into_iter()
 								.filter(|id| *id != offender)
 								.collect::<Vec<_>>(),
-						));
+						).try_into().unwrap());
 					},
 					MisbehaviourType::Sign => {
 						// These are the authorities who underwent keygen.
@@ -1196,10 +1240,10 @@ pub mod pallet {
 			let next_pub_key = Self::next_dkg_public_key();
 			// Force rotate the next authorities into the active and next set.
 			Self::change_authorities(
-				next_authorities.clone(),
-				next_authorities,
-				next_authority_accounts.clone(),
-				next_authority_accounts,
+				next_authorities.clone().into(),
+				next_authorities.into(),
+				next_authority_accounts.clone().into(),
+				next_authority_accounts.into(),
 				true,
 			);
 			// If there's a next key we immediately create a refresh proposal
@@ -1207,7 +1251,7 @@ pub mod pallet {
 			if let Some(pub_key) = next_pub_key {
 				RefreshInProgress::<T>::put(true);
 				let uncompressed_pub_key =
-					Self::decompress_public_key(pub_key.1).unwrap_or_default();
+					Self::decompress_public_key(pub_key.1.into()).unwrap_or_default();
 				let next_nonce = Self::refresh_nonce() + 1u32;
 				let data = dkg_runtime_primitives::RefreshProposal {
 					nonce: next_nonce.into(),
@@ -1343,13 +1387,16 @@ pub mod pallet {
 
 impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
-	pub fn authority_set() -> AuthoritySet<T::DKGId> {
-		AuthoritySet::<T::DKGId> { authorities: Self::authorities(), id: Self::authority_set_id() }
+	pub fn authority_set() -> AuthoritySet<T::DKGId, T::MaxAuthorities> {
+		AuthoritySet::<T::DKGId, T::MaxAuthorities> {
+			authorities: Self::authorities(),
+			id: Self::authority_set_id(),
+		}
 	}
 
 	/// Return the next DKG authority set.
-	pub fn next_authority_set() -> AuthoritySet<T::DKGId> {
-		AuthoritySet::<T::DKGId> {
+	pub fn next_authority_set() -> AuthoritySet<T::DKGId, T::MaxAuthorities> {
+		AuthoritySet::<T::DKGId, T::MaxAuthorities> {
 			authorities: Self::next_authorities(),
 			id: Self::next_authority_set_id(),
 		}
@@ -1437,7 +1484,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn process_misbehaviour_reports(
-		reports: AggregatedMisbehaviourReports<T::DKGId>,
+		reports: AggregatedMisbehaviourReports<T::DKGId, T::MaxSignatureLength, T::MaxReporters>,
 		verifying_set: Vec<T::DKGId>,
 	) -> Vec<T::DKGId> {
 		let mut valid_reporters = Vec::new();

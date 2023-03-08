@@ -15,8 +15,8 @@
 use crate::*;
 use codec::{Decode, Encode};
 #[derive(Default, Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct RoundMetadata {
-	pub curr_round_pub_key: Vec<u8>,
-	pub next_round_pub_key: Vec<u8>,
-	pub refresh_signature: Vec<u8>,
+pub struct RoundMetadata<T: Config> {
+	pub curr_round_pub_key: BoundedVec<u8, T::MaxKeyLength>,
+	pub next_round_pub_key: BoundedVec<u8, T::MaxKeyLength>,
+	pub refresh_signature: BoundedVec<u8, T::MaxSignatureLength>,
 }
