@@ -119,7 +119,7 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
-	MaxProposalLength : Get<u32>
+	MaxProposalLength: Get<u32>,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -169,7 +169,7 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
-	MaxProposalLength : Get<u32>,
+	MaxProposalLength: Get<u32>,
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -209,7 +209,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// Return a new DKG worker instance.
@@ -275,7 +275,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
@@ -1730,13 +1730,13 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C, GE,MaxProposalLength> KeystoreExt for DKGWorker<B, BE, C, GE,MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength> KeystoreExt for DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>
+	MaxProposalLength: Get<u32>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1762,13 +1762,14 @@ pub trait HasLatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength> HasLatestHeader<B> for DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength> HasLatestHeader<B>
+	for DKGWorker<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	MaxProposalLength : Get<u32>
+	MaxProposalLength: Get<u32>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

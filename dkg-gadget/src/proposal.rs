@@ -28,7 +28,12 @@ use sp_runtime::traits::{Block, Get, Header};
 use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+pub(crate) fn get_signed_proposal<
+	B,
+	C,
+	BE,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
@@ -37,7 +42,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let signed_proposal = match payload_key {
@@ -89,7 +94,9 @@ where
 }
 
 /// make an unsigned proposal a signed one
-pub(crate) fn make_signed_proposal<MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+pub(crate) fn make_signed_proposal<
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+>(
 	kind: ProposalKind,
 	finished_round: DKGSignedPayload,
 ) -> Option<Proposal<MaxProposalLength>> {

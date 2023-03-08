@@ -40,7 +40,7 @@ where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let maybe_offchain = backend.offchain_storage();

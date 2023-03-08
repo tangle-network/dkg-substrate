@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::crypto::Public;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
-use std::fmt::Debug;
 use sp_runtime::traits::Get;
-use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
+use std::fmt::Debug;
 
 pub(crate) type StateMachineTxRx<T> = (
 	futures::channel::mpsc::UnboundedSender<Msg<T>>,
@@ -28,7 +28,8 @@ pub(crate) type StateMachineTxRx<T> = (
 
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
-pub trait StateMachineHandler: StateMachine + RoundBlame + Send
+pub trait StateMachineHandler<BI: BlockchainInterface + 'static>:
+	StateMachine + RoundBlame + Send
 where
 	<Self as StateMachine>::Output: Send,
 {
@@ -39,15 +40,15 @@ where
 		futures::channel::mpsc::unbounded()
 	}
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
+	fn handle_unsigned_message(
 		to_async_proto: &futures::channel::mpsc::UnboundedSender<
 			Msg<<Self as StateMachine>::MessageBody>,
 		>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<MaxProposalLength>,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err>;
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		result: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		additional_param: Self::AdditionalReturnParam,

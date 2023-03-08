@@ -36,7 +36,7 @@ where
 	GE: GossipEngineIface + 'static,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();

@@ -33,7 +33,13 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<B, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+pub(crate) fn handle_public_key_broadcast<
+	B,
+	BE,
+	C,
+	GE,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
@@ -89,7 +95,7 @@ where
 			aggregated_public_keys.keys_and_signatures.len()
 		);
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
-			store_aggregated_public_keys::<B, C, BE>(
+			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
 				&dkg_worker.backend,
 				&mut lock,
 				is_main_round,
@@ -119,7 +125,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength>(
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	let public = key_store.get_authority_public_key();

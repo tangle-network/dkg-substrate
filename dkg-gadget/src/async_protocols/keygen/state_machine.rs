@@ -27,14 +27,14 @@ use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
 
 #[async_trait]
-impl StateMachineHandler for Keygen {
+impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 	type AdditionalReturnParam = ();
 	type Return = <Self as StateMachine>::Output;
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
+	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<MaxProposalLength>,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
@@ -70,7 +70,7 @@ impl StateMachineHandler for Keygen {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		local_key: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		_: Self::AdditionalReturnParam,

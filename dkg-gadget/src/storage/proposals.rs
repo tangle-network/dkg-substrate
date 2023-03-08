@@ -42,7 +42,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
 {
 	if signed_proposals.is_empty() {
@@ -76,8 +76,10 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut prop_wrapper = match old_val.clone() {
-			Some(ser_props) =>
-				OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
+			Some(ser_props) => OffchainSignedProposals::<NumberFor<B>, MaxProposalLength>::decode(
+				&mut &ser_props[..],
+			)
+			.unwrap(),
 			None => Default::default(),
 		};
 

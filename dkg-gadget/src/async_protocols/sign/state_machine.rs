@@ -29,9 +29,9 @@ use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
 #[async_trait]
-impl StateMachineHandler for OfflineStage {
+impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage {
 	type AdditionalReturnParam = (
-		UnsignedProposal<MaxProposalLength>,
+		UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		OfflinePartyId,
 		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
@@ -39,10 +39,10 @@ impl StateMachineHandler for OfflineStage {
 	);
 	type Return = ();
 
-	fn handle_unsigned_message<MaxProposalLength : Get<u32> + Clone +Send + Sync>(
+	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<MaxProposalLength>,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, .. } = msg.body;
 
@@ -83,7 +83,7 @@ impl StateMachineHandler for OfflineStage {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: Self::AdditionalReturnParam,
@@ -99,7 +99,7 @@ impl StateMachineHandler for OfflineStage {
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
-			unsigned_proposal.0,
+			unsigned_proposal.0.into(),
 			unsigned_proposal.1,
 			unsigned_proposal.2,
 			unsigned_proposal.3,

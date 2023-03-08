@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use sp_runtime::traits::Get;
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, new_inner, remote::MetaHandlerStatus,
@@ -97,13 +98,15 @@ where
 		t: u16,
 		n: u16,
 		status: DKGMsgStatus,
-	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler>::Return>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler<BI>>::Return>, DKGError>
+	{
 		let ty = match status {
 			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
 		};
 		let i = params.party_i;
-		let channel_type = ProtocolType::Keygen { ty, i, t, n };
+		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
+			ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)

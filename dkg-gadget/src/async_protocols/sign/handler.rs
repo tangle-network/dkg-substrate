@@ -43,10 +43,10 @@ where
 	(): Extend<Out>,
 {
 	/// Top level function for setting up signing
-	pub fn setup_signing<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+	pub fn setup_signing<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		threshold: u16,
-		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
+		unsigned_proposals: Vec<UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>>,
 		s_l: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
@@ -139,17 +139,19 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	fn new_offline<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+	fn new_offline<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
 		async_index: u8,
-	) -> Result<GenericAsyncHandler<'static, <OfflineStage as StateMachineHandler>::Return>, DKGError>
-	{
+	) -> Result<
+		GenericAsyncHandler<'static, <OfflineStage as StateMachineHandler<BI>>::Return>,
+		DKGError,
+	> {
 		let channel_type = ProtocolType::Offline {
 			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 			i: offline_i,
@@ -170,10 +172,10 @@ where
 	}
 
 	#[allow(clippy::too_many_arguments)]
-	pub(crate) fn new_voting<BI: BlockchainInterface + 'static, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI>,
 		completed_offline_stage: CompletedOfflineStage,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
 		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
 		threshold: Threshold,

@@ -50,7 +50,13 @@ use super::KeygenPartyId;
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
-	type MaxProposalLength: Get<u32> + Clone + Send + Sync;
+	type MaxProposalLength: Get<u32>
+		+ Clone
+		+ Send
+		+ Sync
+		+ std::fmt::Debug
+		+ 'static
+		+ std::fmt::Debug;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -77,7 +83,13 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> {
+pub struct DKGProtocolEngine<
+	B: Block,
+	BE,
+	C,
+	GE,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -95,16 +107,26 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + 
 	pub _pd: PhantomData<BE>,
 }
 
-impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> KeystoreExt
-	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+impl<
+		B: Block,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync> HasLatestHeader<B>
-	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+impl<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -123,11 +145,12 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 	BE: Backend<B> + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
 	type GossipEngine = Arc<GE>;
+	type MaxProposalLength = MaxProposalLength;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -172,9 +195,11 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Some(proposal) =
-			get_signed_proposal::<B, C, BE, MaxProposalLength>(&self.backend, finished_round, payload_key)
-		{
+		if let Some(proposal) = get_signed_proposal::<B, C, BE, MaxProposalLength>(
+			&self.backend,
+			finished_round,
+			payload_key,
+		) {
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {

@@ -93,7 +93,7 @@ where
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	/// DKG client
@@ -122,7 +122,7 @@ pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32>  + Clone + Send + Sync + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
 {
 	// ensure logging-related statics are initialized

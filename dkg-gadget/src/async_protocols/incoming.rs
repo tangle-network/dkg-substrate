@@ -27,15 +27,22 @@ use tokio_stream::wrappers::BroadcastStream;
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 /// Used to filter and transform incoming messages from the DKG worker
-pub struct IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength: Get<u32> + Clone + Send + Sync> {
+pub struct IncomingAsyncProtocolWrapper<
+	T,
+	BI,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub receiver: BroadcastStream<T>,
 	session_id: SessionId,
 	engine: Arc<BI>,
 	ty: ProtocolType<MaxProposalLength>,
 }
 
-impl<T: TransformIncoming, BI: BlockchainInterface, MaxProposalLength: Get<u32> + Clone + Send + Sync>
-	IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
+impl<
+		T: TransformIncoming,
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	pub fn new(
 		receiver: tokio::sync::broadcast::Receiver<T>,
@@ -54,7 +61,10 @@ impl<T: TransformIncoming, BI: BlockchainInterface, MaxProposalLength: Get<u32> 
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped;
 
-	fn transform<BI: BlockchainInterface, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+	fn transform<
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	>(
 		self,
 		verify: &BI,
 		stream_type: &ProtocolType<MaxProposalLength>,
@@ -66,7 +76,10 @@ pub trait TransformIncoming: Clone + Send + 'static {
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	type IncomingMapped = DKGMessage<Public>;
-	fn transform<BI: BlockchainInterface, MaxProposalLength: Get<u32> + Clone + Send + Sync>(
+	fn transform<
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	>(
 		self,
 		verify: &BI,
 		stream_type: &ProtocolType<MaxProposalLength>,
@@ -105,7 +118,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	}
 }
 
-impl<T, BI, MaxProposalLength: Get<u32> + Clone + Send + Sync> Stream
+impl<T, BI, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> Stream
 	for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 where
 	T: TransformIncoming,
