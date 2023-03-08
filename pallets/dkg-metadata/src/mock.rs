@@ -15,6 +15,7 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
 
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -123,6 +124,17 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxKeyLength : u32 = 10_000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxSignatureLength : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxAuthorities : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxReporters : u32 = 1000;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -140,6 +152,10 @@ impl pallet_dkg_metadata::Config for Test {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type SessionPeriod = Period;
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = ();
 }
 

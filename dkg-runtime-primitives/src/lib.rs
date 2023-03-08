@@ -28,7 +28,7 @@ pub use ethereum::*;
 pub use ethereum_types::*;
 use frame_support::RuntimeDebug;
 pub use proposal::*;
-
+use sp_std::fmt::Debug;
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode};
 use frame_support::pallet_prelude::Get;
@@ -103,8 +103,8 @@ pub enum MisbehaviourType {
 	Sign,
 }
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>, MaxSignatureLength : Get<u32>, MaxReporters : Get<u32>> {
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
+pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>, MaxSignatureLength : Get<u32> + Debug + Clone + TypeInfo, MaxReporters : Get<u32> + Debug + Clone + TypeInfo> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
