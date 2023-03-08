@@ -20,9 +20,7 @@ pub enum ProtocolPacket {
 	// After the handshake phase is complete, almost every packet sent back and forth
 	// between the client and server uses this packet type
 	Session { event: crate::MockBlockChainEvent },
-	// Tells the client to halt the DKG and related networking services. The client is still
-	// expected to listen to future commands such as "InitialHandshake" to restart the DKG once
-	// the MockBlockchain determines it is time for the client to do so.
+	// Tells the client to halt the DKG and related networking services.
 	Halt,
 }
 

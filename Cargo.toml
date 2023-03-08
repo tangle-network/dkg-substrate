@@ -32,6 +32,7 @@ dkg-primitives = { path = "dkg-primitives", default-features = false }
 dkg-standalone-runtime = { version = "3.0.0", path = "standalone/runtime" }
 dkg-logging = { path = "dkg-logging" }
 dkg-rococo-runtime = { default-features = false, path = "parachain/runtime/rococo" }
+dkg-mock-blockchain = { path = "dkg-mock-blockchain", default-features = false }
 
 futures = "0.3.15"
 clap = { version = "4.0.32", features = ["derive"] }

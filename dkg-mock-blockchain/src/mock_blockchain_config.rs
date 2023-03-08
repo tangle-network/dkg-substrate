@@ -11,8 +11,8 @@ pub struct MockBlockchainConfig {
 	threshold: usize,
 	#[serde(default)]
 	#[serde(with = "humantime_serde")]
-	// the minimum latency in the network. Simulated by setting the
-	// AttachedMetadataCommand::preprocess_delay field
+	// the minimum latency in the network. Each client will receive updates at
+    // base_simulated_latency + random(0, 0.25*base_simulated_latency)
 	base_simulated_latency: Option<Duration>,
 	// a set of error cases
 	error_cases: Vec<ErrorCase>,
@@ -22,6 +22,7 @@ pub struct MockBlockchainConfig {
 /// A specific error case that the MockBlockchain will attempt to cause in
 /// a subscribing client
 pub struct ErrorCase {
+    name: String,
 	#[serde(default)]
 	#[serde(with = "humantime_serde")]
 	// Add an additional amount of delay ontop of the latency before sending the notification to
@@ -32,5 +33,5 @@ pub struct ErrorCase {
 	// the number of clients to cause the error for. Must be less than or equal to `min_clients`
 	n_clients: usize,
 	// the specific command that each receiving client should cause
-	error_command: crate::AttachedCommand,
+	command: crate::AttachedCommand,
 }

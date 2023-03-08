@@ -56,6 +56,7 @@ webb-proposals = { workspace = true }
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-logging = { workspace = true }
+dkg-mock-blockchain = { workspace = true }
 
 [dev-dependencies]
 sc-network-test = { workspace = true }
