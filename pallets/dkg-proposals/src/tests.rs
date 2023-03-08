@@ -16,9 +16,9 @@
 
 use super::{
 	mock::{
-		assert_events, new_test_ext, Balances, ChainIdentifier, DKGProposals, ProposalLifetime,
-		RuntimeEvent, RuntimeOrigin, System, Test, PROPOSER_A, PROPOSER_B, PROPOSER_C, PROPOSER_D,
-		PROPOSER_E, TEST_THRESHOLD,
+		assert_events, new_test_ext, AccountId, Balances, ChainIdentifier, DKGProposals,
+		ProposalLifetime, RuntimeEvent, RuntimeOrigin, System, Test, PROPOSER_A, PROPOSER_B,
+		PROPOSER_C, PROPOSER_D, PROPOSER_E, TEST_THRESHOLD,
 	},
 	*,
 };
@@ -60,12 +60,13 @@ pub const NOT_PROPOSER: u8 = 0x5;
 
 #[test]
 fn complete_proposal_approved() {
-	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
-		votes_against: vec![mock_pub_key(PROPOSER_C)],
-		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get() + 1,
-	};
+	let mut prop =
+		ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![mock_pub_key(PROPOSER_C)].try_into().unwrap(),
+			status: ProposalStatus::Initiated,
+			expiry: ProposalLifetime::get() + 1,
+		};
 
 	prop.try_to_complete(2, 3);
 	assert_eq!(prop.status, ProposalStatus::Approved);
@@ -73,12 +74,15 @@ fn complete_proposal_approved() {
 
 #[test]
 fn complete_proposal_rejected() {
-	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(PROPOSER_A)],
-		votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)],
-		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get() + 1,
-	};
+	let mut prop =
+		ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_B)]
+				.try_into()
+				.unwrap(),
+			status: ProposalStatus::Initiated,
+			expiry: ProposalLifetime::get() + 1,
+		};
 
 	prop.try_to_complete(2, 3);
 	assert_eq!(prop.status, ProposalStatus::Rejected);
@@ -86,22 +90,26 @@ fn complete_proposal_rejected() {
 
 #[test]
 fn complete_proposal_bad_threshold() {
-	let mut prop = ProposalVotes {
-		votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
-		votes_against: vec![],
-		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get() + 1,
-	};
+	let mut prop =
+		ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
+			status: ProposalStatus::Initiated,
+			expiry: ProposalLifetime::get() + 1,
+		};
 
 	prop.try_to_complete(3, 2);
 	assert_eq!(prop.status, ProposalStatus::Initiated);
 
-	let mut prop = ProposalVotes {
-		votes_for: vec![],
-		votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)],
-		status: ProposalStatus::Initiated,
-		expiry: ProposalLifetime::get() + 1,
-	};
+	let mut prop =
+		ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+			votes_for: vec![].try_into().unwrap(),
+			votes_against: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_A)]
+				.try_into()
+				.unwrap(),
+			status: ProposalStatus::Initiated,
+			expiry: ProposalLifetime::get() + 1,
+		};
 
 	prop.try_to_complete(3, 2);
 	assert_eq!(prop.status, ProposalStatus::Initiated);
@@ -111,13 +119,15 @@ fn complete_proposal_bad_threshold() {
 fn setup_resources() {
 	new_test_ext().execute_with(|| {
 		let id: ResourceId = [1; 32].into();
-		let method = "Pallet.do_something".as_bytes().to_vec();
-		let method2 = "Pallet.do_somethingElse".as_bytes().to_vec();
+		let method: BoundedVec<_, _> =
+			"Pallet.do_something".as_bytes().to_vec().try_into().unwrap();
+		let method2: BoundedVec<_, _> =
+			"Pallet.do_somethingElse".as_bytes().to_vec().try_into().unwrap();
 
-		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method.clone()));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method.clone().into()));
 		assert_eq!(DKGProposals::resources(id), Some(method));
 
-		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method2.clone()));
+		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), id, method2.clone().into()));
 		assert_eq!(DKGProposals::resources(id), Some(method2));
 
 		assert_ok!(DKGProposals::remove_resource(RuntimeOrigin::root(), id));
@@ -224,7 +234,9 @@ fn add_remove_relayer() {
 	})
 }
 
-pub fn make_proposal<const N: usize>(prop: Proposal<T::MaxProposalLength>) -> Vec<u8> {
+pub fn make_proposal<const N: usize>(
+	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
+) -> Vec<u8> {
 	// Create the proposal Header
 	let r_id = ResourceId::from([
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
@@ -240,7 +252,10 @@ pub fn make_proposal<const N: usize>(prop: Proposal<T::MaxProposalLength>) -> Ve
 
 	match prop {
 		Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, .. } =>
-			Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: buf },
+			Proposal::<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>::Unsigned {
+				kind: ProposalKind::AnchorUpdate,
+				data: buf.try_into().unwrap(),
+			},
 		_ => panic!("Invalid proposal type"),
 	}
 	.data()
@@ -254,10 +269,12 @@ fn create_successful_proposal() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal = make_proposal::<64>(Proposal::Unsigned {
+		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: vec![],
-		});
+			data: vec![].try_into().unwrap(),
+		})
+		.try_into()
+		.unwrap();
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
 			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
@@ -269,8 +286,8 @@ fn create_successful_proposal() {
 
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -282,12 +299,12 @@ fn create_successful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone(),
+			proposal.clone().try_into().unwrap(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![mock_pub_key(PROPOSER_B)],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![mock_pub_key(PROPOSER_B)].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -299,12 +316,12 @@ fn create_successful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone(),
+			proposal.clone().try_into().unwrap(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_C)],
-			votes_against: vec![mock_pub_key(PROPOSER_B)],
+			votes_for: vec![mock_pub_key(PROPOSER_A), mock_pub_key(PROPOSER_C)].try_into().unwrap(),
+			votes_against: vec![mock_pub_key(PROPOSER_B)].try_into().unwrap(),
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -333,7 +350,7 @@ fn create_successful_proposal() {
 			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
-				data: proposal,
+				data: proposal.into(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
@@ -350,10 +367,12 @@ fn create_unsucessful_proposal() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal = make_proposal::<64>(Proposal::Unsigned {
+		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: vec![],
-		});
+			data: vec![].try_into().unwrap(),
+		})
+		.try_into()
+		.unwrap();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -365,8 +384,8 @@ fn create_unsucessful_proposal() {
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -378,15 +397,16 @@ fn create_unsucessful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone(),
+			proposal.clone().try_into().unwrap(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
-		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![mock_pub_key(PROPOSER_B)],
-			status: ProposalStatus::Initiated,
-			expiry: ProposalLifetime::get() + 1,
-		};
+		let expected =
+			ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+				votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+				votes_against: vec![mock_pub_key(PROPOSER_B)].try_into().unwrap(),
+				status: ProposalStatus::Initiated,
+				expiry: ProposalLifetime::get() + 1,
+			};
 		assert_eq!(prop, expected);
 
 		// Third relayer votes against
@@ -398,12 +418,15 @@ fn create_unsucessful_proposal() {
 			proposal.clone(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
-		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)],
-			status: ProposalStatus::Rejected,
-			expiry: ProposalLifetime::get() + 1,
-		};
+		let expected =
+			ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
+				votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+				votes_against: vec![mock_pub_key(PROPOSER_B), mock_pub_key(PROPOSER_C)]
+					.try_into()
+					.unwrap(),
+				status: ProposalStatus::Rejected,
+				expiry: ProposalLifetime::get() + 1,
+			};
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
@@ -438,10 +461,12 @@ fn execute_after_threshold_change() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal = make_proposal::<64>(Proposal::Unsigned {
+		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: vec![],
-		});
+			data: vec![].try_into().unwrap(),
+		})
+		.try_into()
+		.unwrap();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -453,8 +478,8 @@ fn execute_after_threshold_change() {
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -473,8 +498,8 @@ fn execute_after_threshold_change() {
 
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Approved,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -497,7 +522,7 @@ fn execute_after_threshold_change() {
 			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
-				data: proposal,
+				data: proposal.into(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
@@ -514,10 +539,12 @@ fn proposal_expires() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal = make_proposal::<64>(Proposal::Unsigned {
+		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: vec![],
-		});
+			data: vec![].try_into().unwrap(),
+		})
+		.try_into()
+		.unwrap();
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -529,8 +556,8 @@ fn proposal_expires() {
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -541,8 +568,8 @@ fn proposal_expires() {
 
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -555,7 +582,7 @@ fn proposal_expires() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone(),
+				proposal.clone().try_into().unwrap(),
 			),
 			Error::<Test>::ProposalExpired
 		);
@@ -563,8 +590,8 @@ fn proposal_expires() {
 		// Proposal state should remain unchanged
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -576,14 +603,14 @@ fn proposal_expires() {
 				RuntimeOrigin::signed(mock_pub_key(PROPOSER_C)),
 				prop_id,
 				typed_chain_id,
-				proposal.clone(),
+				proposal.clone().try_into().unwrap(),
 			),
 			Error::<Test>::ProposalExpired
 		);
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
 		let expected = ProposalVotes {
-			votes_for: vec![mock_pub_key(PROPOSER_A)],
-			votes_against: vec![],
+			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
+			votes_against: vec![].try_into().unwrap(),
 			status: ProposalStatus::Initiated,
 			expiry: ProposalLifetime::get() + 1,
 		};
@@ -676,7 +703,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 		let prop_id = ProposalNonce::from(1u32);
 		let proposal = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: vec![],
+			data: vec![].try_into().unwrap(),
 		});
 
 		assert_err!(
@@ -685,7 +712,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone(),
+				proposal.clone().try_into().unwrap(),
 			),
 			crate::Error::<Test>::MustBeProposer
 		);
@@ -696,7 +723,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone(),
+			proposal.clone().try_into().unwrap(),
 		));
 
 		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
@@ -707,7 +734,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal,
+				proposal.try_into().unwrap(),
 			),
 			crate::Error::<Test>::MustBeProposer
 		);

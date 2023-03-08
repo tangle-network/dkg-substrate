@@ -147,12 +147,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter
-			+ EncodeLike
-			+ EncodeAppend
-			+ Into<Vec<u8>>
-			+ AsRef<[u8]>
-			+ MaxEncodedLen;
+		type Proposal: Parameter + EncodeLike + Into<Vec<u8>> + AsRef<[u8]> + MaxEncodedLen;
 
 		/// Estimate next session rotation
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;

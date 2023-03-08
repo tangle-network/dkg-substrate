@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+use crate as pallet_dkg_proposal_handler;
 use crate::{mock::*, UnsignedProposalQueue};
 use codec::Encode;
 use frame_support::{
@@ -33,31 +34,58 @@ use webb_proposals::{Proposal, ProposalKind};
 
 // *** Utility ***
 
-fn add_proposal_to_offchain_storage(prop: Proposal) {
+fn add_proposal_to_offchain_storage(
+	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
+) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<OffchainSignedProposals<u64>, MutateStorageError<_, ()>> = proposals_ref
-		.mutate(
-			|val: Result<Option<OffchainSignedProposals<u64>>, StorageRetrievalError>| match val {
-				Ok(Some(mut ser_props)) => {
-					ser_props.proposals.push((vec![prop], 0));
-					Ok(ser_props)
-				},
-				_ => {
-					let mut prop_wrapper = OffchainSignedProposals::<u64>::default();
-					prop_wrapper.proposals.push((vec![prop], 0));
-					Ok(prop_wrapper)
-				},
+	let update_res: Result<
+		OffchainSignedProposals<
+			u64,
+			<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength,
+		>,
+		MutateStorageError<_, ()>,
+	> = proposals_ref.mutate(
+		|val: Result<
+			Option<
+				OffchainSignedProposals<
+					u64,
+					<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength,
+				>,
+			>,
+			StorageRetrievalError,
+		>| match val {
+			Ok(Some(mut ser_props)) => {
+				ser_props.proposals.push((vec![prop], 0));
+				Ok(ser_props)
 			},
-		);
+			_ => {
+				let mut prop_wrapper = OffchainSignedProposals::<
+					u64,
+					<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength,
+				>::default();
+				prop_wrapper.proposals.push((vec![prop], 0));
+				Ok(prop_wrapper)
+			},
+		},
+	);
 
 	assert_ok!(update_res);
 }
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<OffchainSignedProposals<u64>> =
-		proposals_ref.get::<OffchainSignedProposals<u64>>().unwrap();
+	let stored_props: Option<
+		OffchainSignedProposals<
+			u64,
+			<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength,
+		>,
+	> = proposals_ref
+		.get::<OffchainSignedProposals<
+			u64,
+			<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength,
+		>>()
+		.unwrap();
 	assert!(stored_props.is_some(), "{}", true);
 
 	assert_eq!(stored_props.unwrap().proposals.len(), num);
@@ -107,7 +135,10 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
@@ -169,7 +200,10 @@ fn store_signed_proposal_offchain() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -197,7 +231,10 @@ fn submit_signed_proposal_onchain_success() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -227,7 +264,10 @@ fn submit_signed_proposal_success() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -244,7 +284,7 @@ fn submit_signed_proposal_success() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal]
+			vec![signed_proposal].try_into().unwrap()
 		));
 
 		assert!(
@@ -277,7 +317,10 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -294,7 +337,7 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal.clone()]
+			vec![signed_proposal.clone()].try_into().unwrap()
 		));
 
 		assert!(
@@ -320,7 +363,10 @@ fn submit_signed_proposal_already_exists() {
 		// Second submission
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -335,7 +381,7 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal]
+			vec![signed_proposal].try_into().unwrap()
 		));
 
 		assert!(
@@ -366,7 +412,10 @@ fn submit_signed_proposal_fail_invalid_sig() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned { kind: ProposalKind::EVM, data: tx_v_2.encode() },
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
 		));
 
 		assert!(
@@ -383,8 +432,8 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		invalid_sig.extend_from_slice(&[0u8, 64]);
 		let signed_proposal = Proposal::Signed {
 			kind: ProposalKind::EVM,
-			data: tx_v_2.encode(),
-			signature: invalid_sig.clone(),
+			data: tx_v_2.encode().try_into().unwrap(),
+			signature: invalid_sig.clone().try_into().unwrap(),
 		};
 
 		// it does not return an error, however the proposal is not added to the list.
@@ -392,7 +441,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		// we could check for the RuntimeEvent that is emitted.
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal]
+			vec![signed_proposal].try_into().unwrap()
 		));
 
 		assert!(
@@ -451,7 +500,10 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 	}
 }
 
-pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Proposal {
+pub fn make_proposal<const N: usize>(
+	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
+	chain: TypedChainId,
+) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
 	// Create the proposal Header
 	let header = make_header(chain);
 	let mut buf = vec![];
@@ -461,19 +513,28 @@ pub fn make_proposal<const N: usize>(prop: Proposal, chain: TypedChainId) -> Pro
 
 	if let Proposal::Unsigned { kind, .. } = prop {
 		return match kind {
-			ProposalKind::Refresh => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::TokenAdd => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::TokenRemove => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::WrappingFeeUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::ResourceIdUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::AnchorCreate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::AnchorUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::RescueTokens => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MaxDepositLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::MinWithdrawalLimitUpdate => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::SetTreasuryHandler => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf },
-			ProposalKind::FeeRecipientUpdate => Proposal::Unsigned { kind, data: buf },
+			ProposalKind::Refresh => Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::TokenAdd => Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::TokenRemove => Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::WrappingFeeUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::ResourceIdUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::AnchorCreate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::AnchorUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::RescueTokens =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::MaxDepositLimitUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::MinWithdrawalLimitUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::SetTreasuryHandler =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::SetVerifier => Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
+			ProposalKind::FeeRecipientUpdate =>
+				Proposal::Unsigned { kind, data: buf.try_into().unwrap() },
 			_ => panic!("Invalid proposal type"),
 		}
 	}
@@ -487,7 +548,10 @@ fn force_submit_should_fail_with_invalid_proposal_header_bytes() {
 		assert_err!(
 			DKGProposalHandler::force_submit_unsigned_proposal(
 				RuntimeOrigin::root(),
-				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] }
+				Proposal::Unsigned {
+					kind: ProposalKind::AnchorUpdate,
+					data: vec![].try_into().unwrap()
+				}
 			),
 			crate::Error::<Test>::InvalidProposalBytesLength
 		);
@@ -501,7 +565,10 @@ fn force_submit_should_fail_with_invalid_proposal_type() {
 			DKGProposalHandler::force_submit_unsigned_proposal(
 				RuntimeOrigin::root(),
 				make_proposal::<20>(
-					Proposal::Unsigned { kind: ProposalKind::Refresh, data: vec![] },
+					Proposal::Unsigned {
+						kind: ProposalKind::Refresh,
+						data: vec![].try_into().unwrap()
+					},
 					TypedChainId::None,
 				)
 			),
@@ -524,6 +591,8 @@ fn force_submit_should_work_with_anchor_update() {
 					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 154, 132, 124, 213, 188, 12, 148, 128,
 					173, 160, 179, 57, 215, 240, 168, 202, 194, 182, 103, 1, 0, 0, 0, 19, 138
 				]
+				.try_into()
+				.unwrap()
 			}
 		));
 	});
@@ -536,7 +605,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::TokenAdd,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -552,7 +624,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::TokenRemove,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -568,7 +643,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<2>(
-				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::WrappingFeeUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -584,7 +662,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<72>(
-				Proposal::Unsigned { kind: ProposalKind::RescueTokens, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::RescueTokens,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -600,7 +681,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<52>(
-				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::ResourceIdUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -617,7 +701,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MaxDepositLimitUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::MaxDepositLimitUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -634,7 +721,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<32>(
-				Proposal::Unsigned { kind: ProposalKind::MinWithdrawalLimitUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::MinWithdrawalLimitUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -651,7 +741,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::SetTreasuryHandler, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::SetTreasuryHandler,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -668,7 +761,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::SetVerifier, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::SetVerifier,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -685,7 +781,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::FeeRecipientUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::FeeRecipientUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -703,7 +802,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::TokenAdd,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -719,7 +821,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::TokenRemove, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::TokenRemove,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -735,7 +840,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<1>(
-				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::WrappingFeeUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -751,7 +859,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::AnchorCreate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -767,7 +878,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::AnchorUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -783,7 +897,10 @@ fn force_submit_should_work_with_valid_proposals() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<72>(
-				Proposal::Unsigned { kind: ProposalKind::ResourceIdUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::ResourceIdUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));
@@ -806,7 +923,10 @@ fn expired_unsigned_proposals_are_removed() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
-				Proposal::Unsigned { kind: ProposalKind::TokenAdd, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::TokenAdd,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Evm(0)
 			)
 		));
@@ -816,7 +936,10 @@ fn expired_unsigned_proposals_are_removed() {
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<1>(
-				Proposal::Unsigned { kind: ProposalKind::WrappingFeeUpdate, data: vec![] },
+				Proposal::Unsigned {
+					kind: ProposalKind::WrappingFeeUpdate,
+					data: vec![].try_into().unwrap()
+				},
 				TypedChainId::Substrate(0)
 			)
 		));

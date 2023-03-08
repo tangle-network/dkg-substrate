@@ -1,7 +1,8 @@
 use super::*;
 use crate as pallet_bridge_registry;
 
-use frame_support::{parameter_types, traits::GenesisBuild};
+use codec::{Decode, Encode};
+use frame_support::{pallet_prelude::ConstU32, parameter_types, traits::GenesisBuild};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -80,6 +81,8 @@ impl pallet_balances::Config for Test {
 parameter_types! {
 	pub const MaxAdditionalFields: u32 = 5;
 	pub const MaxResources: u32 = 32;
+		#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+		pub const MaxProposalLength : u32 = 10_000;
 }
 
 impl pallet_bridge_registry::Config for Test {
@@ -88,6 +91,7 @@ impl pallet_bridge_registry::Config for Test {
 	type MaxAdditionalFields = MaxAdditionalFields;
 	type MaxResources = MaxResources;
 	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 

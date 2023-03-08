@@ -13,8 +13,10 @@
 // limitations under the License.
 //
 use crate as pallet_dkg_proposal_handler;
-use codec::Encode;
-use frame_support::{parameter_types, traits::Everything, PalletId};
+use codec::{Decode, Encode};
+use frame_support::{
+	pallet_prelude::ConstU32, parameter_types, traits::Everything, BoundedVec, PalletId,
+};
 use frame_system as system;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519::Signature, H256};
@@ -162,12 +164,26 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxProposalLength : u32 = 10_000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxVotes : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxResources : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxAuthorityProposers : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxExternalProposerAccounts : u32 = 1000;
+}
+
 impl pallet_dkg_proposal_handler::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -177,11 +193,15 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
-	type Proposal = Vec<u8>;
+	type Proposal = BoundedVec<u8, MaxProposalLength>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type Period = Period;
+	type MaxVotes = MaxVotes;
+	type MaxResources = MaxResources;
+	type MaxAuthorityProposers = MaxAuthorityProposers;
+	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
 	type WeightInfo = ();
 }
 
@@ -332,7 +352,9 @@ pub fn mock_sign_msg(
 	keystore.ecdsa_sign_prehashed(dkg_runtime_primitives::crypto::Public::ID, &pub_key, msg)
 }
 
-pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
+pub fn mock_signed_proposal(
+	eth_tx: TransactionV2,
+) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -341,5 +363,9 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
+	Proposal::Signed {
+		kind: ProposalKind::EVM,
+		data: eth_tx_ser.try_into().unwrap(),
+		signature: sig_vec.try_into().unwrap(),
+	}
 }

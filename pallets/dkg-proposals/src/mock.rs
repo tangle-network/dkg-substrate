@@ -15,10 +15,12 @@
 #![cfg(test)]
 
 use super::*;
-
 use crate as pallet_dkg_proposals;
+use codec::{Decode, Encode};
 use frame_support::{
-	assert_ok, ord_parameter_types, parameter_types,
+	assert_ok, ord_parameter_types,
+	pallet_prelude::ConstU32,
+	parameter_types,
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
 	PalletId,
 };
@@ -70,7 +72,7 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 }
 
-type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 impl system::Config for Test {
 	type AccountData = pallet_balances::AccountData<u64>;
@@ -239,12 +241,26 @@ impl pallet_collator_selection::Config for Test {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxProposalLength : u32 = 10_000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxVotes : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxResources : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxAuthorityProposers : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxExternalProposerAccounts : u32 = 1000;
+}
+
 impl pallet_dkg_proposal_handler::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -254,11 +270,15 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
+	type Proposal = BoundedVec<u8, MaxProposalLength>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type Proposal = Vec<u8>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type Period = Period;
+	type MaxVotes = MaxVotes;
+	type MaxResources = MaxResources;
+	type MaxAuthorityProposers = MaxAuthorityProposers;
+	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
 	type WeightInfo = ();
 }
 

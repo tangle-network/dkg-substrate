@@ -532,6 +532,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = ();
+	type MaxProposalLength = ConstU32<10_000>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 

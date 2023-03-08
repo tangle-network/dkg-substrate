@@ -644,6 +644,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = BridgeRegistry;
+	type MaxProposalLength = ConstU32<10_000>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 
@@ -728,6 +729,7 @@ impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
 	type MaxAdditionalFields = MaxAdditionalFields;
 	type MaxResources = MaxResources;
 	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+	type MaxProposalLength = ConstU32<10_000>;
 	type WeightInfo = ();
 }
 
