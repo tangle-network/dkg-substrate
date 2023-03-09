@@ -538,6 +538,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49f6183038e081170ebbbadee6678966c7d54728938a3e7de7f4e780770318f"
+dependencies = [
+ "byteorder",
+ "serde",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.60.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2171,6 +2181,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "atomic",
+ "bincode2",
  "bytes",
  "futures",
  "humantime-serde",

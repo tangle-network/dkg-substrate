@@ -4,9 +4,10 @@ use futures::{
 	Sink, Stream,
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use std::pin::Pin;
+use std::task::Poll;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// A set of all the packets which will be exchanged between the client/server
