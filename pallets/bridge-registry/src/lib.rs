@@ -47,7 +47,7 @@ pub mod mock;
 mod tests;
 
 mod benchmarking;
-mod types;
+pub mod types;
 
 mod weights;
 use weights::WeightInfo;
@@ -107,12 +107,13 @@ pub mod pallet {
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
 		pub phantom: (PhantomData<T>, PhantomData<I>),
+		pub bridges: Vec<BridgeMetadata<T::MaxResources, T::MaxAdditionalFields>>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
 		fn default() -> Self {
-			Self { phantom: Default::default() }
+			Self { phantom: Default::default(), bridges: Default::default() }
 		}
 	}
 
@@ -120,6 +121,14 @@ pub mod pallet {
 	impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
 		fn build(&self) {
 			NextBridgeIndex::<T, I>::put(T::BridgeIndex::one());
+			for bridge in &self.bridges {
+				let idx: T::BridgeIndex = NextBridgeIndex::<T, I>::get();
+				Bridges::<T, I>::insert(idx, bridge);
+				NextBridgeIndex::<T, I>::put(idx + T::BridgeIndex::one());
+				for rid in &bridge.resource_ids {
+					ResourceToBridgeIndex::<T, I>::set(rid, Some(idx));
+				}
+			}
 		}
 	}
 

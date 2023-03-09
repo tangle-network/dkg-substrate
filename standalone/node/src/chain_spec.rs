@@ -12,22 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use dkg_primitives::ResourceId;
 use dkg_standalone_runtime::{
 	constants::currency::{Balance, DOLLARS},
 	AccountId, BalancesConfig, DKGConfig, DKGId, DKGProposalsConfig, GenesisConfig, ImOnlineConfig,
-	MaxNominations, Perbill, ResourceId, SessionConfig, Signature, StakerStatus, StakingConfig,
-	SudoConfig, SystemConfig, WASM_BINARY,
+	MaxNominations, Perbill, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
+	SystemConfig, WASM_BINARY,
 };
+use pallet_bridge_registry::types::BridgeMetadata;
 use hex_literal::hex;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{bounded_vec, sr25519, Pair, Public};
+use pallet_bridge_registry::types::SerdeData;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use std::str::FromStr;
+use pallet_bridge_registry::types::BridgeInfo;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
+
+/// Hermes (Evm, 5001)
+const CHAIN_ID_HERMES: [u8; 6] = hex_literal::hex!("010000001389");
+/// Athena (Evm, 5002)
+const CHAIN_ID_ATHENA: [u8; 6] = hex_literal::hex!("01000000138a");
+
+const RESOURCE_ID_HERMES_ATHENA: ResourceId = ResourceId(hex_literal::hex!(
+	"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
+));
+const RESOURCE_ID_ATHENA_HERMES: ResourceId = ResourceId(hex_literal::hex!(
+	"000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389"
+));
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
@@ -79,7 +96,6 @@ fn dkg_session_keys(
 
 pub fn development_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
-
 	Ok(ChainSpec::from_genesis(
 		// Name
 		"Development",
@@ -118,25 +134,12 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				// Initial Chain Ids
 				vec![
-					hex_literal::hex!("010000001389"), // Hermis (Evm, 5001)
-					hex_literal::hex!("01000000138a"), // Athena (Evm, 5002)
+					CHAIN_ID_HERMES, CHAIN_ID_ATHENA
 				],
 				// Initial resource Ids
 				vec![
-					// Resource ID for Chain Hermis => Athena
-					(
-						hex_literal::hex!(
-							"000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b66701000000138a"
-						),
-						Default::default(),
-					),
-					// Resource ID for Chain Athena => Hermis
-					(
-						hex_literal::hex!(
-							"000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389"
-						),
-						Default::default(),
-					),
+					(RESOURCE_ID_HERMES_ATHENA, Default::default()),
+					(RESOURCE_ID_ATHENA_HERMES, Default::default()),
 				],
 				// Initial proposers
 				vec![
@@ -205,25 +208,12 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					.collect(),
 				// Initial Chain Ids
 				vec![
-					hex_literal::hex!("010000001389"), // Hermis (Evm, 5001)
-					hex_literal::hex!("01000000138a"), // Athena (Evm, 5002)
+					CHAIN_ID_HERMES, CHAIN_ID_ATHENA
 				],
 				// Initial resource Ids
 				vec![
-					// Resource ID for Chain Hermis => Athena
-					(
-						hex_literal::hex!(
-							"0000000000000000e69a847cd5bc0c9480ada0b339d7f0a8cac2b6670000138a"
-						),
-						Default::default(),
-					),
-					// Resource ID for Chain Athena => Hermis
-					(
-						hex_literal::hex!(
-							"0000000000000000d30c8839c1145609e564b986f667b273ddcb849600001389"
-						),
-						Default::default(),
-					),
+					(RESOURCE_ID_HERMES_ATHENA, Default::default()),
+					(RESOURCE_ID_ATHENA_HERMES, Default::default()),
 				],
 				// Initial proposers
 				vec![
@@ -380,7 +370,17 @@ fn testnet_genesis(
 			authority_ids: initial_authorities.iter().map(|(x, ..)| x.clone()).collect::<_>(),
 		},
 		dkg_proposals: DKGProposalsConfig { initial_chain_ids, initial_r_ids, initial_proposers },
-		bridge_registry: Default::default(),
+		bridge_registry: pallet_bridge_registry::pallet::GenesisConfig {
+			bridges: bounded_vec![BridgeMetadata {
+				resource_ids: bounded_vec![RESOURCE_ID_HERMES_ATHENA, RESOURCE_ID_ATHENA_HERMES],
+				info: BridgeInfo {
+					additional: Default::default(),
+					display: SerdeData::from_str("hermes-athena")
+						.unwrap()
+				}
+			}],
+			..Default::default()
+		},
 		im_online: ImOnlineConfig { keys: vec![] },
 	}
 }

@@ -318,7 +318,7 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
 		pub initial_chain_ids: Vec<[u8; 6]>,
-		pub initial_r_ids: Vec<([u8; 32], Vec<u8>)>,
+		pub initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
 		pub initial_proposers: Vec<T::AccountId>,
 	}
 
@@ -345,7 +345,7 @@ pub mod pallet {
 				ChainNonces::<T>::insert(chain_id, ProposalNonce::from(0));
 			}
 			for (r_id, r_data) in self.initial_r_ids.iter() {
-				Resources::<T>::insert(ResourceId::from(*r_id), r_data.clone());
+				Resources::<T>::insert(r_id, r_data.clone());
 			}
 
 			for proposer in self.initial_proposers.iter() {

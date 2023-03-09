@@ -47,7 +47,7 @@ async function run() {
 		sudoAccount.address
 	);
 	let nonce = accountNonce.toNumber();
-	setInterval(async () => {
+	while(true) {
 		// Create the header
 		const proposalHeader = createHeader(nonce);
 		assert(
@@ -62,6 +62,7 @@ async function run() {
 			'0x0000000000000000000000000000000000000000000000000000000000000000',
 			srcResourceId
 		);
+		console.log(nonce);
 		console.log('Proposal Bytes:', u8aToHex(anchorUpdateProposal.toU8a()));
 		assert(
 			anchorUpdateProposal.toU8a().length === 104,
@@ -84,17 +85,20 @@ async function run() {
 			prop.toU8a()
 		);
 		// Sign and send the transaction
-		const unsub = await api.tx.sudo
-			.sudo(call)
-			.signAndSend(sudoAccount, (result) => {
-				if (result.isFinalized || result.isError) {
-					console.log(result.txHash.toHex(), 'is', result.status.type);
-					unsub();
+		await new Promise(async (resolve, reject) => {
+			const unsub = await api.tx.sudo
+			  .sudo(call)
+			  .signAndSend(sudoAccount, (result) => {
+				if (result.isFinalized || result.isInBlock || result.isError) {
+				  unsub();
+				  console.log(result.txHash.toHex(), "is", result.status.type);
+				  resolve(result.isFinalized);
 				}
-			});
+			  });
+		  });
 
 		nonce += 1;
-	}, 20_000);
+	};
 
 	// a perodic task to print How many proposals that have been submitted, unsigned and signed.
 	// This is just for debugging purpose.
