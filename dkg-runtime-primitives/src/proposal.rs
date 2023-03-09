@@ -77,7 +77,18 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Decode, Encode, Copy, Eq, PartialOrd, Ord, scale_info::TypeInfo, codec::MaxEncodedLen)]
+#[derive(
+	Debug,
+	Clone,
+	Decode,
+	Encode,
+	Copy,
+	Eq,
+	PartialOrd,
+	Ord,
+	scale_info::TypeInfo,
+	codec::MaxEncodedLen,
+)]
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
@@ -176,7 +187,9 @@ impl ProposalHandlerTrait for () {
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
-#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen)]
+#[derive(
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
+)]
 pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
 	/// Proposal data
 	pub proposal: Proposal<MaxLength>,

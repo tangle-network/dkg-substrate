@@ -54,13 +54,13 @@ use dkg_primitives::{
 		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
 		SignedDKGMessage,
 	},
-	AuthoritySetId, DKGReport, MisbehaviourType,
+	AuthoritySetId, DKGReport, MisbehaviourType
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	utils::to_slice_33,
+	utils::to_slice_33, MaxAuthorities,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID,
+	GENESIS_AUTHORITY_SET_ID, MaxSignatureLength
 };
 
 use crate::{
@@ -113,13 +113,14 @@ where
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, BE, C, GE, MaxProposalLength>
+pub(crate) struct DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
 	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -141,9 +142,9 @@ where
 	/// Latest block header
 	pub latest_header: Shared<Option<B::Header>>,
 	/// Current validator set
-	pub current_validator_set: Shared<AuthoritySet<Public>>,
+	pub current_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Queued validator set
-	pub queued_validator_set: Shared<AuthoritySet<Public>>,
+	pub queued_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
@@ -163,13 +164,14 @@ where
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
-impl<B, BE, C, GE, MaxProposalLength> Clone for DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength> Clone for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
 	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -201,16 +203,17 @@ where
 }
 
 pub type AggregatedMisbehaviourReportStore =
-	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>>;
 
-impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block + Codec,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -269,14 +272,15 @@ enum ProtoStageType {
 	Signing,
 }
 
-impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -291,7 +295,7 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>>, DKGError>
+	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>, MaxAuthorities>, DKGError>
 	{
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -655,14 +659,14 @@ where
 	pub fn validator_set(
 		&self,
 		header: &B::Header,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		Self::validator_set_inner(header, &self.client)
 	}
 
 	fn validator_set_inner(
 		header: &B::Header,
 		client: &Arc<C>,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
@@ -1730,13 +1734,14 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength> KeystoreExt for DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength, MaxAuthorities> KeystoreExt for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store

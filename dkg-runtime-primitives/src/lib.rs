@@ -21,24 +21,21 @@ pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
-use frame_support::BoundedVec;
-use codec::MaxEncodedLen;
+pub use crate::proposal::DKGPayloadKey;
+use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::RuntimeDebug;
+use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
 pub use proposal::*;
-use sp_std::fmt::Debug;
-pub use crate::proposal::DKGPayloadKey;
-use codec::{Codec, Decode, Encode};
-use frame_support::pallet_prelude::Get;
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
-use sp_std::{prelude::*, vec::Vec};
+use frame_support::pallet_prelude::ConstU32;
+use sp_std::{fmt::Debug, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 use webb_proposals::Proposal;
 
@@ -78,7 +75,16 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
 // Max length for proposals
-pub const MAX_PROPOSAL_LENGTH: u32 = 10_000;
+pub type MaxProposalLength = ConstU32<10_000>;
+
+// Max authorities
+pub type MaxAuthorities = ConstU32<1032>;
+
+// Max reporters
+pub type MaxReporters = ConstU32<1032>;
+
+/// Max size for signatures
+pub type MaxSignatureLength = ConstU32<10_000>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
@@ -104,7 +110,11 @@ pub enum MisbehaviourType {
 }
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
-pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>, MaxSignatureLength : Get<u32> + Debug + Clone + TypeInfo, MaxReporters : Get<u32> + Debug + Clone + TypeInfo> {
+pub struct AggregatedMisbehaviourReports<
+	DKGId: AsRef<[u8]>,
+	MaxSignatureLength: Get<u32> + Debug + Clone + TypeInfo,
+	MaxReporters: Get<u32> + Debug + Clone + TypeInfo,
+> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
@@ -137,20 +147,20 @@ pub mod crypto {
 pub type AuthoritySetId = u64;
 
 #[derive(Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
-pub struct AuthoritySet<AuthorityId, MaxAuthorities : Get<u32>> {
+pub struct AuthoritySet<AuthorityId, MaxAuthorities: Get<u32>> {
 	/// Public keys of the validator set elements
 	pub authorities: BoundedVec<AuthorityId, MaxAuthorities>,
 	/// Identifier of the validator set
 	pub id: AuthoritySetId,
 }
 
-impl<MaxAuthorities : Get<u32>> Default for AuthoritySet<AuthorityId, MaxAuthorities> {
+impl<MaxAuthorities: Get<u32>> Default for AuthoritySet<AuthorityId, MaxAuthorities> {
 	fn default() -> Self {
 		Self { authorities: Default::default(), id: Default::default() }
 	}
 }
 
-impl<AuthorityId, MaxAuthorities : Get<u32>> AuthoritySet<AuthorityId, MaxAuthorities> {
+impl<AuthorityId, MaxAuthorities: Get<u32>> AuthoritySet<AuthorityId, MaxAuthorities> {
 	/// Return an empty validator set with id of 0.
 	pub fn empty() -> Self {
 		Self { authorities: Default::default(), id: Default::default() }
@@ -173,10 +183,13 @@ pub struct Commitment<TBlockNumber, TPayload> {
 pub type AuthorityIndex = u32;
 
 #[derive(Decode, Encode)]
-pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities : Get<u32>> {
+pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities: Get<u32>> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange { active: AuthoritySet<AuthorityId, MaxAuthorities>, queued: AuthoritySet<AuthorityId, MaxAuthorities> },
+	AuthoritiesChange {
+		active: AuthoritySet<AuthorityId, MaxAuthorities>,
+		queued: AuthoritySet<AuthorityId, MaxAuthorities>,
+	},
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),

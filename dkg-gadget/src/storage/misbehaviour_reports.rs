@@ -27,9 +27,18 @@ use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Get, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE, MaxProposalLength>(
+pub(crate) fn store_aggregated_misbehaviour_reports<
+	B,
+	BE,
+	C,
+	GE,
+	MaxProposalLength,
+	MaxSignatureLength,
+	MaxReporters,
+	MaxAuthorities,
+>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
-	reports: &AggregatedMisbehaviourReports<AuthorityId>,
+	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
@@ -37,7 +46,10 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxReporters: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
 	if maybe_offchain.is_none() {

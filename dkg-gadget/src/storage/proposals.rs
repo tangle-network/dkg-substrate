@@ -32,9 +32,9 @@ use std::sync::Arc;
 use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
-pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
+pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	authority_public_key: &Public,
-	current_validator_set: &Arc<RwLock<AuthoritySet<Public>>>,
+	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
 	signed_proposals: Vec<Proposal<MaxProposalLength>>,
@@ -43,7 +43,14 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength>(
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
 	if signed_proposals.is_empty() {
 		return

@@ -32,7 +32,8 @@ pub(crate) fn get_signed_proposal<
 	B,
 	C,
 	BE,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxProposalLength,
+	MaxAuthorities,
 >(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
@@ -43,7 +44,8 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength, MaxAuthorities>,
 {
 	let signed_proposal = match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {

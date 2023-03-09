@@ -29,7 +29,7 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, NumberFor};
 
-pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
+pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
@@ -39,7 +39,8 @@ where
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// Get authority accounts
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
@@ -100,7 +101,7 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	report: DKGMisbehaviourMessage,
 ) where
@@ -109,7 +110,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let public = dkg_worker.get_authority_public_key();
 
@@ -190,7 +192,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength>(
 	}
 }
 
-pub(crate) fn try_store_offchain<B, BE, C, GE, MaxProposalLength>(
+pub(crate) fn try_store_offchain<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId>,
 ) -> Result<(), DKGError>
@@ -200,7 +202,8 @@ where
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
 	// Fetch the current threshold for the DKG. We will use the

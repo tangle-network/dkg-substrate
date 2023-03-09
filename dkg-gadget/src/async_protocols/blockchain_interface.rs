@@ -89,6 +89,7 @@ pub struct DKGProtocolEngine<
 	C,
 	GE,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 > {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
@@ -101,7 +102,7 @@ pub struct DKGProtocolEngine<
 	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal<MaxProposalLength>>>>>,
 	pub is_genesis: bool,
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
 	pub _pd: PhantomData<BE>,

@@ -87,14 +87,15 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, MaxProposalLength>
+pub struct DKGParams<B, BE, C, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -116,14 +117,15 @@ where
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
-	dkg_params: DKGParams<B, BE, C, MaxProposalLength>,
+pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength, MaxAuthorities>(
+	dkg_params: DKGParams<B, BE, C, MaxProposalLength, MaxAuthorities>,
 ) where
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// ensure logging-related statics are initialized
 	dkg_logging::setup_log();
@@ -202,7 +204,7 @@ pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength>(
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _, _, _>::new(worker_params);
 
 	worker.run().await;
 	keygen_handle.abort();

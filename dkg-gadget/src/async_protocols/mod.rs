@@ -63,10 +63,13 @@ use self::{
 use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore};
 use incoming::IncomingAsyncProtocolWrapper;
 
-pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
+pub struct AsyncProtocolParameters<
+	BI: BlockchainInterface,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub engine: Arc<BI>,
 	pub keystore: DKGKeystore,
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
@@ -77,7 +80,11 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 }
 
-impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Drop for AsyncProtocolParameters<BI, MaxAuthorities>
+{
 	fn drop(&mut self) {
 		if self.handle.is_active() && self.handle.is_primary_remote {
 			dkg_logging::warn!(
@@ -98,13 +105,21 @@ impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 	}
 }
 
-impl<BI: BlockchainInterface> KeystoreExt for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> KeystoreExt for AsyncProtocolParameters<BI>
+{
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> AsyncProtocolParameters<BI, MaxAuthorities>
+{
 	pub fn get_next_batch_key<
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	>(
@@ -116,7 +131,11 @@ impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
-impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Clone for AsyncProtocolParameters<BI>
+{
 	fn clone(&self) -> Self {
 		Self {
 			session_id: self.session_id,

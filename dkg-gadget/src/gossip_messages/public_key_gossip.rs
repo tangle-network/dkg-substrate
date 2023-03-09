@@ -39,6 +39,7 @@ pub(crate) fn handle_public_key_broadcast<
 	C,
 	GE,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 >(
 	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
 	dkg_msg: DKGMessage<Public>,
@@ -48,7 +49,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
@@ -115,7 +116,7 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength>(
+pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength, MaxAuthorities>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
@@ -126,7 +127,14 @@ pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength>(
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength>,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
 	let public = key_store.get_authority_public_key();
 
