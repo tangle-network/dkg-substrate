@@ -19,6 +19,8 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+serde = { workspace = true }
+hex = { workspace = true }
 
 frame-benchmarking = { workspace = true, optional = true }
 pallet-identity = { workspace = true }
