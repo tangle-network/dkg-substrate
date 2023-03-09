@@ -31,7 +31,7 @@ use crate::async_protocols::{
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
 };
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::verify,
@@ -44,7 +44,7 @@ where
 {
 	/// Top level function for setting up signing
 	pub fn setup_signing<BI: BlockchainInterface + 'static>(
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
 		unsigned_proposals: Vec<UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>>,
 		s_l: Vec<KeygenPartyId>,
@@ -140,7 +140,7 @@ where
 
 	#[allow(clippy::too_many_arguments)]
 	fn new_offline<BI: BlockchainInterface + 'static>(
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
@@ -173,7 +173,7 @@ where
 
 	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,

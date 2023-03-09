@@ -24,13 +24,13 @@ use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType,
+	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType, MaxSignatureLength, MaxReporters
 };
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, NumberFor};
 
 pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -102,7 +102,7 @@ where
 }
 
 pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
@@ -193,8 +193,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAut
 }
 
 pub(crate) fn try_store_offchain<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
-	reports: &AggregatedMisbehaviourReports<AuthorityId>,
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
 	B: Block,

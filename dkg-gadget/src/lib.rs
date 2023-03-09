@@ -87,14 +87,13 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, MaxProposalLength, MaxAuthorities>
+pub struct DKGParams<B, BE, C, MaxProposalLength>
 where
 	B: Block,
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// DKG client

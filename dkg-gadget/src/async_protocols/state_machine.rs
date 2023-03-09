@@ -14,6 +14,7 @@
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 use async_trait::async_trait;
+use dkg_runtime_primitives::MaxAuthorities;
 use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::crypto::Public;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
@@ -50,7 +51,7 @@ where
 
 	async fn on_finish(
 		result: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		additional_param: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<Self::Return, DKGError>;

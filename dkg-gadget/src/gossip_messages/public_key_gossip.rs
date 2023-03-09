@@ -41,7 +41,7 @@ pub(crate) fn handle_public_key_broadcast<
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 >(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where

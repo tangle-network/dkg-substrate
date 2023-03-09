@@ -18,7 +18,7 @@ use crate::async_protocols::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
 	Keygen, ProtocolMessage,
@@ -72,7 +72,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 
 	async fn on_finish(
 		local_key: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {

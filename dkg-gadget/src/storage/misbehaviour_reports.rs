@@ -37,7 +37,7 @@ pub(crate) fn store_aggregated_misbehaviour_reports<
 	MaxReporters,
 	MaxAuthorities,
 >(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength>,
+	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where

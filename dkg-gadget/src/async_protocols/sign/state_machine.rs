@@ -16,6 +16,7 @@ use crate::async_protocols::{
 	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
 	Threshold,
 };
+use dkg_runtime_primitives::MaxAuthorities;
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
@@ -85,7 +86,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 
 	async fn on_finish(
 		offline_stage: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<(), DKGError> {

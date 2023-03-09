@@ -31,7 +31,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, UnsignedProposal, MaxAuthorities
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -114,7 +114,7 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
@@ -127,7 +127,7 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -140,11 +140,11 @@ where
 }
 
 impl<B, BE, C, GE, MaxProposalLength> BlockchainInterface
-	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>
+	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 	BE: Backend<B> + 'static,
 	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	GE: GossipEngineIface + 'static,

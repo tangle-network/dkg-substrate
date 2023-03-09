@@ -32,7 +32,7 @@ use dkg_primitives::{
 	},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::UnsignedProposal;
+use dkg_runtime_primitives::{UnsignedProposal, MaxAuthorities};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,
@@ -108,7 +108,7 @@ impl<
 impl<
 		BI: BlockchainInterface,
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> KeystoreExt for AsyncProtocolParameters<BI>
+	> KeystoreExt for AsyncProtocolParameters<BI, MaxAuthorities>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
@@ -134,7 +134,7 @@ impl<
 impl<
 		BI: BlockchainInterface,
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> Clone for AsyncProtocolParameters<BI>
+	> Clone for AsyncProtocolParameters<BI, MaxAuthorities>
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -376,7 +376,7 @@ impl<Out> Future for GenericAsyncHandler<'_, Out> {
 pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface + 'static>(
 	additional_param: SM::AdditionalReturnParam,
 	sm: SM,
-	params: AsyncProtocolParameters<BI>,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	async_index: u8,
 	status: DKGMsgStatus,
@@ -511,7 +511,7 @@ fn generate_outgoing_to_wire_fn<
 	SM: StateMachineHandler<BI> + 'static,
 	BI: BlockchainInterface + 'static,
 >(
-	params: AsyncProtocolParameters<BI>,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	async_index: u8,
@@ -616,7 +616,7 @@ pub fn generate_inbound_signed_message_receiver_fn<
 	SM: StateMachineHandler<BI> + 'static,
 	BI: BlockchainInterface + 'static,
 >(
-	params: AsyncProtocolParameters<BI>,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
 ) -> impl SendFuture<'static, ()>

@@ -22,7 +22,6 @@ use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
@@ -60,7 +59,7 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33, MaxAuthorities,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID, MaxSignatureLength
+	GENESIS_AUTHORITY_SET_ID, MaxSignatureLength, KEYGEN_TIMEOUT, MaxReporters
 };
 
 use crate::{
@@ -295,7 +294,7 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength>, MaxAuthorities>, DKGError>
+	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>, MaxAuthorities>, DKGError>
 	{
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
@@ -694,7 +693,7 @@ where
 	fn verify_validator_set(
 		&self,
 		block: &NumberFor<B>,
-		mut active: AuthoritySet<Public>,
+		mut active: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), error::Error> {
 		let active: BTreeSet<Public> = active.authorities.drain(..).collect();
 
@@ -712,7 +711,7 @@ where
 	fn handle_genesis_dkg_setup(
 		&self,
 		header: &B::Header,
-		genesis_authority_set: AuthoritySet<Public>,
+		genesis_authority_set: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
@@ -790,7 +789,7 @@ where
 	fn handle_queued_dkg_setup(
 		&self,
 		header: &B::Header,
-		queued: AuthoritySet<Public>,
+		queued: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
@@ -1767,14 +1766,15 @@ pub trait HasLatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength> HasLatestHeader<B>
-	for DKGWorker<B, BE, C, GE, MaxProposalLength>
+impl<B, BE, C, GE, MaxProposalLength, MaxAuthorities> HasLatestHeader<B>
+	for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

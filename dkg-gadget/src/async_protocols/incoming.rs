@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
 use sp_runtime::traits::Get;
@@ -47,7 +47,7 @@ impl<
 	pub fn new(
 		receiver: tokio::sync::broadcast::Receiver<T>,
 		ty: ProtocolType<MaxProposalLength>,
-		params: &AsyncProtocolParameters<BI>,
+		params: &AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),

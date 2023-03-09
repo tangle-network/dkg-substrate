@@ -75,16 +75,16 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
 // Max length for proposals
-pub type MaxProposalLength = ConstU32<10_000>;
+pub const MAX_PROPOSAL_LENGTH : u32 = 10_000;
 
 // Max authorities
-pub type MaxAuthorities = ConstU32<1032>;
+pub const MAX_AUTHORITIES : u32 = 1032;
 
 // Max reporters
-pub type MaxReporters = ConstU32<1032>;
+pub const MAX_REPORTERS : u32 = 1032;
 
 /// Max size for signatures
-pub type MaxSignatureLength = ConstU32<10_000>;
+pub const MAX_SIGNATURE_LENGTH : u32 = 10_000;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
