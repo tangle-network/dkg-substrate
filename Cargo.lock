@@ -2120,6 +2120,7 @@ dependencies = [
  "auto_impl",
  "curv-kzen",
  "dkg-logging",
+ "dkg-mock-blockchain",
  "dkg-primitives",
  "dkg-runtime-primitives",
  "env_logger 0.9.3",
@@ -2169,6 +2170,7 @@ name = "dkg-mock-blockchain"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "atomic",
  "bytes",
  "futures",
  "humantime-serde",

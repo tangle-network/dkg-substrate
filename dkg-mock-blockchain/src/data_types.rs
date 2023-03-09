@@ -34,8 +34,10 @@ pub struct AttachedCommandMetadata {
 /// A command given to the receiving MockClient
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AttachedCommand {
+	// Tells the client to process the requests as normal
 	ProcessAsNormal,
-	ProcessAndExpectError,
+	// Tells the client to not process the request (for this round)
+	ErrorDontProcessRequest,
 }
 
 /// When a MockClient receives a message, it should attempt to send information
@@ -49,6 +51,7 @@ pub struct MockClientResponse {
 }
 
 /// For keeping track of various events sent to subscribing clients
+#[derive(Debug, Clone)]
 pub enum TestCase {
 	Valid,
 	Invalid(ErrorCase),
