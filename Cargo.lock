@@ -12757,6 +12757,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "schemars",
+ "serde",
  "tiny-keccak",
  "typed-builder",
 ]
