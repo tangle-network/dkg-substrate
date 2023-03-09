@@ -36,27 +36,27 @@ echo "** Inserting keys **"
 
 echo "*** Start Webb DKG Standalone | Alpha Arana Config ***"
 # Node 1
-./target/release/dkg-standalone-node --base-path=./tmp/standalone1 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
+./target/debug/dkg-standalone-node --base-path=./tmp/standalone1 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
   --rpc-cors all --unsafe-rpc-external --unsafe-ws-external \
   --port 30304 \
   --ws-port 9944 &
 # Node 2
-./target/release/dkg-standalone-node --base-path=./tmp/standalone2 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
+./target/debug/dkg-standalone-node --base-path=./tmp/standalone2 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
   --rpc-cors all --unsafe-rpc-external --unsafe-ws-external \
   --port 30305 \
   --ws-port 9945 &
 # Node 3
-./target/release/dkg-standalone-node --base-path=./tmp/standalone3 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
+./target/debug/dkg-standalone-node --base-path=./tmp/standalone3 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
   --rpc-cors all --unsafe-rpc-external --unsafe-ws-external \
   --port 30306 \
   --ws-port 9946 &
 # Node 4
-./target/release/dkg-standalone-node --base-path=./tmp/standalone4 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
+./target/debug/dkg-standalone-node --base-path=./tmp/standalone4 -lerror --chain ./chainspecs/arana-alpha-local.json --validator \
   --rpc-cors all --unsafe-rpc-external --unsafe-ws-external \
   --port 30307 \
   --ws-port 9947 &
 # Node 5
-./target/release/dkg-standalone-node --base-path=./tmp/standalone5 -linfo --validator --chain ./chainspecs/arana-alpha-local.json \
+./target/debug/dkg-standalone-node --base-path=./tmp/standalone5 -linfo --validator --chain ./chainspecs/arana-alpha-local.json \
     --rpc-cors all --unsafe-rpc-external --unsafe-ws-external \
     --ws-port 9948 \
     --port 30308 \

@@ -106,7 +106,8 @@ where
 		let channel_type = ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
-			Keygen::new(i, t, n).map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
+			Keygen::new(*i.as_ref(), t, n)
+				.map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
 			params,
 			channel_type,
 			0,

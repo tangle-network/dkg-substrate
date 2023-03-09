@@ -125,16 +125,17 @@ brew install gmp
 # make sure to run the commands below each time when starting a new env, or, append them to .zshrc
 export LIBRARY_PATH=$LIBRARY_PATH:/opt/homebrew/lib
 export INCLUDE_PATH=$INCLUDE_PATH:/opt/homebrew/include
+```
 
 ❗ **Note:** Native ARM Homebrew installations are only going to be supported at `/opt/homebrew`. After Homebrew installs, make sure to add `/opt/homebrew/bin` to your PATH.
 
-```
+```bash
 echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.bash_profile
 ```
 
 An example `bash_profile` for reference may look like the following:
 
-```
+```bash
 export PATH=/opt/homebrew/bin:$PATH
 export PATH=/opt/homebrew/opt/llvm/bin:$PATH
 export CC=/opt/homebrew/opt/llvm/bin/clang
@@ -152,7 +153,7 @@ echo 'export RUSTFLAGS="-L /opt/homebrew/lib"' >> ~/.bash_profile
 
 Ensure `gmp` dependency is installed correctly.
 
-```
+```bash
 brew install gmp
 ```
 
@@ -160,13 +161,13 @@ If you are still receiving an issue with `gmp`, you may need to adjust your path
 
 Run:
 
-```
+```bash
 cargo clean
 ```
 
 Then:
 
-```
+```bash
 export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib:$(brew --prefix)/opt/gmp/lib
 ```
 
@@ -174,7 +175,7 @@ This should be added to your bash_profile as well.
 
 Ensure `protobuf` dependency is installed correctly.
 
-```
+```bash
 brew install protobuf
 ```
 
