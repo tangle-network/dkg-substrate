@@ -19,3 +19,4 @@ log = { workspace = true }
 sc-client-api = { workspace = true }
 atomic = { workspace = true }
 bincode2 = { workspace = true }
+sp-runtime = { workspace = true }

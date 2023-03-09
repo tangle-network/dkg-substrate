@@ -6,19 +6,27 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum MockBlockChainEvent {
+#[serde(bound = "")]
+pub enum MockBlockChainEvent<B: sp_runtime::traits::Block> {
 	FinalityNotification {
-		notification: FinalityNotification,
+		#[serde(bound = "")]
+		notification: FinalityNotification<B>,
 		command: AttachedCommandMetadata,
 	},
 	ImportNotification {
-		notification: ImportNotification,
+		#[serde(bound = "")]
+		notification: ImportNotification<B>,
 		command: AttachedCommandMetadata,
 	},
 	StorageChangeNotification {
-		notification: StorageChangeNotification,
+		#[serde(bound = "")]
+		notification: StorageChangeNotification<B>,
 		command: AttachedCommandMetadata,
 	},
+	TestCase {
+		trace_id: Uuid,
+		test: TestCase
+	}
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,7 +59,7 @@ pub struct MockClientResponse {
 }
 
 /// For keeping track of various events sent to subscribing clients
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TestCase {
 	Valid,
 	Invalid(ErrorCase),
