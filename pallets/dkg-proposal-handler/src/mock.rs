@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use crate as pallet_dkg_proposal_handler;
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	pallet_prelude::ConstU32, parameter_types, traits::Everything, BoundedVec, PalletId,
 };
@@ -69,10 +69,6 @@ frame_support::construct_runtime!(
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
-
-parameter_types! {
-	pub const MaxAuthorities: u32 = 100_000;
-}
 
 impl pallet_aura::Config for Test {
 	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
@@ -248,6 +244,17 @@ impl pallet_session::Config for Test {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxKeyLength : u32 = 10_000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxSignatureLength : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxAuthorities : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxReporters : u32 = 1000;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -265,6 +272,10 @@ impl pallet_dkg_metadata::Config for Test {
 	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = ();
 }
 
@@ -309,8 +320,9 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	t.register_extension(KeystoreExt(Arc::new(keystore)));
 	t.register_extension(TransactionPoolExt::new(pool));
 
+	let bounded_key: BoundedVec<_, _> = mock_dkg_pub_key.encode().try_into().unwrap();
 	t.execute_with(|| {
-		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, mock_dkg_pub_key.encode()));
+		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, bounded_key));
 		execute()
 	})
 }

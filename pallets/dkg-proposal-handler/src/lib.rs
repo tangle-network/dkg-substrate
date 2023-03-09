@@ -366,7 +366,7 @@ pub mod pallet {
 			);
 
 			for prop in &props {
-				if let Proposal::Signed { kind, ref data, ref signature } = prop {
+				if let Proposal::Signed { kind, ref data, ref signature, .. } = prop {
 					let result =
 						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data);
 					match result {

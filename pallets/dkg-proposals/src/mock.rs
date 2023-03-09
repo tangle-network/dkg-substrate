@@ -16,7 +16,7 @@
 
 use super::*;
 use crate as pallet_dkg_proposals;
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	assert_ok, ord_parameter_types,
 	pallet_prelude::ConstU32,
@@ -157,6 +157,17 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxKeyLength : u32 = 10_000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxSignatureLength : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxAuthorities : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
+	pub const MaxReporters : u32 = 1000;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -174,6 +185,10 @@ impl pallet_dkg_metadata::Config for Test {
 	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = ();
 }
 
@@ -202,7 +217,6 @@ impl pallet_aura::Config for Test {
 parameter_types! {
 	pub const Period: u32 = 10;
 	pub const Offset: u32 = 0;
-	pub const MaxAuthorities: u32 = 100_000;
 }
 
 impl pallet_session::Config for Test {
