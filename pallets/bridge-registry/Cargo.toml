@@ -24,7 +24,7 @@ hex = { workspace = true }
 
 frame-benchmarking = { workspace = true, optional = true }
 pallet-identity = { workspace = true }
-webb-proposals = { workspace = true }
+webb-proposals = { workspace = true, default-features = false }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -41,6 +41,7 @@ std = [
     "frame-system/std",
     "sp-runtime/std",
     "sp-std/std",
+    "webb-proposals/std",
     "pallet-identity/std",
 ]
 runtime-benchmarks = [

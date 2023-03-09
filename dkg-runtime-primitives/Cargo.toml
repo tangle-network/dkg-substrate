@@ -38,7 +38,6 @@ default = ["std"]
 std = [
 	"codec/std",
 	"scale-info/std",
-	"webb-proposals/substrate",
 	"webb-proposals/std",
 	"sp-io/std",
 	"sp-api/std",
