@@ -62,7 +62,6 @@ async function run() {
 			'0x0000000000000000000000000000000000000000000000000000000000000000',
 			srcResourceId
 		);
-		console.log(nonce);
 		console.log('Proposal Bytes:', u8aToHex(anchorUpdateProposal.toU8a()));
 		assert(
 			anchorUpdateProposal.toU8a().length === 104,

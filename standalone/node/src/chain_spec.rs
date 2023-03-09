@@ -19,17 +19,15 @@ use dkg_standalone_runtime::{
 	MaxNominations, Perbill, SessionConfig, Signature, StakerStatus, StakingConfig, SudoConfig,
 	SystemConfig, WASM_BINARY,
 };
-use pallet_bridge_registry::types::BridgeMetadata;
 use hex_literal::hex;
+use pallet_bridge_registry::types::{BridgeInfo, BridgeMetadata, SerdeData};
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{bounded_vec, sr25519, Pair, Public};
-use pallet_bridge_registry::types::SerdeData;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::str::FromStr;
-use pallet_bridge_registry::types::BridgeInfo;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -133,9 +131,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
 				// Initial Chain Ids
-				vec![
-					CHAIN_ID_HERMES, CHAIN_ID_ATHENA
-				],
+				vec![CHAIN_ID_HERMES, CHAIN_ID_ATHENA],
 				// Initial resource Ids
 				vec![
 					(RESOURCE_ID_HERMES_ATHENA, Default::default()),
@@ -207,9 +203,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					}))
 					.collect(),
 				// Initial Chain Ids
-				vec![
-					CHAIN_ID_HERMES, CHAIN_ID_ATHENA
-				],
+				vec![CHAIN_ID_HERMES, CHAIN_ID_ATHENA],
 				// Initial resource Ids
 				vec![
 					(RESOURCE_ID_HERMES_ATHENA, Default::default()),
@@ -375,8 +369,7 @@ fn testnet_genesis(
 				resource_ids: bounded_vec![RESOURCE_ID_HERMES_ATHENA, RESOURCE_ID_ATHENA_HERMES],
 				info: BridgeInfo {
 					additional: Default::default(),
-					display: SerdeData::from_str("hermes-athena")
-						.unwrap()
+					display: SerdeData::from_str("hermes-athena").unwrap()
 				}
 			}],
 			..Default::default()

@@ -113,7 +113,7 @@ mod serde_ {
 		where
 			S: Serializer,
 		{
-			serializer.serialize_str(&hex::encode(&self.0.encode()))
+			serializer.serialize_str(&hex::encode(self.0.encode()))
 		}
 	}
 }
