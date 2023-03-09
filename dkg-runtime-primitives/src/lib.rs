@@ -61,7 +61,7 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
 
 /// The keygen timeout limit in blocks before we consider misbehaviours
-pub const KEYGEN_TIMEOUT: u32 = 5;
+pub const KEYGEN_TIMEOUT: u32 = 10;
 
 /// The offline timeout limit in blocks before we consider misbehaviours
 pub const OFFLINE_TIMEOUT: u32 = 2;
@@ -256,7 +256,7 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Returns true if we should execute an emergency keygen.
-		fn should_execute_emergency_keygen() -> bool;
+		/// Returns true if we should execute an new keygen.
+		fn should_execute_new_keygen() -> bool;
 	}
 }

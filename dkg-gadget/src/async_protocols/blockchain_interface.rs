@@ -45,6 +45,8 @@ use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use webb_proposals::Proposal;
 
+use super::KeygenPartyId;
+
 #[auto_impl::auto_impl(Arc,&,&mut)]
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
@@ -69,7 +71,7 @@ pub trait BlockchainInterface: Send + Sync {
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError>;
-	fn get_authority_set(&self) -> &Vec<Public>;
+	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)>;
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine>;
 	/// Returns the present time
 	fn now(&self) -> Self::Clock;
@@ -83,7 +85,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub gossip_engine: Arc<GE>,
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
-	pub best_authorities: Arc<Vec<Public>>,
+	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
 	pub is_genesis: bool,
@@ -150,7 +152,7 @@ where
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
-		dkg_logging::info!(target: "dkg", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
+		dkg_logging::info!(target: "dkg_gadget", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
@@ -171,7 +173,7 @@ where
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
-				dkg_logging::info!(target: "dkg", "All proposals have resolved for batch {:?}", batch_key);
+				dkg_logging::info!(target: "dkg_gadget", "All proposals have resolved for batch {:?}", batch_key);
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
@@ -187,7 +189,7 @@ where
 					proposals,
 				);
 			} else {
-				dkg_logging::info!(target: "dkg", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				dkg_logging::info!(target: "dkg_gadget", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
 			}
 		}
 
@@ -212,8 +214,8 @@ where
 		self.db.store_local_key(session_id, key)
 	}
 
-	fn get_authority_set(&self) -> &Vec<Public> {
-		&self.best_authorities
+	fn get_authority_set(&self) -> Vec<(KeygenPartyId, Public)> {
+		(*self.best_authorities).clone()
 	}
 
 	fn get_gossip_engine(&self) -> Option<&Self::GossipEngine> {

@@ -17,7 +17,7 @@ use codec::Encode;
 use frame_support::{parameter_types, traits::Everything, PalletId};
 use frame_system as system;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
-use sp_core::{sr25519, sr25519::Signature, H256};
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
 	testing::{Header, TestXt},
@@ -252,13 +252,13 @@ const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put c
 
 #[allow(dead_code)]
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
 	t.into()
 }
 
 #[allow(dead_code)]
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
-	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
 	let keystore = KeyStore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));

@@ -53,7 +53,7 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "SESSION {} | Received public key broadcast", msg.session_id);
+		debug!(target: "dkg_gadget", "SESSION {} | Received public key broadcast", msg.session_id);
 
 		let is_main_round = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
@@ -83,7 +83,7 @@ where
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
 		dkg_logging::debug!(
-			target: "dkg",
+			target: "dkg_gadget",
 			"SESSION {:?} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id, threshold,
 			aggregated_public_keys.keys_and_signatures.len()
@@ -98,7 +98,7 @@ where
 			)?;
 		} else {
 			dkg_logging::debug!(
-				target: "dkg",
+				target: "dkg_gadget",
 				"SESSION {:?} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
 				threshold - aggregated_public_keys.keys_and_signatures.len()
@@ -134,6 +134,9 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			sender_id: public.clone(),
+			// we need to gossip the final public key to all parties, so no specific recipient in
+			// this case.
+			recipient_id: None,
 			status,
 			session_id: msg.session_id,
 			payload,
