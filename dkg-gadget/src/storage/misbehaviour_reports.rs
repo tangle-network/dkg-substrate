@@ -37,7 +37,7 @@ pub(crate) fn store_aggregated_misbehaviour_reports<
 	MaxReporters,
 	MaxAuthorities,
 >(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
@@ -46,8 +46,9 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxSignatureLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxReporters: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxSignatureLength:
+		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + scale_info::TypeInfo,
+	MaxReporters: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + scale_info::TypeInfo,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {

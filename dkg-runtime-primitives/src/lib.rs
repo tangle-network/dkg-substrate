@@ -26,7 +26,10 @@ use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
+use frame_support::{
+	pallet_prelude::{ConstU32, Get},
+	BoundedVec, RuntimeDebug,
+};
 pub use proposal::*;
 use scale_info::TypeInfo;
 use sp_core::H256;
@@ -34,10 +37,31 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
-use frame_support::pallet_prelude::ConstU32;
 use sp_std::{fmt::Debug, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 use webb_proposals::Proposal;
+
+/// A custom get Struct to allow to import runtime values into the dkg gadget
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	Debug,
+	Eq,
+	PartialEq,
+	scale_info::TypeInfo,
+	Ord,
+	PartialOrd,
+	MaxEncodedLen,
+	Default,
+)]
+pub struct CustomU32Getter<const T: u32>;
+
+impl<const T: u32> Get<u32> for CustomU32Getter<T> {
+	fn get() -> u32 {
+		T
+	}
+}
 
 /// Utility fn to calculate keccak 256 has
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {
@@ -75,16 +99,16 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
 // Max length for proposals
-pub const MAX_PROPOSAL_LENGTH : u32 = 10_000;
+pub type MaxProposalLength = CustomU32Getter<10_000>;
 
 // Max authorities
-pub const MAX_AUTHORITIES : u32 = 1032;
+pub type MaxAuthorities = CustomU32Getter<10_000>;
 
 // Max reporters
-pub const MAX_REPORTERS : u32 = 1032;
+pub type MaxReporters = CustomU32Getter<10_000>;
 
 /// Max size for signatures
-pub const MAX_SIGNATURE_LENGTH : u32 = 10_000;
+pub type MaxSignatureLength = CustomU32Getter<10_000>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;

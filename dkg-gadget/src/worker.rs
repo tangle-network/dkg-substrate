@@ -22,6 +22,7 @@ use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
+use frame_support::BoundedVec;
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
@@ -53,13 +54,14 @@ use dkg_primitives::{
 		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
 		SignedDKGMessage,
 	},
-	AuthoritySetId, DKGReport, MisbehaviourType
+	AuthoritySetId, DKGReport, MisbehaviourType,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	utils::to_slice_33, MaxAuthorities,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID, MaxSignatureLength, KEYGEN_TIMEOUT, MaxReporters
+	utils::to_slice_33,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
+	MaxProposalLength, MaxReporters, MaxSignatureLength, UnsignedProposal,
+	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -112,14 +114,12 @@ where
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+pub(crate) struct DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
-	MaxProposalLength: Get<u32>,
-	MaxAuthorities: Get<u32>,
 {
 	pub client: Arc<C>,
 	pub backend: Arc<BE>,
@@ -163,14 +163,12 @@ where
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
-impl<B, BE, C, GE, MaxProposalLength> Clone for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+impl<B, BE, C, GE> Clone for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	GE: GossipEngineIface,
-	MaxProposalLength: Get<u32>,
-	MaxAuthorities: Get<u32>,
 {
 	fn clone(&self) -> Self {
 		Self {
@@ -201,17 +199,17 @@ where
 	}
 }
 
-pub type AggregatedMisbehaviourReportStore =
-	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>>;
+pub type AggregatedMisbehaviourReportStore = HashMap<
+	(MisbehaviourType, SessionId, AuthorityId),
+	AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
+>;
 
-impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block + Codec,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// Return a new DKG worker instance.
@@ -271,14 +269,12 @@ enum ProtoStageType {
 	Signing,
 }
 
-impl<B, BE, C, GE, MaxProposalLength> DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
-	MaxAuthorities: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
@@ -294,8 +290,13 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>, MaxAuthorities>, DKGError>
-	{
+	) -> Result<
+		AsyncProtocolParameters<
+			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+			MaxAuthorities,
+		>,
+		DKGError,
+	> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -1095,7 +1096,7 @@ where
 		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = latest_header.read().clone() {
 			authorities = Self::validator_set_inner(&header, client)
-				.map(|a| (a.0.authorities, a.1.authorities));
+				.map(|a| (a.0.authorities.into(), a.1.authorities.into()));
 		}
 
 		if authorities.is_none() {
@@ -1733,7 +1734,7 @@ pub trait KeystoreExt {
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength, MaxAuthorities> KeystoreExt for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+impl<B, BE, C, GE> KeystoreExt for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -1766,15 +1767,14 @@ pub trait HasLatestHeader<B: Block> {
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength, MaxAuthorities> HasLatestHeader<B>
-	for DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32>,
-	MaxAuthorities: Get<u32>
+	MaxAuthorities: Get<u32>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

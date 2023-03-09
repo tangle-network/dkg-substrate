@@ -20,15 +20,14 @@ use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 use sp_runtime::traits::Get;
 
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
+use sc_keystore::LocalKeystore;
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::Block;
-
-use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxProposalLength};
-use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
+use sp_runtime::traits::Block;
 
 mod error;
 mod keyring;
@@ -87,13 +86,12 @@ where
 }
 
 /// DKG gadget initialization parameters.
-pub struct DKGParams<B, BE, C, MaxProposalLength>
+pub struct DKGParams<B, BE, C>
 where
 	B: Block,
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// DKG client
@@ -110,20 +108,17 @@ where
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// Phantom block type
-	pub _block: PhantomData<(B, MaxProposalLength)>,
+	pub _block: PhantomData<B>,
 }
 
 /// Start the DKG gadget.
 ///
 /// This is a thin shim around running and awaiting a DKG worker.
-pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength, MaxAuthorities>(
-	dkg_params: DKGParams<B, BE, C, MaxProposalLength, MaxAuthorities>,
-) where
+pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
+where
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// ensure logging-related statics are initialized
@@ -203,7 +198,7 @@ pub async fn start_dkg_gadget<B, BE, C, MaxProposalLength, MaxAuthorities>(
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
 
 	worker.run().await;
 	keygen_handle.abort();

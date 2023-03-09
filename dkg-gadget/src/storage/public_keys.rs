@@ -14,7 +14,6 @@
 
 use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
 use codec::Encode;
-use dkg_runtime_primitives::MaxAuthorities;
 use dkg_primitives::types::{DKGError, SessionId};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,
@@ -22,7 +21,7 @@ use dkg_runtime_primitives::{
 		AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, SUBMIT_GENESIS_KEYS_AT,
 		SUBMIT_KEYS_AT,
 	},
-	AggregatedPublicKeys, DKGApi,
+	AggregatedPublicKeys, DKGApi, MaxAuthorities,
 };
 use sc_client_api::Backend;
 use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
@@ -42,7 +41,13 @@ where
 	BE: Backend<B>,
 	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number, MaxProposalLength, MaxAuthorities>,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
 	let maybe_offchain = backend.offchain_storage();
 	if maybe_offchain.is_none() {

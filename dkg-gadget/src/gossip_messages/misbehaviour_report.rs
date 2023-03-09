@@ -24,13 +24,14 @@ use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MisbehaviourType, MaxSignatureLength, MaxReporters
+	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MaxAuthorities, MaxProposalLength,
+	MaxReporters, MaxSignatureLength, MisbehaviourType,
 };
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, NumberFor};
 
-pub(crate) fn handle_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
@@ -71,7 +72,7 @@ where
 		// Authenticate the message against the current authorities
 		let reporter = dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			authorities.unwrap(),
+			(authorities.clone().unwrap().0.into(), authorities.unwrap().1.into()),
 			&signed_payload,
 			&msg.signature,
 		)?;
@@ -84,13 +85,13 @@ where
 				misbehaviour_type: msg.misbehaviour_type,
 				session_id: msg.session_id,
 				offender: msg.offender.clone(),
-				reporters: Vec::new(),
-				signatures: Vec::new(),
+				reporters: Default::default(),
+				signatures: Default::default(),
 			});
 		debug!(target: "dkg", "Reports: {:?}", reports);
 		if !reports.reporters.contains(&reporter) {
-			reports.reporters.push(reporter);
-			reports.signatures.push(msg.signature);
+			reports.reporters.try_push(reporter).unwrap();
+			reports.signatures.try_push(msg.signature.try_into().unwrap()).unwrap();
 		}
 
 		// Try to store reports offchain
@@ -101,8 +102,8 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
 ) where
 	B: Block,
@@ -168,16 +169,16 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAut
 				misbehaviour_type: report.misbehaviour_type,
 				session_id: report.session_id,
 				offender: report.offender.clone(),
-				reporters: Vec::new(),
-				signatures: Vec::new(),
+				reporters: Default::default(),
+				signatures: Default::default(),
 			});
 
 		if reports.reporters.contains(&public) {
 			return
 		}
 
-		reports.reporters.push(public);
-		reports.signatures.push(encoded_signature);
+		reports.reporters.try_push(public).unwrap();
+		reports.signatures.try_push(encoded_signature.try_into().unwrap()).unwrap();
 
 		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
 
@@ -192,8 +193,8 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE, MaxProposalLength, MaxAut
 	}
 }
 
-pub(crate) fn try_store_offchain<B, BE, C, GE, MaxProposalLength, MaxAuthorities>(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+pub(crate) fn try_store_offchain<B, BE, C, GE>(
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
@@ -201,8 +202,6 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);

@@ -31,7 +31,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, UnsignedProposal, MaxAuthorities
+	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -139,7 +139,7 @@ where
 	}
 }
 
-impl<B, BE, C, GE, MaxProposalLength> BlockchainInterface
+impl<B, BE, C, GE> BlockchainInterface
 	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
@@ -159,7 +159,7 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
-		DKGWorker::<_, _, _, GE, _>::verify_signature_against_authorities_inner(
+		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
 			(*msg).clone(),
 			&self.latest_header,
 			client,
@@ -196,7 +196,7 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Some(proposal) = get_signed_proposal::<B, C, BE, MaxProposalLength>(
+		if let Some(proposal) = get_signed_proposal::<B, C, BE, MaxProposalLength, MaxAuthorities>(
 			&self.backend,
 			finished_round,
 			payload_key,
@@ -212,7 +212,7 @@ where
 					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 				}
 
-				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength>(
+				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength, MaxAuthorities>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,
 					&self.latest_header,
@@ -228,7 +228,7 @@ where
 	}
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
-		gossip_public_key::<B, C, BE, GE, MaxProposalLength>(
+		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
 			&mut self.aggregated_public_keys.write(),

@@ -626,6 +626,10 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 	type SessionPeriod = Period;
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -923,7 +927,7 @@ impl_runtime_apis! {
 	}
   }
 
-  impl dkg_runtime_primitives::DKGApi<Block, DKGId, BlockNumber> for Runtime {
+  impl dkg_runtime_primitives::DKGApi<Block, DKGId, BlockNumber, MaxProposalLength, MaxAuthorities> for Runtime {
 	fn authority_set() -> dkg_runtime_primitives::AuthoritySet<DKGId> {
 	  let authorities = DKG::authorities();
 	  let authority_set_id = DKG::authority_set_id();

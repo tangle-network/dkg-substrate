@@ -27,21 +27,14 @@ use dkg_primitives::types::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, DKGApi,
+	AggregatedPublicKeys, DKGApi, MaxAuthorities, MaxProposalLength,
 };
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<
-	B,
-	BE,
-	C,
-	GE,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
->(
-	dkg_worker: &DKGWorker<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
+	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
@@ -72,7 +65,7 @@ where
 
 		dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			authorities.unwrap(),
+			(authorities.clone().unwrap().0.into(), authorities.unwrap().1.into()),
 			&msg.pub_key,
 			&msg.signature,
 		)?;
@@ -116,7 +109,7 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE, GE, MaxProposalLength, MaxAuthorities>(
+pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,

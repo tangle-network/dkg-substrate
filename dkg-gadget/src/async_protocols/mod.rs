@@ -32,7 +32,7 @@ use dkg_primitives::{
 	},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::{UnsignedProposal, MaxAuthorities};
+use dkg_runtime_primitives::{MaxAuthorities, UnsignedProposal};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,

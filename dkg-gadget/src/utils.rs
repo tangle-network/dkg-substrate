@@ -13,7 +13,9 @@
 // limitations under the License.
 //
 use crate::worker::ENGINE_ID;
-use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog, MaxAuthorities};
+use dkg_primitives::{
+	crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog, MaxAuthorities,
+};
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::{fmt::Debug, future::Future};
@@ -45,7 +47,8 @@ where
 /// Matches a `ConsensusLog` for a DKG validator set change.
 fn match_consensus_log(
 	log: ConsensusLog<AuthorityId, MaxAuthorities>,
-) -> Option<(AuthoritySet<AuthorityId, MaxAuthorities>, AuthoritySet<AuthorityId, MaxAuthorities>)> {
+) -> Option<(AuthoritySet<AuthorityId, MaxAuthorities>, AuthoritySet<AuthorityId, MaxAuthorities>)>
+{
 	match log {
 		ConsensusLog::AuthoritiesChange { active: authority_set, queued: queued_authority_set } =>
 			Some((authority_set, queued_authority_set)),

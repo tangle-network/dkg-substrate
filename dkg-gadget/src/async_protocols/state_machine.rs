@@ -14,9 +14,8 @@
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 use async_trait::async_trait;
-use dkg_runtime_primitives::MaxAuthorities;
 use dkg_primitives::types::{DKGError, DKGMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
