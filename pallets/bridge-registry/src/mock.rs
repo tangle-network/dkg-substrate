@@ -106,8 +106,11 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 		],
 	}
 	.assimilate_storage(&mut storage);
-	let _ = pallet_bridge_registry::GenesisConfig::<Test> { phantom: Default::default() }
-		.assimilate_storage(&mut storage);
+	let _ = pallet_bridge_registry::GenesisConfig::<Test> {
+		phantom: Default::default(),
+		bridges: vec![],
+	}
+	.assimilate_storage(&mut storage);
 
 	storage.into()
 }

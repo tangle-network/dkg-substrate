@@ -40,19 +40,82 @@ use sp_std::prelude::*;
 	RuntimeDebugNoBound,
 	TypeInfo,
 )]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 #[codec(mel_bound())]
 #[scale_info(skip_type_params(FieldLimit))]
 pub struct BridgeInfo<FieldLimit: Get<u32>> {
 	/// Additional fields of the metadata that are not catered for with the struct's explicit
 	/// fields.
-	pub additional: BoundedVec<(Data, Data), FieldLimit>,
+	#[cfg_attr(feature = "std", serde(bound = ""))]
+	pub additional: BoundedVec<(SerdeData, SerdeData), FieldLimit>,
 
 	/// A reasonable display name for the bridge. This should be whatever it is
 	/// that it is typically known as and should not be confusable with other entities, given
 	/// reasonable context.
 	///
 	/// Stored as UTF-8.
-	pub display: Data,
+	pub display: SerdeData,
+}
+
+#[derive(
+	Clone,
+	Eq,
+	PartialEq,
+	frame_support::RuntimeDebug,
+	MaxEncodedLen,
+	Encode,
+	TypeInfo,
+	Decode,
+	Default,
+)]
+pub struct SerdeData(Data);
+
+#[cfg(feature = "std")]
+mod serde_ {
+	use super::*;
+	use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+	struct DataVisitor;
+	use std::{fmt::Formatter, str::FromStr};
+
+	impl FromStr for SerdeData {
+		type Err = ();
+
+		fn from_str(s: &str) -> Result<Self, Self::Err> {
+			Ok(SerdeData(Data::Raw(s.as_bytes().to_vec().try_into().unwrap())))
+		}
+	}
+
+	impl<'de> Visitor<'de> for DataVisitor {
+		type Value = SerdeData;
+
+		fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
+			formatter.write_str("a hex string with at most 32 bytes")
+		}
+
+		fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+		where
+			E: serde::de::Error,
+		{
+			Ok(SerdeData(Data::Raw(hex::decode(v).unwrap().try_into().unwrap())))
+		}
+	}
+	impl<'de> Deserialize<'de> for SerdeData {
+		fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+		where
+			D: Deserializer<'de>,
+		{
+			deserializer.deserialize_str(DataVisitor)
+		}
+	}
+
+	impl Serialize for SerdeData {
+		fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+		where
+			S: Serializer,
+		{
+			serializer.serialize_str(&hex::encode(self.0.encode()))
+		}
+	}
 }
 
 /// Information concerning the identity of the controller of an account.
@@ -62,13 +125,16 @@ pub struct BridgeInfo<FieldLimit: Get<u32>> {
 #[derive(
 	CloneNoBound, Encode, Eq, MaxEncodedLen, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo,
 )]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 #[codec(mel_bound())]
 #[scale_info(skip_type_params(MaxResources, MaxAdditionalFields))]
 pub struct BridgeMetadata<MaxResources: Get<u32>, MaxAdditionalFields: Get<u32>> {
 	/// A list of resource IDs for the bridge
+	#[cfg_attr(feature = "std", serde(bound = ""))]
 	pub resource_ids: BoundedVec<ResourceId, MaxResources>,
 
 	/// Auxilliary information on the bridge.
+	#[cfg_attr(feature = "std", serde(bound = ""))]
 	pub info: BridgeInfo<MaxAdditionalFields>,
 }
 

@@ -73,7 +73,7 @@ pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
 	map.entry(ty).or_default().push(serialized_len as u32);
 
 	for (ty, history) in map.iter() {
-		dkg_logging::debug!(target: "dkg", "History for {}: \
+		dkg_logging::debug!(target: "dkg_gadget", "History for {}: \
 			total count={}, \
 			first={:?}, \
 			latest={:?}, \

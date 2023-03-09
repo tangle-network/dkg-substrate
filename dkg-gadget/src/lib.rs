@@ -148,11 +148,11 @@ where
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
 			|result| match result {
 				Ok(metrics) => {
-					debug!(target: "dkg", "🕸️  Registered metrics");
+					debug!(target: "dkg_gadget", "🕸️  Registered metrics");
 					Some(metrics)
 				},
 				Err(err) => {
-					debug!(target: "dkg", "🕸️  Failed to register metrics: {:?}", err);
+					debug!(target: "dkg_gadget", "🕸️  Failed to register metrics: {:?}", err);
 					None
 				},
 			},

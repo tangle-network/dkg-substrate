@@ -49,7 +49,7 @@ where
 {
 	let signed_proposal = match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
-			info!(target: "dkg", "🕸️  Refresh vote with nonce {:?} received", nonce);
+			info!(target: "dkg_gadget", "🕸️  Refresh vote with nonce {:?} received", nonce);
 			let offchain = backend.offchain_storage();
 
 			if let Some(mut offchain) = offchain {
@@ -58,7 +58,7 @@ where
 				let encoded_proposal = refresh_proposal.encode();
 				offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-				trace!(target: "dkg", "Stored pub_key signature offchain {:?}", finished_round.signature);
+				trace!(target: "dkg_gadget", "Stored pub_key signature offchain {:?}", finished_round.signature);
 			}
 
 			return None

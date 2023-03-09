@@ -51,7 +51,7 @@ where
 	}
 
 	if let DKGMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg", "Received misbehaviour report");
+		debug!(target: "dkg_gadget", "Received misbehaviour report");
 
 		let is_main_round = {
 			if let Some(round) = dkg_worker.rounds.read().as_ref() {
@@ -60,7 +60,7 @@ where
 				false
 			}
 		};
-		debug!(target: "dkg", "Is main round: {}", is_main_round);
+		debug!(target: "dkg_gadget", "Is main round: {}", is_main_round);
 		// Create packed message
 		let mut signed_payload = Vec::new();
 		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
@@ -76,7 +76,7 @@ where
 			&signed_payload,
 			&msg.signature,
 		)?;
-		debug!(target: "dkg", "Reporter: {:?}", reporter);
+		debug!(target: "dkg_gadget", "Reporter: {:?}", reporter);
 		// Add new report to the aggregated reports
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 		let reports = lock
@@ -88,7 +88,7 @@ where
 				reporters: Default::default(),
 				signatures: Default::default(),
 			});
-		debug!(target: "dkg", "Reports: {:?}", reports);
+		debug!(target: "dkg_gadget", "Reports: {:?}", reports);
 		if !reports.reporters.contains(&reporter) {
 			reports.reporters.try_push(reporter).unwrap();
 			reports.signatures.try_push(msg.signature.try_into().unwrap()).unwrap();
@@ -180,7 +180,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		reports.reporters.try_push(public).unwrap();
 		reports.signatures.try_push(encoded_signature.try_into().unwrap()).unwrap();
 
-		debug!(target: "dkg", "Gossiping misbehaviour report and signature");
+		debug!(target: "dkg_gadget", "Gossiping misbehaviour report and signature");
 
 		let reports = (*reports).clone();
 		// Try to store reports offchain
@@ -189,7 +189,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
 		}
 	} else {
-		error!(target: "dkg", "Could not sign public key");
+		error!(target: "dkg_gadget", "Could not sign public key");
 	}
 }
 
@@ -209,7 +209,7 @@ where
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.
 	let threshold = dkg_worker.get_signature_threshold(header) as usize;
-	debug!(target: "dkg", "DKG threshold: {}, reports: {}", threshold, reports.reporters.len());
+	debug!(target: "dkg_gadget", "DKG threshold: {}, reports: {}", threshold, reports.reporters.len());
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
 			if reports.reporters.len() > threshold {

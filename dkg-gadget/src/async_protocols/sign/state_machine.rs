@@ -77,7 +77,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 				}
 			},
 
-			err => dkg_logging::debug!(target: "dkg", "Invalid payload received: {:?}", err),
+			err => dkg_logging::debug!(target: "dkg_gadget", "Invalid payload received: {:?}", err),
 		}
 
 		Ok(())
@@ -89,7 +89,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<(), DKGError> {
-		dkg_logging::info!(target: "dkg", "Completed offline stage successfully!");
+		dkg_logging::info!(target: "dkg_gadget", "Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
@@ -107,15 +107,15 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 			async_index,
 		) {
 			Ok(voting_stage) => {
-				dkg_logging::info!(target: "dkg", "Starting voting stage...");
+				dkg_logging::info!(target: "dkg_gadget", "Starting voting stage...");
 				if let Err(e) = voting_stage.await {
-					dkg_logging::error!(target: "dkg", "Error starting voting stage: {:?}", e);
+					dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", e);
 					return Err(e)
 				}
 				Ok(())
 			},
 			Err(err) => {
-				dkg_logging::error!(target: "dkg", "Error starting voting stage: {:?}", err);
+				dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", err);
 				Err(err)
 			},
 		}

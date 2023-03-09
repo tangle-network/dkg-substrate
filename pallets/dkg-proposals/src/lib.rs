@@ -347,7 +347,7 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config> {
 		/// Typed ChainId (chain type, chain id)
 		pub initial_chain_ids: Vec<[u8; 6]>,
-		pub initial_r_ids: Vec<([u8; 32], Vec<u8>)>,
+		pub initial_r_ids: Vec<(ResourceId, Vec<u8>)>,
 		pub initial_proposers: Vec<T::AccountId>,
 	}
 

@@ -357,12 +357,26 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> frame_support::weights::Weight {
-			// reset the `ShouldExecuteEmergencyKeygen` flag if it is set to true.
+			// reset the `ShouldExecuteNewKeygen` flag if it is set to true.
 			// this is done to ensure that the flag is reset and only read once per DKG
 			// `on_finality_notification` call.
-			if ShouldExecuteEmergencyKeygen::<T>::get() {
-				ShouldExecuteEmergencyKeygen::<T>::put(false);
+			if ShouldExecuteNewKeygen::<T>::get() {
+				ShouldExecuteNewKeygen::<T>::put(false);
 			}
+
+			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
+			// true : 1. A SessionPeriod of blocks have passed from the LastSessionRotationBlock
+			// 2. If 1 is true and we have not yet seen NextKey on chain for the last 10 blocks
+			// check if we have passed exactly `Period` blocks from the last session rotation
+			let blocks_passed_since_last_session_rotation =
+				n - LastSessionRotationBlock::<T>::get();
+			if blocks_passed_since_last_session_rotation >= T::SessionPeriod::get() &&
+				blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into()
+			{
+				// lets set the ShouldStartDKG to true
+				ShouldExecuteNewKeygen::<T>::put(true);
+			}
+
 			// Check if we shall refresh the DKG.
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
@@ -406,10 +420,10 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_in_progress)]
 	pub type RefreshInProgress<T: Config> = StorageValue<_, bool, ValueQuery>;
 
-	/// Should we execute emergency keygen protocol.
+	/// Should we start a new Keygen
 	#[pallet::storage]
-	#[pallet::getter(fn should_execute_emergency_keygen)]
-	pub type ShouldExecuteEmergencyKeygen<T: Config> = StorageValue<_, bool, ValueQuery>;
+	#[pallet::getter(fn should_execute_new_keygen)]
+	pub type ShouldExecuteNewKeygen<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -1343,7 +1357,7 @@ pub mod pallet {
 			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
 			// trigger the keygen protocol.
-			<ShouldExecuteEmergencyKeygen<T>>::put(true);
+			<ShouldExecuteNewKeygen<T>>::put(true);
 			Ok(().into())
 		}
 	}

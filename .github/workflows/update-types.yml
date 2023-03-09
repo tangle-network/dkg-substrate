@@ -9,6 +9,9 @@ on:
     paths:
       - "types/src/*"
 
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
+
 jobs:
   build:
     runs-on: ubuntu-latest

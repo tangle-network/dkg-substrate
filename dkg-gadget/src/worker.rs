@@ -89,8 +89,6 @@ pub const MAX_SIGNING_SETS: u64 = 8;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-pub const SESSION_PROGRESS_THRESHOLD: sp_runtime::Permill = sp_runtime::Permill::from_percent(100);
-
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
@@ -458,6 +456,7 @@ where
 						};
 
 						// spawn on parallel thread
+						info!(target: "dkg_gadget::worker", "Started a new thread for task");
 						let _handle = tokio::task::spawn(task);
 					},
 
@@ -634,16 +633,6 @@ where
 	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
 		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
-	}
-
-	/// Returns the progress of current session
-	pub fn get_current_session_progress(&self, header: &B::Header) -> Option<sp_runtime::Permill> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self
-			.client
-			.runtime_api()
-			.get_current_session_progress(&at, *header.number())
-			.unwrap_or_default()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -834,6 +823,7 @@ where
 		let authority_public_key = self.get_authority_public_key();
 		// spawn the Keygen protocol for the Queued DKG.
 		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for queued DKG");
+		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol | Next best authorities {:?}", next_best_authorities);
 		self.spawn_keygen_protocol(
 			next_best_authorities,
 			authority_public_key,
@@ -858,12 +848,7 @@ where
 		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
-		// Check if we should execute emergency Keygen Protocol.
-		if self.should_execute_emergency_keygen(header) {
-			debug!(target: "dkg_gadget::worker", "🕸️  Should execute emergency keygen");
-			self.handle_emergency_keygen(header);
-			return
-		}
+
 		// Attempt to enact new DKG authorities if sessions have changed
 
 		// The Steps for enacting new DKG authorities are:
@@ -916,19 +901,11 @@ where
 	/// 1. If we already running a keygen protocol, and we detected that we are stalled, this
 	///    method will try to restart the keygen protocol.
 	fn maybe_enact_next_authorities(&self, header: &B::Header) {
-		// Query the current state of session progress, we will proceed with enact next
-		// authorities if the session progress has passed threshold
-		if let Some(session_progress) = self.get_current_session_progress(header) {
-			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage : {:?}", session_progress);
-			metric_set!(self, dkg_session_progress, session_progress.deconstruct());
-			if session_progress < SESSION_PROGRESS_THRESHOLD {
-				debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage below threshold!");
-				return
-			}
-		} else {
-			debug!(target: "dkg_gadget::worker", "🕸️  Unable to retrive session progress percentage!");
+		if !self.should_execute_new_keygen(header) {
+			debug!(target: "dkg_gadget::worker", "🕸️  Not executing new keygen protocol");
 			return
 		}
+
 		// Get the active and queued validators to check for updates
 		if let Some((_active, queued)) = self.validator_set(header) {
 			debug!(target: "dkg_gadget::worker", "🕸️  Session progress percentage above threshold, proceed with enact new authorities");
@@ -949,10 +926,11 @@ where
 			debug!(target: "dkg_gadget::worker", "🕸️  HAS NEXT ROUND KEYGEN: {:?}", has_next_rounds);
 			// Check if there is a next DKG Key on-chain.
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
+
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
-			// Start a keygen if we don't have one.
-			// only if there is no queued key on chain.
+			// Start a keygen if we don't have one OR if there is no queued key on chain.
 			if !has_next_rounds && next_dkg_key.is_none() {
+				debug!(target: "dkg_gadget::worker", "🕸️  NO NEXT ROUND KEYGEN AND NO NEXT DKG | STARTING A NEW QUEUED DKG: {}", next_dkg_key.is_some());
 				// Start the queued DKG setup for the new queued authorities
 				if let Err(e) = self.handle_queued_dkg_setup(header, queued) {
 					error!(target: "dkg_gadget::worker", "🕸️  Error handling queued DKG setup: {:?}", e);
@@ -1060,6 +1038,8 @@ where
 			if let Some(metrics) = self.metrics.as_ref() {
 				metrics.reset_session_metrics();
 			}
+		} else {
+			dkg_logging::info!(target: "dkg_gadget::worker", "🕸️  No update to local session found, not rotation local session");
 		}
 	}
 
@@ -1122,21 +1102,6 @@ where
 				reason: "Message signature is not from a registered authority or next authority"
 					.into(),
 			})
-		}
-	}
-
-	pub fn handle_emergency_keygen(&self, header: &B::Header) {
-		// Start the queued DKG setup for the new queued authorities
-		let result = match self.validator_set(header) {
-			Some((_active, queued)) => self.handle_queued_dkg_setup(header, queued),
-			None => {
-				dkg_logging::error!(target: "dkg_gadget::worker", "🕸️  Failed to get validator set for emergency keygen");
-				return
-			},
-		};
-
-		if let Err(e) = result {
-			dkg_logging::error!(target: "dkg_gadget::worker", "🕸️  Failed to handle emergency keygen: {:?}", e);
 		}
 	}
 
@@ -1586,13 +1551,10 @@ where
 			.collect())
 	}
 
-	fn should_execute_emergency_keygen(&self, header: &B::Header) -> bool {
-		// query runtime api to check if we should execute emergency keygen.
+	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
+		// query runtime api to check if we should execute new keygen.
 		let at: BlockId<B> = BlockId::hash(header.hash());
-		self.client
-			.runtime_api()
-			.should_execute_emergency_keygen(&at)
-			.unwrap_or_default()
+		self.client.runtime_api().should_execute_new_keygen(&at).unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block

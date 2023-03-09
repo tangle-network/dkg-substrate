@@ -123,7 +123,7 @@ impl NetworkGossipEngineBuilder {
 		let handler = GossipHandler {
 			latest_header,
 			keystore: self.keystore,
-			protocol_name: self.protocol_name,
+			protocol_name: self.protocol_name.clone(),
 			my_channel: handler_channel.clone(),
 			message_queue: message_queue.clone(),
 			message_notifications_channel: message_notifications_channel.clone(),
@@ -138,6 +138,7 @@ impl NetworkGossipEngineBuilder {
 		};
 
 		let controller = GossipHandlerController {
+			protocol_name: self.protocol_name,
 			handler_channel,
 			message_notifications_channel,
 			gossip_enabled,
@@ -225,6 +226,7 @@ impl DKGMessageWrapper<AuthorityId> {
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
+	protocol_name: ProtocolName,
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
 	/// A simple channel to send notifications whenever we receive a message from a peer.
@@ -248,7 +250,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		recipient: PeerId,
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to {}", recipient);
+		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to {}", self.protocol_name, recipient);
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
@@ -258,7 +260,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to all peers");
+		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to all peers", self.protocol_name);
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
@@ -284,11 +286,11 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		};
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Dequeuing message: {}", msg.message_hash::<B>());
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Dequeuing message: {}", self.protocol_name, msg.message_hash::<B>());
 				Some(msg)
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Message already read too many times, ignoring");
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Message already read too many times, ignoring", self.protocol_name);
 				// We have already read this message too many times, so we remove it from the queue.
 				let _ = lock.pop_front();
 				None
@@ -301,16 +303,16 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		let msg = lock.pop_front().map(|m| m.unwrap());
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Acknowledging message: {}", msg.message_hash::<B>());
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Acknowledging message: {}", self.protocol_name, msg.message_hash::<B>());
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "No message to acknowledge");
+				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | No message to acknowledge", self.protocol_name);
 			},
 		}
 	}
 
 	fn clear_queue(&self) {
-		dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Clearing message queue");
+		dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Clearing message queue", self.protocol_name);
 		let mut lock = self.message_queue.write();
 		lock.clear();
 	}
@@ -635,7 +637,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
+		debug!(target: "dkg_gadget", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
 
 		if let Some(metrics) = self.metrics.as_ref() {
 			metrics.dkg_signed_messages.inc();
@@ -650,12 +652,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 				drop(queue_lock);
 				let recv_count = self.message_notifications_channel.receiver_count();
 				if recv_count == 0 {
-					dkg_logging::warn!(target: "dkg", "No one is going to process the message notification!!!");
+					dkg_logging::warn!(target: "dkg_gadget", "No one is going to process the message notification!!!");
 				}
 				if let Err(e) = self.message_notifications_channel.send(()) {
-					dkg_logging::error!(target: "dkg", "Failed to send message notification to DKG controller: {:?}", e);
+					dkg_logging::error!(target: "dkg_gadget", "Failed to send message notification to DKG controller: {:?}", e);
 				} else {
-					dkg_logging::debug!(target: "dkg", "Message Notification sent to {recv_count} DKG controller listeners");
+					dkg_logging::debug!(target: "dkg_gadget", "Message Notification sent to {recv_count} DKG controller listeners");
 				}
 			};
 			match pending_messages_peers.entry(message.message_hash::<B>()) {

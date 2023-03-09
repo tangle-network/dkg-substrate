@@ -54,6 +54,7 @@ substrate-frame-rpc-system = { workspace = true }
 frame-system = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 pallet-transaction-payment = { workspace = true }
+pallet-bridge-registry = { workspace = true }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking = { workspace = true }
