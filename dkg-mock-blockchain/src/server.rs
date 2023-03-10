@@ -1,5 +1,8 @@
-use crate::{mock_blockchain_config::MockBlockchainConfig, transport::*, TestCase, MockBlockChainEvent};
+use crate::{
+	mock_blockchain_config::MockBlockchainConfig, transport::*, MockBlockChainEvent, TestCase,
+};
 use atomic::Atomic;
+use futures::SinkExt;
 use std::{
 	collections::{HashMap, VecDeque},
 	net::SocketAddr,
@@ -7,16 +10,16 @@ use std::{
 };
 use tokio::{
 	net::{TcpListener, TcpStream},
-	sync::{mpsc, RwLock, Mutex},
+	sync::{mpsc, Mutex, RwLock},
 };
 use uuid::Uuid;
-use futures::SinkExt;
+use futures::StreamExt;
 
 // TODO: replace with peer id
 type PeerId = Vec<u8>;
 
 #[derive(Clone)]
-pub struct MockBlockchain<B: sp_runtime::traits::Block> {
+pub struct MockBlockchain<B: sp_runtime::traits::Block + Unpin> {
 	listener: Arc<Mutex<Option<TcpListener>>>,
 	config: MockBlockchainConfig,
 	clients: Arc<RwLock<HashMap<PeerId, ConnectedClientState<B>>>>,
@@ -34,22 +37,23 @@ enum ClientToOrchestratorEvent {
 	// the client sends this to the orchestrator. The orchestrator will begin
 	// running the test cases once "n" peers send this status
 	ClientReady { peer_id: PeerId },
-	TestResult { peer_id: PeerId, trace_id: Uuid, result: TestResult }
+	TestResult { peer_id: PeerId, trace_id: Uuid, result: TestResult },
 }
 
 #[derive(Debug)]
 struct TestResult {
 	success: bool,
-	error_message: Option<String>
+	error_message: Option<String>,
 }
 
-enum OrchestratorToClientEvent<B: sp_runtime::traits::Block> {
+#[derive(Debug)]
+enum OrchestratorToClientEvent<B: sp_runtime::traits::Block + Unpin> {
 	// Tells the client subtask to halt
 	Halt,
 	// Tells the client subtask to begin a test
 	BeginTest(TestCase),
 	// Tells the client subtask to send a mock event
-	BlockChainEvent(MockBlockChainEvent<B>)
+	BlockChainEvent(MockBlockChainEvent<B>),
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -60,18 +64,18 @@ enum OrchestratorState {
 	// The orchestrator dispatched a round, and, is waiting for the clients
 	// to submit a status update back
 	AwaitingRoundCompletion,
-    // All test cases have been driven to completion
-    Complete
+	// All test cases have been driven to completion
+	Complete,
 }
 
-struct ConnectedClientState<B: sp_runtime::traits::Block> {
+struct ConnectedClientState<B: sp_runtime::traits::Block + Unpin> {
 	// a map from tracing id => test case. Once the test case passes
 	// for the specific client, the test case will be removed from the list
 	outstanding_tasks: HashMap<Uuid, crate::TestCase>,
 	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent<B>>,
 }
 
-impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
+impl<B: sp_runtime::traits::Block + Unpin> MockBlockchain<B> {
 	pub async fn new(config: MockBlockchainConfig) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
@@ -107,13 +111,12 @@ impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
 		// task
 		let orchestrator_task = this_orchestrator.orchestrate();
 
-		tokio::try_join!(listener_task, orchestrator_task)
-			.map(|_| ())
+		tokio::try_join!(listener_task, orchestrator_task).map(|_| ())
 	}
 
 	/// For debugging purposes, everything will get unwrapped here
 	async fn handle_stream(self, stream: TcpStream, addr: SocketAddr) {
-		let (tx, mut rx) = bind_transport::<B>(stream);
+		let (mut tx, mut rx) = bind_transport::<B>(stream);
 		// begin handshake process
 		let handshake_packet = ProtocolPacket::InitialHandshake;
 		tx.send(handshake_packet).await.unwrap();
@@ -144,20 +147,24 @@ impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
 
 			// Now, run the passive handler that reacts to commands from the orchestrator
 			while let Some(orchestrator_command) = orchestrator_rx.recv().await {
-                match orchestrator_command {
-                    OrchestratorToClientEvent::Halt => {
-                        log::info!(target: "dkg", "Peer {peer_id:?} has been requested to halt");
-                        // tell the subscribing client to shutdown the DKG
-                        tx.send(ProtocolPacket::Halt).await.unwrap();
-                        return;
-                    }
-                    OrchestratorToClientEvent::BeginTest(trace_id, test) =>  {
-						tx.send(ProtocolPacket::BlockChainToClient { event: MockBlockChainEvent::TestCase { trace_id, test } }).await.unwrap();
-					}
+				match orchestrator_command {
+					OrchestratorToClientEvent::Halt => {
+						log::info!(target: "dkg", "Peer {peer_id:?} has been requested to halt");
+						// tell the subscribing client to shutdown the DKG
+						tx.send(ProtocolPacket::Halt).await.unwrap();
+						return
+					},
+					OrchestratorToClientEvent::BeginTest(trace_id, test) => {
+						tx.send(ProtocolPacket::BlockChainToClient {
+							event: MockBlockChainEvent::TestCase { trace_id, test },
+						})
+						.await
+						.unwrap();
+					},
 					OrchestratorToClientEvent::BlockChainEvent(event) => {
 						tx.send(ProtocolPacket::BlockChainToClient { event }).await.unwrap();
-					}
-                }
+					},
+				}
 			}
 
 			panic!("Orchestrator tx dropped for peer {peer_id:?}")
@@ -175,24 +182,23 @@ impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
 			match self.orchestrator_state.load(Ordering::SeqCst) {
 				o_state @ OrchestratorState::WaitingForInit => match client_update {
 					ClientToOrchestratorEvent::ClientReady { peer_id } => {
-                        let clients = self.clients.read().await;
+						let clients = self.clients.read().await;
 						// NOTE: the client automatically puts its handle inside this map
-                        if clients.len() == self.config.min_clients {
-                            // we are ready to begin testing rounds
-                            std::mem::drop(clients);
-                            self.orchestrator_begin_next_round(&mut test_cases).await;
-                        }
-                    },
-
-					c_update => {
-						log_invalid_signal(&o_state, &c_update)
+						if clients.len() == self.config.min_clients {
+							// we are ready to begin testing rounds
+							std::mem::drop(clients);
+							self.orchestrator_begin_next_round(&mut test_cases).await;
+						}
 					},
+
+					c_update => log_invalid_signal(&o_state, &c_update),
 				},
 
 				o_state @ OrchestratorState::AwaitingRoundCompletion => {
 					match &client_update {
-        				ClientToOrchestratorEvent::ClientReady { peer_id } => log_invalid_signal(&o_state, &client_update),
-        				ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
+						ClientToOrchestratorEvent::ClientReady { peer_id } =>
+							log_invalid_signal(&o_state, &client_update),
+						ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
 							let mut clients = self.clients.write().await;
 							let client = clients.get_mut(peer_id).unwrap();
 							if result.success {
@@ -202,33 +208,34 @@ impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
 							} else {
 								log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed test {trace_id:?}. Reason: {:?}", result.error_message);
 								// do not remove from map. At the end , any remaining tasks will
-								// cause the orchestrator to have a nonzero exit code (useful for pipeline testing)
+								// cause the orchestrator to have a nonzero exit code (useful for
+								// pipeline testing)
 							}
 
-							// regardless of success, increment completed count for the current round
+							// regardless of success, increment completed count for the current
+							// round
 							current_round_completed_count += 1;
-						}
-    				}
+						},
+					}
 
 					// at the end, check if the round is complete
 					if current_round_completed_count == self.config.min_clients {
 						current_round_completed_count = 0; // reset to 0 for next round
 						self.orchestrator_begin_next_round(&mut test_cases).await
 					}
-                },
-    			o_state @ OrchestratorState::Complete => {
-					log_invalid_signal(&o_state, &client_update)
-				}
+				},
+				o_state @ OrchestratorState::Complete =>
+					log_invalid_signal(&o_state, &client_update),
 			}
 		}
 
 		Err(generic_error("client_to_orchestrator_tx's all dropped"))
 	}
 
-    fn generate_test_cases(&self) -> VecDeque<TestCase> {
+	fn generate_test_cases(&self) -> VecDeque<TestCase> {
 		let error_cases = &self.config.error_cases;
 		let mut test_cases = VecDeque::new();
-		
+
 		// add all positive cases to the front
 		for _ in 0..self.config.positive_cases {
 			test_cases.push_back(TestCase::Valid)
@@ -242,43 +249,49 @@ impl<B: sp_runtime::traits::Block> MockBlockchain<B> {
 		}
 
 		test_cases
-    }
+	}
 
-    async fn orchestrator_begin_next_round(&self, test_cases: &mut VecDeque<TestCase>) {
-        if let Some(next_case) = test_cases.pop_front() {
+	async fn orchestrator_begin_next_round(&self, test_cases: &mut VecDeque<TestCase>) {
+		if let Some(next_case) = test_cases.pop_front() {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
 			let read = self.clients.read().await;
 			for (id, client) in &*read {
-				client.orchestrator_to_client_subtask.send(OrchestratorToClientEvent::BeginTest(next_case.clone())).unwrap();
+				client
+					.orchestrator_to_client_subtask
+					.send(OrchestratorToClientEvent::BeginTest(next_case.clone()))
+					.unwrap();
 			}
-        } else {
-            log::info!(target: "dkg", "Orchestrator has finished running all tests");
+		} else {
+			log::info!(target: "dkg", "Orchestrator has finished running all tests");
 			self.orchestrator_set_state(OrchestratorState::Complete);
-            let mut exit_code = 0;
-            // check to see the final state
-            let read = self.clients.read().await;
-            for (peer_id, client_state) in &*read {
-                let outstanding_tasks = &client_state.outstanding_tasks;
-                // the client should have no outstanding tasks if successful
-                let success = outstanding_tasks.is_empty();
-                if !success { 
-                    exit_code = 1;
-                    log::info!(target: "dkg", "Peer {peer_id:?} final state FAILURE | Failed tasks: {outstanding_tasks:?}")
-                } else {
-                    log::info!(target: "dkg", "Peer {peer_id:?} SUCCESS!")
-                }
-                client_state.orchestrator_to_client_subtask.send(OrchestratorToClientEvent::Halt).unwrap();
-            }
-			
+			let mut exit_code = 0;
+			// check to see the final state
+			let read = self.clients.read().await;
+			for (peer_id, client_state) in &*read {
+				let outstanding_tasks = &client_state.outstanding_tasks;
+				// the client should have no outstanding tasks if successful
+				let success = outstanding_tasks.is_empty();
+				if !success {
+					exit_code = 1;
+					log::info!(target: "dkg", "Peer {peer_id:?} final state FAILURE | Failed tasks: {outstanding_tasks:?}")
+				} else {
+					log::info!(target: "dkg", "Peer {peer_id:?} SUCCESS!")
+				}
+				client_state
+					.orchestrator_to_client_subtask
+					.send(OrchestratorToClientEvent::Halt)
+					.unwrap();
+			}
+
 			// Give time for the client subtasks to send relevent packets to the DKG clients
 			tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            std::process::exit(exit_code);
-        }
-    }
+			std::process::exit(exit_code);
+		}
+	}
 
-    fn orchestrator_set_state(&self, state: OrchestratorState) {
-        self.orchestrator_state.store(state, Ordering::SeqCst);
-    }
+	fn orchestrator_set_state(&self, state: OrchestratorState) {
+		self.orchestrator_state.store(state, Ordering::SeqCst);
+	}
 }
 
 fn generic_error<T: Into<String>>(err: T) -> std::io::Error {

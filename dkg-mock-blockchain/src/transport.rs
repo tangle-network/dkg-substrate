@@ -1,18 +1,16 @@
 use bytes::Bytes;
 use futures::{
 	stream::{SplitSink, SplitStream},
-	Sink, SinkExt, Stream, StreamExt,
+	Sink, Stream, StreamExt,
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncWrite};
+use std::{marker::PhantomData, pin::Pin, task::Poll};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use std::{pin::Pin, marker::PhantomData};
-use std::task::Poll;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// A set of all the packets which will be exchanged between the client/server
 /// after wrapping the TCP streams in the appropriate codecs via bind_transport
-pub enum ProtocolPacket<B: sp_runtime::traits::Block> {
+pub enum ProtocolPacket<B: sp_runtime::traits::Block + Unpin> {
 	// When a client first connects to the MockBlockchain, this packet gets sent
 	InitialHandshake,
 	// After the client receives the initial handshake, the client is expected to
@@ -28,25 +26,34 @@ pub enum ProtocolPacket<B: sp_runtime::traits::Block> {
 
 pub type TransportFramed = Framed<tokio::net::TcpStream, LengthDelimitedCodec>;
 
-pub fn bind_transport<B>(io: tokio::net::TcpStream) -> (WriteHalf<B>, ReadHalf<B>) {
+pub fn bind_transport<B: sp_runtime::traits::Block + Unpin>(
+	io: tokio::net::TcpStream,
+) -> (WriteHalf<B>, ReadHalf<B>) {
 	let (tx, rx) = Framed::new(io, LengthDelimitedCodec::new()).split();
-	(WriteHalf { inner: tx, _pd: Default::default() }, ReadHalf { inner: rx, _pd: Default::default() })
+	(
+		WriteHalf { inner: tx, _pd: Default::default() },
+		ReadHalf { inner: rx, _pd: Default::default() },
+	)
 }
 
-pub struct ReadHalf<B> {
+pub struct ReadHalf<B: sp_runtime::traits::Block + Unpin> {
 	inner: SplitStream<TransportFramed>,
-	_pd: PhantomData<B>
+	_pd: PhantomData<B>,
 }
 
-pub struct WriteHalf<B> {
+pub struct WriteHalf<B: sp_runtime::traits::Block + Unpin> {
 	inner: SplitSink<TransportFramed, Bytes>,
-	_pd: PhantomData<B>
+	_pd: PhantomData<B>,
 }
 
-impl<B: sp_runtime::traits::Block + Unpin> Stream for ReadHalf<B> {
+impl<B: sp_runtime::traits::Block + Unpin + Unpin> Stream for ReadHalf<B> {
 	type Item = ProtocolPacket<B>;
-	fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
-		if let Some(Ok(bytes)) = futures::ready!(Pin::new(&mut self.get_mut().inner).poll_next(cx)) {
+	fn poll_next(
+		self: std::pin::Pin<&mut Self>,
+		cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Option<Self::Item>> {
+		if let Some(Ok(bytes)) = futures::ready!(Pin::new(&mut self.get_mut().inner).poll_next(cx))
+		{
 			// convert bytes to a ProtocolPacket
 			if let Ok(packet) = bincode2::deserialize(&bytes[..]) {
 				Poll::Ready(Some(packet))
@@ -61,18 +68,30 @@ impl<B: sp_runtime::traits::Block + Unpin> Stream for ReadHalf<B> {
 	}
 }
 
-impl<B: sp_runtime::traits::Block + Unpin> Sink<ProtocolPacket<B>> for WriteHalf<B> {
+impl<B: sp_runtime::traits::Block + Unpin + Unpin> Sink<ProtocolPacket<B>> for WriteHalf<B> {
 	type Error = std::io::Error;
-	fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+	fn poll_close(
+		self: std::pin::Pin<&mut Self>,
+		cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.get_mut().inner).poll_close(cx)
 	}
-	fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+	fn poll_flush(
+		self: std::pin::Pin<&mut Self>,
+		cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.get_mut().inner).poll_flush(cx)
 	}
-	fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+	fn poll_ready(
+		self: std::pin::Pin<&mut Self>,
+		cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.get_mut().inner).poll_ready(cx)
 	}
-	fn start_send(self: std::pin::Pin<&mut Self>, item: ProtocolPacket<B>) -> Result<(), Self::Error> {
+	fn start_send(
+		self: std::pin::Pin<&mut Self>,
+		item: ProtocolPacket<B>,
+	) -> Result<(), Self::Error> {
 		let bytes = bincode2::serialize(&item).unwrap();
 		Pin::new(&mut self.get_mut().inner).start_send(Bytes::from(bytes))
 	}

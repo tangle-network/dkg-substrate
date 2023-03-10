@@ -2186,6 +2186,7 @@ dependencies = [
  "futures",
  "humantime-serde",
  "log",
+ "parity-scale-codec",
  "sc-client-api",
  "serde",
  "sp-runtime",
