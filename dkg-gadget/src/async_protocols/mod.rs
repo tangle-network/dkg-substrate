@@ -19,7 +19,7 @@ pub mod remote;
 pub mod sign;
 pub mod state_machine;
 pub mod state_machine_wrapper;
-
+use sp_runtime::traits::Get;
 #[cfg(test)]
 pub mod test_utils;
 
@@ -32,7 +32,7 @@ use dkg_primitives::{
 	},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::UnsignedProposal;
+use dkg_runtime_primitives::{MaxAuthorities, UnsignedProposal};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,
@@ -63,10 +63,13 @@ use self::{
 use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore};
 use incoming::IncomingAsyncProtocolWrapper;
 
-pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
+pub struct AsyncProtocolParameters<
+	BI: BlockchainInterface,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub engine: Arc<BI>,
 	pub keystore: DKGKeystore,
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
@@ -77,7 +80,11 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 }
 
-impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Drop for AsyncProtocolParameters<BI, MaxAuthorities>
+{
 	fn drop(&mut self) {
 		if self.handle.is_active() && self.handle.is_primary_remote {
 			dkg_logging::warn!(
@@ -98,20 +105,37 @@ impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 	}
 }
 
-impl<BI: BlockchainInterface> KeystoreExt for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> KeystoreExt for AsyncProtocolParameters<BI, MaxAuthorities>
+{
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<BI: BlockchainInterface> AsyncProtocolParameters<BI> {
-	pub fn get_next_batch_key(&self, batch: &[UnsignedProposal]) -> BatchKey {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> AsyncProtocolParameters<BI, MaxAuthorities>
+{
+	pub fn get_next_batch_key<
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	>(
+		&self,
+		batch: &[UnsignedProposal<MaxProposalLength>],
+	) -> BatchKey {
 		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
 	}
 }
 
 // Manual implementation of Clone due to https://stegosaurusdormant.com/understanding-derive-clone/
-impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
+impl<
+		BI: BlockchainInterface,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Clone for AsyncProtocolParameters<BI, MaxAuthorities>
+{
 	fn clone(&self) -> Self {
 		Self {
 			session_id: self.session_id,
@@ -263,7 +287,8 @@ pub enum KeygenRound {
 }
 
 #[derive(Clone)]
-pub enum ProtocolType {
+pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
+{
 	Keygen {
 		ty: KeygenRound,
 		i: KeygenPartyId,
@@ -271,19 +296,21 @@ pub enum ProtocolType {
 		n: u16,
 	},
 	Offline {
-		unsigned_proposal: Arc<UnsignedProposal>,
+		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
-		unsigned_proposal: Arc<UnsignedProposal>,
+		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 	},
 }
 
-impl ProtocolType {
+impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
+	ProtocolType<MaxProposalLength>
+{
 	pub const fn get_i(&self) -> u16 {
 		match self {
 			Self::Keygen { i, .. } => i.0,
@@ -291,7 +318,7 @@ impl ProtocolType {
 			Self::Voting { i, .. } => i.0,
 		}
 	}
-	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal> {
+	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal<MaxProposalLength>> {
 		match self {
 			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
 				Some(unsigned_proposal),
@@ -300,7 +327,9 @@ impl ProtocolType {
 	}
 }
 
-impl Debug for ProtocolType {
+impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug> Debug
+	for ProtocolType<MaxProposalLength>
+{
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
 			ProtocolType::Keygen { ty, i, t, n } => {
@@ -344,11 +373,11 @@ impl<Out> Future for GenericAsyncHandler<'_, Out> {
 	}
 }
 
-pub fn new_inner<SM: StateMachineHandler + 'static, BI: BlockchainInterface + 'static>(
+pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface + 'static>(
 	additional_param: SM::AdditionalReturnParam,
 	sm: SM,
-	params: AsyncProtocolParameters<BI>,
-	channel_type: ProtocolType,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
+	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	async_index: u8,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
@@ -479,12 +508,12 @@ where
 }
 
 fn generate_outgoing_to_wire_fn<
-	SM: StateMachineHandler + 'static,
+	SM: StateMachineHandler<BI> + 'static,
 	BI: BlockchainInterface + 'static,
 >(
-	params: AsyncProtocolParameters<BI>,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
-	proto_ty: ProtocolType,
+	proto_ty: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	async_index: u8,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
@@ -584,11 +613,11 @@ where
 }
 
 pub fn generate_inbound_signed_message_receiver_fn<
-	SM: StateMachineHandler + 'static,
+	SM: StateMachineHandler<BI> + 'static,
 	BI: BlockchainInterface + 'static,
 >(
-	params: AsyncProtocolParameters<BI>,
-	channel_type: ProtocolType,
+	params: AsyncProtocolParameters<BI, MaxAuthorities>,
+	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
 ) -> impl SendFuture<'static, ()>
 where

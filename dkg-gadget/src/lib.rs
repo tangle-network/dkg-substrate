@@ -17,18 +17,16 @@ use std::{marker::PhantomData, sync::Arc};
 use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
-
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
 
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
+use sc_keystore::LocalKeystore;
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::Block;
-
-use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi};
-use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
+use sp_runtime::traits::Block;
 
 mod error;
 mod keyring;
@@ -93,7 +91,7 @@ where
 	<B as Block>::Hash: ExHashT,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// DKG client
 	pub client: Arc<C>,
@@ -120,7 +118,7 @@ where
 	B: Block,
 	BE: Backend<B> + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// ensure logging-related statics are initialized
 	dkg_logging::setup_log();

@@ -14,7 +14,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 # Local dependencies
-dkg-runtime-primitives = { workspace = true }
+dkg-runtime-primitives = { workspace = true, default-features = false }
 pallet-dkg-metadata = { workspace = true }
 pallet-dkg-proposals = { workspace = true }
 pallet-dkg-proposal-handler = { workspace = true }
@@ -115,6 +115,8 @@ std = [
 	"pallet-dkg-metadata/std",
 	"pallet-dkg-proposals/std",
 	"pallet-dkg-proposal-handler/std",
+	"frame-benchmarking/std",
+	"frame-system-benchmarking/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",
@@ -132,6 +134,15 @@ runtime-benchmarks = [
 	"pallet-dkg-proposals/runtime-benchmarks",
 	"pallet-dkg-metadata/runtime-benchmarks",
 	"pallet-bridge-registry/runtime-benchmarks",
+	"frame-election-provider-support/runtime-benchmarks",
+	"pallet-bags-list/runtime-benchmarks",
+	"pallet-election-provider-multi-phase/runtime-benchmarks",
+	"pallet-grandpa/runtime-benchmarks",
+	"pallet-identity/runtime-benchmarks",
+	"pallet-indices/runtime-benchmarks",
+	"pallet-nomination-pools/runtime-benchmarks",
+	"pallet-staking/runtime-benchmarks",
+	"sp-staking/runtime-benchmarks",
 ]
 
 integration-tests = []

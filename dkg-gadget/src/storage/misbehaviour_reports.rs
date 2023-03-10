@@ -24,19 +24,33 @@ use dkg_runtime_primitives::{
 };
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{Block, Get, NumberFor};
 
 /// stores aggregated misbehaviour reports offchain
-pub(crate) fn store_aggregated_misbehaviour_reports<B, BE, C, GE>(
+pub(crate) fn store_aggregated_misbehaviour_reports<
+	B,
+	BE,
+	C,
+	GE,
+	MaxProposalLength,
+	MaxSignatureLength,
+	MaxReporters,
+	MaxAuthorities,
+>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
-	reports: &AggregatedMisbehaviourReports<AuthorityId>,
+	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
 	GE: GossipEngineIface + 'static,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxSignatureLength:
+		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + scale_info::TypeInfo,
+	MaxReporters: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + scale_info::TypeInfo,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let maybe_offchain = dkg_worker.backend.offchain_storage();
 	if maybe_offchain.is_none() {

@@ -22,12 +22,13 @@ use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::KEYGEN_TIMEOUT;
+
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
+use sp_runtime::traits::Get;
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
@@ -58,8 +59,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
+	MaxProposalLength, MaxReporters, MaxSignatureLength, UnsignedProposal,
+	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -137,9 +139,9 @@ where
 	/// Latest block header
 	pub latest_header: Shared<Option<B::Header>>,
 	/// Current validator set
-	pub current_validator_set: Shared<AuthoritySet<Public>>,
+	pub current_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Queued validator set
-	pub queued_validator_set: Shared<AuthoritySet<Public>>,
+	pub queued_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
@@ -155,7 +157,7 @@ where
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
 	// keep rustc happy
-	_backend: PhantomData<BE>,
+	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
@@ -195,8 +197,10 @@ where
 	}
 }
 
-pub type AggregatedMisbehaviourReportStore =
-	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+pub type AggregatedMisbehaviourReportStore = HashMap<
+	(MisbehaviourType, SessionId, AuthorityId),
+	AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
+>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
@@ -204,7 +208,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -269,7 +273,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -284,7 +288,13 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
+	) -> Result<
+		AsyncProtocolParameters<
+			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+			MaxAuthorities,
+		>,
+		DKGError,
+	> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -481,7 +491,7 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposals: Vec<UnsignedProposal>,
+		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
 		signing_set: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
@@ -638,14 +648,14 @@ where
 	pub fn validator_set(
 		&self,
 		header: &B::Header,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		Self::validator_set_inner(header, &self.client)
 	}
 
 	fn validator_set_inner(
 		header: &B::Header,
 		client: &Arc<C>,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
@@ -673,7 +683,7 @@ where
 	fn verify_validator_set(
 		&self,
 		block: &NumberFor<B>,
-		mut active: AuthoritySet<Public>,
+		mut active: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), error::Error> {
 		let active: BTreeSet<Public> = active.authorities.drain(..).collect();
 
@@ -691,7 +701,7 @@ where
 	fn handle_genesis_dkg_setup(
 		&self,
 		header: &B::Header,
-		genesis_authority_set: AuthoritySet<Public>,
+		genesis_authority_set: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
@@ -769,7 +779,7 @@ where
 	fn handle_queued_dkg_setup(
 		&self,
 		header: &B::Header,
-		queued: AuthoritySet<Public>,
+		queued: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
@@ -1066,7 +1076,7 @@ where
 		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = latest_header.read().clone() {
 			authorities = Self::validator_set_inner(&header, client)
-				.map(|a| (a.0.authorities, a.1.authorities));
+				.map(|a| (a.0.authorities.into(), a.1.authorities.into()));
 		}
 
 		if authorities.is_none() {
@@ -1692,6 +1702,8 @@ where
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1723,6 +1735,8 @@ where
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

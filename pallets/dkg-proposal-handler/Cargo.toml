@@ -27,7 +27,7 @@ sp-runtime = { workspace = true }
 sp-core = { workspace = true }
 pallet-dkg-metadata = { workspace = true }
 
-webb-proposals = { workspace = true }
+webb-proposals = { workspace = true, default-features = false }
 
 [dev-dependencies]
 pallet-dkg-proposals = { workspace = true }

@@ -67,12 +67,12 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use codec::MaxEncodedLen;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T, I = ()>(_);
 
 	#[pallet::config]
@@ -87,7 +87,13 @@ pub mod pallet {
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Bridge index type
-		type BridgeIndex: Encode + Decode + Parameter + AtLeast32Bit + Default + Copy;
+		type BridgeIndex: Encode
+			+ Decode
+			+ Parameter
+			+ AtLeast32Bit
+			+ Default
+			+ Copy
+			+ MaxEncodedLen;
 
 		/// Maximum number of additional fields that may be stored in a bridge's metadata. Needed to
 		/// bound the I/O required to access an identity, but can be pretty high.
@@ -99,6 +105,10 @@ pub mod pallet {
 		/// required to access a metadata object, but can be pretty high.
 		#[pallet::constant]
 		type MaxResources: Get<u32>;
+
+		/// Max length of a proposal
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>;
 
 		/// Weight information for the extrinsics
 		type WeightInfo: WeightInfo;
@@ -134,13 +144,13 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_bridge_index)]
-	/// Details of the module's parameters
+	/// Storage for next bridge index
 	pub(super) type NextBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageValue<_, T::BridgeIndex, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bridges)]
-	/// Details of the module's parameters
+	/// Storage for map of all bridges
 	pub(super) type Bridges<T: Config<I>, I: 'static = ()> = StorageMap<
 		_,
 		Blake2_256,
@@ -150,7 +160,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn resource_to_bridge_index)]
-	/// Details of the module's parameters
+	/// Mapping of resource to bridge index
 	pub(super) type ResourceToBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageMap<_, Blake2_256, ResourceId, T::BridgeIndex>;
 
@@ -240,8 +250,10 @@ pub mod pallet {
 ///
 /// Note: There MUST only be a single connected component unless the end-user/developer wants
 /// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
-impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError> for Pallet<T, I> {
-	fn on_signed_proposal(proposal: Proposal) -> Result<(), DispatchError> {
+impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLength>
+	for Pallet<T, I>
+{
+	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
 		ensure!(proposal.is_signed(), Error::<T, I>::ProposalNotSigned);
 
 		if proposal.kind() == ProposalKind::AnchorUpdate {

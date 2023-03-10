@@ -12,29 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::{pallet_prelude::Get, BoundedVec};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
-use sp_std::{prelude::*, vec};
+use sp_std::prelude::*;
 
 pub const DKG_DEFAULT_PROPOSER_THRESHOLD: u32 = 1;
 
-#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ProposalStatus {
 	Initiated,
 	Approved,
 	Rejected,
 }
 
-#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct ProposalVotes<AccountId, BlockNumber> {
-	pub votes_for: Vec<AccountId>,
-	pub votes_against: Vec<AccountId>,
+#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct ProposalVotes<AccountId, BlockNumber, MaxVotes: Get<u32> + Clone> {
+	pub votes_for: BoundedVec<AccountId, MaxVotes>,
+	pub votes_against: BoundedVec<AccountId, MaxVotes>,
 	pub status: ProposalStatus,
 	pub expiry: BlockNumber,
 }
 
-impl<A: PartialEq, B: PartialOrd + Default> ProposalVotes<A, B> {
+impl<A: PartialEq, B: PartialOrd + Default, MaxVotes: Get<u32> + Clone>
+	ProposalVotes<A, B, MaxVotes>
+{
 	/// Attempts to mark the proposal as approve or rejected.
 	/// Returns true if the status changes from active.
 	pub fn try_to_complete(&mut self, threshold: u32, total: u32) -> ProposalStatus {
@@ -66,11 +69,13 @@ impl<A: PartialEq, B: PartialOrd + Default> ProposalVotes<A, B> {
 	}
 }
 
-impl<AccountId, BlockNumber: Default> Default for ProposalVotes<AccountId, BlockNumber> {
+impl<AccountId, BlockNumber: Default, MaxVotes: Get<u32> + Clone> Default
+	for ProposalVotes<AccountId, BlockNumber, MaxVotes>
+{
 	fn default() -> Self {
 		Self {
-			votes_for: vec![],
-			votes_against: vec![],
+			votes_for: Default::default(),
+			votes_against: Default::default(),
 			status: ProposalStatus::Initiated,
 			expiry: BlockNumber::default(),
 		}

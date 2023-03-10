@@ -31,8 +31,8 @@ fn should_handle_signed_evm_anchor_update_proposals() {
 		);
 		let signed_proposal = Proposal::Signed {
 			kind: ProposalKind::AnchorUpdate,
-			data: proposal.into_bytes().to_vec(),
-			signature: vec![],
+			data: proposal.into_bytes().to_vec().try_into().unwrap(),
+			signature: vec![].try_into().unwrap(),
 		};
 		// Handle signed proposal
 		assert_ok!(BridgeRegistry::on_signed_proposal(signed_proposal));
@@ -72,8 +72,8 @@ fn should_handle_multiple_signed_evm_anchor_update_proposals() {
 			);
 			let signed_proposal = Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: proposal.into_bytes().to_vec(),
-				signature: vec![],
+				data: proposal.into_bytes().to_vec().try_into().unwrap(),
+				signature: vec![].try_into().unwrap(),
 			};
 			assert_ok!(BridgeRegistry::on_signed_proposal(signed_proposal));
 			resources.push(src_resource_id);
@@ -109,8 +109,8 @@ fn should_fail_to_link_resources_from_different_bridges() {
 			);
 			assert_ok!(BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: src_dummy_proposal.into_bytes().to_vec(),
-				signature: vec![],
+				data: src_dummy_proposal.into_bytes().to_vec().try_into().unwrap(),
+				signature: vec![].try_into().unwrap(),
 			}));
 			assert_eq!(NextBridgeIndex::<Test>::get(), 2);
 		}
@@ -128,8 +128,8 @@ fn should_fail_to_link_resources_from_different_bridges() {
 			);
 			assert_ok!(BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: dest_dummy_proposal.into_bytes().to_vec(),
-				signature: vec![],
+				data: dest_dummy_proposal.into_bytes().to_vec().try_into().unwrap(),
+				signature: vec![].try_into().unwrap(),
 			}));
 			assert_eq!(NextBridgeIndex::<Test>::get(), 3);
 		}
@@ -143,8 +143,8 @@ fn should_fail_to_link_resources_from_different_bridges() {
 		assert_err!(
 			BridgeRegistry::on_signed_proposal(Proposal::Signed {
 				kind: ProposalKind::AnchorUpdate,
-				data: bad_proposal.into_bytes().to_vec(),
-				signature: vec![],
+				data: bad_proposal.into_bytes().to_vec().try_into().unwrap(),
+				signature: vec![].try_into().unwrap(),
 			}),
 			Error::<Test>::BridgeIndexError
 		);

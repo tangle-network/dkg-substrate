@@ -19,7 +19,7 @@ scale-info = { workspace = true }
 k256 = { version = "0.11.5", default-features = false, features = ["arithmetic", "ecdsa"] }
 log = { workspace = true }
 
-dkg-runtime-primitives = { workspace = true }
+dkg-runtime-primitives = { workspace = true, default-features = false }
 
 sp-std = { workspace = true }
 sp-runtime = { workspace = true }
@@ -34,7 +34,7 @@ pallet-timestamp = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 
 [dev-dependencies]
-webb-proposals = { workspace = true }
+webb-proposals = { workspace = true, default-features = false }
 pallet-dkg-proposal-handler = { workspace = true }
 pallet-dkg-metadata = { workspace = true }
 pallet-collator-selection = { workspace = true }
@@ -61,6 +61,7 @@ std = [
 	"sp-consensus-aura/std",
 	"pallet-balances/std",
 	"dkg-runtime-primitives/std",
+	"webb-proposals/std",
 	"pallet-collator-selection/std"
 ]
 runtime-benchmarks = [

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
 	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
@@ -19,19 +18,20 @@ use crate::async_protocols::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
 	OfflineProtocolMessage, OfflineStage,
 };
 use round_based::{Msg, StateMachine};
+
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
 #[async_trait]
-impl StateMachineHandler for OfflineStage {
+impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage {
 	type AdditionalReturnParam = (
-		UnsignedProposal,
+		UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		OfflinePartyId,
 		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
@@ -42,7 +42,7 @@ impl StateMachineHandler for OfflineStage {
 	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, .. } = msg.body;
 
@@ -83,9 +83,9 @@ impl StateMachineHandler for OfflineStage {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		offline_stage: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<(), DKGError> {

@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
+use sp_runtime::traits::Get;
 use std::{
 	pin::Pin,
 	sync::Arc,
@@ -26,18 +27,27 @@ use tokio_stream::wrappers::BroadcastStream;
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 /// Used to filter and transform incoming messages from the DKG worker
-pub struct IncomingAsyncProtocolWrapper<T, BI> {
+pub struct IncomingAsyncProtocolWrapper<
+	T,
+	BI,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub receiver: BroadcastStream<T>,
 	session_id: SessionId,
 	engine: Arc<BI>,
-	ty: ProtocolType,
+	ty: ProtocolType<MaxProposalLength>,
 }
 
-impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper<T, BI> {
+impl<
+		T: TransformIncoming,
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
+{
 	pub fn new(
 		receiver: tokio::sync::broadcast::Receiver<T>,
-		ty: ProtocolType,
-		params: &AsyncProtocolParameters<BI>,
+		ty: ProtocolType<MaxProposalLength>,
+		params: &AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
 		Self {
 			receiver: BroadcastStream::new(receiver),
@@ -50,10 +60,14 @@ impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper
 
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped;
-	fn transform<BI: BlockchainInterface>(
+
+	fn transform<
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	>(
 		self,
 		verify: &BI,
-		stream_type: &ProtocolType,
+		stream_type: &ProtocolType<MaxProposalLength>,
 		this_session_id: SessionId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
@@ -62,10 +76,13 @@ pub trait TransformIncoming: Clone + Send + 'static {
 
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	type IncomingMapped = DKGMessage<Public>;
-	fn transform<BI: BlockchainInterface>(
+	fn transform<
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	>(
 		self,
 		verify: &BI,
-		stream_type: &ProtocolType,
+		stream_type: &ProtocolType<MaxProposalLength>,
 		this_session_id: SessionId,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
@@ -101,7 +118,8 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	}
 }
 
-impl<T, BI> Stream for IncomingAsyncProtocolWrapper<T, BI>
+impl<T, BI, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> Stream
+	for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 where
 	T: TransformIncoming,
 	BI: BlockchainInterface,
