@@ -3,12 +3,10 @@ name = "dkg-mock-blockchain"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "fs"] }
 tokio-util = { workspace = true }
-toml = { workspace = true }
+toml = { workspace = true, features = ["parse"] }
 humantime-serde = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["v4", "serde"] }
@@ -20,4 +18,5 @@ sc-client-api = { workspace = true }
 atomic = { workspace = true }
 bincode2 = { workspace = true }
 sp-runtime = { workspace = true }
+sp-consensus = { workspace = true }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }

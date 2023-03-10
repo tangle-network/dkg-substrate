@@ -17,7 +17,8 @@ members = [
 	'dkg-runtime-primitives',
 	'dkg-gadget',
 	'dkg-logging',
-	'dkg-mock-blockchain'
+	'dkg-mock-blockchain',
+	'dkg-test-orchestrator'
 ]
 
 [workspace.dependencies]
@@ -33,6 +34,7 @@ dkg-standalone-runtime = { version = "3.0.0", path = "standalone/runtime" }
 dkg-logging = { path = "dkg-logging" }
 dkg-rococo-runtime = { default-features = false, path = "parachain/runtime/rococo" }
 dkg-mock-blockchain = { path = "dkg-mock-blockchain", default-features = false }
+dkg-test-orchestrator = { path = "dkg-test-orchestrator", default-features = false }
 
 futures = "0.3.15"
 clap = { version = "4.0.32", features = ["derive"] }
@@ -100,6 +102,7 @@ frame-election-provider-support = { git = "https://github.com/paritytech/substra
 frame-system = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 
+sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-inherents = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }

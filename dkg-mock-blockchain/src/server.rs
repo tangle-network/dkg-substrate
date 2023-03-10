@@ -50,7 +50,7 @@ enum OrchestratorToClientEvent<B: crate::BlockTraitForTest> {
 	// Tells the client subtask to halt
 	Halt,
 	// Tells the client subtask to begin a test
-	BeginTest(TestCase),
+	BeginTest { trace_id: Uuid, test: TestCase },
 	// Tells the client subtask to send a mock event
 	BlockChainEvent(MockBlockChainEvent<B>),
 }
@@ -91,7 +91,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 		})
 	}
 
-	pub async fn execute(mut self) -> std::io::Result<()> {
+	pub async fn execute(self) -> std::io::Result<()> {
 		let listener = self.listener.lock().await.take().unwrap();
 		let this_orchestrator = self.clone();
 
@@ -126,7 +126,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 			let mut write = self.clients.write().await;
 
 			// create a channel for allowing the orchestrator to send this sub-task commands
-			let (orchestrator_to_this_task, orchestrator_rx) = mpsc::unbounded_channel();
+			let (orchestrator_to_this_task, mut orchestrator_rx) = mpsc::unbounded_channel();
 			let state = ConnectedClientState {
 				outstanding_tasks: Default::default(),
 				orchestrator_to_client_subtask: orchestrator_to_this_task,
@@ -153,7 +153,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 						tx.send(ProtocolPacket::Halt).await.unwrap();
 						return
 					},
-					OrchestratorToClientEvent::BeginTest(trace_id, test) => {
+					OrchestratorToClientEvent::BeginTest { trace_id, test } => {
 						tx.send(ProtocolPacket::BlockChainToClient {
 							event: MockBlockChainEvent::TestCase { trace_id, test },
 						})
@@ -253,11 +253,17 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 	async fn orchestrator_begin_next_round(&self, test_cases: &mut VecDeque<TestCase>) {
 		if let Some(next_case) = test_cases.pop_front() {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
-			let read = self.clients.read().await;
-			for (id, client) in &*read {
+			let mut write = self.clients.write().await;
+			for (id, client) in write.iter_mut() {
+				let trace_id = Uuid::new_v4();
+				client.outstanding_tasks.insert(trace_id, next_case.clone());
+
 				client
 					.orchestrator_to_client_subtask
-					.send(OrchestratorToClientEvent::BeginTest(next_case.clone()))
+					.send(OrchestratorToClientEvent::BeginTest {
+						trace_id,
+						test: next_case.clone(),
+					})
 					.unwrap();
 			}
 		} else {

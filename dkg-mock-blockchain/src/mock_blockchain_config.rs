@@ -12,10 +12,10 @@ pub struct MockBlockchainConfig {
 	#[serde(default)]
 	#[serde(with = "humantime_serde")]
 	// the minimum latency in the network. Each client will receive updates at
-    // min_simulated_latency + random(0, 0.25*min_simulated_latency)
+	// min_simulated_latency + random(0, 0.25*min_simulated_latency)
 	pub min_simulated_latency: Option<Duration>,
-    // The number of positive cases to run
-    pub positive_cases: usize,
+	// The number of positive cases to run
+	pub positive_cases: usize,
 	// a set of error cases
 	pub error_cases: Vec<ErrorCase>,
 }
@@ -24,7 +24,7 @@ pub struct MockBlockchainConfig {
 /// A specific error case that the MockBlockchain will attempt to cause in
 /// a subscribing client
 pub struct ErrorCase {
-    pub name: String,
+	pub name: String,
 	#[serde(default)]
 	#[serde(with = "humantime_serde")]
 	// Add an additional amount of delay ontop of the latency before sending the notification to
@@ -36,6 +36,6 @@ pub struct ErrorCase {
 	pub n_clients: usize,
 	// the specific command that each receiving client should cause
 	pub command: crate::AttachedCommand,
-    // the number of times to run this test case
-    pub count: usize
+	// the number of times to run this test case
+	pub count: usize,
 }

@@ -1,6 +1,6 @@
 use crate::{mock_blockchain_config::ErrorCase, FinalityNotification, ImportNotification};
+use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use codec::WrapperTypeDecode;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -10,13 +10,8 @@ pub enum MockBlockChainEvent<B: crate::BlockTraitForTest> {
 	TestCase { trace_id: Uuid, test: TestCase },
 }
 
-pub trait BlockTraitForTest: sp_runtime::traits::Block+ Unpin {
-
-}
-impl<T: sp_runtime::traits::Block + Unpin> BlockTraitForTest for T 
-	where <Self as sp_runtime::traits::Block>::Hash: WrapperTypeDecode {
-
-}
+pub trait BlockTraitForTest: sp_runtime::traits::Block + Unpin {}
+impl<T: sp_runtime::traits::Block + Unpin> BlockTraitForTest for T {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AttachedCommandMetadata {
@@ -58,6 +53,7 @@ mod serde_impl {
 	use crate::{AttachedCommandMetadata, FinalityNotification, ImportNotification, TestCase};
 	use codec::{Decode, Encode};
 	use serde::{Deserialize, Serialize};
+	use sp_consensus::BlockOrigin;
 	use uuid::Uuid;
 
 	use crate::MockBlockChainEvent;
@@ -90,16 +86,16 @@ mod serde_impl {
 		//
 		// This maps to the range `(old_finalized, new_finalized)`.
 		pub tree_route: Option<()>,
-		// Stale branches heads.
-		pub stale_heads: Vec<u8>,
+		// Stale branches heads. (not used)
+		pub stale_heads: Option<()>,
 	}
 
 	#[derive(Serialize, Deserialize)]
 	struct IntermediateImportNotification {
 		// Imported block header hash.
 		hash: Vec<u8>,
-		// Imported block origin.
-		origin: Vec<u8>,
+		// Imported block origin. (disabled for testing purposes)
+		origin: Option<()>,
 		// Imported block header.
 		header: Vec<u8>,
 		// Is this the new best block.
@@ -127,7 +123,7 @@ mod serde_impl {
 						hash: Encode::encode(&notification.hash),
 						tree_route: None,
 						header: Encode::encode(&notification.header),
-						stale_heads: Encode::encode(&notification.stale_heads),
+						stale_heads: None,
 					};
 
 					let intermediate = IntermediateMockBlockChainEvent::FinalityNotification {
@@ -140,7 +136,7 @@ mod serde_impl {
 				MockBlockChainEvent::ImportNotification { notification, command } => {
 					let intermediate_notification = IntermediateImportNotification {
 						hash: Encode::encode(&notification.hash),
-						origin: Encode::encode(&notification.origin),
+						origin: None,
 						header: Encode::encode(&notification.header),
 						is_new_best: notification.is_new_best,
 						tree_route: None,
@@ -172,8 +168,7 @@ mod serde_impl {
 						hash: Decode::decode(&mut notification.hash.as_slice()).unwrap(),
 						header: Decode::decode(&mut notification.header.as_slice()).unwrap(),
 						tree_route: std::sync::Arc::new([]),
-						stale_heads: Decode::decode(&mut notification.stale_heads.as_slice())
-							.unwrap(),
+						stale_heads: std::sync::Arc::new([]),
 					};
 
 					MockBlockChainEvent::FinalityNotification { notification, command }
@@ -182,7 +177,7 @@ mod serde_impl {
 					let notification = ImportNotification::<B> {
 						hash: Decode::decode(&mut notification.hash.as_slice()).unwrap(),
 						header: Decode::decode(&mut notification.header.as_slice()).unwrap(),
-						origin: Decode::decode(&mut notification.origin.as_slice()).unwrap(),
+						origin: BlockOrigin::NetworkBroadcast,
 						is_new_best: notification.is_new_best,
 						tree_route: None,
 					};
@@ -194,4 +189,14 @@ mod serde_impl {
 			Ok(event)
 		}
 	}
+}
+
+pub type TestBlock = sp_runtime::testing::Block<XtDummy>;
+// Xt must impl: 'static + Codec + Sized + Send + Sync + Serialize + Clone + Eq + Debug + Extrinsic
+#[derive(Encode, Decode, Serialize, Clone, Eq, PartialEq, Debug)]
+pub struct XtDummy;
+
+impl sp_runtime::traits::Extrinsic for XtDummy {
+	type Call = ();
+	type SignaturePayload = ();
 }

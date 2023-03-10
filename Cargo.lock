@@ -2189,6 +2189,7 @@ dependencies = [
  "parity-scale-codec",
  "sc-client-api",
  "serde",
+ "sp-consensus",
  "sp-runtime",
  "tokio",
  "tokio-util",
@@ -2406,6 +2407,15 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "dkg-test-orchestrator"
+version = "0.1.0"
+dependencies = [
+ "dkg-mock-blockchain",
+ "tokio",
+ "toml 0.7.2",
 ]
 
 [[package]]
@@ -11951,6 +11961,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
+ "toml_edit",
 ]
 
 [[package]]
@@ -11960,6 +11971,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ab8ed2edee10b50132aed5f331333428b011c99402b5a534154ed15746f9622"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.19.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a1eb0622d28f4b9c90adc4ea4b2b46b47663fde9ac5fafcb14a1369d5508825"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow",
 ]
 
 [[package]]
@@ -13050,6 +13074,15 @@ name = "windows_x86_64_msvc"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "447660ad36a13288b1db4d4248e857b510e8c3a225c822ba4fb748c0aafecffd"
+
+[[package]]
+name = "winnow"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee7b2c67f962bf5042bfd8b6a916178df33a26eec343ae064cb8e069f638fa6f"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "winreg"
