@@ -144,13 +144,13 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_bridge_index)]
-	/// Details of the module's parameters
+	/// Storage for next bridge index
 	pub(super) type NextBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageValue<_, T::BridgeIndex, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bridges)]
-	/// Details of the module's parameters
+	/// Storage for map of all bridges
 	pub(super) type Bridges<T: Config<I>, I: 'static = ()> = StorageMap<
 		_,
 		Blake2_256,
@@ -160,7 +160,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn resource_to_bridge_index)]
-	/// Details of the module's parameters
+	/// Mapping of resource to bridge index
 	pub(super) type ResourceToBridgeIndex<T: Config<I>, I: 'static = ()> =
 		StorageMap<_, Blake2_256, ResourceId, T::BridgeIndex>;
 
