@@ -2,7 +2,7 @@ use super::*;
 use crate as pallet_bridge_registry;
 
 use codec::{Decode, Encode};
-use frame_support::{pallet_prelude::ConstU32, parameter_types, traits::GenesisBuild};
+use frame_support::{parameter_types, traits::GenesisBuild};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{

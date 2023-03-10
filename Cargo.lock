@@ -6248,6 +6248,7 @@ dependencies = [
  "pallet-authorship",
  "pallet-session",
  "parity-scale-codec",
+ "rand_chacha 0.2.2",
  "scale-info",
  "serde",
  "sp-application-crypto",
@@ -12748,8 +12749,8 @@ dependencies = [
 
 [[package]]
 name = "webb-proposals"
-version = "0.5.16"
-source = "git+https://github.com/webb-tools/webb-rs#38932538c529c0b9815a992c8299ba4acb87b3f4"
+version = "0.5.19"
+source = "git+https://github.com/webb-tools/webb-rs?branch=clean-deps-import#4ee96c98bdda99561f34763e0d78c16f3d1d19bf"
 dependencies = [
  "frame-support",
  "hex",

@@ -284,7 +284,7 @@ fn submit_signed_proposal_success() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal].try_into().unwrap()
+			vec![signed_proposal]
 		));
 
 		assert!(
@@ -337,7 +337,7 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal.clone()].try_into().unwrap()
+			vec![signed_proposal.clone()]
 		));
 
 		assert!(
@@ -381,7 +381,7 @@ fn submit_signed_proposal_already_exists() {
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal].try_into().unwrap()
+			vec![signed_proposal]
 		));
 
 		assert!(
@@ -441,7 +441,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		// we could check for the RuntimeEvent that is emitted.
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal].try_into().unwrap()
+			vec![signed_proposal]
 		));
 
 		assert!(

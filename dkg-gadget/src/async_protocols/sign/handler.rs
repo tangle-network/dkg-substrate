@@ -19,7 +19,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-use sp_runtime::traits::Get;
+
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 

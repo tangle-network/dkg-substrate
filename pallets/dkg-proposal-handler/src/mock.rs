@@ -14,9 +14,7 @@
 //
 use crate as pallet_dkg_proposal_handler;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{
-	pallet_prelude::ConstU32, parameter_types, traits::Everything, BoundedVec, PalletId,
-};
+use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519::Signature, H256};

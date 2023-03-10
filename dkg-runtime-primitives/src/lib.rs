@@ -26,10 +26,7 @@ use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::{
-	pallet_prelude::{ConstU32, Get},
-	BoundedVec, RuntimeDebug,
-};
+use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
 pub use proposal::*;
 use scale_info::TypeInfo;
 use sp_core::H256;
@@ -109,6 +106,12 @@ pub type MaxReporters = CustomU32Getter<10_000>;
 
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<10_000>;
+
+/// Max size for signatures
+pub type MaxKeyLength = CustomU32Getter<10_000>;
+
+/// Max votes to store onchain
+pub type MaxVotes = CustomU32Getter<10_000>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
@@ -230,13 +233,13 @@ pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities: Get<u32>> {
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct UnsignedProposal<MaxLength: Get<u32> + Clone> {
+pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
-	pub proposal: Proposal<MaxLength>,
+	pub proposal: Proposal<MaxProposalLength>,
 }
 
-impl<MaxLength: Get<u32> + Clone> UnsignedProposal<MaxLength> {
+impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 	pub fn hash(&self) -> Option<[u8; 32]> {
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
 			Some(keccak_256(data))

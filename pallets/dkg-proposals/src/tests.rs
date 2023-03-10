@@ -299,7 +299,7 @@ fn create_successful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone().try_into().unwrap(),
+			proposal.clone(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
@@ -316,7 +316,7 @@ fn create_successful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone().try_into().unwrap(),
+			proposal.clone(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
@@ -397,7 +397,7 @@ fn create_unsucessful_proposal() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone().try_into().unwrap(),
+			proposal.clone(),
 		));
 		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected =
@@ -582,7 +582,7 @@ fn proposal_expires() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone().try_into().unwrap(),
+				proposal.clone(),
 			),
 			Error::<Test>::ProposalExpired
 		);
@@ -603,7 +603,7 @@ fn proposal_expires() {
 				RuntimeOrigin::signed(mock_pub_key(PROPOSER_C)),
 				prop_id,
 				typed_chain_id,
-				proposal.clone().try_into().unwrap(),
+				proposal.clone(),
 			),
 			Error::<Test>::ProposalExpired
 		);

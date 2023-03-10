@@ -18,7 +18,6 @@ use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
-use sp_runtime::traits::Get;
 
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use sc_keystore::LocalKeystore;

@@ -18,9 +18,7 @@ use super::*;
 use crate as pallet_dkg_proposals;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	assert_ok, ord_parameter_types,
-	pallet_prelude::ConstU32,
-	parameter_types,
+	assert_ok, ord_parameter_types, parameter_types,
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
 	PalletId,
 };

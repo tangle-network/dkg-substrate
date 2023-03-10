@@ -24,7 +24,6 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 	Keygen, ProtocolMessage,
 };
 use round_based::{Msg, StateMachine};
-use sp_runtime::traits::Get;
 
 #[async_trait]
 impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {

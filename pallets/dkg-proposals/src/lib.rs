@@ -95,7 +95,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::{EncodeAppend, EncodeLike};
+use codec::EncodeLike;
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
@@ -375,7 +375,7 @@ pub mod pallet {
 			}
 			for (r_id, r_data) in self.initial_r_ids.iter() {
 				let bounded_input: BoundedVec<_, _> = r_data.clone().try_into().unwrap();
-				Resources::<T>::insert(ResourceId::from(*r_id), bounded_input);
+				Resources::<T>::insert(*r_id, bounded_input);
 			}
 
 			for proposer in self.initial_proposers.iter() {

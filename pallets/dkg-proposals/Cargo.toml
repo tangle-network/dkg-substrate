@@ -19,7 +19,7 @@ scale-info = { workspace = true }
 k256 = { version = "0.11.5", default-features = false, features = ["arithmetic", "ecdsa"] }
 log = { workspace = true }
 
-dkg-runtime-primitives = { workspace = true, default-features = false, optional = true }
+dkg-runtime-primitives = { workspace = true, default-features = false }
 
 sp-std = { workspace = true }
 sp-runtime = { workspace = true }

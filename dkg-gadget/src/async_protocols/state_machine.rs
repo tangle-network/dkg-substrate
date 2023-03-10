@@ -18,7 +18,7 @@ use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
-use sp_runtime::traits::Get;
+
 use std::fmt::Debug;
 
 pub(crate) type StateMachineTxRx<T> = (

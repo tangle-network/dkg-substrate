@@ -22,7 +22,7 @@ use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
-use frame_support::BoundedVec;
+
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;

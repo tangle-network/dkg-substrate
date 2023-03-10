@@ -770,7 +770,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		/// * `new_threshold` - The new keygen threshold for the DKG.
-		#[transactional]
+
 		#[pallet::weight(<T as Config>::WeightInfo::set_keygen_threshold())]
 		#[pallet::call_index(1)]
 		pub fn set_keygen_threshold(
@@ -832,7 +832,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible current
 		///   DKG public keys.
-		#[transactional]
+
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		#[pallet::call_index(3)]
 		pub fn submit_public_key(
@@ -893,7 +893,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `keys_and_signatures` - The aggregated public keys and signatures for possible next
 		///   DKG public keys.
-		#[transactional]
+
 		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
 		#[pallet::call_index(4)]
 		pub fn submit_next_public_key(
@@ -964,7 +964,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
 		///   and nonce.
-		#[transactional]
+
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
 		#[pallet::call_index(5)]
 		pub fn submit_public_key_signature(
@@ -1048,7 +1048,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `reports` - The aggregated misbehaviour reports containing signatures of an offending
 		///   authority
-		#[transactional]
+
 		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
 		#[pallet::call_index(6)]
 		pub fn submit_misbehaviour_reports(
@@ -1298,7 +1298,6 @@ pub mod pallet {
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
 		#[pallet::weight(0)]
-		#[transactional]
 		#[pallet::call_index(10)]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1345,7 +1344,6 @@ pub mod pallet {
 		///
 		/// Note that, this will clear the next public key and its signature, if any.
 		#[pallet::weight(0)]
-		#[transactional]
 		#[pallet::call_index(11)]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1701,7 +1699,7 @@ impl<T: Config> Pallet<T> {
 			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone());
 			PreviousPublicKey::<T>::put(dkg_pub_key);
 			UsedSignatures::<T>::mutate(|val| {
-				val.try_push(pub_key_signature.clone().try_into().unwrap()).unwrap();
+				val.try_push(pub_key_signature.clone()).unwrap();
 			});
 			// and increment the nonce
 			let current_nonce = Self::refresh_nonce();

@@ -24,7 +24,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 	OfflineProtocolMessage, OfflineStage,
 };
 use round_based::{Msg, StateMachine};
-use sp_runtime::traits::Get;
+
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
@@ -99,7 +99,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
-			unsigned_proposal.0.into(),
+			unsigned_proposal.0,
 			unsigned_proposal.1,
 			unsigned_proposal.2,
 			unsigned_proposal.3,
