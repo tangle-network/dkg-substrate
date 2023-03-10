@@ -144,6 +144,9 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 				.send(ClientToOrchestratorEvent::ClientReady { peer_id: peer_id.clone() })
 				.unwrap();
 
+			// TODO! loop for rx to listen from the client and send messages to the orchestrator
+			// must send a ClientToOrchestratorEvent::TestResult
+
 			// Now, run the passive handler that reacts to commands from the orchestrator
 			while let Some(orchestrator_command) = orchestrator_rx.recv().await {
 				match orchestrator_command {
