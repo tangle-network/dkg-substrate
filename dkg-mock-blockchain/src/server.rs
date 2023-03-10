@@ -2,7 +2,7 @@ use crate::{
 	mock_blockchain_config::MockBlockchainConfig, transport::*, MockBlockChainEvent, TestCase,
 };
 use atomic::Atomic;
-use futures::SinkExt;
+use futures::{SinkExt, StreamExt};
 use std::{
 	collections::{HashMap, VecDeque},
 	net::SocketAddr,
@@ -13,13 +13,12 @@ use tokio::{
 	sync::{mpsc, Mutex, RwLock},
 };
 use uuid::Uuid;
-use futures::StreamExt;
 
 // TODO: replace with peer id
 type PeerId = Vec<u8>;
 
 #[derive(Clone)]
-pub struct MockBlockchain<B: sp_runtime::traits::Block + Unpin> {
+pub struct MockBlockchain<B: crate::BlockTraitForTest> {
 	listener: Arc<Mutex<Option<TcpListener>>>,
 	config: MockBlockchainConfig,
 	clients: Arc<RwLock<HashMap<PeerId, ConnectedClientState<B>>>>,
@@ -47,7 +46,7 @@ struct TestResult {
 }
 
 #[derive(Debug)]
-enum OrchestratorToClientEvent<B: sp_runtime::traits::Block + Unpin> {
+enum OrchestratorToClientEvent<B: crate::BlockTraitForTest> {
 	// Tells the client subtask to halt
 	Halt,
 	// Tells the client subtask to begin a test
@@ -68,14 +67,14 @@ enum OrchestratorState {
 	Complete,
 }
 
-struct ConnectedClientState<B: sp_runtime::traits::Block + Unpin> {
+struct ConnectedClientState<B: crate::BlockTraitForTest> {
 	// a map from tracing id => test case. Once the test case passes
 	// for the specific client, the test case will be removed from the list
 	outstanding_tasks: HashMap<Uuid, crate::TestCase>,
 	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent<B>>,
 }
 
-impl<B: sp_runtime::traits::Block + Unpin> MockBlockchain<B> {
+impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 	pub async fn new(config: MockBlockchainConfig) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));

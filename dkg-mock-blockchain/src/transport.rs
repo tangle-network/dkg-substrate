@@ -10,23 +10,30 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// A set of all the packets which will be exchanged between the client/server
 /// after wrapping the TCP streams in the appropriate codecs via bind_transport
-pub enum ProtocolPacket<B: sp_runtime::traits::Block + Unpin> {
+pub enum ProtocolPacket<B: crate::BlockTraitForTest> {
 	// When a client first connects to the MockBlockchain, this packet gets sent
 	InitialHandshake,
 	// After the client receives the initial handshake, the client is expected to
 	// return its peer id to the MockBlockchain
-	InitialHandshakeResponse { peer_id: Vec<u8> },
+	InitialHandshakeResponse {
+		peer_id: Vec<u8>,
+	},
 	// After the handshake phase is complete, almost every packet sent back and forth
 	// between the client and server uses this packet type
-	BlockChainToClient { event: crate::MockBlockChainEvent<B> },
-	ClientToBlockChain { event: crate::MockClientResponse },
+	BlockChainToClient {
+		#[serde(bound = "")]
+		event: crate::MockBlockChainEvent<B>,
+	},
+	ClientToBlockChain {
+		event: crate::MockClientResponse,
+	},
 	// Tells the client to halt the DKG and related networking services.
 	Halt,
 }
 
 pub type TransportFramed = Framed<tokio::net::TcpStream, LengthDelimitedCodec>;
 
-pub fn bind_transport<B: sp_runtime::traits::Block + Unpin>(
+pub fn bind_transport<B: crate::BlockTraitForTest>(
 	io: tokio::net::TcpStream,
 ) -> (WriteHalf<B>, ReadHalf<B>) {
 	let (tx, rx) = Framed::new(io, LengthDelimitedCodec::new()).split();
@@ -36,17 +43,17 @@ pub fn bind_transport<B: sp_runtime::traits::Block + Unpin>(
 	)
 }
 
-pub struct ReadHalf<B: sp_runtime::traits::Block + Unpin> {
+pub struct ReadHalf<B: crate::BlockTraitForTest> {
 	inner: SplitStream<TransportFramed>,
 	_pd: PhantomData<B>,
 }
 
-pub struct WriteHalf<B: sp_runtime::traits::Block + Unpin> {
+pub struct WriteHalf<B: crate::BlockTraitForTest> {
 	inner: SplitSink<TransportFramed, Bytes>,
 	_pd: PhantomData<B>,
 }
 
-impl<B: sp_runtime::traits::Block + Unpin + Unpin> Stream for ReadHalf<B> {
+impl<B: crate::BlockTraitForTest> Stream for ReadHalf<B> {
 	type Item = ProtocolPacket<B>;
 	fn poll_next(
 		self: std::pin::Pin<&mut Self>,
@@ -68,7 +75,7 @@ impl<B: sp_runtime::traits::Block + Unpin + Unpin> Stream for ReadHalf<B> {
 	}
 }
 
-impl<B: sp_runtime::traits::Block + Unpin + Unpin> Sink<ProtocolPacket<B>> for WriteHalf<B> {
+impl<B: crate::BlockTraitForTest> Sink<ProtocolPacket<B>> for WriteHalf<B> {
 	type Error = std::io::Error;
 	fn poll_close(
 		self: std::pin::Pin<&mut Self>,

@@ -1,12 +1,21 @@
 use crate::{mock_blockchain_config::ErrorCase, FinalityNotification, ImportNotification};
 use serde::{Deserialize, Serialize};
+use codec::WrapperTypeDecode;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
-pub enum MockBlockChainEvent<B: sp_runtime::traits::Block + Unpin> {
+pub enum MockBlockChainEvent<B: crate::BlockTraitForTest> {
 	FinalityNotification { notification: FinalityNotification<B>, command: AttachedCommandMetadata },
 	ImportNotification { notification: ImportNotification<B>, command: AttachedCommandMetadata },
 	TestCase { trace_id: Uuid, test: TestCase },
+}
+
+pub trait BlockTraitForTest: sp_runtime::traits::Block+ Unpin {
+
+}
+impl<T: sp_runtime::traits::Block + Unpin> BlockTraitForTest for T 
+	where <Self as sp_runtime::traits::Block>::Hash: WrapperTypeDecode {
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -100,7 +109,7 @@ mod serde_impl {
 		tree_route: Option<()>,
 	}
 
-	impl<B: sp_runtime::traits::Block + Unpin> Serialize for MockBlockChainEvent<B> {
+	impl<B: crate::BlockTraitForTest> Serialize for MockBlockChainEvent<B> {
 		fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 		where
 			S: serde::Serializer,
@@ -148,7 +157,7 @@ mod serde_impl {
 		}
 	}
 
-	impl<'de, B: sp_runtime::traits::Block + Unpin> Deserialize<'de> for MockBlockChainEvent<B> {
+	impl<'de, B: crate::BlockTraitForTest> Deserialize<'de> for MockBlockChainEvent<B> {
 		fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 		where
 			D: serde::Deserializer<'de>,
