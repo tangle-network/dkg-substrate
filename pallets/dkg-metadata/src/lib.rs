@@ -152,7 +152,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
 	use dkg_runtime_primitives::{traits::OnDKGPublicKeyChangeHandler, ProposalHandlerTrait};
-	use frame_support::{ensure, pallet_prelude::*, transactional};
+	use frame_support::{ensure, pallet_prelude::*};
 	use frame_system::{
 		ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction},
