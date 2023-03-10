@@ -17,6 +17,10 @@
 use super::*;
 use crate as pallet_dkg_proposals;
 use codec::{Decode, Encode, MaxEncodedLen};
+pub use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
+	MaxSignatureLength, DKG_ENGINE_ID,
+};
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
 	traits::{GenesisBuild, OnFinalize, OnInitialize},
@@ -34,8 +38,6 @@ use sp_runtime::{
 	},
 	Percent, Permill,
 };
-
-use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, TypedChainId};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -153,17 +155,6 @@ where
 	) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
-}
-
-parameter_types! {
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxKeyLength : u32 = 10_000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxSignatureLength : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxAuthorities : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxReporters : u32 = 1000;
 }
 
 impl pallet_dkg_metadata::Config for Test {

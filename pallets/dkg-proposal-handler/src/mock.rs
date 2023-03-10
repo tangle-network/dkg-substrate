@@ -14,6 +14,10 @@
 //
 use crate as pallet_dkg_proposal_handler;
 use codec::{Decode, Encode, MaxEncodedLen};
+pub use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
+	MaxSignatureLength, DKG_ENGINE_ID,
+};
 use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
@@ -34,11 +38,11 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
-
 use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, EIP2930Transaction, TransactionAction, U256,
+	keccak_256, MaxProposalLength, MaxResources, MaxVotes, TransactionV2, TypedChainId,
 };
+
+use dkg_runtime_primitives::{EIP2930Transaction, TransactionAction, U256};
 use std::sync::Arc;
 use webb_proposals::{Proposal, ProposalKind};
 
@@ -160,15 +164,9 @@ where
 
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxProposalLength : u32 = 10_000;
+	pub const MaxAuthorityProposers : u32 = 100;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxVotes : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxResources : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 1000;
+	pub const MaxExternalProposerAccounts : u32 = 100;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
@@ -240,17 +238,6 @@ impl pallet_session::Config for Test {
 	type SessionHandler = <MockSessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = MockSessionKeys;
 	type WeightInfo = ();
-}
-
-parameter_types! {
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxKeyLength : u32 = 10_000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxSignatureLength : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxAuthorities : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxReporters : u32 = 1000;
 }
 
 impl pallet_dkg_metadata::Config for Test {

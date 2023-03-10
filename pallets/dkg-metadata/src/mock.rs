@@ -15,7 +15,7 @@
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
 
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::MaxEncodedLen;
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -38,7 +38,10 @@ use sp_runtime::{
 use std::{sync::Arc, vec};
 
 use crate as pallet_dkg_metadata;
-pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
+pub use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
+	MaxSignatureLength, DKG_ENGINE_ID,
+};
 
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
@@ -122,17 +125,6 @@ where
 	) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
-}
-
-parameter_types! {
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxKeyLength : u32 = 10_000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxSignatureLength : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxAuthorities : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen, Default)]
-	pub const MaxReporters : u32 = 1000;
 }
 
 impl pallet_dkg_metadata::Config for Test {

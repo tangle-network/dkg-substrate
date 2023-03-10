@@ -99,19 +99,22 @@ pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::Ke
 pub type MaxProposalLength = CustomU32Getter<10_000>;
 
 // Max authorities
-pub type MaxAuthorities = CustomU32Getter<10_000>;
+pub type MaxAuthorities = CustomU32Getter<100>;
 
 // Max reporters
-pub type MaxReporters = CustomU32Getter<10_000>;
+pub type MaxReporters = CustomU32Getter<100>;
 
 /// Max size for signatures
-pub type MaxSignatureLength = CustomU32Getter<10_000>;
+pub type MaxSignatureLength = CustomU32Getter<512>;
 
 /// Max size for signatures
-pub type MaxKeyLength = CustomU32Getter<10_000>;
+pub type MaxKeyLength = CustomU32Getter<512>;
 
 /// Max votes to store onchain
-pub type MaxVotes = CustomU32Getter<10_000>;
+pub type MaxVotes = CustomU32Getter<100>;
+
+/// Max resources to store onchain
+pub type MaxResources = CustomU32Getter<32>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
