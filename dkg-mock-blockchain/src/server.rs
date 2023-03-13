@@ -1,5 +1,5 @@
 use crate::{
-	mock_blockchain_config::MockBlockchainConfig, transport::*, MockBlockChainEvent, TestCase,
+	mock_blockchain_config::MockBlockchainConfig, transport::*, MockBlockChainEvent, TestCase, BlockTraitForTest, AttachedCommandMetadata, FinalityNotification,
 };
 use atomic::Atomic;
 use futures::{SinkExt, StreamExt};
@@ -35,7 +35,7 @@ enum ClientToOrchestratorEvent {
 	// Once the client has completed its handshake with the mock blockchain,
 	// the client sends this to the orchestrator. The orchestrator will begin
 	// running the test cases once "n" peers send this status
-	ClientReady { peer_id: PeerId },
+	ClientReady,
 	TestResult { peer_id: PeerId, trace_id: Uuid, result: TestResult },
 }
 
@@ -122,7 +122,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 		let response = rx.next().await.unwrap();
 
 		if let ProtocolPacket::InitialHandshakeResponse { peer_id } = response {
-			log::info!(target: "dkg", "Received handshake response from peer {peer_id:?}");
+			log::info!(target: "dkg", "Received handshake response from peer {peer_id:?} = {addr:?}");
 			let mut write = self.clients.write().await;
 
 			// create a channel for allowing the orchestrator to send this sub-task commands
@@ -141,35 +141,62 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 
 			// Tell the orchestrator we have established a connection with the client
 			self.to_orchestrator
-				.send(ClientToOrchestratorEvent::ClientReady { peer_id: peer_id.clone() })
+				.send(ClientToOrchestratorEvent::ClientReady)
 				.unwrap();
 
-			// TODO! loop for rx to listen from the client and send messages to the orchestrator
-			// must send a ClientToOrchestratorEvent::TestResult
+			let peer_id = &peer_id;
 
-			// Now, run the passive handler that reacts to commands from the orchestrator
-			while let Some(orchestrator_command) = orchestrator_rx.recv().await {
-				match orchestrator_command {
-					OrchestratorToClientEvent::Halt => {
-						log::info!(target: "dkg", "Peer {peer_id:?} has been requested to halt");
-						// tell the subscribing client to shutdown the DKG
-						tx.send(ProtocolPacket::Halt).await.unwrap();
-						return
-					},
-					OrchestratorToClientEvent::BeginTest { trace_id, test } => {
-						tx.send(ProtocolPacket::BlockChainToClient {
-							event: MockBlockChainEvent::TestCase { trace_id, test },
-						})
-						.await
-						.unwrap();
-					},
-					OrchestratorToClientEvent::BlockChainEvent(event) => {
-						tx.send(ProtocolPacket::BlockChainToClient { event }).await.unwrap();
-					},
+			// this subtask handles passing messages from the DKG client to the orchestrator
+			// for tallying results
+			let fwd_orchestrator = async move {
+				while let Some(packet) = rx.next().await {
+					match packet {
+						pkt @ ProtocolPacket::InitialHandshake |
+						pkt @ ProtocolPacket::InitialHandshakeResponse { .. } |
+						pkt @ ProtocolPacket::BlockChainToClient { .. } |
+						pkt @ ProtocolPacket::Halt => {
+							panic!("Received invalid packet {pkt:?} inside to_orchestrator for {peer_id:?}")
+						}
+						ProtocolPacket::ClientToBlockChain { event } => {
+							let trace_id = event.trace_id;
+							let result = TestResult {
+								error_message: event.error,
+								success: event.success,
+							};
+							self.to_orchestrator.send(ClientToOrchestratorEvent::TestResult { peer_id: peer_id.clone(), trace_id, result }).unwrap();
+						}
+					}
 				}
-			}
+			};
 
-			panic!("Orchestrator tx dropped for peer {peer_id:?}")
+			// this subtask handles receiving commands from the orhcestrator and potentially
+			// sending testcases to the DKG clients
+			let from_orchestrator = async move {
+				while let Some(orchestrator_command) = orchestrator_rx.recv().await {
+					match orchestrator_command {
+						OrchestratorToClientEvent::Halt => {
+							log::info!(target: "dkg", "Peer {peer_id:?} has been requested to halt");
+							// tell the subscribing client to shutdown the DKG
+							tx.send(ProtocolPacket::Halt).await.unwrap();
+							return
+						},
+						OrchestratorToClientEvent::BeginTest { trace_id, test } => {
+							tx.send(ProtocolPacket::BlockChainToClient {
+								event: MockBlockChainEvent::TestCase { trace_id, test },
+							})
+							.await
+							.unwrap();
+						},
+						OrchestratorToClientEvent::BlockChainEvent(event) => {
+							tx.send(ProtocolPacket::BlockChainToClient { event }).await.unwrap();
+						},
+					}
+				}
+			};
+
+			let _ = tokio::join!(fwd_orchestrator, from_orchestrator);
+
+			panic!("Communications between orchestrator and DKG client for peer {peer_id:?} died")
 		} else {
 			panic!("Invalid first packet received from peer")
 		}
@@ -183,9 +210,9 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 		while let Some(client_update) = client_to_orchestrator_rx.recv().await {
 			match self.orchestrator_state.load(Ordering::SeqCst) {
 				o_state @ OrchestratorState::WaitingForInit => match client_update {
-					ClientToOrchestratorEvent::ClientReady { peer_id } => {
+					ClientToOrchestratorEvent::ClientReady => {
 						let clients = self.clients.read().await;
-						// NOTE: the client automatically puts its handle inside this map
+						// NOTE: the client automatically puts its handle inside this map. We do not have to here
 						if clients.len() == self.config.min_clients {
 							// we are ready to begin testing rounds
 							std::mem::drop(clients);
@@ -198,7 +225,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 
 				o_state @ OrchestratorState::AwaitingRoundCompletion => {
 					match &client_update {
-						ClientToOrchestratorEvent::ClientReady { peer_id } =>
+						ClientToOrchestratorEvent::ClientReady =>
 							log_invalid_signal(&o_state, &client_update),
 						ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
 							let mut clients = self.clients.write().await;
@@ -257,9 +284,12 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 		if let Some(next_case) = test_cases.pop_front() {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
 			let mut write = self.clients.write().await;
-			for (id, client) in write.iter_mut() {
+			for (_id, client) in write.iter_mut() {
 				let trace_id = Uuid::new_v4();
 				client.outstanding_tasks.insert(trace_id, next_case.clone());
+
+				// First, send out a MockBlockChainEvent
+				todo!();
 
 				client
 					.orchestrator_to_client_subtask
@@ -308,4 +338,14 @@ fn generic_error<T: Into<String>>(err: T) -> std::io::Error {
 
 fn log_invalid_signal(o_state: &OrchestratorState, c_update: &ClientToOrchestratorEvent) {
 	log::error!(target: "dkg", "Orchestrator state is {o_state:?}, yet, the client's update state is {c_update:?}")
+}
+
+fn create_mocked_finality_blockchain_event<B: BlockTraitForTest>() -> MockBlockChainEvent<B> {
+	let notification = FinalityNotification {
+		hash: Default::default(),
+		header: Default::default(),
+		tree_route: Arc::new([]),
+		stale_heads: Arc::new([]),
+	};
+	MockBlockChainEvent::FinalityNotification { notification }
 }
