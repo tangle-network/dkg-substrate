@@ -6,7 +6,7 @@ pub struct MockBlockchainConfig {
 	// the bind address for the server
 	pub bind: String,
 	// the minimum number of clients required before starting the MockBlockchain (=n)
-	pub min_clients: usize,
+	pub n_clients: usize,
 	// threshold (=t)
 	pub threshold: usize,
 	#[serde(default)]

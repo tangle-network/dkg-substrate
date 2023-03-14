@@ -1,5 +1,6 @@
 use crate::{
-	mock_blockchain_config::MockBlockchainConfig, transport::*, MockBlockChainEvent, TestCase, BlockTraitForTest, AttachedCommandMetadata, FinalityNotification,
+	mock_blockchain_config::MockBlockchainConfig, transport::*, FinalityNotification,
+	MockBlockChainEvent, TestBlock, TestCase,
 };
 use atomic::Atomic;
 use futures::{SinkExt, StreamExt};
@@ -7,6 +8,7 @@ use std::{
 	collections::{HashMap, VecDeque},
 	net::SocketAddr,
 	sync::{atomic::Ordering, Arc},
+	time::Duration,
 };
 use tokio::{
 	net::{TcpListener, TcpStream},
@@ -18,10 +20,10 @@ use uuid::Uuid;
 type PeerId = Vec<u8>;
 
 #[derive(Clone)]
-pub struct MockBlockchain<B: crate::BlockTraitForTest> {
+pub struct MockBlockchain {
 	listener: Arc<Mutex<Option<TcpListener>>>,
 	config: MockBlockchainConfig,
-	clients: Arc<RwLock<HashMap<PeerId, ConnectedClientState<B>>>>,
+	clients: Arc<RwLock<HashMap<PeerId, ConnectedClientState>>>,
 	// client sub-tasks communicate with the orchestrator using this sender
 	to_orchestrator: mpsc::UnboundedSender<ClientToOrchestratorEvent>,
 	// the orchestrator receives updates from its client sub-tasks from this receiver
@@ -46,13 +48,13 @@ struct TestResult {
 }
 
 #[derive(Debug)]
-enum OrchestratorToClientEvent<B: crate::BlockTraitForTest> {
+enum OrchestratorToClientEvent {
 	// Tells the client subtask to halt
 	Halt,
 	// Tells the client subtask to begin a test
 	BeginTest { trace_id: Uuid, test: TestCase },
 	// Tells the client subtask to send a mock event
-	BlockChainEvent(MockBlockChainEvent<B>),
+	BlockChainEvent(MockBlockChainEvent<TestBlock>),
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -67,14 +69,14 @@ enum OrchestratorState {
 	Complete,
 }
 
-struct ConnectedClientState<B: crate::BlockTraitForTest> {
+struct ConnectedClientState {
 	// a map from tracing id => test case. Once the test case passes
 	// for the specific client, the test case will be removed from the list
 	outstanding_tasks: HashMap<Uuid, crate::TestCase>,
-	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent<B>>,
+	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent>,
 }
 
-impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
+impl MockBlockchain {
 	pub async fn new(config: MockBlockchainConfig) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
@@ -115,7 +117,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 
 	/// For debugging purposes, everything will get unwrapped here
 	async fn handle_stream(self, stream: TcpStream, addr: SocketAddr) {
-		let (mut tx, mut rx) = bind_transport::<B>(stream);
+		let (mut tx, mut rx) = bind_transport::<TestBlock>(stream);
 		// begin handshake process
 		let handshake_packet = ProtocolPacket::InitialHandshake;
 		tx.send(handshake_packet).await.unwrap();
@@ -140,9 +142,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 			std::mem::drop(write);
 
 			// Tell the orchestrator we have established a connection with the client
-			self.to_orchestrator
-				.send(ClientToOrchestratorEvent::ClientReady)
-				.unwrap();
+			self.to_orchestrator.send(ClientToOrchestratorEvent::ClientReady).unwrap();
 
 			let peer_id = &peer_id;
 
@@ -156,15 +156,19 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 						pkt @ ProtocolPacket::BlockChainToClient { .. } |
 						pkt @ ProtocolPacket::Halt => {
 							panic!("Received invalid packet {pkt:?} inside to_orchestrator for {peer_id:?}")
-						}
+						},
 						ProtocolPacket::ClientToBlockChain { event } => {
 							let trace_id = event.trace_id;
-							let result = TestResult {
-								error_message: event.error,
-								success: event.success,
-							};
-							self.to_orchestrator.send(ClientToOrchestratorEvent::TestResult { peer_id: peer_id.clone(), trace_id, result }).unwrap();
-						}
+							let result =
+								TestResult { error_message: event.error, success: event.success };
+							self.to_orchestrator
+								.send(ClientToOrchestratorEvent::TestResult {
+									peer_id: peer_id.clone(),
+									trace_id,
+									result,
+								})
+								.unwrap();
+						},
 					}
 				}
 			};
@@ -205,6 +209,7 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 	async fn orchestrate(self) -> std::io::Result<()> {
 		let mut test_cases = self.generate_test_cases();
 		let mut client_to_orchestrator_rx = self.orchestrator_rx.lock().await.take().unwrap();
+		let mut round_id = &mut 0;
 		let mut current_round_completed_count = 0;
 
 		while let Some(client_update) = client_to_orchestrator_rx.recv().await {
@@ -212,11 +217,13 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 				o_state @ OrchestratorState::WaitingForInit => match client_update {
 					ClientToOrchestratorEvent::ClientReady => {
 						let clients = self.clients.read().await;
-						// NOTE: the client automatically puts its handle inside this map. We do not have to here
-						if clients.len() == self.config.min_clients {
+						// NOTE: the client automatically puts its handle inside this map. We do not
+						// have to here
+						if clients.len() == self.config.n_clients {
 							// we are ready to begin testing rounds
 							std::mem::drop(clients);
-							self.orchestrator_begin_next_round(&mut test_cases).await;
+							self.orchestrator_begin_next_round(&mut test_cases, &mut round_id)
+								.await;
 						}
 					},
 
@@ -248,9 +255,9 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 					}
 
 					// at the end, check if the round is complete
-					if current_round_completed_count == self.config.min_clients {
+					if current_round_completed_count == self.config.n_clients {
 						current_round_completed_count = 0; // reset to 0 for next round
-						self.orchestrator_begin_next_round(&mut test_cases).await
+						self.orchestrator_begin_next_round(&mut test_cases, round_id).await
 					}
 				},
 				o_state @ OrchestratorState::Complete =>
@@ -280,16 +287,34 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 		test_cases
 	}
 
-	async fn orchestrator_begin_next_round(&self, test_cases: &mut VecDeque<TestCase>) {
+	async fn orchestrator_begin_next_round(
+		&self,
+		test_cases: &mut VecDeque<TestCase>,
+		round_number: &mut u64,
+	) {
 		if let Some(next_case) = test_cases.pop_front() {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
+			// phase 1: send finality notifications to each client
+			let mut write = self.clients.write().await;
+			for (_id, client) in write.iter_mut() {
+				// First, send out a MockBlockChainEvent (happens before each round occurs)
+				let next_finality_notification =
+					create_mocked_finality_blockchain_event(*round_number);
+				client
+					.orchestrator_to_client_subtask
+					.send(OrchestratorToClientEvent::BlockChainEvent(next_finality_notification))
+					.unwrap();
+			}
+
+			std::mem::drop(write);
+			// now, sleep 1s to allow time for the DKG clients to process that event
+			tokio::time::sleep(Duration::from_millis(1000)).await;
+
+			// finally, send out the test case
 			let mut write = self.clients.write().await;
 			for (_id, client) in write.iter_mut() {
 				let trace_id = Uuid::new_v4();
 				client.outstanding_tasks.insert(trace_id, next_case.clone());
-
-				// First, send out a MockBlockChainEvent
-				todo!();
 
 				client
 					.orchestrator_to_client_subtask
@@ -299,6 +324,9 @@ impl<B: crate::BlockTraitForTest> MockBlockchain<B> {
 					})
 					.unwrap();
 			}
+
+			// increment the round number
+			*round_number += 1;
 		} else {
 			log::info!(target: "dkg", "Orchestrator has finished running all tests");
 			self.orchestrator_set_state(OrchestratorState::Complete);
@@ -340,10 +368,25 @@ fn log_invalid_signal(o_state: &OrchestratorState, c_update: &ClientToOrchestrat
 	log::error!(target: "dkg", "Orchestrator state is {o_state:?}, yet, the client's update state is {c_update:?}")
 }
 
-fn create_mocked_finality_blockchain_event<B: BlockTraitForTest>() -> MockBlockChainEvent<B> {
-	let notification = FinalityNotification {
-		hash: Default::default(),
-		header: Default::default(),
+// Two fields are used by the DKG: the block number via header.number(), and the hash via
+// header.hash(). So long as these values remain unique, the DKG should work as expected
+fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockChainEvent<TestBlock> {
+	let header = sp_runtime::generic::Header::<u64, _> {
+		digest: Default::default(),
+		extrinsics_root: Default::default(),
+		number: block_number,
+		parent_hash: Default::default(),
+		state_root: Default::default(),
+	};
+
+	let mut slice = [0u8; 32];
+	slice[..8].copy_from_slice(&block_number.to_be_bytes());
+
+	let hash = sp_runtime::testing::H256::from(slice);
+
+	let notification = FinalityNotification::<TestBlock> {
+		hash,
+		header,
 		tree_route: Arc::new([]),
 		stale_heads: Arc::new([]),
 	};

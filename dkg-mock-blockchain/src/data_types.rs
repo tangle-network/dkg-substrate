@@ -50,7 +50,7 @@ pub enum TestCase {
 }
 
 mod serde_impl {
-	use crate::{AttachedCommandMetadata, FinalityNotification, ImportNotification, TestCase};
+	use crate::{FinalityNotification, ImportNotification, TestCase};
 	use codec::{Decode, Encode};
 	use serde::{Deserialize, Serialize};
 	use sp_consensus::BlockOrigin;
