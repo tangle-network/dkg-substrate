@@ -952,6 +952,17 @@ dependencies = [
 
 [[package]]
 name = "clap"
+version = "2.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
+dependencies = [
+ "bitflags",
+ "textwrap",
+ "unicode-width",
+]
+
+[[package]]
+name = "clap"
 version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e638668a62aced2c9fb72b5135a33b4a500485ccf2a0e402e09aa04ab2fc115"
@@ -1353,7 +1364,7 @@ name = "cumulus-client-cli"
 version = "0.1.0"
 source = "git+https://github.com/paritytech/cumulus?branch=release-v0.9.360#27c57ba6a77a598582d97c1e42fc243ec80bcff9"
 dependencies = [
- "clap",
+ "clap 4.1.2",
  "parity-scale-codec",
  "sc-chain-spec",
  "sc-cli",
@@ -2070,7 +2081,7 @@ dependencies = [
 name = "dkg-collator"
 version = "3.0.0"
 dependencies = [
- "clap",
+ "clap 4.1.2",
  "cumulus-client-cli",
  "cumulus-client-consensus-aura",
  "cumulus-client-consensus-common",
@@ -2202,7 +2213,7 @@ name = "dkg-primitives"
 version = "0.0.1"
 dependencies = [
  "chacha20poly1305",
- "clap",
+ "clap 4.1.2",
  "curv-kzen",
  "dkg-runtime-primitives",
  "hex",
@@ -2313,7 +2324,7 @@ dependencies = [
 name = "dkg-standalone-node"
 version = "3.0.0"
 dependencies = [
- "clap",
+ "clap 4.1.2",
  "dkg-gadget",
  "dkg-primitives",
  "dkg-runtime-primitives",
@@ -2413,7 +2424,11 @@ dependencies = [
 name = "dkg-test-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "dkg-logging",
  "dkg-mock-blockchain",
+ "futures",
+ "log",
+ "structopt",
  "tokio",
  "toml 0.7.2",
 ]
@@ -2963,7 +2978,7 @@ dependencies = [
  "Inflector",
  "array-bytes 4.2.0",
  "chrono",
- "clap",
+ "clap 4.1.2",
  "comfy-table",
  "frame-benchmarking",
  "frame-support",
@@ -6883,7 +6898,7 @@ name = "polkadot-cli"
 version = "0.9.36"
 source = "git+https://github.com/paritytech/polkadot?branch=release-v0.9.36#dc25abc712e42b9b51d87ad1168e453a42b5f0bc"
 dependencies = [
- "clap",
+ "clap 4.1.2",
  "frame-benchmarking-cli",
  "futures",
  "log",
@@ -9081,7 +9096,7 @@ source = "git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.36#cb
 dependencies = [
  "array-bytes 4.2.0",
  "chrono",
- "clap",
+ "clap 4.1.2",
  "fdlimit",
  "futures",
  "libp2p",
@@ -11414,6 +11429,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
+name = "structopt"
+version = "0.3.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
+dependencies = [
+ "clap 2.34.0",
+ "lazy_static",
+ "structopt-derive",
+]
+
+[[package]]
+name = "structopt-derive"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcb5ae327f9cc13b68763b5749770cb9e048a99bd9dfdfa58d0cf05d5f64afe0"
+dependencies = [
+ "heck 0.3.3",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "strum"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11740,6 +11779,15 @@ name = "termtree"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95059e91184749cb66be6dc994f67f182b6d897cb3df74a5bf66b5e709295fd8"
+
+[[package]]
+name = "textwrap"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
+dependencies = [
+ "unicode-width",
+]
 
 [[package]]
 name = "thiserror"
@@ -12244,7 +12292,7 @@ name = "try-runtime-cli"
 version = "0.10.0-dev"
 source = "git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.36#cb4f2491b00af7d7817f3a54209c26b20faa1f51"
 dependencies = [
- "clap",
+ "clap 4.1.2",
  "frame-remote-externalities",
  "hex",
  "log",

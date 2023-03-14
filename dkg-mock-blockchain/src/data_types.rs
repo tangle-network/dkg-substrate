@@ -62,16 +62,9 @@ mod serde_impl {
 	// However, codec is implemented for all their inner field
 	#[derive(Serialize, Deserialize)]
 	enum IntermediateMockBlockChainEvent {
-		FinalityNotification {
-			notification: IntermediateFinalityNotification,
-		},
-		ImportNotification {
-			notification: IntermediateImportNotification,
-		},
-		TestCase {
-			trace_id: Uuid,
-			test: TestCase,
-		},
+		FinalityNotification { notification: IntermediateFinalityNotification },
+		ImportNotification { notification: IntermediateImportNotification },
+		TestCase { trace_id: Uuid, test: TestCase },
 	}
 
 	#[derive(Serialize, Deserialize)]
