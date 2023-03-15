@@ -69,4 +69,7 @@ pub enum Subcommand {
 
 	/// Db meta columns information.
 	ChainInfo(sc_cli::ChainInfoCmd),
+	/// For running a client hooked-up to the MockBlockchain
+	#[clap(subcommand)]
+	TestHarnessClient
 }

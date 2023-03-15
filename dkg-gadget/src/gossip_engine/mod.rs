@@ -41,8 +41,8 @@ use crate::{worker::KeystoreExt, DKGKeystore};
 /// - `gossip` which will send a DKG message to all peers.
 /// - `stream` which will return a stream of DKG messages.
 #[auto_impl(Arc,Box,&)]
-pub trait GossipEngineIface: Send + Sync {
-	type Clock: AtLeast32BitUnsigned + Send + Sync;
+pub trait GossipEngineIface: Send + Sync + 'static {
+	type Clock: AtLeast32BitUnsigned + Send + Sync + 'static;
 	/// Send a DKG message to a specific peer.
 	fn send(
 		&self,

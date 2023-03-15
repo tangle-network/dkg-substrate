@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let stderr_handle = stdout_handle.try_clone()?;
 
 		let mut cmd = tokio::process::Command::new(args.dkg.clone());
-		cmd.arg("--tmp").arg("--{base_name}");
+		cmd.arg("TestHarnessClient").arg("--tmp").arg("--{base_name}");
 		// pipe both stdout and stderr to the tmp file
 		cmd.stdout(stdout_handle);
 		cmd.stderr(stderr_handle);

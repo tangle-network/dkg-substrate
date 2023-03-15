@@ -4,6 +4,7 @@ use crate::{
 	cli::{Cli, Subcommand},
 	service,
 };
+use dkg_gadget::start_dkg_gadget;
 use dkg_standalone_runtime::{Block, EXISTENTIAL_DEPOSIT};
 use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
@@ -197,6 +198,12 @@ pub fn run() -> sc_cli::Result<()> {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run::<Block>(&config))
 		},
+		Some(Subcommand::TestHarnessClient) => {
+			log::info!(target: "dkg", "Running test harness client ...");
+			let rt = tokio::runtime::Runtime::new()?;
+			rt.block_on(start_dkg_gadget(dkg_params));
+			Ok(())
+		}
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
