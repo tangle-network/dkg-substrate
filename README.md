@@ -244,6 +244,16 @@ The following instructions outlines how to run dkg-substrate's base test suite a
 cargo test
 ```
 
+### To run the test orchestrator E2E tests (recommended)
+
+```
+# Build the dkg-standalone node
+cargo build --release -p dkg-standalone-node --features integration-tests
+
+# run the orchestrator, making sure to use the proper config
+cargo run --package dkg-test-orchestrator -- --tmp /path/to/tmp/dir/ --config /path/to/orchestrator_config.toml --dkg /path/to/dkg-standalone-node
+```
+
 ### To run E2E tests
 
 1. Run `cargo build --release -p dkg-standalone-node --features integration-tests`

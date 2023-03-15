@@ -17,7 +17,7 @@ pub struct MockBlockchainConfig {
 	// The number of positive cases to run
 	pub positive_cases: usize,
 	// a set of error cases
-	pub error_cases: Vec<ErrorCase>,
+	pub error_cases: Option<Vec<ErrorCase>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

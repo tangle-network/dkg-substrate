@@ -269,7 +269,6 @@ impl MockBlockchain {
 	}
 
 	fn generate_test_cases(&self) -> VecDeque<TestCase> {
-		let error_cases = &self.config.error_cases;
 		let mut test_cases = VecDeque::new();
 
 		// add all positive cases to the front
@@ -277,11 +276,13 @@ impl MockBlockchain {
 			test_cases.push_back(TestCase::Valid)
 		}
 
+		if let Some(error_cases) = &self.config.error_cases {	
 		// add all error cases to the back
 		for error_case in error_cases {
 			for _ in 0..error_case.count {
 				test_cases.push_back(TestCase::Invalid(error_case.clone()))
 			}
+		}	
 		}
 
 		test_cases
