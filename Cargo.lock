@@ -2170,6 +2170,7 @@ dependencies = [
  "sp-core",
  "sp-keystore",
  "sp-runtime",
+ "sp-state-machine",
  "strum 0.21.0",
  "substrate-prometheus-endpoint",
  "thiserror",

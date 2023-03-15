@@ -123,6 +123,7 @@ sp-application-crypto = { git = "https://github.com/paritytech/substrate", branc
 sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-state-machine = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 
 sc-cli = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
 sc-executor = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36" }
