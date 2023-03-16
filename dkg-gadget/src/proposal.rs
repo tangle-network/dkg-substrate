@@ -16,7 +16,7 @@ use std::sync::Arc;
 use crate::Client;
 use codec::Encode;
 use dkg_logging::{info, trace};
-use dkg_primitives::types::DKGSignedPayload;
+use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
 	RefreshProposalSigned,
@@ -32,7 +32,7 @@ pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
-) -> Option<Proposal<MaxProposalLength>>
+) -> Result<Option<Proposal<MaxProposalLength>>, DKGError>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -61,7 +61,7 @@ where
 				trace!(target: "dkg_gadget", "Stored pub_key signature offchain {:?}", finished_round.signature);
 			}
 
-			return None
+			return Ok(None)
 		},
 		DKGPayloadKey::ProposerSetUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::ProposerSetUpdate, finished_round),
@@ -101,10 +101,9 @@ pub(crate) fn make_signed_proposal<
 >(
 	kind: ProposalKind,
 	finished_round: DKGSignedPayload,
-) -> Option<Proposal<MaxProposalLength>> {
-	Some(Proposal::Signed {
-		kind,
-		data: finished_round.payload.try_into().unwrap(),
-		signature: finished_round.signature.try_into().unwrap(),
-	})
+) -> Result<Option<Proposal<MaxProposalLength>>, DKGError> {
+	let bounded_data = finished_round.payload.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+	let bounded_signature =
+		finished_round.signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+	Ok(Some(Proposal::Signed { kind, data: bounded_data, signature: bounded_signature }))
 }

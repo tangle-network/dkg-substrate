@@ -1275,7 +1275,10 @@ where
 
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
-		gossip_misbehaviour_report(self, misbehaviour_msg);
+		let gossip = gossip_misbehaviour_report(self, misbehaviour_msg);
+		if gossip.is_err() {
+			info!(target: "dkg_gadget::worker", "🕸️  DKG gossip_misbehaviour_report failed!");
+		}
 	}
 
 	pub fn authenticate_msg_origin(
@@ -1662,7 +1665,10 @@ where
 		tokio::spawn(async move {
 			while let Some(misbehaviour) = misbehaviour_rx.recv().await {
 				dkg_logging::debug!(target: "dkg_gadget::worker", "Going to handle Misbehaviour");
-				gossip_misbehaviour_report(&self_, misbehaviour);
+				let gossip = gossip_misbehaviour_report(&self_, misbehaviour);
+				if gossip.is_err() {
+					info!(target: "dkg_gadget::worker", "🕸️  DKG gossip_misbehaviour_report failed!");
+				}
 			}
 		})
 	}

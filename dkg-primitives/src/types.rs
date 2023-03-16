@@ -269,6 +269,8 @@ pub enum DKGError {
 	InvalidSignature,
 	InvalidKeygenPartyId,
 	InvalidSigningSet,
+	InputOutOfBounds,
+	CannotSign,
 }
 
 impl fmt::Display for DKGError {
@@ -293,6 +295,8 @@ impl fmt::Display for DKGError {
 			InvalidSignature => "Invalid Signature!".to_string(),
 			InvalidKeygenPartyId => "Invalid Keygen Party Id!".to_string(),
 			InvalidSigningSet => "Invalid Signing Set!".to_string(),
+			InputOutOfBounds => "Input value out of bounds set by runtime".to_string(),
+			CannotSign => "Could not sign public key".to_string(),
 		};
 		write!(f, "DKGError of type {label}")
 	}
