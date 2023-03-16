@@ -90,8 +90,13 @@ where
 			});
 		debug!(target: "dkg_gadget", "Reports: {:?}", reports);
 		if !reports.reporters.contains(&reporter) {
-			reports.reporters.try_push(reporter).unwrap();
-			reports.signatures.try_push(msg.signature.try_into().unwrap()).unwrap();
+			reports.reporters.try_push(reporter).map_err(|_| DKGError::InputOutOfBounds)?;
+			let bounded_signature =
+				msg.signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+			reports
+				.signatures
+				.try_push(bounded_signature)
+				.map_err(|_| DKGError::InputOutOfBounds)?;
 		}
 
 		// Try to store reports offchain
@@ -105,7 +110,8 @@ where
 pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
-) where
+) -> Result<(), DKGError>
+where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
@@ -174,11 +180,14 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			});
 
 		if reports.reporters.contains(&public) {
-			return
+			return Ok(())
 		}
 
-		reports.reporters.try_push(public).unwrap();
-		reports.signatures.try_push(encoded_signature.try_into().unwrap()).unwrap();
+		reports.reporters.try_push(public).map_err(|_| DKGError::InputOutOfBounds)?;
+		reports
+			.signatures
+			.try_push(encoded_signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?)
+			.map_err(|_| DKGError::InputOutOfBounds)?;
 
 		debug!(target: "dkg_gadget", "Gossiping misbehaviour report and signature");
 
@@ -188,8 +197,10 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			// remove the report from the queue
 			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
 		}
+		Ok(())
 	} else {
 		error!(target: "dkg_gadget", "Could not sign public key");
+		Err(DKGError::CannotSign)
 	}
 }
 
