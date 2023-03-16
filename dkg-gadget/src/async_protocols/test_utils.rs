@@ -78,7 +78,7 @@ impl BlockchainInterface for TestDummyIface {
 		};
 
 		let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
-		lock.entry(batch_key).or_default().push((prop, signature_rec, message));
+		lock.entry(batch_key).or_default().push((prop.unwrap(), signature_rec, message));
 
 		Ok(())
 	}
