@@ -61,10 +61,12 @@ frame-benchmarking = { workspace = true }
 frame-benchmarking-cli = { workspace = true }
 
 # Local dependencies
-dkg-gadget = { workspace = true }
+dkg-gadget = { workspace = true, features = ["testing"] }
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-standalone-runtime = { workspace = true }
+dkg-logging = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
 
 
 [build-dependencies]

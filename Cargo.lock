@@ -2146,6 +2146,7 @@ dependencies = [
  "dkg-runtime-primitives",
  "env_logger 0.9.3",
  "futures",
+ "hash-db",
  "hex",
  "itertools 0.10.5",
  "linked-hash-map",
@@ -2328,6 +2329,7 @@ version = "3.0.0"
 dependencies = [
  "clap 4.1.2",
  "dkg-gadget",
+ "dkg-logging",
  "dkg-primitives",
  "dkg-runtime-primitives",
  "dkg-standalone-runtime",
@@ -2368,6 +2370,7 @@ dependencies = [
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
+ "tokio",
 ]
 
 [[package]]

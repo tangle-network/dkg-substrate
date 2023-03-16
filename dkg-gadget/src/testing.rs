@@ -10,10 +10,11 @@ use dkg_mock_blockchain::transport::ProtocolPacket;
 use sp_api::StateBackend;
 use sp_runtime::traits::BlakeTwo256;
 use parking_lot::RwLock;
-use sp_state_machine::UsageInfo;
-use sp_state_machine::StateMachineStats;
-use sp_state_machine::StorageValue;
-use sp_state_machine::StorageKey;
+use sp_state_machine::*;
+use sp_state_machine::backend::Consolidate;
+use hash_db::HashDB;
+use sp_trie::HashDBT;
+use dkg_runtime_primitives::crypto::AuthorityId;
 
 use crate::{worker::DKGWorker, gossip_engine::GossipEngineIface};
 
@@ -27,12 +28,13 @@ pub struct MockClient<GE> {
 	_pd: PhantomData<GE>
 }
 
+#[derive(Clone)]
 pub struct TestBackend {
 
 }
 
 impl<GE: GossipEngineIface> MockClient<GE> {
-	pub async fn connect<T: ToSocketAddrs>(mock_bc_addr: T, peer_id: Vec<u8>, dkg_worker: DKGWorker<TestBlock, TestBackend, Self, GE>) -> std::io::Result<Self> {
+	pub(crate) async fn connect<T: ToSocketAddrs>(mock_bc_addr: T, peer_id: Vec<u8>, dkg_worker: DKGWorker<TestBlock, TestBackend, TestBackend, GE>) -> std::io::Result<Self> {
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 		let task = async move {
 			let (mut tx, mut rx) = dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
@@ -64,7 +66,7 @@ impl<GE: GossipEngineIface> MockClient<GE> {
 	}
 }
 
-impl<GE: GossipEngineIface> BlockchainEvents<TestBlock> for MockClient<GE> {
+impl BlockchainEvents<TestBlock> for TestBackend {
 	fn finality_notification_stream(&self) -> sc_client_api::FinalityNotifications<TestBlock> {
 		todo!()
 	}
@@ -87,11 +89,8 @@ impl<GE: GossipEngineIface> BlockchainEvents<TestBlock> for MockClient<GE> {
 
 impl sc_client_api::Backend<TestBlock> for TestBackend {
     type BlockImportOperation = DummyStateBackend;
-
     type Blockchain = sc_client_api::in_mem::Blockchain<TestBlock>;
-
-    type State =DummyStateBackend;
-
+    type State = DummyStateBackend;
     type OffchainStorage = InMemOffchainStorage;
 
     fn begin_operation(&self) -> sp_blockchain::Result<Self::BlockImportOperation> {
@@ -167,7 +166,7 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 }
 
 
-impl<GE: GossipEngineIface> HeaderBackend<TestBlock> for MockClient<GE> {
+impl HeaderBackend<TestBlock> for TestBackend {
     fn header(&self, id: sp_api::BlockId<TestBlock>) -> sp_blockchain::Result<Option<<TestBlock as BlockT>::Header>> {
         todo!()
     }
@@ -193,7 +192,7 @@ impl<GE: GossipEngineIface> HeaderBackend<TestBlock> for MockClient<GE> {
 }
 
 
-impl<GE: GossipEngineIface> ProvideRuntimeApi<TestBlock> for MockClient<GE> {
+impl ProvideRuntimeApi<TestBlock> for TestBackend {
 	type Api = DummyApi;
 	fn runtime_api(&self) -> sp_api::ApiRef<Self::Api> {
 		sp_api::ApiRef::from(DummyApi)
@@ -219,11 +218,19 @@ impl AuxStore for TestBackend {
     }
 }
 
-struct DummyApi;
+pub struct DummyApi;
+impl sp_api::Core<TestBlock> for DummyApi {
+
+}
+
+impl dkg_primitives::DKGApi<TestBlock, AuthorityId, sp_api::NumberFor<TestBlock>> for DummyApi {
+
+}
+
 #[derive(Debug)]
-struct DummyStateBackend;
+pub struct DummyStateBackend;
 #[derive(Debug)]
-struct DummyError(String);
+pub struct DummyError(String);
 
 impl std::fmt::Display for DummyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -234,7 +241,7 @@ impl std::fmt::Display for DummyError {
 impl StateBackend<BlakeTwo256> for DummyStateBackend {
     type Error = DummyError;
 
-    type Transaction = ();
+    type Transaction = DummyOverlay;
 
     type TrieBackendStorage = DummyStateBackend;
 
@@ -402,16 +409,119 @@ impl ApiExt<TestBlock> for DummyApi {
 impl AsTrieBackend<BlakeTwo256, Vec<u8>> for DummyStateBackend {
     type TrieBackendStorage = Self;
 
-    fn as_trie_backend(&self) -> &sp_api::TrieBackend<Self::TrieBackendStorage, BlakeTwo256, sp_trie::cache::LocalTrieCache<BlakeTwo256>> {
+    fn as_trie_backend(&self) -> &sp_api::TrieBackend<Self::TrieBackendStorage, BlakeTwo256, Vec<u8>> {
         todo!()
     }
 }
 
-struct DummyOverlay;
-impl sp_trie::HashDBT<BlakeTwo256, Vec<u8>> for DummyOverlay {}
-impl sp_trie::AsHashDB<BlakeTwo256> for DummyOverlay {}
+#[derive(Default)]
+pub struct DummyOverlay;
+impl HashDBT<BlakeTwo256, Vec<u8>> for DummyOverlay {
+	fn get(&self, _: &<BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>)) -> std::option::Option<Vec<u8>> { todo!() }
+	fn contains(&self, _: &<BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>)) -> bool { todo!() }
+	fn insert(&mut self, _: (&[u8], std::option::Option<u8>), _: &[u8]) -> <BlakeTwo256 as sp_core::Hasher>::Out { todo!() }
+	fn emplace(&mut self, _: <BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>), _: Vec<u8>) { todo!() }
+	fn remove(&mut self, _: &<BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>)) { todo!() }
+}
+
+impl hash_db::AsHashDB<BlakeTwo256, Vec<u8>> for DummyOverlay {
+	fn as_hash_db(&self) -> &dyn HashDB<BlakeTwo256, Vec<u8>> { todo!() }
+	fn as_hash_db_mut<'a>(&'a mut self) -> &'a mut (dyn HashDB<BlakeTwo256, Vec<u8>> + 'a) { todo!() }
+}
+
+impl Consolidate for DummyOverlay {
+	fn consolidate(&mut self, _: Self) { todo!() }
+}
 
 impl sp_state_machine::TrieBackendStorage<BlakeTwo256> for DummyStateBackend {
 	type Overlay = DummyOverlay;
 	fn get(&self, _: &<BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>)) -> Result<std::option::Option<Vec<u8>>, std::string::String> { todo!() }
+}
+
+pub struct DummyState;
+
+impl sc_client_api::BlockImportOperation<TestBlock> for DummyStateBackend {
+    type State = Self;
+
+    fn state(&self) -> sp_blockchain::Result<Option<&Self::State>> {
+        todo!()
+    }
+
+    fn set_block_data(
+		&mut self,
+		header: <TestBlock as BlockT>::Header,
+		body: Option<Vec<<TestBlock as BlockT>::Extrinsic>>,
+		indexed_body: Option<Vec<Vec<u8>>>,
+		justifications: Option<sp_runtime::Justifications>,
+		state: sc_client_api::NewBlockState,
+	) -> sp_blockchain::Result<()> {
+        todo!()
+    }
+
+    fn update_cache(&mut self, cache: std::collections::HashMap<sp_blockchain::well_known_cache_keys::Id, Vec<u8>>) {
+        todo!()
+    }
+
+    fn update_db_storage(
+		&mut self,
+		update: sc_client_api::TransactionForSB<Self::State, TestBlock>,
+	) -> sp_blockchain::Result<()> {
+        todo!()
+    }
+
+    fn set_genesis_state(
+		&mut self,
+		storage: sp_runtime::Storage,
+		commit: bool,
+		state_version: sp_api::StateVersion,
+	) -> sp_blockchain::Result<<TestBlock as BlockT>::Hash> {
+        todo!()
+    }
+
+    fn reset_storage(
+		&mut self,
+		storage: sp_runtime::Storage,
+		state_version: sp_api::StateVersion,
+	) -> sp_blockchain::Result<<TestBlock as BlockT>::Hash> {
+        todo!()
+    }
+
+    fn update_storage(
+		&mut self,
+		update: StorageCollection,
+		child_update: ChildStorageCollection,
+	) -> sp_blockchain::Result<()> {
+        todo!()
+    }
+
+    fn insert_aux<I>(&mut self, ops: I) -> sp_blockchain::Result<()>
+	where
+		I: IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)> {
+        todo!()
+    }
+
+    fn mark_finalized(
+		&mut self,
+		hash: <TestBlock as BlockT>::Hash,
+		justification: Option<sp_runtime::Justification>,
+	) -> sp_blockchain::Result<()> {
+        todo!()
+    }
+
+    fn mark_head(&mut self, hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<()> {
+        todo!()
+    }
+
+    fn update_transaction_index(&mut self, index: Vec<IndexOperation>)
+		-> sp_blockchain::Result<()> {
+        todo!()
+    }
+}
+
+impl AsTrieBackend<BlakeTwo256> for DummyStateBackend {
+    type TrieBackendStorage = Self;
+
+    fn as_trie_backend(&self) -> &sp_api::TrieBackend<Self::TrieBackendStorage, BlakeTwo256, sp_trie::cache::LocalTrieCache<BlakeTwo256>> {
+        todo!()
+    }
 }

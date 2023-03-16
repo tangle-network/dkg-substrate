@@ -39,7 +39,8 @@ mod gossip_engine;
 mod db;
 mod metrics;
 mod proposal;
-mod testing;
+#[cfg(feature = "testing")]
+pub mod testing;
 mod utils;
 mod worker;
 

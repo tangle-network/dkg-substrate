@@ -10,6 +10,7 @@ edition = { workspace = true }
 [features]
 outbound-inspection = []
 tracing = []
+testing = ["sp-state-machine", "sp-trie", "hash-db"]
 
 [dependencies]
 futures = { workspace = true }
@@ -33,8 +34,8 @@ sp-core = { workspace = true }
 sp-keystore = { workspace = true }
 sp-runtime = { workspace = true }
 # TODO: only use sp-state-machine if testing feature enabled
-sp-state-machine = { workspace = true }
-sp-trie = { workspace = true }
+sp-state-machine = { workspace = true, optional = true }
+sp-trie = { workspace = true, optional = true }
 
 sc-client-api = { workspace = true }
 sc-keystore = { workspace = true }
@@ -52,7 +53,7 @@ atomic = { workspace = true }
 async-trait = { workspace = true }
 auto_impl = { workspace = true }
 itertools = { workspace = true }
-
+hash-db = { workspace = true, optional = true }
 webb-proposals = { workspace = true }
 
 # Local dependencies
