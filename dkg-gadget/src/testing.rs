@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use sc_client_api::{BlockchainEvents, HeaderBackend, AuxStore};
+use sp_api::AsTrieBackend;
 use sp_api::{BlockT, ProvideRuntimeApi, ApiExt, offchain::storage::InMemOffchainStorage};
 use tokio::net::ToSocketAddrs;
 use dkg_mock_blockchain::TestBlock;
@@ -8,9 +9,11 @@ use futures::{StreamExt, SinkExt};
 use dkg_mock_blockchain::transport::ProtocolPacket;
 use sp_api::StateBackend;
 use sp_runtime::traits::BlakeTwo256;
-use sc_client_api::UsageInfo;
-use sp_runtime::offchain::storage::StorageValue;
-use sc_client_api::StorageKey;
+use parking_lot::RwLock;
+use sp_state_machine::UsageInfo;
+use sp_state_machine::StateMachineStats;
+use sp_state_machine::StorageValue;
+use sp_state_machine::StorageKey;
 
 use crate::{worker::DKGWorker, gossip_engine::GossipEngineIface};
 
@@ -32,7 +35,7 @@ impl<GE: GossipEngineIface> MockClient<GE> {
 	pub async fn connect<T: ToSocketAddrs>(mock_bc_addr: T, peer_id: Vec<u8>, dkg_worker: DKGWorker<TestBlock, TestBackend, Self, GE>) -> std::io::Result<Self> {
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 		let task = async move {
-			let (tx, mut rx) = dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
+			let (mut tx, mut rx) = dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
 
 			while let Some(packet) = rx.next().await {
 				match packet {
@@ -41,7 +44,7 @@ impl<GE: GossipEngineIface> MockClient<GE> {
 						tx.send(ProtocolPacket::InitialHandshakeResponse { peer_id: peer_id.clone() }).await.unwrap();
 					}
 					ProtocolPacket::BlockChainToClient { event } => {
-						
+						todo!()
 					}
 					ProtocolPacket::Halt => {
 						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
@@ -56,15 +59,19 @@ impl<GE: GossipEngineIface> MockClient<GE> {
 
 			panic!("The connection to the MockBlockchain died")
 		};
+
+		Ok(MockClient { _pd: Default::default() })
 	}
 }
 
 impl<GE: GossipEngineIface> BlockchainEvents<TestBlock> for MockClient<GE> {
 	fn finality_notification_stream(&self) -> sc_client_api::FinalityNotifications<TestBlock> {
-		TracingUnboundedReceiver
+		todo!()
 	}
 
-	fn import_notification_stream(&self) -> sc_client_api::ImportNotifications<TestBlock> {}
+	fn import_notification_stream(&self) -> sc_client_api::ImportNotifications<TestBlock> {
+		todo!()
+	}
 
 	fn storage_changes_notification_stream(
 		&self,
@@ -73,16 +80,17 @@ impl<GE: GossipEngineIface> BlockchainEvents<TestBlock> for MockClient<GE> {
 			&[(sc_client_api::StorageKey, Option<Vec<sc_client_api::StorageKey>>)],
 		>,
 	) -> sp_blockchain::Result<sc_client_api::StorageEventStream<<TestBlock as BlockT>::Hash>> {
+		todo!()
 	}
 }
 
 
 impl sc_client_api::Backend<TestBlock> for TestBackend {
-    type BlockImportOperation = sc_client_api::in_mem::BlockImportOperation<TestBlock>;
+    type BlockImportOperation = DummyStateBackend;
 
     type Blockchain = sc_client_api::in_mem::Blockchain<TestBlock>;
 
-    type State = DummyStateBackend;
+    type State =DummyStateBackend;
 
     type OffchainStorage = InMemOffchainStorage;
 
@@ -214,13 +222,21 @@ impl AuxStore for TestBackend {
 struct DummyApi;
 #[derive(Debug)]
 struct DummyStateBackend;
+#[derive(Debug)]
+struct DummyError(String);
+
+impl std::fmt::Display for DummyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl StateBackend<BlakeTwo256> for DummyStateBackend {
-    type Error;
+    type Error = DummyError;
 
-    type Transaction;
+    type Transaction = ();
 
-    type TrieBackendStorage;
+    type TrieBackendStorage = DummyStateBackend;
 
     fn storage(&self, key: &[u8]) -> Result<Option<StorageValue>, Self::Error> {
         todo!()
@@ -317,7 +333,7 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
         todo!()
     }
 
-    fn register_overlay_stats(&self, _stats: &crate::stats::StateMachineStats) {
+    fn register_overlay_stats(&self, _stats: &StateMachineStats) {
         todo!()
     }
 
@@ -381,4 +397,21 @@ impl ApiExt<TestBlock> for DummyApi {
 		Self: Sized {
         todo!()
     }
+}
+
+impl AsTrieBackend<BlakeTwo256, Vec<u8>> for DummyStateBackend {
+    type TrieBackendStorage = Self;
+
+    fn as_trie_backend(&self) -> &sp_api::TrieBackend<Self::TrieBackendStorage, BlakeTwo256, sp_trie::cache::LocalTrieCache<BlakeTwo256>> {
+        todo!()
+    }
+}
+
+struct DummyOverlay;
+impl sp_trie::HashDBT<BlakeTwo256, Vec<u8>> for DummyOverlay {}
+impl sp_trie::AsHashDB<BlakeTwo256> for DummyOverlay {}
+
+impl sp_state_machine::TrieBackendStorage<BlakeTwo256> for DummyStateBackend {
+	type Overlay = DummyOverlay;
+	fn get(&self, _: &<BlakeTwo256 as sp_core::Hasher>::Out, _: (&[u8], std::option::Option<u8>)) -> Result<std::option::Option<Vec<u8>>, std::string::String> { todo!() }
 }

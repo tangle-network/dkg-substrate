@@ -34,6 +34,7 @@ sp-keystore = { workspace = true }
 sp-runtime = { workspace = true }
 # TODO: only use sp-state-machine if testing feature enabled
 sp-state-machine = { workspace = true }
+sp-trie = { workspace = true }
 
 sc-client-api = { workspace = true }
 sc-keystore = { workspace = true }
