@@ -71,5 +71,5 @@ pub enum Subcommand {
 	ChainInfo(sc_cli::ChainInfoCmd),
 	/// For running a client hooked-up to the MockBlockchain
 	#[clap(subcommand)]
-	TestHarnessClient
+	TestHarnessClient,
 }

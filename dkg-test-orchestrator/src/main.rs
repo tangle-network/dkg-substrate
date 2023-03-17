@@ -7,9 +7,9 @@
 //! piped to the temporary directory
 
 use dkg_mock_blockchain::*;
+use futures::TryStreamExt;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use futures::TryStreamExt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -70,17 +70,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 		let child = async move {
 			match cmd.spawn()?.wait().await {
-				Ok(exit_code) => {
+				Ok(exit_code) =>
 					if exit_code.code().unwrap_or(-1) != 0 {
-						Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Bad exit code: {exit_code}")))
+						Err(std::io::Error::new(
+							std::io::ErrorKind::Other,
+							format!("Bad exit code: {exit_code}"),
+						))
 					} else {
 						Ok(())
-					}
-				},
+					},
 
-				Err(err) => {
-					Err(err)
-				}
+				Err(err) => Err(err),
 			}
 		};
 
@@ -108,7 +108,6 @@ fn validate_args(args: &Args) -> Result<(), String> {
 	if !config_path.is_file() {
 		return Err(format!("{} is not a valid config path", args.config_path))
 	}
-
 
 	let dkg_path = PathBuf::from(&args.dkg);
 	if !dkg_path.is_file() {

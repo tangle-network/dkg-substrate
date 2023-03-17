@@ -214,10 +214,10 @@ pub fn run() -> sc_cli::Result<()> {
 				prometheus_registry: None,
 				_block: Default::default(),
 			};
-			
+
 			rt.block_on(start_dkg_gadget(dkg_params));
 			Ok(())
-		}
+		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
