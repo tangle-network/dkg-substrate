@@ -553,63 +553,65 @@ mod dummy_api {
 		}
 
 		fn authority_set(&self, _: &BlockId<TestBlock>) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
-			let authorities = DKG::authorities();
+			todo!()
+			/*let authorities = DKG::authorities();
 			let authority_set_id = DKG::authority_set_id();
 	  
 			Ok(dkg_runtime_primitives::AuthoritySet {
 			  authorities,
 			  id: authority_set_id
-			})
+			})*/
 		  }
 	  
 		  fn queued_authority_set(&self, _: &BlockId<TestBlock>) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
-			let queued_authorities = DKG::next_authorities();
+			todo!()
+			/*let queued_authorities = DKG::next_authorities();
 			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
 	  
 			Ok(dkg_runtime_primitives::AuthoritySet {
 			  authorities: queued_authorities,
 			  id: queued_authority_set_id
-			})
+			})*/
 		  }
 	  
 		  fn signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			DKG::signature_threshold()
+			todo!()
 		  }
 	  
 		  fn keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			DKG::keygen_threshold()
+			todo!()
 		  }
 	  
 		  fn next_signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			DKG::next_signature_threshold()
+			todo!()
 		  }
 	  
 		  fn next_keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			DKG::next_keygen_threshold()
+			todo!()
 		  }
 	  
 		  fn should_refresh(&self, _: &BlockId<TestBlock>, block_number: BlockNumber) -> ApiResult<bool> {
-			DKG::should_refresh(block_number)
+			todo!()
 		  }
 	  
 		  fn next_dkg_pub_key(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
-			DKG::next_dkg_public_key()
+			todo!()
 		  }
 	  
 		  fn next_pub_key_sig(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<Vec<u8>>> {
-			DKG::next_public_key_signature()
+			todo!()
 		  }
 	  
 		  fn dkg_pub_key(&self, _: &BlockId<TestBlock>) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
-			DKG::dkg_public_key()
+			todo!()
 		  }
 	  
 		  fn get_best_authorities(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<(u16, AuthorityId)>> {
-			DKG::best_authorities()
+			todo!()
 		  }
 	  
 		  fn get_next_best_authorities(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<(u16, AuthorityId)>> {
-			DKG::next_best_authorities()
+			todo!()
 		  }
 	  
 		  fn get_current_session_progress(&self, _: &BlockId<TestBlock>, _block_number: BlockNumber) -> ApiResult<Option<Permill>> {
@@ -619,19 +621,22 @@ mod dummy_api {
 		  }
 	  
 		  fn get_unsigned_proposals(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<UnsignedProposal>> {
-			DKGProposalHandler::get_unsigned_proposals()
+			todo!()
+			//DKGProposalHandler::get_unsigned_proposals()
 		  }
 	  
 		  fn get_max_extrinsic_delay(&self, _: &BlockId<TestBlock>, block_number: BlockNumber) -> ApiResult<BlockNumber> {
-			Ok(DKG::max_extrinsic_delay(block_number))
+			todo!()
 		  }
 	  
 		  fn get_authority_accounts(&self, _: &BlockId<TestBlock>) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
-			Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
+			todo!()
+			//Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
 		  }
 	  
 		  fn get_reputations(&self, _: &BlockId<TestBlock>, authorities: Vec<AuthorityId>) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
-			Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
+			todo!()
+			//Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
 		  }
 	  
 		  fn get_keygen_jailed(&self, _: &BlockId<TestBlock>, set: Vec<AuthorityId>) -> ApiResult<Vec<AuthorityId>> {
@@ -645,11 +650,11 @@ mod dummy_api {
 		  }
 	  
 		  fn refresh_nonce(&self, _: &BlockId<TestBlock>) -> ApiResult<u32> {
-			DKG::refresh_nonce()
+			todo!()
 		  }
 	  
 		  fn should_execute_new_keygen(&self, _: &BlockId<TestBlock>) -> ApiResult<bool> {
-			  DKG::should_execute_new_keygen()
+			  todo!()
 		  }
 	}
 }

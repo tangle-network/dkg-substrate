@@ -248,10 +248,10 @@ cargo test
 
 ```
 # Build the dkg-standalone node
-cargo build --release -p dkg-standalone-node --features integration-tests
+cargo build --release -p dkg-standalone-node --features=integration-tests,testing
 
 # run the orchestrator, making sure to use the proper config
-cargo run --package dkg-test-orchestrator -- --tmp /path/to/tmp/dir/ --config /path/to/orchestrator_config.toml --dkg /path/to/dkg-standalone-node
+cargo run --package dkg-test-orchestrator --features=testing -- --tmp /path/to/tmp/dir/ --config /path/to/orchestrator_config.toml --dkg /path/to/dkg-standalone-node
 ```
 
 ### To run E2E tests
