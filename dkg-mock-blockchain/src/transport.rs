@@ -16,7 +16,8 @@ pub enum ProtocolPacket<B: crate::BlockTraitForTest> {
 	// After the client receives the initial handshake, the client is expected to
 	// return its peer id to the MockBlockchain
 	InitialHandshakeResponse {
-		peer_id: Vec<u8>,
+		#[serde(serialize_with = "crate::data_types::serialize_peer_id", deserialize_with = "crate::data_types::deserialize_peer_id")]
+		peer_id: crate::server::PeerId,
 	},
 	// After the handshake phase is complete, almost every packet sent back and forth
 	// between the client and server uses this packet type

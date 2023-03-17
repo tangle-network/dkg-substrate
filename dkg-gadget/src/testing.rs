@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use dkg_mock_blockchain::{transport::ProtocolPacket, TestBlock};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{SinkExt, StreamExt};
@@ -14,8 +12,8 @@ use sp_runtime::traits::BlakeTwo256;
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
 use tokio::net::ToSocketAddrs;
-
-use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker};
+use sc_network::PeerId;
+use crate::worker::DKGWorker;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -23,18 +21,16 @@ use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker};
 /// To allow flexibility in the design, each [`MockClient`] will need to connect
 /// to a MockBlockchain service that periodically sends notifications to all connected
 /// clients.
-pub struct MockClient<GE> {
-	_pd: PhantomData<GE>,
-}
+pub struct MockClient {}
 
 #[derive(Clone)]
 pub struct TestBackend {}
 
-impl<GE: GossipEngineIface> MockClient<GE> {
+impl MockClient {
 	pub(crate) async fn connect<T: ToSocketAddrs>(
 		mock_bc_addr: T,
-		peer_id: Vec<u8>,
-		dkg_worker: DKGWorker<TestBlock, TestBackend, TestBackend, GE>,
+		peer_id: PeerId,
+		dkg_worker: DKGWorker<TestBlock, TestBackend, TestBackend, InMemoryGossipEngine>,
 	) -> std::io::Result<Self> {
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 		let task = async move {
@@ -68,7 +64,7 @@ impl<GE: GossipEngineIface> MockClient<GE> {
 			panic!("The connection to the MockBlockchain died")
 		};
 
-		Ok(MockClient { _pd: Default::default() })
+		Ok(MockClient { })
 	}
 }
 
@@ -818,11 +814,16 @@ pub use mock_gossip::InMemoryGossipEngine;
 pub mod mock_gossip {
     use std::collections::HashMap;
 	use crate::gossip_engine::GossipEngineIface;
-    use tokio::sync::mpsc::UnboundedSender;
+    use futures::channel::mpsc::{UnboundedSender, UnboundedReceiver};
 	pub type PeerId = sc_network::PeerId;
-	use crate::DKGError;
+	use dkg_primitives::types::DKGError;
 	use std::sync::Arc;
 	use parking_lot::Mutex;
+	use std::collections::VecDeque;
+	use dkg_runtime_primitives::crypto::AuthorityId;
+	use dkg_primitives::types::SignedDKGMessage;
+	use futures::Stream;
+	use std::pin::Pin;
 
 	pub struct InMemoryGossipEngine {
 		clients: Arc<Mutex<HashMap<PeerId, VecDeque<SignedDKGMessage<AuthorityId>>>>>,
@@ -844,7 +845,7 @@ pub mod mock_gossip {
 
 		// generates a new PeerId internally and adds to the hashmap
 		pub fn clone_for_peer(&self) -> Self {
-			let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+			let (tx, rx) = futures::channel::mpsc::unbounded();
 			let this_peer = PeerId::random();
 			self.clients.lock().insert(this_peer.clone(), Default::default());
 			self.notifier.lock().insert(this_peer.clone(), rx);
@@ -863,7 +864,7 @@ pub mod mock_gossip {
 		}
 	}
 
-	impl GossipEngineIface for MockGossipEngine {
+	impl GossipEngineIface for InMemoryGossipEngine {
 		type Clock = u128;
 		/// Send a DKG message to a specific peer.
 		fn send(
@@ -876,7 +877,7 @@ pub mod mock_gossip {
 			tx.push_back(message);
 
 			// notify the receiver
-			self.notifier_tx.lock().get(&recipient).unwrap().send(()).unwrap();
+			self.notifier_tx.lock().get(&recipient).unwrap().unbounded_send(()).unwrap();
 			Ok(())
 		}
 
@@ -886,7 +887,7 @@ pub mod mock_gossip {
 			let notifiers = self.notifier_tx.lock();
 			let this_peer = self.peer_id();
 
-			for (peer_id, tx) in clients.iter() {
+			for (peer_id, tx) in clients.iter_mut() {
 				if peer_id != this_peer {
 					tx.push_back(message.clone());
 				}
@@ -894,7 +895,7 @@ pub mod mock_gossip {
 			
 			for (peer_id, notifier) in notifiers.iter() {
 				if peer_id != this_peer {
-					notifier.send(()).unwrap();
+					notifier.unbounded_send(()).unwrap();
 				}
 			}
 
@@ -903,7 +904,7 @@ pub mod mock_gossip {
 		/// A stream that sends messages when they are ready to be polled from the message queue.
 		fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
 			let this_peer = self.peer_id();
-			let rx = self.notifier_rx.lock().remove(this_peer).unwrap();
+			let rx = self.notifier.lock().remove(this_peer).unwrap();
 			Box::pin(rx) as _
 		}
 		/// Peek the front of the message queue.
@@ -921,19 +922,19 @@ pub mod mock_gossip {
 		/// it from the queue.
 		fn acknowledge_last_message(&self) {
 			let this_peer = self.peer_id();
-			let clients = self.clients.lock();
-			clients.get(this_peer).unwrap().pop_front();
+			let mut clients = self.clients.lock();
+			clients.get_mut(this_peer).unwrap().pop_front();
 		}
 
 		/// Clears the Message Queue.
 		fn clear_queue(&self) {
 			let this_peer = self.peer_id();
-			let clients = self.clients.lock();
-			clients.get(this_peer).unwrap().clear();
+			let mut clients = self.clients.lock();
+			clients.get_mut(this_peer).unwrap().clear();
 		}
 	}
 
 	fn error<T: std::fmt::Debug>(err: T) -> DKGError {
-		DKGError::Generic { error: format!("{err:?}") }
+		DKGError::GenericError { reason: format!("{err:?}") }
 	}
 }

@@ -16,7 +16,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-type PeerId = sc_network::PeerId;
+pub type PeerId = sc_network::PeerId;
 
 #[derive(Clone)]
 pub struct MockBlockchain {
