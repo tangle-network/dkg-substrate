@@ -61,7 +61,7 @@ frame-benchmarking = { workspace = true }
 frame-benchmarking-cli = { workspace = true }
 
 # Local dependencies
-dkg-gadget = { workspace = true, features = ["testing"] }
+dkg-gadget = { workspace = true }
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-standalone-runtime = { workspace = true }
@@ -78,3 +78,4 @@ runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks"]
 integration-tests = ["dkg-standalone-runtime/integration-tests"]
 manual-seal = ["dkg-standalone-runtime/manual-seal"]
 tracing = ["dkg-gadget/tracing"]
+testing = ["dkg-gadget/testing"]

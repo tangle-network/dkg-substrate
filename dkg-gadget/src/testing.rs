@@ -219,13 +219,6 @@ impl AuxStore for TestBackend {
 }
 
 pub struct DummyApi;
-impl sp_api::Core<TestBlock> for DummyApi {
-
-}
-
-impl dkg_primitives::DKGApi<TestBlock, AuthorityId, sp_api::NumberFor<TestBlock>> for DummyApi {
-
-}
 
 #[derive(Debug)]
 pub struct DummyStateBackend;
@@ -524,4 +517,139 @@ impl AsTrieBackend<BlakeTwo256> for DummyStateBackend {
     fn as_trie_backend(&self) -> &sp_api::TrieBackend<Self::TrieBackendStorage, BlakeTwo256, sp_trie::cache::LocalTrieCache<BlakeTwo256>> {
         todo!()
     }
+}
+
+mod dummy_api {
+	use super::*;
+	use dkg_runtime_primitives::UnsignedProposal;
+	use sp_api::*;
+	use sp_runtime::Permill;
+
+	frame_support::parameter_types! {
+		// How often we trigger a new session.
+		pub const Period: BlockNumber = MINUTES;
+		pub const Offset: BlockNumber = 0;
+	}
+
+	pub type ApiResult<T> = Result<T, sp_api::ApiError>;
+	pub type BlockNumber = sp_api::NumberFor<TestBlock>;
+	pub type AccountId = sp_runtime::AccountId32;
+	pub type Reputation = u128;
+	pub type Moment = u64;
+	pub const MILLISECS_PER_BLOCK: Moment = 6000;
+	pub const SECS_PER_BLOCK: Moment = MILLISECS_PER_BLOCK / 1000;
+	pub const MINUTES: BlockNumber = 60 / (SECS_PER_BLOCK as BlockNumber);
+
+	impl sp_api::Core<TestBlock> for DummyApi {
+		fn __runtime_api_internal_call_api_at(&self, _: &BlockId<TestBlock>, _: ExecutionContext, _: Vec<u8>, _: &dyn Fn(RuntimeVersion) -> &'static str) -> ApiResult<Vec<u8>> {
+			Ok(vec![])
+		}
+	}
+
+	impl dkg_primitives::DKGApi<TestBlock, AuthorityId, sp_api::NumberFor<TestBlock>> for DummyApi {
+		fn __runtime_api_internal_call_api_at(&self, _: &BlockId<TestBlock>, _: ExecutionContext, _: Vec<u8>, _: &dyn Fn(RuntimeVersion) -> &'static str) -> ApiResult<Vec<u8>> {
+			// This function for this dummy implementation does nothing
+			Ok(vec![])
+		}
+
+		fn authority_set(&self, _: &BlockId<TestBlock>) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
+			let authorities = DKG::authorities();
+			let authority_set_id = DKG::authority_set_id();
+	  
+			Ok(dkg_runtime_primitives::AuthoritySet {
+			  authorities,
+			  id: authority_set_id
+			})
+		  }
+	  
+		  fn queued_authority_set(&self, _: &BlockId<TestBlock>) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
+			let queued_authorities = DKG::next_authorities();
+			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
+	  
+			Ok(dkg_runtime_primitives::AuthoritySet {
+			  authorities: queued_authorities,
+			  id: queued_authority_set_id
+			})
+		  }
+	  
+		  fn signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
+			DKG::signature_threshold()
+		  }
+	  
+		  fn keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
+			DKG::keygen_threshold()
+		  }
+	  
+		  fn next_signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
+			DKG::next_signature_threshold()
+		  }
+	  
+		  fn next_keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
+			DKG::next_keygen_threshold()
+		  }
+	  
+		  fn should_refresh(&self, _: &BlockId<TestBlock>, block_number: BlockNumber) -> ApiResult<bool> {
+			DKG::should_refresh(block_number)
+		  }
+	  
+		  fn next_dkg_pub_key(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
+			DKG::next_dkg_public_key()
+		  }
+	  
+		  fn next_pub_key_sig(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<Vec<u8>>> {
+			DKG::next_public_key_signature()
+		  }
+	  
+		  fn dkg_pub_key(&self, _: &BlockId<TestBlock>) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
+			DKG::dkg_public_key()
+		  }
+	  
+		  fn get_best_authorities(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<(u16, AuthorityId)>> {
+			DKG::best_authorities()
+		  }
+	  
+		  fn get_next_best_authorities(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<(u16, AuthorityId)>> {
+			DKG::next_best_authorities()
+		  }
+	  
+		  fn get_current_session_progress(&self, _: &BlockId<TestBlock>, _block_number: BlockNumber) -> ApiResult<Option<Permill>> {
+			  todo!()
+			  //use frame_support::traits::EstimateNextSessionRotation;
+			  //Ok(<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0)
+		  }
+	  
+		  fn get_unsigned_proposals(&self, _: &BlockId<TestBlock>) -> ApiResult<Vec<UnsignedProposal>> {
+			DKGProposalHandler::get_unsigned_proposals()
+		  }
+	  
+		  fn get_max_extrinsic_delay(&self, _: &BlockId<TestBlock>, block_number: BlockNumber) -> ApiResult<BlockNumber> {
+			Ok(DKG::max_extrinsic_delay(block_number))
+		  }
+	  
+		  fn get_authority_accounts(&self, _: &BlockId<TestBlock>) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
+			Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
+		  }
+	  
+		  fn get_reputations(&self, _: &BlockId<TestBlock>, authorities: Vec<AuthorityId>) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
+			Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
+		  }
+	  
+		  fn get_keygen_jailed(&self, _: &BlockId<TestBlock>, set: Vec<AuthorityId>) -> ApiResult<Vec<AuthorityId>> {
+			todo!()
+			//Ok(set.iter().filter(|a| pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().collect())
+		  }
+	  
+		  fn get_signing_jailed(&self, _: &BlockId<TestBlock>, set: Vec<AuthorityId>) -> ApiResult<Vec<AuthorityId>> {
+			todo!()
+			//Ok(set.iter().filter(|a| pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().collect())
+		  }
+	  
+		  fn refresh_nonce(&self, _: &BlockId<TestBlock>) -> ApiResult<u32> {
+			DKG::refresh_nonce()
+		  }
+	  
+		  fn should_execute_new_keygen(&self, _: &BlockId<TestBlock>) -> ApiResult<bool> {
+			  DKG::should_execute_new_keygen()
+		  }
+	}
 }
