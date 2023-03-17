@@ -19,4 +19,5 @@ atomic = { workspace = true }
 bincode2 = { workspace = true }
 sp-runtime = { workspace = true }
 sp-consensus = { workspace = true }
+sc-network = { workspace = true }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }

@@ -16,8 +16,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-// TODO: replace with peer id
-type PeerId = Vec<u8>;
+type PeerId = sc_network::PeerId;
 
 #[derive(Clone)]
 pub struct MockBlockchain {
