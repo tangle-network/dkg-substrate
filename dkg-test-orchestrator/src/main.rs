@@ -22,12 +22,9 @@ struct Args {
 	#[structopt(short = "c", long = "config")]
 	// path to the configuration for the mock blockchain
 	config_path: String,
-	#[structopt(short = "d", long = "dkg")]
-	// absolute path to the DKG executable (release build expected)
-	dkg: String,
 }
 
-const NAMES: &'static [&'static str] = &["alice", "bob", "charlie", "dave", "eve", "ferdie"];
+//const NAMES: &'static [&'static str] = &["alice", "bob", "charlie", "dave", "eve", "ferdie"];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let data = tokio::fs::read_to_string(&args.config_path).await?;
 	let config: MockBlockchainConfig = toml::from_str(&data)?;
 	let n_client = config.n_clients;
+	let bind_addr = config.bind.clone();
 
 	// first, spawn the orchestrator/mock-blockchain
 	let orchestrator_task = MockBlockchain::new(config).await?.execute();
@@ -47,28 +45,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
-	let gossip_engine = dkg_gadget::testing::InMemoryGossipEngine::new();
+	let gossip_engine = &dkg_gadget::testing::InMemoryGossipEngine::new();
 	// setup the clients
-	for idx in 0..n_client {
-		let name_idx = idx % NAMES.len(); // cycle through each of the names
-		let base_name = NAMES[name_idx];
-		let unique_name = format!("{base_name}_{idx}");
+	for _idx in 0..n_client {
+		//let name_idx = idx % NAMES.len(); // cycle through each of the names
+		//let base_name = NAMES[name_idx];
+		//let unique_name = format!("{base_name}_{idx}");
+		
+		let latest_header = Arc::new(RwLock::new(None));
+		// using clone_for_new_peer then clone ensures the peer ID instances are the same
+		let keygen_gossip_engine = gossip_engine.clone_for_new_peer();
+		let signing_gossip_engine = keygen_gossip_engine.clone();
+		let peer_id = keygen_gossip_engine.peer_id().clone();
+		
+		let client = Arc::new(dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id).await?);
+		let backend = client.clone();
+		let key_store: dkg_gadget::keystore::DKGKeystore = None.into();
+		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
+		let metrics = None;
+		let local_keystore = None;
 
 		let child = async move {
-			
-			let latest_header = Arc::new(RwLock::new(None));
-			// using clone_for_new_peer then clone ensures the peer ID instances are the same
-			let keygen_gossip_engine = gossip_engine.clone_for_new_peer();
-			let signing_gossip_engine = keygen_gossip_engine.clone();
-			let peer_id = keygen_gossip_engine.peer_id().clone();
-			
-			let client = Arc::new(dkg_gadget::testing::TestBackend::connect(&config.bind, peer_id).await?);
-			let backend = Arc::new(backend);
-			let key_store: dkg_gadget::keystore::DKGKeystore = None.into();
-			let db_backend = None;
-			let metrics = None;
-			let local_keystore = None;
-
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				latest_header,
 				client,
@@ -83,8 +80,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			};
 
 			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params);
-			worker.run();
-			Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Worker for peer {:?} ended", peer_id)))
+			worker.run().await;
+			Err::<(), _>(std::io::Error::new(std::io::ErrorKind::Other, format!("Worker for peer {:?} ended", peer_id)))
 		};
 
 		children_processes_dkg_clients.push(Box::pin(child));
@@ -105,11 +102,6 @@ fn validate_args(args: &Args) -> Result<(), String> {
 	let config_path = PathBuf::from(&args.config_path);
 	if !config_path.is_file() {
 		return Err(format!("{} is not a valid config path", args.config_path))
-	}
-
-	let dkg_path = PathBuf::from(&args.dkg);
-	if !dkg_path.is_file() {
-		return Err(format!("{} is not a valid DKG standalone binary path", args.dkg))
 	}
 
 	Ok(())

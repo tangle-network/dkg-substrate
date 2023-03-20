@@ -36,7 +36,7 @@ pub mod keystore;
 
 mod gossip_engine;
 // mod meta_async_rounds;
-mod db;
+pub mod db;
 mod metrics;
 mod proposal;
 #[cfg(feature = "testing")]
