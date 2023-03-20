@@ -10,6 +10,8 @@ tokio = { workspace = true, features = ["rt-multi-thread", "fs", "macros", "proc
 toml = { workspace = true, features = ["parse"] }
 dkg-mock-blockchain = { workspace = true }
 dkg-logging = { workspace = true }
+dkg-gadget = { workspace = true, features = ["testing"] }
 structopt = { workspace = true }
 log = { workspace = true }
 futures = { workspace = true }
+parking_lot = { workspace = true }

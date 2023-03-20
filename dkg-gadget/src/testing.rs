@@ -14,6 +14,7 @@ use sp_trie::HashDBT;
 use tokio::net::ToSocketAddrs;
 use sc_network::PeerId;
 use crate::worker::DKGWorker;
+use std::sync::Arc;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -24,15 +25,21 @@ use crate::worker::DKGWorker;
 pub struct MockClient {}
 
 #[derive(Clone)]
-pub struct TestBackend {}
+pub struct TestBackend {
+	inner: Arc<parking_lot::RwLock<TestBackendState>>
+}
 
-impl MockClient {
-	pub(crate) async fn connect<T: ToSocketAddrs>(
+#[derive(Clone)]
+pub struct TestBackendState {}
+
+impl TestBackend {
+	pub async fn connect<T: ToSocketAddrs>(
 		mock_bc_addr: T,
 		peer_id: PeerId,
-		dkg_worker: DKGWorker<TestBlock, TestBackend, TestBackend, InMemoryGossipEngine>,
 	) -> std::io::Result<Self> {
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
+		let this = TestBackend { inner: Arc::new(RwLock::new(TestBackendState {})) };
+		let this_for_orchestrator_rx = this.clone();
 		let task = async move {
 			let (mut tx, mut rx) =
 				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
@@ -52,7 +59,7 @@ impl MockClient {
 					},
 					ProtocolPacket::Halt => {
 						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
-						std::process::exit(0);
+						return;
 					},
 
 					packet => {
@@ -64,7 +71,7 @@ impl MockClient {
 			panic!("The connection to the MockBlockchain died")
 		};
 
-		Ok(MockClient { })
+		Ok(this)
 	}
 }
 
@@ -825,6 +832,7 @@ pub mod mock_gossip {
 	use futures::Stream;
 	use std::pin::Pin;
 
+	#[derive(Clone)]
 	pub struct InMemoryGossipEngine {
 		clients: Arc<Mutex<HashMap<PeerId, VecDeque<SignedDKGMessage<AuthorityId>>>>>,
 		notifier: Arc<Mutex<HashMap<PeerId, UnboundedReceiver<()>>>>,
@@ -833,7 +841,6 @@ pub mod mock_gossip {
 	}
 
 	impl InMemoryGossipEngine {
-		// creates the first version. This should not be used
 		pub fn new() -> Self {
 			Self {
 				clients: Arc::new(Mutex::new(Default::default())),
@@ -844,7 +851,7 @@ pub mod mock_gossip {
 		}
 
 		// generates a new PeerId internally and adds to the hashmap
-		pub fn clone_for_peer(&self) -> Self {
+		pub fn clone_for_new_peer(&self) -> Self {
 			let (tx, rx) = futures::channel::mpsc::unbounded();
 			let this_peer = PeerId::random();
 			self.clients.lock().insert(this_peer.clone(), Default::default());

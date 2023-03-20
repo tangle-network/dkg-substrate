@@ -32,7 +32,7 @@ use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
 mod keyring;
-mod keystore;
+pub mod keystore;
 
 mod gossip_engine;
 // mod meta_async_rounds;
@@ -42,7 +42,7 @@ mod proposal;
 #[cfg(feature = "testing")]
 pub mod testing;
 mod utils;
-mod worker;
+pub mod worker;
 
 pub mod async_protocols;
 pub mod gossip_messages;

@@ -10,7 +10,7 @@ edition = { workspace = true }
 [features]
 outbound-inspection = []
 tracing = []
-testing = ["sp-state-machine", "sp-trie", "hash-db", "dkg-runtime-primitives/testing", "pallet-dkg-metadata", "frame-support"]
+testing = ["sp-state-machine", "sp-trie", "hash-db", "dkg-runtime-primitives/testing", "dkg-runtime-primitives/std", "pallet-dkg-metadata", "frame-support"]
 
 [dependencies]
 futures = { workspace = true }
@@ -38,7 +38,7 @@ sp-runtime = { workspace = true }
 sp-state-machine = { workspace = true, optional = true }
 sp-trie = { workspace = true, optional = true }
 pallet-dkg-metadata = { workspace = true, optional = true }
-frame-support = { workspace = true, optional = true }
+frame-support = { workspace = true, optional = true, features = ["std"] }
 
 sc-client-api = { workspace = true }
 sc-keystore = { workspace = true }

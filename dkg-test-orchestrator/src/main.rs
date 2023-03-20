@@ -10,6 +10,8 @@ use dkg_mock_blockchain::*;
 use futures::TryStreamExt;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -17,10 +19,6 @@ use structopt::StructOpt;
 	about = "Executes both the mock blockchain and client DKGs"
 )]
 struct Args {
-	#[structopt(short = "t", long = "tmp")]
-	// path to the temporary directory for piping stdout/stderr of each spawned DKG client child
-	// process
-	tmp: String,
 	#[structopt(short = "c", long = "config")]
 	// path to the configuration for the mock blockchain
 	config_path: String,
@@ -45,43 +43,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// first, spawn the orchestrator/mock-blockchain
 	let orchestrator_task = MockBlockchain::new(config).await?.execute();
 	let orchestrator_handle = tokio::task::spawn(orchestrator_task);
+	// give time for the orchestrator to bind
+	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
-	// now, spawn the DKG clients
-	let tmp_dir = PathBuf::from(args.tmp.clone());
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
+	let gossip_engine = dkg_gadget::testing::InMemoryGossipEngine::new();
 	// setup the clients
 	for idx in 0..n_client {
 		let name_idx = idx % NAMES.len(); // cycle through each of the names
 		let base_name = NAMES[name_idx];
 		let unique_name = format!("{base_name}_{idx}");
-		// create the output io:
-		let mut tmp_file_stdout = tmp_dir.clone();
-		tmp_file_stdout.push(format!("{unique_name}.stdout.txt"));
-		log::info!("Will pipe stdout/stderr for {unique_name} to {}", tmp_file_stdout.display());
-
-		let stdout_handle = std::fs::File::create(tmp_file_stdout)?;
-		let stderr_handle = stdout_handle.try_clone()?;
-
-		let mut cmd = tokio::process::Command::new(args.dkg.clone());
-		cmd.arg("TestHarnessClient").arg("--tmp").arg("--{base_name}");
-		// pipe both stdout and stderr to the tmp file
-		cmd.stdout(stdout_handle);
-		cmd.stderr(stderr_handle);
 
 		let child = async move {
-			match cmd.spawn()?.wait().await {
-				Ok(exit_code) =>
-					if exit_code.code().unwrap_or(-1) != 0 {
-						Err(std::io::Error::new(
-							std::io::ErrorKind::Other,
-							format!("Bad exit code: {exit_code}"),
-						))
-					} else {
-						Ok(())
-					},
+			
+			let latest_header = Arc::new(RwLock::new(None));
+			// using clone_for_new_peer then clone ensures the peer ID instances are the same
+			let keygen_gossip_engine = gossip_engine.clone_for_new_peer();
+			let signing_gossip_engine = keygen_gossip_engine.clone();
+			let peer_id = keygen_gossip_engine.peer_id().clone();
+			
+			let client = Arc::new(dkg_gadget::testing::TestBackend::connect(&config.bind, peer_id).await?);
+			let backend = Arc::new(backend);
+			let key_store: dkg_gadget::keystore::DKGKeystore = None.into();
+			let db_backend = None;
+			let metrics = None;
+			let local_keystore = None;
 
-				Err(err) => Err(err),
-			}
+			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
+				latest_header,
+				client,
+				backend,
+				key_store,
+				keygen_gossip_engine,
+				signing_gossip_engine,
+				db_backend,
+				metrics,
+				local_keystore,
+				_marker: Default::default()
+			};
+
+			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params);
+			worker.run();
+			Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Worker for peer {:?} ended", peer_id)))
 		};
 
 		children_processes_dkg_clients.push(Box::pin(child));
@@ -99,11 +102,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn validate_args(args: &Args) -> Result<(), String> {
-	let tmp_dir = PathBuf::from(&args.tmp);
-	if !tmp_dir.is_dir() {
-		return Err(format!("{} is not a valid temporary directory", args.tmp))
-	}
-
 	let config_path = PathBuf::from(&args.config_path);
 	if !config_path.is_file() {
 		return Err(format!("{} is not a valid config path", args.config_path))

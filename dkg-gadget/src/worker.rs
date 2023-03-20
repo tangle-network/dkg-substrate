@@ -92,7 +92,7 @@ pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
-pub(crate) struct WorkerParams<B, BE, C, GE>
+pub struct WorkerParams<B, BE, C, GE>
 where
 	B: Block,
 	GE: GossipEngineIface,
@@ -110,7 +110,7 @@ where
 }
 
 /// A DKG worker plays the DKG protocol
-pub(crate) struct DKGWorker<B, BE, C, GE>
+pub struct DKGWorker<B, BE, C, GE>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -212,7 +212,7 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub(crate) fn new(worker_params: WorkerParams<B, BE, C, GE>) -> Self {
+	pub fn new(worker_params: WorkerParams<B, BE, C, GE>) -> Self {
 		let WorkerParams {
 			client,
 			backend,
@@ -1572,7 +1572,7 @@ where
 	}
 
 	// *** Main run loop ***
-	pub(crate) async fn run(mut self) {
+	pub async fn run(mut self) {
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;

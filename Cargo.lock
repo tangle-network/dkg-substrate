@@ -2432,10 +2432,12 @@ dependencies = [
 name = "dkg-test-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "dkg-gadget",
  "dkg-logging",
  "dkg-mock-blockchain",
  "futures",
  "log",
+ "parking_lot 0.12.1",
  "structopt",
  "tokio",
  "toml 0.7.2",
