@@ -28,7 +28,7 @@ COPY rust-toolchain.toml .
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 # Build application
-RUN cargo build --release -p dkg-standalone-node
+RUN cargo build --release -p dkg-standalone-node -Z sparse-registry
 
 # This is the 2nd stage: a very small image where we copy the DKG binary."
 
