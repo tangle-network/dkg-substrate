@@ -4,6 +4,7 @@ use futures::{SinkExt, StreamExt};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sc_client_api::{AuxStore, BlockchainEvents, HeaderBackend};
+use sc_network::PeerId;
 use sp_api::{
 	offchain::storage::InMemOffchainStorage, ApiExt, AsTrieBackend, BlockT, ProvideRuntimeApi,
 	StateBackend,
@@ -11,10 +12,10 @@ use sp_api::{
 use sp_runtime::traits::BlakeTwo256;
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
-use tokio::net::ToSocketAddrs;
-use sc_network::PeerId;
-use crate::worker::DKGWorker;
 use std::sync::Arc;
+use tokio::net::ToSocketAddrs;
+use dkg_mock_blockchain::{ImportNotification, FinalityNotification, MockBlockChainEvent};
+use sc_utils::mpsc::*;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -26,24 +27,36 @@ pub struct MockClient {}
 
 #[derive(Clone)]
 pub struct TestBackend {
-	inner: Arc<parking_lot::RwLock<TestBackendState>>
+	inner: TestBackendState,
 }
 
 #[derive(Clone)]
-pub struct TestBackendState {}
+pub struct TestBackendState {
+	finality_stream: Arc<MultiSubscribableStream<FinalityNotification<TestBlock>>>,
+	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
+	api: DummyApi
+}
 
 impl TestBackend {
 	pub async fn connect<T: ToSocketAddrs>(
 		mock_bc_addr: T,
 		peer_id: PeerId,
+		api: DummyApi
 	) -> std::io::Result<Self> {
+		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
-		let this = TestBackend { inner: Arc::new(RwLock::new(TestBackendState {})) };
+
+		let this = TestBackend { inner: TestBackendState {
+			finality_stream: Arc::new(MultiSubscribableStream::new()),
+			import_stream: Arc::new(MultiSubscribableStream::new()),
+			api
+		}};
+
 		let this_for_orchestrator_rx = this.clone();
 		let task = async move {
+			dkg_logging::info!(target: "dkg", "Complete: orchestrator<=>DKG communications for peer {peer_id:?}");
 			let (mut tx, mut rx) =
 				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
-
 			while let Some(packet) = rx.next().await {
 				match packet {
 					ProtocolPacket::InitialHandshake => {
@@ -55,11 +68,21 @@ impl TestBackend {
 						.unwrap();
 					},
 					ProtocolPacket::BlockChainToClient { event } => {
-						todo!()
+						match event {
+							MockBlockChainEvent::FinalityNotification { notification } => {
+								this_for_orchestrator_rx.inner.finality_stream.send(notification);
+							},
+							MockBlockChainEvent::ImportNotification { notification } => {
+								this_for_orchestrator_rx.inner.import_stream.send(notification);
+							}
+							MockBlockChainEvent::TestCase { trace_id, test } => {
+								todo!()
+							}
+						}
 					},
 					ProtocolPacket::Halt => {
 						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
-						return;
+						return
 					},
 
 					packet => {
@@ -71,17 +94,48 @@ impl TestBackend {
 			panic!("The connection to the MockBlockchain died")
 		};
 
+		tokio::task::spawn(task);
+
 		Ok(this)
+	}
+}
+
+// each stream may be called multiple times. As such, we need to keep track of each subscriber
+// and broadcast as necessary
+struct MultiSubscribableStream<T> {
+	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>
+}
+
+impl<T: Clone> MultiSubscribableStream<T> {
+	pub fn new() -> Self {
+		Self { inner: parking_lot::RwLock::new(vec![]) }
+	}
+
+	pub fn subscribe(&self) -> TracingUnboundedReceiver<T> {
+		let (tx, rx) = tracing_unbounded("__inner_label");
+		let mut lock = self.inner.write();
+		lock.push(tx);
+		rx
+	}
+
+	pub fn send(&self, t: T) {
+		let lock = self.inner.read();
+		assert!(!lock.is_empty());
+		for tx in lock.iter() {
+			if let Err(err) = tx.unbounded_send(t.clone()) {
+				dkg_logging::error!(target: "dkg", "Error while sending through MultiSubscribableStream: {err:?}")
+			}
+		}
 	}
 }
 
 impl BlockchainEvents<TestBlock> for TestBackend {
 	fn finality_notification_stream(&self) -> sc_client_api::FinalityNotifications<TestBlock> {
-		todo!()
+		self.inner.finality_stream.subscribe()
 	}
 
 	fn import_notification_stream(&self) -> sc_client_api::ImportNotifications<TestBlock> {
-		todo!()
+		self.inner.import_stream.subscribe()
 	}
 
 	fn storage_changes_notification_stream(
@@ -213,7 +267,7 @@ impl HeaderBackend<TestBlock> for TestBackend {
 impl ProvideRuntimeApi<TestBlock> for TestBackend {
 	type Api = DummyApi;
 	fn runtime_api(&self) -> sp_api::ApiRef<Self::Api> {
-		sp_api::ApiRef::from(DummyApi)
+		sp_api::ApiRef::from(self.inner.api.clone())
 	}
 }
 impl AuxStore for TestBackend {
@@ -236,7 +290,18 @@ impl AuxStore for TestBackend {
 	}
 }
 
-pub struct DummyApi;
+#[derive(Clone)]
+pub struct DummyApi {
+	inner: Arc<RwLock<DummyApiInner>>
+}
+
+impl DummyApi {
+	pub fn new() -> Self {
+		Self { inner: Arc::new(RwLock::new(DummyApiInner {})) }
+	}
+}
+
+pub struct DummyApiInner {}
 
 #[derive(Debug)]
 pub struct DummyStateBackend;
@@ -819,25 +884,22 @@ mod dummy_api {
 pub use mock_gossip::InMemoryGossipEngine;
 
 pub mod mock_gossip {
-    use std::collections::HashMap;
 	use crate::gossip_engine::GossipEngineIface;
-    use futures::channel::mpsc::{UnboundedSender, UnboundedReceiver};
+	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+	use std::collections::HashMap;
 	pub type PeerId = sc_network::PeerId;
-	use dkg_primitives::types::DKGError;
-	use std::sync::Arc;
-	use parking_lot::Mutex;
-	use std::collections::VecDeque;
+	use dkg_primitives::types::{DKGError, SignedDKGMessage};
 	use dkg_runtime_primitives::crypto::AuthorityId;
-	use dkg_primitives::types::SignedDKGMessage;
 	use futures::Stream;
-	use std::pin::Pin;
+	use parking_lot::Mutex;
+	use std::{collections::VecDeque, pin::Pin, sync::Arc};
 
 	#[derive(Clone)]
 	pub struct InMemoryGossipEngine {
 		clients: Arc<Mutex<HashMap<PeerId, VecDeque<SignedDKGMessage<AuthorityId>>>>>,
 		notifier: Arc<Mutex<HashMap<PeerId, UnboundedReceiver<()>>>>,
 		notifier_tx: Arc<Mutex<HashMap<PeerId, UnboundedSender<()>>>>,
-		this_peer: Option<PeerId>
+		this_peer: Option<PeerId>,
 	}
 
 	impl InMemoryGossipEngine {
@@ -846,7 +908,7 @@ pub mod mock_gossip {
 				clients: Arc::new(Mutex::new(Default::default())),
 				notifier: Arc::new(Mutex::new(Default::default())),
 				notifier_tx: Arc::new(Mutex::new(Default::default())),
-				this_peer: None
+				this_peer: None,
 			}
 		}
 
@@ -862,7 +924,7 @@ pub mod mock_gossip {
 				clients: self.clients.clone(),
 				notifier: self.notifier.clone(),
 				notifier_tx: self.notifier_tx.clone(),
-				this_peer: Some(this_peer)
+				this_peer: Some(this_peer),
 			}
 		}
 
@@ -880,7 +942,9 @@ pub mod mock_gossip {
 			message: SignedDKGMessage<AuthorityId>,
 		) -> Result<(), DKGError> {
 			let mut clients = self.clients.lock();
-			let tx = clients.get_mut(&recipient).ok_or_else(||error(format!("Peer {recipient:?} does not exist")))?;
+			let tx = clients
+				.get_mut(&recipient)
+				.ok_or_else(|| error(format!("Peer {recipient:?} does not exist")))?;
 			tx.push_back(message);
 
 			// notify the receiver
@@ -899,7 +963,7 @@ pub mod mock_gossip {
 					tx.push_back(message.clone());
 				}
 			}
-			
+
 			for (peer_id, notifier) in notifiers.iter() {
 				if peer_id != this_peer {
 					notifier.unbounded_send(()).unwrap();
@@ -925,8 +989,8 @@ pub mod mock_gossip {
 			let clients = self.clients.lock();
 			clients.get(this_peer).unwrap().front().cloned()
 		}
-		/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes
-		/// it from the queue.
+		/// Acknowledge the last message (the front of the queue) and mark it as processed, then
+		/// removes it from the queue.
 		fn acknowledge_last_message(&self) {
 			let this_peer = self.peer_id();
 			let mut clients = self.clients.lock();

@@ -8,10 +8,9 @@
 
 use dkg_mock_blockchain::*;
 use futures::TryStreamExt;
-use std::path::PathBuf;
-use structopt::StructOpt;
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::{path::PathBuf, sync::Arc};
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -45,20 +44,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
+	// the gossip engine and the dummy api share a state between ALL clients in this process
 	let gossip_engine = &dkg_gadget::testing::InMemoryGossipEngine::new();
+	let api = &dkg_gadget::testing::DummyApi::new();
 	// setup the clients
 	for _idx in 0..n_client {
 		//let name_idx = idx % NAMES.len(); // cycle through each of the names
 		//let base_name = NAMES[name_idx];
 		//let unique_name = format!("{base_name}_{idx}");
-		
+
 		let latest_header = Arc::new(RwLock::new(None));
 		// using clone_for_new_peer then clone ensures the peer ID instances are the same
 		let keygen_gossip_engine = gossip_engine.clone_for_new_peer();
 		let signing_gossip_engine = keygen_gossip_engine.clone();
 		let peer_id = keygen_gossip_engine.peer_id().clone();
-		
-		let client = Arc::new(dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id).await?);
+
+		let client =
+			Arc::new(dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?);
 		let backend = client.clone();
 		let key_store: dkg_gadget::keystore::DKGKeystore = None.into();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
@@ -76,12 +78,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				db_backend,
 				metrics,
 				local_keystore,
-				_marker: Default::default()
+				_marker: Default::default(),
 			};
 
 			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params);
 			worker.run().await;
-			Err::<(), _>(std::io::Error::new(std::io::ErrorKind::Other, format!("Worker for peer {:?} ended", peer_id)))
+			Err::<(), _>(std::io::Error::new(
+				std::io::ErrorKind::Other,
+				format!("Worker for peer {:?} ended", peer_id),
+			))
 		};
 
 		children_processes_dkg_clients.push(Box::pin(child));

@@ -2164,6 +2164,7 @@ dependencies = [
  "sc-network-common",
  "sc-network-test",
  "sc-peerset",
+ "sc-utils",
  "serde",
  "serde_json",
  "sp-api",

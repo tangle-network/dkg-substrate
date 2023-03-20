@@ -190,13 +190,11 @@ impl sp_runtime::traits::Extrinsic for XtDummy {
 	type SignaturePayload = ();
 }
 
-
 pub fn serialize_peer_id<S>(x: &crate::server::PeerId, s: S) -> Result<S::Ok, S::Error>
 where
-    S: serde::Serializer,
+	S: serde::Serializer,
 {
 	Vec::<u8>::serialize(&x.to_bytes(), s)
-
 }
 
 pub fn deserialize_peer_id<'de, D>(data: D) -> Result<crate::server::PeerId, D::Error>
