@@ -2,9 +2,12 @@ name: Container Image Release
 
 on:
   push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+    # Publish `master` as Container `edge` image.
+    branches:
+      - master
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
