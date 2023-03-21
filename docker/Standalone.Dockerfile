@@ -25,10 +25,10 @@ RUN apt-get update && apt-get install -y git cmake clang curl libssl-dev llvm li
 COPY --from=planner /dkg/recipe.json recipe.json
 COPY rust-toolchain.toml .
 # Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json -Z sparse-registry
+RUN cargo chef cook -Z sparse-registry --release --recipe-path recipe.json 
 COPY . .
 # Build application
-RUN cargo +nightly build --release -p dkg-standalone-node -Z sparse-registry
+RUN cargo +nightly build -Z sparse-registry --release -p dkg-standalone-node
 
 # This is the 2nd stage: a very small image where we copy the DKG binary."
 
