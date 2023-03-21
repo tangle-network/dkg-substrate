@@ -25,6 +25,8 @@ use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
 	KEY_TYPE,
 };
+use sc_keystore::LocalKeystore;
+use std::sync::Arc;
 
 use crate::error;
 
@@ -33,6 +35,13 @@ use crate::error;
 /// common cryptographic functionality.
 #[derive(Clone)]
 pub struct DKGKeystore(Option<SyncCryptoStorePtr>);
+
+impl Default for DKGKeystore {
+	fn default() -> Self {
+		let keystore = Arc::new(LocalKeystore::in_memory()) as Arc<dyn SyncCryptoStore>;
+		DKGKeystore::from(Some(keystore))
+	}
+}
 
 impl DKGKeystore {
 	/// Check if the keystore contains a private key for one of the public keys

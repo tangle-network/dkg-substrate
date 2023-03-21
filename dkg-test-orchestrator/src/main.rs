@@ -23,8 +23,6 @@ struct Args {
 	config_path: String,
 }
 
-//const NAMES: &'static [&'static str] = &["alice", "bob", "charlie", "dave", "eve", "ferdie"];
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	dkg_logging::setup_log();
@@ -34,7 +32,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let data = tokio::fs::read_to_string(&args.config_path).await?;
 	let config: MockBlockchainConfig = toml::from_str(&data)?;
-	let n_client = config.n_clients;
+	let n_clients = config.n_clients;
+	let t = config.threshold;
+	// set the number of blocks to the sum of the number of positive and negative cases
+	// in other words, the each block gets 1 test case
+	let n_blocks = config.positive_cases + config.error_cases.as_ref().map(|r| r.len()).unwrap_or(0);
 	let bind_addr = config.bind.clone();
 
 	// first, spawn the orchestrator/mock-blockchain
@@ -45,24 +47,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
 	// the gossip engine and the dummy api share a state between ALL clients in this process
+	// we will use the SAME gossip engine for both keygen and signing
 	let gossip_engine = &dkg_gadget::testing::InMemoryGossipEngine::new();
-	let api = &dkg_gadget::testing::DummyApi::new();
-	// setup the clients
-	for _idx in 0..n_client {
-		//let name_idx = idx % NAMES.len(); // cycle through each of the names
-		//let base_name = NAMES[name_idx];
-		//let unique_name = format!("{base_name}_{idx}");
+	let keygen_t = t as u16;
+	let keygen_n = n_clients as u16;
+	let signing_t = t as u16;
+	let signing_n = n_clients as u16;
 
+	let api = &dkg_gadget::testing::DummyApi::new(keygen_t, keygen_n, signing_t, signing_n);
+
+	// setup the clients
+	for idx in 0..n_clients {
 		let latest_header = Arc::new(RwLock::new(None));
 		// using clone_for_new_peer then clone ensures the peer ID instances are the same
-		let keygen_gossip_engine = gossip_engine.clone_for_new_peer();
+		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
+		let keygen_gossip_engine = gossip_engine.clone_for_new_peer(api, n_blocks as _, keyring);
 		let signing_gossip_engine = keygen_gossip_engine.clone();
-		let peer_id = keygen_gossip_engine.peer_id().clone();
+		let (peer_id, public_key) = keygen_gossip_engine.peer_id();
+		let peer_id = *peer_id;
 
 		let client =
 			Arc::new(dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?);
 		let backend = client.clone();
-		let key_store: dkg_gadget::keystore::DKGKeystore = None.into();
+		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
 		let metrics = None;
 		let local_keystore = None;

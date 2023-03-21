@@ -31,7 +31,7 @@ use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
-mod keyring;
+pub mod keyring;
 pub mod keystore;
 
 mod gossip_engine;

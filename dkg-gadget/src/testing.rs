@@ -16,6 +16,8 @@ use std::sync::Arc;
 use tokio::net::ToSocketAddrs;
 use dkg_mock_blockchain::{ImportNotification, FinalityNotification, MockBlockChainEvent};
 use sc_utils::mpsc::*;
+use std::collections::HashMap;
+use sp_api::BlockId;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -295,13 +297,41 @@ pub struct DummyApi {
 	inner: Arc<RwLock<DummyApiInner>>
 }
 
-impl DummyApi {
-	pub fn new() -> Self {
-		Self { inner: Arc::new(RwLock::new(DummyApiInner {})) }
-	}
+pub struct DummyApiInner {
+	keygen_t: u16,
+	keygen_n: u16,
+	signing_t: u16,
+	signing_n: u16,
+	// maps: block number => list of authorities for that block
+	authority_sets: HashMap<u64, Vec<AuthorityId>>,
+	dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>
 }
 
-pub struct DummyApiInner {}
+impl DummyApi {
+	pub fn new(
+		keygen_t: u16,
+		keygen_n: u16,
+		signing_t: u16,
+		signing_n: u16
+	) -> Self {
+		Self { inner: Arc::new(RwLock::new(DummyApiInner {
+			keygen_t,
+			keygen_n,
+			signing_t,
+			signing_n,
+			authority_sets: HashMap::new(),
+			dkg_keys: HashMap::new()
+		})) }
+	}
+
+	fn block_id_to_u64(&self, input: &BlockId<TestBlock>) -> u64 {
+		match input {
+			BlockId::Number(number) => *number,
+			// TODO: Make sure this produces the correct value!
+			BlockId::Hash(hash) => hash.to_low_u64_be()
+		}
+	}
+}
 
 #[derive(Debug)]
 pub struct DummyStateBackend;
@@ -722,30 +752,25 @@ mod dummy_api {
 
 		fn authority_set(
 			&self,
-			_: &BlockId<TestBlock>,
+			block: &BlockId<TestBlock>,
 		) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
-			todo!()
-			/*let authorities = DKG::authorities();
-			let authority_set_id = DKG::authority_set_id();
+			let number = self.block_id_to_u64(block);
+			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
+			let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
+			let authority_set_id = number;
 
 			Ok(dkg_runtime_primitives::AuthoritySet {
 			  authorities,
 			  id: authority_set_id
-			})*/
+			})
 		}
 
 		fn queued_authority_set(
 			&self,
-			_: &BlockId<TestBlock>,
+			id: &BlockId<TestBlock>,
 		) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
-			todo!()
-			/*let queued_authorities = DKG::next_authorities();
-			let queued_authority_set_id = DKG::authority_set_id() + 1u64;
-
-			Ok(dkg_runtime_primitives::AuthoritySet {
-			  authorities: queued_authorities,
-			  id: queued_authority_set_id
-			})*/
+			let next_id = BlockId::Number(self.block_id_to_u64(id) + 1);
+			self.authority_set(&next_id)
 		}
 
 		fn signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
@@ -785,23 +810,33 @@ mod dummy_api {
 
 		fn dkg_pub_key(
 			&self,
-			_: &BlockId<TestBlock>,
+			block: &BlockId<TestBlock>,
 		) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
-			todo!()
+			let number = self.block_id_to_u64(block);
+			if number == 0 {
+				return Ok((number, vec![]))
+			}
+			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
+			let pub_key = self.inner.read().dkg_keys.get(&number).unwrap().clone();
+			let authority_set_id = number;
+			Ok((authority_set_id, pub_key))
 		}
 
 		fn get_best_authorities(
 			&self,
-			_: &BlockId<TestBlock>,
+			id: &BlockId<TestBlock>,
 		) -> ApiResult<Vec<(u16, AuthorityId)>> {
-			todo!()
+			let read = self.inner.read();
+			let id = self.block_id_to_u64(id);
+			Ok(read.authority_sets.get(&id).unwrap().iter().enumerate().map(|(idx, auth)| (idx as u16, auth.clone())).collect())
 		}
 
 		fn get_next_best_authorities(
 			&self,
-			_: &BlockId<TestBlock>,
+			id: &BlockId<TestBlock>,
 		) -> ApiResult<Vec<(u16, AuthorityId)>> {
-			todo!()
+			let next_id = BlockId::Number(self.block_id_to_u64(id) + 1);
+			self.get_best_authorities(&next_id)
 		}
 
 		fn get_current_session_progress(
@@ -900,6 +935,9 @@ pub mod mock_gossip {
 		notifier: Arc<Mutex<HashMap<PeerId, UnboundedReceiver<()>>>>,
 		notifier_tx: Arc<Mutex<HashMap<PeerId, UnboundedSender<()>>>>,
 		this_peer: Option<PeerId>,
+		this_peer_public_key: Option<AuthorityId>,
+		// Maps Peer IDs to public keys
+		mapping: Arc<Mutex<HashMap<PeerId, AuthorityId>>>
 	}
 
 	impl InMemoryGossipEngine {
@@ -909,27 +947,43 @@ pub mod mock_gossip {
 				notifier: Arc::new(Mutex::new(Default::default())),
 				notifier_tx: Arc::new(Mutex::new(Default::default())),
 				this_peer: None,
+				this_peer_public_key: None,
+				mapping: Arc::new(Mutex::new(Default::default()))
 			}
 		}
 
 		// generates a new PeerId internally and adds to the hashmap
-		pub fn clone_for_new_peer(&self) -> Self {
+		pub fn clone_for_new_peer(&self, dummy_api: &super::DummyApi, n_blocks: u64, keyring: crate::keyring::Keyring) -> Self {
 			let (tx, rx) = futures::channel::mpsc::unbounded();
+			let public_key = keyring.public();
 			let this_peer = PeerId::random();
+			self.mapping.lock().insert(this_peer.clone(), public_key.clone());
 			self.clients.lock().insert(this_peer.clone(), Default::default());
 			self.notifier.lock().insert(this_peer.clone(), rx);
 			self.notifier_tx.lock().insert(this_peer.clone(), tx);
+
+			// by default, add this peer to the best authorities
+			// TODO: make the configurable
+			let mut lock = dummy_api.inner.write();
+			// add +1 to allow calls for queued_authorities at block=n_blocks to not fail
+			for x in 0..n_blocks+1 {
+				lock.authority_sets.entry(x).or_default().push(public_key.clone());
+			}
+
 
 			Self {
 				clients: self.clients.clone(),
 				notifier: self.notifier.clone(),
 				notifier_tx: self.notifier_tx.clone(),
 				this_peer: Some(this_peer),
+				this_peer_public_key: Some(public_key),
+				mapping: self.mapping.clone()
 			}
 		}
 
-		pub fn peer_id(&self) -> &PeerId {
-			self.this_peer.as_ref().unwrap()
+		pub fn peer_id(&self) -> (&PeerId, &AuthorityId) {
+			(self.this_peer.as_ref().unwrap(),
+		self.this_peer_public_key.as_ref().unwrap())
 		}
 	}
 
@@ -956,7 +1010,7 @@ pub mod mock_gossip {
 		fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
 			let mut clients = self.clients.lock();
 			let notifiers = self.notifier_tx.lock();
-			let this_peer = self.peer_id();
+			let (this_peer, _) = self.peer_id();
 
 			for (peer_id, tx) in clients.iter_mut() {
 				if peer_id != this_peer {
@@ -974,7 +1028,7 @@ pub mod mock_gossip {
 		}
 		/// A stream that sends messages when they are ready to be polled from the message queue.
 		fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
-			let this_peer = self.peer_id();
+			let (this_peer, _) = self.peer_id();
 			let rx = self.notifier.lock().remove(this_peer).unwrap();
 			Box::pin(rx) as _
 		}
@@ -985,21 +1039,21 @@ pub mod mock_gossip {
 		///
 		/// Returns `None` if there are no messages in the queue.
 		fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
-			let this_peer = self.peer_id();
+			let (this_peer, _) = self.peer_id();
 			let clients = self.clients.lock();
 			clients.get(this_peer).unwrap().front().cloned()
 		}
 		/// Acknowledge the last message (the front of the queue) and mark it as processed, then
 		/// removes it from the queue.
 		fn acknowledge_last_message(&self) {
-			let this_peer = self.peer_id();
+			let (this_peer, _) = self.peer_id();
 			let mut clients = self.clients.lock();
 			clients.get_mut(this_peer).unwrap().pop_front();
 		}
 
 		/// Clears the Message Queue.
 		fn clear_queue(&self) {
-			let this_peer = self.peer_id();
+			let (this_peer, _) = self.peer_id();
 			let mut clients = self.clients.lock();
 			clients.get_mut(this_peer).unwrap().clear();
 		}
