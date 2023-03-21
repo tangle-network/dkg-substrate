@@ -1,8 +1,10 @@
 name: Container Image Release
 
 on:
+  push:
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
@@ -10,7 +12,6 @@ env:
 jobs:
   push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     permissions:
       packages: write
       contents: read
