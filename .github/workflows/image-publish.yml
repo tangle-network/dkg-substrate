@@ -1,13 +1,6 @@
 name: Container Image Release
 
 on:
-  push:
-    # Publish `master` as Container `edge` image.
-    branches:
-      - master
-    # Publish `v1.2.3` tags as releases.
-    tags:
-      - v*
   pull_request:
     branches: [ master ]
 
