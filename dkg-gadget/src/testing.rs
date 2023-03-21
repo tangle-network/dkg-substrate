@@ -1,23 +1,23 @@
-use dkg_mock_blockchain::{transport::ProtocolPacket, TestBlock};
+use dkg_mock_blockchain::{
+	transport::ProtocolPacket, FinalityNotification, ImportNotification, MockBlockChainEvent,
+	TestBlock,
+};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{SinkExt, StreamExt};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sc_client_api::{AuxStore, BlockchainEvents, HeaderBackend};
 use sc_network::PeerId;
+use sc_utils::mpsc::*;
 use sp_api::{
-	offchain::storage::InMemOffchainStorage, ApiExt, AsTrieBackend, BlockT, ProvideRuntimeApi,
-	StateBackend,
+	offchain::storage::InMemOffchainStorage, ApiExt, AsTrieBackend, BlockId, BlockT,
+	ProvideRuntimeApi, StateBackend,
 };
 use sp_runtime::traits::BlakeTwo256;
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::net::ToSocketAddrs;
-use dkg_mock_blockchain::{ImportNotification, FinalityNotification, MockBlockChainEvent};
-use sc_utils::mpsc::*;
-use std::collections::HashMap;
-use sp_api::BlockId;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -36,23 +36,25 @@ pub struct TestBackend {
 pub struct TestBackendState {
 	finality_stream: Arc<MultiSubscribableStream<FinalityNotification<TestBlock>>>,
 	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
-	api: DummyApi
+	api: DummyApi,
 }
 
 impl TestBackend {
 	pub async fn connect<T: ToSocketAddrs>(
 		mock_bc_addr: T,
 		peer_id: PeerId,
-		api: DummyApi
+		api: DummyApi,
 	) -> std::io::Result<Self> {
 		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 
-		let this = TestBackend { inner: TestBackendState {
-			finality_stream: Arc::new(MultiSubscribableStream::new()),
-			import_stream: Arc::new(MultiSubscribableStream::new()),
-			api
-		}};
+		let this = TestBackend {
+			inner: TestBackendState {
+				finality_stream: Arc::new(MultiSubscribableStream::new()),
+				import_stream: Arc::new(MultiSubscribableStream::new()),
+				api,
+			},
+		};
 
 		let this_for_orchestrator_rx = this.clone();
 		let task = async move {
@@ -69,18 +71,16 @@ impl TestBackend {
 						.await
 						.unwrap();
 					},
-					ProtocolPacket::BlockChainToClient { event } => {
-						match event {
-							MockBlockChainEvent::FinalityNotification { notification } => {
-								this_for_orchestrator_rx.inner.finality_stream.send(notification);
-							},
-							MockBlockChainEvent::ImportNotification { notification } => {
-								this_for_orchestrator_rx.inner.import_stream.send(notification);
-							}
-							MockBlockChainEvent::TestCase { trace_id, test } => {
-								todo!()
-							}
-						}
+					ProtocolPacket::BlockChainToClient { event } => match event {
+						MockBlockChainEvent::FinalityNotification { notification } => {
+							this_for_orchestrator_rx.inner.finality_stream.send(notification);
+						},
+						MockBlockChainEvent::ImportNotification { notification } => {
+							this_for_orchestrator_rx.inner.import_stream.send(notification);
+						},
+						MockBlockChainEvent::TestCase { trace_id, test } => {
+							todo!()
+						},
 					},
 					ProtocolPacket::Halt => {
 						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
@@ -105,7 +105,7 @@ impl TestBackend {
 // each stream may be called multiple times. As such, we need to keep track of each subscriber
 // and broadcast as necessary
 struct MultiSubscribableStream<T> {
-	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>
+	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>,
 }
 
 impl<T: Clone> MultiSubscribableStream<T> {
@@ -294,7 +294,7 @@ impl AuxStore for TestBackend {
 
 #[derive(Clone)]
 pub struct DummyApi {
-	inner: Arc<RwLock<DummyApiInner>>
+	inner: Arc<RwLock<DummyApiInner>>,
 }
 
 pub struct DummyApiInner {
@@ -304,31 +304,28 @@ pub struct DummyApiInner {
 	signing_n: u16,
 	// maps: block number => list of authorities for that block
 	authority_sets: HashMap<u64, Vec<AuthorityId>>,
-	dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>
+	dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
 }
 
 impl DummyApi {
-	pub fn new(
-		keygen_t: u16,
-		keygen_n: u16,
-		signing_t: u16,
-		signing_n: u16
-	) -> Self {
-		Self { inner: Arc::new(RwLock::new(DummyApiInner {
-			keygen_t,
-			keygen_n,
-			signing_t,
-			signing_n,
-			authority_sets: HashMap::new(),
-			dkg_keys: HashMap::new()
-		})) }
+	pub fn new(keygen_t: u16, keygen_n: u16, signing_t: u16, signing_n: u16) -> Self {
+		Self {
+			inner: Arc::new(RwLock::new(DummyApiInner {
+				keygen_t,
+				keygen_n,
+				signing_t,
+				signing_n,
+				authority_sets: HashMap::new(),
+				dkg_keys: HashMap::new(),
+			})),
+		}
 	}
 
 	fn block_id_to_u64(&self, input: &BlockId<TestBlock>) -> u64 {
 		match input {
 			BlockId::Number(number) => *number,
 			// TODO: Make sure this produces the correct value!
-			BlockId::Hash(hash) => hash.to_low_u64_be()
+			BlockId::Hash(hash) => hash.to_low_u64_be(),
 		}
 	}
 }
@@ -759,10 +756,7 @@ mod dummy_api {
 			let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
 			let authority_set_id = number;
 
-			Ok(dkg_runtime_primitives::AuthoritySet {
-			  authorities,
-			  id: authority_set_id
-			})
+			Ok(dkg_runtime_primitives::AuthoritySet { authorities, id: authority_set_id })
 		}
 
 		fn queued_authority_set(
@@ -828,7 +822,14 @@ mod dummy_api {
 		) -> ApiResult<Vec<(u16, AuthorityId)>> {
 			let read = self.inner.read();
 			let id = self.block_id_to_u64(id);
-			Ok(read.authority_sets.get(&id).unwrap().iter().enumerate().map(|(idx, auth)| (idx as u16, auth.clone())).collect())
+			Ok(read
+				.authority_sets
+				.get(&id)
+				.unwrap()
+				.iter()
+				.enumerate()
+				.map(|(idx, auth)| (idx as u16, auth.clone()))
+				.collect())
 		}
 
 		fn get_next_best_authorities(
@@ -937,7 +938,7 @@ pub mod mock_gossip {
 		this_peer: Option<PeerId>,
 		this_peer_public_key: Option<AuthorityId>,
 		// Maps Peer IDs to public keys
-		mapping: Arc<Mutex<HashMap<PeerId, AuthorityId>>>
+		mapping: Arc<Mutex<HashMap<PeerId, AuthorityId>>>,
 	}
 
 	impl InMemoryGossipEngine {
@@ -948,12 +949,17 @@ pub mod mock_gossip {
 				notifier_tx: Arc::new(Mutex::new(Default::default())),
 				this_peer: None,
 				this_peer_public_key: None,
-				mapping: Arc::new(Mutex::new(Default::default()))
+				mapping: Arc::new(Mutex::new(Default::default())),
 			}
 		}
 
 		// generates a new PeerId internally and adds to the hashmap
-		pub fn clone_for_new_peer(&self, dummy_api: &super::DummyApi, n_blocks: u64, keyring: crate::keyring::Keyring) -> Self {
+		pub fn clone_for_new_peer(
+			&self,
+			dummy_api: &super::DummyApi,
+			n_blocks: u64,
+			keyring: crate::keyring::Keyring,
+		) -> Self {
 			let (tx, rx) = futures::channel::mpsc::unbounded();
 			let public_key = keyring.public();
 			let this_peer = PeerId::random();
@@ -966,10 +972,9 @@ pub mod mock_gossip {
 			// TODO: make the configurable
 			let mut lock = dummy_api.inner.write();
 			// add +1 to allow calls for queued_authorities at block=n_blocks to not fail
-			for x in 0..n_blocks+1 {
+			for x in 0..n_blocks + 1 {
 				lock.authority_sets.entry(x).or_default().push(public_key.clone());
 			}
-
 
 			Self {
 				clients: self.clients.clone(),
@@ -977,13 +982,12 @@ pub mod mock_gossip {
 				notifier_tx: self.notifier_tx.clone(),
 				this_peer: Some(this_peer),
 				this_peer_public_key: Some(public_key),
-				mapping: self.mapping.clone()
+				mapping: self.mapping.clone(),
 			}
 		}
 
 		pub fn peer_id(&self) -> (&PeerId, &AuthorityId) {
-			(self.this_peer.as_ref().unwrap(),
-		self.this_peer_public_key.as_ref().unwrap())
+			(self.this_peer.as_ref().unwrap(), self.this_peer_public_key.as_ref().unwrap())
 		}
 	}
 

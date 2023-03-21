@@ -36,7 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let t = config.threshold;
 	// set the number of blocks to the sum of the number of positive and negative cases
 	// in other words, the each block gets 1 test case
-	let n_blocks = config.positive_cases + config.error_cases.as_ref().map(|r| r.len()).unwrap_or(0);
+	let n_blocks =
+		config.positive_cases + config.error_cases.as_ref().map(|r| r.len()).unwrap_or(0);
 	let bind_addr = config.bind.clone();
 
 	// first, spawn the orchestrator/mock-blockchain
@@ -66,8 +67,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let (peer_id, public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
 
-		let client =
-			Arc::new(dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?);
+		let client = Arc::new(
+			dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?,
+		);
 		let backend = client.clone();
 		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
