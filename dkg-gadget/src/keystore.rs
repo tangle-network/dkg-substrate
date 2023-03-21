@@ -175,6 +175,10 @@ impl DKGKeystore {
 
 		sp_core::ecdsa::Pair::verify_prehashed(sig, &msg, public)
 	}
+
+	pub fn as_dyn_crypto_store(&self) -> Option<&dyn SyncCryptoStore> {
+		self.0.as_deref()
+	}
 }
 
 impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {

@@ -37,6 +37,7 @@ pub struct TestBackendState {
 	finality_stream: Arc<MultiSubscribableStream<FinalityNotification<TestBlock>>>,
 	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
 	api: DummyApi,
+	offchain_storage: InMemOffchainStorage,
 }
 
 impl TestBackend {
@@ -53,6 +54,7 @@ impl TestBackend {
 				finality_stream: Arc::new(MultiSubscribableStream::new()),
 				import_stream: Arc::new(MultiSubscribableStream::new()),
 				api,
+				offchain_storage: Default::default(),
 			},
 		};
 
@@ -79,7 +81,7 @@ impl TestBackend {
 							this_for_orchestrator_rx.inner.import_stream.send(notification);
 						},
 						MockBlockChainEvent::TestCase { trace_id, test } => {
-							todo!()
+							dkg_logging::warn!(target: "dkg", "The client is doing nothing right now for testcases")
 						},
 					},
 					ProtocolPacket::Halt => {
@@ -201,7 +203,7 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 	}
 
 	fn offchain_storage(&self) -> Option<Self::OffchainStorage> {
-		todo!()
+		Some(self.inner.offchain_storage.clone())
 	}
 
 	fn state_at(&self, hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<Self::State> {
@@ -768,19 +770,21 @@ mod dummy_api {
 		}
 
 		fn signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			todo!()
+			Ok(self.inner.read().signing_t)
 		}
 
 		fn keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			todo!()
+			Ok(self.inner.read().keygen_t)
 		}
 
-		fn next_signature_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			todo!()
+		fn next_signature_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
+			// TODO: proper implementation
+			self.signature_threshold(block)
 		}
 
-		fn next_keygen_threshold(&self, _: &BlockId<TestBlock>) -> ApiResult<u16> {
-			todo!()
+		fn next_keygen_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
+			// TODO: proper implementation
+			self.next_keygen_threshold(block)
 		}
 
 		fn should_refresh(
@@ -828,7 +832,7 @@ mod dummy_api {
 				.unwrap()
 				.iter()
 				.enumerate()
-				.map(|(idx, auth)| (idx as u16, auth.clone()))
+				.map(|(idx, auth)| (idx as u16 + 1, auth.clone()))
 				.collect())
 		}
 
@@ -845,11 +849,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			_block_number: BlockNumber,
 		) -> ApiResult<Option<Permill>> {
-			todo!()
-			//use frame_support::traits::EstimateNextSessionRotation;
-			//Ok(<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as
-			// EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).
-			// 0)
+			Ok(None)
 		}
 
 		fn get_unsigned_proposals(
@@ -930,11 +930,15 @@ pub mod mock_gossip {
 	use parking_lot::Mutex;
 	use std::{collections::VecDeque, pin::Pin, sync::Arc};
 
+	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+
+	use super::MultiSubscribableStream;
+	use dkg_runtime_primitives::{crypto, KEY_TYPE};
+
 	#[derive(Clone)]
 	pub struct InMemoryGossipEngine {
 		clients: Arc<Mutex<HashMap<PeerId, VecDeque<SignedDKGMessage<AuthorityId>>>>>,
-		notifier: Arc<Mutex<HashMap<PeerId, UnboundedReceiver<()>>>>,
-		notifier_tx: Arc<Mutex<HashMap<PeerId, UnboundedSender<()>>>>,
+		notifier: Arc<Mutex<HashMap<PeerId, MultiSubscribableStream<()>>>>,
 		this_peer: Option<PeerId>,
 		this_peer_public_key: Option<AuthorityId>,
 		// Maps Peer IDs to public keys
@@ -946,7 +950,6 @@ pub mod mock_gossip {
 			Self {
 				clients: Arc::new(Mutex::new(Default::default())),
 				notifier: Arc::new(Mutex::new(Default::default())),
-				notifier_tx: Arc::new(Mutex::new(Default::default())),
 				this_peer: None,
 				this_peer_public_key: None,
 				mapping: Arc::new(Mutex::new(Default::default())),
@@ -959,14 +962,22 @@ pub mod mock_gossip {
 			dummy_api: &super::DummyApi,
 			n_blocks: u64,
 			keyring: crate::keyring::Keyring,
+			key_store: &dyn SyncCryptoStore,
 		) -> Self {
-			let (tx, rx) = futures::channel::mpsc::unbounded();
-			let public_key = keyring.public();
+			let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
+				&*key_store,
+				KEY_TYPE,
+				Some(&keyring.to_seed()),
+			)
+			.ok()
+			.unwrap()
+			.into();
+
 			let this_peer = PeerId::random();
+			let stream = MultiSubscribableStream::new();
 			self.mapping.lock().insert(this_peer.clone(), public_key.clone());
 			self.clients.lock().insert(this_peer.clone(), Default::default());
-			self.notifier.lock().insert(this_peer.clone(), rx);
-			self.notifier_tx.lock().insert(this_peer.clone(), tx);
+			self.notifier.lock().insert(this_peer.clone(), stream);
 
 			// by default, add this peer to the best authorities
 			// TODO: make the configurable
@@ -979,7 +990,6 @@ pub mod mock_gossip {
 			Self {
 				clients: self.clients.clone(),
 				notifier: self.notifier.clone(),
-				notifier_tx: self.notifier_tx.clone(),
 				this_peer: Some(this_peer),
 				this_peer_public_key: Some(public_key),
 				mapping: self.mapping.clone(),
@@ -1006,14 +1016,14 @@ pub mod mock_gossip {
 			tx.push_back(message);
 
 			// notify the receiver
-			self.notifier_tx.lock().get(&recipient).unwrap().unbounded_send(()).unwrap();
+			self.notifier.lock().get(&recipient).unwrap().send(());
 			Ok(())
 		}
 
 		/// Send a DKG message to all peers.
 		fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
 			let mut clients = self.clients.lock();
-			let notifiers = self.notifier_tx.lock();
+			let notifiers = self.notifier.lock();
 			let (this_peer, _) = self.peer_id();
 
 			for (peer_id, tx) in clients.iter_mut() {
@@ -1024,7 +1034,7 @@ pub mod mock_gossip {
 
 			for (peer_id, notifier) in notifiers.iter() {
 				if peer_id != this_peer {
-					notifier.unbounded_send(()).unwrap();
+					notifier.send(());
 				}
 			}
 
@@ -1033,7 +1043,7 @@ pub mod mock_gossip {
 		/// A stream that sends messages when they are ready to be polled from the message queue.
 		fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
 			let (this_peer, _) = self.peer_id();
-			let rx = self.notifier.lock().remove(this_peer).unwrap();
+			let rx = self.notifier.lock().get(this_peer).unwrap().subscribe();
 			Box::pin(rx) as _
 		}
 		/// Peek the front of the message queue.

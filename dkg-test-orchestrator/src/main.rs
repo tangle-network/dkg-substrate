@@ -61,8 +61,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	for idx in 0..n_clients {
 		let latest_header = Arc::new(RwLock::new(None));
 		// using clone_for_new_peer then clone ensures the peer ID instances are the same
+		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
-		let keygen_gossip_engine = gossip_engine.clone_for_new_peer(api, n_blocks as _, keyring);
+		let keygen_gossip_engine = gossip_engine.clone_for_new_peer(
+			api,
+			n_blocks as _,
+			keyring,
+			key_store.as_dyn_crypto_store().unwrap(),
+		);
 		let signing_gossip_engine = keygen_gossip_engine.clone();
 		let (peer_id, public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
@@ -71,7 +77,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?,
 		);
 		let backend = client.clone();
-		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
 		let metrics = None;
 		let local_keystore = None;

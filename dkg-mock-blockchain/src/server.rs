@@ -292,6 +292,7 @@ impl MockBlockchain {
 		test_cases: &mut VecDeque<TestCase>,
 		round_number: &mut u64,
 	) {
+		log::info!(target: "dkg", "[Orchestrator] Running next round!");
 		if let Some(next_case) = test_cases.pop_front() {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
 			// phase 1: send finality notifications to each client
@@ -308,6 +309,8 @@ impl MockBlockchain {
 
 			std::mem::drop(write);
 			// now, sleep 1s to allow time for the DKG clients to process that event
+			// NOTE: the DKG clients may still be in a middle of a round. Thus, the clientside
+			// code must take that into consideration
 			tokio::time::sleep(Duration::from_millis(1000)).await;
 
 			// finally, send out the test case
