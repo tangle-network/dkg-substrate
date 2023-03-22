@@ -60,6 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// setup the clients
 	for idx in 0..n_clients {
 		let latest_header = Arc::new(RwLock::new(None));
+		let latest_test_uuid = Arc::new(RwLock::new(None));
+		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 		// using clone_for_new_peer then clone ensures the peer ID instances are the same
 		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
@@ -74,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let peer_id = *peer_id;
 
 		let client = Arc::new(
-			dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone()).await?,
+			dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone(), rx, latest_test_uuid.clone()).await?,
 		);
 		let backend = client.clone();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
@@ -95,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				_marker: Default::default(),
 			};
 
-			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params);
+			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params, Some(tx), latest_test_uuid);
 			worker.run().await;
 			Err::<(), _>(std::io::Error::new(
 				std::io::ErrorKind::Other,

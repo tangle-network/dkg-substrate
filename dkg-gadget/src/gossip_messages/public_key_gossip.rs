@@ -96,6 +96,7 @@ where
 				session_id,
 				current_block_number,
 			)?;
+			dkg_worker.send_result_to_test_client(Ok(()));
 		} else {
 			dkg_logging::debug!(
 				target: "dkg_gadget",

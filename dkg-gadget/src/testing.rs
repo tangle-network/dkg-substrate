@@ -18,6 +18,10 @@ use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
 use tokio::net::ToSocketAddrs;
+use dkg_mock_blockchain::MockClientResponse;
+use uuid::Uuid;
+use parking_lot::Mutex;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -38,6 +42,7 @@ pub struct TestBackendState {
 	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
 	api: DummyApi,
 	offchain_storage: InMemOffchainStorage,
+	local_test_cases: Arc<Mutex<HashMap::<Uuid, Option<Result<(), String>>>>>
 }
 
 impl TestBackend {
@@ -45,21 +50,39 @@ impl TestBackend {
 		mock_bc_addr: T,
 		peer_id: PeerId,
 		api: DummyApi,
+		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>)>,
+		latest_test_uuid: Arc<RwLock<Option<Uuid>>>
 	) -> std::io::Result<Self> {
 		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 
 		let this = TestBackend {
 			inner: TestBackendState {
-				finality_stream: Arc::new(MultiSubscribableStream::new()),
-				import_stream: Arc::new(MultiSubscribableStream::new()),
+				finality_stream: Arc::new(MultiSubscribableStream::new("finality_stream")),
+				import_stream: Arc::new(MultiSubscribableStream::new("import_stream")),
 				api,
 				offchain_storage: Default::default(),
+				local_test_cases: Arc::new(Mutex::new(Default::default()))
 			},
 		};
 
+		let this_for_dkg_listener = this.clone();
+		let dkg_worker_listener = async move {
+			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
+				let mut lock = this_for_dkg_listener.inner.local_test_cases.lock();
+
+				if lock.contains_key(&trace_id) {
+					dkg_logging::warn!(target: "dkg", "overwrote previous test case value for {trace_id:?}");
+				}
+
+				*lock.get_mut(&trace_id).unwrap() = Some(result);
+			}
+
+			panic!("DKG worker listener ended prematurely")
+		};
+
 		let this_for_orchestrator_rx = this.clone();
-		let task = async move {
+		let orchestrator_coms = async move {
 			dkg_logging::info!(target: "dkg", "Complete: orchestrator<=>DKG communications for peer {peer_id:?}");
 			let (mut tx, mut rx) =
 				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
@@ -73,16 +96,45 @@ impl TestBackend {
 						.await
 						.unwrap();
 					},
-					ProtocolPacket::BlockChainToClient { event } => match event {
-						MockBlockChainEvent::FinalityNotification { notification } => {
-							this_for_orchestrator_rx.inner.finality_stream.send(notification);
-						},
-						MockBlockChainEvent::ImportNotification { notification } => {
-							this_for_orchestrator_rx.inner.import_stream.send(notification);
-						},
-						MockBlockChainEvent::TestCase { trace_id, test } => {
-							dkg_logging::warn!(target: "dkg", "The client is doing nothing right now for testcases")
-						},
+					ProtocolPacket::BlockChainToClient { trace_id, event } => {
+						*latest_test_uuid.write() = Some(trace_id);
+						
+						match event {
+							MockBlockChainEvent::FinalityNotification { notification } => {
+								this_for_orchestrator_rx.inner.local_test_cases.lock().insert(trace_id, None);
+								this_for_orchestrator_rx.inner.finality_stream.send(notification);
+							},
+							MockBlockChainEvent::ImportNotification { notification } => {
+								this_for_orchestrator_rx.inner.local_test_cases.lock().insert(trace_id, None);
+								this_for_orchestrator_rx.inner.import_stream.send(notification);
+							},
+							MockBlockChainEvent::TestCase { trace_id, test } => {
+								dkg_logging::info!(target: "dkg", "server is requesting update for test {trace_id:?}");
+								
+								let resp = {
+									let mut lock = this_for_orchestrator_rx.inner.local_test_cases.lock();
+									if let Some(test_result) = lock.remove(&trace_id) {
+										if let Some(test_result) = test_result {
+											dkg_logging::info!(target: "dkg", "The client {peer_id:?} has finished test {trace_id:?}. Result: {test_result:?}");
+											let success = test_result.is_ok();
+											Some(ProtocolPacket::ClientToBlockChain { event: MockClientResponse { error: test_result.err(), success, trace_id  } })
+										} else {
+											// TODO: check for updates instead of ending here
+											lock.insert(trace_id, None);
+											dkg_logging::warn!(target: "dkg", "The client received a test case request for {trace_id:?}, but, the test did not yet finish");
+											None
+										}
+									} else {
+										dkg_logging::warn!(target: "dkg", "The client received a test case request for {trace_id:?}, but, it did not exist in the local map");
+										None
+									}
+								};
+	
+								if let Some(resp) = resp {
+									tx.send(resp).await.unwrap();
+								}
+							},
+						}
 					},
 					ProtocolPacket::Halt => {
 						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
@@ -98,7 +150,8 @@ impl TestBackend {
 			panic!("The connection to the MockBlockchain died")
 		};
 
-		tokio::task::spawn(task);
+		tokio::task::spawn(dkg_worker_listener);
+		tokio::task::spawn(orchestrator_coms);
 
 		Ok(this)
 	}
@@ -108,28 +161,33 @@ impl TestBackend {
 // and broadcast as necessary
 struct MultiSubscribableStream<T> {
 	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>,
+	tag: &'static str
 }
 
 impl<T: Clone> MultiSubscribableStream<T> {
-	pub fn new() -> Self {
-		Self { inner: parking_lot::RwLock::new(vec![]) }
+	pub fn new(tag: &'static str) -> Self {
+		Self { inner: parking_lot::RwLock::new(vec![]), tag }
 	}
 
 	pub fn subscribe(&self) -> TracingUnboundedReceiver<T> {
-		let (tx, rx) = tracing_unbounded("__inner_label");
+		let (tx, rx) = tracing_unbounded(self.tag);
 		let mut lock = self.inner.write();
 		lock.push(tx);
 		rx
 	}
 
 	pub fn send(&self, t: T) {
-		let lock = self.inner.read();
+		let mut lock = self.inner.write();
 		assert!(!lock.is_empty());
-		for tx in lock.iter() {
+		// receiver will naturally drop when no longer used.
+		lock.retain(|tx| {
 			if let Err(err) = tx.unbounded_send(t.clone()) {
-				dkg_logging::error!(target: "dkg", "Error while sending through MultiSubscribableStream: {err:?}")
+				dkg_logging::warn!(target: "dkg", "Error while sending through MultiSubscribableStream {}: {err:?}", self.tag);
+				false
+			} else {
+				true
 			}
-		}
+		})
 	}
 }
 
@@ -778,13 +836,11 @@ mod dummy_api {
 		}
 
 		fn next_signature_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
-			// TODO: proper implementation
-			self.signature_threshold(block)
+			Ok(self.inner.read().signing_t)
 		}
 
 		fn next_keygen_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
-			// TODO: proper implementation
-			self.next_keygen_threshold(block)
+			Ok(self.inner.read().keygen_t)
 		}
 
 		fn should_refresh(
@@ -792,17 +848,19 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			block_number: BlockNumber,
 		) -> ApiResult<bool> {
-			todo!()
+			Ok(true)
 		}
 
 		fn next_dkg_pub_key(
 			&self,
-			_: &BlockId<TestBlock>,
+			id: &BlockId<TestBlock>,
 		) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
-			todo!()
+			let next_id = BlockId::Number(self.block_id_to_u64(id) + 1);
+			self.dkg_pub_key(&next_id).map(Some)
 		}
 
 		fn next_pub_key_sig(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<Vec<u8>>> {
+			dkg_logging::error!(target: "dkg", "unimplemented get_next_pub_key_sig");
 			todo!()
 		}
 
@@ -811,6 +869,8 @@ mod dummy_api {
 			block: &BlockId<TestBlock>,
 		) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
 			let number = self.block_id_to_u64(block);
+			// hack: set to 0 for now
+			let number = 0;
 			if number == 0 {
 				return Ok((number, vec![]))
 			}
@@ -856,6 +916,7 @@ mod dummy_api {
 			&self,
 			_: &BlockId<TestBlock>,
 		) -> ApiResult<Vec<UnsignedProposal>> {
+			dkg_logging::error!(target: "dkg", "unimplemented get_unsigned_proposals");
 			todo!()
 			//DKGProposalHandler::get_unsigned_proposals()
 		}
@@ -865,6 +926,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			block_number: BlockNumber,
 		) -> ApiResult<BlockNumber> {
+			dkg_logging::error!(target: "dkg", "unimplemented get_max_extrinsic_delay");
 			todo!()
 		}
 
@@ -872,6 +934,7 @@ mod dummy_api {
 			&self,
 			_: &BlockId<TestBlock>,
 		) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
+			dkg_logging::error!(target: "dkg", "unimplemented get_authority_accounts");
 			todo!()
 			//Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
 		}
@@ -881,6 +944,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			authorities: Vec<AuthorityId>,
 		) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
+			dkg_logging::error!(target: "dkg", "unimplemented get_repuations");
 			todo!()
 			//Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
 		}
@@ -890,10 +954,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			set: Vec<AuthorityId>,
 		) -> ApiResult<Vec<AuthorityId>> {
-			todo!()
-			//Ok(set.iter().filter(|a|
-			// pallet_dkg_metadata::JailedKeygenAuthorities::<Runtime>::contains_key(a)).cloned().
-			// collect())
+			Ok(vec![])
 		}
 
 		fn get_signing_jailed(
@@ -901,18 +962,15 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			set: Vec<AuthorityId>,
 		) -> ApiResult<Vec<AuthorityId>> {
-			todo!()
-			//Ok(set.iter().filter(|a|
-			// pallet_dkg_metadata::JailedSigningAuthorities::<Runtime>::contains_key(a)).cloned().
-			// collect())
+			Ok(vec![])
 		}
 
 		fn refresh_nonce(&self, _: &BlockId<TestBlock>) -> ApiResult<u32> {
-			todo!()
+			Ok(0)
 		}
 
 		fn should_execute_new_keygen(&self, _: &BlockId<TestBlock>) -> ApiResult<bool> {
-			todo!()
+			Ok(true)
 		}
 	}
 }
@@ -921,7 +979,6 @@ pub use mock_gossip::InMemoryGossipEngine;
 
 pub mod mock_gossip {
 	use crate::gossip_engine::GossipEngineIface;
-	use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 	use std::collections::HashMap;
 	pub type PeerId = sc_network::PeerId;
 	use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -930,7 +987,7 @@ pub mod mock_gossip {
 	use parking_lot::Mutex;
 	use std::{collections::VecDeque, pin::Pin, sync::Arc};
 
-	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+	use sp_keystore::SyncCryptoStore;
 
 	use super::MultiSubscribableStream;
 	use dkg_runtime_primitives::{crypto, KEY_TYPE};
@@ -974,7 +1031,7 @@ pub mod mock_gossip {
 			.into();
 
 			let this_peer = PeerId::random();
-			let stream = MultiSubscribableStream::new();
+			let stream = MultiSubscribableStream::new("stream notifier");
 			self.mapping.lock().insert(this_peer.clone(), public_key.clone());
 			self.clients.lock().insert(this_peer.clone(), Default::default());
 			self.notifier.lock().insert(this_peer.clone(), stream);

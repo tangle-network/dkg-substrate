@@ -53,7 +53,7 @@ enum OrchestratorToClientEvent {
 	// Tells the client subtask to begin a test
 	BeginTest { trace_id: Uuid, test: TestCase },
 	// Tells the client subtask to send a mock event
-	BlockChainEvent(MockBlockChainEvent<TestBlock>),
+	BlockChainEvent { trace_id: Uuid, event: MockBlockChainEvent<TestBlock> }
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -185,13 +185,14 @@ impl MockBlockchain {
 						},
 						OrchestratorToClientEvent::BeginTest { trace_id, test } => {
 							tx.send(ProtocolPacket::BlockChainToClient {
+								trace_id,
 								event: MockBlockChainEvent::TestCase { trace_id, test },
 							})
 							.await
 							.unwrap();
 						},
-						OrchestratorToClientEvent::BlockChainEvent(event) => {
-							tx.send(ProtocolPacket::BlockChainToClient { event }).await.unwrap();
+						OrchestratorToClientEvent::BlockChainEvent { trace_id, event} => {
+							tx.send(ProtocolPacket::BlockChainToClient { trace_id, event }).await.unwrap();
 						},
 					}
 				}
@@ -293,8 +294,15 @@ impl MockBlockchain {
 		round_number: &mut u64,
 	) {
 		log::info!(target: "dkg", "[Orchestrator] Running next round!");
+
 		if let Some(next_case) = test_cases.pop_front() {
+			for x in (1..=3).rev() {
+				log::info!(target: "dkg", "[Orchestrator] Beginning next test in {x}");
+				tokio::time::sleep(Duration::from_millis(1000)).await
+			}
+
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
+			let trace_id = Uuid::new_v4();
 			// phase 1: send finality notifications to each client
 			let mut write = self.clients.write().await;
 			for (_id, client) in write.iter_mut() {
@@ -303,7 +311,7 @@ impl MockBlockchain {
 					create_mocked_finality_blockchain_event(*round_number);
 				client
 					.orchestrator_to_client_subtask
-					.send(OrchestratorToClientEvent::BlockChainEvent(next_finality_notification))
+					.send(OrchestratorToClientEvent::BlockChainEvent { trace_id, event: next_finality_notification })
 					.unwrap();
 			}
 
@@ -311,12 +319,11 @@ impl MockBlockchain {
 			// now, sleep 1s to allow time for the DKG clients to process that event
 			// NOTE: the DKG clients may still be in a middle of a round. Thus, the clientside
 			// code must take that into consideration
-			tokio::time::sleep(Duration::from_millis(1000)).await;
+			tokio::time::sleep(Duration::from_millis(3000)).await;
 
 			// finally, send out the test case
 			let mut write = self.clients.write().await;
 			for (_id, client) in write.iter_mut() {
-				let trace_id = Uuid::new_v4();
 				client.outstanding_tasks.insert(trace_id, next_case.clone());
 
 				client

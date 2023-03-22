@@ -154,6 +154,8 @@ where
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
+	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, 
+	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -189,6 +191,8 @@ where
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
+			to_test_client: self.to_test_client.clone(),
+			current_test_id: self.current_test_id.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
 			_backend: PhantomData,
 		}
@@ -212,7 +216,7 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub fn new(worker_params: WorkerParams<B, BE, C, GE>) -> Self {
+	pub fn new(worker_params: WorkerParams<B, BE, C, GE>, to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, current_test_id: Arc<RwLock<Option<uuid::Uuid>>>) -> Self {
 		let WorkerParams {
 			client,
 			backend,
@@ -249,6 +253,8 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
+			to_test_client,
+			current_test_id,
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			_backend: PhantomData,
@@ -271,6 +277,15 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
+	#[cfg(feature = "testing")]
+	pub fn send_result_to_test_client(&self, result: Result<(), String>) {
+		let current_test_id = self.current_test_id.read().clone().unwrap();
+		self.to_test_client.as_ref().unwrap().send((current_test_id, result)).unwrap();
+	}
+
+	#[cfg(not(feature = "testing"))]
+	pub fn send_result_to_test_client(&self, _result: Result<(), String>) {}
+
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
 	// it well set the "next_rounds" field

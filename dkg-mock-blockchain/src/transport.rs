@@ -6,6 +6,7 @@ use futures::{
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, pin::Pin, task::Poll};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// A set of all the packets which will be exchanged between the client/server
@@ -25,6 +26,7 @@ pub enum ProtocolPacket<B: crate::BlockTraitForTest> {
 	// After the handshake phase is complete, almost every packet sent back and forth
 	// between the client and server uses this packet type
 	BlockChainToClient {
+		trace_id: Uuid,
 		#[serde(bound = "")]
 		event: crate::MockBlockChainEvent<B>,
 	},

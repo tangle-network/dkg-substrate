@@ -2181,6 +2181,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "uuid",
  "webb-proposals",
 ]
 
