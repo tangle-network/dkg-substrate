@@ -105,7 +105,7 @@ use frame_support::{
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
 	BoundedVec,
 };
-use frame_system::ensure_root;
+
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::{Convert, Saturating},
@@ -553,7 +553,7 @@ impl<T: Config> Pallet<T> {
 	// *** Utility methods ***
 
 	pub fn ensure_admin(o: T::RuntimeOrigin) -> DispatchResultWithPostInfo {
-		T::AdminOrigin::try_origin(o).map(|_| ()).or_else(ensure_root)?;
+		T::AdminOrigin::ensure_origin(o)?;
 		Ok(().into())
 	}
 

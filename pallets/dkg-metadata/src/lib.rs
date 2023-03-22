@@ -294,6 +294,10 @@ pub mod pallet {
 			+ PartialOrd
 			+ Ord;
 
+		/// The origin which may forcibly reset parameters or otherwise alter
+		/// privileged attributes.
+		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
 		type WeightInfo: WeightInfo;
 	}
 
@@ -746,7 +750,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			ensure!(new_threshold > 0, Error::<T>::InvalidThreshold);
 			ensure!(
 				usize::from(new_threshold) < NextAuthorities::<T>::get().len(),
@@ -777,7 +781,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new_threshold: u16,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			ensure!(new_threshold > 1, Error::<T>::InvalidThreshold);
 			ensure!(
 				usize::from(new_threshold) <= NextAuthorities::<T>::get().len(),
@@ -811,7 +815,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new_delay: u8,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 
 			ensure!(new_delay <= 100, Error::<T>::InvalidRefreshDelay);
 
@@ -1268,7 +1272,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			authority: T::DKGId,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			JailedKeygenAuthorities::<T>::remove(authority.clone());
 			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
@@ -1286,7 +1290,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			authority: T::DKGId,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			JailedSigningAuthorities::<T>::remove(authority.clone());
 			Self::deposit_event(Event::AuthorityUnJailed { authority });
 			Ok(().into())
@@ -1300,7 +1304,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		#[pallet::call_index(10)]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			let next_authorities = NextAuthorities::<T>::get();
 			let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
 			let next_pub_key = Self::next_dkg_public_key();
@@ -1346,7 +1350,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		#[pallet::call_index(11)]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::ForceOrigin::ensure_origin(origin)?;
 			// Clear the next public key, if any, to ensure that the keygen protocol runs and we
 			// do not have any invalid state.
 			NextDKGPublicKey::<T>::kill();
