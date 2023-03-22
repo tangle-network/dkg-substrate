@@ -754,7 +754,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
 			let peers_map = self.peers.read();
-			peers_map.keys().into_iter().cloned().collect::<Vec<_>>()
+			peers_map.keys().cloned().collect::<Vec<_>>()
 		};
 		if peer_ids.is_empty() {
 			let message_hash = message.message_hash::<B>();
