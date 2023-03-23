@@ -20,6 +20,7 @@ pub use dkg_runtime_primitives::{
 };
 use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
+use frame_system::EnsureRoot;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -175,6 +176,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
@@ -250,6 +252,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type SessionPeriod = Period;
 	type DecayPercentage = DecayPercentage;
 	type Reputation = u128;

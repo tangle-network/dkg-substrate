@@ -27,6 +27,7 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
+use frame_system::EnsureRoot;
 pub use pallet_balances;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -166,6 +167,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
 	type SessionPeriod = Period;
@@ -264,6 +266,7 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type MaxProposalLength = MaxProposalLength;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }
 

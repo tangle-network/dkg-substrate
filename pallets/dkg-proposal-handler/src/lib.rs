@@ -180,6 +180,11 @@ pub mod pallet {
 			+ PartialOrd
 			+ Ord
 			+ TypeInfo;
+
+		/// The origin which may forcibly reset parameters or otherwise alter
+		/// privileged attributes.
+		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;
 	}
@@ -431,7 +436,7 @@ pub mod pallet {
 			prop: Proposal<T::MaxProposalLength>,
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
-			ensure_root(origin)?;
+			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
 			#[cfg(feature = "std")]
 			println!("force_submit_unsigned_proposal: {:?}, {:?}", prop.data().len(), prop);
 			// We ensure that only certain proposals are valid this way

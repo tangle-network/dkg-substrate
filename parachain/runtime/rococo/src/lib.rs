@@ -507,6 +507,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
 	type Reputation = Reputation;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 	type SessionPeriod = Period;
@@ -533,6 +534,7 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = ();
 	type MaxProposalLength = MaxProposalLength;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 

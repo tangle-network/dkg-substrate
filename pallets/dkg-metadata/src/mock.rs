@@ -20,6 +20,7 @@ use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
 };
+use frame_system::EnsureRoot;
 use sp_core::{
 	sr25519::{self, Signature},
 	H256,
@@ -135,6 +136,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
