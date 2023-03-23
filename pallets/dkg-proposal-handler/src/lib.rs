@@ -180,7 +180,7 @@ pub mod pallet {
 			+ PartialOrd
 			+ Ord
 			+ TypeInfo;
-		
+
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;

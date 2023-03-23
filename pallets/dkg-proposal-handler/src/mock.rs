@@ -18,9 +18,9 @@ pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
 	MaxSignatureLength, DKG_ENGINE_ID,
 };
-use frame_system::EnsureRoot;
 use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
+use frame_system::EnsureRoot;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
