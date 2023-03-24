@@ -105,6 +105,8 @@ pub enum DKGPayloadKey {
 	SetVerifierProposal(ProposalNonce),
 	SetTreasuryHandlerProposal(ProposalNonce),
 	FeeRecipientUpdateProposal(ProposalNonce),
+	WrappedFungibleAssetAddProposal(ProposalNonce),
+	WrappedNFTAddProposal(ProposalNonce),
 }
 
 impl PartialEq for DKGPayloadKey {
@@ -131,6 +133,10 @@ impl PartialEq for DKGPayloadKey {
 				l0 == r0,
 			(Self::FeeRecipientUpdateProposal(l0), Self::FeeRecipientUpdateProposal(r0)) =>
 				l0 == r0,
+			(
+				Self::WrappedFungibleAssetAddProposal(l0),
+				Self::WrappedFungibleAssetAddProposal(r0),
+			) => l0 == r0,
 			_ => false,
 		}
 	}

@@ -90,6 +90,10 @@ where
 			make_signed_proposal(ProposalKind::SetTreasuryHandler, finished_round),
 		DKGPayloadKey::FeeRecipientUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::FeeRecipientUpdate, finished_round),
+		DKGPayloadKey::WrappedFungibleAssetAddProposal(_) =>
+			make_signed_proposal(ProposalKind::WrappedFungibleAssetAdd, finished_round),
+		DKGPayloadKey::WrappedNFTAddProposal(_) =>
+			make_signed_proposal(ProposalKind::WrappedNFTAdd, finished_round),
 	};
 
 	signed_proposal
