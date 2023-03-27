@@ -8,6 +8,8 @@ on:
     # Publish `v1.2.3` tags as releases.
     tags:
       - v*
+  pull_request:
+    branches: [ master ]
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
