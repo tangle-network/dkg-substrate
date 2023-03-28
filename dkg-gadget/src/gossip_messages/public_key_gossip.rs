@@ -88,6 +88,7 @@ where
 			msg.session_id, threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		);
+		
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, C, BE>(
 				&dkg_worker.backend,
@@ -96,13 +97,12 @@ where
 				session_id,
 				current_block_number,
 			)?;
-			dkg_worker.send_result_to_test_client(Ok(()));
 		} else {
 			dkg_logging::debug!(
 				target: "dkg_gadget",
 				"SESSION {:?} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
-				threshold - aggregated_public_keys.keys_and_signatures.len()
+				(threshold + 1) - aggregated_public_keys.keys_and_signatures.len()
 			);
 		}
 	}

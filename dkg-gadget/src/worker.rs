@@ -277,15 +277,6 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
 {
-	#[cfg(feature = "testing")]
-	pub fn send_result_to_test_client(&self, result: Result<(), String>) {
-		let current_test_id = self.current_test_id.read().clone().unwrap();
-		self.to_test_client.as_ref().unwrap().send((current_test_id, result)).unwrap();
-	}
-
-	#[cfg(not(feature = "testing"))]
-	pub fn send_result_to_test_client(&self, _result: Result<(), String>) {}
-
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
 	// it well set the "next_rounds" field
@@ -334,6 +325,8 @@ where
 				vote_results: Arc::new(Default::default()),
 				is_genesis: stage == ProtoStageType::Genesis,
 				metrics: self.metrics.clone(),
+				to_test_client: self.to_test_client.clone(),
+				current_test_id: self.current_test_id.clone(),
 				_pd: Default::default(),
 			}),
 			session_id,

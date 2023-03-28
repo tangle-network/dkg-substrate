@@ -22,6 +22,7 @@ use crate::{
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
 };
+use tokio::sync::mpsc::UnboundedSender;
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
@@ -92,7 +93,20 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
+	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, 
+	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 	pub _pd: PhantomData<BE>,
+}
+
+impl<B: Block, BE, C, GE> DKGProtocolEngine<B, BE, C, GE> {
+	#[cfg(feature = "testing")]
+	fn send_result_to_test_client(&self, result: Result<(), String>) {
+		let current_test_id = self.current_test_id.read().clone().unwrap();
+		self.to_test_client.as_ref().unwrap().send((current_test_id, result)).unwrap();
+	}
+
+	#[cfg(not(feature = "testing"))]
+	fn send_result_to_test_client(&self, _result: Result<(), String>) {}
 }
 
 impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
@@ -203,6 +217,7 @@ where
 			&mut self.aggregated_public_keys.write(),
 			key,
 		);
+		self.send_result_to_test_client(Ok(()));
 		Ok(())
 	}
 

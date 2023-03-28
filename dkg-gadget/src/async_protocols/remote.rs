@@ -65,7 +65,7 @@ pub enum MetaHandlerStatus {
 	Terminated,
 }
 
-impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
+impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(at: C, session_id: SessionId) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -75,9 +75,35 @@ impl<C: AtLeast32BitUnsigned + Copy> AsyncProtocolRemote<C> {
 		let (current_round_blame_tx, current_round_blame) =
 			tokio::sync::watch::channel(CurrentRoundBlame::empty());
 
+		let status = Arc::new(Atomic::new(MetaHandlerStatus::Beginning));
+		let status_history = Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning]));
+
+		let status_debug = status.clone();
+		let status_history_debug = status_history.clone();
+
+		tokio::task::spawn(async move {
+			loop {
+				tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+				let status = status_debug.load(Ordering::Relaxed);
+				if [MetaHandlerStatus::Terminated, MetaHandlerStatus::Complete].contains(&status) {
+					break;
+				}
+				let status_history = status_history_debug.lock();
+				
+				if status == MetaHandlerStatus::Beginning && status_history.len() == 1 {
+					continue;
+				}
+
+				dkg_logging::debug!(
+					"AsyncProtocolRemote status: {:?} ||||| history: {:?}",
+					status,
+					status_history);
+			}
+		});
+
 		Self {
-			status: Arc::new(Atomic::new(MetaHandlerStatus::Beginning)),
-			status_history: Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning])),
+			status,
+			status_history,
 			broadcaster,
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
