@@ -47,7 +47,7 @@ where
 		MaxAuthorities,
 	>,
 {
-	let signed_proposal = match payload_key {
+	match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
 			info!(target: "dkg_gadget", "🕸️  Refresh vote with nonce {:?} received", nonce);
 			let offchain = backend.offchain_storage();
@@ -61,7 +61,7 @@ where
 				trace!(target: "dkg_gadget", "Stored pub_key signature offchain {:?}", finished_round.signature);
 			}
 
-			return Ok(None)
+			Ok(None)
 		},
 		DKGPayloadKey::ProposerSetUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::ProposerSetUpdate, finished_round),
@@ -90,9 +90,7 @@ where
 			make_signed_proposal(ProposalKind::SetTreasuryHandler, finished_round),
 		DKGPayloadKey::FeeRecipientUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::FeeRecipientUpdate, finished_round),
-	};
-
-	signed_proposal
+	}
 }
 
 /// make an unsigned proposal a signed one
