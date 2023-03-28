@@ -27,7 +27,7 @@ ARG BUILD_ARGS
 
 COPY . .
 # Build DKG Parachain Node
-RUN cargo +nightly build --release -p dkg-collator -Z sparse-registry
+RUN cargo +nightly -Z sparse-registry build --release -p dkg-collator
 
 # =============
 
