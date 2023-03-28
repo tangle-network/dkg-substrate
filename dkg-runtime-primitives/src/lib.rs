@@ -195,6 +195,13 @@ pub struct UnsignedProposal {
 }
 
 impl UnsignedProposal {
+	pub fn testing_dummy() -> Self {
+		Self {
+			typed_chain_id: webb_proposals::TypedChainId::None,
+			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),
+			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data: vec![0, 1, 2] },
+		}
+	}
 	pub fn hash(&self) -> Option<[u8; 32]> {
 		if let Proposal::Unsigned { data, .. } = &self.proposal {
 			Some(keccak_256(data))

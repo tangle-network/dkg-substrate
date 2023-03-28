@@ -869,15 +869,17 @@ mod dummy_api {
 			block: &BlockId<TestBlock>,
 		) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
 			let number = self.block_id_to_u64(block);
-			// hack: set to 0 for now
-			let number = 0;
+			// the first key should always be an empty key to drive the DKG forward
 			if number == 0 {
-				return Ok((number, vec![]))
+				Ok((number, vec![]))
+			} else {
+				Ok((number, vec![1, 2, 3, 4, 5]))
 			}
+			/*
 			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
 			let pub_key = self.inner.read().dkg_keys.get(&number).unwrap().clone();
 			let authority_set_id = number;
-			Ok((authority_set_id, pub_key))
+			Ok((authority_set_id, pub_key))*/
 		}
 
 		fn get_best_authorities(
@@ -916,9 +918,8 @@ mod dummy_api {
 			&self,
 			_: &BlockId<TestBlock>,
 		) -> ApiResult<Vec<UnsignedProposal>> {
-			dkg_logging::error!(target: "dkg", "unimplemented get_unsigned_proposals");
-			todo!()
-			//DKGProposalHandler::get_unsigned_proposals()
+			// TODO: parameter to increase number of proposals
+			Ok(vec![UnsignedProposal::testing_dummy()])
 		}
 
 		fn get_max_extrinsic_delay(

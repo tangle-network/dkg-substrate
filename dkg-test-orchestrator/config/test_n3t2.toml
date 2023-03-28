@@ -3,4 +3,4 @@ bind = "127.0.0.1:7777"
 n_clients = 3
 threshold = 2
 min_simulated_latency = "100ms"
-positive_cases = 5
+positive_cases = 10

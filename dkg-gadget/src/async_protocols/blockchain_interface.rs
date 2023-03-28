@@ -211,6 +211,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
+		dkg_logging::debug!(target: "dkg", "Storing local key for session {:?}", session_id);
 		self.db.store_local_key(session_id, key)
 	}
 

@@ -316,6 +316,8 @@ where
 				active_local_key
 			},
 		};
+		debug!(target: "dkg", "Active local key enabled for stage {stage:?}? {}", active_local_key.is_some());
+
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
 				backend: self.backend.clone(),
@@ -862,6 +864,7 @@ where
 		// 3. if no, we start enacting authorities on queued flow and submit any unsigned
 		//          proposals.
 		if self.get_dkg_pub_key(header).1.is_empty() {
+			debug!(target: "dkg_gadget::worker", "🕸️  Maybe enacting genesis authorities since dkg pub key is empty");
 			self.maybe_enact_genesis_authorities(header);
 		} else {
 			self.maybe_enact_next_authorities(header);
@@ -889,7 +892,11 @@ where
 				if let Err(e) = self.handle_genesis_dkg_setup(header, active) {
 					error!(target: "dkg_gadget::worker", "🕸️  Error handling genesis DKG setup: {:?}", e);
 				}
+			} else {
+				debug!(target: "dkg_gadget::worker", "🕸️  NOT IN GENESIS SESSION ID {:?}", active.id);
 			}
+		} else {
+			debug!(target: "dkg_gadget::worker", "🕸️  No active validators");
 		}
 	}
 
@@ -933,8 +940,9 @@ where
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
 
 			debug!(target: "dkg_gadget::worker", "🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some());
+			let test_harness_mode = self.to_test_client.is_some();
 			// Start a keygen if we don't have one OR if there is no queued key on chain.
-			if !has_next_rounds && next_dkg_key.is_none() {
+			if (!has_next_rounds && next_dkg_key.is_none()) || test_harness_mode {
 				debug!(target: "dkg_gadget::worker", "🕸️  NO NEXT ROUND KEYGEN AND NO NEXT DKG | STARTING A NEW QUEUED DKG: {}", next_dkg_key.is_some());
 				// Start the queued DKG setup for the new queued authorities
 				if let Err(e) = self.handle_queued_dkg_setup(header, queued) {
@@ -943,6 +951,8 @@ where
 				// Reset the Retry counter.
 				self.keygen_retry_count.store(0, Ordering::SeqCst);
 				return
+			} else {
+				debug!(target: "dkg_gadget::worker", "🕸️  NEXT ROUND KEYGEN OR NEXT DKG KEY ON CHAIN | NOT STARTING A NEW QUEUED DKG");
 			}
 
 			// Check if we are stalled:

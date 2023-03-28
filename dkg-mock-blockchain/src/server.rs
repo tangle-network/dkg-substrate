@@ -200,7 +200,7 @@ impl MockBlockchain {
 
 			let _ = tokio::join!(fwd_orchestrator, from_orchestrator);
 
-			panic!("Communications between orchestrator and DKG client for peer {peer_id:?} died")
+			log::warn!(target: "dkg", "Communications between orchestrator and DKG client for peer {peer_id:?} died")
 		} else {
 			panic!("Invalid first packet received from peer")
 		}
@@ -361,6 +361,7 @@ impl MockBlockchain {
 
 			// Give time for the client subtasks to send relevent packets to the DKG clients
 			tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+			log::info!(target: "dkg", "Orchestrator is exiting with code {exit_code}");
 			std::process::exit(exit_code);
 		}
 	}

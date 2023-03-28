@@ -75,7 +75,6 @@ impl<B: crate::BlockTraitForTest> Stream for ReadHalf<B> {
 			}
 		} else {
 			// stream died
-			log::warn!(target: "dkg", "ReadHalf stream died");
 			std::task::Poll::Ready(None)
 		}
 	}
