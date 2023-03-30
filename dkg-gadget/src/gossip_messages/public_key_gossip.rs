@@ -88,7 +88,7 @@ where
 			msg.session_id, threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		);
-		
+
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, C, BE>(
 				&dkg_worker.backend,

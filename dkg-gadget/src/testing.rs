@@ -1,11 +1,11 @@
 use dkg_mock_blockchain::{
 	transport::ProtocolPacket, FinalityNotification, ImportNotification, MockBlockChainEvent,
-	TestBlock,
+	MockClientResponse, TestBlock,
 };
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{SinkExt, StreamExt};
 use hash_db::HashDB;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use sc_client_api::{AuxStore, BlockchainEvents, HeaderBackend};
 use sc_network::PeerId;
 use sc_utils::mpsc::*;
@@ -17,11 +17,8 @@ use sp_runtime::traits::BlakeTwo256;
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
-use tokio::net::ToSocketAddrs;
-use dkg_mock_blockchain::MockClientResponse;
+use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
 use uuid::Uuid;
-use parking_lot::Mutex;
-use tokio::sync::mpsc::UnboundedReceiver;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -42,7 +39,7 @@ pub struct TestBackendState {
 	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
 	api: DummyApi,
 	offchain_storage: InMemOffchainStorage,
-	local_test_cases: Arc<Mutex<HashMap::<Uuid, Option<Result<(), String>>>>>
+	local_test_cases: Arc<Mutex<HashMap<Uuid, Option<Result<(), String>>>>>,
 }
 
 impl TestBackend {
@@ -51,12 +48,11 @@ impl TestBackend {
 		peer_id: PeerId,
 		api: DummyApi,
 		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>)>,
-		latest_test_uuid: Arc<RwLock<Option<Uuid>>>
+		latest_test_uuid: Arc<RwLock<Option<Uuid>>>,
 	) -> std::io::Result<Self> {
 		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
-		let (tx, mut rx) =
-				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
+		let (tx, mut rx) = dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
 		let tx0 = Arc::new(tokio::sync::Mutex::new(tx));
 		let tx1 = tx0.clone();
 
@@ -66,16 +62,18 @@ impl TestBackend {
 				import_stream: Arc::new(MultiSubscribableStream::new("import_stream")),
 				api,
 				offchain_storage: Default::default(),
-				local_test_cases: Arc::new(Mutex::new(Default::default()))
+				local_test_cases: Arc::new(Mutex::new(Default::default())),
 			},
 		};
 
-		let this_for_dkg_listener = this.clone();
+		let _this_for_dkg_listener = this.clone();
 		let dkg_worker_listener = async move {
-			while let Some((trace_id, result)) = from_dkg_worker.recv().await {		
+			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
 				dkg_logging::info!(target: "dkg", "The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}");
 				let success = result.is_ok();
-				let packet = ProtocolPacket::ClientToBlockChain { event: MockClientResponse { error: result.err(), success, trace_id  } };
+				let packet = ProtocolPacket::ClientToBlockChain {
+					event: MockClientResponse { error: result.err(), success, trace_id },
+				};
 				tx0.lock().await.send(packet).await.unwrap();
 			}
 
@@ -89,25 +87,35 @@ impl TestBackend {
 				match packet {
 					ProtocolPacket::InitialHandshake => {
 						// pong back the handshake response
-						tx1.lock().await.send(ProtocolPacket::InitialHandshakeResponse {
-							peer_id: peer_id.clone(),
-						})
-						.await
-						.unwrap();
+						tx1.lock()
+							.await
+							.send(ProtocolPacket::InitialHandshakeResponse {
+								peer_id: peer_id.clone(),
+							})
+							.await
+							.unwrap();
 					},
 					ProtocolPacket::BlockChainToClient { trace_id, event } => {
 						*latest_test_uuid.write() = Some(trace_id);
-						
+
 						match event {
 							MockBlockChainEvent::FinalityNotification { notification } => {
-								this_for_orchestrator_rx.inner.local_test_cases.lock().insert(trace_id, None);
+								this_for_orchestrator_rx
+									.inner
+									.local_test_cases
+									.lock()
+									.insert(trace_id, None);
 								this_for_orchestrator_rx.inner.finality_stream.send(notification);
 							},
 							MockBlockChainEvent::ImportNotification { notification } => {
-								this_for_orchestrator_rx.inner.local_test_cases.lock().insert(trace_id, None);
+								this_for_orchestrator_rx
+									.inner
+									.local_test_cases
+									.lock()
+									.insert(trace_id, None);
 								this_for_orchestrator_rx.inner.import_stream.send(notification);
 							},
-							MockBlockChainEvent::TestCase { trace_id, test } => {
+							MockBlockChainEvent::TestCase { trace_id: _, test: _ } => {
 								unimplemented!()
 							},
 						}
@@ -137,7 +145,7 @@ impl TestBackend {
 // and broadcast as necessary
 struct MultiSubscribableStream<T> {
 	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>,
-	tag: &'static str
+	tag: &'static str,
 }
 
 impl<T: Clone> MultiSubscribableStream<T> {
@@ -178,8 +186,8 @@ impl BlockchainEvents<TestBlock> for TestBackend {
 
 	fn storage_changes_notification_stream(
 		&self,
-		filter_keys: Option<&[sc_client_api::StorageKey]>,
-		child_filter_keys: Option<
+		_filter_keys: Option<&[sc_client_api::StorageKey]>,
+		_child_filter_keys: Option<
 			&[(sc_client_api::StorageKey, Option<Vec<sc_client_api::StorageKey>>)],
 		>,
 	) -> sp_blockchain::Result<sc_client_api::StorageEventStream<<TestBlock as BlockT>::Hash>> {
@@ -199,31 +207,31 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 
 	fn begin_state_operation(
 		&self,
-		operation: &mut Self::BlockImportOperation,
-		block: <TestBlock as BlockT>::Hash,
+		_operation: &mut Self::BlockImportOperation,
+		_block: <TestBlock as BlockT>::Hash,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn commit_operation(
 		&self,
-		transaction: Self::BlockImportOperation,
+		_transaction: Self::BlockImportOperation,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn finalize_block(
 		&self,
-		hash: <TestBlock as BlockT>::Hash,
-		justification: Option<sp_runtime::Justification>,
+		_hash: <TestBlock as BlockT>::Hash,
+		_justification: Option<sp_runtime::Justification>,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn append_justification(
 		&self,
-		hash: <TestBlock as BlockT>::Hash,
-		justification: sp_runtime::Justification,
+		_hash: <TestBlock as BlockT>::Hash,
+		_justification: sp_runtime::Justification,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
@@ -240,14 +248,14 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 		Some(self.inner.offchain_storage.clone())
 	}
 
-	fn state_at(&self, hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<Self::State> {
+	fn state_at(&self, _hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<Self::State> {
 		todo!()
 	}
 
 	fn revert(
 		&self,
-		n: sp_api::NumberFor<TestBlock>,
-		revert_finalized: bool,
+		_n: sp_api::NumberFor<TestBlock>,
+		_revert_finalized: bool,
 	) -> sp_blockchain::Result<(
 		sp_api::NumberFor<TestBlock>,
 		std::collections::HashSet<<TestBlock as BlockT>::Hash>,
@@ -255,7 +263,7 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 		todo!()
 	}
 
-	fn remove_leaf_block(&self, hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<()> {
+	fn remove_leaf_block(&self, _hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
@@ -271,7 +279,7 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 impl HeaderBackend<TestBlock> for TestBackend {
 	fn header(
 		&self,
-		id: sp_api::BlockId<TestBlock>,
+		_id: sp_api::BlockId<TestBlock>,
 	) -> sp_blockchain::Result<Option<<TestBlock as BlockT>::Header>> {
 		todo!()
 	}
@@ -282,21 +290,21 @@ impl HeaderBackend<TestBlock> for TestBackend {
 
 	fn status(
 		&self,
-		id: sp_api::BlockId<TestBlock>,
+		_id: sp_api::BlockId<TestBlock>,
 	) -> sp_blockchain::Result<sp_blockchain::BlockStatus> {
 		todo!()
 	}
 
 	fn number(
 		&self,
-		hash: <TestBlock as BlockT>::Hash,
+		_hash: <TestBlock as BlockT>::Hash,
 	) -> sp_blockchain::Result<Option<<<TestBlock as BlockT>::Header as sp_api::HeaderT>::Number>> {
 		todo!()
 	}
 
 	fn hash(
 		&self,
-		number: sp_api::NumberFor<TestBlock>,
+		_number: sp_api::NumberFor<TestBlock>,
 	) -> sp_blockchain::Result<Option<<TestBlock as BlockT>::Hash>> {
 		todo!()
 	}
@@ -317,13 +325,13 @@ impl AuxStore for TestBackend {
 		D: IntoIterator<Item = &'a &'b [u8]>,
 	>(
 		&self,
-		insert: I,
-		delete: D,
+		_insert: I,
+		_delete: D,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
-	fn get_aux(&self, key: &[u8]) -> sp_blockchain::Result<Option<Vec<u8>>> {
+	fn get_aux(&self, _key: &[u8]) -> sp_blockchain::Result<Option<Vec<u8>>> {
 		todo!()
 	}
 }
@@ -335,8 +343,10 @@ pub struct DummyApi {
 
 pub struct DummyApiInner {
 	keygen_t: u16,
+	#[allow(dead_code)]
 	keygen_n: u16,
 	signing_t: u16,
+	#[allow(dead_code)]
 	signing_n: u16,
 	// maps: block number => list of authorities for that block
 	authority_sets: HashMap<u64, Vec<AuthorityId>>,
@@ -344,7 +354,21 @@ pub struct DummyApiInner {
 }
 
 impl DummyApi {
-	pub fn new(keygen_t: u16, keygen_n: u16, signing_t: u16, signing_n: u16) -> Self {
+	pub fn new(
+		keygen_t: u16,
+		keygen_n: u16,
+		signing_t: u16,
+		signing_n: u16,
+		n_sessions: usize,
+	) -> Self {
+		let mut dkg_keys = HashMap::new();
+		// add a empty-key for the genesis block to drive the DKG forward
+		dkg_keys.insert(0 as _, vec![]);
+		for x in 1..=n_sessions {
+			// add dummy keys for all other sessions
+			dkg_keys.insert(x as _, vec![0, 1, 2, 3, 4, 5]);
+		}
+
 		Self {
 			inner: Arc::new(RwLock::new(DummyApiInner {
 				keygen_t,
@@ -352,7 +376,7 @@ impl DummyApi {
 				signing_t,
 				signing_n,
 				authority_sets: HashMap::new(),
-				dkg_keys: HashMap::new(),
+				dkg_keys,
 			})),
 		}
 	}
@@ -384,83 +408,83 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 
 	type TrieBackendStorage = DummyStateBackend;
 
-	fn storage(&self, key: &[u8]) -> Result<Option<StorageValue>, Self::Error> {
+	fn storage(&self, _key: &[u8]) -> Result<Option<StorageValue>, Self::Error> {
 		todo!()
 	}
 
 	fn storage_hash(
 		&self,
-		key: &[u8],
+		_key: &[u8],
 	) -> Result<Option<<BlakeTwo256 as sp_api::Hasher>::Out>, Self::Error> {
 		todo!()
 	}
 
 	fn child_storage(
 		&self,
-		child_info: &sc_client_api::ChildInfo,
-		key: &[u8],
+		_child_info: &sc_client_api::ChildInfo,
+		_key: &[u8],
 	) -> Result<Option<StorageValue>, Self::Error> {
 		todo!()
 	}
 
 	fn child_storage_hash(
 		&self,
-		child_info: &sc_client_api::ChildInfo,
-		key: &[u8],
+		_child_info: &sc_client_api::ChildInfo,
+		_key: &[u8],
 	) -> Result<Option<<BlakeTwo256 as sp_api::Hasher>::Out>, Self::Error> {
 		todo!()
 	}
 
-	fn next_storage_key(&self, key: &[u8]) -> Result<Option<StorageKey>, Self::Error> {
+	fn next_storage_key(&self, _key: &[u8]) -> Result<Option<StorageKey>, Self::Error> {
 		todo!()
 	}
 
 	fn next_child_storage_key(
 		&self,
-		child_info: &sc_client_api::ChildInfo,
-		key: &[u8],
+		_child_info: &sc_client_api::ChildInfo,
+		_key: &[u8],
 	) -> Result<Option<StorageKey>, Self::Error> {
 		todo!()
 	}
 
 	fn apply_to_key_values_while<F: FnMut(Vec<u8>, Vec<u8>) -> bool>(
 		&self,
-		child_info: Option<&sc_client_api::ChildInfo>,
-		prefix: Option<&[u8]>,
-		start_at: Option<&[u8]>,
-		f: F,
-		allow_missing: bool,
+		_child_info: Option<&sc_client_api::ChildInfo>,
+		_prefix: Option<&[u8]>,
+		_start_at: Option<&[u8]>,
+		_f: F,
+		_allow_missing: bool,
 	) -> Result<bool, Self::Error> {
 		todo!()
 	}
 
 	fn apply_to_keys_while<F: FnMut(&[u8]) -> bool>(
 		&self,
-		child_info: Option<&sc_client_api::ChildInfo>,
-		prefix: Option<&[u8]>,
-		start_at: Option<&[u8]>,
-		f: F,
+		_child_info: Option<&sc_client_api::ChildInfo>,
+		_prefix: Option<&[u8]>,
+		_start_at: Option<&[u8]>,
+		_f: F,
 	) {
 		todo!()
 	}
 
-	fn for_key_values_with_prefix<F: FnMut(&[u8], &[u8])>(&self, prefix: &[u8], f: F) {
+	fn for_key_values_with_prefix<F: FnMut(&[u8], &[u8])>(&self, _prefix: &[u8], _f: F) {
 		todo!()
 	}
 
 	fn for_child_keys_with_prefix<F: FnMut(&[u8])>(
 		&self,
-		child_info: &sc_client_api::ChildInfo,
-		prefix: &[u8],
-		f: F,
+		_child_info: &sc_client_api::ChildInfo,
+		_prefix: &[u8],
+		_f: F,
 	) {
 		todo!()
 	}
 
 	fn storage_root<'a>(
 		&self,
-		delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
-		state_version: sp_api::StateVersion,
+		_delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
+		_state_version: sp_api::StateVersion,
 	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, Self::Transaction)
 	where
 		<BlakeTwo256 as sp_api::Hasher>::Out: Ord,
@@ -470,9 +494,9 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 
 	fn child_storage_root<'a>(
 		&self,
-		child_info: &sc_client_api::ChildInfo,
-		delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
-		state_version: sp_api::StateVersion,
+		_child_info: &sc_client_api::ChildInfo,
+		_delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
+		_state_version: sp_api::StateVersion,
 	) -> (<BlakeTwo256 as sp_api::Hasher>::Out, bool, Self::Transaction)
 	where
 		<BlakeTwo256 as sp_api::Hasher>::Out: Ord,
@@ -498,7 +522,7 @@ impl ApiExt<TestBlock> for DummyApi {
 
 	fn execute_in_transaction<F: FnOnce(&Self) -> sp_api::TransactionOutcome<R>, R>(
 		&self,
-		call: F,
+		_call: F,
 	) -> R
 	where
 		Self: Sized,
@@ -508,7 +532,7 @@ impl ApiExt<TestBlock> for DummyApi {
 
 	fn has_api<A: sp_api::RuntimeApiInfo + ?Sized>(
 		&self,
-		at: &sp_api::BlockId<TestBlock>,
+		_at: &sp_api::BlockId<TestBlock>,
 	) -> Result<bool, sp_api::ApiError>
 	where
 		Self: Sized,
@@ -518,8 +542,8 @@ impl ApiExt<TestBlock> for DummyApi {
 
 	fn has_api_with<A: sp_api::RuntimeApiInfo + ?Sized, P: Fn(u32) -> bool>(
 		&self,
-		at: &sp_api::BlockId<TestBlock>,
-		pred: P,
+		_at: &sp_api::BlockId<TestBlock>,
+		_pred: P,
 	) -> Result<bool, sp_api::ApiError>
 	where
 		Self: Sized,
@@ -529,7 +553,7 @@ impl ApiExt<TestBlock> for DummyApi {
 
 	fn api_version<A: sp_api::RuntimeApiInfo + ?Sized>(
 		&self,
-		at: &sp_api::BlockId<TestBlock>,
+		_at: &sp_api::BlockId<TestBlock>,
 	) -> Result<Option<u32>, sp_api::ApiError>
 	where
 		Self: Sized,
@@ -551,8 +575,8 @@ impl ApiExt<TestBlock> for DummyApi {
 
 	fn into_storage_changes(
 		&self,
-		backend: &Self::StateBackend,
-		parent_hash: <TestBlock as BlockT>::Hash,
+		_backend: &Self::StateBackend,
+		_parent_hash: <TestBlock as BlockT>::Hash,
 	) -> Result<sp_api::StorageChanges<Self::StateBackend, TestBlock>, String>
 	where
 		Self: Sized,
@@ -649,55 +673,55 @@ impl sc_client_api::BlockImportOperation<TestBlock> for DummyStateBackend {
 
 	fn set_block_data(
 		&mut self,
-		header: <TestBlock as BlockT>::Header,
-		body: Option<Vec<<TestBlock as BlockT>::Extrinsic>>,
-		indexed_body: Option<Vec<Vec<u8>>>,
-		justifications: Option<sp_runtime::Justifications>,
-		state: sc_client_api::NewBlockState,
+		_header: <TestBlock as BlockT>::Header,
+		_body: Option<Vec<<TestBlock as BlockT>::Extrinsic>>,
+		_indexed_body: Option<Vec<Vec<u8>>>,
+		_justifications: Option<sp_runtime::Justifications>,
+		_state: sc_client_api::NewBlockState,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn update_cache(
 		&mut self,
-		cache: std::collections::HashMap<sp_blockchain::well_known_cache_keys::Id, Vec<u8>>,
+		_cache: std::collections::HashMap<sp_blockchain::well_known_cache_keys::Id, Vec<u8>>,
 	) {
 		todo!()
 	}
 
 	fn update_db_storage(
 		&mut self,
-		update: sc_client_api::TransactionForSB<Self::State, TestBlock>,
+		_update: sc_client_api::TransactionForSB<Self::State, TestBlock>,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn set_genesis_state(
 		&mut self,
-		storage: sp_runtime::Storage,
-		commit: bool,
-		state_version: sp_api::StateVersion,
+		_storage: sp_runtime::Storage,
+		_commit: bool,
+		_state_version: sp_api::StateVersion,
 	) -> sp_blockchain::Result<<TestBlock as BlockT>::Hash> {
 		todo!()
 	}
 
 	fn reset_storage(
 		&mut self,
-		storage: sp_runtime::Storage,
-		state_version: sp_api::StateVersion,
+		_storage: sp_runtime::Storage,
+		_state_version: sp_api::StateVersion,
 	) -> sp_blockchain::Result<<TestBlock as BlockT>::Hash> {
 		todo!()
 	}
 
 	fn update_storage(
 		&mut self,
-		update: StorageCollection,
-		child_update: ChildStorageCollection,
+		_update: StorageCollection,
+		_child_update: ChildStorageCollection,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
-	fn insert_aux<I>(&mut self, ops: I) -> sp_blockchain::Result<()>
+	fn insert_aux<I>(&mut self, _ops: I) -> sp_blockchain::Result<()>
 	where
 		I: IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
 	{
@@ -706,19 +730,19 @@ impl sc_client_api::BlockImportOperation<TestBlock> for DummyStateBackend {
 
 	fn mark_finalized(
 		&mut self,
-		hash: <TestBlock as BlockT>::Hash,
-		justification: Option<sp_runtime::Justification>,
+		_hash: <TestBlock as BlockT>::Hash,
+		_justification: Option<sp_runtime::Justification>,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
-	fn mark_head(&mut self, hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<()> {
+	fn mark_head(&mut self, _hash: <TestBlock as BlockT>::Hash) -> sp_blockchain::Result<()> {
 		todo!()
 	}
 
 	fn update_transaction_index(
 		&mut self,
-		index: Vec<IndexOperation>,
+		_index: Vec<IndexOperation>,
 	) -> sp_blockchain::Result<()> {
 		todo!()
 	}
@@ -811,18 +835,18 @@ mod dummy_api {
 			Ok(self.inner.read().keygen_t)
 		}
 
-		fn next_signature_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
+		fn next_signature_threshold(&self, _block: &BlockId<TestBlock>) -> ApiResult<u16> {
 			Ok(self.inner.read().signing_t)
 		}
 
-		fn next_keygen_threshold(&self, block: &BlockId<TestBlock>) -> ApiResult<u16> {
+		fn next_keygen_threshold(&self, _block: &BlockId<TestBlock>) -> ApiResult<u16> {
 			Ok(self.inner.read().keygen_t)
 		}
 
 		fn should_refresh(
 			&self,
 			_: &BlockId<TestBlock>,
-			block_number: BlockNumber,
+			_block_number: BlockNumber,
 		) -> ApiResult<bool> {
 			Ok(true)
 		}
@@ -845,17 +869,10 @@ mod dummy_api {
 			block: &BlockId<TestBlock>,
 		) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
 			let number = self.block_id_to_u64(block);
-			// the first key should always be an empty key to drive the DKG forward
-			if number == 0 {
-				Ok((number, vec![]))
-			} else {
-				Ok((number, vec![1, 2, 3, 4, 5]))
-			}
-			/*
 			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
 			let pub_key = self.inner.read().dkg_keys.get(&number).unwrap().clone();
 			let authority_set_id = number;
-			Ok((authority_set_id, pub_key))*/
+			Ok((authority_set_id, pub_key))
 		}
 
 		fn get_best_authorities(
@@ -901,7 +918,7 @@ mod dummy_api {
 		fn get_max_extrinsic_delay(
 			&self,
 			_: &BlockId<TestBlock>,
-			block_number: BlockNumber,
+			_block_number: BlockNumber,
 		) -> ApiResult<BlockNumber> {
 			dkg_logging::error!(target: "dkg", "unimplemented get_max_extrinsic_delay");
 			todo!()
@@ -919,7 +936,7 @@ mod dummy_api {
 		fn get_reputations(
 			&self,
 			_: &BlockId<TestBlock>,
-			authorities: Vec<AuthorityId>,
+			_authorities: Vec<AuthorityId>,
 		) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
 			dkg_logging::error!(target: "dkg", "unimplemented get_repuations");
 			todo!()
@@ -929,7 +946,7 @@ mod dummy_api {
 		fn get_keygen_jailed(
 			&self,
 			_: &BlockId<TestBlock>,
-			set: Vec<AuthorityId>,
+			_set: Vec<AuthorityId>,
 		) -> ApiResult<Vec<AuthorityId>> {
 			Ok(vec![])
 		}
@@ -937,7 +954,7 @@ mod dummy_api {
 		fn get_signing_jailed(
 			&self,
 			_: &BlockId<TestBlock>,
-			set: Vec<AuthorityId>,
+			_set: Vec<AuthorityId>,
 		) -> ApiResult<Vec<AuthorityId>> {
 			Ok(vec![])
 		}

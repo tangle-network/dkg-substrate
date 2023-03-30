@@ -31,6 +31,7 @@ use sc_keystore::LocalKeystore;
 use sp_keystore::SyncCryptoStorePtr;
 
 mod error;
+/// Stores keypairs for DKG
 pub mod keyring;
 pub mod keystore;
 
@@ -196,7 +197,8 @@ where
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, None, Arc::new(RwLock::new(None)));
+	let worker =
+		worker::DKGWorker::<_, _, _, _>::new(worker_params, None, Arc::new(RwLock::new(None)));
 
 	worker.run().await;
 	keygen_handle.abort();

@@ -154,7 +154,7 @@ where
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
-	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, 
+	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
@@ -216,7 +216,11 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub fn new(worker_params: WorkerParams<B, BE, C, GE>, to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, current_test_id: Arc<RwLock<Option<uuid::Uuid>>>) -> Self {
+	pub fn new(
+		worker_params: WorkerParams<B, BE, C, GE>,
+		to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
+		current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+	) -> Self {
 		let WorkerParams {
 			client,
 			backend,

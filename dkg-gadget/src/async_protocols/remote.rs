@@ -86,18 +86,19 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 				tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 				let status = status_debug.load(Ordering::Relaxed);
 				if [MetaHandlerStatus::Terminated, MetaHandlerStatus::Complete].contains(&status) {
-					break;
+					break
 				}
 				let status_history = status_history_debug.lock();
-				
+
 				if status == MetaHandlerStatus::Beginning && status_history.len() == 1 {
-					continue;
+					continue
 				}
 
 				dkg_logging::debug!(
 					"AsyncProtocolRemote status: {:?} ||||| history: {:?}",
 					status,
-					status_history);
+					status_history
+				);
 			}
 		});
 

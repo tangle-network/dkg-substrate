@@ -50,10 +50,8 @@ struct TestResult {
 enum OrchestratorToClientEvent {
 	// Tells the client subtask to halt
 	Halt,
-	// Tells the client subtask to begin a test
-	BeginTest { trace_id: Uuid, test: TestCase },
 	// Tells the client subtask to send a mock event
-	BlockChainEvent { trace_id: Uuid, event: MockBlockChainEvent<TestBlock> }
+	BlockChainEvent { trace_id: Uuid, event: MockBlockChainEvent<TestBlock> },
 }
 
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq)]
@@ -183,16 +181,10 @@ impl MockBlockchain {
 							tx.send(ProtocolPacket::Halt).await.unwrap();
 							return
 						},
-						OrchestratorToClientEvent::BeginTest { trace_id, test } => {
-							tx.send(ProtocolPacket::BlockChainToClient {
-								trace_id,
-								event: MockBlockChainEvent::TestCase { trace_id, test },
-							})
-							.await
-							.unwrap();
-						},
-						OrchestratorToClientEvent::BlockChainEvent { trace_id, event} => {
-							tx.send(ProtocolPacket::BlockChainToClient { trace_id, event }).await.unwrap();
+						OrchestratorToClientEvent::BlockChainEvent { trace_id, event } => {
+							tx.send(ProtocolPacket::BlockChainToClient { trace_id, event })
+								.await
+								.unwrap();
 						},
 					}
 				}
@@ -333,7 +325,10 @@ impl MockBlockchain {
 					create_mocked_finality_blockchain_event(*round_number);
 				client
 					.orchestrator_to_client_subtask
-					.send(OrchestratorToClientEvent::BlockChainEvent { trace_id, event: next_finality_notification })
+					.send(OrchestratorToClientEvent::BlockChainEvent {
+						trace_id,
+						event: next_finality_notification,
+					})
 					.unwrap();
 			}
 

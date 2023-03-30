@@ -22,7 +22,6 @@ use crate::{
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
 	Client, DKGApi, DKGKeystore,
 };
-use tokio::sync::mpsc::UnboundedSender;
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
@@ -44,6 +43,7 @@ use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
+use tokio::sync::mpsc::UnboundedSender;
 use webb_proposals::Proposal;
 
 use super::KeygenPartyId;
@@ -93,7 +93,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
-	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>, 
+	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 	pub _pd: PhantomData<BE>,
 }

@@ -55,7 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let signing_t = t as u16;
 	let signing_n = n_clients as u16;
 
-	let api = &dkg_gadget::testing::DummyApi::new(keygen_t, keygen_n, signing_t, signing_n);
+	let api =
+		&dkg_gadget::testing::DummyApi::new(keygen_t, keygen_n, signing_t, signing_n, n_blocks);
 
 	// setup the clients
 	for idx in 0..n_clients {
@@ -72,11 +73,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			key_store.as_dyn_crypto_store().unwrap(),
 		);
 		let signing_gossip_engine = keygen_gossip_engine.clone();
-		let (peer_id, public_key) = keygen_gossip_engine.peer_id();
+		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
 
 		let client = Arc::new(
-			dkg_gadget::testing::TestBackend::connect(&bind_addr, peer_id, api.clone(), rx, latest_test_uuid.clone()).await?,
+			dkg_gadget::testing::TestBackend::connect(
+				&bind_addr,
+				peer_id,
+				api.clone(),
+				rx,
+				latest_test_uuid.clone(),
+			)
+			.await?,
 		);
 		let backend = client.clone();
 		let db_backend = Arc::new(dkg_gadget::db::DKGInMemoryDb::new());
@@ -97,7 +105,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				_marker: Default::default(),
 			};
 
-			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params, Some(tx), latest_test_uuid);
+			let worker =
+				dkg_gadget::worker::DKGWorker::new(dkg_worker_params, Some(tx), latest_test_uuid);
 			worker.run().await;
 			Err::<(), _>(std::io::Error::new(
 				std::io::ErrorKind::Other,
