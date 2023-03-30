@@ -689,7 +689,7 @@ mod tests {
 	fn should_create_offline_id_from_keygen_id() {
 		let party_id = 1;
 		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l = (1..=3).map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		assert_eq!(*offline_id.as_ref(), 1);
 		assert_eq!(offline_id.to_index(), 0);
@@ -703,7 +703,7 @@ mod tests {
 	fn should_return_the_correct_offline_id() {
 		let party_id = 1;
 		let keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l = (1..=3).map(KeygenPartyId).collect::<Vec<_>>();
 		let s_l_raw = s_l.iter().map(|id| id.0).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		let expected_offline_id = get_offline_stage_index(&s_l_raw, party_id).unwrap();
@@ -720,7 +720,7 @@ mod tests {
 	fn should_convert_from_keygen_id_to_offline_id_and_back() {
 		let party_id = 1;
 		let orig_keygen_id = KeygenPartyId::try_from(party_id).unwrap();
-		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l = (1..=3).map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(orig_keygen_id, &s_l).unwrap();
 		let keygen_id = offline_id.try_to_keygen_party_id(&s_l).unwrap();
 		assert_eq!(keygen_id, orig_keygen_id);
@@ -742,7 +742,7 @@ mod tests {
 			.unwrap();
 		assert_eq!(party_i, 2);
 		let keygen_id = KeygenPartyId::try_from(party_i).unwrap();
-		let s_l = (1..=3).into_iter().map(KeygenPartyId).collect::<Vec<_>>();
+		let s_l = (1..=3).map(KeygenPartyId).collect::<Vec<_>>();
 		let offline_id = OfflinePartyId::try_from_keygen_party_id(keygen_id, &s_l).unwrap();
 		assert_eq!(offline_id.to_index(), 1);
 		assert_eq!(*offline_id.as_ref(), 2);

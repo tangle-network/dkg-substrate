@@ -167,7 +167,7 @@ pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 /// We allow for 0.5 of a second of compute with a 12 second average block time.
 pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 	WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
-	cumulus_primitives_core::relay_chain::v2::MAX_POV_SIZE as u64,
+	cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
 parameter_types! {
@@ -269,7 +269,7 @@ impl pallet_aura::Config for Runtime {
 impl pallet_grandpa::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MaxAuthorities = MaxAuthorities;
-
+	type MaxSetIdSessionEntries = frame_support::traits::ConstU64<0>;
 	type KeyOwnerProofSystem = ();
 
 	type KeyOwnerProof =
@@ -369,10 +369,9 @@ impl pallet_staking::Config for Runtime {
 	type Slash = ();
 	type Reward = ();
 	type SessionsPerEra = SessionsPerEra;
+	type AdminOrigin = EnsureRoot<AccountId>;
 	type BondingDuration = BondingDuration;
 	type SlashDeferDuration = SlashDeferDuration;
-	/// A super-majority of the council can cancel the slash.
-	type SlashCancelOrigin = EnsureRoot<AccountId>;
 	type SessionInterface = Self;
 	type EraPayout = pallet_staking::ConvertCurve<RewardCurve>;
 	type NextNewSession = Session;
@@ -1055,6 +1054,12 @@ impl_runtime_apis! {
 	  len: u32,
 	) -> pallet_transaction_payment::FeeDetails<Balance> {
 	  TransactionPayment::query_fee_details(uxt, len)
+	}
+	fn query_weight_to_fee(weight: Weight) -> Balance {
+		TransactionPayment::weight_to_fee(weight)
+	}
+	fn query_length_to_fee(length: u32) -> Balance {
+		TransactionPayment::length_to_fee(length)
 	}
   }
 
