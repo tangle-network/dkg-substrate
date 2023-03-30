@@ -173,7 +173,7 @@ mod rep {
 	/// We received an unexpected message packet.
 	pub const UNEXPECTED_MESSAGE: Rep = Rep::new_fatal("Unexpected message packet");
 	/// When a peer tries to impersonate another peer, by claiming another authority id.
-	pub const PEER_IMPIRSONATED: Rep = Rep::new_fatal("Peer is impersonating another peer");
+	pub const PEER_IMPERSONATED: Rep = Rep::new_fatal("Peer is impersonating another peer");
 	/// Reputation change when a peer sends us the same message over and over.
 	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
@@ -616,7 +616,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					debug!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is valid");
 				} else {
 					warn!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is invalid");
-					self.service.report_peer(who, rep::PEER_IMPIRSONATED);
+					self.service.report_peer(who, rep::PEER_IMPERSONATED);
 				},
 			Err(e) => {
 				warn!(target: "dkg_gadget::gossip_engine::network", "Failed to verify handshake message from peer {who} with error: {e:?}");
