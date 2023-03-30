@@ -55,6 +55,10 @@ impl TestBackend {
 	) -> std::io::Result<Self> {
 		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
+		let (tx, mut rx) =
+				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
+		let tx0 = Arc::new(tokio::sync::Mutex::new(tx));
+		let tx1 = tx0.clone();
 
 		let this = TestBackend {
 			inner: TestBackendState {
@@ -68,14 +72,11 @@ impl TestBackend {
 
 		let this_for_dkg_listener = this.clone();
 		let dkg_worker_listener = async move {
-			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
-				let mut lock = this_for_dkg_listener.inner.local_test_cases.lock();
-
-				if lock.contains_key(&trace_id) {
-					dkg_logging::warn!(target: "dkg", "overwrote previous test case value for {trace_id:?}");
-				}
-
-				*lock.get_mut(&trace_id).unwrap() = Some(result);
+			while let Some((trace_id, result)) = from_dkg_worker.recv().await {		
+				dkg_logging::info!(target: "dkg", "The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}");
+				let success = result.is_ok();
+				let packet = ProtocolPacket::ClientToBlockChain { event: MockClientResponse { error: result.err(), success, trace_id  } };
+				tx0.lock().await.send(packet).await.unwrap();
 			}
 
 			panic!("DKG worker listener ended prematurely")
@@ -84,13 +85,11 @@ impl TestBackend {
 		let this_for_orchestrator_rx = this.clone();
 		let orchestrator_coms = async move {
 			dkg_logging::info!(target: "dkg", "Complete: orchestrator<=>DKG communications for peer {peer_id:?}");
-			let (mut tx, mut rx) =
-				dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
 			while let Some(packet) = rx.next().await {
 				match packet {
 					ProtocolPacket::InitialHandshake => {
 						// pong back the handshake response
-						tx.send(ProtocolPacket::InitialHandshakeResponse {
+						tx1.lock().await.send(ProtocolPacket::InitialHandshakeResponse {
 							peer_id: peer_id.clone(),
 						})
 						.await
@@ -109,30 +108,7 @@ impl TestBackend {
 								this_for_orchestrator_rx.inner.import_stream.send(notification);
 							},
 							MockBlockChainEvent::TestCase { trace_id, test } => {
-								dkg_logging::info!(target: "dkg", "server is requesting update for test {trace_id:?}");
-								
-								let resp = {
-									let mut lock = this_for_orchestrator_rx.inner.local_test_cases.lock();
-									if let Some(test_result) = lock.remove(&trace_id) {
-										if let Some(test_result) = test_result {
-											dkg_logging::info!(target: "dkg", "The client {peer_id:?} has finished test {trace_id:?}. Result: {test_result:?}");
-											let success = test_result.is_ok();
-											Some(ProtocolPacket::ClientToBlockChain { event: MockClientResponse { error: test_result.err(), success, trace_id  } })
-										} else {
-											// TODO: check for updates instead of ending here
-											lock.insert(trace_id, None);
-											dkg_logging::warn!(target: "dkg", "The client received a test case request for {trace_id:?}, but, the test did not yet finish");
-											None
-										}
-									} else {
-										dkg_logging::warn!(target: "dkg", "The client received a test case request for {trace_id:?}, but, it did not exist in the local map");
-										None
-									}
-								};
-	
-								if let Some(resp) = resp {
-									tx.send(resp).await.unwrap();
-								}
+								unimplemented!()
 							},
 						}
 					},

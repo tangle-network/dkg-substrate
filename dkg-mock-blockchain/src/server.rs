@@ -56,7 +56,7 @@ enum OrchestratorToClientEvent {
 	BlockChainEvent { trace_id: Uuid, event: MockBlockChainEvent<TestBlock> }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Eq, PartialEq)]
 enum OrchestratorState {
 	#[default]
 	// The orchestrator is waiting for n clients to connect
@@ -212,6 +212,27 @@ impl MockBlockchain {
 		let mut round_id = &mut 0;
 		let mut current_round_completed_count = 0;
 
+		let cl = self.clients.clone();
+		let state = self.orchestrator_state.clone();
+
+		//spawn the watcher task
+		tokio::task::spawn(async move {
+			let mut interval = tokio::time::interval(Duration::from_secs(5));
+			loop {
+				interval.tick().await;
+				if state.load(Ordering::SeqCst) != OrchestratorState::AwaitingRoundCompletion {
+					continue
+				}
+
+				let clients = cl.read().await;
+				for (id, client) in clients.iter() {
+					if !client.outstanding_tasks.is_empty() {
+						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding task(s)", tasks = client.outstanding_tasks.len());
+					}
+				}
+			}
+		});
+
 		while let Some(client_update) = client_to_orchestrator_rx.recv().await {
 			match self.orchestrator_state.load(Ordering::SeqCst) {
 				o_state @ OrchestratorState::WaitingForInit => match client_update {
@@ -306,32 +327,13 @@ impl MockBlockchain {
 			// phase 1: send finality notifications to each client
 			let mut write = self.clients.write().await;
 			for (_id, client) in write.iter_mut() {
+				client.outstanding_tasks.insert(trace_id, next_case.clone());
 				// First, send out a MockBlockChainEvent (happens before each round occurs)
 				let next_finality_notification =
 					create_mocked_finality_blockchain_event(*round_number);
 				client
 					.orchestrator_to_client_subtask
 					.send(OrchestratorToClientEvent::BlockChainEvent { trace_id, event: next_finality_notification })
-					.unwrap();
-			}
-
-			std::mem::drop(write);
-			// now, sleep 1s to allow time for the DKG clients to process that event
-			// NOTE: the DKG clients may still be in a middle of a round. Thus, the clientside
-			// code must take that into consideration
-			tokio::time::sleep(Duration::from_millis(3000)).await;
-
-			// finally, send out the test case
-			let mut write = self.clients.write().await;
-			for (_id, client) in write.iter_mut() {
-				client.outstanding_tasks.insert(trace_id, next_case.clone());
-
-				client
-					.orchestrator_to_client_subtask
-					.send(OrchestratorToClientEvent::BeginTest {
-						trace_id,
-						test: next_case.clone(),
-					})
 					.unwrap();
 			}
 

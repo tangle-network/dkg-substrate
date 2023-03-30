@@ -47,6 +47,7 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 impl<T> StateMachine for StateMachineWrapper<T>
 where
 	T: StateMachine + RoundBlame,
+	<T as StateMachine>::Err: std::fmt::Debug,
 {
 	type Err = T::Err;
 	type Output = T::Output;
@@ -61,6 +62,10 @@ where
 			msg.sender
 		);
 		let result = self.sm.handle_incoming(msg);
+		if let Some(err) = result.as_ref().err() {
+			dkg_logging::error!(target: "dkg", "StateMachine error: {:?}", err);
+		}
+
 		self.collect_round_blame();
 		result
 	}

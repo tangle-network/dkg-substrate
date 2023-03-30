@@ -111,7 +111,9 @@ where
 					})
 				}
 			} else {
-				dkg_logging::info!(target: "dkg_gadget", "Will skip keygen since local is NOT in best authority set");
+				return Err(DKGError::GenericError {
+					reason: "Will skip keygen since local key does not exist".to_string(),
+				})
 			}
 
 			Ok(())
