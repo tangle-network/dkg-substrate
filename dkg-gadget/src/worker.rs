@@ -26,9 +26,12 @@ use dkg_primitives::utils::select_random_set;
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use parking_lot::RwLock;
+use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
+use sp_arithmetic::traits::CheckedRem;
 use sp_core::ecdsa;
-use sp_runtime::traits::Get;
+use sp_runtime::traits::{Block, Get, Header, NumberFor, Zero};
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
@@ -39,14 +42,6 @@ use std::{
 		Arc,
 	},
 };
-
-use parking_lot::RwLock;
-
-use sc_client_api::{Backend, FinalityNotification};
-
-use sp_api::BlockId;
-use sp_arithmetic::traits::CheckedRem;
-use sp_runtime::traits::{Block, Header, NumberFor, Zero};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use dkg_primitives::{
@@ -589,50 +584,60 @@ where
 
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
+		return self.client.runtime_api().signature_threshold(header.hash()).unwrap_or_default()
 	}
 
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.next_signature_threshold(header.hash())
+			.unwrap_or_default()
 	}
 
 	/// Get the active DKG public key
 	pub fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().dkg_pub_key(&at).ok().unwrap_or_default()
+		return self.client.runtime_api().dkg_pub_key(header.hash()).ok().unwrap_or_default()
 	}
 
 	/// Get the next DKG public key
 	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.next_dkg_pub_key(header.hash())
+			.ok()
+			.unwrap_or_default()
 	}
 
 	/// Get the jailed keygen authorities
 	#[allow(dead_code)]
 	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
 		return self
 			.client
 			.runtime_api()
-			.get_keygen_jailed(&at, set.to_vec())
+			.get_keygen_jailed(header.hash(), set.to_vec())
 			.unwrap_or_default()
 	}
 
 	/// Get the best authorities for keygen
 	pub fn get_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_best_authorities(&at).unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.get_best_authorities(header.hash())
+			.unwrap_or_default()
 	}
 
 	/// Get the next best authorities for keygen
 	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
+		return self
+			.client
+			.runtime_api()
+			.get_next_best_authorities(header.hash())
+			.unwrap_or_default()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -659,9 +664,9 @@ where
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
-			let at: BlockId<B> = BlockId::hash(header.hash());
-			let current_authority_set = client.runtime_api().authority_set(&at).ok();
-			let queued_authority_set = client.runtime_api().queued_authority_set(&at).ok();
+			let current_authority_set = client.runtime_api().authority_set(header.hash()).ok();
+			let queued_authority_set =
+				client.runtime_api().queued_authority_set(header.hash()).ok();
 			match (current_authority_set, queued_authority_set) {
 				(Some(current), Some(queued)) => Some((current, queued)),
 				_ => None,
@@ -1321,7 +1326,6 @@ where
 		let on_chain_dkg = self.get_dkg_pub_key(header);
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
-		let at: BlockId<B> = BlockId::hash(header.hash());
 		// Check whether the worker is in the best set or return
 		let party_i = match self.get_party_index(header) {
 			Some(party_index) => {
@@ -1355,7 +1359,11 @@ where
 			self.currently_signing_proposals.write().clear();
 		}
 
-		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
+		let unsigned_proposals = match self
+			.client
+			.runtime_api()
+			.get_unsigned_proposals(header.hash())
+		{
 			Ok(res) => {
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
@@ -1526,11 +1534,10 @@ where
 		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
 			reason: "latest header does not exist!".to_string(),
 		})?;
-		let at: BlockId<B> = BlockId::hash(now.hash());
 		Ok(self
 			.client
 			.runtime_api()
-			.get_signing_jailed(&at, best_authorities.to_vec())
+			.get_signing_jailed(now.hash(), best_authorities.to_vec())
 			.unwrap_or_default())
 	}
 	fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
@@ -1556,8 +1563,10 @@ where
 
 	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
 		// query runtime api to check if we should execute new keygen.
-		let at: BlockId<B> = BlockId::hash(header.hash());
-		self.client.runtime_api().should_execute_new_keygen(&at).unwrap_or_default()
+		self.client
+			.runtime_api()
+			.should_execute_new_keygen(header.hash())
+			.unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block

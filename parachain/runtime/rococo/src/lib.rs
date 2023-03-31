@@ -255,7 +255,7 @@ pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 /// We allow for 0.5 of a second of compute with a 12 second average block time.
 pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 	WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
-	cumulus_primitives_core::relay_chain::v2::MAX_POV_SIZE as u64,
+	cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
 parameter_types! {
@@ -433,9 +433,7 @@ parameter_types! {
 
 impl pallet_authorship::Config for Runtime {
 	type EventHandler = (CollatorSelection,);
-	type FilterUncle = ();
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
-	type UncleGenerations = UncleGenerations;
 }
 
 parameter_types! {
@@ -684,6 +682,7 @@ impl pallet_democracy::Config for Runtime {
 	type CooloffPeriod = CooloffPeriod;
 	type Currency = Balances;
 	type EnactmentPeriod = EnactmentPeriod;
+	type SubmitOrigin = frame_system::EnsureSigned<AccountId>;
 	type RuntimeEvent = RuntimeEvent;
 	/// A unanimous council can have the next scheduled referendum be a straight
 	/// default-carries (NTB) vote.
@@ -739,6 +738,7 @@ impl pallet_collective::Config<CouncilCollective> for Runtime {
 	type MotionDuration = CouncilMotionDuration;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Proposal = RuntimeCall;
+	type SetMembersOrigin = EnsureRoot<AccountId>;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 }
 
@@ -816,7 +816,7 @@ construct_runtime!(
 		Indices: pallet_indices::{Pallet, Call, Storage, Config<T>, Event<T>} = 25,
 
 		// Collator support. the order of these 4 are important and shall not change.
-		Authorship: pallet_authorship::{Pallet, Call, Storage} = 30,
+		Authorship: pallet_authorship::{Pallet, Storage} = 30,
 		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>} = 31,
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 32,
 		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 33,
@@ -1044,6 +1044,12 @@ impl_runtime_apis! {
 			len: u32,
 		) -> pallet_transaction_payment::FeeDetails<Balance> {
 			TransactionPayment::query_fee_details(uxt, len)
+		}
+		fn query_weight_to_fee(weight: Weight) -> Balance {
+			TransactionPayment::weight_to_fee(weight)
+		}
+		fn query_length_to_fee(length: u32) -> Balance {
+			TransactionPayment::length_to_fee(length)
 		}
 	}
 
