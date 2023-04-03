@@ -863,7 +863,6 @@ where
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
 
 		// if we are still syncing, return immediately
-		// Ref : https://paritytech.github.io/substrate/master/sc_network_common/sync/enum.SyncState.html#method.is_major_syncing
 		if self.network.is_major_syncing() {
 			debug!(target: "dkg_gadget::worker", "🕸️  Chain not fully synced, skipping keygen process!", header.number());
 			return
