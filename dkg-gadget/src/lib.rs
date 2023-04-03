@@ -15,11 +15,10 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use dkg_logging::debug;
+use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents, Finalizer};
-
-use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use sc_keystore::LocalKeystore;
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
@@ -194,6 +193,7 @@ where
 		db_backend,
 		metrics,
 		local_keystore,
+		network,
 		_marker: PhantomData::default(),
 	};
 

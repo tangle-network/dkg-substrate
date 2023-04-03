@@ -22,6 +22,8 @@ use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_logging::{debug, error, info, trace};
 use dkg_primitives::utils::select_random_set;
+use sc_network::NetworkService;
+use sp_consensus::SyncOracle;
 
 use futures::StreamExt;
 use itertools::Itertools;
@@ -103,6 +105,7 @@ where
 	pub metrics: Option<Metrics>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub network: Arc<NetworkService<B, B::Hash>>,
 	pub _marker: PhantomData<B>,
 }
 
@@ -151,6 +154,8 @@ where
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
+	/// Used to keep track of network state
+	pub network: Arc<NetworkService<B, B::Hash>>,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
@@ -187,6 +192,7 @@ where
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
+			network: self.network.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -222,6 +228,7 @@ where
 			metrics,
 			local_keystore,
 			latest_header,
+			network,
 			..
 		} = worker_params;
 
@@ -250,6 +257,7 @@ where
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
+			network,
 			_backend: PhantomData,
 		}
 	}
@@ -853,6 +861,12 @@ where
 		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		debug!(target: "dkg_gadget::worker", "🕸️  Latest header is now: {:?}", header.number());
+
+		// if we are still syncing, return immediately
+		if self.network.is_major_syncing() {
+			debug!(target: "dkg_gadget::worker", "🕸️  Chain not fully synced, skipping block processing!");
+			return
+		}
 
 		// Attempt to enact new DKG authorities if sessions have changed
 
