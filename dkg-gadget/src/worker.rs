@@ -864,7 +864,7 @@ where
 
 		// if we are still syncing, return immediately
 		if self.network.is_major_syncing() {
-			debug!(target: "dkg_gadget::worker", "🕸️  Chain not fully synced, skipping keygen process!");
+			debug!(target: "dkg_gadget::worker", "🕸️  Chain not fully synced, skipping block processing!");
 			return
 		}
 
