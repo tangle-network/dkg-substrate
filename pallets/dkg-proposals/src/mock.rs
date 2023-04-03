@@ -16,7 +16,7 @@
 
 use super::*;
 use crate as pallet_dkg_proposals;
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, Encode};
 pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
 	MaxSignatureLength, DKG_ENGINE_ID,

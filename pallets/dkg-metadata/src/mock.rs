@@ -14,8 +14,6 @@
 
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
-
-use codec::MaxEncodedLen;
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,

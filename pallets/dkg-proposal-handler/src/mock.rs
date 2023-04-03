@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 use crate as pallet_dkg_proposal_handler;
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, Encode};
 pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
 	MaxSignatureLength, DKG_ENGINE_ID,

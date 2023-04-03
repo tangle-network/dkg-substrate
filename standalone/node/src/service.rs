@@ -119,6 +119,7 @@ pub fn new_partial(
 		client.clone(),
 	);
 
+	#[allow(clippy::redundant_clone)]
 	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
 		client.clone(),
 		&(client.clone() as Arc<_>),
