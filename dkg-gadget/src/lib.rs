@@ -15,13 +15,12 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use debug_logger::DebugLogger;
-use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents};
 
-use sc_network::{NetworkService, ProtocolName, NetworkStateInfo};
+use sc_network::{NetworkService, NetworkStateInfo, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -47,9 +46,9 @@ mod utils;
 pub mod worker;
 
 pub mod async_protocols;
+pub mod debug_logger;
 pub mod gossip_messages;
 pub mod storage;
-pub mod debug_logger;
 
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
@@ -134,7 +133,12 @@ where
 		local_keystore,
 		_block,
 	} = dkg_params;
-	let dkg_keystore: DKGKeystore = key_store.into();
+
+	// setup debug logging
+	let local_peer_id = network.local_peer_id().clone();
+	let debug_logger = DebugLogger::new(local_peer_id, None);
+
+	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
 	let keygen_gossip_protocol = NetworkGossipEngineBuilder::new(
 		DKG_KEYGEN_PROTOCOL_NAME.to_string().into(),
 		dkg_keystore.clone(),
@@ -144,10 +148,6 @@ where
 		DKG_SIGNING_PROTOCOL_NAME.to_string().into(),
 		dkg_keystore.clone(),
 	);
-
-	// setup debug logging
-	let local_peer_id = network.local_peer_id().clone();
-	let debug_logger = DebugLogger::new(local_peer_id, None);
 
 	let logger_prometheus = debug_logger.clone();
 
@@ -166,7 +166,6 @@ where
 		);
 
 	let latest_header = Arc::new(RwLock::new(None));
-
 
 	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
 		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
@@ -208,8 +207,12 @@ where
 		_marker: PhantomData::default(),
 	};
 
-	let worker =
-		worker::DKGWorker::<_, _, _, _>::new(worker_params, None, Arc::new(RwLock::new(None)), debug_logger);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(
+		worker_params,
+		None,
+		Arc::new(RwLock::new(None)),
+		debug_logger,
+	);
 
 	worker.run().await;
 	keygen_handle.abort();

@@ -14,13 +14,14 @@
 
 use crate::{
 	async_protocols::BatchKey,
+	debug_logger::DebugLogger,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
-	Client, DKGApi, DKGKeystore, debug_logger::DebugLogger,
+	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
@@ -168,7 +169,10 @@ where
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
-		dkg_logging::info!(target: "dkg_gadget", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
+		self.logger.info(format!(
+			"PROCESS VOTE RESULT : session_id {:?}, signature : {:?}",
+			session_id, signature
+		));
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
@@ -183,13 +187,17 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Some(proposal) =
-			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key, &self.logger)
-		{
+		if let Some(proposal) = get_signed_proposal::<B, C, BE>(
+			&self.backend,
+			finished_round,
+			payload_key,
+			&self.logger,
+		) {
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
-				dkg_logging::info!(target: "dkg_gadget", "All proposals have resolved for batch {:?}", batch_key);
+				self.logger
+					.info(format!("All proposals have resolved for batch {:?}", batch_key));
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
@@ -206,7 +214,12 @@ where
 					&self.logger,
 				);
 			} else {
-				dkg_logging::info!(target: "dkg_gadget", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				self.logger.info(format!(
+					"{}/{} proposals have resolved for batch {:?}",
+					proposals_for_this_batch.len(),
+					batch_key.len,
+					batch_key,
+				));
 			}
 		}
 
@@ -229,7 +242,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
-		dkg_logging::debug!(target: "dkg", "Storing local key for session {:?}", session_id);
+		self.logger.debug(format!("Storing local key for session {:?}", session_id));
 		self.db.store_local_key(session_id, key)
 	}
 

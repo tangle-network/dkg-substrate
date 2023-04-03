@@ -1,9 +1,6 @@
-use tracing_subscriber::filter::LevelFilter;
-pub use tracing::{self, instrument, span, Level};
+pub use tracing::{self, debug, error, info, instrument, span, trace, warn, Level};
 use tracing_subscriber::{
 	fmt::{format::FmtSpan, SubscriberBuilder},
-	layer::{Layer, SubscriberExt},
-    filter::FilterFn,
 	util::SubscriberInitExt,
 	EnvFilter,
 };
@@ -18,18 +15,12 @@ pub fn setup_log() {
 		.try_init();
 }
 
-pub fn setup_json_log(out: std::fs::File) {
+pub fn setup_simple_log() {
 	let _ = SubscriberBuilder::default()
-		.json()
-		.with_line_number(true)
-		.with_file(true)
-		.with_span_events(FmtSpan::FULL)
 		.with_env_filter(EnvFilter::from_default_env())
-		.with_writer(out)
 		.finish()
 		.try_init();
 }
-
 
 #[macro_export]
 macro_rules! define_span {

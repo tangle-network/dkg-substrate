@@ -31,9 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	log::info!(target: "dkg", "Orchestrator args: {args:?}");
 	validate_args(&args)?;
 
-	let output = std::fs::File::create(args.tmp_path.join("output.json"))?;
+	//let output = std::fs::File::create(args.tmp_path.join("output.json"))?;
 	// before launching the DKGs, make sure to run to setup the logging
-	dkg_logging::setup_json_log(output);
+	dkg_logging::setup_simple_log();
 
 	let data = tokio::fs::read_to_string(&args.config_path).await?;
 	let config: MockBlockchainConfig = toml::from_str(&data)?;
@@ -60,26 +60,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let signing_t = t as u16;
 	let signing_n = n_clients as u16;
 
-	let api =
-		&dkg_gadget::testing::DummyApi::new(keygen_t, keygen_n, signing_t, signing_n, n_blocks);
+	// logging for the dummy api only
+	let dummy_api_logger =
+		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), None);
+
+	let api = &dkg_gadget::testing::DummyApi::new(
+		keygen_t,
+		keygen_n,
+		signing_t,
+		signing_n,
+		n_blocks,
+		dummy_api_logger.clone(),
+	);
 
 	// setup the clients
 	for idx in 0..n_clients {
 		let latest_header = Arc::new(RwLock::new(None));
 		let latest_test_uuid = Arc::new(RwLock::new(None));
 		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-		// using clone_for_new_peer then clone ensures the peer ID instances are the same
-		let key_store: dkg_gadget::keystore::DKGKeystore = Default::default();
+		// pass the dummy api logger initially, with the intent of overwriting it later
+		let mut key_store: dkg_gadget::keystore::DKGKeystore =
+			dkg_gadget::keystore::DKGKeystore::new_default(dummy_api_logger.clone());
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
-		let keygen_gossip_engine = gossip_engine.clone_for_new_peer(
+		let mut keygen_gossip_engine = gossip_engine.clone_for_new_peer(
 			api,
 			n_blocks as _,
 			keyring,
 			key_store.as_dyn_crypto_store().unwrap(),
 		);
-		let signing_gossip_engine = keygen_gossip_engine.clone();
+		let mut signing_gossip_engine = keygen_gossip_engine.clone();
+
+		// set the loggers for the gossip engines
 		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
+		// output the logs for this specific peer to a file
+		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.json")))?;
+		let logger = dkg_gadget::debug_logger::DebugLogger::new(peer_id, Some(output));
+		keygen_gossip_engine.set_logger(logger.clone());
+		signing_gossip_engine.set_logger(logger.clone());
+		key_store.set_logger(logger.clone());
 
 		let client = Arc::new(
 			dkg_gadget::testing::TestBackend::connect(
@@ -88,6 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				api.clone(),
 				rx,
 				latest_test_uuid.clone(),
+				logger.clone(),
 			)
 			.await?,
 		);
@@ -112,8 +132,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				_marker: Default::default(),
 			};
 
-			let worker =
-				dkg_gadget::worker::DKGWorker::new(dkg_worker_params, Some(tx), latest_test_uuid);
+			let worker = dkg_gadget::worker::DKGWorker::new(
+				dkg_worker_params,
+				Some(tx),
+				latest_test_uuid,
+				logger,
+			);
 			worker.run().await;
 			Err::<(), _>(std::io::Error::new(
 				std::io::ErrorKind::Other,

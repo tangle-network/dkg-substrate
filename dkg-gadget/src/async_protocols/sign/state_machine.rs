@@ -57,7 +57,7 @@ impl StateMachineHandler for OfflineStage {
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,
 						Err(err) => {
-							dkg_logging::error!("Error deserializing offline message: {:?}", err);
+							logger.error(format!("Error deserializing offline message: {:?}", err));
 							// Skip this message.
 							return Ok(())
 						},
@@ -77,11 +77,11 @@ impl StateMachineHandler for OfflineStage {
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
-					dkg_logging::error!(target: "dkg_gadget::async_protocol::sign", "Error sending message to async proto: {}", err);
+					logger.error(format!("Error sending message to async proto: {}", err));
 				}
 			},
 
-			err => dkg_logging::debug!(target: "dkg_gadget", "Invalid payload received: {:?}", err),
+			err => logger.debug(format!("Invalid payload received: {:?}", err)),
 		}
 
 		Ok(())
@@ -92,7 +92,6 @@ impl StateMachineHandler for OfflineStage {
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
-		logger: &DebugLogger,
 	) -> Result<(), DKGError> {
 		params.logger.info(format!("Completed offline stage successfully!"));
 		// Take the completed offline stage and immediately execute the corresponding voting
@@ -101,6 +100,7 @@ impl StateMachineHandler for OfflineStage {
 		//
 		// NOTE: we pass the generated offline stage id for the i in voting to keep
 		// consistency
+		let logger = params.logger.clone();
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
@@ -112,15 +112,15 @@ impl StateMachineHandler for OfflineStage {
 			async_index,
 		) {
 			Ok(voting_stage) => {
-				params.logger.info(format!("Starting voting stage..."));
+				logger.info(format!("Starting voting stage..."));
 				if let Err(e) = voting_stage.await {
-					dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", e);
+					logger.error(format!("Error starting voting stage: {:?}", e));
 					return Err(e)
 				}
 				Ok(())
 			},
 			Err(err) => {
-				dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", err);
+				logger.error(format!("Error starting voting stage: {:?}", err));
 				Err(err)
 			},
 		}

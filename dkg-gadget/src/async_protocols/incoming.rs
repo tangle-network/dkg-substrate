@@ -59,7 +59,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		verify: &BI,
 		stream_type: &ProtocolType,
 		this_session_id: SessionId,
-		logger: &DebugLogger
+		logger: &DebugLogger,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized;
@@ -72,7 +72,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		verify: &BI,
 		stream_type: &ProtocolType,
 		this_session_id: SessionId,
-		logger: &DebugLogger
+		logger: &DebugLogger,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized,
@@ -126,12 +126,15 @@ where
 					Ok(None) => continue,
 
 					Err(err) => {
-						dkg_logging::warn!(target: "dkg_gadget", "While mapping signed message, received an error: {:?}", err);
+						logger.warn(format!(
+							"While mapping signed message, received an error: {:?}",
+							err
+						));
 						continue
 					},
 				},
 				Some(Err(err)) => {
-					dkg_logging::error!(target: "dkg_gadget", "Stream RECV error: {:?}", err);
+					logger.error(format!("Stream RECV error: {:?}", err));
 					continue
 				},
 				None => return Poll::Ready(None),

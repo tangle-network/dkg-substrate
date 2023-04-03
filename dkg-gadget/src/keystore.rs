@@ -19,8 +19,6 @@ use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, R
 use sp_core::keccak_256;
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 
-use dkg_logging::warn;
-
 use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
 	KEY_TYPE,
@@ -28,22 +26,27 @@ use dkg_runtime_primitives::{
 use sc_keystore::LocalKeystore;
 use std::sync::Arc;
 
-use crate::error;
+use crate::{debug_logger::DebugLogger, error};
 
 /// A DKG specific keystore implemented as a `Newtype`. This is basically a
 /// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize
 /// common cryptographic functionality.
 #[derive(Clone)]
-pub struct DKGKeystore(Option<SyncCryptoStorePtr>);
-
-impl Default for DKGKeystore {
-	fn default() -> Self {
-		let keystore = Arc::new(LocalKeystore::in_memory()) as Arc<dyn SyncCryptoStore>;
-		DKGKeystore::from(Some(keystore))
-	}
-}
+pub struct DKGKeystore(Option<SyncCryptoStorePtr>, DebugLogger);
 
 impl DKGKeystore {
+	pub fn new(keystore: Option<Arc<dyn SyncCryptoStore>>, logger: DebugLogger) -> Self {
+		Self(keystore, logger)
+	}
+
+	pub fn new_default(logger: DebugLogger) -> Self {
+		let keystore = Arc::new(LocalKeystore::in_memory()) as Arc<dyn SyncCryptoStore>;
+		Self::new(Some(keystore), logger)
+	}
+
+	pub fn set_logger(&mut self, logger: DebugLogger) {
+		self.1 = logger;
+	}
 	/// Check if the keystore contains a private key for one of the public keys
 	/// contained in `keys`. A public key with a matching private key is known
 	/// as a local authority id.
@@ -61,7 +64,11 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "dkg_gadget", "🕸️  (authority_id) Multiple private keys found for: {:?} ({})", public, public.len());
+			self.1.warn(format!(
+				"🕸️  (authority_id) Multiple private keys found for: {:?} ({})",
+				public,
+				public.len()
+			));
 		}
 
 		public.get(0).cloned()
@@ -84,7 +91,11 @@ impl DKGKeystore {
 			.collect();
 
 		if public.len() > 1 {
-			warn!(target: "dkg_gadget", "🕸️  (sr25519_public_key) Multiple private keys found for: {:?} ({})", public, public.len());
+			self.1.warn(format!(
+				"🕸️  (sr25519_public_key) Multiple private keys found for: {:?} ({})",
+				public,
+				public.len()
+			));
 		}
 
 		public.get(0).cloned()
@@ -178,12 +189,6 @@ impl DKGKeystore {
 
 	pub fn as_dyn_crypto_store(&self) -> Option<&dyn SyncCryptoStore> {
 		self.0.as_deref()
-	}
-}
-
-impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
-	fn from(store: Option<SyncCryptoStorePtr>) -> DKGKeystore {
-		DKGKeystore(store)
 	}
 }
 

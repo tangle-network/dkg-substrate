@@ -20,7 +20,6 @@ use crate::{
 	Client, DKGKeystore,
 };
 use codec::Encode;
-use dkg_logging::{debug, error};
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, SessionId,
 	SignedDKGMessage,
@@ -53,7 +52,9 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg_gadget", "SESSION {} | Received public key broadcast", msg.session_id);
+		dkg_worker
+			.logger
+			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
 
 		let is_main_round = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
@@ -82,12 +83,12 @@ where
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
 		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
-		dkg_logging::debug!(
-			target: "dkg_gadget",
-			"SESSION {:?} | Threshold {} | Aggregated pubkeys {}",
-			msg.session_id, threshold,
+		dkg_worker.logger.debug(format!(
+			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
+			msg.session_id,
+			threshold,
 			aggregated_public_keys.keys_and_signatures.len()
-		);
+		));
 
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, C, BE>(
@@ -96,14 +97,14 @@ where
 				is_main_round,
 				session_id,
 				current_block_number,
+				&dkg_worker.logger,
 			)?;
 		} else {
-			dkg_logging::debug!(
-				target: "dkg_gadget",
-				"SESSION {:?} | Need more signatures to submit next DKG public key, needs {} more",
+			dkg_worker.logger.debug(format!(
+				"SESSION {} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
 				(threshold + 1) - aggregated_public_keys.keys_and_signatures.len()
-			);
+			));
 		}
 	}
 
@@ -151,14 +152,13 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					error!(target: "dkg_gadget::gossip", "Failed to gossip DKG public key: {:?}", e);
+					gossip_engine
+						.logger()
+						.error(format!("Failed to gossip DKG public key: {:?}", e));
 				}
 			},
-			Err(e) => error!(
-				target: "dkg_gadget::gossip",
-				"🕸️  Error signing DKG message: {:?}",
-				e
-			),
+			Err(e) =>
+				gossip_engine.logger().error(format!("🕸️  Error signing DKG message: {:?}", e)),
 		}
 
 		aggregated_public_keys
@@ -167,7 +167,9 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			.keys_and_signatures
 			.push((msg.pub_key.clone(), encoded_signature));
 
-		debug!(target: "dkg_gadget::gossip", "Gossiping local node {} public key and signature", public)
+		gossip_engine
+			.logger()
+			.debug(format!("Gossiping local node {} public key and signature", public))
 	} else {
 		gossip_engine.logger().error(format!("Could not sign public key"));
 	}

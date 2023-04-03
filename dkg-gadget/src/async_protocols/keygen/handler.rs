@@ -48,6 +48,9 @@ where
 				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
 			})?;
 
+		let logger0 = params.logger.clone();
+		let logger1 = params.logger.clone();
+
 		let protocol = async move {
 			params
 				.logger
@@ -61,7 +64,7 @@ where
 			// Set status of the handle
 			params.handle.set_status(MetaHandlerStatus::Keygen);
 			// Execute the keygen
-			GenericAsyncHandler::new_keygen(params, t, n, status)?.await?;
+			GenericAsyncHandler::new_keygen(params.clone(), t, n, status)?.await?;
 			params.logger.debug("Keygen stage complete!");
 
 			Ok(())
@@ -71,11 +74,11 @@ where
 				Ok(_) => {
 					// Set the status as complete.
 					status_handle.set_status(MetaHandlerStatus::Complete);
-					params.logger.info(format!("🕸️  Keygen GenericAsyncHandler completed"));
+					logger0.info(format!("🕸️  Keygen GenericAsyncHandler completed"));
 				},
 				Err(ref err) => {
 					// Do not update the status here, evetually the Keygen will fail and timeout.
-					dkg_logging::error!(target: "dkg_gadget::keygen", "Keygen failed with error: {:?}", err);
+					logger0.error(format!("Keygen failed with error: {:?}", err));
 				},
 			};
 			res
@@ -85,7 +88,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					dkg_logging::info!(target: "dkg_gadget::keygen", "Stopper has been called {:?}", res1);
+					logger1.info(format!("Stopper has been called {:?}", res1));
 					Ok(())
 				}
 			}

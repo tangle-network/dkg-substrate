@@ -15,7 +15,7 @@
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
-use std::{sync::Arc, collections::HashSet};
+use std::{collections::HashSet, sync::Arc};
 
 use super::{CurrentRoundBlame, ProtocolType};
 use crate::debug_logger::DebugLogger;
@@ -38,7 +38,14 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 		logger: DebugLogger,
 	) -> Self {
-		Self { sm, session_id, channel_type, current_round_blame, logger, received_messages: HashSet::new() }
+		Self {
+			sm,
+			session_id,
+			channel_type,
+			current_round_blame,
+			logger,
+			received_messages: HashSet::new(),
+		}
 	}
 
 	fn collect_round_blame(&self) {
@@ -53,7 +60,7 @@ impl<T> StateMachine for StateMachineWrapper<T>
 where
 	T: StateMachine + RoundBlame,
 	<T as StateMachine>::Err: std::fmt::Debug,
-	<T as StateMachine>::MessageBody: serde::Serialize
+	<T as StateMachine>::MessageBody: serde::Serialize,
 {
 	type Err = T::Err;
 	type Output = T::Output;
@@ -68,8 +75,9 @@ where
 			msg.sender
 		));
 
-		// before passing to the state machine, make sure that we haven't already received the same message
-		// (this is needed as we use a gossiping protocol to send messages, and we don't want to process the same message twice)
+		// before passing to the state machine, make sure that we haven't already received the same
+		// message (this is needed as we use a gossiping protocol to send messages, and we don't
+		// want to process the same message twice)
 		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");
 		if self.received_messages.contains(&msg_serde) {
 			self.logger.trace(format!(
@@ -79,14 +87,14 @@ where
 				self.current_round(),
 				msg.sender
 			));
-			return Ok(());
+			return Ok(())
 		} else {
 			self.received_messages.insert(msg_serde);
 		}
 
 		let result = self.sm.handle_incoming(msg);
 		if let Some(err) = result.as_ref().err() {
-			dkg_logging::error!(target: "dkg", "StateMachine error: {:?}", err);
+			self.logger.error(format!("StateMachine error: {:?}", err));
 		}
 
 		self.collect_round_blame();

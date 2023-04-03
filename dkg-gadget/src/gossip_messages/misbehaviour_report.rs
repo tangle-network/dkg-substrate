@@ -19,7 +19,6 @@ use crate::{
 	Client,
 };
 use codec::Encode;
-use dkg_logging::{debug, error};
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
 };
@@ -57,7 +56,7 @@ where
 				false
 			}
 		};
-		debug!(target: "dkg_gadget", "Is main round: {}", is_main_round);
+		dkg_worker.logger.debug(format!("Is main round: {}", is_main_round));
 		// Create packed message
 		let mut signed_payload = Vec::new();
 		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
@@ -73,7 +72,7 @@ where
 			&signed_payload,
 			&msg.signature,
 		)?;
-		debug!(target: "dkg_gadget", "Reporter: {:?}", reporter);
+		dkg_worker.logger.debug(format!("Reporter: {:?}", reporter));
 		// Add new report to the aggregated reports
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 		let reports = lock
@@ -85,7 +84,7 @@ where
 				reporters: Vec::new(),
 				signatures: Vec::new(),
 			});
-		debug!(target: "dkg_gadget", "Reports: {:?}", reports);
+		dkg_worker.logger.debug(format!("Reports: {:?}", reports));
 		if !reports.reporters.contains(&reporter) {
 			reports.reporters.push(reporter);
 			reports.signatures.push(msg.signature);
@@ -145,16 +144,19 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				let encoded_signed_dkg_message = signed_dkg_message.encode();
 
-				dkg_logging::debug!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)", report.session_id, encoded_signed_dkg_message.len());
+				dkg_worker.logger.debug(format!(
+					"💀  (Round: {:?}) Sending Misbehaviour message: ({:?} bytes)",
+					report.session_id,
+					encoded_signed_dkg_message.len()
+				));
 				if let Err(e) = dkg_worker.keygen_gossip_engine.gossip(signed_dkg_message) {
-					dkg_logging::error!(target: "dkg_gadget::gossip", "💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}", report.session_id, e);
+					dkg_worker.logger.error(format!(
+						"💀  (Round: {:?}) Failed to gossip misbehaviour message: {:?}",
+						report.session_id, e
+					));
 				}
 			},
-			Err(e) => error!(
-				target: "dkg_gadget::gossip",
-				"🕸️  Error signing DKG message: {:?}",
-				e
-			),
+			Err(e) => dkg_worker.logger.error(format!("🕸️  Error signing DKG message: {:?}", e)),
 		}
 
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
@@ -204,7 +206,11 @@ where
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.
 	let threshold = dkg_worker.get_signature_threshold(header) as usize;
-	debug!(target: "dkg_gadget", "DKG threshold: {}, reports: {}", threshold, reports.reporters.len());
+	dkg_worker.logger.debug(format!(
+		"DKG threshold: {}, reports: {}",
+		threshold,
+		reports.reporters.len()
+	));
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
 			if reports.reporters.len() > threshold {

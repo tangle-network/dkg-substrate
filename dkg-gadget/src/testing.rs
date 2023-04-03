@@ -1,3 +1,4 @@
+use crate::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{
 	transport::ProtocolPacket, FinalityNotification, ImportNotification, MockBlockChainEvent,
 	MockClientResponse, TestBlock,
@@ -19,7 +20,6 @@ use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
 use uuid::Uuid;
-use crate::debug_logger::DebugLogger;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -171,14 +171,7 @@ impl<T: Clone> MultiSubscribableStream<T> {
 		let mut lock = self.inner.write();
 		assert!(!lock.is_empty());
 		// receiver will naturally drop when no longer used.
-		lock.retain(|tx| {
-			if let Err(err) = tx.unbounded_send(t.clone()) {
-				dkg_logging::warn!(target: "dkg", "Error while sending through MultiSubscribableStream {}: {err:?}", self.tag);
-				false
-			} else {
-				true
-			}
-		})
+		lock.retain(|tx| if let Err(_) = tx.unbounded_send(t.clone()) { false } else { true })
 	}
 }
 
@@ -1027,7 +1020,6 @@ pub mod mock_gossip {
 			n_blocks: u64,
 			keyring: crate::keyring::Keyring,
 			key_store: &dyn SyncCryptoStore,
-			logger: DebugLogger,
 		) -> Self {
 			let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
 				&*key_store,
@@ -1058,8 +1050,12 @@ pub mod mock_gossip {
 				this_peer: Some(this_peer),
 				this_peer_public_key: Some(public_key),
 				mapping: self.mapping.clone(),
-				logger: Some(logger),
+				logger: None,
 			}
+		}
+
+		pub fn set_logger(&mut self, logger: DebugLogger) {
+			self.logger = Some(logger);
 		}
 
 		pub fn peer_id(&self) -> (&PeerId, &AuthorityId) {

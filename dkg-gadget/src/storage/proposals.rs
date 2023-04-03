@@ -18,7 +18,6 @@ use crate::{
 	Client,
 };
 use codec::{Decode, Encode};
-use dkg_logging::debug;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,

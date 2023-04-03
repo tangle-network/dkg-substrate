@@ -62,6 +62,9 @@ where
 				reason: "execute called twice with the same AsyncProtocol Parameters".to_string(),
 			})?;
 
+		let logger0 = params.logger.clone();
+		let logger2 = params.logger.clone();
+
 		let protocol = async move {
 			let maybe_local_key = params.local_key.clone();
 			if let Some(local_key) = maybe_local_key {
@@ -75,10 +78,12 @@ where
 				let count_in_batch = unsigned_proposals.len();
 				let batch_key = params.get_next_batch_key(&unsigned_proposals);
 
-				dkg_logging::debug!(target: "dkg_gadget", "Got unsigned proposals count {}", unsigned_proposals.len());
+				params
+					.logger
+					.debug(format!("Got unsigned proposals count {}", unsigned_proposals.len()));
 
 				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
-					dkg_logging::info!(target: "dkg", "Offline stage index: {}", offline_i);
+					params.logger.info(format!("Offline stage index: {}", offline_i));
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -99,11 +104,7 @@ where
 					// TODO: Consider not blocking here and allowing processing of
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
-					dkg_logging::info!(
-						target: "dkg_gadget",
-						"Concluded all Offline->Voting stages ({} total) for this batch for this node",
-						count_in_batch
-					);
+					params.logger.info(format!("🕸️  Concluded all Offline->Voting stages ({} total) for this batch for this node", count_in_batch));
 				} else {
 					params.logger.warn(format!("🕸️  We are not among signers, skipping"));
 					return Err(DKGError::GenericError {
@@ -121,7 +122,7 @@ where
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
 			// print the res value.
-			dkg_logging::info!(target: "dkg_gadget", "🕸️  Signing protocol concluded with {:?}", res);
+			logger0.info(format!("🕸️  Signing protocol concluded with {:?}", res));
 			res
 		});
 
@@ -129,7 +130,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					dkg_logging::info!(target: "dkg_gadget", "Stopper has been called {:?}", res1);
+					logger2.info(format!("Stopper has been called {:?}", res1));
 					Err(DKGError::GenericError {
 						reason: format!("Stopper has been called {res1:?}")
 					})
@@ -195,7 +196,10 @@ where
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
-			dkg_logging::info!(target: "dkg_gadget", "Will now begin the voting stage with n={} parties with offline_i={}", number_of_parties, offline_i);
+			params.logger.info(format!(
+				"Will now begin the voting stage with n={} parties with offline_i={}",
+				number_of_parties, offline_i
+			));
 
 			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
 				reason: "The unsigned proposal for this stage is invalid".to_string(),
@@ -237,7 +241,10 @@ where
 			let number_of_partial_sigs = threshold as usize;
 			let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
-			dkg_logging::info!(target: "dkg_gadget", "Must obtain {} partial sigs to continue ...", number_of_partial_sigs);
+			params.logger.info(format!(
+				"Must obtain {} partial sigs to continue ...",
+				number_of_partial_sigs
+			));
 
 			while let Some(msg) = incoming_wrapper.next().await {
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
@@ -249,7 +256,9 @@ where
 						)
 						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
 						sigs.push(partial);
-						dkg_logging::info!(target: "dkg_gadget", "There are now {} partial sigs ...", sigs.len());
+						params
+							.logger
+							.info(format!("There are now {} partial sigs ...", sigs.len()));
 						if sigs.len() == number_of_partial_sigs {
 							break
 						}
@@ -260,26 +269,29 @@ where
 				}
 			}
 
-			dkg_logging::info!("RD0 on {} for {:?}", offline_i, hash_of_proposal);
+			params.logger.error(format!("RD0 on {} for {:?}", offline_i, hash_of_proposal));
 
 			if sigs.len() != number_of_partial_sigs {
-				dkg_logging::error!(target: "dkg_gadget", "Received number of signs not equal to expected (received: {} | expected: {})", sigs.len(), number_of_partial_sigs);
+				params.logger.error(format!(
+					"Received number of signs not equal to expected (received: {} | expected: {})",
+					sigs.len(),
+					number_of_partial_sigs
+				));
 				return Err(DKGError::Vote {
 					reason: "Invalid number of received partial sigs".to_string(),
 				})
 			}
 
-			dkg_logging::info!("RD1");
+			params.logger.info("RD1");
 			let signature = signing
 				.complete(&sigs)
 				.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error(err))?;
 
-			dkg_logging::info!("RD2");
+			params.logger.info("RD2");
 			verify(&signature, offline_stage_pub_key, &message).map_err(|err| DKGError::Vote {
 				reason: format!("Verification of voting stage failed with error : {err:?}"),
 			})?;
-
-			dkg_logging::info!("RD3");
+			params.logger.info("RD3");
 			params.engine.process_vote_result(
 				signature,
 				unsigned_proposal,

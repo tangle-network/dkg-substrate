@@ -43,31 +43,32 @@ impl StateMachineHandler for Keygen {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, session={}", msg.sender_id, session_id);
-				let message: Msg<ProtocolMessage> = match serde_json::from_slice(
-					msg.keygen_msg.as_slice(),
-				) {
-					Ok(message) => message,
-					Err(err) => {
-						dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error deserializing message: {}", err);
-						// Skip this message.
-						return Ok(())
-					},
-				};
+				logger.info(format!(
+					"Handling Keygen inbound message from id={}, session={}",
+					msg.sender_id, session_id
+				));
+				let message: Msg<ProtocolMessage> =
+					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
+						Ok(message) => message,
+						Err(err) => {
+							logger.error(format!("Error deserializing message: {}", err));
+							// Skip this message.
+							return Ok(())
+						},
+					};
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						dkg_logging::info!("Skipping passing of message to async proto since not intended for local");
+						logger.info("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
 				if let Err(e) = to_async_proto.unbounded_send(message) {
-					dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error sending message to async proto: {}", e);
+					logger.error(format!("Error sending message to async proto: {}", e));
 				}
 			},
 
-			err =>
-				dkg_logging::debug!(target: "dkg_gadget::async_protocol::keygen", "Invalid payload received: {:?}", err),
+			err => logger.debug(format!("Invalid payload received: {:?}", err)),
 		}
 
 		Ok(())
@@ -78,7 +79,6 @@ impl StateMachineHandler for Keygen {
 		params: AsyncProtocolParameters<BI>,
 		_: Self::AdditionalReturnParam,
 		_: u8,
-		logger: &DebugLogger,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
 		params.logger.info(format!("Completed keygen stage successfully!"));
 		// PublicKeyGossip (we need meta handler to handle this)

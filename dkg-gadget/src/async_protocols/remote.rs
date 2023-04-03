@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::async_protocols::CurrentRoundBlame;
+use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
@@ -33,6 +33,7 @@ pub struct AsyncProtocolRemote<C> {
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
+	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
 
@@ -50,6 +51,7 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			current_round_blame: self.current_round_blame.clone(),
 			current_round_blame_tx: self.current_round_blame_tx.clone(),
 			session_id: self.session_id,
+			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 		}
 	}
@@ -67,7 +69,7 @@ pub enum MetaHandlerStatus {
 
 impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
-	pub fn new(at: C, session_id: SessionId) -> Self {
+	pub fn new(at: C, session_id: SessionId, logger: DebugLogger) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
@@ -80,6 +82,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 
 		let status_debug = status.clone();
 		let status_history_debug = status_history.clone();
+		let logger_debug = logger.clone();
 
 		tokio::task::spawn(async move {
 			loop {
@@ -94,11 +97,10 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 					continue
 				}
 
-				dkg_logging::debug!(
+				logger_debug.debug(format!(
 					"AsyncProtocolRemote status: {:?} ||||| history: {:?}",
-					status,
-					status_history
-				);
+					status, status_history,
+				));
 			}
 		});
 
@@ -112,6 +114,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			stop_tx: Arc::new(Mutex::new(Some(stop_tx))),
 			stop_rx: Arc::new(Mutex::new(Some(stop_rx))),
 			current_round_blame,
+			logger,
 			current_round_blame_tx: Arc::new(current_round_blame_tx),
 			is_primary_remote: true,
 			session_id,
@@ -160,7 +163,11 @@ impl<C> AsyncProtocolRemote<C> {
 			self.status_history.lock().push(status);
 			self.status.store(status, Ordering::SeqCst);
 		} else {
-			dkg_logging::error!(target: "dkg_gadget", "Invalid status update: {:?} -> {:?}", self.get_status(), status);
+			self.logger.error(format!(
+				"Invalid status update: {:?} -> {:?}",
+				self.get_status(),
+				status
+			));
 		}
 	}
 
@@ -205,14 +212,14 @@ impl<C> AsyncProtocolRemote<C> {
 		let tx = match self.stop_tx.lock().take() {
 			Some(tx) => tx,
 			None => {
-				dkg_logging::warn!(
-					target: "dkg_gadget", "Unable to shutdown meta handler since it is already {:?}, ignoring...",
+				self.logger.warn(format!(
+					"Unable to shutdown meta handler since it is already {:?}, ignoring...",
 					self.get_status()
-				);
+				));
 				return Ok(())
 			},
 		};
-		dkg_logging::info!("Shutting down meta handler: {}", reason.as_ref());
+		self.logger.error(format!("Shutting down meta handler: {}", reason.as_ref()));
 		tx.send(()).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
@@ -249,12 +256,11 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			// belonging to the async proto. Signal as complete to allow the DKG worker to move
 			// forward
 			if self.get_status() != MetaHandlerStatus::Complete {
-				dkg_logging::info!(
-					target: "dkg_gadget",
-					"[drop code] MetaAsyncProtocol is ending: {:?}, History: {:?}",
+				self.logger.info(format!(
+					"MetaAsyncProtocol is ending: {:?}, History: {:?}",
 					self.get_status(),
-					self.status_history.lock(),
-				);
+					self.status_history.lock()
+				));
 				// if it is not complete, then it must be terminated, since the only other
 				// way to exit is to complete.
 				if self.get_status() != MetaHandlerStatus::Terminated {

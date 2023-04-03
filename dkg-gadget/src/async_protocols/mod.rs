@@ -81,20 +81,15 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 impl<BI: BlockchainInterface> Drop for AsyncProtocolParameters<BI> {
 	fn drop(&mut self) {
 		if self.handle.is_active() && self.handle.is_primary_remote {
-			dkg_logging::warn!(
+			self.logger.debug(format!(
 				"AsyncProtocolParameters({})'s handler is still active and now will be dropped!!!",
 				self.session_id
-			);
-		} else if self.handle.is_primary_remote {
-			dkg_logging::debug!(
-				"AsyncProtocolParameters({})'s handler is going to be dropped",
-				self.session_id
-			);
+			));
 		} else {
-			dkg_logging::debug!(
+			self.logger.debug(format!(
 				"AsyncProtocolParameters({})'s handler is going to be dropped",
 				self.session_id
-			);
+			))
 		}
 	}
 }
@@ -381,23 +376,16 @@ where
 	.set_watcher(StderrWatcher);
 
 	let params_for_end_of_proto = params.clone();
-
+	let logger = params.logger.clone();
 	let async_proto = Box::pin(async move {
 		// Loop and wait for the protocol to finish.
 		loop {
-			dkg_logging::info!(target: "dkg_gadget", "Running AsyncProtocol with party_index: {}", params.party_i);
+			logger.info(format!("Running AsyncProtocol with party_index: {}", params.party_i));
 			let res = async_proto.run().await;
-			let logger = params_for_end_of_proto.logger.clone();
 			match res {
 				Ok(v) =>
-					return SM::on_finish(
-						v,
-						params_for_end_of_proto,
-						additional_param,
-						async_index,
-						&logger,
-					)
-					.await,
+					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
+						.await,
 				Err(err) => match err {
 					async_runtime::Error::Recv(e) |
 					async_runtime::Error::Proceed(e) |
@@ -406,45 +394,40 @@ where
 					async_runtime::Error::Finish(e)
 						if e.is_critical() =>
 					{
-						params.logger.error(format!("Async Proto Cought Critical Error: {e:?}"));
+						logger.error(format!("Async Proto Cought Critical Error: {e:?}"));
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::Send(e) => {
-						params
-							.logger
+						logger
 							.error(format!("Async Proto Failed to send outgoing messages: {e:?}"));
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::ProceedPanicked(e) => {
-						params
-							.logger
-							.error(format!("Async Proto `proceed` method panicked: {e:?}"));
+						logger.error(format!("Async Proto `proceed` method panicked: {e:?}"));
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::InternalError(e) => {
-						params.logger.error(format!("Async Proto Internal Error: {e:?}"));
+						logger.error(format!("Async Proto Internal Error: {e:?}"));
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::Exhausted => {
-						params.logger.error(format!("Async Proto Exhausted"));
+						logger.error(format!("Async Proto Exhausted"));
 						return Err(DKGError::GenericError { reason: String::from("Exhausted") })
 					},
 					async_runtime::Error::RecvEof => {
-						params.logger.error(format!("Async Proto Incoming channel closed"));
+						logger.error(format!("Async Proto Incoming channel closed"));
 						return Err(DKGError::GenericError {
 							reason: String::from("RecvEof: Incomming channel closed"),
 						})
 					},
 					async_runtime::Error::BadStateMachine(e) => {
-						params.logger.error(format!("Async Proto Bad State Machine: {e:?}"));
+						logger.error(format!("Async Proto Bad State Machine: {e:?}"));
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					_ => {
 						// If the protocol errored, but it's not a critical error, then we
 						// should continue to run the protocol.
-						params
-							.logger
-							.error(format!("Async Proto Cought Non-Critical Error: {err:?}"));
+						logger.error(format!("Async Proto Cought Non-Critical Error: {err:?}"));
 					},
 				},
 			};
@@ -464,7 +447,7 @@ where
 	// For taking raw inbound signed messages, mapping them to unsigned messages, then
 	// sending to the appropriate AsyncProtocol
 	let inbound_signed_message_receiver = generate_inbound_signed_message_receiver_fn::<SM, BI>(
-		params,
+		params.clone(),
 		channel_type.clone(),
 		incoming_tx_proto,
 	);
@@ -478,7 +461,9 @@ where
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
-		dkg_logging::info!(target: "dkg_gadget", "🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res);
+		params
+			.logger
+			.info(format!("🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res));
 		// Abort the inbound task
 		handle.abort();
 		// Wait for the outbound task to finish
@@ -486,8 +471,7 @@ where
 		// within a reasonable time, we should abort it.
 		match handle2.await {
 			Ok(Ok(_)) => params.logger.info(format!("🕸️  Outbound task finished")),
-			Ok(Err(err)) =>
-				dkg_logging::error!(target: "dkg_gadget", "🕸️  Outbound task errored: {:?}", err),
+			Ok(Err(err)) => params.logger.error(format!("🕸️  Outbound task errored: {:?}", err)),
 			Err(_) => params.logger.error(format!("🕸️  Outbound task aborted")),
 		}
 		res
@@ -527,12 +511,17 @@ where
 				},
 			};
 
-			dkg_logging::info!(target: "dkg_gadget", "Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})", params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty);
+			params.logger.info(format!(
+				"Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})",
+				params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty
+			));
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
 				Err(err) => {
-					dkg_logging::error!(target: "dkg_gadget", "Failed to serialize message: {:?}, Skipping..", err);
+					params
+						.logger
+						.error(format!("Failed to serialize message: {:?}, Skipping..", err));
 					continue
 				},
 			};
@@ -584,9 +573,13 @@ where
 				session_id: params.session_id,
 			};
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
-				dkg_logging::error!(target: "dkg_gadget", "Async proto failed to send outbound message: {:?}", err);
+				params
+					.logger
+					.error(format!("Async proto failed to send outbound message: {:?}", err));
 			} else {
-				dkg_logging::info!(target: "dkg_gadget", "🕸️  Async proto sent outbound message: {:?}", &proto_ty);
+				params
+					.logger
+					.info(format!("🕸️  Async proto sent outbound message: {:?}", &proto_ty));
 			}
 
 			// check the status of the async protocol.

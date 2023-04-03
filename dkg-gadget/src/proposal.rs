@@ -13,9 +13,8 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{Client, debug_logger::DebugLogger};
+use crate::{debug_logger::DebugLogger, Client};
 use codec::Encode;
-use dkg_logging::{info, trace};
 use dkg_primitives::types::DKGSignedPayload;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
@@ -26,14 +25,13 @@ use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
 use sp_runtime::traits::{Block, Header};
 use webb_proposals::{Proposal, ProposalKind};
-use crate::debug_logger::DebugLogger;
 
 /// Get signed proposal
 pub(crate) fn get_signed_proposal<B, C, BE>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
-	logger: &DebugLogger
+	logger: &DebugLogger,
 ) -> Option<Proposal>
 where
 	B: Block,
@@ -52,7 +50,10 @@ where
 				let encoded_proposal = refresh_proposal.encode();
 				offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-				logger.trace(format!("Stored pub_key signature offchain {:?}", finished_round.signature));
+				logger.trace(format!(
+					"Stored pub_key signature offchain {:?}",
+					finished_round.signature
+				));
 			}
 
 			return None
