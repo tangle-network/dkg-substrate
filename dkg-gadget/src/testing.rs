@@ -985,6 +985,7 @@ pub mod mock_gossip {
 
 	use super::MultiSubscribableStream;
 	use dkg_runtime_primitives::{crypto, KEY_TYPE};
+	use crate::debug_logger::DebugLogger;
 
 	#[derive(Clone)]
 	pub struct InMemoryGossipEngine {
@@ -994,6 +995,7 @@ pub mod mock_gossip {
 		this_peer_public_key: Option<AuthorityId>,
 		// Maps Peer IDs to public keys
 		mapping: Arc<Mutex<HashMap<PeerId, AuthorityId>>>,
+		logger: Option<DebugLogger>
 	}
 
 	impl InMemoryGossipEngine {
@@ -1004,6 +1006,7 @@ pub mod mock_gossip {
 				this_peer: None,
 				this_peer_public_key: None,
 				mapping: Arc::new(Mutex::new(Default::default())),
+				logger: None
 			}
 		}
 
@@ -1014,6 +1017,7 @@ pub mod mock_gossip {
 			n_blocks: u64,
 			keyring: crate::keyring::Keyring,
 			key_store: &dyn SyncCryptoStore,
+			logger: DebugLogger
 		) -> Self {
 			let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
 				&*key_store,
@@ -1027,7 +1031,7 @@ pub mod mock_gossip {
 			let this_peer = PeerId::random();
 			let stream = MultiSubscribableStream::new("stream notifier");
 			self.mapping.lock().insert(this_peer.clone(), public_key.clone());
-			self.clients.lock().insert(this_peer.clone(), Default::default());
+			assert!(self.clients.lock().insert(this_peer.clone(), Default::default()).is_none());
 			self.notifier.lock().insert(this_peer.clone(), stream);
 
 			// by default, add this peer to the best authorities
@@ -1044,6 +1048,7 @@ pub mod mock_gossip {
 				this_peer: Some(this_peer),
 				this_peer_public_key: Some(public_key),
 				mapping: self.mapping.clone(),
+				logger: Some(logger)
 			}
 		}
 
@@ -1054,6 +1059,15 @@ pub mod mock_gossip {
 
 	impl GossipEngineIface for InMemoryGossipEngine {
 		type Clock = u128;
+
+		fn logger(&self) -> &DebugLogger {
+			self.logger.as_ref().unwrap()
+		}
+
+		fn local_peer_id(&self) -> PeerId {
+			self.peer_id().0.clone()
+		}
+
 		/// Send a DKG message to a specific peer.
 		fn send(
 			&self,

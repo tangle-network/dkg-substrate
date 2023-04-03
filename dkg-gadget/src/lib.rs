@@ -14,13 +14,14 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
+use debug_logger::DebugLogger;
 use dkg_logging::debug;
 use parking_lot::RwLock;
 use prometheus::Registry;
 
 use sc_client_api::{Backend, BlockchainEvents};
 
-use sc_network::{NetworkService, ProtocolName};
+use sc_network::{NetworkService, ProtocolName, NetworkStateInfo};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -48,6 +49,7 @@ pub mod worker;
 pub mod async_protocols;
 pub mod gossip_messages;
 pub mod storage;
+pub mod debug_logger;
 
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
@@ -143,27 +145,35 @@ where
 		dkg_keystore.clone(),
 	);
 
+	// setup debug logging
+	let local_peer_id = network.local_peer_id().clone();
+	let debug_logger = DebugLogger::new(local_peer_id, None);
+
+	let logger_prometheus = debug_logger.clone();
+
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
 			|result| match result {
 				Ok(metrics) => {
-					debug!(target: "dkg_gadget", "🕸️  Registered metrics");
+					logger_prometheus.debug("🕸️  Registered metrics");
 					Some(metrics)
 				},
 				Err(err) => {
-					debug!(target: "dkg_gadget", "🕸️  Failed to register metrics: {:?}", err);
+					logger_prometheus.debug(format!("🕸️  Failed to register metrics: {:?}", err));
 					None
 				},
 			},
 		);
 
 	let latest_header = Arc::new(RwLock::new(None));
+
+
 	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
 		.expect("Keygen : Failed to build gossip engine");
 
 	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
 		.expect("Signing : Failed to build gossip engine");
 
 	// enable the gossip
@@ -182,6 +192,7 @@ where
 		backend.clone(),
 		dkg_keystore.clone(),
 		local_keystore.clone(),
+		debug_logger.clone(),
 	);
 	let db_backend = Arc::new(offchain_db_backend);
 	let worker_params = worker::WorkerParams {
@@ -198,7 +209,7 @@ where
 	};
 
 	let worker =
-		worker::DKGWorker::<_, _, _, _>::new(worker_params, None, Arc::new(RwLock::new(None)));
+		worker::DKGWorker::<_, _, _, _>::new(worker_params, None, Arc::new(RwLock::new(None)), debug_logger);
 
 	worker.run().await;
 	keygen_handle.abort();

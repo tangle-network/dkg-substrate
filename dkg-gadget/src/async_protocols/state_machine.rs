@@ -18,6 +18,7 @@ use dkg_runtime_primitives::crypto::Public;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use std::fmt::Debug;
+use crate::debug_logger::DebugLogger;
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
@@ -45,6 +46,7 @@ where
 		>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType,
+		logger: &DebugLogger
 	) -> Result<(), <Self as StateMachine>::Err>;
 
 	async fn on_finish<BI: BlockchainInterface + 'static>(
@@ -52,5 +54,6 @@ where
 		params: AsyncProtocolParameters<BI>,
 		additional_param: Self::AdditionalReturnParam,
 		async_index: u8,
+		logger: &DebugLogger
 	) -> Result<Self::Return, DKGError>;
 }

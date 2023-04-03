@@ -33,6 +33,7 @@ mod network;
 pub use network::{GossipHandler, GossipHandlerController, NetworkGossipEngineBuilder};
 
 use crate::{worker::KeystoreExt, DKGKeystore};
+use crate::debug_logger::DebugLogger;
 
 /// A GossipEngine that can be used to send DKG messages.
 ///
@@ -66,6 +67,9 @@ pub trait GossipEngineIface: Send + Sync + 'static {
 
 	/// Clears the Message Queue.
 	fn clear_queue(&self);
+
+	fn local_peer_id(&self) -> PeerId;
+	fn logger(&self) -> &DebugLogger;
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -95,6 +99,14 @@ impl GossipEngineIface for () {
 	fn acknowledge_last_message(&self) {}
 
 	fn clear_queue(&self) {}
+
+	fn local_peer_id(&self) -> PeerId {
+		PeerId::random()
+	}
+
+	fn logger(&self) -> &DebugLogger {
+		panic!()
+	}
 }
 
 /// A Handshake message that is sent when a peer connects to us, to verify that the peer Id (which

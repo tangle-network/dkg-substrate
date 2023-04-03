@@ -21,14 +21,19 @@ struct Args {
 	#[structopt(short = "c", long = "config")]
 	// path to the configuration for the mock blockchain
 	config_path: String,
+	#[structopt(short = "t", long = "tmp")]
+	tmp_path: PathBuf,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	dkg_logging::setup_log();
 	let args = Args::from_args();
 	log::info!(target: "dkg", "Orchestrator args: {args:?}");
 	validate_args(&args)?;
+
+	let output = std::fs::File::create(args.tmp_path.join("output.json"))?;
+	// before launching the DKGs, make sure to run to setup the logging
+	dkg_logging::setup_json_log(output);
 
 	let data = tokio::fs::read_to_string(&args.config_path).await?;
 	let config: MockBlockchainConfig = toml::from_str(&data)?;
@@ -92,6 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let local_keystore = None;
 
 		let child = async move {
+			let label = peer_id.to_string();
+			dkg_logging::define_span!("DKG Client", label);
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				latest_header,
 				client,
@@ -130,7 +137,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn validate_args(args: &Args) -> Result<(), String> {
 	let config_path = PathBuf::from(&args.config_path);
+	let tmp_path = PathBuf::from(&args.tmp_path);
 	if !config_path.is_file() {
+		return Err(format!("{} is not a valid config path", args.config_path))
+	}
+
+	if !tmp_path.is_dir() {
 		return Err(format!("{} is not a valid config path", args.config_path))
 	}
 

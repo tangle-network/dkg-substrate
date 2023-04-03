@@ -23,6 +23,8 @@ use std::{
 };
 use tokio_stream::wrappers::BroadcastStream;
 
+use crate::debug_logger::DebugLogger;
+
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 /// Used to filter and transform incoming messages from the DKG worker
@@ -30,6 +32,7 @@ pub struct IncomingAsyncProtocolWrapper<T, BI> {
 	pub receiver: BroadcastStream<T>,
 	session_id: SessionId,
 	engine: Arc<BI>,
+	logger: DebugLogger,
 	ty: ProtocolType,
 }
 
@@ -43,6 +46,7 @@ impl<T: TransformIncoming, BI: BlockchainInterface> IncomingAsyncProtocolWrapper
 			receiver: BroadcastStream::new(receiver),
 			session_id: params.session_id,
 			engine: params.engine.clone(),
+			logger: params.logger.clone(),
 			ty,
 		}
 	}
@@ -55,6 +59,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		verify: &BI,
 		stream_type: &ProtocolType,
 		this_session_id: SessionId,
+		logger: &DebugLogger
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized;
@@ -67,6 +72,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		verify: &BI,
 		stream_type: &ProtocolType,
 		this_session_id: SessionId,
+		logger: &DebugLogger
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
 	where
 		Self: Sized,
@@ -83,11 +89,11 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 							.verify_signature_against_authorities(self)
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
-						dkg_logging::warn!(target: "dkg_gadget", "Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id);
+						logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
 						Ok(None)
 					}
 				} else {
-					dkg_logging::trace!(target: "dkg_gadget", "Will skip passing message to state machine since sender is self");
+					logger.trace("Will skip passing message to state machine since sender is self");
 					Ok(None)
 				}
 			},
@@ -109,12 +115,12 @@ where
 	type Item = Msg<T::IncomingMapped>;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, engine, session_id } = &mut *self;
+		let Self { receiver, ty, engine, session_id, logger } = &mut *self;
 		let mut receiver = Pin::new(receiver);
 
 		loop {
 			match futures::ready!(receiver.as_mut().poll_next(cx)) {
-				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *session_id) {
+				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *session_id, &*logger) {
 					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
 
 					Ok(None) => continue,

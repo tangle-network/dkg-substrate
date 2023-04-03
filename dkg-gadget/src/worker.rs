@@ -16,11 +16,11 @@
 
 use crate::{
 	async_protocols::{blockchain_interface::DKGProtocolEngine, KeygenPartyId},
-	utils::convert_u16_vec_to_usize_vec,
+	utils::convert_u16_vec_to_usize_vec, debug_logger::DebugLogger,
 };
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
-use dkg_logging::{debug, error, info, trace};
+use dkg_logging::{debug, error, info};
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::KEYGEN_TIMEOUT;
 use futures::StreamExt;
@@ -83,7 +83,8 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 8;
+// TODO: set back to 8. Set to 1 for debugging purposes
+pub const MAX_SIGNING_SETS: u64 = 1;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
@@ -156,6 +157,7 @@ where
 	pub keygen_retry_count: Arc<AtomicUsize>,
 	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+	pub logger: DebugLogger,
 	// keep rustc happy
 	_backend: PhantomData<BE>,
 }
@@ -194,6 +196,7 @@ where
 			to_test_client: self.to_test_client.clone(),
 			current_test_id: self.current_test_id.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
+			logger: self.logger.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -220,6 +223,7 @@ where
 		worker_params: WorkerParams<B, BE, C, GE>,
 		to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 		current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+		logger: DebugLogger,
 	) -> Self {
 		let WorkerParams {
 			client,
@@ -261,6 +265,7 @@ where
 			current_test_id,
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
+			logger,
 			_backend: PhantomData,
 		}
 	}
@@ -311,7 +316,7 @@ where
 				active_local_key
 			},
 		};
-		debug!(target: "dkg", "Active local key enabled for stage {stage:?}? {}", active_local_key.is_some());
+		self.logger.debug(format!("Active local key enabled for stage {:?}? {}", stage, active_local_key.is_some()));
 
 		let params = AsyncProtocolParameters {
 			engine: Arc::new(DKGProtocolEngine {
@@ -331,6 +336,7 @@ where
 				metrics: self.metrics.clone(),
 				to_test_client: self.to_test_client.clone(),
 				current_test_id: self.current_test_id.clone(),
+				logger: self.logger.clone(),
 				_pd: Default::default(),
 			}),
 			session_id,
@@ -342,6 +348,7 @@ where
 			authority_public_key,
 			batch_id_gen: Arc::new(Default::default()),
 			handle: status_handle.clone(),
+			logger: self.logger.clone(),
 			local_key: active_local_key,
 		};
 		// Start the respective protocol
@@ -349,18 +356,18 @@ where
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
-				debug!(target: "dkg_gadget::worker", "Starting genesis protocol (obtaing the lock)");
+				self.logger.debug(format!("Starting genesis protocol (obtaining the lock)"));
 				let mut lock = self.rounds.write();
-				debug!(target: "dkg_gadget::worker", "Starting genesis protocol (got the lock)");
+				self.logger.debug(format!("Starting genesis protocol (got the lock)"));
 				if lock.is_some() {
 					dkg_logging::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
 				*lock = Some(status_handle);
 			},
 			ProtoStageType::Queued => {
-				debug!(target: "dkg_gadget::worker", "Starting queued protocol (obtaing the lock)");
+				self.logger.debug(format!("Starting queued protocol (obtaining the lock)"));
 				let mut lock = self.next_rounds.write();
-				debug!(target: "dkg_gadget::worker", "Starting queued protocol (got the lock)");
+				self.logger.debug(format!("Starting queued protocol (got the lock)"));
 				if lock.is_some() {
 					dkg_logging::warn!(target: "dkg_gadget::worker", "Overwriting rounds will result in termination of previous rounds!");
 				}
@@ -368,7 +375,7 @@ where
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
-				debug!(target: "dkg_gadget::worker", "Starting signing protocol: async_index #{}", async_index);
+				self.logger.debug(format!("Starting signing protocol (async_index #{async_index})"));
 				let mut lock = self.signing_rounds.write();
 				// first, check if the async_index is already in use and if so, and it is still
 				// running, return an error and print a warning that we will overwrite the previous
@@ -385,7 +392,7 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
-						dkg_logging::debug!(target: "dkg_gadget::worker", "signing round async index #{} is not active, overwriting it", async_index);
+						self.logger.debug(format!("signing round async index #{} is not active, overwriting it", async_index));
 						lock[async_index as usize] = Some(status_handle)
 					}
 				} else {
@@ -479,7 +486,7 @@ where
 
 	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 	#[cfg_attr(
-		feature = "tracing",
+		feature = "debug-tracing",
 		dkg_logging::instrument(
 			target = "dkg",
 			skip_all,
@@ -653,10 +660,11 @@ where
 		&self,
 		header: &B::Header,
 	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
-		Self::validator_set_inner(header, &self.client)
+		Self::validator_set_inner(&self.logger, header, &self.client)
 	}
 
 	fn validator_set_inner(
+		logger: &DebugLogger,
 		header: &B::Header,
 		client: &Arc<C>,
 	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
@@ -672,7 +680,7 @@ where
 			}
 		};
 
-		trace!(target: "dkg_gadget::worker", "🕸️  active validator set: {:?}", new);
+		logger.trace(format!("🕸️  active validator set: {:?}", new));
 
 		new
 	}
@@ -696,7 +704,10 @@ where
 		let missing: Vec<_> = store.difference(&active).cloned().collect();
 
 		if !missing.is_empty() {
-			debug!(target: "dkg_gadget::worker", "🕸️  for block {:?}, public key missing in validator set is: {:?}", block, missing);
+			self.logger.debug(format!(
+				"🕸️  for block {:?}, public key missing in validator set is: {:?}",
+				block, missing
+			));
 		}
 
 		Ok(())
@@ -735,12 +746,18 @@ where
 		// if the active is currently running, and, the keygen has stalled, create one anew
 		match self.rounds.read().as_ref() {
 			Some(rounds) if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) => {
-				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is active");
+				self.logger.debug(format!(
+					"🕸️  Rounds exists and is active, latest block number: {:?}",
+					latest_block_num
+				));
 				return Ok(())
 			},
 			// For when we already completed the DKG, no need to do it again.
 			Some(rounds) if rounds.is_completed() => {
-				debug!(target: "dkg_gadget::worker", "🕸️  Rounds exists and is completed");
+				self.logger.debug(format!(
+					"🕸️  Rounds exists and is completed, latest block number: {:?}",
+					latest_block_num
+				));
 				return Ok(())
 			},
 			_ => {},
@@ -768,7 +785,7 @@ where
 			.collect();
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
-		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for genesis DKG");
+		self.logger.debug(format!("🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | BEST AUTHORITIES: {best_authorities:?}"));
 		self.spawn_keygen_protocol(
 			best_authorities,
 			authority_public_key,
@@ -787,18 +804,21 @@ where
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
-			debug!(target: "dkg_gadget::worker", "🕸️  queued authority set is empty");
+			self.logger.debug(format!("🕸️  queued authority set is empty"));
 			return Err(DKGError::StartKeygen { reason: String::from("Empty queued authority set") })
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
 		if let Some(rounds) = self.next_rounds.read().as_ref() {
 			// Check if the next rounds exists and has processed for this next queued round id
 			if rounds.is_active() && !rounds.keygen_has_stalled(*header.number()) {
-				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds exists and is active, returning...");
+				self.logger.debug(format!(
+					"🕸️  Next rounds exists and is active, latest block number: {:?}",
+					*header.number()
+				));
 				return Ok(())
 			} else {
 				// Proceed to clear the next rounds.
-				debug!(target: "dkg_gadget::worker", "🕸️  Next rounds keygen has stalled, creating new rounds...");
+				self.logger.debug(format!(" Next rounds keygen has stalled, creating new rounds..."));
 			}
 		}
 		// Get the best next authorities using the keygen threshold
@@ -826,8 +846,7 @@ where
 
 		let authority_public_key = self.get_authority_public_key();
 		// spawn the Keygen protocol for the Queued DKG.
-		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol for queued DKG");
-		debug!(target: "dkg_gadget::worker", "🕸️  PARTY {party_i} | Spawning keygen protocol | Next best authorities {:?}", next_best_authorities);
+		self.logger.debug(format!("🕸️  PARTY {party_i} | SPAWNING QUEUED KEYGEN SESSION {session_id} | BEST AUTHORITIES: {next_best_authorities:?}"));
 		self.spawn_keygen_protocol(
 			next_best_authorities,
 			authority_public_key,
@@ -1056,13 +1075,13 @@ where
 	}
 
 	fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
-		trace!(target: "dkg_gadget::worker", "🕸️  Finality notification: {:?}", notification);
+		self.logger.trace(format!("🕸️  Finality notification: {:?}", notification));
 		// Handle finality notifications
 		self.process_block_notification(&notification.header);
 	}
 
 	#[cfg_attr(
-		feature = "tracing",
+		feature = "debug-tracing",
 		dkg_logging::instrument(target = "dkg", skip_all, ret, err, fields(signed_dkg_message))
 	)]
 	fn verify_signature_against_authorities(
@@ -1070,6 +1089,7 @@ where
 		signed_dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		Self::verify_signature_against_authorities_inner(
+			&self.logger,
 			signed_dkg_msg,
 			&self.latest_header,
 			&self.client,
@@ -1077,6 +1097,7 @@ where
 	}
 
 	pub fn verify_signature_against_authorities_inner(
+		logger: &DebugLogger,
 		signed_dkg_msg: SignedDKGMessage<Public>,
 		latest_header: &Arc<RwLock<Option<B::Header>>>,
 		client: &Arc<C>,
@@ -1087,7 +1108,7 @@ where
 		// Get authority accounts
 		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = latest_header.read().clone() {
-			authorities = Self::validator_set_inner(&header, client)
+			authorities = Self::validator_set_inner(logger, &header, client)
 				.map(|a| (a.0.authorities, a.1.authorities));
 		}
 
@@ -1118,7 +1139,7 @@ where
 	}
 
 	#[cfg_attr(
-		feature = "tracing",
+		feature = "debug-tracing",
 		dkg_logging::instrument(target = "dkg", skip_all, fields(dkg_error))
 	)]
 	pub fn handle_dkg_error(&self, dkg_error: DKGError) {
@@ -1171,7 +1192,7 @@ where
 
 	/// Route messages internally where they need to be routed
 	#[cfg_attr(
-		feature = "tracing",
+		feature = "debug-tracing",
 		dkg_logging::instrument(target = "dkg", skip_all, ret, err, fields(dkg_msg))
 	)]
 	fn process_incoming_dkg_message(
@@ -1228,10 +1249,12 @@ where
 							})
 						}
 					} else {
-						dkg_logging::debug!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
+						dkg_logging::error!(target: "dkg_gadget::worker", "Message is for another signing round: {}", rounds.session_id);
+						panic!("Message is for another signing round: {}", rounds.session_id)
 					}
 				} else {
-					dkg_logging::trace!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
+					dkg_logging::error!(target: "dkg_gadget::worker", "No signing rounds for async index {}", async_index);
+					panic!("No signing rounds for async index {}", async_index)
 				}
 				Ok(())
 			},
@@ -1415,7 +1438,7 @@ where
 		// permutations of size `t+1`. i.e. (1,2), (2,3), (1,3) === (2,1), (3,2), (3,1)
 		let factorial = |num: u64| match num {
 			0 => 1,
-			1.. => (1..num + 1).product(),
+			1.. => (1..=num).product(),
 		};
 		let mut signing_sets = Vec::new();
 		let n = factorial(best_authorities.len() as u64);
@@ -1595,6 +1618,8 @@ where
 
 	// *** Main run loop ***
 	pub async fn run(mut self) {
+		let tag = self.keygen_gossip_engine.local_peer_id().to_string();
+		dkg_logging::define_span!("DKG Client", tag);
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;

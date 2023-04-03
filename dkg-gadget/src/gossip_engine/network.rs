@@ -40,7 +40,7 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
+use crate::{metrics::Metrics, worker::HasLatestHeader, DKGKeystore, debug_logger::DebugLogger};
 use codec::{Decode, Encode};
 use dkg_logging::{debug, warn};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
@@ -110,6 +110,7 @@ impl NetworkGossipEngineBuilder {
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
+		logger: DebugLogger
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
 		// Here we need to create few channels to communicate back and forth between the
 		// background task and the controller.
@@ -137,13 +138,17 @@ impl NetworkGossipEngineBuilder {
 			metrics: Arc::new(metrics),
 		};
 
+		let local_peer_id = handler.service.local_peer_id();
+
 		let controller = GossipHandlerController {
+			local_peer_id,
 			protocol_name: self.protocol_name,
 			handler_channel,
 			message_notifications_channel,
 			gossip_enabled,
 			processing_already_seen_messages_enabled,
 			message_queue,
+			logger,
 			_pd: Default::default(),
 		};
 
@@ -226,6 +231,7 @@ impl DKGMessageWrapper<AuthorityId> {
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
+	local_peer_id: PeerId,
 	protocol_name: ProtocolName,
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
@@ -237,6 +243,7 @@ pub struct GossipHandlerController<B: Block> {
 	gossip_enabled: Arc<AtomicBool>,
 	/// Whether we should process already seen messages or not.
 	processing_already_seen_messages_enabled: Arc<AtomicBool>,
+	logger: DebugLogger,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
 	_pd: PhantomData<B>,
@@ -244,6 +251,14 @@ pub struct GossipHandlerController<B: Block> {
 
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	type Clock = NumberFor<B>;
+
+	fn logger(&self) ->  &DebugLogger {
+		&self.logger
+	}
+
+	fn local_peer_id(&self) -> PeerId {
+		self.local_peer_id
+	}
 
 	fn send(
 		&self,

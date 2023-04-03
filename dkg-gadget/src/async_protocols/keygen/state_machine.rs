@@ -24,6 +24,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 	Keygen, ProtocolMessage,
 };
 use round_based::{Msg, StateMachine};
+use crate::debug_logger::DebugLogger;
 
 #[async_trait]
 impl StateMachineHandler for Keygen {
@@ -34,6 +35,7 @@ impl StateMachineHandler for Keygen {
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType,
+		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
@@ -74,6 +76,7 @@ impl StateMachineHandler for Keygen {
 		params: AsyncProtocolParameters<BI>,
 		_: Self::AdditionalReturnParam,
 		_: u8,
+		logger: &DebugLogger,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
 		dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
 		// PublicKeyGossip (we need meta handler to handle this)

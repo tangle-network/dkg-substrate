@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+debug-tracing = ["dkg-gadget/debug-tracing"]
+
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "macros", "process"] }
 toml = { workspace = true, features = ["parse"] }

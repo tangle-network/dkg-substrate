@@ -27,6 +27,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
+use crate::debug_logger::DebugLogger;
 
 #[async_trait]
 impl StateMachineHandler for OfflineStage {
@@ -43,6 +44,7 @@ impl StateMachineHandler for OfflineStage {
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType,
+		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, .. } = msg.body;
 
@@ -88,6 +90,7 @@ impl StateMachineHandler for OfflineStage {
 		params: AsyncProtocolParameters<BI>,
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
+		logger: &DebugLogger,
 	) -> Result<(), DKGError> {
 		dkg_logging::info!(target: "dkg_gadget", "Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting

@@ -16,6 +16,7 @@ use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_core::{offchain::OffchainStorage, Pair};
 use sp_runtime::traits::Block;
+use crate::debug_logger::DebugLogger;
 
 use crate::DKGKeystore;
 
@@ -30,6 +31,7 @@ pub struct DKGOffchainStorageDb<B, BE> {
 	backend: Arc<BE>,
 	key_store: DKGKeystore,
 	local_keystore: Option<Arc<LocalKeystore>>,
+	logger: DebugLogger,
 	__marker: std::marker::PhantomData<B>,
 }
 
@@ -38,8 +40,9 @@ impl<B, BE> DKGOffchainStorageDb<B, BE> {
 		backend: Arc<BE>,
 		dkg_key_store: DKGKeystore,
 		local_keystore: Option<Arc<LocalKeystore>>,
+		logger: DebugLogger,
 	) -> Self {
-		Self { backend, key_store: dkg_key_store, local_keystore, __marker: Default::default() }
+		Self { backend, key_store: dkg_key_store, local_keystore, logger, __marker: Default::default() }
 	}
 }
 
@@ -72,14 +75,14 @@ where
 		&self,
 		session_id: SessionId,
 	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
-		dkg_logging::trace!(target: "dkg_gadget", "Offchain Storage : Fetching local keys for session {:?}", session_id);
+		self.logger.trace(format!("Offchain Storage : Fetching local keys for session {:?}", session_id));
 		let db_key = keys::LocalKey::new(session_id);
 		let maybe_decrypted_bytes = self.load_and_decrypt(codec::Encode::encode(&db_key))?;
 		match maybe_decrypted_bytes {
 			Some(decrypted_bytes) => {
 				let local_key = serde_json::from_slice(&decrypted_bytes.0)
 					.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;
-				dkg_logging::trace!(target: "dkg_gadget", "Offchain Storage : Fetched local keys for session {:?}, Key : {:?}", session_id, local_key);
+				self.logger.trace(format!("Offchain Storage : Fetched local keys for session {:?}, Key : {:?}", session_id, local_key));
 				Ok(Some(local_key))
 			},
 			None => Ok(None),
@@ -91,7 +94,7 @@ where
 		session_id: SessionId,
 		local_key: LocalKey<Secp256k1>,
 	) -> Result<(), DKGError> {
-		dkg_logging::trace!(target: "dkg_gadget", "Offchain Storage : Store local keys for session {:?}, Key : {:?}", session_id, local_key);
+		self.logger.trace(format!("Offchain Storage : Store local keys for session {:?}, Key : {:?}", session_id, local_key));
 		let db_key = keys::LocalKey::new(session_id);
 		let value = serde_json::to_vec(&local_key)
 			.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;

@@ -20,7 +20,7 @@ use crate::{
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
-	Client, DKGApi, DKGKeystore,
+	Client, DKGApi, DKGKeystore, debug_logger::DebugLogger,
 };
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
@@ -95,6 +95,7 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub metrics: Arc<Option<Metrics>>,
 	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+	pub logger: DebugLogger,
 	pub _pd: PhantomData<BE>,
 }
 
@@ -145,6 +146,7 @@ where
 		let client = &self.client;
 
 		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
+			&self.logger,
 			(*msg).clone(),
 			&self.latest_header,
 			client,
@@ -182,7 +184,7 @@ where
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
 		if let Some(proposal) =
-			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key)
+			get_signed_proposal::<B, C, BE>(&self.backend, finished_round, payload_key, &self.logger)
 		{
 			proposals_for_this_batch.push(proposal);
 

@@ -60,7 +60,7 @@ use self::{
 	blockchain_interface::BlockchainInterface, remote::AsyncProtocolRemote,
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
-use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore, debug_logger::DebugLogger};
 use incoming::IncomingAsyncProtocolWrapper;
 
 pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
@@ -74,6 +74,7 @@ pub struct AsyncProtocolParameters<BI: BlockchainInterface> {
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
 	pub local_key: Option<LocalKey<Secp256k1>>,
+	pub logger: DebugLogger,
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 }
 
@@ -125,6 +126,7 @@ impl<BI: BlockchainInterface> Clone for AsyncProtocolParameters<BI> {
 			handle: self.handle.clone(),
 			local_key: self.local_key.clone(),
 			db: self.db.clone(),
+			logger: self.logger.clone()
 		}
 	}
 }
@@ -361,12 +363,14 @@ where
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
 	let (outgoing_tx, outgoing_rx) = futures::channel::mpsc::unbounded();
 
+	let logger = params.logger.clone();
 	let session_id = params.session_id;
 	let sm = StateMachineWrapper::new(
 		sm,
 		session_id,
 		channel_type.clone(),
 		params.handle.current_round_blame_tx.clone(),
+		logger
 	);
 
 	let mut async_proto = AsyncProtocol::new(
@@ -383,9 +387,10 @@ where
 		loop {
 			dkg_logging::info!(target: "dkg_gadget", "Running AsyncProtocol with party_index: {}", params.party_i);
 			let res = async_proto.run().await;
+			let logger = params_for_end_of_proto.logger.clone();
 			match res {
 				Ok(v) =>
-					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
+					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index, &logger)
 						.await,
 				Err(err) => match err {
 					async_runtime::Error::Recv(e) |
@@ -614,7 +619,7 @@ where
 				},
 			};
 
-			if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type)
+			if SM::handle_unsigned_message(&to_async_proto, unsigned_message, &channel_type, &params.logger)
 				.is_err()
 			{
 				dkg_logging::error!(target: "dkg_gadget", "Error handling unsigned inbound message. Returning");
