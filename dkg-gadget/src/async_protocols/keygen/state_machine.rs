@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, ProtocolType,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+		AsyncProtocolParameters, ProtocolType,
+	},
+	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
@@ -24,7 +27,6 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 	Keygen, ProtocolMessage,
 };
 use round_based::{Msg, StateMachine};
-use crate::debug_logger::DebugLogger;
 
 #[async_trait]
 impl StateMachineHandler for Keygen {
@@ -78,7 +80,7 @@ impl StateMachineHandler for Keygen {
 		_: u8,
 		logger: &DebugLogger,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
+		params.logger.info(format!("Completed keygen stage successfully!"));
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in

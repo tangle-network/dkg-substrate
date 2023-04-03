@@ -203,6 +203,7 @@ where
 					&self.latest_header,
 					&self.backend,
 					proposals,
+					&self.logger,
 				);
 			} else {
 				dkg_logging::info!(target: "dkg_gadget", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);

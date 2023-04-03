@@ -169,6 +169,6 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 
 		debug!(target: "dkg_gadget::gossip", "Gossiping local node {} public key and signature", public)
 	} else {
-		error!(target: "dkg_gadget::gossip", "Could not sign public key");
+		gossip_engine.logger().error(format!("Could not sign public key"));
 	}
 }

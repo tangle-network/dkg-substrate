@@ -49,18 +49,20 @@ where
 			})?;
 
 		let protocol = async move {
-				dkg_logging::info!(target: "dkg_gadget::keygen", "Will execute keygen since local is in best authority set");
-				let t = threshold;
-				let n = params.best_authorities.len() as u16;
-				// wait for the start signal
-				start_rx
-					.await
-					.map_err(|err| DKGError::StartKeygen { reason: err.to_string() })?;
-				// Set status of the handle
-				params.handle.set_status(MetaHandlerStatus::Keygen);
-				// Execute the keygen
-				GenericAsyncHandler::new_keygen(params, t, n, status)?.await?;
-				dkg_logging::debug!(target: "dkg_gadget::keygen", "Keygen stage complete!");
+			params
+				.logger
+				.info(format!("Will execute keygen since local is in best authority set"));
+			let t = threshold;
+			let n = params.best_authorities.len() as u16;
+			// wait for the start signal
+			start_rx
+				.await
+				.map_err(|err| DKGError::StartKeygen { reason: err.to_string() })?;
+			// Set status of the handle
+			params.handle.set_status(MetaHandlerStatus::Keygen);
+			// Execute the keygen
+			GenericAsyncHandler::new_keygen(params, t, n, status)?.await?;
+			params.logger.debug("Keygen stage complete!");
 
 			Ok(())
 		}
@@ -69,12 +71,12 @@ where
 				Ok(_) => {
 					// Set the status as complete.
 					status_handle.set_status(MetaHandlerStatus::Complete);
-					dkg_logging::info!(target: "dkg_gadget::keygen", "🕸️  Keygen GenericAsyncHandler completed");
-				}
+					params.logger.info(format!("🕸️  Keygen GenericAsyncHandler completed"));
+				},
 				Err(ref err) => {
 					// Do not update the status here, evetually the Keygen will fail and timeout.
 					dkg_logging::error!(target: "dkg_gadget::keygen", "Keygen failed with error: {:?}", err);
-				}
+				},
 			};
 			res
 		});

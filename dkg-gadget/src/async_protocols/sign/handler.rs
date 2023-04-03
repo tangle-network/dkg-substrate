@@ -105,7 +105,7 @@ where
 						count_in_batch
 					);
 				} else {
-					dkg_logging::warn!(target: "dkg_gadget", "🕸️  We are not among signers, skipping");
+					params.logger.warn(format!("🕸️  We are not among signers, skipping"));
 					return Err(DKGError::GenericError {
 						reason: "We are not among signers, skipping".to_string(),
 					})
@@ -243,7 +243,7 @@ where
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
-						dkg_logging::info!(target: "dkg_gadget", "Found matching round key!");
+						params.logger.info(format!("Found matching round key!"));
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)

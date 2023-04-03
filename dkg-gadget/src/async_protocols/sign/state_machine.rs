@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
-	Threshold,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
+		Threshold,
+	},
+	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
@@ -27,7 +30,6 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 use round_based::{Msg, StateMachine};
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
-use crate::debug_logger::DebugLogger;
 
 #[async_trait]
 impl StateMachineHandler for OfflineStage {
@@ -92,7 +94,7 @@ impl StateMachineHandler for OfflineStage {
 		async_index: u8,
 		logger: &DebugLogger,
 	) -> Result<(), DKGError> {
-		dkg_logging::info!(target: "dkg_gadget", "Completed offline stage successfully!");
+		params.logger.info(format!("Completed offline stage successfully!"));
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
@@ -110,7 +112,7 @@ impl StateMachineHandler for OfflineStage {
 			async_index,
 		) {
 			Ok(voting_stage) => {
-				dkg_logging::info!(target: "dkg_gadget", "Starting voting stage...");
+				params.logger.info(format!("Starting voting stage..."));
 				if let Err(e) = voting_stage.await {
 					dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", e);
 					return Err(e)

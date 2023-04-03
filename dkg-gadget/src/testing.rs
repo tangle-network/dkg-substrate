@@ -19,6 +19,7 @@ use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
 use uuid::Uuid;
+use crate::debug_logger::DebugLogger;
 
 /// When peers use a Client, the streams they receive are suppose
 /// to come from the BlockChain. However, for testing purposes, we will mock
@@ -49,8 +50,10 @@ impl TestBackend {
 		api: DummyApi,
 		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>)>,
 		latest_test_uuid: Arc<RwLock<Option<Uuid>>>,
+		logger: DebugLogger,
 	) -> std::io::Result<Self> {
-		dkg_logging::info!(target: "dkg", "0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}");
+		logger
+			.info(format!("0. Setting up orchestrator<=>DKG communications for peer {peer_id:?}"));
 		let socket = tokio::net::TcpStream::connect(mock_bc_addr).await?;
 		let (tx, mut rx) = dkg_mock_blockchain::transport::bind_transport::<TestBlock>(socket);
 		let tx0 = Arc::new(tokio::sync::Mutex::new(tx));
@@ -67,9 +70,12 @@ impl TestBackend {
 		};
 
 		let _this_for_dkg_listener = this.clone();
+		let logger0 = logger.clone();
 		let dkg_worker_listener = async move {
 			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
-				dkg_logging::info!(target: "dkg", "The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}");
+				logger0.info(format!(
+					"The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}"
+				));
 				let success = result.is_ok();
 				let packet = ProtocolPacket::ClientToBlockChain {
 					event: MockClientResponse { error: result.err(), success, trace_id },
@@ -82,7 +88,8 @@ impl TestBackend {
 
 		let this_for_orchestrator_rx = this.clone();
 		let orchestrator_coms = async move {
-			dkg_logging::info!(target: "dkg", "Complete: orchestrator<=>DKG communications for peer {peer_id:?}");
+			logger
+				.info(format!("Complete: orchestrator<=>DKG communications for peer {peer_id:?}"));
 			while let Some(packet) = rx.next().await {
 				match packet {
 					ProtocolPacket::InitialHandshake => {
@@ -121,7 +128,7 @@ impl TestBackend {
 						}
 					},
 					ProtocolPacket::Halt => {
-						dkg_logging::info!(target: "dkg", "Received HALT command from the orchestrator");
+						logger.info(format!("Received HALT command from the orchestrator"));
 						return
 					},
 
@@ -339,6 +346,7 @@ impl AuxStore for TestBackend {
 #[derive(Clone)]
 pub struct DummyApi {
 	inner: Arc<RwLock<DummyApiInner>>,
+	logger: DebugLogger,
 }
 
 pub struct DummyApiInner {
@@ -360,6 +368,7 @@ impl DummyApi {
 		signing_t: u16,
 		signing_n: u16,
 		n_sessions: usize,
+		logger: DebugLogger,
 	) -> Self {
 		let mut dkg_keys = HashMap::new();
 		// add a empty-key for the genesis block to drive the DKG forward
@@ -378,6 +387,7 @@ impl DummyApi {
 				authority_sets: HashMap::new(),
 				dkg_keys,
 			})),
+			logger,
 		}
 	}
 
@@ -812,7 +822,7 @@ mod dummy_api {
 			block: &BlockId<TestBlock>,
 		) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId>> {
 			let number = self.block_id_to_u64(block);
-			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
+			self.logger.info(format!("Getting authority set for block {number}"));
 			let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
 			let authority_set_id = number;
 
@@ -860,7 +870,7 @@ mod dummy_api {
 		}
 
 		fn next_pub_key_sig(&self, _: &BlockId<TestBlock>) -> ApiResult<Option<Vec<u8>>> {
-			dkg_logging::error!(target: "dkg", "unimplemented get_next_pub_key_sig");
+			self.logger.error(format!("unimplemented get_next_pub_key_sig"));
 			todo!()
 		}
 
@@ -869,7 +879,7 @@ mod dummy_api {
 			block: &BlockId<TestBlock>,
 		) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
 			let number = self.block_id_to_u64(block);
-			dkg_logging::info!(target: "dkg", "Getting authority set for block {number}");
+			self.logger.info(format!("Getting authority set for block {number}"));
 			let pub_key = self.inner.read().dkg_keys.get(&number).unwrap().clone();
 			let authority_set_id = number;
 			Ok((authority_set_id, pub_key))
@@ -920,7 +930,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			_block_number: BlockNumber,
 		) -> ApiResult<BlockNumber> {
-			dkg_logging::error!(target: "dkg", "unimplemented get_max_extrinsic_delay");
+			self.logger.error(format!("unimplemented get_max_extrinsic_delay"));
 			todo!()
 		}
 
@@ -928,7 +938,7 @@ mod dummy_api {
 			&self,
 			_: &BlockId<TestBlock>,
 		) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
-			dkg_logging::error!(target: "dkg", "unimplemented get_authority_accounts");
+			self.logger.error(format!("unimplemented get_authority_accounts"));
 			todo!()
 			//Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
 		}
@@ -938,7 +948,7 @@ mod dummy_api {
 			_: &BlockId<TestBlock>,
 			_authorities: Vec<AuthorityId>,
 		) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
-			dkg_logging::error!(target: "dkg", "unimplemented get_repuations");
+			self.logger.error(format!("unimplemented get_repuations"));
 			todo!()
 			//Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
 		}
@@ -984,8 +994,8 @@ pub mod mock_gossip {
 	use sp_keystore::SyncCryptoStore;
 
 	use super::MultiSubscribableStream;
-	use dkg_runtime_primitives::{crypto, KEY_TYPE};
 	use crate::debug_logger::DebugLogger;
+	use dkg_runtime_primitives::{crypto, KEY_TYPE};
 
 	#[derive(Clone)]
 	pub struct InMemoryGossipEngine {
@@ -995,7 +1005,7 @@ pub mod mock_gossip {
 		this_peer_public_key: Option<AuthorityId>,
 		// Maps Peer IDs to public keys
 		mapping: Arc<Mutex<HashMap<PeerId, AuthorityId>>>,
-		logger: Option<DebugLogger>
+		logger: Option<DebugLogger>,
 	}
 
 	impl InMemoryGossipEngine {
@@ -1006,7 +1016,7 @@ pub mod mock_gossip {
 				this_peer: None,
 				this_peer_public_key: None,
 				mapping: Arc::new(Mutex::new(Default::default())),
-				logger: None
+				logger: None,
 			}
 		}
 
@@ -1017,7 +1027,7 @@ pub mod mock_gossip {
 			n_blocks: u64,
 			keyring: crate::keyring::Keyring,
 			key_store: &dyn SyncCryptoStore,
-			logger: DebugLogger
+			logger: DebugLogger,
 		) -> Self {
 			let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
 				&*key_store,
@@ -1048,7 +1058,7 @@ pub mod mock_gossip {
 				this_peer: Some(this_peer),
 				this_peer_public_key: Some(public_key),
 				mapping: self.mapping.clone(),
-				logger: Some(logger)
+				logger: Some(logger),
 			}
 		}
 

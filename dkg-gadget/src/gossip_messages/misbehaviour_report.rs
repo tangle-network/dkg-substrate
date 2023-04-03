@@ -48,7 +48,7 @@ where
 	}
 
 	if let DKGMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
-		debug!(target: "dkg_gadget", "Received misbehaviour report");
+		dkg_worker.logger.debug(format!("Received misbehaviour report"));
 
 		let is_main_round = {
 			if let Some(round) = dkg_worker.rounds.read().as_ref() {
@@ -175,7 +175,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 		reports.reporters.push(public);
 		reports.signatures.push(encoded_signature);
 
-		debug!(target: "dkg_gadget", "Gossiping misbehaviour report and signature");
+		dkg_worker.logger.debug(format!("Gossiping misbehaviour report and signature"));
 
 		let reports = (*reports).clone();
 		// Try to store reports offchain
@@ -184,7 +184,7 @@ pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
 			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
 		}
 	} else {
-		error!(target: "dkg_gadget", "Could not sign public key");
+		dkg_worker.logger.error(format!("Could not sign public key"));
 	}
 }
 
