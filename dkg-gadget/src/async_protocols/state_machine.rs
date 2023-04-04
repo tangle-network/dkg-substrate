@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::debug_logger::DebugLogger;
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
+use crate::debug_logger::DebugLogger;
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};

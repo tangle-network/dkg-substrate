@@ -154,18 +154,20 @@ mod serde_impl {
 				IntermediateMockBlockChainEvent::TestCase { trace_id, test } =>
 					MockBlockChainEvent::TestCase { trace_id, test },
 				IntermediateMockBlockChainEvent::FinalityNotification { notification } => {
-					let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
-					let summary= FinalizeSummary::<B> {
+					let (tx, _rx) =
+						sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
+					let summary = FinalizeSummary::<B> {
 						header: Decode::decode(&mut notification.header.as_slice()).unwrap(),
 						finalized: vec![Decode::decode(&mut notification.hash.as_slice()).unwrap()],
-						stale_heads: vec![]
+						stale_heads: vec![],
 					};
 					let notification = FinalityNotification::<B>::from_summary(summary, tx);
 
 					MockBlockChainEvent::FinalityNotification { notification }
 				},
 				IntermediateMockBlockChainEvent::ImportNotification { notification } => {
-					let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
+					let (tx, _rx) =
+						sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
 					let notification = ImportNotification::<B>::new(
 						Decode::decode(&mut notification.hash.as_slice()).unwrap(),
 						BlockOrigin::NetworkBroadcast,

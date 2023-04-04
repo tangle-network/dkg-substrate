@@ -4,13 +4,13 @@ use crate::{
 };
 use atomic::Atomic;
 use futures::{SinkExt, StreamExt};
+use sc_client_api::FinalizeSummary;
 use std::{
 	collections::{HashMap, VecDeque},
 	net::SocketAddr,
 	sync::{atomic::Ordering, Arc},
 	time::Duration,
 };
-use sc_client_api::FinalizeSummary;
 use tokio::{
 	net::{TcpListener, TcpStream},
 	sync::{mpsc, Mutex, RwLock},
@@ -319,8 +319,7 @@ impl MockBlockchain {
 			let trace_id = Uuid::new_v4();
 			// phase 1: send finality notifications to each client
 			let mut write = self.clients.write().await;
-			let next_finality_notification =
-				create_mocked_finality_blockchain_event(*round_number);
+			let next_finality_notification = create_mocked_finality_blockchain_event(*round_number);
 			for (_id, client) in write.iter_mut() {
 				client.outstanding_tasks.insert(trace_id, next_case.clone());
 				// First, send out a MockBlockChainEvent (happens before each round occurs)
@@ -385,11 +384,7 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockChainE
 	slice[..8].copy_from_slice(&block_number.to_be_bytes());
 
 	let hash = sp_runtime::testing::H256::from(slice);
-	let summary = FinalizeSummary {
-		header,
-		finalized: vec![hash],
-		stale_heads: vec![]
-	};
+	let summary = FinalizeSummary { header, finalized: vec![hash], stale_heads: vec![] };
 
 	let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
 	let notification = FinalityNotification::<TestBlock>::from_summary(summary, tx);

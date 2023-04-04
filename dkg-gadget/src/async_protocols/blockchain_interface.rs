@@ -113,8 +113,15 @@ pub struct DKGProtocolEngine<
 	pub _pd: PhantomData<BE>,
 }
 
-impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities> {
+impl<
+		B: Block,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+{
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
 		let current_test_id = self.current_test_id.read().clone().unwrap();
@@ -221,7 +228,7 @@ where
 			&self.backend,
 			finished_round,
 			payload_key,
-			&self.logger
+			&self.logger,
 		) {
 			proposals_for_this_batch.push(proposal);
 

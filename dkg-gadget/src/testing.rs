@@ -11,15 +11,14 @@ use sc_client_api::{AuxStore, BlockchainEvents, HeaderBackend};
 use sc_network::PeerId;
 use sc_utils::mpsc::*;
 use sp_api::{
-	offchain::storage::InMemOffchainStorage, ApiExt, AsTrieBackend, BlockT,
-	ProvideRuntimeApi, StateBackend,
+	offchain::storage::InMemOffchainStorage, ApiExt, AsTrieBackend, BlockT, ProvideRuntimeApi,
+	StateBackend,
 };
-use sp_runtime::traits::BlakeTwo256;
+use sp_core::bounded_vec::BoundedVec;
+use sp_runtime::{testing::H256, traits::BlakeTwo256};
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
-use sp_core::bounded_vec::BoundedVec;
-use sp_runtime::testing::H256;
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
 use uuid::Uuid;
 
@@ -203,8 +202,15 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 	type State = DummyStateBackend;
 	type OffchainStorage = InMemOffchainStorage;
 
-	fn pin_block(&self, _: <TestBlock as sp_api::BlockT>::Hash) -> Result<(), sp_blockchain::Error> { todo!() }
-	fn unpin_block(&self, _: <TestBlock as sp_api::BlockT>::Hash) { todo!() }
+	fn pin_block(
+		&self,
+		_: <TestBlock as sp_api::BlockT>::Hash,
+	) -> Result<(), sp_blockchain::Error> {
+		todo!()
+	}
+	fn unpin_block(&self, _: <TestBlock as sp_api::BlockT>::Hash) {
+		todo!()
+	}
 
 	fn begin_operation(&self) -> sp_blockchain::Result<Self::BlockImportOperation> {
 		todo!()
@@ -282,10 +288,7 @@ impl sc_client_api::Backend<TestBlock> for TestBackend {
 }
 
 impl HeaderBackend<TestBlock> for TestBackend {
-	fn header(
-		&self,
-		_id: H256,
-	) -> sp_blockchain::Result<Option<<TestBlock as BlockT>::Header>> {
+	fn header(&self, _id: H256) -> sp_blockchain::Result<Option<<TestBlock as BlockT>::Header>> {
 		todo!()
 	}
 
@@ -293,10 +296,7 @@ impl HeaderBackend<TestBlock> for TestBackend {
 		todo!()
 	}
 
-	fn status(
-		&self,
-		_id: H256,
-	) -> sp_blockchain::Result<sp_blockchain::BlockStatus> {
+	fn status(&self, _id: H256) -> sp_blockchain::Result<sp_blockchain::BlockStatus> {
 		todo!()
 	}
 
@@ -355,7 +355,8 @@ pub struct DummyApiInner {
 	#[allow(dead_code)]
 	signing_n: u16,
 	// maps: block number => list of authorities for that block
-	authority_sets: HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
+	authority_sets:
+		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
 }
 
@@ -395,7 +396,7 @@ impl DummyApi {
 			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(x);
 			let hash = header.hash();
 			if &hash == input {
-				return x;
+				return x
 			}
 		}
 
@@ -424,7 +425,10 @@ impl sp_state_machine::StorageIterator<BlakeTwo256> for DummyRawIterator {
 		todo!()
 	}
 
-	fn next_pair(&mut self, _backend: &Self::Backend) -> Option<Result<(StorageKey, StorageValue), Self::Error>> {
+	fn next_pair(
+		&mut self,
+		_backend: &Self::Backend,
+	) -> Option<Result<(StorageKey, StorageValue), Self::Error>> {
 		todo!()
 	}
 
@@ -506,7 +510,11 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 		todo!()
 	}
 
-	fn for_key_values_with_prefix<F: FnMut(&[u8], &[u8])>(&self, _prefix: &[u8], _f: F) -> Result<(), DummyError> {
+	fn for_key_values_with_prefix<F: FnMut(&[u8], &[u8])>(
+		&self,
+		_prefix: &[u8],
+		_f: F,
+	) -> Result<(), DummyError> {
 		todo!()
 	}
 
@@ -542,7 +550,10 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 		todo!()
 	}
 
-	fn pairs<'a>(&'a self, _args: IterArgs) -> Result<PairsIter<'a, BlakeTwo256, Self::RawIter>, Self::Error> {
+	fn pairs<'a>(
+		&'a self,
+		_args: IterArgs,
+	) -> Result<PairsIter<'a, BlakeTwo256, Self::RawIter>, Self::Error> {
 		todo!()
 	}
 
@@ -833,7 +844,15 @@ mod dummy_api {
 		}
 	}
 
-	impl dkg_primitives::DKGApi<TestBlock, AuthorityId, sp_api::NumberFor<TestBlock>, dkg_runtime_primitives::CustomU32Getter<10000>, dkg_runtime_primitives::CustomU32Getter<100>> for DummyApi {
+	impl
+		dkg_primitives::DKGApi<
+			TestBlock,
+			AuthorityId,
+			sp_api::NumberFor<TestBlock>,
+			dkg_runtime_primitives::CustomU32Getter<10000>,
+			dkg_runtime_primitives::CustomU32Getter<100>,
+		> for DummyApi
+	{
 		fn __runtime_api_internal_call_api_at(
 			&self,
 			_: H256,
@@ -848,7 +867,12 @@ mod dummy_api {
 		fn authority_set(
 			&self,
 			block: H256,
-		) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>> {
+		) -> ApiResult<
+			dkg_runtime_primitives::AuthoritySet<
+				AuthorityId,
+				dkg_runtime_primitives::CustomU32Getter<100>,
+			>,
+		> {
 			let number = self.block_id_to_u64(&block);
 			self.logger.info(format!("Getting authority set for block {number}"));
 			let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
@@ -860,8 +884,15 @@ mod dummy_api {
 		fn queued_authority_set(
 			&self,
 			id: H256,
-		) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>> {
-			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
+		) -> ApiResult<
+			dkg_runtime_primitives::AuthoritySet<
+				AuthorityId,
+				dkg_runtime_primitives::CustomU32Getter<100>,
+			>,
+		> {
+			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(
+				self.block_id_to_u64(&id) + 1,
+			);
 			self.authority_set(header.hash())
 		}
 
@@ -881,11 +912,7 @@ mod dummy_api {
 			Ok(self.inner.read().keygen_t)
 		}
 
-		fn should_refresh(
-			&self,
-			_: H256,
-			_block_number: BlockNumber,
-		) -> ApiResult<bool> {
+		fn should_refresh(&self, _: H256, _block_number: BlockNumber) -> ApiResult<bool> {
 			Ok(true)
 		}
 
@@ -893,7 +920,9 @@ mod dummy_api {
 			&self,
 			id: H256,
 		) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
-			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
+			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(
+				self.block_id_to_u64(&id) + 1,
+			);
 			self.dkg_pub_key(header.hash()).map(Some)
 		}
 
@@ -913,10 +942,7 @@ mod dummy_api {
 			Ok((authority_set_id, pub_key))
 		}
 
-		fn get_best_authorities(
-			&self,
-			id: H256,
-		) -> ApiResult<Vec<(u16, AuthorityId)>> {
+		fn get_best_authorities(&self, id: H256) -> ApiResult<Vec<(u16, AuthorityId)>> {
 			let read = self.inner.read();
 			let id = self.block_id_to_u64(&id);
 			Ok(read
@@ -929,11 +955,10 @@ mod dummy_api {
 				.collect())
 		}
 
-		fn get_next_best_authorities(
-			&self,
-			id: H256,
-		) -> ApiResult<Vec<(u16, AuthorityId)>> {
-			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
+		fn get_next_best_authorities(&self, id: H256) -> ApiResult<Vec<(u16, AuthorityId)>> {
+			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(
+				self.block_id_to_u64(&id) + 1,
+			);
 			self.get_best_authorities(header.hash())
 		}
 
@@ -962,10 +987,7 @@ mod dummy_api {
 			todo!()
 		}
 
-		fn get_authority_accounts(
-			&self,
-			_: H256,
-		) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
+		fn get_authority_accounts(&self, _: H256) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
 			self.logger.error(format!("unimplemented get_authority_accounts"));
 			todo!()
 			//Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
@@ -1076,7 +1098,6 @@ pub mod mock_gossip {
 			let mut lock = dummy_api.inner.write();
 			// add +1 to allow calls for queued_authorities at block=n_blocks to not fail
 			for x in 0..n_blocks + 1 {
-
 				lock.authority_sets.entry(x).or_default().force_push(public_key.clone());
 			}
 

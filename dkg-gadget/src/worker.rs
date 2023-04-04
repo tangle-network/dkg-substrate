@@ -1491,11 +1491,7 @@ where
 			self.currently_signing_proposals.write().clear();
 		}
 
-		let unsigned_proposals = match self
-			.client
-			.runtime_api()
-			.get_unsigned_proposals(at)
-		{
+		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(at) {
 			Ok(res) => {
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
