@@ -61,8 +61,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let signing_n = n_clients as u16;
 
 	// logging for the dummy api only
+	let output = std::fs::File::create(args.tmp_path.join(format!("dummy_api.txt")))?;
 	let dummy_api_logger =
-		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), None);
+		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output));
 
 	let api = &dkg_gadget::testing::DummyApi::new(
 		keygen_t,
@@ -94,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
 		// output the logs for this specific peer to a file
-		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.json")))?;
+		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.txt")))?;
 		let logger = dkg_gadget::debug_logger::DebugLogger::new(peer_id, Some(output));
 		keygen_gossip_engine.set_logger(logger.clone());
 		signing_gossip_engine.set_logger(logger.clone());

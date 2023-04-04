@@ -64,8 +64,7 @@ impl StateMachineHandler for OfflineStage {
 					};
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						//dkg_logging::info!("Skipping passing of message to async proto since not
-						// intended for local");
+						logger.info("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
