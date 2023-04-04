@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::{
 	async_protocols::BatchKey,
 	debug_logger::DebugLogger,
@@ -33,7 +32,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -42,7 +41,7 @@ use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_runtime::traits::{Block, NumberFor};
+use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 use webb_proposals::Proposal;
@@ -53,6 +52,13 @@ use super::KeygenPartyId;
 pub trait BlockchainInterface: Send + Sync {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
+	type MaxProposalLength: Get<u32>
+		+ Clone
+		+ Send
+		+ Sync
+		+ std::fmt::Debug
+		+ 'static
+		+ std::fmt::Debug;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -62,7 +68,7 @@ pub trait BlockchainInterface: Send + Sync {
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<Self::MaxProposalLength>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
@@ -79,7 +85,14 @@ pub trait BlockchainInterface: Send + Sync {
 	fn now(&self) -> Self::Clock;
 }
 
-pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
+pub struct DKGProtocolEngine<
+	B: Block,
+	BE,
+	C,
+	GE,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub client: Arc<C>,
@@ -89,9 +102,9 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
-	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal>>>>,
+	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal<MaxProposalLength>>>>>,
 	pub is_genesis: bool,
-	pub current_validator_set: Arc<RwLock<AuthoritySet<Public>>>,
+	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
 	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
@@ -100,7 +113,8 @@ pub struct DKGProtocolEngine<B: Block, BE, C, GE> {
 	pub _pd: PhantomData<BE>,
 }
 
-impl<B: Block, BE, C, GE> DKGProtocolEngine<B, BE, C, GE> {
+impl<B: Block, BE, C, GE, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities> {
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
 		let current_test_id = self.current_test_id.read().clone().unwrap();
@@ -111,13 +125,26 @@ impl<B: Block, BE, C, GE> DKGProtocolEngine<B, BE, C, GE> {
 	fn send_result_to_test_client(&self, _result: Result<(), String>) {}
 }
 
-impl<B: Block, BE, C, GE> KeystoreExt for DKGProtocolEngine<B, BE, C, GE> {
+impl<
+		B: Block,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+{
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
 	}
 }
 
-impl<B, BE, C, GE> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE>
+impl<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	BE: Backend<B>,
@@ -129,16 +156,19 @@ where
 	}
 }
 
-impl<B, BE, C, GE> BlockchainInterface for DKGProtocolEngine<B, BE, C, GE>
+impl<B, BE, C, GE> BlockchainInterface
+	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 	BE: Backend<B> + 'static,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
 	type GossipEngine = Arc<GE>;
+	type MaxProposalLength = MaxProposalLength;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -162,7 +192,7 @@ where
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		_message: BigInt,
@@ -187,11 +217,11 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Some(proposal) = get_signed_proposal::<B, C, BE>(
+		if let Ok(Some(proposal)) = get_signed_proposal::<B, C, BE, MaxProposalLength, MaxAuthorities>(
 			&self.backend,
 			finished_round,
 			payload_key,
-			&self.logger,
+			&self.logger
 		) {
 			proposals_for_this_batch.push(proposal);
 
@@ -205,7 +235,7 @@ where
 					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 				}
 
-				save_signed_proposals_in_storage::<B, C, BE>(
+				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength, MaxAuthorities>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,
 					&self.latest_header,

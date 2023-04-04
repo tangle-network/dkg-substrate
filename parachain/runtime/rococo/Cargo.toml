@@ -150,6 +150,8 @@ std = [
 	"dkg-runtime-primitives/std",
 	"pallet-dkg-proposals/std",
 	"pallet-dkg-proposal-handler/std",
+	"pallet-collective/std",
+	"frame-system-benchmarking/std",
 ]
 runtime-benchmarks = [
 	"hex-literal",

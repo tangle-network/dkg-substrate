@@ -10,7 +10,7 @@ use dkg_primitives::{
 	},
 	utils::convert_signature,
 };
-use dkg_runtime_primitives::{crypto::Public, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::Public, MaxProposalLength, UnsignedProposal};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
@@ -21,7 +21,7 @@ use webb_proposals::{Proposal, ProposalKind};
 use super::KeygenPartyId;
 
 pub(crate) type VoteResults =
-	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal, SignatureRecid, BigInt)>>>>;
+	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal<MaxProposalLength>, SignatureRecid, BigInt)>>>>;
 
 #[derive(Clone)]
 pub struct TestDummyIface {
@@ -36,6 +36,7 @@ pub struct TestDummyIface {
 impl BlockchainInterface for TestDummyIface {
 	type Clock = u32;
 	type GossipEngine = ();
+	type MaxProposalLength = MaxProposalLength;
 
 	fn verify_signature_against_authorities(
 		&self,
@@ -59,7 +60,7 @@ impl BlockchainInterface for TestDummyIface {
 	fn process_vote_result(
 		&self,
 		signature_rec: SignatureRecid,
-		unsigned_proposal: UnsignedProposal,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
@@ -77,7 +78,7 @@ impl BlockchainInterface for TestDummyIface {
 		};
 
 		let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
-		lock.entry(batch_key).or_default().push((prop, signature_rec, message));
+		lock.entry(batch_key).or_default().push((prop.unwrap(), signature_rec, message));
 
 		Ok(())
 	}

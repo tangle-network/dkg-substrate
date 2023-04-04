@@ -13,9 +13,14 @@
 // limitations under the License.
 //
 use crate as pallet_dkg_proposal_handler;
-use codec::Encode;
-use frame_support::{parameter_types, traits::Everything, PalletId};
+use codec::{Decode, Encode};
+pub use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
+	MaxSignatureLength, DKG_ENGINE_ID,
+};
+use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
+use frame_system::EnsureRoot;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -34,11 +39,11 @@ use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 use sp_runtime::RuntimeAppPublic;
 
-use dkg_runtime_primitives::{keccak_256, TransactionV2, TypedChainId};
-
 use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, EIP2930Transaction, TransactionAction, U256,
+	keccak_256, MaxProposalLength, MaxResources, MaxVotes, TransactionV2, TypedChainId,
 };
+
+use dkg_runtime_primitives::{EIP2930Transaction, TransactionAction, U256};
 use std::sync::Arc;
 use webb_proposals::{Proposal, ProposalKind};
 
@@ -67,10 +72,6 @@ frame_support::construct_runtime!(
 		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 	}
 );
-
-parameter_types! {
-	pub const MaxAuthorities: u32 = 100_000;
-}
 
 impl pallet_aura::Config for Test {
 	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
@@ -162,12 +163,21 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxAuthorityProposers : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxExternalProposerAccounts : u32 = 100;
+}
+
 impl pallet_dkg_proposal_handler::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -177,11 +187,15 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
-	type Proposal = Vec<u8>;
+	type Proposal = BoundedVec<u8, MaxProposalLength>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type Period = Period;
+	type MaxVotes = MaxVotes;
+	type MaxResources = MaxResources;
+	type MaxAuthorityProposers = MaxAuthorityProposers;
+	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
 	type WeightInfo = ();
 }
 
@@ -238,6 +252,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type SessionPeriod = Period;
 	type DecayPercentage = DecayPercentage;
 	type Reputation = u128;
@@ -245,6 +260,10 @@ impl pallet_dkg_metadata::Config for Test {
 	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = ();
 }
 
@@ -289,8 +308,9 @@ pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	t.register_extension(KeystoreExt(Arc::new(keystore)));
 	t.register_extension(TransactionPoolExt::new(pool));
 
+	let bounded_key: BoundedVec<_, _> = mock_dkg_pub_key.encode().try_into().unwrap();
 	t.execute_with(|| {
-		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, mock_dkg_pub_key.encode()));
+		pallet_dkg_metadata::DKGPublicKey::<Test>::put((0, bounded_key));
 		execute()
 	})
 }
@@ -332,7 +352,9 @@ pub fn mock_sign_msg(
 	keystore.ecdsa_sign_prehashed(dkg_runtime_primitives::crypto::Public::ID, &pub_key, msg)
 }
 
-pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
+pub fn mock_signed_proposal(
+	eth_tx: TransactionV2,
+) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -341,5 +363,9 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2) -> Proposal {
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
+	Proposal::Signed {
+		kind: ProposalKind::EVM,
+		data: eth_tx_ser.try_into().unwrap(),
+		signature: sig_vec.try_into().unwrap(),
+	}
 }

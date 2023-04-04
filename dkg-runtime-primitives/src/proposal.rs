@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use frame_support::RuntimeDebug;
+use frame_support::{
+	pallet_prelude::{ConstU32, Get},
+	RuntimeDebug,
+};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode};
@@ -74,7 +77,18 @@ pub struct RefreshProposalSigned {
 	pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Decode, Encode, Copy, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
+#[derive(
+	Debug,
+	Clone,
+	Decode,
+	Encode,
+	Copy,
+	Eq,
+	PartialOrd,
+	Ord,
+	scale_info::TypeInfo,
+	codec::MaxEncodedLen,
+)]
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshVote(ProposalNonce),
@@ -132,6 +146,8 @@ pub enum ProposalAction {
 	Sign(u8),
 }
 pub trait ProposalHandlerTrait {
+	type MaxProposalLength: Get<u32>;
+
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,
 		_action: ProposalAction,
@@ -146,7 +162,9 @@ pub trait ProposalHandlerTrait {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(_prop: Proposal) -> frame_support::pallet_prelude::DispatchResult {
+	fn handle_signed_proposal(
+		_prop: Proposal<Self::MaxProposalLength>,
+	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 
@@ -163,14 +181,18 @@ pub trait ProposalHandlerTrait {
 	}
 }
 
-impl ProposalHandlerTrait for () {}
+impl ProposalHandlerTrait for () {
+	type MaxProposalLength = ConstU32<0>;
+}
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
-#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo)]
-pub struct StoredUnsignedProposal<Timestamp> {
+#[derive(
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
+)]
+pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
 	/// Proposal data
-	pub proposal: Proposal,
+	pub proposal: Proposal<MaxLength>,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }

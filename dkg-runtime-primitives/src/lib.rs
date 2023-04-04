@@ -21,24 +21,44 @@ pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
-
+pub use crate::proposal::DKGPayloadKey;
+use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
 pub use ethereum::*;
 pub use ethereum_types::*;
-use frame_support::RuntimeDebug;
+use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
 pub use proposal::*;
-
-pub use crate::proposal::DKGPayloadKey;
-use codec::{Codec, Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
-use sp_std::{prelude::*, vec::Vec};
+use sp_std::{fmt::Debug, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
 use webb_proposals::Proposal;
+
+/// A custom get Struct to allow to import runtime values into the dkg gadget
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	Debug,
+	Eq,
+	PartialEq,
+	scale_info::TypeInfo,
+	Ord,
+	PartialOrd,
+	MaxEncodedLen,
+	Default,
+)]
+pub struct CustomU32Getter<const T: u32>;
+
+impl<const T: u32> Get<u32> for CustomU32Getter<T> {
+	fn get() -> u32 {
+		T
+	}
+}
 
 /// Utility fn to calculate keccak 256 has
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {
@@ -75,12 +95,33 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
+// Max length for proposals
+pub type MaxProposalLength = CustomU32Getter<10_000>;
+
+// Max authorities
+pub type MaxAuthorities = CustomU32Getter<100>;
+
+// Max reporters
+pub type MaxReporters = CustomU32Getter<100>;
+
+/// Max size for signatures
+pub type MaxSignatureLength = CustomU32Getter<512>;
+
+/// Max size for signatures
+pub type MaxKeyLength = CustomU32Getter<512>;
+
+/// Max votes to store onchain
+pub type MaxVotes = CustomU32Getter<100>;
+
+/// Max resources to store onchain
+pub type MaxResources = CustomU32Getter<32>;
+
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals<BlockNumber> {
-	pub proposals: Vec<(Vec<Proposal>, BlockNumber)>,
+pub struct OffchainSignedProposals<BlockNumber, MaxLength: Get<u32>> {
+	pub proposals: Vec<(Vec<Proposal<MaxLength>>, BlockNumber)>,
 }
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
@@ -91,15 +132,19 @@ pub struct AggregatedPublicKeys {
 	pub keys_and_signatures: Vec<PublicKeyAndSignature>,
 }
 
-#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash)]
+#[derive(Debug, Clone, Copy, Decode, Encode, PartialEq, Eq, TypeInfo, Hash, MaxEncodedLen)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub enum MisbehaviourType {
 	Keygen,
 	Sign,
 }
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo)]
-pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
+pub struct AggregatedMisbehaviourReports<
+	DKGId: AsRef<[u8]>,
+	MaxSignatureLength: Get<u32> + Debug + Clone + TypeInfo,
+	MaxReporters: Get<u32> + Debug + Clone + TypeInfo,
+> {
 	/// Offending type
 	pub misbehaviour_type: MisbehaviourType,
 	/// The round id the offense took place in
@@ -107,14 +152,14 @@ pub struct AggregatedMisbehaviourReports<DKGId: AsRef<[u8]>> {
 	/// The offending authority
 	pub offender: DKGId,
 	/// A list of reporters
-	pub reporters: Vec<DKGId>,
+	pub reporters: BoundedVec<DKGId, MaxReporters>,
 	/// A list of signed reports
-	pub signatures: Vec<Vec<u8>>,
+	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxReporters>,
 }
 
-impl<BlockNumber> Default for OffchainSignedProposals<BlockNumber> {
+impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
 	fn default() -> Self {
-		Self { proposals: Vec::default() }
+		Self { proposals: Default::default() }
 	}
 }
 
@@ -132,23 +177,23 @@ pub mod crypto {
 pub type AuthoritySetId = u64;
 
 #[derive(Decode, Encode, Debug, PartialEq, Clone, TypeInfo)]
-pub struct AuthoritySet<AuthorityId> {
+pub struct AuthoritySet<AuthorityId, MaxAuthorities: Get<u32>> {
 	/// Public keys of the validator set elements
-	pub authorities: Vec<AuthorityId>,
+	pub authorities: BoundedVec<AuthorityId, MaxAuthorities>,
 	/// Identifier of the validator set
 	pub id: AuthoritySetId,
 }
 
-impl Default for AuthoritySet<AuthorityId> {
+impl<MaxAuthorities: Get<u32>> Default for AuthoritySet<AuthorityId, MaxAuthorities> {
 	fn default() -> Self {
-		Self { authorities: vec![], id: Default::default() }
+		Self { authorities: Default::default(), id: Default::default() }
 	}
 }
 
-impl<AuthorityId> AuthoritySet<AuthorityId> {
+impl<AuthorityId, MaxAuthorities: Get<u32>> AuthoritySet<AuthorityId, MaxAuthorities> {
 	/// Return an empty validator set with id of 0.
 	pub fn empty() -> Self {
-		Self { authorities: vec![], id: Default::default() }
+		Self { authorities: Default::default(), id: Default::default() }
 	}
 }
 
@@ -168,10 +213,13 @@ pub struct Commitment<TBlockNumber, TPayload> {
 pub type AuthorityIndex = u32;
 
 #[derive(Decode, Encode)]
-pub enum ConsensusLog<AuthorityId: Codec> {
+pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities: Get<u32>> {
 	/// The authorities have changed.
 	#[codec(index = 1)]
-	AuthoritiesChange { active: AuthoritySet<AuthorityId>, queued: AuthoritySet<AuthorityId> },
+	AuthoritiesChange {
+		active: AuthoritySet<AuthorityId, MaxAuthorities>,
+		queued: AuthoritySet<AuthorityId, MaxAuthorities>,
+	},
 	/// Disable the authority with given index.
 	#[codec(index = 2)]
 	OnDisabled(AuthorityIndex),
@@ -188,18 +236,19 @@ pub enum ConsensusLog<AuthorityId: Codec> {
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct UnsignedProposal {
+pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
-	pub proposal: Proposal,
+	pub proposal: Proposal<MaxProposalLength>,
 }
 
-impl UnsignedProposal {
+impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 	pub fn testing_dummy() -> Self {
+		let data = BoundedVec::try_from(vec![0, 1, 2]).unwrap();
 		Self {
 			typed_chain_id: webb_proposals::TypedChainId::None,
 			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),
-			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data: vec![0, 1, 2] },
+			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data },
 		}
 	}
 	pub fn hash(&self) -> Option<[u8; 32]> {
@@ -219,12 +268,14 @@ impl UnsignedProposal {
 
 sp_api::decl_runtime_apis! {
 
-	pub trait DKGApi<AuthorityId, N> where
+	pub trait DKGApi<AuthorityId, N, MaxProposalLength, MaxAuthorities> where
 		AuthorityId: Codec + PartialEq,
+		MaxProposalLength: Get<u32> + Clone,
+		MaxAuthorities : Get<u32> + Clone,
 		N: Codec + PartialEq + sp_runtime::traits::AtLeast32BitUnsigned,
 	{
 		/// Return the current active authority set
-		fn authority_set() -> AuthoritySet<AuthorityId>;
+		fn authority_set() -> AuthoritySet<AuthorityId, MaxAuthorities>;
 		/// Return the current best authority set chosen for keygen
 		fn get_best_authorities() -> Vec<(u16, AuthorityId)>;
 		/// Return the next best authority set chosen for the queued keygen
@@ -240,7 +291,7 @@ sp_api::decl_runtime_apis! {
 		/// Return the next keygen threshold for the DKG
 		fn next_keygen_threshold() -> u16;
 		/// Return the next authorities active authority set
-		fn queued_authority_set() -> AuthoritySet<AuthorityId>;
+		fn queued_authority_set() -> AuthoritySet<AuthorityId, MaxAuthorities>;
 		/// Check if refresh process should start
 		fn should_refresh(_block_number: N) -> bool;
 		/// Fetch DKG public key for queued authorities
@@ -248,7 +299,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal>;
+		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

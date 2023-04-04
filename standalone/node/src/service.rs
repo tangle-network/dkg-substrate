@@ -119,6 +119,7 @@ pub fn new_partial(
 		client.clone(),
 	);
 
+	#[allow(clippy::redundant_clone)]
 	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
 		client.clone(),
 		&(client.clone() as Arc<_>),
@@ -229,7 +230,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync: Some(warp_sync),
+			warp_sync_params: Some(sc_service::WarpSyncParams::WithProvider(warp_sync)),
 		})?;
 
 	if config.offchain_worker.enabled {

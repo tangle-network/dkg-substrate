@@ -21,7 +21,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
 	Keygen, ProtocolMessage,
@@ -29,14 +29,14 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use round_based::{Msg, StateMachine};
 
 #[async_trait]
-impl StateMachineHandler for Keygen {
+impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 	type AdditionalReturnParam = ();
 	type Return = <Self as StateMachine>::Output;
 
 	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;
@@ -74,9 +74,9 @@ impl StateMachineHandler for Keygen {
 		Ok(())
 	}
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		local_key: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {

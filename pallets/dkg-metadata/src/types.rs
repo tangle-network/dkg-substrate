@@ -13,10 +13,11 @@
 // limitations under the License.
 //
 use crate::*;
-use codec::{Decode, Encode};
-#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo)]
-pub struct RoundMetadata {
-	pub curr_round_pub_key: Vec<u8>,
-	pub next_round_pub_key: Vec<u8>,
-	pub refresh_signature: Vec<u8>,
+use codec::{Decode, Encode, MaxEncodedLen};
+use sp_runtime::traits::Get;
+#[derive(Default, Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo, MaxEncodedLen)]
+pub struct RoundMetadata<MaxKeyLength: Get<u32>, MaxSignatureLength: Get<u32>> {
+	pub curr_round_pub_key: BoundedVec<u8, MaxKeyLength>,
+	pub next_round_pub_key: BoundedVec<u8, MaxKeyLength>,
+	pub refresh_signature: BoundedVec<u8, MaxSignatureLength>,
 }

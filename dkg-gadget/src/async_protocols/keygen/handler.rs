@@ -25,6 +25,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use std::fmt::Debug;
 
 use dkg_primitives::types::{DKGError, DKGMsgStatus};
+use dkg_runtime_primitives::MaxAuthorities;
 use futures::FutureExt;
 
 impl<Out: Send + Debug + 'static> GenericAsyncHandler<'static, Out>
@@ -33,7 +34,7 @@ where
 {
 	/// Top-level function used to begin the execution of async protocols
 	pub fn setup_keygen<BI: BlockchainInterface + 'static>(
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
 		status: DKGMsgStatus,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
@@ -98,17 +99,19 @@ where
 	}
 
 	fn new_keygen<BI: BlockchainInterface + 'static>(
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		t: u16,
 		n: u16,
 		status: DKGMsgStatus,
-	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler>::Return>, DKGError> {
+	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler<BI>>::Return>, DKGError>
+	{
 		let ty = match status {
 			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
 		};
 		let i = params.party_i;
-		let channel_type = ProtocolType::Keygen { ty, i, t, n };
+		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
+			ProtocolType::Keygen { ty, i, t, n };
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)

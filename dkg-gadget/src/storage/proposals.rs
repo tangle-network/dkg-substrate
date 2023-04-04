@@ -27,23 +27,31 @@ use parking_lot::RwLock;
 use rand::Rng;
 use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::sync::Arc;
 use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
-pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
+pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	authority_public_key: &Public,
-	current_validator_set: &Arc<RwLock<AuthoritySet<Public>>>,
+	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	signed_proposals: Vec<Proposal>,
+	signed_proposals: Vec<Proposal<MaxProposalLength>>,
 	logger: &DebugLogger,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
 	if signed_proposals.is_empty() {
 		return
@@ -76,8 +84,10 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE>(
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut prop_wrapper = match old_val.clone() {
-			Some(ser_props) =>
-				OffchainSignedProposals::<NumberFor<B>>::decode(&mut &ser_props[..]).unwrap(),
+			Some(ser_props) => OffchainSignedProposals::<NumberFor<B>, MaxProposalLength>::decode(
+				&mut &ser_props[..],
+			)
+			.unwrap(),
 			None => Default::default(),
 		};
 

@@ -15,7 +15,7 @@ use std::sync::Arc;
 //
 use crate::{debug_logger::DebugLogger, Client};
 use codec::Encode;
-use dkg_primitives::types::DKGSignedPayload;
+use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
 	RefreshProposalSigned,
@@ -23,23 +23,31 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
-use sp_runtime::traits::{Block, Header};
+use sp_runtime::traits::{Block, Get, Header};
 use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE>(
+pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
 	logger: &DebugLogger,
-) -> Option<Proposal>
+) -> Result<Option<Proposal<MaxProposalLength>>, DKGError>
 where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
-	let signed_proposal = match payload_key {
+	match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
 			logger.info(format!("🕸️  Refresh vote with nonce {:?} received", nonce));
 			let offchain = backend.offchain_storage();
@@ -56,7 +64,7 @@ where
 				));
 			}
 
-			return None
+			Ok(None)
 		},
 		DKGPayloadKey::ProposerSetUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::ProposerSetUpdate, finished_round),
@@ -85,19 +93,18 @@ where
 			make_signed_proposal(ProposalKind::SetTreasuryHandler, finished_round),
 		DKGPayloadKey::FeeRecipientUpdateProposal(_) =>
 			make_signed_proposal(ProposalKind::FeeRecipientUpdate, finished_round),
-	};
-
-	signed_proposal
+	}
 }
 
 /// make an unsigned proposal a signed one
-pub(crate) fn make_signed_proposal(
+pub(crate) fn make_signed_proposal<
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+>(
 	kind: ProposalKind,
 	finished_round: DKGSignedPayload,
-) -> Option<Proposal> {
-	Some(Proposal::Signed {
-		kind,
-		data: finished_round.payload,
-		signature: finished_round.signature,
-	})
+) -> Result<Option<Proposal<MaxProposalLength>>, DKGError> {
+	let bounded_data = finished_round.payload.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+	let bounded_signature =
+		finished_round.signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+	Ok(Some(Proposal::Signed { kind, data: bounded_data, signature: bounded_signature }))
 }

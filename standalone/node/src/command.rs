@@ -199,25 +199,6 @@ pub fn run() -> sc_cli::Result<()> {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run::<Block>(&config))
 		},
-		Some(Subcommand::TestHarnessClient) => {
-			dkg_logging::info!(target: "dkg", "Running test harness client ...");
-			let rt = tokio::runtime::Runtime::new()?;
-			let dummy = std::sync::Arc::new(dkg_gadget::testing::TestBackend {});
-			let network = todo!();
-
-			let dkg_params = dkg_gadget::DKGParams {
-				client: dummy.clone(),
-				backend: dummy.clone(),
-				key_store: None,
-				local_keystore: None,
-				network,
-				prometheus_registry: None,
-				_block: Default::default(),
-			};
-
-			rt.block_on(start_dkg_gadget(dkg_params));
-			Ok(())
-		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {

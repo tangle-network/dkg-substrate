@@ -13,7 +13,9 @@
 // limitations under the License.
 //
 use crate::worker::ENGINE_ID;
-use dkg_primitives::{crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog};
+use dkg_primitives::{
+	crypto::AuthorityId, types::DKGError, AuthoritySet, ConsensusLog, MaxAuthorities,
+};
 use sp_api::{BlockT as Block, HeaderT};
 use sp_runtime::generic::OpaqueDigestItemId;
 use std::{fmt::Debug, future::Future};
@@ -33,7 +35,7 @@ pub fn find_index<B: Eq>(queue: &[B], value: &B) -> Option<usize> {
 /// validator set or `None` in case no validator set change has been signaled.
 pub fn find_authorities_change<B>(
 	header: &B::Header,
-) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)>
+) -> Option<(AuthoritySet<AuthorityId, MaxAuthorities>, AuthoritySet<AuthorityId, MaxAuthorities>)>
 where
 	B: Block,
 {
@@ -44,8 +46,9 @@ where
 
 /// Matches a `ConsensusLog` for a DKG validator set change.
 fn match_consensus_log(
-	log: ConsensusLog<AuthorityId>,
-) -> Option<(AuthoritySet<AuthorityId>, AuthoritySet<AuthorityId>)> {
+	log: ConsensusLog<AuthorityId, MaxAuthorities>,
+) -> Option<(AuthoritySet<AuthorityId, MaxAuthorities>, AuthoritySet<AuthorityId, MaxAuthorities>)>
+{
 	match log {
 		ConsensusLog::AuthoritiesChange { active: authority_set, queued: queued_authority_set } =>
 			Some((authority_set, queued_authority_set)),

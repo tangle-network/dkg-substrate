@@ -178,7 +178,7 @@ mod rep {
 	/// We received an unexpected message packet.
 	pub const UNEXPECTED_MESSAGE: Rep = Rep::new_fatal("Unexpected message packet");
 	/// When a peer tries to impersonate another peer, by claiming another authority id.
-	pub const PEER_IMPIRSONATED: Rep = Rep::new_fatal("Peer is impersonating another peer");
+	pub const PEER_IMPERSONATED: Rep = Rep::new_fatal("Peer is impersonating another peer");
 	/// Reputation change when a peer sends us the same message over and over.
 	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
@@ -655,7 +655,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.logger.debug("Handshake message from peer {who} is valid");
 				} else {
 					self.logger.warn(format!("Handshake message from peer {who} is invalid"));
-					self.service.report_peer(who, rep::PEER_IMPIRSONATED);
+					self.service.report_peer(who, rep::PEER_IMPERSONATED);
 				},
 			Err(e) => {
 				self.logger.warn(format!(
@@ -808,7 +808,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
 			let peers_map = self.peers.read();
-			peers_map.keys().into_iter().cloned().collect::<Vec<_>>()
+			peers_map.keys().cloned().collect::<Vec<_>>()
 		};
 		if peer_ids.is_empty() {
 			let message_hash = message.message_hash::<B>();

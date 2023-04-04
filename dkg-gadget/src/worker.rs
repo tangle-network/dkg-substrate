@@ -22,12 +22,18 @@ use crate::{
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::KEYGEN_TIMEOUT;
+use sc_network::NetworkService;
+use sp_consensus::SyncOracle;
+
 use futures::StreamExt;
 use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
+use parking_lot::RwLock;
+use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
+use sp_arithmetic::traits::CheckedRem;
 use sp_core::ecdsa;
+use sp_runtime::traits::{Block, Get, Header, NumberFor, Zero};
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
 	future::Future,
@@ -38,14 +44,6 @@ use std::{
 		Arc,
 	},
 };
-
-use parking_lot::RwLock;
-
-use sc_client_api::{Backend, FinalityNotification};
-
-use sp_api::BlockId;
-use sp_arithmetic::traits::CheckedRem;
-use sp_runtime::traits::{Block, Header, NumberFor, Zero};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use dkg_primitives::{
@@ -58,8 +56,9 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
+	MaxProposalLength, MaxReporters, MaxSignatureLength, UnsignedProposal,
+	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -107,6 +106,7 @@ where
 	pub metrics: Option<Metrics>,
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	pub _marker: PhantomData<B>,
 }
 
@@ -138,9 +138,9 @@ where
 	/// Latest block header
 	pub latest_header: Shared<Option<B::Header>>,
 	/// Current validator set
-	pub current_validator_set: Shared<AuthoritySet<Public>>,
+	pub current_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Queued validator set
-	pub queued_validator_set: Shared<AuthoritySet<Public>>,
+	pub queued_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Tracking for the broadcasted public keys and signatures
 	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
@@ -155,11 +155,13 @@ where
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Keep track of the number of how many times we have tried the keygen protocol.
 	pub keygen_retry_count: Arc<AtomicUsize>,
+	/// Used to keep track of network status
+	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 	pub logger: DebugLogger,
 	// keep rustc happy
-	_backend: PhantomData<BE>,
+	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
@@ -196,14 +198,17 @@ where
 			to_test_client: self.to_test_client.clone(),
 			current_test_id: self.current_test_id.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
+			network: self.network.clone(),
 			logger: self.logger.clone(),
 			_backend: PhantomData,
 		}
 	}
 }
 
-pub type AggregatedMisbehaviourReportStore =
-	HashMap<(MisbehaviourType, SessionId, AuthorityId), AggregatedMisbehaviourReports<AuthorityId>>;
+pub type AggregatedMisbehaviourReportStore = HashMap<
+	(MisbehaviourType, SessionId, AuthorityId),
+	AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
+>;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
@@ -211,7 +216,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	/// Return a new DKG worker instance.
 	///
@@ -235,6 +240,7 @@ where
 			metrics,
 			local_keystore,
 			latest_header,
+			network,
 			..
 		} = worker_params;
 
@@ -266,6 +272,7 @@ where
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			logger,
+			network,
 			_backend: PhantomData,
 		}
 	}
@@ -284,7 +291,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// NOTE: This must be ran at the start of each epoch since best_authorities may change
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
@@ -299,7 +306,13 @@ where
 		stage: ProtoStageType,
 		async_index: u8,
 		protocol_name: &str,
-	) -> Result<AsyncProtocolParameters<DKGProtocolEngine<B, BE, C, GE>>, DKGError> {
+	) -> Result<
+		AsyncProtocolParameters<
+			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+			MaxAuthorities,
+		>,
+		DKGError,
+	> {
 		let best_authorities = Arc::new(best_authorities);
 		let authority_public_key = Arc::new(authority_public_key);
 
@@ -523,7 +536,7 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposals: Vec<UnsignedProposal>,
+		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
 		signing_set: Vec<KeygenPartyId>,
 		async_index: u8,
 	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
@@ -622,50 +635,50 @@ where
 
 	/// Get the signature threshold at a specific block
 	pub fn get_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().signature_threshold(&at).unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().signature_threshold(at).unwrap_or_default()
 	}
 
 	/// Get the next signature threshold at a specific block
 	pub fn get_next_signature_threshold(&self, header: &B::Header) -> u16 {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().next_signature_threshold(&at).unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().next_signature_threshold(at).unwrap_or_default()
 	}
 
 	/// Get the active DKG public key
 	pub fn get_dkg_pub_key(&self, header: &B::Header) -> (AuthoritySetId, Vec<u8>) {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().dkg_pub_key(&at).ok().unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().dkg_pub_key(at).ok().unwrap_or_default()
 	}
 
 	/// Get the next DKG public key
 	#[allow(dead_code)]
 	pub fn get_next_dkg_pub_key(&self, header: &B::Header) -> Option<(AuthoritySetId, Vec<u8>)> {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().next_dkg_pub_key(&at).ok().unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().next_dkg_pub_key(at).ok().unwrap_or_default()
 	}
 
 	/// Get the jailed keygen authorities
 	#[allow(dead_code)]
 	pub fn get_keygen_jailed(&self, header: &B::Header, set: &[AuthorityId]) -> Vec<AuthorityId> {
-		let at: BlockId<B> = BlockId::number(*header.number());
+		let at = header.hash();
 		return self
 			.client
 			.runtime_api()
-			.get_keygen_jailed(&at, set.to_vec())
+			.get_keygen_jailed(at, set.to_vec())
 			.unwrap_or_default()
 	}
 
 	/// Get the best authorities for keygen
 	pub fn get_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().get_best_authorities(&at).unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().get_best_authorities(at).unwrap_or_default()
 	}
 
 	/// Get the next best authorities for keygen
 	pub fn get_next_best_authorities(&self, header: &B::Header) -> Vec<(u16, AuthorityId)> {
-		let at: BlockId<B> = BlockId::number(*header.number());
-		return self.client.runtime_api().get_next_best_authorities(&at).unwrap_or_default()
+		let at = header.hash();
+		return self.client.runtime_api().get_next_best_authorities(at).unwrap_or_default()
 	}
 
 	/// Return the next and queued validator set at header `header`.
@@ -681,7 +694,7 @@ where
 	pub fn validator_set(
 		&self,
 		header: &B::Header,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		Self::validator_set_inner(&self.logger, header, &self.client)
 	}
 
@@ -689,13 +702,13 @@ where
 		logger: &DebugLogger,
 		header: &B::Header,
 		client: &Arc<C>,
-	) -> Option<(AuthoritySet<Public>, AuthoritySet<Public>)> {
+	) -> Option<(AuthoritySet<Public, MaxAuthorities>, AuthoritySet<Public, MaxAuthorities>)> {
 		let new = if let Some((new, queued)) = find_authorities_change::<B>(header) {
 			Some((new, queued))
 		} else {
-			let at: BlockId<B> = BlockId::number(*header.number());
-			let current_authority_set = client.runtime_api().authority_set(&at).ok();
-			let queued_authority_set = client.runtime_api().queued_authority_set(&at).ok();
+			let at = header.hash();
+			let current_authority_set = client.runtime_api().authority_set(at).ok();
+			let queued_authority_set = client.runtime_api().queued_authority_set(at).ok();
 			match (current_authority_set, queued_authority_set) {
 				(Some(current), Some(queued)) => Some((current, queued)),
 				_ => None,
@@ -717,7 +730,7 @@ where
 	fn verify_validator_set(
 		&self,
 		block: &NumberFor<B>,
-		mut active: AuthoritySet<Public>,
+		mut active: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), error::Error> {
 		let active: BTreeSet<Public> = active.authorities.drain(..).collect();
 
@@ -738,7 +751,7 @@ where
 	fn handle_genesis_dkg_setup(
 		&self,
 		header: &B::Header,
-		genesis_authority_set: AuthoritySet<Public>,
+		genesis_authority_set: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty or if this authority set isn't actually the genesis
 		// set
@@ -825,7 +838,7 @@ where
 	fn handle_queued_dkg_setup(
 		&self,
 		header: &B::Header,
-		queued: AuthoritySet<Public>,
+		queued: AuthoritySet<Public, MaxAuthorities>,
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
@@ -903,6 +916,14 @@ where
 		metric_set!(self, dkg_latest_block_height, header.number());
 		*self.latest_header.write() = Some(header.clone());
 		self.logger.debug(format!("🕸️  Latest header is now: {:?}", header.number()));
+
+		// if we are still syncing, return immediately
+		if let Some(network) = &self.network {
+			if network.is_major_syncing() {
+				self.logger.debug("🕸️  Chain not fully synced, skipping block processing!");
+				return
+			}
+		}
 
 		// Attempt to enact new DKG authorities if sessions have changed
 
@@ -1167,7 +1188,7 @@ where
 		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = latest_header.read().clone() {
 			authorities = Self::validator_set_inner(logger, &header, client)
-				.map(|a| (a.0.authorities, a.1.authorities));
+				.map(|a| (a.0.authorities.into(), a.1.authorities.into()));
 		}
 
 		if authorities.is_none() {
@@ -1389,7 +1410,10 @@ where
 
 		let misbehaviour_msg =
 			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
-		gossip_misbehaviour_report(self, misbehaviour_msg);
+		let gossip = gossip_misbehaviour_report(self, misbehaviour_msg);
+		if gossip.is_err() {
+			self.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
+		}
 	}
 
 	pub fn authenticate_msg_origin(
@@ -1432,7 +1456,7 @@ where
 		let on_chain_dkg = self.get_dkg_pub_key(header);
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
-		let at: BlockId<B> = BlockId::number(*header.number());
+		let at = header.hash();
 		// Check whether the worker is in the best set or return
 		let party_i = match self.get_party_index(header) {
 			Some(party_index) => {
@@ -1467,7 +1491,11 @@ where
 			self.currently_signing_proposals.write().clear();
 		}
 
-		let unsigned_proposals = match self.client.runtime_api().get_unsigned_proposals(&at) {
+		let unsigned_proposals = match self
+			.client
+			.runtime_api()
+			.get_unsigned_proposals(at)
+		{
 			Ok(res) => {
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
@@ -1654,11 +1682,11 @@ where
 		let now = self.latest_header.read().clone().ok_or_else(|| DKGError::CriticalError {
 			reason: "latest header does not exist!".to_string(),
 		})?;
-		let at: BlockId<B> = BlockId::number(*now.number());
+		let at = now.hash();
 		Ok(self
 			.client
 			.runtime_api()
-			.get_signing_jailed(&at, best_authorities.to_vec())
+			.get_signing_jailed(at, best_authorities.to_vec())
 			.unwrap_or_default())
 	}
 	fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
@@ -1684,8 +1712,8 @@ where
 
 	fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
 		// query runtime api to check if we should execute new keygen.
-		let at: BlockId<B> = BlockId::number(*header.number());
-		self.client.runtime_api().should_execute_new_keygen(&at).unwrap_or_default()
+		let at = header.hash();
+		self.client.runtime_api().should_execute_new_keygen(at).unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block
@@ -1804,7 +1832,10 @@ where
 		tokio::spawn(async move {
 			while let Some(misbehaviour) = misbehaviour_rx.recv().await {
 				self_.logger.debug("Going to handle Misbehaviour");
-				gossip_misbehaviour_report(&self_, misbehaviour);
+				let gossip = gossip_misbehaviour_report(&self_, misbehaviour);
+				if gossip.is_err() {
+					self_.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
+				}
 			}
 		})
 	}
@@ -1845,6 +1876,8 @@ where
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.key_store
@@ -1876,6 +1909,8 @@ where
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
+	MaxProposalLength: Get<u32>,
+	MaxAuthorities: Get<u32>,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

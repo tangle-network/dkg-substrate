@@ -10,6 +10,7 @@ use std::{
 	sync::{atomic::Ordering, Arc},
 	time::Duration,
 };
+use sc_client_api::FinalizeSummary;
 use tokio::{
 	net::{TcpListener, TcpStream},
 	sync::{mpsc, Mutex, RwLock},
@@ -318,16 +319,16 @@ impl MockBlockchain {
 			let trace_id = Uuid::new_v4();
 			// phase 1: send finality notifications to each client
 			let mut write = self.clients.write().await;
+			let next_finality_notification =
+				create_mocked_finality_blockchain_event(*round_number);
 			for (_id, client) in write.iter_mut() {
 				client.outstanding_tasks.insert(trace_id, next_case.clone());
 				// First, send out a MockBlockChainEvent (happens before each round occurs)
-				let next_finality_notification =
-					create_mocked_finality_blockchain_event(*round_number);
 				client
 					.orchestrator_to_client_subtask
 					.send(OrchestratorToClientEvent::BlockChainEvent {
 						trace_id,
-						event: next_finality_notification,
+						event: next_finality_notification.clone(),
 					})
 					.unwrap();
 			}
@@ -379,24 +380,18 @@ fn log_invalid_signal(o_state: &OrchestratorState, c_update: &ClientToOrchestrat
 // Two fields are used by the DKG: the block number via header.number(), and the hash via
 // header.hash(). So long as these values remain unique, the DKG should work as expected
 fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockChainEvent<TestBlock> {
-	let header = sp_runtime::generic::Header::<u64, _> {
-		digest: Default::default(),
-		extrinsics_root: Default::default(),
-		number: block_number,
-		parent_hash: Default::default(),
-		state_root: Default::default(),
-	};
-
+	let header = sp_runtime::generic::Header::<u64, _>::new_from_number(block_number);
 	let mut slice = [0u8; 32];
 	slice[..8].copy_from_slice(&block_number.to_be_bytes());
 
 	let hash = sp_runtime::testing::H256::from(slice);
-
-	let notification = FinalityNotification::<TestBlock> {
-		hash,
+	let summary = FinalizeSummary {
 		header,
-		tree_route: Arc::new([]),
-		stale_heads: Arc::new([]),
+		finalized: vec![hash],
+		stale_heads: vec![]
 	};
+
+	let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
+	let notification = FinalityNotification::<TestBlock>::from_summary(summary, tx);
 	MockBlockChainEvent::FinalityNotification { notification }
 }

@@ -14,11 +14,11 @@
 
 // construct_runtime requires this
 #![allow(clippy::from_over_into)]
-
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
 };
+use frame_system::EnsureRoot;
 use sp_core::{
 	sr25519::{self, Signature},
 	H256,
@@ -37,7 +37,10 @@ use sp_runtime::{
 use std::{sync::Arc, vec};
 
 use crate as pallet_dkg_metadata;
-pub use dkg_runtime_primitives::{crypto::AuthorityId as DKGId, ConsensusLog, DKG_ENGINE_ID};
+pub use dkg_runtime_primitives::{
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
+	MaxSignatureLength, DKG_ENGINE_ID,
+};
 
 impl_opaque_keys! {
 	pub struct MockSessionKeys {
@@ -131,6 +134,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type RefreshDelay = RefreshDelay;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
@@ -140,6 +144,10 @@ impl pallet_dkg_metadata::Config for Test {
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type SessionPeriod = Period;
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = ();
 }
 

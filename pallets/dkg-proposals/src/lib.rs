@@ -95,7 +95,7 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::{EncodeAppend, EncodeLike};
+use codec::EncodeLike;
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
@@ -103,8 +103,9 @@ use dkg_runtime_primitives::{
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},
 	traits::{EnsureOrigin, EstimateNextSessionRotation, Get},
+	BoundedVec,
 };
-use frame_system::ensure_root;
+
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::{Convert, Saturating},
@@ -127,13 +128,13 @@ pub mod pallet {
 		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
 		weights::WeightInfo,
 	};
+	use codec::MaxEncodedLen;
 	use dkg_runtime_primitives::ProposalNonce;
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -146,7 +147,7 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + EncodeAppend + Into<Vec<u8>> + AsRef<[u8]>;
+		type Proposal: Parameter + EncodeLike + Into<Vec<u8>> + AsRef<[u8]> + MaxEncodedLen;
 
 		/// Estimate next session rotation
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
@@ -173,6 +174,22 @@ pub mod pallet {
 		/// The session period
 		#[pallet::constant]
 		type Period: Get<Self::BlockNumber>;
+
+		/// The max votes to store for for and against
+		#[pallet::constant]
+		type MaxVotes: Get<u32> + TypeInfo + Clone;
+
+		/// The max resources that can be stored in storage
+		#[pallet::constant]
+		type MaxResources: Get<u32> + TypeInfo;
+
+		/// The max authority proposers that can be stored in storage
+		#[pallet::constant]
+		type MaxAuthorityProposers: Get<u32> + TypeInfo;
+
+		/// The max external proposer accounts that can be stored in storage
+		#[pallet::constant]
+		type MaxExternalProposerAccounts: Get<u32> + TypeInfo;
 
 		type ProposalHandler: ProposalHandlerTrait;
 
@@ -209,20 +226,29 @@ pub mod pallet {
 	/// Currently meant to store Ethereum compatible 64-bytes ECDSA public keys
 	#[pallet::storage]
 	#[pallet::getter(fn external_proposer_accounts)]
-	pub type ExternalProposerAccounts<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, Vec<u8>, ValueQuery>;
+	pub type ExternalProposerAccounts<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		T::AccountId,
+		BoundedVec<u8, T::MaxExternalProposerAccounts>,
+		ValueQuery,
+	>;
 
 	/// Tracks the authorities that are proposers so we can properly update the proposer set
 	/// across sessions and authority changes.
 	#[pallet::storage]
 	#[pallet::getter(fn authority_proposers)]
-	pub type AuthorityProposers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type AuthorityProposers<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, T::MaxAuthorityProposers>, ValueQuery>;
 
 	/// Tracks current proposer set external accounts
 	#[pallet::storage]
 	#[pallet::getter(fn external_authority_proposer_accounts)]
-	pub type ExternalAuthorityProposerAccounts<T: Config> =
-		StorageValue<_, Vec<Vec<u8>>, ValueQuery>;
+	pub type ExternalAuthorityProposerAccounts<T: Config> = StorageValue<
+		_,
+		BoundedVec<BoundedVec<u8, T::MaxExternalProposerAccounts>, T::MaxAuthorityProposers>,
+		ValueQuery,
+	>;
 
 	/// Number of proposers in set
 	#[pallet::storage]
@@ -240,13 +266,14 @@ pub mod pallet {
 		TypedChainId,
 		Blake2_256,
 		(ProposalNonce, T::Proposal),
-		ProposalVotes<T::AccountId, T::BlockNumber>,
+		ProposalVotes<T::AccountId, T::BlockNumber, T::MaxVotes>,
 	>;
 
 	/// Utilized by the bridge software to map resource IDs to actual methods
 	#[pallet::storage]
 	#[pallet::getter(fn resources)]
-	pub type Resources<T: Config> = StorageMap<_, Blake2_256, ResourceId, Vec<u8>>;
+	pub type Resources<T: Config> =
+		StorageMap<_, Blake2_256, ResourceId, BoundedVec<u8, T::MaxResources>>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub fn deposit_event)]
@@ -312,6 +339,8 @@ pub mod pallet {
 		ProposalExpired,
 		/// Proposer Count is Zero
 		ProposerCountIsZero,
+		/// Input is out of bounds
+		OutOfBounds,
 	}
 
 	#[pallet::genesis_config]
@@ -345,7 +374,8 @@ pub mod pallet {
 				ChainNonces::<T>::insert(chain_id, ProposalNonce::from(0));
 			}
 			for (r_id, r_data) in self.initial_r_ids.iter() {
-				Resources::<T>::insert(r_id, r_data.clone());
+				let bounded_input: BoundedVec<_, _> = r_data.clone().try_into().unwrap();
+				Resources::<T>::insert(*r_id, bounded_input);
 			}
 
 			for proposer in self.initial_proposers.iter() {
@@ -523,7 +553,7 @@ impl<T: Config> Pallet<T> {
 	// *** Utility methods ***
 
 	pub fn ensure_admin(o: T::RuntimeOrigin) -> DispatchResultWithPostInfo {
-		T::AdminOrigin::try_origin(o).map(|_| ()).or_else(ensure_root)?;
+		T::AdminOrigin::ensure_origin(o)?;
 		Ok(().into())
 	}
 
@@ -554,7 +584,9 @@ impl<T: Config> Pallet<T> {
 
 	/// Register a method for a resource Id, enabling associated transfers
 	pub fn register_resource(id: ResourceId, method: Vec<u8>) -> DispatchResultWithPostInfo {
-		Resources::<T>::insert(id, method);
+		let bounded_method: BoundedVec<_, _> =
+			method.try_into().map_err(|_| Error::<T>::OutOfBounds)?;
+		Resources::<T>::insert(id, bounded_method);
 		Ok(().into())
 	}
 
@@ -584,7 +616,9 @@ impl<T: Config> Pallet<T> {
 		// Add the proposer to the set
 		Proposers::<T>::insert(&proposer, true);
 		// Add the proposer's public key to the set
-		ExternalProposerAccounts::<T>::insert(&proposer, external_account);
+		let bounded_external_account: BoundedVec<_, _> =
+			external_account.try_into().map_err(|_| Error::<T>::OutOfBounds)?;
+		ExternalProposerAccounts::<T>::insert(&proposer, bounded_external_account);
 		ProposerCount::<T>::mutate(|i| *i += 1);
 
 		Self::deposit_event(Event::ProposerAdded { proposer_id: proposer });
@@ -621,6 +655,7 @@ impl<T: Config> Pallet<T> {
 			None => ProposalVotes::<
 				<T as frame_system::Config>::AccountId,
 				<T as frame_system::Config>::BlockNumber,
+				<T as Config>::MaxVotes,
 			> {
 				expiry: now + T::ProposalLifetime::get(),
 				..Default::default()
@@ -633,14 +668,14 @@ impl<T: Config> Pallet<T> {
 		ensure!(!votes.has_voted(&who), Error::<T>::ProposerAlreadyVoted);
 
 		if in_favour {
-			votes.votes_for.push(who.clone());
+			votes.votes_for.try_push(who.clone()).map_err(|_| Error::<T>::OutOfBounds)?;
 			Self::deposit_event(Event::VoteFor {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
 				who,
 			});
 		} else {
-			votes.votes_against.push(who.clone());
+			votes.votes_against.try_push(who.clone()).map_err(|_| Error::<T>::OutOfBounds)?;
 			Self::deposit_event(Event::VoteAgainst {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
@@ -887,13 +922,26 @@ impl<T: Config>
 		{
 			ProposerCount::<T>::put(Self::proposer_count().saturating_add(1));
 			Proposers::<T>::insert(authority_account, true);
-			ExternalProposerAccounts::<T>::insert(authority_account, external_account);
+			// TODO: Return result to avoid panic
+			let bounded_external_account: BoundedVec<_, _> =
+				external_account.clone().try_into().unwrap();
+			ExternalProposerAccounts::<T>::insert(authority_account, bounded_external_account);
 		}
 		// Update the new authorities that are also proposers
-		AuthorityProposers::<T>::put(authorities.clone());
+		// TODO: Return result to avoid panic
+		let bounded_authorities: BoundedVec<_, _> = authorities.try_into().unwrap();
+		AuthorityProposers::<T>::put(bounded_authorities.clone());
 		// Update the external accounts of the new authorities
-		ExternalAuthorityProposerAccounts::<T>::put(new_external_accounts);
-		Self::deposit_event(Event::<T>::AuthorityProposersReset { proposers: authorities });
+		// TODO: Return result to avoid panic
+		let mut bounded_new_external_accounts: BoundedVec<_, _> = Default::default();
+		for item in new_external_accounts {
+			let bounded_item: BoundedVec<_, _> = item.try_into().unwrap();
+			bounded_new_external_accounts.try_push(bounded_item).unwrap();
+		}
+		ExternalAuthorityProposerAccounts::<T>::put(bounded_new_external_accounts);
+		Self::deposit_event(Event::<T>::AuthorityProposersReset {
+			proposers: bounded_authorities.into(),
+		});
 		// Create the new proposer set merkle tree and update proposal
 		Self::create_proposer_set_update();
 	}

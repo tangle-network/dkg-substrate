@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use crate::debug_logger::DebugLogger;
+use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
-use std::fmt::Debug;
 
-use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
+use std::fmt::Debug;
 
 pub(crate) type StateMachineTxRx<T> = (
 	futures::channel::mpsc::UnboundedSender<Msg<T>>,
@@ -29,7 +29,8 @@ pub(crate) type StateMachineTxRx<T> = (
 
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
-pub trait StateMachineHandler: StateMachine + RoundBlame + Send
+pub trait StateMachineHandler<BI: BlockchainInterface + 'static>:
+	StateMachine + RoundBlame + Send
 where
 	<Self as StateMachine>::Output: Send,
 {
@@ -45,13 +46,13 @@ where
 			Msg<<Self as StateMachine>::MessageBody>,
 		>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType,
+		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err>;
 
-	async fn on_finish<BI: BlockchainInterface + 'static>(
+	async fn on_finish(
 		result: <Self as StateMachine>::Output,
-		params: AsyncProtocolParameters<BI>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		additional_param: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<Self::Return, DKGError>;

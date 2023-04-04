@@ -15,26 +15,34 @@
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
+use sp_runtime::traits::Get;
 use std::{collections::HashSet, sync::Arc};
 
 use super::{CurrentRoundBlame, ProtocolType};
 use crate::debug_logger::DebugLogger;
 
-pub(crate) struct StateMachineWrapper<T: StateMachine> {
+pub(crate) struct StateMachineWrapper<
+	T: StateMachine,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	sm: T,
 	session_id: SessionId,
-	channel_type: ProtocolType,
+	channel_type: ProtocolType<MaxProposalLength>,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
 }
 
-impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
+impl<
+		T: StateMachine + RoundBlame,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> StateMachineWrapper<T, MaxProposalLength>
+{
 	pub fn new(
 		sm: T,
 		session_id: SessionId,
-		channel_type: ProtocolType,
+		channel_type: ProtocolType<MaxProposalLength>,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 		logger: DebugLogger,
 	) -> Self {
@@ -56,7 +64,8 @@ impl<T: StateMachine + RoundBlame> StateMachineWrapper<T> {
 	}
 }
 
-impl<T> StateMachine for StateMachineWrapper<T>
+impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> StateMachine
+	for StateMachineWrapper<T, MaxProposalLength>
 where
 	T: StateMachine + RoundBlame,
 	<T as StateMachine>::Err: std::fmt::Debug,
@@ -168,7 +177,11 @@ where
 	}
 }
 
-impl<T: StateMachine + RoundBlame> RoundBlame for StateMachineWrapper<T> {
+impl<
+		T: StateMachine + RoundBlame,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> RoundBlame for StateMachineWrapper<T, MaxProposalLength>
+{
 	fn round_blame(&self) -> (u16, Vec<u16>) {
 		self.sm.round_blame()
 	}

@@ -52,6 +52,7 @@ pub enum TestCase {
 mod serde_impl {
 	use crate::{FinalityNotification, ImportNotification, TestCase};
 	use codec::{Decode, Encode};
+	use sc_client_api::FinalizeSummary;
 	use serde::{Deserialize, Serialize};
 	use sp_consensus::BlockOrigin;
 	use uuid::Uuid;
@@ -153,23 +154,26 @@ mod serde_impl {
 				IntermediateMockBlockChainEvent::TestCase { trace_id, test } =>
 					MockBlockChainEvent::TestCase { trace_id, test },
 				IntermediateMockBlockChainEvent::FinalityNotification { notification } => {
-					let notification = FinalityNotification::<B> {
-						hash: Decode::decode(&mut notification.hash.as_slice()).unwrap(),
+					let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
+					let summary= FinalizeSummary::<B> {
 						header: Decode::decode(&mut notification.header.as_slice()).unwrap(),
-						tree_route: std::sync::Arc::new([]),
-						stale_heads: std::sync::Arc::new([]),
+						finalized: vec![Decode::decode(&mut notification.hash.as_slice()).unwrap()],
+						stale_heads: vec![]
 					};
+					let notification = FinalityNotification::<B>::from_summary(summary, tx);
 
 					MockBlockChainEvent::FinalityNotification { notification }
 				},
 				IntermediateMockBlockChainEvent::ImportNotification { notification } => {
-					let notification = ImportNotification::<B> {
-						hash: Decode::decode(&mut notification.hash.as_slice()).unwrap(),
-						header: Decode::decode(&mut notification.header.as_slice()).unwrap(),
-						origin: BlockOrigin::NetworkBroadcast,
-						is_new_best: notification.is_new_best,
-						tree_route: None,
-					};
+					let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
+					let notification = ImportNotification::<B>::new(
+						Decode::decode(&mut notification.hash.as_slice()).unwrap(),
+						BlockOrigin::NetworkBroadcast,
+						Decode::decode(&mut notification.header.as_slice()).unwrap(),
+						notification.is_new_best,
+						None,
+						tx,
+					);
 
 					MockBlockChainEvent::ImportNotification { notification }
 				},

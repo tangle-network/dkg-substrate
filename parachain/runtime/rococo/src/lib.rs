@@ -23,10 +23,17 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 pub mod impls;
 pub mod weights;
 pub mod xcm_config;
-use codec::Encode;
-use dkg_runtime_primitives::{TypedChainId, UnsignedProposal};
-use frame_support::weights::constants::WEIGHT_REF_TIME_PER_SECOND;
+use codec::{Decode, Encode};
+use dkg_runtime_primitives::{
+	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength,
+	TypedChainId, UnsignedProposal,
+};
+use frame_support::weights::{
+	constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, WeightToFeeCoefficient,
+	WeightToFeeCoefficients, WeightToFeePolynomial,
+};
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
+use pallet_transaction_payment::{CurrencyAdapter, Multiplier};
 use polkadot_runtime_common::SlowAdjustingFeeUpdate;
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -34,19 +41,12 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{self, BlakeTwo256, Block as BlockT, IdentifyAccount, StaticLookup, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature, SaturatedConversion,
+	ApplyExtrinsicResult, FixedPointNumber, MultiSignature, Perquintill, SaturatedConversion,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
-
-use frame_support::weights::{
-	ConstantMultiplier, WeightToFeeCoefficient, WeightToFeeCoefficients, WeightToFeePolynomial,
-};
-use pallet_transaction_payment::{CurrencyAdapter, Multiplier};
-use sp_runtime::{FixedPointNumber, Perquintill};
-
 pub type AccountIndex = u32;
 
 // A few exports that help ease life for downstream crates.
@@ -255,7 +255,7 @@ pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 /// We allow for 0.5 of a second of compute with a 12 second average block time.
 pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 	WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
-	cumulus_primitives_core::relay_chain::v2::MAX_POV_SIZE as u64,
+	cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
 parameter_types! {
@@ -421,10 +421,6 @@ impl pallet_sudo::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 }
 
-parameter_types! {
-	pub const MaxAuthorities: u32 = 1_000;
-}
-
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
@@ -437,9 +433,7 @@ parameter_types! {
 
 impl pallet_authorship::Config for Runtime {
 	type EventHandler = (CollatorSelection,);
-	type FilterUncle = ();
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
-	type UncleGenerations = UncleGenerations;
 }
 
 parameter_types! {
@@ -511,9 +505,14 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type SigningJailSentence = Period;
 	type DecayPercentage = DecayPercentage;
 	type Reputation = Reputation;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = DKGProposalHandler;
 	type SessionPeriod = Period;
+	type MaxKeyLength = MaxKeyLength;
+	type MaxSignatureLength = MaxSignatureLength;
+	type MaxReporters = MaxReporters;
+	type MaxAuthorities = MaxAuthorities;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -532,7 +531,20 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = ();
+	type MaxProposalLength = MaxProposalLength;
+	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
+}
+
+parameter_types! {
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxVotes : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxResources : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxAuthorityProposers : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxExternalProposerAccounts : u32 = 1000;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
@@ -542,10 +554,14 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type Proposal = Vec<u8>;
+	type Proposal = frame_support::BoundedVec<u8, MaxProposalLength>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
 	type Period = Period;
+	type MaxVotes = MaxVotes;
+	type MaxResources = MaxResources;
+	type MaxAuthorityProposers = MaxAuthorityProposers;
+	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
@@ -648,7 +664,6 @@ parameter_types! {
 	pub const CooloffPeriod: BlockNumber = 28 * 24 * 60 * MINUTES;
 	// One cent: $10,000 / MB
 	pub const PreimageByteDeposit: Balance = CENT;
-	pub const MaxVotes: u32 = 100;
 	pub const MaxProposals: u32 = 100;
 }
 
@@ -667,6 +682,7 @@ impl pallet_democracy::Config for Runtime {
 	type CooloffPeriod = CooloffPeriod;
 	type Currency = Balances;
 	type EnactmentPeriod = EnactmentPeriod;
+	type SubmitOrigin = frame_system::EnsureSigned<AccountId>;
 	type RuntimeEvent = RuntimeEvent;
 	/// A unanimous council can have the next scheduled referendum be a straight
 	/// default-carries (NTB) vote.
@@ -722,6 +738,7 @@ impl pallet_collective::Config<CouncilCollective> for Runtime {
 	type MotionDuration = CouncilMotionDuration;
 	type RuntimeOrigin = RuntimeOrigin;
 	type Proposal = RuntimeCall;
+	type SetMembersOrigin = EnsureRoot<AccountId>;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 }
 
@@ -799,7 +816,7 @@ construct_runtime!(
 		Indices: pallet_indices::{Pallet, Call, Storage, Config<T>, Event<T>} = 25,
 
 		// Collator support. the order of these 4 are important and shall not change.
-		Authorship: pallet_authorship::{Pallet, Call, Storage} = 30,
+		Authorship: pallet_authorship::{Pallet, Storage} = 30,
 		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>} = 31,
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>} = 32,
 		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 33,
@@ -866,8 +883,8 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber> for Runtime {
-		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+	impl dkg_runtime_primitives::DKGApi<Block, dkg_runtime_primitives::crypto::AuthorityId, BlockNumber, MaxProposalLength, MaxAuthorities> for Runtime {
+		fn authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId, MaxAuthorities> {
 			let authorities = DKG::authorities();
 			let authority_set_id = DKG::authority_set_id();
 
@@ -877,7 +894,7 @@ impl_runtime_apis! {
 			}
 		}
 
-		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId> {
+		fn queued_authority_set() -> dkg_runtime_primitives::AuthoritySet<dkg_runtime_primitives::crypto::AuthorityId, MaxAuthorities> {
 			let queued_authorities = DKG::next_authorities();
 			let queued_authority_set_id = DKG::next_authority_set_id();
 
@@ -908,31 +925,31 @@ impl_runtime_apis! {
 		}
 
 		fn next_dkg_pub_key() -> Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
-			DKG::next_dkg_public_key()
-		}
+			DKG::next_dkg_public_key().map(|pub_key| (pub_key.0, pub_key.1.into()))
+		  }
 
-		fn next_pub_key_sig() -> Option<Vec<u8>> {
-			DKG::next_public_key_signature()
-		}
+		  fn next_pub_key_sig() -> Option<Vec<u8>> {
+			DKG::next_public_key_signature().map(|pub_key_sig| pub_key_sig.into())
+		  }
 
-		fn dkg_pub_key() -> (dkg_runtime_primitives::AuthoritySetId, Vec<u8>) {
-			DKG::dkg_public_key()
-		}
+		  fn dkg_pub_key() -> (dkg_runtime_primitives::AuthoritySetId, Vec<u8>) {
+			(DKG::dkg_public_key().0, DKG::dkg_public_key().1.into())
+		  }
 
-		fn get_best_authorities() -> Vec<(u16, DKGId)> {
-			DKG::best_authorities()
-		}
+		  fn get_best_authorities() -> Vec<(u16, DKGId)> {
+			DKG::best_authorities().into()
+		  }
 
-		fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
-			DKG::next_best_authorities()
-		}
+		  fn get_next_best_authorities() -> Vec<(u16, DKGId)> {
+			DKG::next_best_authorities().into()
+		  }
 
 		fn get_current_session_progress(block_number: BlockNumber) -> Option<Permill> {
 			use frame_support::traits::EstimateNextSessionRotation;
 			<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 		}
 
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal> {
+		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>> {
 			DKGProposalHandler::get_unsigned_proposals()
 		}
 
@@ -941,7 +958,7 @@ impl_runtime_apis! {
 		}
 
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
-			(DKG::current_authorities_accounts(), DKG::next_authorities_accounts())
+			(DKG::current_authorities_accounts().into(), DKG::next_authorities_accounts().into())
 		}
 
 		fn get_reputations(authorities: Vec<DKGId>) -> Vec<(DKGId, Reputation)> {
@@ -1027,6 +1044,12 @@ impl_runtime_apis! {
 			len: u32,
 		) -> pallet_transaction_payment::FeeDetails<Balance> {
 			TransactionPayment::query_fee_details(uxt, len)
+		}
+		fn query_weight_to_fee(weight: Weight) -> Balance {
+			TransactionPayment::weight_to_fee(weight)
+		}
+		fn query_length_to_fee(length: u32) -> Balance {
+			TransactionPayment::length_to_fee(length)
 		}
 	}
 

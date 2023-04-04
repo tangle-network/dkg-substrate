@@ -17,6 +17,7 @@ use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
 	DKGPayloadKey,
 };
+use frame_support::pallet_prelude::Get;
 use webb_proposals::{Proposal, ProposalKind};
 
 pub fn decode_proposal_header(
@@ -37,8 +38,8 @@ pub struct ProposalIdentifier {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 }
 
-pub fn decode_proposal_identifier(
-	proposal: &Proposal,
+pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
+	proposal: &Proposal<MaxLength>,
 ) -> Result<ProposalIdentifier, ValidationError> {
 	// First parse if EVM tx proposal
 	if let ProposalKind::EVM = proposal.kind() {

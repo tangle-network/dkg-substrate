@@ -26,10 +26,10 @@ use dkg_primitives::types::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, DKGApi,
+	AggregatedPublicKeys, DKGApi, MaxAuthorities, MaxProposalLength,
 };
 use sc_client_api::Backend;
-use sp_runtime::traits::{Block, Header, NumberFor};
+use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
 pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
@@ -41,7 +41,7 @@ where
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
-	C::Api: DKGApi<B, AuthorityId, NumberFor<B>>,
+	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
@@ -66,7 +66,7 @@ where
 
 		dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			authorities.unwrap(),
+			(authorities.clone().unwrap().0.into(), authorities.unwrap().1.into()),
 			&msg.pub_key,
 			&msg.signature,
 		)?;
@@ -91,7 +91,7 @@ where
 		));
 
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
-			store_aggregated_public_keys::<B, C, BE>(
+			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
 				&dkg_worker.backend,
 				&mut lock,
 				is_main_round,
@@ -121,7 +121,15 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 	BE: Backend<B>,
 	GE: GossipEngineIface,
 	C: Client<B, BE>,
-	C::Api: DKGApi<B, AuthorityId, <<B as Block>::Header as Header>::Number>,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	C::Api: DKGApi<
+		B,
+		AuthorityId,
+		<<B as Block>::Header as Header>::Number,
+		MaxProposalLength,
+		MaxAuthorities,
+	>,
 {
 	let public = key_store.get_authority_public_key();
 

@@ -25,6 +25,7 @@ pub struct Cli {
 }
 
 #[derive(Debug, clap::Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Subcommand {
 	/// Key management cli utilities
 	#[clap(subcommand)]
@@ -69,7 +70,4 @@ pub enum Subcommand {
 
 	/// Db meta columns information.
 	ChainInfo(sc_cli::ChainInfoCmd),
-	/// For running a client hooked-up to the MockBlockchain
-	#[clap(subcommand)]
-	TestHarnessClient,
 }
