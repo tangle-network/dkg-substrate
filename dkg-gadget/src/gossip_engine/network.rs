@@ -532,7 +532,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			timer_task,
 		])
 		.await;
-		self.logger.error(format!("The DKG Gossip Handler has finished!!"));
+		self.logger.error("The DKG Gossip Handler has finished!!".to_string());
 	}
 
 	async fn handle_network_event(&self, event: Event) {
@@ -545,7 +545,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					.service
 					.add_peers_to_reserved_set(self.protocol_name.clone(), HashSet::from([addr]));
 				if let Err(err) = result {
-					self.logger.error(format!("Add reserved peer failed: {}", err));
+					self.logger.error(format!("Add reserved peer failed: {err}"));
 				}
 			},
 			Event::SyncDisconnected { remote } => {
@@ -558,7 +558,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{
-				self.logger.debug(format!("Peer {} connected to gossip protocol", remote));
+				self.logger.debug(format!("Peer {remote} connected to gossip protocol"));
 				// Send our Handshake message to that peer.
 				if let Err(err) = self.send_handshake_message(remote).await {
 					self.logger
@@ -613,7 +613,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					if protocol != self.protocol_name {
 						continue
 					}
-					self.logger.debug(format!("Received message from {} from gossiping", remote));
+					self.logger.debug(format!("Received message from {remote} from gossiping"));
 					let maybe_dkg_network_message =
 						<super::DKGNetworkMessage as Decode>::decode(&mut message.as_ref());
 					let m = match maybe_dkg_network_message {
@@ -699,12 +699,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 				let recv_count = self.message_notifications_channel.receiver_count();
 				if recv_count == 0 {
 					self.logger
-						.warn(format!("No one is going to process the message notification!!!"));
+						.warn("No one is going to process the message notification!!!".to_string());
 				}
 				if let Err(e) = self.message_notifications_channel.send(()) {
 					self.logger.error(format!(
-						"Failed to send message notification to DKG controller: {:?}",
-						e
+						"Failed to send message notification to DKG controller: {e:?}"
 					));
 				} else {
 					self.logger.debug(
@@ -714,7 +713,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			};
 			match pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					self.logger.debug(format!("NEW DKG MESSAGE FROM {}", who));
+					self.logger.debug(format!("NEW DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_new_signed_messages.inc();
 					}
@@ -725,7 +724,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
-					self.logger.debug(format!("OLD DKG MESSAGE FROM {}", who));
+					self.logger.debug(format!("OLD DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_old_signed_messages.inc();
 					}
@@ -782,7 +781,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				metrics.dkg_propagated_messages.inc();
 			}
 		} else {
-			self.logger.debug(format!("Peer {} does not exist in known peers", to_who));
+			self.logger.debug(format!("Peer {to_who} does not exist in known peers"));
 		}
 	}
 
@@ -803,7 +802,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			));
 		} else {
 			self.logger
-				.debug(format!("No specific recipient, broadcasting message to all peers"));
+				.debug("No specific recipient, broadcasting message to all peers".to_string());
 		}
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
@@ -812,7 +811,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		};
 		if peer_ids.is_empty() {
 			let message_hash = message.message_hash::<B>();
-			self.logger.warn(format!("No peers to gossip message {}", message_hash));
+			self.logger.warn(format!("No peers to gossip message {message_hash}"));
 			return
 		}
 		for peer in peer_ids {

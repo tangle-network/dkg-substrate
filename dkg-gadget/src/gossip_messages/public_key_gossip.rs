@@ -160,13 +160,10 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 				let signed_dkg_message =
 					SignedDKGMessage { msg: message, signature: Some(sig.encode()) };
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					gossip_engine
-						.logger()
-						.error(format!("Failed to gossip DKG public key: {:?}", e));
+					gossip_engine.logger().error(format!("Failed to gossip DKG public key: {e:?}"));
 				}
 			},
-			Err(e) =>
-				gossip_engine.logger().error(format!("🕸️  Error signing DKG message: {:?}", e)),
+			Err(e) => gossip_engine.logger().error(format!("🕸️  Error signing DKG message: {e:?}")),
 		}
 
 		aggregated_public_keys
@@ -177,8 +174,8 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 
 		gossip_engine
 			.logger()
-			.debug(format!("Gossiping local node {} public key and signature", public))
+			.debug(format!("Gossiping local node {public} public key and signature"))
 	} else {
-		gossip_engine.logger().error(format!("Could not sign public key"));
+		gossip_engine.logger().error("Could not sign public key".to_string());
 	}
 }

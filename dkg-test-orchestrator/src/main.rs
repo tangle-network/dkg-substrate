@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let signing_n = n_clients as u16;
 
 	// logging for the dummy api only
-	let output = std::fs::File::create(args.tmp_path.join(format!("dummy_api.txt")))?;
+	let output = std::fs::File::create(args.tmp_path.join("dummy_api.txt"))?;
 	let dummy_api_logger =
 		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output));
 
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let local_keystore = None;
 
 		let child = async move {
-			let label = peer_id.to_string();
+			let _label = peer_id.to_string();
 			dkg_logging::define_span!("DKG Client", label);
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				network: None,
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			worker.run().await;
 			Err::<(), _>(std::io::Error::new(
 				std::io::ErrorKind::Other,
-				format!("Worker for peer {:?} ended", peer_id),
+				format!("Worker for peer {peer_id:?} ended"),
 			))
 		};
 

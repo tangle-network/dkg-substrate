@@ -16,7 +16,7 @@ impl DebugLogger {
 
 			tokio::task::spawn(async move {
 				while let Some(message) = rx.recv().await {
-					writeln!(file, "{:?}", message).unwrap();
+					writeln!(file, "{message:?}").unwrap();
 				}
 			});
 
@@ -53,7 +53,7 @@ impl DebugLogger {
 
 	fn log_to_file<T: std::fmt::Debug>(&self, level: &str, message: T) {
 		if let Some(file) = &self.to_file_io {
-			let message = format!("[{}]: {:?}", level, message);
+			let message = format!("[{level}]: {message:?}");
 			file.send(message).unwrap();
 		}
 	}

@@ -373,24 +373,26 @@ where
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
-				self.logger.debug(format!("Starting genesis protocol (obtaining the lock)"));
+				self.logger.debug("Starting genesis protocol (obtaining the lock)".to_string());
 				let mut lock = self.rounds.write();
-				self.logger.debug(format!("Starting genesis protocol (got the lock)"));
+				self.logger.debug("Starting genesis protocol (got the lock)".to_string());
 				if lock.is_some() {
-					self.logger.warn(format!(
+					self.logger.warn(
 						"Overwriting rounds will result in termination of previous rounds!"
-					));
+							.to_string(),
+					);
 				}
 				*lock = Some(status_handle);
 			},
 			ProtoStageType::Queued => {
-				self.logger.debug(format!("Starting queued protocol (obtaining the lock)"));
+				self.logger.debug("Starting queued protocol (obtaining the lock)".to_string());
 				let mut lock = self.next_rounds.write();
-				self.logger.debug(format!("Starting queued protocol (got the lock)"));
+				self.logger.debug("Starting queued protocol (got the lock)".to_string());
 				if lock.is_some() {
-					self.logger.warn(format!(
+					self.logger.warn(
 						"Overwriting rounds will result in termination of previous rounds!"
-					));
+							.to_string(),
+					);
 				}
 				*lock = Some(status_handle);
 			},
@@ -408,20 +410,19 @@ where
 					if current_round.signing_has_stalled(now) {
 						// the round has stalled, so we can overwrite it
 						self.logger.warn(format!(
-							"signing round async index #{} has stalled, overwriting it",
-							async_index
+							"signing round async index #{async_index} has stalled, overwriting it"
 						));
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
-						self.logger.warn(format!(
+						self.logger.warn(
 							"Overwriting rounds will result in termination of previous rounds!"
-						));
+								.to_string(),
+						);
 						lock[async_index as usize] = Some(status_handle)
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						self.logger.debug(format!(
-							"signing round async index #{} is not active, overwriting it",
-							async_index
+							"signing round async index #{async_index} is not active, overwriting it"
 						));
 						lock[async_index as usize] = Some(status_handle)
 					}
@@ -487,9 +488,9 @@ where
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
-									logger.info(format!(
-										"The meta handler has executed successfully"
-									));
+									logger.info(
+										"The meta handler has executed successfully".to_string(),
+									);
 								},
 
 								Err(err) => {
@@ -501,7 +502,7 @@ where
 						};
 
 						// spawn on parallel thread
-						self.logger.info(format!("Started a new thread for task"));
+						self.logger.info("Started a new thread for task".to_string());
 						let _handle = tokio::task::spawn(task);
 					},
 
@@ -565,7 +566,7 @@ where
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
-					logger.info(format!("The meta handler has executed successfully"));
+					logger.info("The meta handler has executed successfully".to_string());
 					Ok(async_index)
 				},
 
@@ -715,7 +716,7 @@ where
 			}
 		};
 
-		logger.trace(format!("🕸️  active validator set: {:?}", new));
+		logger.trace(format!("🕸️  active validator set: {new:?}"));
 
 		new
 	}
@@ -740,8 +741,7 @@ where
 
 		if !missing.is_empty() {
 			self.logger.debug(format!(
-				"🕸️  for block {:?}, public key missing in validator set is: {:?}",
-				block, missing
+				"🕸️  for block {block:?}, public key missing in validator set is: {missing:?}"
 			));
 		}
 
@@ -765,8 +765,9 @@ where
 		// prevent an edge case.
 		match self.rounds.read().as_ref() {
 			None if genesis_authority_set.id != GENESIS_AUTHORITY_SET_ID => {
-				self.logger
-					.error(format!("🕸️  Rounds is None and authority set is not genesis set ID 0"));
+				self.logger.error(
+					"🕸️  Rounds is None and authority set is not genesis set ID 0".to_string(),
+				);
 				return Err(DKGError::StartKeygen {
 					reason: String::from(
 						"Rounds is None and authority set is not genesis set ID 0",
@@ -783,16 +784,14 @@ where
 		match self.rounds.read().as_ref() {
 			Some(rounds) if rounds.is_active() && !rounds.keygen_has_stalled(latest_block_num) => {
 				self.logger.debug(format!(
-					"🕸️  Rounds exists and is active, latest block number: {:?}",
-					latest_block_num
+					"🕸️  Rounds exists and is active, latest block number: {latest_block_num:?}"
 				));
 				return Ok(())
 			},
 			// For when we already completed the DKG, no need to do it again.
 			Some(rounds) if rounds.is_completed() => {
 				self.logger.debug(format!(
-					"🕸️  Rounds exists and is completed, latest block number: {:?}",
-					latest_block_num
+					"🕸️  Rounds exists and is completed, latest block number: {latest_block_num:?}"
 				));
 				return Ok(())
 			},
@@ -842,7 +841,7 @@ where
 	) -> Result<(), DKGError> {
 		// Check if the authority set is empty, return or proceed
 		if queued.authorities.is_empty() {
-			self.logger.debug(format!("🕸️  queued authority set is empty"));
+			self.logger.debug("🕸️  queued authority set is empty".to_string());
 			return Err(DKGError::StartKeygen { reason: String::from("Empty queued authority set") })
 		}
 		// Handling edge cases when the rounds exists, is currently active, and not stalled
@@ -857,7 +856,7 @@ where
 			} else {
 				// Proceed to clear the next rounds.
 				self.logger
-					.debug(format!(" Next rounds keygen has stalled, creating new rounds..."));
+					.debug(" Next rounds keygen has stalled, creating new rounds...".to_string());
 			}
 		}
 		// Get the best next authorities using the keygen threshold
@@ -870,8 +869,7 @@ where
 			},
 			None => {
 				self.logger.info(format!(
-					"🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {:?}",
-					session_id
+					"🕸️  NOT IN THE SET OF BEST NEXT AUTHORITIES: session {session_id:?}"
 				));
 				*self.next_rounds.write() = None;
 				return Ok(())
@@ -940,7 +938,7 @@ where
 			self.maybe_enact_next_authorities(header);
 			self.maybe_rotate_local_sessions(header);
 			if let Err(e) = self.submit_unsigned_proposals(header) {
-				self.logger.error(format!("🕸️  Error submitting unsigned proposals: {:?}", e));
+				self.logger.error(format!("🕸️  Error submitting unsigned proposals: {e:?}"));
 			}
 		}
 	}
@@ -960,7 +958,7 @@ where
 				*self.next_best_authorities.write() = self.get_next_best_authorities(header);
 				// Setting up the DKG
 				if let Err(e) = self.handle_genesis_dkg_setup(header, active) {
-					self.logger.error(format!("🕸️  Error handling genesis DKG setup: {:?}", e));
+					self.logger.error(format!("🕸️  Error handling genesis DKG setup: {e:?}"));
 				}
 			} else {
 				self.logger.debug(format!("🕸️  NOT IN GENESIS SESSION ID {:?}", active.id));
@@ -999,7 +997,7 @@ where
 				.map(|r| r.is_keygen_finished())
 				.unwrap_or(false);
 			self.logger
-				.debug(format!("🕸️  QUEUED KEYGEN FINISHED: {:?}", queued_keygen_finished));
+				.debug(format!("🕸️  QUEUED KEYGEN FINISHED: {queued_keygen_finished:?}"));
 			self.logger.debug(format!(
 				"🕸️  QUEUED DKG STATUS: {:?}",
 				self.next_rounds.read().as_ref().map(|r| r.status.clone())
@@ -1009,7 +1007,7 @@ where
 			}
 
 			let has_next_rounds = self.next_rounds.read().is_some();
-			self.logger.debug(format!("🕸️  HAS NEXT ROUND KEYGEN: {:?}", has_next_rounds));
+			self.logger.debug(format!("🕸️  HAS NEXT ROUND KEYGEN: {has_next_rounds:?}"));
 			// Check if there is a next DKG Key on-chain.
 			let next_dkg_key = self.get_next_dkg_pub_key(header);
 
@@ -1024,7 +1022,7 @@ where
 				));
 				// Start the queued DKG setup for the new queued authorities
 				if let Err(e) = self.handle_queued_dkg_setup(header, queued) {
-					self.logger.error(format!("🕸️  Error handling queued DKG setup: {:?}", e));
+					self.logger.error(format!("🕸️  Error handling queued DKG setup: {e:?}"));
 				}
 				// Reset the Retry counter.
 				self.keygen_retry_count.store(0, Ordering::SeqCst);
@@ -1066,21 +1064,19 @@ where
 					let should_retry = v < max_retries || max_retries == 0;
 					if keygen_stalled {
 						self.logger.debug(format!(
-							"🕸️  Keygen has stalled, retry conditions => n: {}, t: {}, current_attempt: {}/{}, should_retry: {}",
-							n, t, v, max_retries, should_retry
+							"🕸️  Keygen has stalled, retry conditions => n: {n}, t: {t}, current_attempt: {v}/{max_retries}, should_retry: {should_retry}"
 						));
 					}
 					(v, max_retries, should_retry)
 				};
 				if keygen_stalled && should_retry {
 					self.logger.debug(format!(
-						"🕸️  Queued Keygen has stalled, retrying (attempt: {}/{})",
-						current_attmp, max
+						"🕸️  Queued Keygen has stalled, retrying (attempt: {current_attmp}/{max})"
 					));
 					metric_inc!(self, dkg_keygen_retry_counter);
 					// Start the queued Keygen protocol again.
 					if let Err(e) = self.handle_queued_dkg_setup(header, queued) {
-						self.logger.error(format!("🕸️  Error handling queued DKG setup: {:?}", e));
+						self.logger.error(format!("🕸️  Error handling queued DKG setup: {e:?}"));
 					}
 					// Increment the retry count
 					self.keygen_retry_count.fetch_add(1, Ordering::SeqCst);
@@ -1106,9 +1102,9 @@ where
 			// Check if the on chain authority_set_id is the same as the queued_authority_set_id.
 			let (set_id, _) = self.get_dkg_pub_key(header);
 			let queued_authority_set_id = self.queued_validator_set.read().id;
-			self.logger.debug(format!("🕸️  CURRENT SET ID: {:?}", set_id));
+			self.logger.debug(format!("🕸️  CURRENT SET ID: {set_id:?}"));
 			self.logger
-				.debug(format!("🕸️  QUEUED AUTHORITY SET ID: {:?}", queued_authority_set_id));
+				.debug(format!("🕸️  QUEUED AUTHORITY SET ID: {queued_authority_set_id:?}"));
 			if set_id != queued_authority_set_id {
 				return
 			}
@@ -1118,14 +1114,15 @@ where
 			self.logger.debug("🕸️  Rotating next round this will result in a drop/termination of the current rounds!");
 			match self.rounds.read().as_ref() {
 				Some(r) if r.is_active() => {
-					self.logger.warn(format!(
+					self.logger.warn(
 						"🕸️  Current rounds is active, rotating next round will terminate it!!"
-					));
+							.to_string(),
+					);
 				},
 				Some(_) | None => {
-					self.logger.warn(format!(
-						"🕸️  Current rounds is not active, rotating next rounds is okay"
-					));
+					self.logger.warn(
+						"🕸️  Current rounds is not active, rotating next rounds is okay".to_string(),
+					);
 				},
 			};
 			*self.rounds.write() = self.next_rounds.write().take();
@@ -1148,13 +1145,14 @@ where
 				metrics.reset_session_metrics();
 			}
 		} else {
-			self.logger
-				.info(format!("🕸️  No update to local session found, not rotation local session"));
+			self.logger.info(
+				"🕸️  No update to local session found, not rotation local session".to_string(),
+			);
 		}
 	}
 
 	fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
-		self.logger.trace(format!("🕸️  Finality notification: {:?}", notification));
+		self.logger.trace(format!("🕸️  Finality notification: {notification:?}"));
 		// Handle finality notifications
 		self.process_block_notification(&notification.header);
 	}
@@ -1222,7 +1220,7 @@ where
 		dkg_logging::instrument(target = "dkg", skip_all, fields(dkg_error))
 	)]
 	pub fn handle_dkg_error(&self, dkg_error: DKGError) {
-		self.logger.error(format!("Received error: {:?}", dkg_error));
+		self.logger.error(format!("Received error: {dkg_error:?}"));
 		metric_inc!(self, dkg_error_counter);
 		let authorities: Vec<Public> =
 			self.best_authorities.read().iter().map(|x| x.1.clone()).collect();
@@ -1245,7 +1243,7 @@ where
 		};
 
 		self.logger
-			.error(format!("Bad Actors : {:?}, Session Id : {:?}", bad_actors, session_id));
+			.error(format!("Bad Actors : {bad_actors:?}, Session Id : {session_id:?}"));
 
 		let mut offenders: Vec<AuthorityId> = Vec::new();
 		for bad_actor in bad_actors {
@@ -1321,7 +1319,7 @@ where
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
 				let async_index = msg.msg.payload.get_async_index();
-				self.logger.debug(format!("Received message for async index {}", async_index));
+				self.logger.debug(format!("Received message for async index {async_index}"));
 				if let Some(Some(rounds)) = self.signing_rounds.read().get(async_index as usize) {
 					self.logger.debug(format!(
 						"Message is for signing execution in session {}",
@@ -1345,8 +1343,8 @@ where
 						panic!("Message is for another signing round: {}", rounds.session_id)
 					}
 				} else {
-					self.logger.error(format!("No signing rounds for async index {}", async_index));
-					panic!("No signing rounds for async index {}", async_index)
+					self.logger.error(format!("No signing rounds for async index {async_index}"));
+					panic!("No signing rounds for async index {async_index}")
 				}
 				Ok(())
 			},
@@ -1357,13 +1355,12 @@ where
 							Ok(()) => (),
 							Err(err) => self
 								.logger
-								.error(format!("🕸️  Error while handling DKG message {:?}", err)),
+								.error(format!("🕸️  Error while handling DKG message {err:?}")),
 						};
 					},
 
 					Err(err) => self.logger.error(format!(
-						"Error while verifying signature against authorities: {:?}",
-						err
+						"Error while verifying signature against authorities: {err:?}"
 					)),
 				}
 				Ok(())
@@ -1375,13 +1372,12 @@ where
 							Ok(()) => (),
 							Err(err) => self
 								.logger
-								.error(format!("🕸️  Error while handling DKG message {:?}", err)),
+								.error(format!("🕸️  Error while handling DKG message {err:?}")),
 						};
 					},
 
 					Err(err) => self.logger.error(format!(
-						"Error while verifying signature against authorities: {:?}",
-						err
+						"Error while verifying signature against authorities: {err:?}"
 					)),
 				}
 
@@ -1553,7 +1549,7 @@ where
 		let k = factorial((threshold + 1) as u64);
 		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
 		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
-		self.logger.debug(format!("Generating {} signing sets", num_combinations));
+		self.logger.debug(format!("Generating {num_combinations} signing sets"));
 		while signing_sets.len() < num_combinations as usize {
 			if count > 0 {
 				seed = sp_core::keccak_256(&seed).to_vec();
@@ -1609,7 +1605,7 @@ where
 
 		if futures.is_empty() {
 			self.logger
-				.error(format!("While creating the signing protocol, 0 were created"));
+				.error("While creating the signing protocol, 0 were created".to_string());
 			Err(DKGError::GenericError {
 				reason: "While creating the signing protocol, 0 were created".to_string(),
 			})
@@ -1628,11 +1624,10 @@ where
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
 					logger.info(format!(
-						"*** SUCCESSFULLY EXECUTED meta signing protocol {:?} ***",
-						_success
+						"*** SUCCESSFULLY EXECUTED meta signing protocol {_success:?} ***"
 					));
 				} else {
-					logger.warn(format!("*** UNSUCCESSFULLY EXECUTED meta signing protocol"));
+					logger.warn("*** UNSUCCESSFULLY EXECUTED meta signing protocol".to_string());
 				}
 			};
 
@@ -1738,7 +1733,7 @@ where
 
 	// *** Main run loop ***
 	pub async fn run(mut self) {
-		let tag = self.keygen_gossip_engine.local_peer_id().to_string();
+		let _tag = self.keygen_gossip_engine.local_peer_id().to_string();
 		dkg_logging::define_span!("DKG Client", tag);
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
@@ -1755,10 +1750,8 @@ where
 			self.spawn_misbehaviour_report_task(misbehaviour_rx),
 		])
 		.await;
-		self.logger.error(format!(
-			"DKG Worker finished; the reason that task({n}) ended with: {:?}",
-			first
-		));
+		self.logger
+			.error(format!("DKG Worker finished; the reason that task({n}) ended with: {first:?}"));
 	}
 
 	fn spawn_finality_notification_task(&self) -> tokio::task::JoinHandle<()> {
@@ -1789,7 +1782,7 @@ where
 						self_.keygen_gossip_engine.acknowledge_last_message();
 					},
 					Err(e) => {
-						self_.logger.error(format!("Error processing keygen message: {:?}", e));
+						self_.logger.error(format!("Error processing keygen message: {e:?}"));
 					},
 				}
 			}
@@ -1813,7 +1806,7 @@ where
 						self_.signing_gossip_engine.acknowledge_last_message();
 					},
 					Err(e) => {
-						self_.logger.error(format!("Error processing signing message: {:?}", e));
+						self_.logger.error(format!("Error processing signing message: {e:?}"));
 					},
 				}
 			}

@@ -192,6 +192,12 @@ impl DKGKeystore {
 	}
 }
 
+impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
+	fn from(store: Option<SyncCryptoStorePtr>) -> Self {
+		Self(store, DebugLogger::new("DKGKeystore", None))
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;

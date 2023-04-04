@@ -440,11 +440,11 @@ where
 						return Err(DKGError::GenericError { reason: format!("{e:?}") })
 					},
 					async_runtime::Error::Exhausted => {
-						logger.error(format!("Async Proto Exhausted"));
+						logger.error("Async Proto Exhausted".to_string());
 						return Err(DKGError::GenericError { reason: String::from("Exhausted") })
 					},
 					async_runtime::Error::RecvEof => {
-						logger.error(format!("Async Proto Incoming channel closed"));
+						logger.error("Async Proto Incoming channel closed".to_string());
 						return Err(DKGError::GenericError {
 							reason: String::from("RecvEof: Incomming channel closed"),
 						})
@@ -499,9 +499,9 @@ where
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
 		// within a reasonable time, we should abort it.
 		match handle2.await {
-			Ok(Ok(_)) => params.logger.info(format!("🕸️  Outbound task finished")),
-			Ok(Err(err)) => params.logger.error(format!("🕸️  Outbound task errored: {:?}", err)),
-			Err(_) => params.logger.error(format!("🕸️  Outbound task aborted")),
+			Ok(Ok(_)) => params.logger.info("🕸️  Outbound task finished".to_string()),
+			Ok(Err(err)) => params.logger.error(format!("🕸️  Outbound task errored: {err:?}")),
+			Err(_) => params.logger.error("🕸️  Outbound task aborted".to_string()),
 		}
 		res
 	};
@@ -550,7 +550,7 @@ where
 				Err(err) => {
 					params
 						.logger
-						.error(format!("Failed to serialize message: {:?}, Skipping..", err));
+						.error(format!("Failed to serialize message: {err:?}, Skipping.."));
 					continue
 				},
 			};
@@ -604,7 +604,7 @@ where
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				params
 					.logger
-					.error(format!("Async proto failed to send outbound message: {:?}", err));
+					.error(format!("Async proto failed to send outbound message: {err:?}"));
 			} else {
 				params
 					.logger
@@ -665,7 +665,7 @@ where
 			{
 				params
 					.logger
-					.error(format!("Error handling unsigned inbound message. Returning"));
+					.error("Error handling unsigned inbound message. Returning".to_string());
 				break
 			}
 

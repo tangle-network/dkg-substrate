@@ -14,6 +14,12 @@ pub struct DKGInMemoryDb {
 	local_keys: LockedMap<SessionId, LocalKey<Secp256k1>>,
 }
 
+impl Default for DKGInMemoryDb {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl DKGInMemoryDb {
 	/// Create a new instance of [`DKGInMemoryDb`].
 	#[allow(unused)]

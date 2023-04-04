@@ -50,7 +50,7 @@ where
 	}
 
 	if let DKGMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
-		dkg_worker.logger.debug(format!("Received misbehaviour report"));
+		dkg_worker.logger.debug("Received misbehaviour report".to_string());
 
 		let is_main_round = {
 			if let Some(round) = dkg_worker.rounds.read().as_ref() {
@@ -59,7 +59,7 @@ where
 				false
 			}
 		};
-		dkg_worker.logger.debug(format!("Is main round: {}", is_main_round));
+		dkg_worker.logger.debug(format!("Is main round: {is_main_round}"));
 		// Create packed message
 		let mut signed_payload = Vec::new();
 		signed_payload.extend_from_slice(&match msg.misbehaviour_type {
@@ -75,7 +75,7 @@ where
 			&signed_payload,
 			&msg.signature,
 		)?;
-		dkg_worker.logger.debug(format!("Reporter: {:?}", reporter));
+		dkg_worker.logger.debug(format!("Reporter: {reporter:?}"));
 		// Add new report to the aggregated reports
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 		let reports = lock
@@ -87,7 +87,7 @@ where
 				reporters: Default::default(),
 				signatures: Default::default(),
 			});
-		dkg_worker.logger.debug(format!("Reports: {:?}", reports));
+		dkg_worker.logger.debug(format!("Reports: {reports:?}"));
 		if !reports.reporters.contains(&reporter) {
 			reports.reporters.try_push(reporter).map_err(|_| DKGError::InputOutOfBounds)?;
 			let bounded_signature =
@@ -167,7 +167,7 @@ where
 					));
 				}
 			},
-			Err(e) => dkg_worker.logger.error(format!("🕸️  Error signing DKG message: {:?}", e)),
+			Err(e) => dkg_worker.logger.error(format!("🕸️  Error signing DKG message: {e:?}")),
 		}
 
 		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
@@ -191,7 +191,9 @@ where
 			.try_push(encoded_signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?)
 			.map_err(|_| DKGError::InputOutOfBounds)?;
 
-		dkg_worker.logger.debug(format!("Gossiping misbehaviour report and signature"));
+		dkg_worker
+			.logger
+			.debug("Gossiping misbehaviour report and signature".to_string());
 
 		let reports = (*reports).clone();
 		// Try to store reports offchain
@@ -201,7 +203,7 @@ where
 		}
 		Ok(())
 	} else {
-		dkg_worker.logger.error(format!("Could not sign public key"));
+		dkg_worker.logger.error("Could not sign public key".to_string());
 		Err(DKGError::CannotSign)
 	}
 }

@@ -102,7 +102,7 @@ pub fn perform_storing_of_aggregated_public_keys<B, BE>(
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
 	let submit_at = generate_delayed_submit_at::<B>(current_block_number, MAX_SUBMISSION_DELAY);
 	if let Some(submit_at) = submit_at {
-		logger.debug(format!("Storing aggregated public keys at block {}", submit_at));
+		logger.debug(format!("Storing aggregated public keys at block {submit_at}"));
 		offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
 	}
 }

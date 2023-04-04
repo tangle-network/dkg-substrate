@@ -49,7 +49,7 @@ where
 {
 	match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
-			logger.info(format!("🕸️  Refresh vote with nonce {:?} received", nonce));
+			logger.info(format!("🕸️  Refresh vote with nonce {nonce:?} received"));
 			let offchain = backend.offchain_storage();
 
 			if let Some(mut offchain) = offchain {

@@ -51,7 +51,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
 						Ok(message) => message,
 						Err(err) => {
-							logger.error(format!("Error deserializing message: {}", err));
+							logger.error(format!("Error deserializing message: {err}"));
 							// Skip this message.
 							return Ok(())
 						},
@@ -64,11 +64,11 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 					}
 				}
 				if let Err(e) = to_async_proto.unbounded_send(message) {
-					logger.error(format!("Error sending message to async proto: {}", e));
+					logger.error(format!("Error sending message to async proto: {e}"));
 				}
 			},
 
-			err => logger.debug(format!("Invalid payload received: {:?}", err)),
+			err => logger.debug(format!("Invalid payload received: {err:?}")),
 		}
 
 		Ok(())
@@ -80,7 +80,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		params.logger.info(format!("Completed keygen stage successfully!"));
+		params.logger.info("Completed keygen stage successfully!".to_string());
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in

@@ -55,7 +55,7 @@ where
 		let protocol = async move {
 			params
 				.logger
-				.info(format!("Will execute keygen since local is in best authority set"));
+				.info("Will execute keygen since local is in best authority set".to_string());
 			let t = threshold;
 			let n = params.best_authorities.len() as u16;
 			// wait for the start signal
@@ -75,11 +75,11 @@ where
 				Ok(_) => {
 					// Set the status as complete.
 					status_handle.set_status(MetaHandlerStatus::Complete);
-					logger0.info(format!("🕸️  Keygen GenericAsyncHandler completed"));
+					logger0.info("🕸️  Keygen GenericAsyncHandler completed".to_string());
 				},
 				Err(ref err) => {
 					// Do not update the status here, evetually the Keygen will fail and timeout.
-					logger0.error(format!("Keygen failed with error: {:?}", err));
+					logger0.error(format!("Keygen failed with error: {err:?}"));
 				},
 			};
 			res
@@ -89,7 +89,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					logger1.info(format!("Stopper has been called {:?}", res1));
+					logger1.info(format!("Stopper has been called {res1:?}"));
 					Ok(())
 				}
 			}

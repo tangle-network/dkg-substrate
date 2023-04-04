@@ -4,7 +4,7 @@ use crate::{
 	cli::{Cli, Subcommand},
 	service,
 };
-use dkg_gadget::start_dkg_gadget;
+
 use dkg_standalone_runtime::{Block, EXISTENTIAL_DEPOSIT};
 use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};

@@ -57,7 +57,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		return
 	}
 
-	logger.debug(format!("🕸️  saving signed proposal in offchain storage"));
+	logger.debug("🕸️  saving signed proposal in offchain storage".to_string());
 
 	if find_index::<AuthorityId>(
 		&current_validator_set.read().authorities[..],
@@ -108,7 +108,9 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 				old_val.as_deref(),
 				&prop_wrapper.encode(),
 			) {
-				logger.debug(format!("🕸️  Successfully saved signed proposals in offchain storage"));
+				logger.debug(
+					"🕸️  Successfully saved signed proposals in offchain storage".to_string(),
+				);
 				break
 			}
 		}

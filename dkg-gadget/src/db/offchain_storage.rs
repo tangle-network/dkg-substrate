@@ -82,7 +82,7 @@ where
 		session_id: SessionId,
 	) -> Result<Option<LocalKey<Secp256k1>>, DKGError> {
 		self.logger
-			.trace(format!("Offchain Storage : Fetching local keys for session {:?}", session_id));
+			.trace(format!("Offchain Storage : Fetching local keys for session {session_id:?}"));
 		let db_key = keys::LocalKey::new(session_id);
 		let maybe_decrypted_bytes = self.load_and_decrypt(codec::Encode::encode(&db_key))?;
 		match maybe_decrypted_bytes {
@@ -90,8 +90,7 @@ where
 				let local_key = serde_json::from_slice(&decrypted_bytes.0)
 					.map_err(|e| DKGError::CriticalError { reason: e.to_string() })?;
 				self.logger.trace(format!(
-					"Offchain Storage : Fetched local keys for session {:?}, Key : {:?}",
-					session_id, local_key
+					"Offchain Storage : Fetched local keys for session {session_id:?}, Key : {local_key:?}"
 				));
 				Ok(Some(local_key))
 			},
@@ -105,8 +104,7 @@ where
 		local_key: LocalKey<Secp256k1>,
 	) -> Result<(), DKGError> {
 		self.logger.trace(format!(
-			"Offchain Storage : Store local keys for session {:?}, Key : {:?}",
-			session_id, local_key
+			"Offchain Storage : Store local keys for session {session_id:?}, Key : {local_key:?}"
 		));
 		let db_key = keys::LocalKey::new(session_id);
 		let value = serde_json::to_vec(&local_key)

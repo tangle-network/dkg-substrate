@@ -145,14 +145,13 @@ where
 
 					Err(err) => {
 						logger.warn(format!(
-							"While mapping signed message, received an error: {:?}",
-							err
+							"While mapping signed message, received an error: {err:?}"
 						));
 						continue
 					},
 				},
 				Some(Err(err)) => {
-					logger.error(format!("Stream RECV error: {:?}", err));
+					logger.error(format!("Stream RECV error: {err:?}"));
 					continue
 				},
 				None => return Poll::Ready(None),

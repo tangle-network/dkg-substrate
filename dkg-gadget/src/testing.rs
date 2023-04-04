@@ -41,8 +41,10 @@ pub struct TestBackendState {
 	import_stream: Arc<MultiSubscribableStream<ImportNotification<TestBlock>>>,
 	api: DummyApi,
 	offchain_storage: InMemOffchainStorage,
-	local_test_cases: Arc<Mutex<HashMap<Uuid, Option<Result<(), String>>>>>,
+	local_test_cases: LocalTestCases,
 }
+
+pub type LocalTestCases = Arc<Mutex<HashMap<Uuid, Option<Result<(), String>>>>>;
 
 impl TestBackend {
 	pub async fn connect<T: ToSocketAddrs>(
@@ -97,9 +99,7 @@ impl TestBackend {
 						// pong back the handshake response
 						tx1.lock()
 							.await
-							.send(ProtocolPacket::InitialHandshakeResponse {
-								peer_id: peer_id.clone(),
-							})
+							.send(ProtocolPacket::InitialHandshakeResponse { peer_id })
 							.await
 							.unwrap();
 					},
@@ -129,7 +129,7 @@ impl TestBackend {
 						}
 					},
 					ProtocolPacket::Halt => {
-						logger.info(format!("Received HALT command from the orchestrator"));
+						logger.info("Received HALT command from the orchestrator".to_string());
 						return
 					},
 
@@ -172,7 +172,7 @@ impl<T: Clone> MultiSubscribableStream<T> {
 		let mut lock = self.inner.write();
 		assert!(!lock.is_empty());
 		// receiver will naturally drop when no longer used.
-		lock.retain(|tx| if let Err(_) = tx.unbounded_send(t.clone()) { false } else { true })
+		lock.retain(|tx| tx.unbounded_send(t.clone()).is_ok())
 	}
 }
 
@@ -927,7 +927,7 @@ mod dummy_api {
 		}
 
 		fn next_pub_key_sig(&self, _: H256) -> ApiResult<Option<Vec<u8>>> {
-			self.logger.error(format!("unimplemented get_next_pub_key_sig"));
+			self.logger.error("unimplemented get_next_pub_key_sig".to_string());
 			todo!()
 		}
 
@@ -983,12 +983,12 @@ mod dummy_api {
 			_: H256,
 			_block_number: BlockNumber,
 		) -> ApiResult<BlockNumber> {
-			self.logger.error(format!("unimplemented get_max_extrinsic_delay"));
+			self.logger.error("unimplemented get_max_extrinsic_delay".to_string());
 			todo!()
 		}
 
 		fn get_authority_accounts(&self, _: H256) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
-			self.logger.error(format!("unimplemented get_authority_accounts"));
+			self.logger.error("unimplemented get_authority_accounts".to_string());
 			todo!()
 			//Ok((DKG::current_authorities_accounts(), DKG::next_authorities_accounts()))
 		}
@@ -998,7 +998,7 @@ mod dummy_api {
 			_: H256,
 			_authorities: Vec<AuthorityId>,
 		) -> ApiResult<Vec<(AuthorityId, Reputation)>> {
-			self.logger.error(format!("unimplemented get_repuations"));
+			self.logger.error("unimplemented get_repuations".to_string());
 			todo!()
 			//Ok(authorities.iter().map(|a| (a.clone(), DKG::authority_reputations(a))).collect())
 		}
@@ -1058,6 +1058,12 @@ pub mod mock_gossip {
 		logger: Option<DebugLogger>,
 	}
 
+	impl Default for InMemoryGossipEngine {
+		fn default() -> Self {
+			Self::new()
+		}
+	}
+
 	impl InMemoryGossipEngine {
 		pub fn new() -> Self {
 			Self {
@@ -1078,20 +1084,17 @@ pub mod mock_gossip {
 			keyring: crate::keyring::Keyring,
 			key_store: &dyn SyncCryptoStore,
 		) -> Self {
-			let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
-				&*key_store,
-				KEY_TYPE,
-				Some(&keyring.to_seed()),
-			)
-			.ok()
-			.unwrap()
-			.into();
+			let public_key: crypto::Public =
+				SyncCryptoStore::ecdsa_generate_new(key_store, KEY_TYPE, Some(&keyring.to_seed()))
+					.ok()
+					.unwrap()
+					.into();
 
 			let this_peer = PeerId::random();
 			let stream = MultiSubscribableStream::new("stream notifier");
-			self.mapping.lock().insert(this_peer.clone(), public_key.clone());
-			assert!(self.clients.lock().insert(this_peer.clone(), Default::default()).is_none());
-			self.notifier.lock().insert(this_peer.clone(), stream);
+			self.mapping.lock().insert(this_peer, public_key.clone());
+			assert!(self.clients.lock().insert(this_peer, Default::default()).is_none());
+			self.notifier.lock().insert(this_peer, stream);
 
 			// by default, add this peer to the best authorities
 			// TODO: make the configurable
@@ -1128,7 +1131,7 @@ pub mod mock_gossip {
 		}
 
 		fn local_peer_id(&self) -> PeerId {
-			self.peer_id().0.clone()
+			*self.peer_id().0
 		}
 
 		/// Send a DKG message to a specific peer.

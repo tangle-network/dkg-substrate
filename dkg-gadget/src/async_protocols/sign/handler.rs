@@ -83,7 +83,7 @@ where
 					.debug(format!("Got unsigned proposals count {}", unsigned_proposals.len()));
 
 				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
-					params.logger.info(format!("Offline stage index: {}", offline_i));
+					params.logger.info(format!("Offline stage index: {offline_i}"));
 
 					// create one offline stage for each unsigned proposal
 					let futures = FuturesUnordered::new();
@@ -104,9 +104,9 @@ where
 					// TODO: Consider not blocking here and allowing processing of
 					// each batch of unsigned proposals concurrently
 					futures.try_collect::<()>().await.map(|_| ())?;
-					params.logger.info(format!("🕸️  Concluded all Offline->Voting stages ({} total) for this batch for this node", count_in_batch));
+					params.logger.info(format!("🕸️  Concluded all Offline->Voting stages ({count_in_batch} total) for this batch for this node"));
 				} else {
-					params.logger.warn(format!("🕸️  We are not among signers, skipping"));
+					params.logger.warn("🕸️  We are not among signers, skipping".to_string());
 					return Err(DKGError::GenericError {
 						reason: "We are not among signers, skipping".to_string(),
 					})
@@ -122,7 +122,7 @@ where
 		.then(|res| async move {
 			status_handle.set_status(MetaHandlerStatus::Complete);
 			// print the res value.
-			logger0.info(format!("🕸️  Signing protocol concluded with {:?}", res));
+			logger0.info(format!("🕸️  Signing protocol concluded with {res:?}"));
 			res
 		});
 
@@ -130,7 +130,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					logger2.info(format!("Stopper has been called {:?}", res1));
+					logger2.info(format!("Stopper has been called {res1:?}"));
 					Err(DKGError::GenericError {
 						reason: format!("Stopper has been called {res1:?}")
 					})
@@ -199,8 +199,7 @@ where
 			let number_of_parties = params.best_authorities.len();
 
 			params.logger.info(format!(
-				"Will now begin the voting stage with n={} parties with offline_i={}",
-				number_of_parties, offline_i
+				"Will now begin the voting stage with n={number_of_parties} parties with offline_i={offline_i}"
 			));
 
 			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
@@ -243,16 +242,15 @@ where
 			let number_of_partial_sigs = threshold as usize;
 			let mut sigs = Vec::with_capacity(number_of_partial_sigs);
 
-			params.logger.info(format!(
-				"Must obtain {} partial sigs to continue ...",
-				number_of_partial_sigs
-			));
+			params
+				.logger
+				.info(format!("Must obtain {number_of_partial_sigs} partial sigs to continue ..."));
 
 			while let Some(msg) = incoming_wrapper.next().await {
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
-						params.logger.info(format!("Found matching round key!"));
+						params.logger.info("Found matching round key!".to_string());
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)
@@ -265,12 +263,12 @@ where
 							break
 						}
 					} else {
-						params.logger.info(format!("Found non-matching round key; skipping"));
+						params.logger.info("Found non-matching round key; skipping".to_string());
 					}
 				}
 			}
 
-			params.logger.error(format!("RD0 on {} for {:?}", offline_i, hash_of_proposal));
+			params.logger.error(format!("RD0 on {offline_i} for {hash_of_proposal:?}"));
 
 			if sigs.len() != number_of_partial_sigs {
 				params.logger.error(format!(

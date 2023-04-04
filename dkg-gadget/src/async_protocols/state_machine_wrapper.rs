@@ -103,7 +103,7 @@ where
 
 		let result = self.sm.handle_incoming(msg);
 		if let Some(err) = result.as_ref().err() {
-			self.logger.error(format!("StateMachine error: {:?}", err));
+			self.logger.error(format!("StateMachine error: {err:?}"));
 		}
 
 		self.collect_round_blame();

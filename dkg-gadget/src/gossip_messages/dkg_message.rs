@@ -58,11 +58,10 @@ pub(crate) fn sign_and_send_messages<GE>(
 				// recipient or not. So it is up to the underlying gossip engine to decide
 				// whether to gossip or not.
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					gossip_engine.logger().error(format!("Error sending message: {:?}", e));
+					gossip_engine.logger().error(format!("Error sending message: {e:?}"));
 				}
 			},
-			Err(e) =>
-				gossip_engine.logger().trace(format!("🕸️  Error signing DKG message: {:?}", e)),
+			Err(e) => gossip_engine.logger().trace(format!("🕸️  Error signing DKG message: {e:?}")),
 		};
 
 		gossip_engine

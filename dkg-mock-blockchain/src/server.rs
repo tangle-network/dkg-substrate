@@ -100,7 +100,7 @@ impl MockBlockchain {
 			while let Ok((stream, addr)) = listener.accept().await {
 				let this = self.clone();
 				// spawn a sub-task within this listener task
-				let _ = tokio::task::spawn(this.handle_stream(stream, addr));
+				tokio::task::spawn(this.handle_stream(stream, addr));
 			}
 
 			Err::<(), _>(generic_error("Listener died"))
@@ -132,7 +132,7 @@ impl MockBlockchain {
 				orchestrator_to_client_subtask: orchestrator_to_this_task,
 			};
 
-			if write.insert(peer_id.clone(), state).is_some() {
+			if write.insert(peer_id, state).is_some() {
 				// when simulating disconnects, this may happen
 				log::warn!(target: "dkg", "Inserted peer {peer_id:?} into the clients map, but, overwrote a previous value")
 			}
@@ -161,7 +161,7 @@ impl MockBlockchain {
 								TestResult { error_message: event.error, success: event.success };
 							self.to_orchestrator
 								.send(ClientToOrchestratorEvent::TestResult {
-									peer_id: peer_id.clone(),
+									peer_id: *peer_id,
 									trace_id,
 									result,
 								})
@@ -202,7 +202,7 @@ impl MockBlockchain {
 	async fn orchestrate(self) -> std::io::Result<()> {
 		let mut test_cases = self.generate_test_cases();
 		let mut client_to_orchestrator_rx = self.orchestrator_rx.lock().await.take().unwrap();
-		let mut round_id = &mut 0;
+		let round_id = &mut 0;
 		let mut current_round_completed_count = 0;
 
 		let cl = self.clients.clone();
@@ -236,8 +236,7 @@ impl MockBlockchain {
 						if clients.len() == self.config.n_clients {
 							// we are ready to begin testing rounds
 							std::mem::drop(clients);
-							self.orchestrator_begin_next_round(&mut test_cases, &mut round_id)
-								.await;
+							self.orchestrator_begin_next_round(&mut test_cases, round_id).await;
 						}
 					},
 

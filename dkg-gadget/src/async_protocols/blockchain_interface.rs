@@ -124,7 +124,7 @@ impl<
 {
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
-		let current_test_id = self.current_test_id.read().clone().unwrap();
+		let current_test_id = (*self.current_test_id.read()).unwrap();
 		self.to_test_client.as_ref().unwrap().send((current_test_id, result)).unwrap();
 	}
 
@@ -207,8 +207,7 @@ where
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
 		self.logger.info(format!(
-			"PROCESS VOTE RESULT : session_id {:?}, signature : {:?}",
-			session_id, signature
+			"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
 		));
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
@@ -233,8 +232,7 @@ where
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
-				self.logger
-					.info(format!("All proposals have resolved for batch {:?}", batch_key));
+				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
@@ -279,7 +277,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
-		self.logger.debug(format!("Storing local key for session {:?}", session_id));
+		self.logger.debug(format!("Storing local key for session {session_id:?}"));
 		self.db.store_local_key(session_id, key)
 	}
 

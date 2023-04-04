@@ -132,7 +132,7 @@ where
 	} = dkg_params;
 
 	// setup debug logging
-	let local_peer_id = network.local_peer_id().clone();
+	let local_peer_id = network.local_peer_id();
 	let debug_logger = DebugLogger::new(local_peer_id, None);
 
 	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
@@ -156,7 +156,7 @@ where
 					Some(metrics)
 				},
 				Err(err) => {
-					logger_prometheus.debug(format!("🕸️  Failed to register metrics: {:?}", err));
+					logger_prometheus.debug(format!("🕸️  Failed to register metrics: {err:?}"));
 					None
 				},
 			},
