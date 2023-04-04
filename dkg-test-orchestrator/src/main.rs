@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 		let child = async move {
 			let _label = peer_id.to_string();
-			dkg_logging::define_span!("DKG Client", label);
+			dkg_logging::define_span!("DKG Client", _label);
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				network: None,
 				latest_header,

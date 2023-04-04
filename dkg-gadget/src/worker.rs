@@ -1734,7 +1734,7 @@ where
 	// *** Main run loop ***
 	pub async fn run(mut self) {
 		let _tag = self.keygen_gossip_engine.local_peer_id().to_string();
-		dkg_logging::define_span!("DKG Client", tag);
+		dkg_logging::define_span!("DKG Client", _tag);
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;
