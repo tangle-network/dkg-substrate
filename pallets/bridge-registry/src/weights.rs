@@ -30,8 +30,8 @@ use sp_std::marker::PhantomData;
 
 /// Weight functions needed for pallet_bridge_registry.
 pub trait WeightInfo {
-	fn submit_signed_proposals(n: u32, ) -> Weight;
-	fn force_submit_unsigned_proposal() -> Weight;
+	fn set_metadata() -> Weight;
+	fn force_reset_indices() -> Weight;
 }
 
 /// Weights for pallet_bridge_registry using the Substrate node and recommended hardware.
@@ -39,14 +39,8 @@ pub struct WebbWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	// Storage: BridgeRegistry Bridges (r:1 w:1)
 	fn set_metadata() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `563 + n * (57 ±0)`
-		//  Estimated: `1017 + n * (22527 ±0)`
-		// Minimum execution time: 6_000 nanoseconds.
 		Weight::from_ref_time(5_566_119)
-			.saturating_add(Weight::from_proof_size(1017))
-			// Standard Error: 1_019_605
-			.saturating_add(Weight::from_ref_time(91_257_999).saturating_mul(n.into()))
+			.saturating_add(Weight::from_proof_size(0))
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -66,27 +60,21 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 // For backwards compatibility and tests
 impl WeightInfo for () {
 		// Storage: BridgeRegistry Bridges (r:1 w:1)
-		fn set_metadata() -> Weight {
-			// Proof Size summary in bytes:
-			//  Measured:  `563 + n * (57 ±0)`
-			//  Estimated: `1017 + n * (22527 ±0)`
-			// Minimum execution time: 6_000 nanoseconds.
-			Weight::from_ref_time(5_566_119)
-				.saturating_add(Weight::from_proof_size(1017))
-				// Standard Error: 1_019_605
-				.saturating_add(Weight::from_ref_time(91_257_999).saturating_mul(n.into()))
-				.saturating_add(T::DbWeight::get().reads(1_u64))
-				.saturating_add(T::DbWeight::get().writes(1_u64))
-		}
-		// Storage: BridgeRegistry ResourceToBridgeIndex (r:0 w:1)
-		fn force_reset_indices() -> Weight {
-			// Proof Size summary in bytes:
-			//  Measured:  `0`
-			//  Estimated: `0`
-			// Minimum execution time: 13_000 nanoseconds.
-			Weight::from_ref_time(13_000_000)
-				.saturating_add(Weight::from_proof_size(0))
-				.saturating_add(T::DbWeight::get().reads(1_u64))
-				.saturating_add(T::DbWeight::get().writes(1_u64))
-		}
+	fn set_metadata() -> Weight {
+		Weight::from_ref_time(5_566_119)
+			.saturating_add(Weight::from_proof_size(0))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	// Storage: BridgeRegistry ResourceToBridgeIndex (r:0 w:1)
+	fn force_reset_indices() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 13_000 nanoseconds.
+		Weight::from_ref_time(13_000_000)
+			.saturating_add(Weight::from_proof_size(0))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
 }
