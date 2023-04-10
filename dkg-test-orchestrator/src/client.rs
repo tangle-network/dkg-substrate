@@ -119,9 +119,6 @@ impl TestClient {
 									.insert(trace_id, None);
 								this_for_orchestrator_rx.inner.import_stream.send(notification);
 							},
-							MockBlockchainEvent::TestCase { trace_id: _, test: _ } => {
-								unimplemented!()
-							},
 						}
 					},
 					ProtocolPacket::Halt => {

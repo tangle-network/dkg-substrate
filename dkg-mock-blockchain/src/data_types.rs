@@ -7,7 +7,6 @@ use uuid::Uuid;
 pub enum MockBlockchainEvent<B: crate::BlockTraitForTest> {
 	FinalityNotification { notification: FinalityNotification<B> },
 	ImportNotification { notification: ImportNotification<B> },
-	TestCase { trace_id: Uuid, test: TestCase },
 }
 
 pub trait BlockTraitForTest: sp_runtime::traits::Block + Unpin {}
@@ -49,22 +48,20 @@ pub enum TestCase {
 }
 
 mod serde_impl {
-	use crate::{FinalityNotification, ImportNotification, TestCase};
+	use crate::{FinalityNotification, ImportNotification};
 	use codec::{Decode, Encode};
 	use sc_client_api::FinalizeSummary;
 	use serde::{Deserialize, Serialize};
 	use sp_consensus::BlockOrigin;
-	use uuid::Uuid;
 
 	use crate::MockBlockchainEvent;
 
 	// Serialize/Deserialize is not implemented for FinalityNotification and ImportNotification
 	// However, codec is implemented for all their inner field
 	#[derive(Serialize, Deserialize)]
-	enum IntermediateMockBlockChainEvent {
+	enum IntermediateMockBlockchainEvent {
 		FinalityNotification { notification: IntermediateFinalityNotification },
 		ImportNotification { notification: IntermediateImportNotification },
-		TestCase { trace_id: Uuid, test: TestCase },
 	}
 
 	#[derive(Serialize, Deserialize)]
@@ -102,13 +99,6 @@ mod serde_impl {
 			S: serde::Serializer,
 		{
 			match self {
-				MockBlockchainEvent::TestCase { trace_id, test } => {
-					let intermediate = IntermediateMockBlockChainEvent::TestCase {
-						trace_id: *trace_id,
-						test: test.clone(),
-					};
-					Serialize::serialize(&intermediate, serializer)
-				},
 				MockBlockchainEvent::FinalityNotification { notification } => {
 					let intermediate_notification = IntermediateFinalityNotification {
 						hash: Encode::encode(&notification.hash),
@@ -117,7 +107,7 @@ mod serde_impl {
 						stale_heads: None,
 					};
 
-					let intermediate = IntermediateMockBlockChainEvent::FinalityNotification {
+					let intermediate = IntermediateMockBlockchainEvent::FinalityNotification {
 						notification: intermediate_notification,
 					};
 
@@ -132,7 +122,7 @@ mod serde_impl {
 						tree_route: None,
 					};
 
-					let intermediate = IntermediateMockBlockChainEvent::ImportNotification {
+					let intermediate = IntermediateMockBlockchainEvent::ImportNotification {
 						notification: intermediate_notification,
 					};
 
@@ -147,12 +137,10 @@ mod serde_impl {
 		where
 			D: serde::Deserializer<'de>,
 		{
-			let intermediate: IntermediateMockBlockChainEvent =
+			let intermediate: IntermediateMockBlockchainEvent =
 				Deserialize::deserialize(deserializer)?;
 			let event = match intermediate {
-				IntermediateMockBlockChainEvent::TestCase { trace_id, test } =>
-					MockBlockchainEvent::TestCase { trace_id, test },
-				IntermediateMockBlockChainEvent::FinalityNotification { notification } => {
+				IntermediateMockBlockchainEvent::FinalityNotification { notification } => {
 					let (tx, _rx) =
 						sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
 					let summary = FinalizeSummary::<B> {
@@ -164,7 +152,7 @@ mod serde_impl {
 
 					MockBlockchainEvent::FinalityNotification { notification }
 				},
-				IntermediateMockBlockChainEvent::ImportNotification { notification } => {
+				IntermediateMockBlockchainEvent::ImportNotification { notification } => {
 					let (tx, _rx) =
 						sc_utils::mpsc::tracing_unbounded("mpsc_import_notification", 999999);
 					let notification = ImportNotification::<B>::new(
