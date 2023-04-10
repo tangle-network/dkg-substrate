@@ -32,13 +32,12 @@ frame-system = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-timestamp = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
+pallet-dkg-metadata = { workspace = true }
 
 [dev-dependencies]
 webb-proposals = { workspace = true, default-features = false }
 pallet-dkg-proposal-handler = { workspace = true }
-pallet-dkg-metadata = { workspace = true }
 pallet-collator-selection = { workspace = true }
-pallet-aura = { workspace = true }
 pallet-timestamp = { workspace = true }
 sp-consensus-aura = { workspace = true }
 pallet-session = { workspace = true }
@@ -62,10 +61,12 @@ std = [
 	"pallet-balances/std",
 	"dkg-runtime-primitives/std",
 	"webb-proposals/std",
-	"pallet-collator-selection/std"
+	"pallet-collator-selection/std",
+	"pallet-dkg-metadata/std",
 ]
 runtime-benchmarks = [
   "frame-benchmarking",
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "pallet-dkg-metadata/runtime-benchmarks",
 ]

@@ -59,7 +59,7 @@ fn mock_misbehaviour_report<T: Config>(
 	pub_key: ecdsa::Public,
 	offender: T::DKGId,
 	misbehaviour_type: MisbehaviourType,
-) -> Vec<u8> {
+) -> BoundedVec<u8, T::MaxSignatureLength> {
 	let session_id: u64 = 1;
 	let mut payload = Vec::new();
 	payload.extend_from_slice(&match misbehaviour_type {
@@ -71,7 +71,7 @@ fn mock_misbehaviour_report<T: Config>(
 	let hash = keccak_256(&payload);
 	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 
-	signature.encode()
+	signature.encode().try_into().unwrap()
 }
 
 fn mock_account_id<T: Config>(pub_key: ecdsa::Public) -> T::AccountId {
@@ -91,10 +91,10 @@ benchmarks! {
 
 	set_signature_threshold {
 		// threshold should be less than total number of next authorities
-		let mut next_authorities: Vec<T::DKGId> = Vec::new();
+		let mut next_authorities: BoundedVec<_,_> = Default::default();
 		for id in 1..= MAX_AUTHORITIES{
 			let account_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
-			next_authorities.push(account_id);
+			next_authorities.try_push(account_id).unwrap();
 		}
 		NextAuthorities::<T>::put(&next_authorities);
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
@@ -108,10 +108,10 @@ benchmarks! {
 	set_keygen_threshold {
 		// threshold should be <= total number of next authorities
 		// threshold <= PendingSignatureThreshold
-		let mut next_authorities:Vec<T::DKGId> = Vec::new();
+		let mut next_authorities: BoundedVec<_,_> = Default::default();
 		for id in 1..= MAX_AUTHORITIES{
 			let account_id = T::DKGId::from(ecdsa::Public::from_raw([id as u8; 33]));
-			next_authorities.push(account_id);
+			next_authorities.try_push(account_id).unwrap();
 		}
 		NextAuthorities::<T>::put(&next_authorities);
 		let threshold = u16::try_from(next_authorities.len()).unwrap();
@@ -128,44 +128,32 @@ benchmarks! {
 		assert!(Pallet::<T>::refresh_delay() == Permill::from_percent(n as u32));
 	}
 
-	manual_increment_nonce {
-		let refresh_nounce = Pallet::<T>::refresh_nonce();
-	}: _(RawOrigin::Root)
-	verify {
-		assert!(Pallet::<T>::refresh_nonce() == refresh_nounce+1);
-	}
-
-	manual_refresh {
-		let current_dkg = ecdsa_generate(KEY_TYPE, None);
-		let next_dkg = ecdsa_generate(KEY_TYPE, None);
-		DKGPublicKey::<T>::put((0, current_dkg.encode()));
-		NextDKGPublicKey::<T>::put((1, next_dkg.encode()));
-	}: _(RawOrigin::Root)
-	verify {
-		assert!(Pallet::<T>::should_manual_refresh() == true);
-	}
-
 	submit_public_key {
-		let n in 3..MAX_AUTHORITIES;
+		let n in 4..MAX_AUTHORITIES;
 		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut current_authorities: Vec<T::DKGId> = Vec::new();
+		let mut current_authorities: BoundedVec<_,_> = Default::default();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
 			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key));
 			let account_id = T::DKGId::from(authority_id);
-			current_authorities.push(account_id);
+			current_authorities.try_push(account_id).unwrap();
 		}
 		let threshold = u16::try_from(current_authorities.len() / 2).unwrap() + 1;
 		SignatureThreshold::<T>::put(threshold);
 		Authorities::<T>::put(&current_authorities);
-		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
-	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
+		let best_authorities = Pallet::<T>::get_best_authorities(threshold as usize, &current_authorities);
+		let mut bounded_best_authorities : BoundedVec<_,_> = Default::default();
+		for auth in best_authorities {
+			bounded_best_authorities.try_push(auth).unwrap();
+		}
+		BestAuthorities::<T>::put(&bounded_best_authorities);
+	}: _(RawOrigin::None, aggregated_public_keys)
 	verify {
 		let (id, dkg_key) = Pallet::<T>::dkg_public_key();
 		assert_last_event::<T>(Event::PublicKeySubmitted{
-			compressed_pub_key: dkg_key.clone(),
-			uncompressed_pub_key: Pallet::<T>::decompress_public_key(dkg_key.clone()).unwrap_or_default(),
+			compressed_pub_key: dkg_key.clone().into(),
+			uncompressed_pub_key: Pallet::<T>::decompress_public_key(dkg_key.clone().into()).unwrap_or_default(),
 			}.into());
 	}
 
@@ -173,69 +161,78 @@ benchmarks! {
 		let n in 3..MAX_AUTHORITIES;
 		let dkg_key = ecdsa_generate(KEY_TYPE, None);
 		let mut aggregated_public_keys = AggregatedPublicKeys::default();
-		let mut next_authorities: Vec<T::DKGId> = Vec::new();
+		let mut next_authorities: BoundedVec<_,_> = Default::default();
 		for id in 1..=n {
 			let authority_id = mock_pub_key();
 			aggregated_public_keys.keys_and_signatures.push(mock_signature(authority_id, dkg_key));
 			let account_id = T::DKGId::from(authority_id);
-			next_authorities.push(account_id);
+			next_authorities.try_push(account_id).unwrap();
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
 		NextAuthorities::<T>::put(&next_authorities);
-		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
-	}: _(RawOrigin::Signed(caller), aggregated_public_keys)
+		let next_best_authorities = Pallet::<T>::get_best_authorities(threshold as usize, &next_authorities);
+		let mut bounded_next_best_authorities : BoundedVec<_,_> = Default::default();
+		for auth in next_best_authorities {
+			bounded_next_best_authorities.try_push(auth).unwrap();
+		}
+		NextBestAuthorities::<T>::put(&bounded_next_best_authorities);
+	}: _(RawOrigin::None, aggregated_public_keys)
 	verify {
 		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
 		assert_last_event::<T>(Event::NextPublicKeySubmitted{
-			compressed_pub_key: next_dkg_key.clone(),
-			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone()).unwrap_or_default(),
+			compressed_pub_key: next_dkg_key.clone().into(),
+			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone().into()).unwrap_or_default(),
 			}.into());
 	}
 
 	submit_public_key_signature {
 		let current_dkg = ecdsa_generate(KEY_TYPE, None);
 		let next_dkg =  ecdsa_generate(KEY_TYPE, None);
-		DKGPublicKey::<T>::put((0, current_dkg.encode()));
-		NextDKGPublicKey::<T>::put((1, next_dkg.encode()));
+		let bounded_current_dkg : BoundedVec<u8, T::MaxKeyLength> = current_dkg.encode().try_into().unwrap();
+		let bounded_next_dkg : BoundedVec<u8, T::MaxKeyLength> = next_dkg.encode().try_into().unwrap();
+		DKGPublicKey::<T>::put((0, bounded_current_dkg));
+		NextDKGPublicKey::<T>::put((1, bounded_next_dkg));
 		let uncompressed_pub_key = Pallet::<T>::decompress_public_key(next_dkg.encode()).unwrap();
 		let refresh_nounce = Pallet::<T>::refresh_nonce();
 		let refresh_proposal = RefreshProposal {
-								nonce: ProposalNonce::from(0),
+								nonce: ProposalNonce::from(1),
 								pub_key: uncompressed_pub_key,
 								};
 		let hash = keccak_256(&refresh_proposal.encode());
 		let signature = ecdsa_sign_prehashed(KEY_TYPE, &current_dkg, &hash).expect("Expected a valid signature");
 		let signed_proposal = RefreshProposalSigned {
-								nonce: ProposalNonce::from(0),
+								nonce: ProposalNonce::from(1),
 								signature: signature.encode()
 							};
-		ShouldManualRefresh::<T>::put(true);
 		let all_accounts = Pallet::<T>::current_authorities_accounts();
 		let caller:T::AccountId = all_accounts[0].clone();
-	}: _(RawOrigin::Signed(caller), signed_proposal)
+	}: _(RawOrigin::None, signed_proposal)
 	verify {
-		assert!(Pallet::<T>::should_manual_refresh() == false);
+		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
 		assert_has_event::<T>(Event::NextPublicKeySignatureSubmitted{
+			compressed_pub_key: next_dkg_key.clone().into(),
+			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone().into()).unwrap_or_default(),
 			pub_key_sig: signature.encode(),
+			nonce : 1,
 			}.into());
 	}
 
 	submit_misbehaviour_reports {
 		let n in 3..MAX_AUTHORITIES;
 		let offender: T::DKGId = T::DKGId::from(ecdsa_generate(KEY_TYPE, None));
-		let mut next_authorities: Vec<T::DKGId> = Vec::new();
+		let mut next_authorities: BoundedVec<_,_> = Default::default();
 		let mut reporters: Vec<T::DKGId> = Vec::new();
-		let mut signatures: Vec<Vec<u8>> = Vec::new();
+		let mut signatures: BoundedVec<_, _> = Default::default();
 		let session_id = 1;
 		let misbehaviour_type = MisbehaviourType::Keygen;
 		for id in 1..=n{
 			let authority_id = mock_pub_key();
 			let sig = mock_misbehaviour_report::<T>(authority_id, offender.clone(), misbehaviour_type);
-			signatures.push(sig);
+			signatures.try_push(sig).unwrap();
 			let dkg_id = T::DKGId::from(authority_id);
 			reporters.push(dkg_id.clone());
-			next_authorities.push(dkg_id);
+			next_authorities.try_push(dkg_id).unwrap();
 		}
 		let threshold = u16::try_from(next_authorities.len() / 2).unwrap() + 1;
 		NextSignatureThreshold::<T>::put(threshold);
@@ -243,16 +240,17 @@ benchmarks! {
 		let aggregated_misbehaviour_reports= AggregatedMisbehaviourReports {
 													misbehaviour_type,
 													session_id,
-													offender,
-													reporters:reporters.clone(),
-													signatures,
+													offender : offender.clone(),
+													reporters:reporters.clone().try_into().unwrap(),
+													signatures : signatures.try_into().unwrap(),
 												};
 		let caller = T::AccountId::from(sr25519::Public::from_raw([1u8; 32]));
-	}: _(RawOrigin::Signed(caller), aggregated_misbehaviour_reports)
+	}: _(RawOrigin::None, aggregated_misbehaviour_reports)
 	verify {
 		assert_last_event::<T>(Event::MisbehaviourReportsSubmitted{
 			misbehaviour_type,
-			reporters: reporters.clone(),
+			reporters: reporters.clone().try_into().unwrap(),
+			offender,
 			}.into());
 	}
 
