@@ -6,6 +6,7 @@
 //! for needing to run multiple clients. Each individual DKG node's stdout will be
 //! piped to the temporary directory
 
+use crate::in_memory_gossip_engine::InMemoryGossipEngine;
 use dkg_gadget::worker::TestBundle;
 use dkg_mock_blockchain::*;
 use futures::TryStreamExt;
@@ -14,6 +15,8 @@ use std::{path::PathBuf, sync::Arc};
 use structopt::StructOpt;
 
 mod client;
+mod dummy_api;
+mod in_memory_gossip_engine;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -57,18 +60,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
 	// the gossip engine and the dummy api share a state between ALL clients in this process
 	// we will use the SAME gossip engine for both keygen and signing
-	let gossip_engine = &crate::client::InMemoryGossipEngine::new();
+	let gossip_engine = &InMemoryGossipEngine::new();
 	let keygen_t = t as u16;
 	let keygen_n = n_clients as u16;
 	let signing_t = t as u16;
 	let signing_n = n_clients as u16;
 
 	// logging for the dummy api only
-	let output = std::fs::File::create(args.tmp_path.join("dummy_api.txt"))?;
+	let output = std::fs::File::create(args.tmp_path.join("dummy_api.log"))?;
 	let dummy_api_logger =
 		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output));
 
-	let api = &crate::client::DummyApi::new(
+	let api = &crate::dummy_api::DummyApi::new(
 		keygen_t,
 		keygen_n,
 		signing_t,
@@ -98,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
 		// output the logs for this specific peer to a file
-		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.txt")))?;
+		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.log")))?;
 		let logger = dkg_gadget::debug_logger::DebugLogger::new(peer_id, Some(output));
 		keygen_gossip_engine.set_logger(logger.clone());
 		signing_gossip_engine.set_logger(logger.clone());
