@@ -61,6 +61,6 @@ positive_cases = 10
 cargo build --release -p dkg-standalone-node --features=integration-tests,testing
 
 # run the orchestrator, making sure to use the proper config
-cargo run --package dkg-test-orchestrator --features=debug-testing -- --config /path/to/orchestrator_config.toml --tmp ./tmp
+cargo run --package dkg-test-orchestrator --features=debug-tracing -- --config /path/to/orchestrator_config.toml --tmp ./tmp
 # log files for each client will be individually present inside the ./tmp folder, denoted by their peer IDs
 ```
