@@ -18,3 +18,19 @@ structopt = { workspace = true }
 log = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
+sp-state-machine = { workspace = true }
+sp-trie = { workspace = true }
+hash-db = { workspace = true }
+dkg-runtime-primitives = { workspace = true, features = ["testing", "std"] }
+dkg-primitives = { workspace = true }
+pallet-dkg-metadata = { workspace = true }
+sc-client-api = { workspace = true }
+sc-utils = { workspace = true }
+sp-runtime = { workspace = true }
+sc-network = { workspace = true }
+sp-api = { workspace = true }
+sp-blockchain = { workspace = true }
+sp-core = { workspace = true }
+sp-keystore = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+frame-support = { workspace = true }

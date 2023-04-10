@@ -107,6 +107,7 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
+	pub test_bundle: Option<TestBundle>,
 	pub _marker: PhantomData<B>,
 }
 
@@ -157,11 +158,17 @@ where
 	pub keygen_retry_count: Arc<AtomicUsize>,
 	/// Used to keep track of network status
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
-	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
-	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
+}
+
+/// Used only for tests
+#[derive(Clone)]
+pub struct TestBundle {
+	pub to_test_client: UnboundedSender<(uuid::Uuid, Result<(), String>)>,
+	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 }
 
 // Implementing Clone for DKGWorker is required for the async protocol
@@ -195,8 +202,7 @@ where
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
-			to_test_client: self.to_test_client.clone(),
-			current_test_id: self.current_test_id.clone(),
+			test_bundle: self.test_bundle.clone(),
 			keygen_retry_count: self.keygen_retry_count.clone(),
 			network: self.network.clone(),
 			logger: self.logger.clone(),
@@ -224,12 +230,7 @@ where
 	/// DKG pallet has been deployed on-chain.
 	///
 	/// The DKG pallet is needed in order to keep track of the DKG authority set.
-	pub fn new(
-		worker_params: WorkerParams<B, BE, C, GE>,
-		to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
-		current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
-		logger: DebugLogger,
-	) -> Self {
+	pub fn new(worker_params: WorkerParams<B, BE, C, GE>, logger: DebugLogger) -> Self {
 		let WorkerParams {
 			client,
 			backend,
@@ -241,6 +242,7 @@ where
 			local_keystore,
 			latest_header,
 			network,
+			test_bundle,
 			..
 		} = worker_params;
 
@@ -267,8 +269,7 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
-			to_test_client,
-			current_test_id,
+			test_bundle,
 			error_handler,
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			logger,
@@ -351,8 +352,7 @@ where
 				vote_results: Arc::new(Default::default()),
 				is_genesis: stage == ProtoStageType::Genesis,
 				metrics: self.metrics.clone(),
-				to_test_client: self.to_test_client.clone(),
-				current_test_id: self.current_test_id.clone(),
+				test_bundle: self.test_bundle.clone(),
 				logger: self.logger.clone(),
 				_pd: Default::default(),
 			}),
@@ -1013,7 +1013,7 @@ where
 
 			self.logger
 				.debug(format!("🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some()));
-			let test_harness_mode = self.to_test_client.is_some();
+			let test_harness_mode = self.test_bundle.is_some();
 			// Start a keygen if we don't have one OR if there is no queued key on chain.
 			if (!has_next_rounds && next_dkg_key.is_none()) || test_harness_mode {
 				self.logger.debug(format!(
@@ -1336,15 +1336,15 @@ where
 							})
 						}
 					} else {
-						self.logger.error(format!(
-							"Message is for another signing round: {}",
-							rounds.session_id
-						));
-						panic!("Message is for another signing round: {}", rounds.session_id)
+						let message =
+							format!("Message is for another signing round: {}", rounds.session_id);
+						self.logger.error(&message);
+						return Err(DKGError::GenericError { reason: message })
 					}
 				} else {
-					self.logger.error(format!("No signing rounds for async index {async_index}"));
-					panic!("No signing rounds for async index {async_index}")
+					let message = format!("No signing rounds for async index {async_index}");
+					self.logger.error(&message);
+					return Err(DKGError::GenericError { reason: message })
 				}
 				Ok(())
 			},

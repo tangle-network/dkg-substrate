@@ -84,7 +84,7 @@ where
 			msg.sender
 		));
 
-		// before passing to the state machine, make sure that we haven't already received the same
+		// Before passing to the state machine, make sure that we haven't already received the same
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
 		// want to process the same message twice)
 		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");

@@ -243,6 +243,7 @@ pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 }
 
 impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
+	#[cfg(feature = "testing")]
 	pub fn testing_dummy() -> Self {
 		let data = BoundedVec::try_from(vec![0, 1, 2]).unwrap();
 		Self {

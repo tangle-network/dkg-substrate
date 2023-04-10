@@ -53,9 +53,9 @@ where
 		let logger1 = params.logger.clone();
 
 		let protocol = async move {
-			params
-				.logger
-				.info("Will execute keygen since local is in best authority set".to_string());
+			params.logger.info_keygen(
+				"Will execute keygen since local is in best authority set".to_string(),
+			);
 			let t = threshold;
 			let n = params.best_authorities.len() as u16;
 			// wait for the start signal
@@ -66,7 +66,7 @@ where
 			params.handle.set_status(MetaHandlerStatus::Keygen);
 			// Execute the keygen
 			GenericAsyncHandler::new_keygen(params.clone(), t, n, status)?.await?;
-			params.logger.debug("Keygen stage complete!");
+			params.logger.debug_keygen("Keygen stage complete!");
 
 			Ok(())
 		}
@@ -75,11 +75,11 @@ where
 				Ok(_) => {
 					// Set the status as complete.
 					status_handle.set_status(MetaHandlerStatus::Complete);
-					logger0.info("🕸️  Keygen GenericAsyncHandler completed".to_string());
+					logger0.info_keygen("🕸️  Keygen GenericAsyncHandler completed".to_string());
 				},
 				Err(ref err) => {
 					// Do not update the status here, evetually the Keygen will fail and timeout.
-					logger0.error(format!("Keygen failed with error: {err:?}"));
+					logger0.error_keygen(format!("Keygen failed with error: {err:?}"));
 				},
 			};
 			res
@@ -89,7 +89,7 @@ where
 			tokio::select! {
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
-					logger1.info(format!("Stopper has been called {res1:?}"));
+					logger1.info_keygen(format!("Stopper has been called {res1:?}"));
 					Ok(())
 				}
 			}
@@ -115,7 +115,7 @@ where
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)
-				.map_err(|err| Self::map_keygen_error_to_dkg_error(err))?,
+				.map_err(|err| Self::map_keygen_error_to_dkg_error_keygen(err))?,
 			params,
 			channel_type,
 			0,
@@ -123,7 +123,7 @@ where
 		)
 	}
 
-	fn map_keygen_error_to_dkg_error(
+	fn map_keygen_error_to_dkg_error_keygen(
 		error : multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::Error,
 	) -> DKGError {
 		match error {

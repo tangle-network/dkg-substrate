@@ -10,7 +10,7 @@ edition = { workspace = true }
 [features]
 outbound-inspection = []
 debug-tracing = ["tracing"]
-testing = ["sp-state-machine", "sp-trie", "hash-db", "dkg-runtime-primitives/testing", "dkg-runtime-primitives/std", "pallet-dkg-metadata", "sc-utils"]
+testing = []
 
 [dependencies]
 futures = { workspace = true }
@@ -34,13 +34,6 @@ sp-blockchain = { workspace = true }
 sp-core = { workspace = true }
 sp-keystore = { workspace = true }
 sp-runtime = { workspace = true }
-
-# testing related crates
-sp-state-machine = { workspace = true, optional = true }
-sp-trie = { workspace = true, optional = true }
-pallet-dkg-metadata = { workspace = true, optional = true }
-frame-support = { workspace = true, features = ["std"] }
-sc-utils = { workspace = true, optional = true }
 
 uuid = { workspace = true }
 bincode2 = { workspace = true }

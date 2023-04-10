@@ -43,7 +43,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				logger.info(format!(
+				logger.info_keygen(format!(
 					"Handling Keygen inbound message from id={}, session={}",
 					msg.sender_id, session_id
 				));
@@ -51,7 +51,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
 						Ok(message) => message,
 						Err(err) => {
-							logger.error(format!("Error deserializing message: {err}"));
+							logger.error_keygen(format!("Error deserializing message: {err}"));
 							// Skip this message.
 							return Ok(())
 						},
@@ -59,16 +59,16 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						logger.info("Skipping passing of message to async proto since not intended for local");
+						logger.info_keygen("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
 				if let Err(e) = to_async_proto.unbounded_send(message) {
-					logger.error(format!("Error sending message to async proto: {e}"));
+					logger.error_keygen(format!("Error sending message to async proto: {e}"));
 				}
 			},
 
-			err => logger.debug(format!("Invalid payload received: {err:?}")),
+			err => logger.debug_keygen(format!("Invalid payload received: {err:?}")),
 		}
 
 		Ok(())
@@ -80,7 +80,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		params.logger.info("Completed keygen stage successfully!".to_string());
+		params.logger.info_keygen("Completed keygen stage successfully!".to_string());
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in

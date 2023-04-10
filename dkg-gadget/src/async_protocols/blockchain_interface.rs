@@ -19,7 +19,7 @@ use crate::{
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
-	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
+	worker::{DKGWorker, HasLatestHeader, KeystoreExt, TestBundle},
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
@@ -43,7 +43,6 @@ use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
-use tokio::sync::mpsc::UnboundedSender;
 use webb_proposals::Proposal;
 
 use super::KeygenPartyId;
@@ -107,8 +106,7 @@ pub struct DKGProtocolEngine<
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
-	pub to_test_client: Option<UnboundedSender<(uuid::Uuid, Result<(), String>)>>,
-	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
+	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
 	pub _pd: PhantomData<BE>,
 }
@@ -124,8 +122,9 @@ impl<
 {
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
-		let current_test_id = (*self.current_test_id.read()).unwrap();
-		self.to_test_client.as_ref().unwrap().send((current_test_id, result)).unwrap();
+		let bundle = self.test_bundle.as_ref().unwrap();
+		let current_test_id = (bundle.current_test_id.read()).unwrap();
+		bundle.to_test_client.send((current_test_id, result)).unwrap();
 	}
 
 	#[cfg(not(feature = "testing"))]

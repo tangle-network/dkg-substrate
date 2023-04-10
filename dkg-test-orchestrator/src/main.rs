@@ -6,11 +6,14 @@
 //! for needing to run multiple clients. Each individual DKG node's stdout will be
 //! piped to the temporary directory
 
+use dkg_gadget::worker::TestBundle;
 use dkg_mock_blockchain::*;
 use futures::TryStreamExt;
 use parking_lot::RwLock;
 use std::{path::PathBuf, sync::Arc};
 use structopt::StructOpt;
+
+mod client;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -54,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
 	// the gossip engine and the dummy api share a state between ALL clients in this process
 	// we will use the SAME gossip engine for both keygen and signing
-	let gossip_engine = &dkg_gadget::testing::InMemoryGossipEngine::new();
+	let gossip_engine = &crate::client::InMemoryGossipEngine::new();
 	let keygen_t = t as u16;
 	let keygen_n = n_clients as u16;
 	let signing_t = t as u16;
@@ -65,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let dummy_api_logger =
 		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output));
 
-	let api = &dkg_gadget::testing::DummyApi::new(
+	let api = &crate::client::DummyApi::new(
 		keygen_t,
 		keygen_n,
 		signing_t,
@@ -77,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// setup the clients
 	for idx in 0..n_clients {
 		let latest_header = Arc::new(RwLock::new(None));
-		let latest_test_uuid = Arc::new(RwLock::new(None));
+		let current_test_id = Arc::new(RwLock::new(None));
 		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 		// pass the dummy api logger initially, with the intent of overwriting it later
 		let mut key_store: dkg_gadget::keystore::DKGKeystore =
@@ -102,12 +105,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		key_store.set_logger(logger.clone());
 
 		let client = Arc::new(
-			dkg_gadget::testing::TestBackend::connect(
+			crate::client::TestClient::connect(
 				&bind_addr,
 				peer_id,
 				api.clone(),
 				rx,
-				latest_test_uuid.clone(),
+				current_test_id.clone(),
 				logger.clone(),
 			)
 			.await?,
@@ -120,6 +123,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let child = async move {
 			let _label = peer_id.to_string();
 			dkg_logging::define_span!("DKG Client", _label);
+			let test_bundle = TestBundle { to_test_client: tx, current_test_id };
+
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				network: None,
 				latest_header,
@@ -131,15 +136,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				db_backend,
 				metrics,
 				local_keystore,
+				test_bundle: Some(test_bundle),
 				_marker: Default::default(),
 			};
 
-			let worker = dkg_gadget::worker::DKGWorker::new(
-				dkg_worker_params,
-				Some(tx),
-				latest_test_uuid,
-				logger,
-			);
+			let worker = dkg_gadget::worker::DKGWorker::new(dkg_worker_params, logger);
 			worker.run().await;
 			Err::<(), _>(std::io::Error::new(
 				std::io::ErrorKind::Other,

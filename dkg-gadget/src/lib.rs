@@ -32,13 +32,11 @@ mod error;
 pub mod keyring;
 pub mod keystore;
 
-mod gossip_engine;
+pub mod gossip_engine;
 // mod meta_async_rounds;
 pub mod db;
 mod metrics;
 mod proposal;
-#[cfg(feature = "testing")]
-pub mod testing;
 mod utils;
 pub mod worker;
 
@@ -202,15 +200,11 @@ where
 		metrics,
 		local_keystore,
 		network: Some(network),
+		test_bundle: None,
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _>::new(
-		worker_params,
-		None,
-		Arc::new(RwLock::new(None)),
-		debug_logger,
-	);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
 
 	worker.run().await;
 	keygen_handle.abort();

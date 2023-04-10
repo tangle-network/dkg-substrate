@@ -1,6 +1,6 @@
 use crate::{
 	mock_blockchain_config::MockBlockchainConfig, transport::*, FinalityNotification,
-	MockBlockChainEvent, TestBlock, TestCase,
+	MockBlockchainEvent, TestBlock, TestCase,
 };
 use atomic::Atomic;
 use futures::{SinkExt, StreamExt};
@@ -43,8 +43,7 @@ enum ClientToOrchestratorEvent {
 
 #[derive(Debug)]
 struct TestResult {
-	success: bool,
-	error_message: Option<String>,
+	result: Result<(), String>,
 }
 
 #[derive(Debug)]
@@ -52,7 +51,7 @@ enum OrchestratorToClientEvent {
 	// Tells the client subtask to halt
 	Halt,
 	// Tells the client subtask to send a mock event
-	BlockChainEvent { trace_id: Uuid, event: MockBlockChainEvent<TestBlock> },
+	BlockChainEvent { trace_id: Uuid, event: MockBlockchainEvent<TestBlock> },
 }
 
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq)]
@@ -151,14 +150,13 @@ impl MockBlockchain {
 					match packet {
 						pkt @ ProtocolPacket::InitialHandshake |
 						pkt @ ProtocolPacket::InitialHandshakeResponse { .. } |
-						pkt @ ProtocolPacket::BlockChainToClient { .. } |
+						pkt @ ProtocolPacket::BlockchainToClient { .. } |
 						pkt @ ProtocolPacket::Halt => {
 							panic!("Received invalid packet {pkt:?} inside to_orchestrator for {peer_id:?}")
 						},
-						ProtocolPacket::ClientToBlockChain { event } => {
+						ProtocolPacket::ClientToBlockchain { event } => {
 							let trace_id = event.trace_id;
-							let result =
-								TestResult { error_message: event.error, success: event.success };
+							let result = TestResult { result: event.result };
 							self.to_orchestrator
 								.send(ClientToOrchestratorEvent::TestResult {
 									peer_id: *peer_id,
@@ -183,7 +181,7 @@ impl MockBlockchain {
 							return
 						},
 						OrchestratorToClientEvent::BlockChainEvent { trace_id, event } => {
-							tx.send(ProtocolPacket::BlockChainToClient { trace_id, event })
+							tx.send(ProtocolPacket::BlockchainToClient { trace_id, event })
 								.await
 								.unwrap();
 						},
@@ -250,15 +248,15 @@ impl MockBlockchain {
 						ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
 							let mut clients = self.clients.write().await;
 							let client = clients.get_mut(peer_id).unwrap();
-							if result.success {
+							if let Err(err) = &result.result {
+								log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed test {trace_id:?}. Reason: {err:?}");
+							// do not remove from map. At the end , any remaining tasks will
+							// cause the orchestrator to have a nonzero exit code (useful for
+							// pipeline testing)
+							} else {
 								log::info!(target: "dkg", "Peer {peer_id:?} successfully completed test {trace_id:?}");
 								// remove from map
 								assert!(client.outstanding_tasks.remove(trace_id).is_some());
-							} else {
-								log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed test {trace_id:?}. Reason: {:?}", result.error_message);
-								// do not remove from map. At the end , any remaining tasks will
-								// cause the orchestrator to have a nonzero exit code (useful for
-								// pipeline testing)
 							}
 
 							// regardless of success, increment completed count for the current
@@ -377,7 +375,7 @@ fn log_invalid_signal(o_state: &OrchestratorState, c_update: &ClientToOrchestrat
 
 // Two fields are used by the DKG: the block number via header.number(), and the hash via
 // header.hash(). So long as these values remain unique, the DKG should work as expected
-fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockChainEvent<TestBlock> {
+fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainEvent<TestBlock> {
 	let header = sp_runtime::generic::Header::<u64, _>::new_from_number(block_number);
 	let mut slice = [0u8; 32];
 	slice[..8].copy_from_slice(&block_number.to_be_bytes());
@@ -387,5 +385,5 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockChainE
 
 	let (tx, _rx) = sc_utils::mpsc::tracing_unbounded("mpsc_finality_notification", 999999);
 	let notification = FinalityNotification::<TestBlock>::from_summary(summary, tx);
-	MockBlockChainEvent::FinalityNotification { notification }
+	MockBlockchainEvent::FinalityNotification { notification }
 }

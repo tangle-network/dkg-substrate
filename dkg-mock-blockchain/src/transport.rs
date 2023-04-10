@@ -25,12 +25,12 @@ pub enum ProtocolPacket<B: crate::BlockTraitForTest> {
 	},
 	// After the handshake phase is complete, almost every packet sent back and forth
 	// between the client and server uses this packet type
-	BlockChainToClient {
+	BlockchainToClient {
 		trace_id: Uuid,
 		#[serde(bound = "")]
-		event: crate::MockBlockChainEvent<B>,
+		event: crate::MockBlockchainEvent<B>,
 	},
-	ClientToBlockChain {
+	ClientToBlockchain {
 		event: crate::MockClientResponse,
 	},
 	// Tells the client to halt the DKG and related networking services.
