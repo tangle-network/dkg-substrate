@@ -26,7 +26,7 @@ mod in_memory_gossip_engine;
 struct Args {
 	#[structopt(short = "c", long = "config")]
 	// path to the configuration for the mock blockchain
-	config_path: String,
+	config_path: PathBuf,
 	#[structopt(short = "t", long = "tmp")]
 	tmp_path: PathBuf,
 }
@@ -166,14 +166,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn validate_args(args: &Args) -> Result<(), String> {
-	let config_path = PathBuf::from(&args.config_path);
-	let tmp_path = PathBuf::from(&args.tmp_path);
+	let config_path = &args.config_path;
+	let tmp_path = &args.tmp_path;
 	if !config_path.is_file() {
-		return Err(format!("{} is not a valid config path", args.config_path))
+		return Err(format!("{:?} is not a valid config path", args.config_path))
 	}
 
 	if !tmp_path.is_dir() {
-		return Err(format!("{} is not a valid config path", args.config_path))
+		return Err(format!("{:?} is not a valid tmp path", args.tmp_path))
 	}
 
 	Ok(())

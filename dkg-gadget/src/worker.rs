@@ -579,7 +579,7 @@ where
 					proposal_hashes.iter().for_each(|h| {
 						lock.remove(h);
 					});
-					info!(target: "dkg_gadget::worker", "Removed {:?} proposal hashes from currently signing queue", proposal_hashes.len());
+					logger.info(format!("Removed {:?} proposal hashes from currently signing queue", proposal_hashes.len()));
 					Err(err)
 				},
 			}
