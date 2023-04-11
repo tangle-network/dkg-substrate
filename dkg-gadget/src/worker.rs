@@ -86,7 +86,7 @@ pub const MAX_SIGNING_SETS: u64 = 2;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET : usize = 2;
+pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
 
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
@@ -1392,8 +1392,10 @@ where
 						}
 
 						// lets limit the max proposals we sign at one time to prevent overflow
-						if filtered_unsigned_proposals.len() >= MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET {
-							break;
+						if filtered_unsigned_proposals.len() >=
+							MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET
+						{
+							break
 						}
 					}
 				}
