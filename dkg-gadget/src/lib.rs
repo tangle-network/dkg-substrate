@@ -14,13 +14,13 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use dkg_logging::debug;
+use debug_logger::DebugLogger;
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use parking_lot::RwLock;
 use prometheus::Registry;
-use sc_client_api::{Backend, BlockchainEvents, Finalizer};
+use sc_client_api::{Backend, BlockchainEvents};
 use sc_keystore::LocalKeystore;
-use sc_network::{NetworkService, ProtocolName};
+use sc_network::{NetworkService, NetworkStateInfo, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -28,18 +28,20 @@ use sp_keystore::SyncCryptoStorePtr;
 use sp_runtime::traits::Block;
 
 mod error;
-mod keyring;
-mod keystore;
+/// Stores keypairs for DKG
+pub mod keyring;
+pub mod keystore;
 
-mod gossip_engine;
+pub mod gossip_engine;
 // mod meta_async_rounds;
-mod db;
+pub mod db;
 mod metrics;
 mod proposal;
 mod utils;
-mod worker;
+pub mod worker;
 
 pub mod async_protocols;
+pub mod debug_logger;
 pub mod gossip_messages;
 pub mod storage;
 
@@ -62,7 +64,7 @@ pub fn dkg_peers_set_config(
 /// of today, Rust does not allow a type alias to be used as a trait bound. Tracking
 /// issue is <https://github.com/rust-lang/rust/issues/41517>.
 pub trait Client<B, BE>:
-	BlockchainEvents<B> + HeaderBackend<B> + Finalizer<B, BE> + ProvideRuntimeApi<B> + Send + Sync
+	BlockchainEvents<B> + HeaderBackend<B> + ProvideRuntimeApi<B> + Send + Sync
 where
 	B: Block,
 	BE: Backend<B>,
@@ -73,12 +75,7 @@ impl<B, BE, T> Client<B, BE> for T
 where
 	B: Block,
 	BE: Backend<B>,
-	T: BlockchainEvents<B>
-		+ HeaderBackend<B>
-		+ Finalizer<B, BE>
-		+ ProvideRuntimeApi<B>
-		+ Send
-		+ Sync,
+	T: BlockchainEvents<B> + HeaderBackend<B> + ProvideRuntimeApi<B> + Send + Sync,
 {
 	// empty
 }
@@ -131,7 +128,12 @@ where
 		local_keystore,
 		_block,
 	} = dkg_params;
-	let dkg_keystore: DKGKeystore = key_store.into();
+
+	// setup debug logging
+	let local_peer_id = network.local_peer_id();
+	let debug_logger = DebugLogger::new(local_peer_id, None);
+
+	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
 	let keygen_gossip_protocol = NetworkGossipEngineBuilder::new(
 		DKG_KEYGEN_PROTOCOL_NAME.to_string().into(),
 		dkg_keystore.clone(),
@@ -142,27 +144,30 @@ where
 		dkg_keystore.clone(),
 	);
 
+	let logger_prometheus = debug_logger.clone();
+
 	let metrics =
 		prometheus_registry.as_ref().map(metrics::Metrics::register).and_then(
 			|result| match result {
 				Ok(metrics) => {
-					debug!(target: "dkg_gadget", "🕸️  Registered metrics");
+					logger_prometheus.debug("🕸️  Registered metrics");
 					Some(metrics)
 				},
 				Err(err) => {
-					debug!(target: "dkg_gadget", "🕸️  Failed to register metrics: {:?}", err);
+					logger_prometheus.debug(format!("🕸️  Failed to register metrics: {err:?}"));
 					None
 				},
 			},
 		);
 
 	let latest_header = Arc::new(RwLock::new(None));
+
 	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
 		.expect("Keygen : Failed to build gossip engine");
 
 	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone())
+		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
 		.expect("Signing : Failed to build gossip engine");
 
 	// enable the gossip
@@ -181,6 +186,7 @@ where
 		backend.clone(),
 		dkg_keystore.clone(),
 		local_keystore.clone(),
+		debug_logger.clone(),
 	);
 	let db_backend = Arc::new(offchain_db_backend);
 	let worker_params = worker::WorkerParams {
@@ -193,11 +199,12 @@ where
 		db_backend,
 		metrics,
 		local_keystore,
-		network,
+		network: Some(network),
+		test_bundle: None,
 		_marker: PhantomData::default(),
 	};
 
-	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params);
+	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
 
 	worker.run().await;
 	keygen_handle.abort();

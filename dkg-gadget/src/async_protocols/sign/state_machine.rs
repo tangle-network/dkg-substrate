@@ -11,10 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
-	Threshold,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
+		Threshold,
+	},
+	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
@@ -43,6 +46,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, .. } = msg.body;
 
@@ -53,15 +57,16 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,
 						Err(err) => {
-							dkg_logging::error!("Error deserializing offline message: {:?}", err);
+							logger.error_signing(format!(
+								"Error deserializing offline message: {err:?}"
+							));
 							// Skip this message.
 							return Ok(())
 						},
 					};
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						//dkg_logging::info!("Skipping passing of message to async proto since not
-						// intended for local");
+						logger.info_signing("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
@@ -73,11 +78,11 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
-					dkg_logging::error!(target: "dkg_gadget::async_protocol::sign", "Error sending message to async proto: {}", err);
+					logger.error_signing(format!("Error sending message to async proto: {err}"));
 				}
 			},
 
-			err => dkg_logging::debug!(target: "dkg_gadget", "Invalid payload received: {:?}", err),
+			err => logger.debug_signing(format!("Invalid payload received: {err:?}")),
 		}
 
 		Ok(())
@@ -89,13 +94,14 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		unsigned_proposal: Self::AdditionalReturnParam,
 		async_index: u8,
 	) -> Result<(), DKGError> {
-		dkg_logging::info!(target: "dkg_gadget", "Completed offline stage successfully!");
+		params.logger.info_signing("Completed offline stage successfully!".to_string());
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
 		//
 		// NOTE: we pass the generated offline stage id for the i in voting to keep
 		// consistency
+		let logger = params.logger.clone();
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
@@ -107,15 +113,15 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 			async_index,
 		) {
 			Ok(voting_stage) => {
-				dkg_logging::info!(target: "dkg_gadget", "Starting voting stage...");
+				logger.info_signing("Starting voting stage...".to_string());
 				if let Err(e) = voting_stage.await {
-					dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", e);
+					logger.error_signing(format!("Error starting voting stage: {e:?}"));
 					return Err(e)
 				}
 				Ok(())
 			},
 			Err(err) => {
-				dkg_logging::error!(target: "dkg_gadget", "Error starting voting stage: {:?}", err);
+				logger.error_signing(format!("Error starting voting stage: {err:?}"));
 				Err(err)
 			},
 		}

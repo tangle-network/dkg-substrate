@@ -40,9 +40,8 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
+use crate::{debug_logger::DebugLogger, metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
 use codec::{Decode, Encode};
-use dkg_logging::{debug, warn};
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::{Stream, StreamExt};
@@ -110,6 +109,7 @@ impl NetworkGossipEngineBuilder {
 		service: Arc<NetworkService<B, B::Hash>>,
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
+		logger: DebugLogger,
 	) -> error::Result<(GossipHandler<B>, GossipHandlerController<B>)> {
 		// Here we need to create few channels to communicate back and forth between the
 		// background task and the controller.
@@ -134,16 +134,21 @@ impl NetworkGossipEngineBuilder {
 				.clone(),
 			service,
 			peers: Arc::new(RwLock::new(HashMap::new())),
+			logger: logger.clone(),
 			metrics: Arc::new(metrics),
 		};
 
+		let local_peer_id = handler.service.local_peer_id();
+
 		let controller = GossipHandlerController {
+			local_peer_id,
 			protocol_name: self.protocol_name,
 			handler_channel,
 			message_notifications_channel,
 			gossip_enabled,
 			processing_already_seen_messages_enabled,
 			message_queue,
+			logger,
 			_pd: Default::default(),
 		};
 
@@ -226,6 +231,7 @@ impl DKGMessageWrapper<AuthorityId> {
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
+	local_peer_id: PeerId,
 	protocol_name: ProtocolName,
 	/// a channel to send commands to the background task (Controller -> Background).
 	handler_channel: broadcast::Sender<ToHandler>,
@@ -237,6 +243,7 @@ pub struct GossipHandlerController<B: Block> {
 	gossip_enabled: Arc<AtomicBool>,
 	/// Whether we should process already seen messages or not.
 	processing_already_seen_messages_enabled: Arc<AtomicBool>,
+	logger: DebugLogger,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
 	_pd: PhantomData<B>,
@@ -245,12 +252,23 @@ pub struct GossipHandlerController<B: Block> {
 impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	type Clock = NumberFor<B>;
 
+	fn logger(&self) -> &DebugLogger {
+		&self.logger
+	}
+
+	fn local_peer_id(&self) -> PeerId {
+		self.local_peer_id
+	}
+
 	fn send(
 		&self,
 		recipient: PeerId,
 		message: SignedDKGMessage<AuthorityId>,
 	) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to {}", self.protocol_name, recipient);
+		self.logger.debug(format!(
+			"Protocol : {:?} | Sending message to {}",
+			self.protocol_name, recipient
+		));
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
 			.map(|_| ())
@@ -260,7 +278,8 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 	}
 
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Sending message to all peers", self.protocol_name);
+		self.logger
+			.debug(format!("Protocol : {:?} | Sending message to all peers", self.protocol_name));
 		self.handler_channel.send(ToHandler::Gossip(message)).map(|_| ()).map_err(|_| {
 			DKGError::GenericError { reason: "Failed to send message to handler".into() }
 		})
@@ -280,17 +299,24 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		let msg = match lock.front() {
 			Some(value) => value.try_read(),
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "No message to dequeue");
+				self.logger.debug("No message to dequeue");
 				return None
 			},
 		};
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Dequeuing message: {}", self.protocol_name, msg.message_hash::<B>());
+				self.logger.debug(format!(
+					"Protocol : {:?} | Dequeuing message: {}",
+					self.protocol_name,
+					msg.message_hash::<B>()
+				));
 				Some(msg)
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Message already read too many times, ignoring", self.protocol_name);
+				self.logger.debug(format!(
+					"Protocol : {:?} | Message already read too many times, ignoring",
+					self.protocol_name
+				));
 				// We have already read this message too many times, so we remove it from the queue.
 				let _ = lock.pop_front();
 				None
@@ -303,16 +329,24 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		let msg = lock.pop_front().map(|m| m.unwrap());
 		match msg {
 			Some(msg) => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Acknowledging message: {}", self.protocol_name, msg.message_hash::<B>());
+				self.logger.debug(format!(
+					"Protocol : {:?} | Acknowledging message: {}",
+					self.protocol_name,
+					msg.message_hash::<B>()
+				));
 			},
 			None => {
-				dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | No message to acknowledge", self.protocol_name);
+				self.logger.debug(format!(
+					"Protocol : {:?} | No message to acknowledge",
+					self.protocol_name
+				));
 			},
 		}
 	}
 
 	fn clear_queue(&self) {
-		dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "Protocol : {:?} | Clearing message queue", self.protocol_name);
+		self.logger
+			.debug(format!("Protocol : {:?} | Clearing message queue", self.protocol_name));
 		let mut lock = self.message_queue.write();
 		lock.clear();
 	}
@@ -372,6 +406,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	/// A Channel to receive commands from the controller.
 	my_channel: broadcast::Sender<ToHandler>,
+	logger: DebugLogger,
 	/// Prometheus metrics.
 	metrics: Arc<Option<Metrics>>,
 }
@@ -393,6 +428,7 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 				.processing_already_seen_messages_enabled
 				.clone(),
 			my_channel: self.my_channel.clone(),
+			logger: self.logger.clone(),
 			metrics: self.metrics.clone(),
 		}
 	}
@@ -433,7 +469,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		let stream = self.my_channel.subscribe();
 		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
 		let mut event_stream = self.service.event_stream("dkg-handler");
-		debug!(target: "dkg_gadget::gossip_engine::network", "Starting the DKG Gossip Handler");
+		self.logger.debug("Starting the DKG Gossip Handler");
 
 		// we have two streams, one from the network and one from the controller.
 		// hence we want to start two separate tasks, one for each stream that are running
@@ -466,10 +502,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 			}
 		});
 
+		let self2 = self.clone();
 		// second task, handles the incoming messages/events from the network stream.
 		let network_events_task = tokio::spawn(async move {
 			while let Some(event) = event_stream.next().await {
-				self.handle_network_event(event).await;
+				self2.handle_network_event(event).await;
 			}
 		});
 
@@ -495,7 +532,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 			timer_task,
 		])
 		.await;
-		dkg_logging::error!(target: "dkg_gadget::gossip_engine::network", "The DKG Gossip Handler has finished!!");
+		self.logger.error("The DKG Gossip Handler has finished!!".to_string());
 	}
 
 	async fn handle_network_event(&self, event: Event) {
@@ -508,7 +545,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					.service
 					.add_peers_to_reserved_set(self.protocol_name.clone(), HashSet::from([addr]));
 				if let Err(err) = result {
-					dkg_logging::error!(target: "dkg-gossip", "Add reserved peer failed: {}", err);
+					self.logger.error(format!("Add reserved peer failed: {err}"));
 				}
 			},
 			Event::SyncDisconnected { remote } => {
@@ -521,12 +558,13 @@ impl<B: Block + 'static> GossipHandler<B> {
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{
-				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} connected to gossip protocol", remote);
+				self.logger.debug(format!("Peer {remote} connected to gossip protocol"));
 				// Send our Handshake message to that peer.
 				if let Err(err) = self.send_handshake_message(remote).await {
-					dkg_logging::error!(target: "dkg-gossip", "Send handshake message to peer {remote} failed: {err:?}");
+					self.logger
+						.error(format!("Send handshake message to peer {remote} failed: {err:?}"));
 				} else {
-					dkg_logging::debug!(target: "dkg-gossip", "Send handshake message to peer {remote} succeeded");
+					self.logger.debug("Send handshake message to peer {remote} succeeded");
 				}
 				let mut lock = self.peers.write();
 				let _was_in = lock.insert(
@@ -563,10 +601,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 							debug_assert_eq!(expected_remote, Some(remote));
 						},
 					None => {
-						debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected without sending handshake message");
+						self.logger
+							.debug("Peer {remote} disconnected without sending handshake message");
 					},
 				}
-				debug!(target: "dkg_gadget::gossip_engine::network", "Peer {remote} disconnected from gossip protocol");
+				self.logger.debug("Peer {remote} disconnected from gossip protocol");
 			},
 
 			Event::NotificationsReceived { remote, messages } => {
@@ -574,13 +613,13 @@ impl<B: Block + 'static> GossipHandler<B> {
 					if protocol != self.protocol_name {
 						continue
 					}
-					debug!(target: "dkg_gadget::gossip_engine::network", "Received message from {} from gossiping", remote);
+					self.logger.debug(format!("Received message from {remote} from gossiping"));
 					let maybe_dkg_network_message =
 						<super::DKGNetworkMessage as Decode>::decode(&mut message.as_ref());
 					let m = match maybe_dkg_network_message {
 						Ok(m) => m,
 						Err(e) => {
-							warn!(target: "dkg_gadget::gossip_engine::network", "Failed to decode DKG Network message from peer {remote} with error: {e:?}");
+							self.logger.warn(format!("Failed to decode DKG Network message from peer {remote} with error: {e:?}"));
 							self.service.report_peer(remote, rep::UNEXPECTED_MESSAGE);
 							return
 						},
@@ -613,22 +652,26 @@ impl<B: Block + 'static> GossipHandler<B> {
 		match message.is_valid(who) {
 			Ok(v) =>
 				if v {
-					debug!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is valid");
+					self.logger.debug("Handshake message from peer {who} is valid");
 				} else {
-					warn!(target: "dkg_gadget::gossip_engine::network", "Handshake message from peer {who} is invalid");
+					self.logger.warn(format!("Handshake message from peer {who} is invalid"));
 					self.service.report_peer(who, rep::PEER_IMPERSONATED);
 				},
 			Err(e) => {
-				warn!(target: "dkg_gadget::gossip_engine::network", "Failed to verify handshake message from peer {who} with error: {e:?}");
+				self.logger.warn(format!(
+					"Failed to verify handshake message from peer {who} with error: {e:?}"
+				));
 				self.service.report_peer(who, rep::UNEXPECTED_MESSAGE);
 			},
 		};
-		debug!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is now connected as {}", message.authority_id);
+		self.logger
+			.debug(format!("Peer {who} is now connected as {}", message.authority_id));
 		let mut lock = self.peers.write();
 		if let Some(peer) = lock.get_mut(&who) {
 			peer.authority_id = Some(message.authority_id.clone());
 		} else {
-			warn!(target: "dkg_gadget::gossip_engine::network", "Peer {who} is not connected, but sent us a handshake message!!");
+			self.logger
+				.warn(format!("Peer {who} is not connected, but sent us a handshake message!!"));
 		}
 		self.authority_id_to_peer_id.write().insert(message.authority_id, who);
 	}
@@ -637,7 +680,10 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn on_signed_dkg_message(&self, who: PeerId, message: SignedDKGMessage<AuthorityId>) {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
-		debug!(target: "dkg_gadget", "{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ", message.msg.status, message.msg.session_id, who, now);
+		self.logger.debug(format!(
+			"{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ",
+			message.msg.status, message.msg.session_id, who, now
+		));
 
 		if let Some(metrics) = self.metrics.as_ref() {
 			metrics.dkg_signed_messages.inc();
@@ -652,17 +698,22 @@ impl<B: Block + 'static> GossipHandler<B> {
 				drop(queue_lock);
 				let recv_count = self.message_notifications_channel.receiver_count();
 				if recv_count == 0 {
-					dkg_logging::warn!(target: "dkg_gadget", "No one is going to process the message notification!!!");
+					self.logger
+						.warn("No one is going to process the message notification!!!".to_string());
 				}
 				if let Err(e) = self.message_notifications_channel.send(()) {
-					dkg_logging::error!(target: "dkg_gadget", "Failed to send message notification to DKG controller: {:?}", e);
+					self.logger.error(format!(
+						"Failed to send message notification to DKG controller: {e:?}"
+					));
 				} else {
-					dkg_logging::debug!(target: "dkg_gadget", "Message Notification sent to {recv_count} DKG controller listeners");
+					self.logger.debug(
+						"Message Notification sent to {recv_count} DKG controller listeners",
+					);
 				}
 			};
 			match pending_messages_peers.entry(message.message_hash::<B>()) {
 				Entry::Vacant(entry) => {
-					dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "NEW DKG MESSAGE FROM {}", who);
+					self.logger.debug(format!("NEW DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_new_signed_messages.inc();
 					}
@@ -673,7 +724,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
 				Entry::Occupied(mut entry) => {
-					dkg_logging::debug!(target: "dkg_gadget::gossip_engine::network", "OLD DKG MESSAGE FROM {}", who);
+					self.logger.debug(format!("OLD DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_old_signed_messages.inc();
 					}
@@ -694,10 +745,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
 						// as malicious.
 						if old >= MAX_DUPLICATED_MESSAGES_PER_PEER {
-							dkg_logging::warn!(
-								target: "dkg_gadget::gossip_engine::network",
-								"reporting peer {who} as they are sending us the same message over and over again"
-							);
+							self.logger.warn(format!(
+								"Reporting peer {who} as they are sending us the same message over and over again"
+							));
 							self.service.report_peer(who, rep::DUPLICATE_MESSAGE);
 						}
 					}
@@ -731,7 +781,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 				metrics.dkg_propagated_messages.inc();
 			}
 		} else {
-			debug!(target: "dkg_gadget::gossip_engine::network", "Peer {} does not exist in known peers", to_who);
+			self.logger.debug(format!("Peer {to_who} does not exist in known peers"));
 		}
 	}
 
@@ -743,13 +793,16 @@ impl<B: Block + 'static> GossipHandler<B> {
 		};
 		// If we have a peer id, we send the message to that peer directly.
 		if let Some(peer_id) = maybe_peer_id {
-			debug!(target: "dkg_gadget::gossip_engine::network", "Sending message to recipient {peer_id} using p2p");
+			self.logger.debug(format!("Sending message to recipient {peer_id} using p2p"));
 			self.send_signed_dkg_message(peer_id, message);
 			return
 		} else if let Some(recipient_id) = &message.msg.recipient_id {
-			debug!(target: "dkg_gadget::gossip_engine::network", "No direct connection to {recipient_id}, falling back to gossiping");
+			self.logger.debug(format!(
+				"No direct connection to {recipient_id}, falling back to gossiping"
+			));
 		} else {
-			debug!(target: "dkg_gadget::gossip_engine::network", "No specific recipient, broadcasting message to all peers");
+			self.logger
+				.debug("No specific recipient, broadcasting message to all peers".to_string());
 		}
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
@@ -758,7 +811,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		};
 		if peer_ids.is_empty() {
 			let message_hash = message.message_hash::<B>();
-			warn!(target: "dkg_gadget::gossip_engine::network", "No peers to gossip message {}", message_hash);
+			self.logger.warn(format!("No peers to gossip message {message_hash}"));
 			return
 		}
 		for peer in peer_ids {

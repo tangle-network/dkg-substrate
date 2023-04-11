@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
+	debug_logger::DebugLogger,
 	utils::find_index,
 	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
 	Client,
 };
 use codec::{Decode, Encode};
-use dkg_logging::debug;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
@@ -38,6 +38,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
 	signed_proposals: Vec<Proposal<MaxProposalLength>>,
+	logger: &DebugLogger,
 ) where
 	B: Block,
 	BE: Backend<B>,
@@ -56,7 +57,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		return
 	}
 
-	debug!(target: "dkg_gadget", "🕸️  saving signed proposal in offchain storage");
+	logger.debug("🕸️  saving signed proposal in offchain storage".to_string());
 
 	if find_index::<AuthorityId>(
 		&current_validator_set.read().authorities[..],
@@ -107,7 +108,9 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 				old_val.as_deref(),
 				&prop_wrapper.encode(),
 			) {
-				debug!(target: "dkg_gadget", "🕸️  Successfully saved signed proposals in offchain storage");
+				logger.debug(
+					"🕸️  Successfully saved signed proposals in offchain storage".to_string(),
+				);
 				break
 			}
 		}

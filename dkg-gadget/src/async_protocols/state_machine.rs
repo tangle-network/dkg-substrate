@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
+use crate::debug_logger::DebugLogger;
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
@@ -46,6 +47,7 @@ where
 		>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err>;
 
 	async fn on_finish(

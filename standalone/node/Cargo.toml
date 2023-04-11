@@ -65,6 +65,8 @@ dkg-gadget = { workspace = true }
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-standalone-runtime = { workspace = true }
+dkg-logging = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
 
 
 [build-dependencies]
@@ -77,4 +79,5 @@ runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks",
 	                "frame-benchmarking-cli/runtime-benchmarks",]
 integration-tests = ["dkg-standalone-runtime/integration-tests"]
 manual-seal = ["dkg-standalone-runtime/manual-seal"]
-tracing = ["dkg-gadget/tracing"]
+tracing = ["dkg-gadget/debug-tracing"]
+testing = ["dkg-gadget/testing"]

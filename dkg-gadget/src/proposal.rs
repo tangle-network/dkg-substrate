@@ -13,9 +13,8 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::Client;
+use crate::{debug_logger::DebugLogger, Client};
 use codec::Encode;
-use dkg_logging::{info, trace};
 use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
@@ -32,6 +31,7 @@ pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
+	logger: &DebugLogger,
 ) -> Result<Option<Proposal<MaxProposalLength>>, DKGError>
 where
 	B: Block,
@@ -49,7 +49,7 @@ where
 {
 	match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {
-			info!(target: "dkg_gadget", "🕸️  Refresh vote with nonce {:?} received", nonce);
+			logger.info(format!("🕸️  Refresh vote with nonce {nonce:?} received"));
 			let offchain = backend.offchain_storage();
 
 			if let Some(mut offchain) = offchain {
@@ -58,7 +58,10 @@ where
 				let encoded_proposal = refresh_proposal.encode();
 				offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-				trace!(target: "dkg_gadget", "Stored pub_key signature offchain {:?}", finished_round.signature);
+				logger.trace(format!(
+					"Stored pub_key signature offchain {:?}",
+					finished_round.signature
+				));
 			}
 
 			Ok(None)
