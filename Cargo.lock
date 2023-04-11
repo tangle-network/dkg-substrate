@@ -6404,7 +6404,6 @@ dependencies = [
  "hex",
  "k256",
  "log",
- "pallet-aura",
  "pallet-balances",
  "pallet-collator-selection",
  "pallet-dkg-metadata",

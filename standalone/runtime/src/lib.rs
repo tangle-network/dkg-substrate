@@ -1072,12 +1072,9 @@ impl_runtime_apis! {
 	  use frame_benchmarking::{list_benchmark, Benchmarking, BenchmarkList};
 	  use frame_support::traits::StorageInfoTrait;
 
-	  use frame_system_benchmarking::Pallet as SystemBench;
-
 	  let mut list = Vec::<BenchmarkList>::new();
 
 	  list_benchmark!(list, extra, pallet_balances, Balances);
-	  list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 	  list_benchmark!(list, extra, pallet_timestamp, Timestamp);
 	  list_benchmark!(list, extra, pallet_dkg_proposal_handler, DKGProposalHandler);
 	  list_benchmark!(list, extra, pallet_dkg_proposals, DKGProposals);
@@ -1094,8 +1091,6 @@ impl_runtime_apis! {
 	) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
 	  use frame_benchmarking::{Benchmarking, BenchmarkBatch, add_benchmark, TrackedStorageKey};
 	  use frame_support::traits::StorageInfoTrait;
-
-	  use frame_system_benchmarking::Pallet as SystemBench;
 	  impl frame_system_benchmarking::Config for Runtime {}
 
 	  let whitelist: Vec<TrackedStorageKey> = vec![
@@ -1116,7 +1111,6 @@ impl_runtime_apis! {
 	  let mut batches = Vec::<BenchmarkBatch>::new();
 	  let params = (&config, &whitelist);
 
-	  add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
 	  add_benchmark!(params, batches, pallet_balances, Balances);
 	  add_benchmark!(params, batches, pallet_timestamp, Timestamp);
 	  add_benchmark!(params, batches, pallet_dkg_proposal_handler, DKGProposalHandler);

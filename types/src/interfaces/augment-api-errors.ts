@@ -147,6 +147,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       NoNextPublicKey: AugmentedError<ApiType>;
       /**
+       * Input is out of bounds
+       **/
+      OutOfBounds: AugmentedError<ApiType>;
+      /**
        * DKG Refresh is already in progress.
        **/
       RefreshInProgress: AugmentedError<ApiType>;
@@ -165,6 +169,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       ChainIdInvalid: AugmentedError<ApiType>;
       /**
+       * Proposal bytes length is invalid
+       **/
+      InvalidProposalBytesLength: AugmentedError<ApiType>;
+      /**
        * Error names should be descriptive.
        **/
       NoneValue: AugmentedError<ApiType>;
@@ -180,6 +188,14 @@ declare module '@polkadot/api-base/types/errors' {
        * Proposal format is invalid
        **/
       ProposalFormatInvalid: AugmentedError<ApiType>;
+      /**
+       * Proposal must be unsigned
+       **/
+      ProposalMustBeUnsigned: AugmentedError<ApiType>;
+      /**
+       * Proposal out of bounds
+       **/
+      ProposalOutOfBounds: AugmentedError<ApiType>;
       /**
        * Proposal signature is invalid
        **/
@@ -222,6 +238,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Protected operation, must be performed by proposer
        **/
       MustBeProposer: AugmentedError<ApiType>;
+      /**
+       * Input is out of bounds
+       **/
+      OutOfBounds: AugmentedError<ApiType>;
       /**
        * Proposal has either failed or succeeded
        **/
@@ -493,6 +513,10 @@ declare module '@polkadot/api-base/types/errors' {
        * pool at a time.
        **/
       AccountBelongsToOtherPool: AugmentedError<ApiType>;
+      /**
+       * Bonding extra is restricted to the exact pending reward amount.
+       **/
+      BondExtraRestricted: AugmentedError<ApiType>;
       /**
        * The pools state cannot be changed.
        **/

@@ -48,7 +48,10 @@ pub fn mock_sign_msg(msg: &[u8; 32], pub_key: &ecdsa::Public) -> ecdsa::Signatur
 	ecdsa_sign_prehashed(KEY_TYPE, pub_key, msg).expect("Expected a valid signature")
 }
 
-pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> Proposal {
+pub fn mock_signed_proposal<T: Config>(
+	eth_tx: TransactionV2,
+	pub_key: &ecdsa::Public,
+) -> Proposal<T::MaxProposalLength> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -57,28 +60,30 @@ pub fn mock_signed_proposal(eth_tx: TransactionV2, pub_key: &ecdsa::Public) -> P
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	Proposal::Signed { kind: ProposalKind::EVM, data: eth_tx_ser, signature: sig_vec }
+	Proposal::Signed {
+		kind: ProposalKind::EVM,
+		data: eth_tx_ser.try_into().unwrap(),
+		signature: sig_vec.try_into().unwrap(),
+	}
 }
 
 benchmarks! {
 	submit_signed_proposals {
 		let n in 0..(T::MaxSubmissionsPerBatch::get()).into();
 		let dkg_pub_key = ecdsa_generate(KEY_TYPE, None);
-		DKGPallet::<T>::set_dkg_public_key(dkg_pub_key.encode());
+		let bounded_dkg_pub_key : BoundedVec<_,_> = dkg_pub_key.encode().try_into().unwrap();
+		DKGPallet::<T>::set_dkg_public_key(bounded_dkg_pub_key);
 		let caller: T::AccountId = whitelisted_caller();
 		let mut signed_proposals = Vec::new();
 		for i in 0..n as usize {
 			let tx = TransactionV2::EIP2930(mock_eth_tx_eip2930(i as u8));
 			let proposal = Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Root.into(),Proposal::Unsigned {
 				kind: ProposalKind::EVM,
-				data: tx.encode().clone()
+				data: tx.encode().clone().try_into().unwrap()
 			});
-			let signed_prop = mock_signed_proposal(tx, &dkg_pub_key);
+			let signed_prop = mock_signed_proposal::<T>(tx, &dkg_pub_key);
 			signed_proposals.push(signed_prop)
 		}
-
-
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == n as usize);
 	}: _(RawOrigin::Signed(caller), signed_proposals)
 	verify {
 		assert!(Pallet::<T>::get_unsigned_proposals().is_empty());
@@ -91,7 +96,7 @@ benchmarks! {
 
 		let proposal = Proposal::Unsigned {
 			kind: ProposalKind::TokenAdd,
-			data: buf
+			data: buf.try_into().unwrap()
 		};
 
 	}: _(RawOrigin::Root, proposal)
