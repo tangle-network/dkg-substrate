@@ -23,9 +23,12 @@ use webb_proposals::{Proposal, ProposalKind};
 pub fn decode_proposal_header(
 	data: &[u8],
 ) -> Result<webb_proposals::ProposalHeader, ValidationError> {
+	println!("Decoding proposal header {:?}", data.len());
+	println!("Decoding proposal header {:?}", webb_proposals::ProposalHeader::LENGTH);
 	if data.len() < webb_proposals::ProposalHeader::LENGTH {
 		return Err(ValidationError::InvalidProposalBytesLength)
 	}
+	println!("here");
 	let mut bytes = [0u8; webb_proposals::ProposalHeader::LENGTH];
 	bytes.copy_from_slice(data[..webb_proposals::ProposalHeader::LENGTH].as_ref());
 	let header = webb_proposals::ProposalHeader::from(bytes);

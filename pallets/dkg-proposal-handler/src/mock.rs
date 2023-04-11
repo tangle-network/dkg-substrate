@@ -187,7 +187,6 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
-	type Proposal = BoundedVec<u8, MaxProposalLength>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;
