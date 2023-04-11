@@ -32,66 +32,66 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 benchmarks! {
 
 	set_threshold {
-		let c in 1 .. 16_000;
-		let admin = T::AdminOrigin::successful_origin();
-	}: _<T::Origin>(admin, c as u32)
+		let c in 1 .. 500;
+		let admin = RawOrigin::Root;
+	}: _(admin, c as u32)
 	verify {
 		assert_last_event::<T>(Event::ProposerThresholdChanged { new_threshold: c}.into());
 	}
 
 	set_resource {
-		let c in 1 .. 16_000;
-		let admin = T::AdminOrigin::successful_origin();
+		let c in 1 .. 500;
+		let admin = RawOrigin::Root;
 		let resource_id: ResourceId = [0; 32].into();
 		let bytes = vec![0u8; c as usize];
-	}: _<T::Origin>(admin, resource_id, bytes)
+	}: _(admin, resource_id, bytes)
 	verify {
 		assert!(Pallet::<T>::resource_exists(resource_id));
 	}
 
 	remove_resource {
-		let admin = T::AdminOrigin::successful_origin();
+		let admin = RawOrigin::Root;
 		let resource_id: ResourceId = [0; 32].into();
 		let bytes = vec![0u8; 12];
 		Pallet::<T>::register_resource(resource_id, bytes).unwrap();
-	}: _<T::Origin>(admin, resource_id)
+	}: _(admin, resource_id)
 	verify {
 		assert!(!Pallet::<T>::resource_exists(resource_id));
 	}
 
 	whitelist_chain {
-		let admin = T::AdminOrigin::successful_origin();
+		let admin = RawOrigin::Root;
 		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		// let chain_id = ChainIdType::Substrate(CHAIN_IDENTIFIER);
-	}: _<T::Origin>(admin, chain_id)
+	}: _(admin, chain_id)
 	verify {
 		assert_last_event::<T>(Event::ChainWhitelisted{ chain_id}.into());
 	}
 
 	add_proposer {
-		let admin = T::AdminOrigin::successful_origin();
+		let admin = RawOrigin::Root;
 		let v: T::AccountId = account("account", 0, SEED);
 		let another = vec![1u8, 2, 3];
 
 
-	}: _<T::Origin>(admin, v.clone(), another)
+	}: _(admin, v.clone(), another)
 	verify {
 		assert_last_event::<T>(Event::ProposerAdded{ proposer_id: v}.into());
 	}
 
 	remove_proposer {
-		let admin = T::AdminOrigin::successful_origin();
+		let admin = RawOrigin::Root;
 		let v: T::AccountId = account("account", 0, SEED);
 		let another = vec![1u8, 2, 3];
 
 		crate::Pallet::<T>::register_proposer(v.clone(), another).unwrap();
-	}: _<T::Origin>(admin, v.clone())
+	}: _(admin, v.clone())
 	verify {
 		assert_last_event::<T>(Event::ProposerRemoved{ proposer_id: v}.into());
 	}
 
 	acknowledge_proposal {
-		let c in 1 .. 16_000;
+		let c in 1 .. 500;
 		let caller: T::AccountId = whitelisted_caller();
 		let resource_id: ResourceId = [0; 32].into();
 		let bytes = vec![0u8; 12];
@@ -114,7 +114,7 @@ benchmarks! {
 	}
 
 	reject_proposal {
-		let c in 1 .. 16_000;
+		let c in 1 .. 500;
 		let caller: T::AccountId = whitelisted_caller();
 		let resource_id: ResourceId = [0; 32].into();
 		let bytes = vec![0u8; 12];
@@ -138,7 +138,7 @@ benchmarks! {
 	}
 
 	eval_vote_state {
-		let c in 1 .. 16_000;
+		let c in 1 .. 500;
 		let caller: T::AccountId = whitelisted_caller();
 		let bytes = vec![0u8; 12];
 		let nonce: ProposalNonce = 1.into();
@@ -158,6 +158,6 @@ benchmarks! {
 		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id, &proposal_bytes, true).unwrap();
 	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes.clone())
 	verify {
-		assert!(Votes::<T>::get(chain_id, (nonce, proposal_bytes)) != None);
+		assert!(Votes::<T>::get(chain_id, (nonce, proposal_bytes)).is_some());
 	}
 }

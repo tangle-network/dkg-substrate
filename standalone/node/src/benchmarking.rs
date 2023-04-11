@@ -20,6 +20,10 @@
 //!
 //! Should only be used for benchmarking as it may break in other contexts.
 
+//! Setup code for [`super::command`] which would otherwise bloat that module.
+//!
+//! Should only be used for benchmarking as it may break in other contexts.
+
 use crate::service::FullClient;
 
 use dkg_standalone_runtime as runtime;

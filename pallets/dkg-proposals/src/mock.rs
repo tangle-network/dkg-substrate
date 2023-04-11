@@ -62,7 +62,6 @@ frame_support::construct_runtime!(
 		CollatorSelection: pallet_collator_selection::{Pallet, Call, Storage, Event<T>, Config<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
-		Aura: pallet_aura::{Pallet, Storage, Config<T>},
 		DKGProposals: pallet_dkg_proposals::{Pallet, Call, Storage, Event<T>},
 		DKGProposalHandler: pallet_dkg_proposal_handler::{Pallet, Call, Storage, Event<T>},
 	}
@@ -195,14 +194,8 @@ parameter_types! {
 impl pallet_timestamp::Config for Test {
 	type MinimumPeriod = MinimumPeriod;
 	type Moment = u64;
-	type OnTimestampSet = Aura;
+	type OnTimestampSet = ();
 	type WeightInfo = ();
-}
-
-impl pallet_aura::Config for Test {
-	type AuthorityId = sp_consensus_aura::sr25519::AuthorityId;
-	type DisabledValidators = ();
-	type MaxAuthorities = MaxAuthorities;
 }
 
 parameter_types! {
@@ -317,7 +310,6 @@ pub(crate) fn roll_to(n: u64) {
 		Balances::on_finalize(System::block_number());
 		CollatorSelection::on_finalize(System::block_number());
 		Session::on_finalize(System::block_number());
-		Aura::on_finalize(System::block_number());
 		System::on_finalize(System::block_number());
 		DKGProposals::on_finalize(System::block_number());
 		System::set_block_number(System::block_number() + 1);
@@ -326,7 +318,6 @@ pub(crate) fn roll_to(n: u64) {
 		Balances::on_initialize(System::block_number());
 		Session::on_initialize(System::block_number());
 		CollatorSelection::on_initialize(System::block_number());
-		Aura::on_initialize(System::block_number());
 		DKGProposals::on_initialize(System::block_number());
 	}
 }

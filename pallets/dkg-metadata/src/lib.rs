@@ -854,7 +854,7 @@ pub mod pallet {
 
 			let mut accepted = false;
 			for (key, reporters) in dict.iter() {
-				if reporters.len() > threshold.into() {
+				if reporters.len() >= threshold.into() {
 					let bounded_key: BoundedVec<_, _> =
 						key.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
 					DKGPublicKey::<T>::put((Self::authority_set_id(), bounded_key));
@@ -919,7 +919,7 @@ pub mod pallet {
 			let mut keys = dict.iter();
 			let accepted_key = loop {
 				if let Some((key, accounts)) = keys.next() {
-					if accounts.len() > threshold.into() {
+					if accounts.len() >= threshold.into() {
 						let bounded_key: BoundedVec<_, _> =
 							key.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
 						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), bounded_key));
@@ -2104,7 +2104,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
-	pub fn set_dkg_public_key(key: Vec<u8>) {
+	pub fn set_dkg_public_key(key: BoundedVec<u8, T::MaxKeyLength>) {
 		DKGPublicKey::<T>::put((0, key))
 	}
 }

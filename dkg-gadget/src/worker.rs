@@ -82,9 +82,11 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 8;
+pub const MAX_SIGNING_SETS: u64 = 2;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
+
+pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
 
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
@@ -534,6 +536,7 @@ where
 					proposal_hashes.iter().for_each(|h| {
 						lock.remove(h);
 					});
+					info!(target: "dkg_gadget::worker", "Removed {:?} proposal hashes from currently signing queue", proposal_hashes.len());
 					Err(err)
 				},
 			}
@@ -1387,6 +1390,13 @@ where
 							metric_inc!(self, dkg_unsigned_proposal_counter);
 							filtered_unsigned_proposals.push(proposal);
 						}
+
+						// lets limit the max proposals we sign at one time to prevent overflow
+						if filtered_unsigned_proposals.len() >=
+							MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET
+						{
+							break
+						}
 					}
 				}
 				filtered_unsigned_proposals
@@ -1492,7 +1502,8 @@ where
 				unsigned_proposals.iter().filter_map(|x| x.hash()).collect::<Vec<_>>();
 			// save the proposal hashes in the currently_signing_proposals.
 			// this is used to check if we have already signed a proposal or not.
-			self.currently_signing_proposals.write().extend(proposal_hashes);
+			self.currently_signing_proposals.write().extend(proposal_hashes.clone());
+			info!(target: "dkg_gadget::worker", "Signing protocol created, added {:?} proposals to currently_signing_proposals list", proposal_hashes.len());
 			// the goal of the meta task is to select the first winner
 			let meta_signing_protocol = async move {
 				// select the first future to return Ok(()), ignoring every failure
