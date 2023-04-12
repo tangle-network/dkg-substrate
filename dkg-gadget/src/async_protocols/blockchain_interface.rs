@@ -123,7 +123,7 @@ impl<
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
-			if let Some(current_test_id) = bundle.current_test_id.read().clone() {
+			if let Some(current_test_id) = *bundle.current_test_id.read() {
 				bundle.to_test_client.send((current_test_id, result)).unwrap();
 			}
 		}
