@@ -1,4 +1,4 @@
- # DKG Metadata Module
+Misbehavior # DKG Metadata Module
 
  A pallet to manage metadata about the DKG and DKG proposal system.
 
@@ -32,7 +32,7 @@
    authority set change.
  - **DKG signature threshold**: The `t` in `t-out-of-n` threshold signatures used in the DKG
    signing system.
- - **Misbheaviour Report**: A report of a DKG authority misbehaving.
+ - **Misbehaviour Report**: A report of a DKG authority misbehaving.
  - **Refresh delay**: The length of time within a session that the key refresh protocol will be
    initiated.
 
