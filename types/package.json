@@ -16,7 +16,6 @@
   },
   "homepage": "https://github.com/webb-tools/dkg-substrate",
   "dependencies": {
-    "@babel/runtime": "^7.19.0",
     "@open-web3/orml-types": "^1.1.3",
     "@polkadot/api-derive": "9.2.4",
     "@polkadot/typegen": "9.2.4",
@@ -28,14 +27,16 @@
     "ts-node": "10.8.0",
     "tsconfig-paths": "^3.14.1",
     "typescript": "4.7.2",
-    "@polkadot/dev": "^0.67.86",
-    "websocket": "^1.0.31"
+    "@polkadot/dev": "^0.72.34",
+    "websocket": "^1.0.31",
+    "mkdirp": "^2.1.5",
+    "glob2base": "^0.0.12"
   },
   "scripts": {
     "build": "node ./scripts/build.js",
     "build:interfaces": "yarn build:interfaces:defs && yarn build:interfaces:chain && rm ./src/interfaces/index.ts && rm ./src/interfaces/types.ts",
     "build:interfaces:defs": "npx ts-node node_modules/.bin/polkadot-types-from-defs --input ./src/interfaces --package @webb-tools/dkg-substrate-types --endpoint ./src/metadata/metadata.json",
-    "build:interfaces:chain": "npx ts-node node_modules/.bin/polkadot-types-from-chain --endpoint ws://localhost:9944 --output ./src/interfaces",
+    "build:interfaces:chain": "npx ts-node node_modules/.bin/polkadot-types-from-chain --endpoint ./src/metadata/metadata.json --output ./src/interfaces",
     "clean": "rm -rf build && rm -rf ts-types",
     "publish-types": "node ./scripts/publish-types.js",
     "update:metadata": "npx ts-node ./scripts/updateMetadata.ts"
