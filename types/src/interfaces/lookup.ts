@@ -347,28 +347,34 @@ export default {
         proposerId: 'AccountId32',
       },
       VoteFor: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
         who: 'AccountId32',
       },
       VoteAgainst: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
         who: 'AccountId32',
       },
       ProposalApproved: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
       },
       ProposalRejected: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
       },
       ProposalSucceeded: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
       },
       ProposalFailed: {
+        kind: 'WebbProposalsProposalProposalKind',
         chainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
       },
@@ -394,7 +400,13 @@ export default {
     }
   },
   /**
-   * Lookup48: pallet_dkg_proposal_handler::pallet::Event<T>
+   * Lookup46: webb_proposals::proposal::ProposalKind
+   **/
+  WebbProposalsProposalProposalKind: {
+    _enum: ['Refresh', 'ProposerSetUpdate', 'EVM', 'AnchorCreate', 'AnchorUpdate', 'TokenAdd', 'TokenRemove', 'WrappingFeeUpdate', 'ResourceIdUpdate', 'RescueTokens', 'MaxDepositLimitUpdate', 'MinWithdrawalLimitUpdate', 'SetVerifier', 'SetTreasuryHandler', 'FeeRecipientUpdate']
+  },
+  /**
+   * Lookup49: pallet_dkg_proposal_handler::pallet::Event<T>
    **/
   PalletDkgProposalHandlerEvent: {
     _enum: {
@@ -422,12 +434,6 @@ export default {
         signature: 'Bytes'
       }
     }
-  },
-  /**
-   * Lookup49: webb_proposals::proposal::ProposalKind
-   **/
-  WebbProposalsProposalProposalKind: {
-    _enum: ['Refresh', 'ProposerSetUpdate', 'EVM', 'AnchorCreate', 'AnchorUpdate', 'TokenAdd', 'TokenRemove', 'WrappingFeeUpdate', 'ResourceIdUpdate', 'RescueTokens', 'MaxDepositLimitUpdate', 'MinWithdrawalLimitUpdate', 'SetVerifier', 'SetTreasuryHandler', 'FeeRecipientUpdate']
   },
   /**
    * Lookup51: dkg_runtime_primitives::proposal::DKGPayloadKey
@@ -1206,7 +1212,23 @@ export default {
     _enum: ['NoMappedAccount', 'InvalidThreshold', 'MustBeAQueuedAuthority', 'MustBeAnActiveAuthority', 'InvalidRefreshDelay', 'InvalidPublicKeys', 'AlreadySubmittedPublicKey', 'AlreadySubmittedSignature', 'UsedSignature', 'InvalidSignature', 'InvalidNonce', 'InvalidMisbehaviourReports', 'RefreshInProgress', 'NoNextPublicKey', 'InvalidControllerAccount', 'OutOfBounds']
   },
   /**
-   * Lookup172: pallet_dkg_proposals::types::ProposalVotes<sp_core::crypto::AccountId32, BlockNumber, dkg_standalone_runtime::MaxVotes>
+   * Lookup171: webb_proposals::proposal::Proposal<dkg_runtime_primitives::CustomU32Getter>
+   **/
+  WebbProposalsProposal: {
+    _enum: {
+      Signed: {
+        kind: 'WebbProposalsProposalProposalKind',
+        data: 'Bytes',
+        signature: 'Bytes',
+      },
+      Unsigned: {
+        kind: 'WebbProposalsProposalProposalKind',
+        data: 'Bytes'
+      }
+    }
+  },
+  /**
+   * Lookup174: pallet_dkg_proposals::types::ProposalVotes<sp_core::crypto::AccountId32, BlockNumber, dkg_standalone_runtime::MaxVotes>
    **/
   PalletDkgProposalsProposalVotes: {
     votesFor: 'Vec<AccountId32>',
@@ -1215,21 +1237,21 @@ export default {
     expiry: 'u32'
   },
   /**
-   * Lookup173: dkg_standalone_runtime::MaxVotes
+   * Lookup175: dkg_standalone_runtime::MaxVotes
    **/
   DkgStandaloneRuntimeMaxVotes: 'Null',
   /**
-   * Lookup175: pallet_dkg_proposals::types::ProposalStatus
+   * Lookup177: pallet_dkg_proposals::types::ProposalStatus
    **/
   PalletDkgProposalsProposalStatus: {
     _enum: ['Initiated', 'Approved', 'Rejected']
   },
   /**
-   * Lookup176: webb_proposals::header::ResourceId
+   * Lookup178: webb_proposals::header::ResourceId
    **/
   WebbProposalsHeaderResourceId: '[u8;32]',
   /**
-   * Lookup178: pallet_dkg_proposals::pallet::Call<T>
+   * Lookup180: pallet_dkg_proposals::pallet::Call<T>
    **/
   PalletDkgProposalsCall: {
     _enum: {
@@ -1257,49 +1279,33 @@ export default {
         nonce: 'u32',
         srcChainId: 'WebbProposalsHeaderTypedChainId',
         rId: 'WebbProposalsHeaderResourceId',
-        prop: 'Bytes',
+        prop: 'WebbProposalsProposal',
       },
       reject_proposal: {
         nonce: 'u32',
         srcChainId: 'WebbProposalsHeaderTypedChainId',
         rId: 'WebbProposalsHeaderResourceId',
-        prop: 'Bytes',
+        prop: 'WebbProposalsProposal',
       },
       eval_vote_state: {
         nonce: 'u32',
         srcChainId: 'WebbProposalsHeaderTypedChainId',
-        prop: 'Bytes'
+        prop: 'WebbProposalsProposal'
       }
     }
   },
   /**
-   * Lookup179: pallet_dkg_proposals::pallet::Error<T>
+   * Lookup181: pallet_dkg_proposals::pallet::Error<T>
    **/
   PalletDkgProposalsError: {
     _enum: ['InvalidPermissions', 'ThresholdNotSet', 'InvalidChainId', 'InvalidThreshold', 'ChainNotWhitelisted', 'ChainAlreadyWhitelisted', 'ResourceDoesNotExist', 'ProposerAlreadyExists', 'ProposerInvalid', 'MustBeProposer', 'ProposerAlreadyVoted', 'ProposalAlreadyExists', 'ProposalDoesNotExist', 'ProposalNotComplete', 'ProposalAlreadyComplete', 'ProposalExpired', 'ProposerCountIsZero', 'OutOfBounds']
   },
   /**
-   * Lookup181: dkg_runtime_primitives::proposal::StoredUnsignedProposal<Timestamp, dkg_runtime_primitives::CustomU32Getter>
+   * Lookup183: dkg_runtime_primitives::proposal::StoredUnsignedProposal<Timestamp, dkg_runtime_primitives::CustomU32Getter>
    **/
   DkgRuntimePrimitivesProposalStoredUnsignedProposal: {
     proposal: 'WebbProposalsProposal',
     timestamp: 'u32'
-  },
-  /**
-   * Lookup183: webb_proposals::proposal::Proposal<dkg_runtime_primitives::CustomU32Getter>
-   **/
-  WebbProposalsProposal: {
-    _enum: {
-      Signed: {
-        kind: 'WebbProposalsProposalProposalKind',
-        data: 'Bytes',
-        signature: 'Bytes',
-      },
-      Unsigned: {
-        kind: 'WebbProposalsProposalProposalKind',
-        data: 'Bytes'
-      }
-    }
   },
   /**
    * Lookup184: pallet_dkg_proposal_handler::pallet::Call<T>

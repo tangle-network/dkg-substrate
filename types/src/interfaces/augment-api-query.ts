@@ -330,7 +330,7 @@ declare module '@polkadot/api-base/types/storage' {
        * The key is the hash of the call and the deposit ID, to ensure it's
        * unique.
        **/
-      votes: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: ITuple<[u32, Bytes]> | [u32 | AnyNumber | Uint8Array, Bytes | string | Uint8Array]) => Observable<Option<PalletDkgProposalsProposalVotes>>, [WebbProposalsHeaderTypedChainId, ITuple<[u32, Bytes]>]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, ITuple<[u32, Bytes]>]>;
+      votes: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: ITuple<[u32, WebbProposalsProposal]> | [u32 | AnyNumber | Uint8Array, WebbProposalsProposal | { Signed: any } | { Unsigned: any } | string | Uint8Array]) => Observable<Option<PalletDkgProposalsProposalVotes>>, [WebbProposalsHeaderTypedChainId, ITuple<[u32, WebbProposalsProposal]>]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, ITuple<[u32, WebbProposalsProposal]>]>;
       /**
        * Generic query
        **/
