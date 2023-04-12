@@ -122,13 +122,12 @@ impl<
 {
 	#[cfg(feature = "testing")]
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
-		let bundle = self.test_bundle.as_ref().unwrap();
-		let current_test_id = (bundle.current_test_id.read()).unwrap();
-		bundle.to_test_client.send((current_test_id, result)).unwrap();
+		if let Some(bundle) = self.test_bundle.as_ref() {
+			if let Some(current_test_id) = bundle.current_test_id.read().clone() {
+				bundle.to_test_client.send((current_test_id, result)).unwrap();
+			}
+		}
 	}
-
-	#[cfg(not(feature = "testing"))]
-	fn send_result_to_test_client(&self, _result: Result<(), String>) {}
 }
 
 impl<
@@ -267,7 +266,11 @@ where
 			&mut self.aggregated_public_keys.write(),
 			key,
 		);
-		self.send_result_to_test_client(Ok(()));
+
+		if cfg!(feature = "testing") {
+			self.send_result_to_test_client(Ok(()));
+		}
+
 		Ok(())
 	}
 
