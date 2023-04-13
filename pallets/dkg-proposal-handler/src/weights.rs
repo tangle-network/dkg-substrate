@@ -51,6 +51,15 @@ pub trait WeightInfo {
 	fn submit_signed_proposals(n: u32) -> Weight;
 	fn force_submit_unsigned_proposal() -> Weight;
 }
+
+	/// <HB SBP Review M2
+	///
+	/// The code is running under the release 0.9.39 however the weights are still using weights v1
+	/// since it is considering only one value (ref time). The output of the CLI should configure the weights
+	/// to use the `from_parts(ref time,proof size)` fn
+	///
+	/// HB SBP Review M2>
+
 /// Weight functions for `pallet_dkg_proposal_handler`.
 pub struct WebbWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config>WeightInfo for WebbWeight<T> {

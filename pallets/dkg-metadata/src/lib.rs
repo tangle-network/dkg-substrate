@@ -1364,6 +1364,18 @@ pub mod pallet {
 		}
 	}
 
+	/// <HB SBP Review M2
+	///
+	/// Is the validate_unsigned fn used anywhere? I'm not able to find if this is used in any OCW.
+	///
+	/// We detected a vector atack with unsigned transactions from OCW: A malissuous validator might
+	/// push tempered data and the validators wouldn't be punished for this. Validators are only
+	/// subject to slashing if they create a block that violates the STF. Creating valid
+	/// transactions with tampered data would not result in slashing, and therefore the possibility
+	/// of malicious Validators in this context is real.
+	///
+	/// HB SBP Review M2>
+
 	#[pallet::validate_unsigned]
 	impl<T: Config> ValidateUnsigned for Pallet<T> {
 		type Call = Call<T>;
@@ -1454,6 +1466,15 @@ pub mod pallet {
 	}
 }
 
+/// <HB SBP Review M2
+///
+/// I would recommend extracting these functions into it's own file to help the pallet's readability
+/// and to reduce the number of lines to this file.
+///
+/// Here there is a proposal about a code organization for a big pallet like this one:
+/// https://github.com/paritytech/substrate/blob/master/frame/assets/src
+///
+/// HB SBP Review M2>
 impl<T: Config> Pallet<T> {
 	/// Return the current active DKG authority set.
 	pub fn authority_set() -> AuthoritySet<T::DKGId, T::MaxAuthorities> {
