@@ -185,6 +185,10 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       maxExternalProposerAccounts: u32 & AugmentedConst<ApiType>;
       /**
+       * Max length of a proposal
+       **/
+      maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
        * The max resources that can be stored in storage
        **/
       maxResources: u32 & AugmentedConst<ApiType>;

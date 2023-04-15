@@ -379,33 +379,39 @@ declare module '@polkadot/types/lookup' {
     } & Struct;
     readonly isVoteFor: boolean;
     readonly asVoteFor: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
       readonly who: AccountId32;
     } & Struct;
     readonly isVoteAgainst: boolean;
     readonly asVoteAgainst: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
       readonly who: AccountId32;
     } & Struct;
     readonly isProposalApproved: boolean;
     readonly asProposalApproved: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
     } & Struct;
     readonly isProposalRejected: boolean;
     readonly asProposalRejected: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
     } & Struct;
     readonly isProposalSucceeded: boolean;
     readonly asProposalSucceeded: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
     } & Struct;
     readonly isProposalFailed: boolean;
     readonly asProposalFailed: {
+      readonly kind: WebbProposalsProposalProposalKind;
       readonly chainId: WebbProposalsHeaderTypedChainId;
       readonly proposalNonce: u32;
     } & Struct;
@@ -438,7 +444,27 @@ declare module '@polkadot/types/lookup' {
     readonly type: 'None' | 'Evm' | 'Substrate' | 'PolkadotParachain' | 'KusamaParachain' | 'RococoParachain' | 'Cosmos' | 'Solana' | 'Ink';
   }
 
-  /** @name PalletDkgProposalHandlerEvent (48) */
+  /** @name WebbProposalsProposalProposalKind (46) */
+  interface WebbProposalsProposalProposalKind extends Enum {
+    readonly isRefresh: boolean;
+    readonly isProposerSetUpdate: boolean;
+    readonly isEvm: boolean;
+    readonly isAnchorCreate: boolean;
+    readonly isAnchorUpdate: boolean;
+    readonly isTokenAdd: boolean;
+    readonly isTokenRemove: boolean;
+    readonly isWrappingFeeUpdate: boolean;
+    readonly isResourceIdUpdate: boolean;
+    readonly isRescueTokens: boolean;
+    readonly isMaxDepositLimitUpdate: boolean;
+    readonly isMinWithdrawalLimitUpdate: boolean;
+    readonly isSetVerifier: boolean;
+    readonly isSetTreasuryHandler: boolean;
+    readonly isFeeRecipientUpdate: boolean;
+    readonly type: 'Refresh' | 'ProposerSetUpdate' | 'Evm' | 'AnchorCreate' | 'AnchorUpdate' | 'TokenAdd' | 'TokenRemove' | 'WrappingFeeUpdate' | 'ResourceIdUpdate' | 'RescueTokens' | 'MaxDepositLimitUpdate' | 'MinWithdrawalLimitUpdate' | 'SetVerifier' | 'SetTreasuryHandler' | 'FeeRecipientUpdate';
+  }
+
+  /** @name PalletDkgProposalHandlerEvent (49) */
   interface PalletDkgProposalHandlerEvent extends Enum {
     readonly isInvalidProposalSignature: boolean;
     readonly asInvalidProposalSignature: {
@@ -468,26 +494,6 @@ declare module '@polkadot/types/lookup' {
       readonly signature: Bytes;
     } & Struct;
     readonly type: 'InvalidProposalSignature' | 'ProposalAdded' | 'ProposalRemoved' | 'ProposalSigned';
-  }
-
-  /** @name WebbProposalsProposalProposalKind (49) */
-  interface WebbProposalsProposalProposalKind extends Enum {
-    readonly isRefresh: boolean;
-    readonly isProposerSetUpdate: boolean;
-    readonly isEvm: boolean;
-    readonly isAnchorCreate: boolean;
-    readonly isAnchorUpdate: boolean;
-    readonly isTokenAdd: boolean;
-    readonly isTokenRemove: boolean;
-    readonly isWrappingFeeUpdate: boolean;
-    readonly isResourceIdUpdate: boolean;
-    readonly isRescueTokens: boolean;
-    readonly isMaxDepositLimitUpdate: boolean;
-    readonly isMinWithdrawalLimitUpdate: boolean;
-    readonly isSetVerifier: boolean;
-    readonly isSetTreasuryHandler: boolean;
-    readonly isFeeRecipientUpdate: boolean;
-    readonly type: 'Refresh' | 'ProposerSetUpdate' | 'Evm' | 'AnchorCreate' | 'AnchorUpdate' | 'TokenAdd' | 'TokenRemove' | 'WrappingFeeUpdate' | 'ResourceIdUpdate' | 'RescueTokens' | 'MaxDepositLimitUpdate' | 'MinWithdrawalLimitUpdate' | 'SetVerifier' | 'SetTreasuryHandler' | 'FeeRecipientUpdate';
   }
 
   /** @name DkgRuntimePrimitivesProposalDkgPayloadKey (51) */
@@ -1334,7 +1340,23 @@ declare module '@polkadot/types/lookup' {
     readonly type: 'NoMappedAccount' | 'InvalidThreshold' | 'MustBeAQueuedAuthority' | 'MustBeAnActiveAuthority' | 'InvalidRefreshDelay' | 'InvalidPublicKeys' | 'AlreadySubmittedPublicKey' | 'AlreadySubmittedSignature' | 'UsedSignature' | 'InvalidSignature' | 'InvalidNonce' | 'InvalidMisbehaviourReports' | 'RefreshInProgress' | 'NoNextPublicKey' | 'InvalidControllerAccount' | 'OutOfBounds';
   }
 
-  /** @name PalletDkgProposalsProposalVotes (172) */
+  /** @name WebbProposalsProposal (171) */
+  interface WebbProposalsProposal extends Enum {
+    readonly isSigned: boolean;
+    readonly asSigned: {
+      readonly kind: WebbProposalsProposalProposalKind;
+      readonly data: Bytes;
+      readonly signature: Bytes;
+    } & Struct;
+    readonly isUnsigned: boolean;
+    readonly asUnsigned: {
+      readonly kind: WebbProposalsProposalProposalKind;
+      readonly data: Bytes;
+    } & Struct;
+    readonly type: 'Signed' | 'Unsigned';
+  }
+
+  /** @name PalletDkgProposalsProposalVotes (174) */
   interface PalletDkgProposalsProposalVotes extends Struct {
     readonly votesFor: Vec<AccountId32>;
     readonly votesAgainst: Vec<AccountId32>;
@@ -1342,10 +1364,10 @@ declare module '@polkadot/types/lookup' {
     readonly expiry: u32;
   }
 
-  /** @name DkgStandaloneRuntimeMaxVotes (173) */
+  /** @name DkgStandaloneRuntimeMaxVotes (175) */
   type DkgStandaloneRuntimeMaxVotes = Null;
 
-  /** @name PalletDkgProposalsProposalStatus (175) */
+  /** @name PalletDkgProposalsProposalStatus (177) */
   interface PalletDkgProposalsProposalStatus extends Enum {
     readonly isInitiated: boolean;
     readonly isApproved: boolean;
@@ -1353,10 +1375,10 @@ declare module '@polkadot/types/lookup' {
     readonly type: 'Initiated' | 'Approved' | 'Rejected';
   }
 
-  /** @name WebbProposalsHeaderResourceId (176) */
+  /** @name WebbProposalsHeaderResourceId (178) */
   interface WebbProposalsHeaderResourceId extends U8aFixed {}
 
-  /** @name PalletDkgProposalsCall (178) */
+  /** @name PalletDkgProposalsCall (180) */
   interface PalletDkgProposalsCall extends Enum {
     readonly isSetThreshold: boolean;
     readonly asSetThreshold: {
@@ -1389,25 +1411,25 @@ declare module '@polkadot/types/lookup' {
       readonly nonce: u32;
       readonly srcChainId: WebbProposalsHeaderTypedChainId;
       readonly rId: WebbProposalsHeaderResourceId;
-      readonly prop: Bytes;
+      readonly prop: WebbProposalsProposal;
     } & Struct;
     readonly isRejectProposal: boolean;
     readonly asRejectProposal: {
       readonly nonce: u32;
       readonly srcChainId: WebbProposalsHeaderTypedChainId;
       readonly rId: WebbProposalsHeaderResourceId;
-      readonly prop: Bytes;
+      readonly prop: WebbProposalsProposal;
     } & Struct;
     readonly isEvalVoteState: boolean;
     readonly asEvalVoteState: {
       readonly nonce: u32;
       readonly srcChainId: WebbProposalsHeaderTypedChainId;
-      readonly prop: Bytes;
+      readonly prop: WebbProposalsProposal;
     } & Struct;
     readonly type: 'SetThreshold' | 'SetResource' | 'RemoveResource' | 'WhitelistChain' | 'AddProposer' | 'RemoveProposer' | 'AcknowledgeProposal' | 'RejectProposal' | 'EvalVoteState';
   }
 
-  /** @name PalletDkgProposalsError (179) */
+  /** @name PalletDkgProposalsError (181) */
   interface PalletDkgProposalsError extends Enum {
     readonly isInvalidPermissions: boolean;
     readonly isThresholdNotSet: boolean;
@@ -1430,26 +1452,10 @@ declare module '@polkadot/types/lookup' {
     readonly type: 'InvalidPermissions' | 'ThresholdNotSet' | 'InvalidChainId' | 'InvalidThreshold' | 'ChainNotWhitelisted' | 'ChainAlreadyWhitelisted' | 'ResourceDoesNotExist' | 'ProposerAlreadyExists' | 'ProposerInvalid' | 'MustBeProposer' | 'ProposerAlreadyVoted' | 'ProposalAlreadyExists' | 'ProposalDoesNotExist' | 'ProposalNotComplete' | 'ProposalAlreadyComplete' | 'ProposalExpired' | 'ProposerCountIsZero' | 'OutOfBounds';
   }
 
-  /** @name DkgRuntimePrimitivesProposalStoredUnsignedProposal (181) */
+  /** @name DkgRuntimePrimitivesProposalStoredUnsignedProposal (183) */
   interface DkgRuntimePrimitivesProposalStoredUnsignedProposal extends Struct {
     readonly proposal: WebbProposalsProposal;
     readonly timestamp: u32;
-  }
-
-  /** @name WebbProposalsProposal (183) */
-  interface WebbProposalsProposal extends Enum {
-    readonly isSigned: boolean;
-    readonly asSigned: {
-      readonly kind: WebbProposalsProposalProposalKind;
-      readonly data: Bytes;
-      readonly signature: Bytes;
-    } & Struct;
-    readonly isUnsigned: boolean;
-    readonly asUnsigned: {
-      readonly kind: WebbProposalsProposalProposalKind;
-      readonly data: Bytes;
-    } & Struct;
-    readonly type: 'Signed' | 'Unsigned';
   }
 
   /** @name PalletDkgProposalHandlerCall (184) */
