@@ -118,7 +118,6 @@ where
 				.map_err(|err| Self::map_keygen_error_to_dkg_error_keygen(err))?,
 			params,
 			channel_type,
-			0,
 			status,
 		)
 	}

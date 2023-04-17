@@ -92,7 +92,6 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: Self::AdditionalReturnParam,
-		async_index: u8,
 	) -> Result<(), DKGError> {
 		params.logger.info_signing("Completed offline stage successfully!".to_string());
 		// Take the completed offline stage and immediately execute the corresponding voting
@@ -110,7 +109,6 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 			unsigned_proposal.2,
 			unsigned_proposal.3,
 			unsigned_proposal.4,
-			async_index,
 		) {
 			Ok(voting_stage) => {
 				logger.info_signing("Starting voting stage...".to_string());

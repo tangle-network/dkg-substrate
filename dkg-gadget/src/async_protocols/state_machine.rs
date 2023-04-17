@@ -54,6 +54,5 @@ where
 		result: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		additional_param: Self::AdditionalReturnParam,
-		async_index: u8,
 	) -> Result<Self::Return, DKGError>;
 }

@@ -116,13 +116,10 @@ impl<
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> AsyncProtocolParameters<BI, MaxAuthorities>
 {
-	pub fn get_next_batch_key<
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	>(
+	pub fn get_next_batch_key(
 		&self,
-		batch: &[UnsignedProposal<MaxProposalLength>],
 	) -> BatchKey {
-		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
+		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: 1 }
 	}
 }
 
@@ -375,7 +372,6 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 	sm: SM,
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
@@ -413,7 +409,7 @@ where
 			let res = async_proto.run().await;
 			match res {
 				Ok(v) =>
-					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
+					return SM::on_finish(v, params_for_end_of_proto, additional_param)
 						.await,
 				Err(err) => match err {
 					async_runtime::Error::Recv(e) |
@@ -469,7 +465,6 @@ where
 		params.clone(),
 		outgoing_rx,
 		channel_type.clone(),
-		async_index,
 		status,
 	);
 
@@ -515,7 +510,6 @@ fn generate_outgoing_to_wire_fn<
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
 where
@@ -584,7 +578,6 @@ where
 						key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
 						signer_set_id: party_id as u64,
 						offline_msg: serialized_body,
-						async_index,
 					}),
 				_ => {
 					unreachable!(

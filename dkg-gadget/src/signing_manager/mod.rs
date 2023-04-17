@@ -1,11 +1,25 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
 
 use dkg_primitives::{UnsignedProposal, MaxProposalLength, types::DKGError};
-use sp_core::Get;
 
-use crate::worker::DKGWorker;
-
+use crate::{worker::DKGWorker, async_protocols::GenericAsyncHandler};
+use dkg_primitives::utils::select_random_set;
 use self::work_manager::WorkManager;
+use crate::metric_inc;
+use crate::worker::ProtoStageType;
+use crate::async_protocols::KeygenPartyId;
+use crate::*;
+use crate::gossip_engine::GossipEngineIface;
+use dkg_primitives::SessionId;
+use std::pin::Pin;
+use std::future::Future;
+use dkg_runtime_primitives::crypto::Public;
+use rand_chacha::ChaCha20Rng;
+use codec::Encode;
+use rand::SeedableRng;
+use sp_api::HeaderT;
+use crate::worker::KeystoreExt;
+use crate::async_protocols::remote::AsyncProtocolRemote;
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -23,10 +37,19 @@ pub mod work_manager;
 /// generate a t+1 signing set from this RNG
 /// if we are in this set, we send it to the work manager, and continue.
 /// if we are not, we continue the loop.
-pub struct SigningManager<B, BE, C, GE> {
+pub struct SigningManager<B: Block, BE, C, GE> {
     // governs the workload for each node
-    work_manager: WorkManager,
-    _pd: PhantomData<()>,
+    work_manager: WorkManager<B>,
+    _pd: PhantomData<(B, BE, C, GE)>,
+}
+
+impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
+    fn clone(&self) -> Self {
+        Self {
+            work_manager: self.work_manager.clone(),
+            _pd: self._pd,
+        }
+    }
 }
 
 // 1 unsigned proposal per signing set
@@ -40,9 +63,10 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities> {
 
-    pub fn new() -> Self {
+    pub fn new(logger: DebugLogger) -> Self {
         Self {
-            work_manager: WorkManager::new()
+            work_manager: WorkManager::<B>::new(logger, 5),
+            _pd: Default::default()
         }
     }
 
@@ -73,7 +97,7 @@ where
 					if let Some(hash) = proposal.hash() {
 						if !self.work_manager.currently_signing_proposals.read().contains(&hash) {
 							// update unsigned proposal counter
-							metric_inc!(self, dkg_unsigned_proposal_counter);
+							metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
 							filtered_unsigned_proposals.push(proposal);
 						}
 
@@ -122,109 +146,48 @@ where
                 if we are in this set, we send it to the signing manager, and continue.
                 if we are not, we continue the loop.
              */
-            let proposal_hash = sp_core::keccak_256(&unsigned_proposal.encode());
-            let concat_data = dkg_pub_key.into_iter().chain(at).chain(proposal_hash).collect::<Vec<u8>>();
-            let seed = sp_core::keccak_256(concat_data);
-            let mut rng = ChaChaRng::from_seed(seed);
+            let unsigned_proposal_hash = sp_core::keccak_256(&unsigned_proposal.encode());
+            let concat_data = dkg_pub_key.into_iter().chain(at.encode()).chain(unsigned_proposal_hash).collect::<Vec<u8>>();
+            let seed = sp_core::keccak_256(&concat_data);
+            let mut rng = ChaCha20Rng::from_seed(seed);
+
+            let maybe_set = self.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker).ok();
+            if let Some(signing_set) = maybe_set {
+                // if we are in the set, send to work manager
+                if signing_set.contains(&party_i) {
+                    dkg_worker.logger.info(format!(
+                        "🕸️  Session Id {:?} | {}-out-of-{} signers: ({:?})",
+                        session_id,
+                        threshold,
+                        best_authorities.len(),
+                        signing_set,
+                    ));
+                    match self.create_signing_protocol(
+                        dkg_worker,
+                        best_authorities.clone(),
+                        authority_public_key.clone(),
+                        party_i,
+                        session_id,
+                        threshold,
+                        ProtoStageType::Signing { unsigned_proposal_hash },
+                        unsigned_proposal,
+                        signing_set
+                    ) {
+                        Ok((handle, task)) => {
+                            // send task to the work manager
+                            self.work_manager.push_task(unsigned_proposal_hash, handle, task)?;
+                        }
+                        Err(err) => {
+                            dkg_worker.logger.error(format!("Error creating signing protocol: {:?}", &err));
+                            dkg_worker.handle_dkg_error(err.clone());
+                            return Err(err)
+                        },
+                    }
+                }
+            }
         }
 
-		let factorial = |num: u64| match num {
-			0 => 1,
-			1.. => (1..=num).product(),
-		};
-		let mut signing_sets = Vec::new();
-		let n = factorial(best_authorities.len() as u64);
-		let k = factorial((threshold + 1) as u64);
-		let n_minus_k = factorial((best_authorities.len() - threshold as usize - 1) as u64);
-		let num_combinations = std::cmp::min(n / (k * n_minus_k), MAX_SIGNING_SETS);
-		self.logger.debug(format!("Generating {num_combinations} signing sets"));
-		while signing_sets.len() < num_combinations as usize {
-			if count > 0 {
-				seed = sp_core::keccak_256(&seed).to_vec();
-			}
-			let maybe_set = self.generate_signers(&seed, threshold, best_authorities.clone()).ok();
-			if let Some(set) = maybe_set {
-				let set = HashSet::<_>::from_iter(set.iter().cloned());
-				if !signing_sets.contains(&set) {
-					signing_sets.push(set);
-				}
-			}
-
-			count += 1;
-		}
-		metric_set!(dkg_worker, dkg_signing_sets, signing_sets.len());
-
-		let mut futures = Vec::with_capacity(signing_sets.len());
-		#[allow(clippy::needless_range_loop)]
-		for i in 0..signing_sets.len() {
-			// Filter for only the signing sets that contain our party index.
-			if signing_sets[i].contains(&party_i) {
-				dkg_worker.logger.info(format!(
-					"🕸️  Session Id {:?} | Async index {:?} | {}-out-of-{} signers: ({:?})",
-					session_id,
-					i,
-					threshold,
-					best_authorities.len(),
-					signing_sets[i].clone(),
-				));
-				match self.create_signing_protocol(
-					best_authorities.clone(),
-					authority_public_key.clone(),
-					party_i,
-					session_id,
-					threshold,
-					ProtoStageType::Signing,
-					unsigned_proposals.clone(),
-					signing_sets[i].clone().into_iter().sorted().collect::<Vec<_>>(),
-					// using i here as the async index is not correct at all,
-					// instead we should find a free index in the `signing_rounds` and use that
-					//
-					// FIXME: use a free index in the `signing_rounds` instead of `i`
-					i as _,
-				) {
-					Ok(task) => futures.push(task),
-					Err(err) => {
-						dkg_worker.logger.error(format!("Error creating signing protocol: {:?}", &err));
-						dkg_worker.handle_dkg_error(err)
-					},
-				}
-			}
-		}
-
-		if futures.is_empty() {
-			dkg_worker.logger
-				.error("While creating the signing protocol, 0 were created".to_string());
-			Err(DKGError::GenericError {
-				reason: "While creating the signing protocol, 0 were created".to_string(),
-			})
-		} else {
-			let proposal_hashes =
-				unsigned_proposals.iter().filter_map(|x| x.hash()).collect::<Vec<_>>();
-			// save the proposal hashes in the currently_signing_proposals.
-			// this is used to check if we have already signed a proposal or not.
-            // TODO! send task to work manager
-			let logger = dkg_worker.logger.clone();
-			self.currently_signing_proposals.write().extend(proposal_hashes.clone());
-			logger.info(format!("Signing protocol created, added {:?} proposals to currently_signing_proposals list", proposal_hashes.len()));
-			// the goal of the meta task is to select the first winner
-			let meta_signing_protocol = async move {
-				// select the first future to return Ok(()), ignoring every failure
-				// (note: the errors are not truly ignored since each individual future
-				// has logic to handle errors internally, including misbehaviour monitors
-				let mut results = futures::future::select_ok(futures).await.into_iter();
-				if let Some((_success, _losing_futures)) = results.next() {
-					logger.info(format!(
-						"*** SUCCESSFULLY EXECUTED meta signing protocol {_success:?} ***"
-					));
-				} else {
-					logger.warn("*** UNSUCCESSFULLY EXECUTED meta signing protocol".to_string());
-				}
-			};
-
-			// spawn in parallel
-			let _handle = tokio::task::spawn(meta_signing_protocol);
-			Ok(())
-		}
+        Ok(())
     }
 
 
@@ -235,68 +198,85 @@ where
 			target = "dkg",
 			skip_all,
 			err,
-			fields(session_id, threshold, stage, async_index)
+			fields(session_id, threshold, stage, party_i)
 		)
 	)]
 	fn create_signing_protocol(
 		&self,
-        dkg_worker: &DKGWorker,
+        dkg_worker: &DKGWorker<B, BE, C, GE>,
 		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposals: Vec<UnsignedProposal<MaxProposalLength>>,
+		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		signing_set: Vec<KeygenPartyId>,
-		async_index: u8,
-	) -> Result<Pin<Box<dyn Future<Output = Result<u8, DKGError>> + Send + 'static>>, DKGError> {
+	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn Future<Output = Result<(), DKGError>> + Send + 'static>>), DKGError> {
 		let async_proto_params = dkg_worker.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
 			party_i,
 			session_id,
 			stage,
-			async_index,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
 		)?;
 
+        let handle = async_proto_params.handle.clone();
+
 		let err_handler_tx = dkg_worker.error_handler.clone();
-		let proposal_hashes =
-			unsigned_proposals.iter().filter_map(|p| p.hash()).collect::<Vec<_>>();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
-			unsigned_proposals,
+			unsigned_proposal,
 			signing_set,
-			async_index,
 		)?;
 		let logger = dkg_worker.logger.clone();
-		let work_manager = self.work_manager.clone();
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
 					logger.info("The meta handler has executed successfully".to_string());
-					Ok(async_index)
+					Ok(())
 				},
 
 				Err(err) => {
 					logger.error(format!("Error executing meta handler {:?}", &err));
 					let _ = err_handler_tx.send(err.clone());
-					// remove proposal hashes, so that they can be reprocessed
-					let mut lock = work_manager.currently_signing_proposals.write();
-					proposal_hashes.iter().for_each(|h| {
-						lock.remove(h);
-					});
-					logger.info(format!(
-						"Removed {:?} proposal hashes from currently signing queue",
-						proposal_hashes.len()
-					));
 					Err(err)
 				},
 			}
 		};
 
-		Ok(Box::pin(task))
+		Ok((handle, Box::pin(task)))
+	}
+
+    	/// After keygen, this should be called to generate a random set of signers
+	/// NOTE: since the random set is called using a deterministic seed to and RNG,
+	/// the resulting set is deterministic
+	fn generate_signers(
+		&self,
+		seed: &[u8],
+		t: u16,
+		best_authorities: Vec<(KeygenPartyId, Public)>,
+        dkg_worker: &DKGWorker<B, BE, C, GE>
+	) -> Result<Vec<KeygenPartyId>, DKGError> {
+		let only_public_keys = best_authorities.iter().map(|(_, p)| p).cloned().collect::<Vec<_>>();
+		let mut final_set = dkg_worker.get_unjailed_signers(&only_public_keys)?;
+		// Mutate the final set if we don't have enough unjailed signers
+		if final_set.len() <= t as usize {
+			let jailed_set = dkg_worker.get_jailed_signers(&only_public_keys)?;
+			let diff = t as usize + 1 - final_set.len();
+			final_set = final_set
+				.iter()
+				.chain(jailed_set.iter().take(diff))
+				.cloned()
+				.collect::<Vec<_>>();
+		}
+
+		select_random_set(seed, final_set, t + 1)
+			.map(|set| set.into_iter().flat_map(KeygenPartyId::try_from).collect::<Vec<_>>())
+			.map_err(|err| DKGError::CreateOfflineStage {
+				reason: format!("generate_signers failed, reason: {err}"),
+			})
 	}
 }

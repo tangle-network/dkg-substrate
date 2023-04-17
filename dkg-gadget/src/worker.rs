@@ -21,24 +21,20 @@ use crate::{
 };
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
-use dkg_primitives::utils::select_random_set;
 use sc_network::NetworkService;
 use sp_consensus::SyncOracle;
 
 use futures::StreamExt;
-use itertools::Itertools;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::RwLock;
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
-use sp_arithmetic::traits::CheckedRem;
 use sp_core::ecdsa;
-use sp_runtime::traits::{Block, Get, Header, NumberFor, Zero};
+use crate::signing_manager::SigningManager;
+use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
-	future::Future,
 	marker::PhantomData,
-	pin::Pin,
 	sync::{
 		atomic::{AtomicUsize, Ordering},
 		Arc,
@@ -57,7 +53,7 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength, UnsignedProposal,
+	MaxProposalLength, MaxReporters, MaxSignatureLength,
 	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
@@ -132,7 +128,7 @@ where
 	// Next keygen round, always taken and restarted each session
 	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Signing rounds, created everytime there are unique unsigned proposals
-	pub signing_rounds: Shared<Vec<Option<AsyncProtocolRemote<NumberFor<B>>>>>,
+	pub signing_rounds: Shared<HashMap<[u8; 32], AsyncProtocolRemote<NumberFor<B>>>>,
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
@@ -161,6 +157,7 @@ where
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
+	pub signing_manager: SigningManager<B, BE, C, GE>,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
@@ -207,6 +204,7 @@ where
 			keygen_retry_count: self.keygen_retry_count.clone(),
 			network: self.network.clone(),
 			logger: self.logger.clone(),
+			signing_manager: self.signing_manager.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -248,7 +246,7 @@ where
 		} = worker_params;
 
 		let (error_handler, _) = tokio::sync::broadcast::channel(1024);
-
+		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone());
 		DKGWorker {
 			client,
 			misbehaviour_tx: None,
@@ -260,7 +258,7 @@ where
 			metrics: Arc::new(metrics),
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
-			signing_rounds: Arc::new(RwLock::new(vec![None; MAX_SIGNING_SETS as _])),
+			signing_rounds: Arc::new(RwLock::new(HashMap::new())),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			next_best_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
@@ -275,16 +273,17 @@ where
 			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			logger,
 			network,
+			signing_manager,
 			_backend: PhantomData,
 		}
 	}
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum ProtoStageType {
+pub enum ProtoStageType {
 	Genesis,
 	Queued,
-	Signing,
+	Signing { unsigned_proposal_hash: [u8; 32] },
 }
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
@@ -299,14 +298,13 @@ where
 	// if "current" is true, this will set the "rounds" field in the dkg worker, otherwise,
 	// it well set the "next_rounds" field
 	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
-	fn generate_async_proto_params(
+	pub(crate) fn generate_async_proto_params(
 		&self,
 		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
 		stage: ProtoStageType,
-		async_index: u8,
 		protocol_name: &str,
 	) -> Result<
 		AsyncProtocolParameters<
@@ -325,7 +323,7 @@ where
 		let active_local_key = match stage {
 			ProtoStageType::Genesis => None,
 			ProtoStageType::Queued => None,
-			ProtoStageType::Signing => {
+			ProtoStageType::Signing { .. } => {
 				let optional_session_id = Some(session_id);
 				let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
 				active_local_key
@@ -398,38 +396,38 @@ where
 				*lock = Some(status_handle);
 			},
 			// When we are at signing stage, it is using the active rounds.
-			ProtoStageType::Signing => {
+			ProtoStageType::Signing { unsigned_proposal_hash } => {
 				self.logger
-					.debug(format!("Starting signing protocol (async_index #{async_index})"));
+					.debug(format!("Starting signing protocol"));
 				let mut lock = self.signing_rounds.write();
 				// first, check if the async_index is already in use and if so, and it is still
 				// running, return an error and print a warning that we will overwrite the previous
 				// round.
-				if let Some(Some(current_round)) = lock.get(async_index as usize) {
+				if let Some(current_round) = lock.get(&unsigned_proposal_hash) {
 					// check if it has stalled or not, if so, we can overwrite it
 					// TODO: Write more on what we should be going here since it's all the same
 					if current_round.signing_has_stalled(now) {
 						// the round has stalled, so we can overwrite it
 						self.logger.warn(format!(
-							"signing round async index #{async_index} has stalled, overwriting it"
+							"signing round {unsigned_proposal_hash:?} has stalled, overwriting it"
 						));
-						lock[async_index as usize] = Some(status_handle)
+						lock.insert(unsigned_proposal_hash, status_handle);
 					} else if current_round.is_active() {
 						self.logger.warn(
 							"Overwriting rounds will result in termination of previous rounds!"
 								.to_string(),
 						);
-						lock[async_index as usize] = Some(status_handle)
+						lock.insert(unsigned_proposal_hash, status_handle);
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						self.logger.debug(format!(
-							"signing round async index #{async_index} is not active, overwriting it"
+							"signing round {unsigned_proposal_hash:?} is not active, overwriting it"
 						));
-						lock[async_index as usize] = Some(status_handle)
+						lock.insert(unsigned_proposal_hash, status_handle);
 					}
 				} else {
 					// otherwise, we can safely write to this slot.
-					lock[async_index as usize] = Some(status_handle);
+					lock.insert(unsigned_proposal_hash, status_handle);
 				}
 			},
 		}
@@ -461,7 +459,6 @@ where
 			party_i,
 			session_id,
 			stage,
-			0u8,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
 		) {
 			Ok(async_proto_params) => {
@@ -1069,11 +1066,8 @@ where
 			// clear the currently being signing proposals cache.
 			self.currently_signing_proposals.write().clear();
 			// Reset all the signing rounds.
-			self.signing_rounds.write().iter_mut().for_each(|v| {
-				if let Some(r) = v.as_mut() {
-					let _ = r.shutdown("Rotating next round");
-				}
-				*v = None;
+			self.signing_rounds.write().values().for_each(|v| {
+				let _ = v.shutdown("Rotating next round");
 			});
 			// Reset per session metrics
 			if let Some(metrics) = self.metrics.as_ref() {
@@ -1253,9 +1247,7 @@ where
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
-				let async_index = msg.msg.payload.get_async_index();
-				self.logger.debug(format!("Received message for async index {async_index}"));
-				if let Some(Some(rounds)) = self.signing_rounds.read().get(async_index as usize) {
+				if let Some(rounds) = self.rounds.read().as_ref() {
 					self.logger.debug(format!(
 						"Message is for signing execution in session {}",
 						rounds.session_id
@@ -1276,11 +1268,8 @@ where
 						self.logger.error(&message);
 						return Err(DKGError::GenericError { reason: message })
 					}
-				} else {
-					let message = format!("No signing rounds for async index {async_index}");
-					self.logger.error(&message);
-					return Err(DKGError::GenericError { reason: message })
 				}
+
 				Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
@@ -1387,35 +1376,6 @@ where
 		self.signing_manager.on_block_finalized(header, self)
 	}
 
-	/// After keygen, this should be called to generate a random set of signers
-	/// NOTE: since the random set is called using a deterministic seed to and RNG,
-	/// the resulting set is deterministic
-	fn generate_signers(
-		&self,
-		seed: &[u8],
-		t: u16,
-		best_authorities: Vec<(KeygenPartyId, Public)>,
-	) -> Result<Vec<KeygenPartyId>, DKGError> {
-		let only_public_keys = best_authorities.iter().map(|(_, p)| p).cloned().collect::<Vec<_>>();
-		let mut final_set = self.get_unjailed_signers(&only_public_keys)?;
-		// Mutate the final set if we don't have enough unjailed signers
-		if final_set.len() <= t as usize {
-			let jailed_set = self.get_jailed_signers(&only_public_keys)?;
-			let diff = t as usize + 1 - final_set.len();
-			final_set = final_set
-				.iter()
-				.chain(jailed_set.iter().take(diff))
-				.cloned()
-				.collect::<Vec<_>>();
-		}
-
-		select_random_set(seed, final_set, t + 1)
-			.map(|set| set.into_iter().flat_map(KeygenPartyId::try_from).collect::<Vec<_>>())
-			.map_err(|err| DKGError::CreateOfflineStage {
-				reason: format!("generate_signers failed, reason: {err}"),
-			})
-	}
-
 	fn get_jailed_signers_inner(
 		&self,
 		best_authorities: &[Public],
@@ -1430,7 +1390,7 @@ where
 			.get_signing_jailed(at, best_authorities.to_vec())
 			.unwrap_or_default())
 	}
-	fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+	pub(crate) fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
 		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
 		Ok(best_authorities
 			.iter()
@@ -1441,7 +1401,7 @@ where
 	}
 
 	/// Get the jailed signers
-	fn get_jailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+	pub(crate) fn get_jailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
 		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
 		Ok(best_authorities
 			.iter()
