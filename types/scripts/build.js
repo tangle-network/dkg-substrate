@@ -82,6 +82,7 @@ async function buildJs(dir) {
     console.log(`*** ${name} ${version}`);
 
     mkdirp.sync('build');
+    copyMiscFiles();
   }
 }
 
