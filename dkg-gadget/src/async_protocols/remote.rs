@@ -244,6 +244,10 @@ impl<C> AsyncProtocolRemote<C> {
 		matches!(state, MetaHandlerStatus::Terminated)
 	}
 
+	pub fn is_done(&self) -> bool {
+		self.is_terminated() || self.is_completed()
+	}
+
 	pub fn current_round_blame(&self) -> CurrentRoundBlame {
 		self.current_round_blame.borrow().clone()
 	}

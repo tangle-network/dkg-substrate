@@ -24,13 +24,13 @@ use curv::elliptic::curves::Secp256k1;
 use sc_network::NetworkService;
 use sp_consensus::SyncOracle;
 
+use crate::signing_manager::SigningManager;
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use parking_lot::RwLock;
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
 use sp_core::ecdsa;
-use crate::signing_manager::SigningManager;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{
 	collections::{BTreeSet, HashMap, HashSet},
@@ -53,8 +53,7 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength,
-	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
+	MaxProposalLength, MaxReporters, MaxSignatureLength, GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -397,8 +396,7 @@ where
 			},
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing { unsigned_proposal_hash } => {
-				self.logger
-					.debug(format!("Starting signing protocol"));
+				self.logger.debug(format!("Starting signing protocol"));
 				let mut lock = self.signing_rounds.write();
 				// first, check if the async_index is already in use and if so, and it is still
 				// running, return an error and print a warning that we will overwrite the previous
@@ -516,7 +514,6 @@ where
 			},
 		}
 	}
-
 
 	/// Fetch the stored local keys if they exist.
 	///
@@ -1390,7 +1387,10 @@ where
 			.get_signing_jailed(at, best_authorities.to_vec())
 			.unwrap_or_default())
 	}
-	pub(crate) fn get_unjailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+	pub(crate) fn get_unjailed_signers(
+		&self,
+		best_authorities: &[Public],
+	) -> Result<Vec<u16>, DKGError> {
 		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
 		Ok(best_authorities
 			.iter()
@@ -1401,7 +1401,10 @@ where
 	}
 
 	/// Get the jailed signers
-	pub(crate) fn get_jailed_signers(&self, best_authorities: &[Public]) -> Result<Vec<u16>, DKGError> {
+	pub(crate) fn get_jailed_signers(
+		&self,
+		best_authorities: &[Public],
+	) -> Result<Vec<u16>, DKGError> {
 		let jailed_signers = self.get_jailed_signers_inner(best_authorities)?;
 		Ok(best_authorities
 			.iter()

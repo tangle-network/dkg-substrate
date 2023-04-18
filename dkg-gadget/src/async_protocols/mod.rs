@@ -116,9 +116,7 @@ impl<
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> AsyncProtocolParameters<BI, MaxAuthorities>
 {
-	pub fn get_next_batch_key(
-		&self,
-	) -> BatchKey {
+	pub fn get_next_batch_key(&self) -> BatchKey {
 		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: 1 }
 	}
 }
@@ -408,9 +406,7 @@ where
 			logger.info(format!("Running AsyncProtocol with party_index: {}", params.party_i));
 			let res = async_proto.run().await;
 			match res {
-				Ok(v) =>
-					return SM::on_finish(v, params_for_end_of_proto, additional_param)
-						.await,
+				Ok(v) => return SM::on_finish(v, params_for_end_of_proto, additional_param).await,
 				Err(err) => match err {
 					async_runtime::Error::Recv(e) |
 					async_runtime::Error::Proceed(e) |

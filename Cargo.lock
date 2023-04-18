@@ -2479,7 +2479,6 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
  "round-based",
  "rstest",
  "sc-client-api",
@@ -2501,6 +2500,7 @@ dependencies = [
  "sp-runtime",
  "strum 0.21.0",
  "substrate-prometheus-endpoint",
+ "sync_wrapper",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -12389,6 +12389,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "sync_wrapper"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
 
 [[package]]
 name = "synstructure"
