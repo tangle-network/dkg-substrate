@@ -30,7 +30,6 @@ use std::sync::Arc;
 //
 use crate::{worker::KeystoreExt, DKGKeystore};
 use codec::Encode;
-use dkg_logging::trace;
 use dkg_primitives::types::{DKGMessage, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 
@@ -59,17 +58,15 @@ pub(crate) fn sign_and_send_messages<GE>(
 				// recipient or not. So it is up to the underlying gossip engine to decide
 				// whether to gossip or not.
 				if let Err(e) = gossip_engine.gossip(signed_dkg_message) {
-					dkg_logging::error!(target: "dkg_gadget::gossip", "Error sending message: {:?}", e);
+					gossip_engine.logger().error(format!("Error sending message: {e:?}"));
 				}
 			},
-			Err(e) => trace!(
-				target: "dkg_gadget::gossip",
-				"🕸️  Error signing DKG message: {:?}",
-				e
-			),
+			Err(e) => gossip_engine.logger().trace(format!("🕸️  Error signing DKG message: {e:?}")),
 		};
 
-		trace!(target: "dkg_gadget::gossip", "🕸️  Sent DKG Message of len {}", dkg_message.encoded_size());
+		gossip_engine
+			.logger()
+			.trace(format!("🕸️  Sent DKG Message of len {}", dkg_message.encoded_size()));
 	}
 }
 

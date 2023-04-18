@@ -209,7 +209,7 @@ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
 ```
 
 Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
-instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate dirctories for the DB.
+instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate directories for the DB.
 
 <h3 id="para"> Run local testnet with <a href="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
 
@@ -236,12 +236,22 @@ docker-compose up -d --build
 
 <h2 id="test"> Testing 🧪 </h2>
 
-The following instructions outlines how to run dkg-substrate's base test suite and E2E test suite.
+The following instructions outline how to run dkg-substrate's base test suite and E2E test suite.
 
 ### To run base tests
 
 ```
 cargo test
+```
+
+### To run the test orchestrator E2E tests (recommended)
+
+```
+# Build the dkg-standalone node
+cargo build --release -p dkg-standalone-node --features=integration-tests,testing
+
+# run the orchestrator, making sure to use the proper config
+cargo run --package dkg-test-orchestrator --release --features=testing -- --config /path/to/orchestrator_config.toml
 ```
 
 ### To run E2E tests

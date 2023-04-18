@@ -48,3 +48,4 @@ std = [
 	"frame-system/std",
 	"frame-support/std",
 ]
+testing = []

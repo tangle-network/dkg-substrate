@@ -236,7 +236,7 @@ fn add_remove_relayer() {
 
 pub fn make_proposal<const N: usize>(
 	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
-) -> Vec<u8> {
+) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
 	// Create the proposal Header
 	let r_id = ResourceId::from([
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
@@ -258,8 +258,6 @@ pub fn make_proposal<const N: usize>(
 			},
 		_ => panic!("Invalid proposal type"),
 	}
-	.data()
-	.clone()
 }
 
 #[test]
@@ -269,12 +267,10 @@ fn create_successful_proposal() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
+		let proposal = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
-		})
-		.try_into()
-		.unwrap();
+		});
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
 			RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
@@ -331,30 +327,35 @@ fn create_successful_proposal() {
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_B),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_C),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: typed_chain_id,
+				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 			}),
 			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
-				data: proposal.into(),
+				data: proposal.data().clone(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 			}),
 		]);
 	})
@@ -367,12 +368,10 @@ fn create_unsucessful_proposal() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
+		let proposal = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
-		})
-		.try_into()
-		.unwrap();
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -417,7 +416,7 @@ fn create_unsucessful_proposal() {
 			r_id,
 			proposal.clone(),
 		));
-		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected =
 			ProposalVotes::<AccountId, u64, <Test as pallet_dkg_proposals::Config>::MaxVotes> {
 				votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
@@ -434,21 +433,25 @@ fn create_unsucessful_proposal() {
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
+				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_B),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
 				chain_id: typed_chain_id,
+				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_C),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 			}),
 		]);
 	})
@@ -461,12 +464,10 @@ fn execute_after_threshold_change() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
+		let proposal = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
-		})
-		.try_into()
-		.unwrap();
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -510,6 +511,7 @@ fn execute_after_threshold_change() {
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
@@ -518,15 +520,17 @@ fn execute_after_threshold_change() {
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 			}),
 			RuntimeEvent::DKGProposalHandler(pallet_dkg_proposal_handler::Event::ProposalAdded {
 				key: DKGPayloadKey::AnchorUpdateProposal(prop_id),
 				target_chain: typed_chain_id,
-				data: proposal.into(),
+				data: proposal.data().clone(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
 				chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
+				kind: proposal.kind(),
 			}),
 		]);
 	})
@@ -539,12 +543,10 @@ fn proposal_expires() {
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
-		let proposal: BoundedVec<_, _> = make_proposal::<64>(Proposal::Unsigned {
+		let proposal = make_proposal::<64>(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
-		})
-		.try_into()
-		.unwrap();
+		});
 
 		// Create proposal (& vote)
 		assert_ok!(DKGProposals::acknowledge_proposal(
@@ -607,7 +609,7 @@ fn proposal_expires() {
 			),
 			Error::<Test>::ProposalExpired
 		);
-		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal)).unwrap();
+		let prop = DKGProposals::votes(typed_chain_id, (prop_id, proposal.clone())).unwrap();
 		let expected = ProposalVotes {
 			votes_for: vec![mock_pub_key(PROPOSER_A)].try_into().unwrap(),
 			votes_against: vec![].try_into().unwrap(),
@@ -619,6 +621,7 @@ fn proposal_expires() {
 		assert_events(vec![RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
 			chain_id: typed_chain_id,
 			proposal_nonce: prop_id,
+			kind: proposal.kind(),
 			who: mock_pub_key(PROPOSER_A),
 		})]);
 	})
@@ -712,7 +715,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone().try_into().unwrap(),
+				proposal.clone(),
 			),
 			crate::Error::<Test>::MustBeProposer
 		);
@@ -723,7 +726,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 			prop_id,
 			typed_chain_id,
 			r_id,
-			proposal.clone().try_into().unwrap(),
+			proposal.clone(),
 		));
 
 		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
@@ -734,7 +737,7 @@ fn only_current_authorities_should_make_successful_proposals() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.try_into().unwrap(),
+				proposal,
 			),
 			crate::Error::<Test>::MustBeProposer
 		);

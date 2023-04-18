@@ -93,6 +93,10 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       maxAdditionalFields: u32 & AugmentedConst<ApiType>;
       /**
+       * Max length of a proposal
+       **/
+      maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum number of resources that may be stored in a bridge. This is not to be confused
        * with the actual maximum supported by the bridge. Needed to bound the I/O
        * required to access a metadata object, but can be pretty high.
@@ -104,6 +108,22 @@ declare module '@polkadot/api-base/types/consts' {
       [key: string]: Codec;
     };
     dkg: {
+      /**
+       * Max authorities to store
+       **/
+      maxAuthorities: u32 & AugmentedConst<ApiType>;
+      /**
+       * MaxLength for keys
+       **/
+      maxKeyLength: u32 & AugmentedConst<ApiType>;
+      /**
+       * Max reporters to store
+       **/
+      maxReporters: u32 & AugmentedConst<ApiType>;
+      /**
+       * MaxLength for signature
+       **/
+      maxSignatureLength: u32 & AugmentedConst<ApiType>;
       /**
        * Percentage session should have progressed for refresh to begin
        **/
@@ -133,6 +153,10 @@ declare module '@polkadot/api-base/types/consts' {
     };
     dkgProposalHandler: {
       /**
+       * Max length of a proposal
+       **/
+      maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
        * Max number of signed proposal submissions per batch;
        **/
       maxSubmissionsPerBatch: u16 & AugmentedConst<ApiType>;
@@ -152,6 +176,26 @@ declare module '@polkadot/api-base/types/consts' {
        * set of bridged chains.
        **/
       chainIdentifier: WebbProposalsHeaderTypedChainId & AugmentedConst<ApiType>;
+      /**
+       * The max authority proposers that can be stored in storage
+       **/
+      maxAuthorityProposers: u32 & AugmentedConst<ApiType>;
+      /**
+       * The max external proposer accounts that can be stored in storage
+       **/
+      maxExternalProposerAccounts: u32 & AugmentedConst<ApiType>;
+      /**
+       * Max length of a proposal
+       **/
+      maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
+       * The max resources that can be stored in storage
+       **/
+      maxResources: u32 & AugmentedConst<ApiType>;
+      /**
+       * The max votes to store for for and against
+       **/
+      maxVotes: u32 & AugmentedConst<ApiType>;
       /**
        * The session period
        **/
@@ -260,6 +304,15 @@ declare module '@polkadot/api-base/types/consts' {
        * Max Authorities in use
        **/
       maxAuthorities: u32 & AugmentedConst<ApiType>;
+      /**
+       * The maximum number of entries to keep in the set id to session index mapping.
+       * 
+       * Since the `SetIdSession` map is only used for validating equivocations this
+       * value should relate to the bonding duration of whatever staking system is
+       * being used (if any). If equivocation handling is not enabled then this value
+       * can be zero.
+       **/
+      maxSetIdSessionEntries: u64 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

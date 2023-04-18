@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
+use crate::{
+	debug_logger::DebugLogger, storage::proposals::generate_delayed_submit_at,
+	worker::MAX_SUBMISSION_DELAY, Client,
+};
 use codec::Encode;
 use dkg_primitives::types::{DKGError, SessionId};
 use dkg_runtime_primitives::{
@@ -35,6 +38,7 @@ pub(crate) fn store_aggregated_public_keys<B, C, BE, MaxProposalLength>(
 	is_genesis_round: bool,
 	session_id: SessionId,
 	current_block_number: NumberFor<B>,
+	logger: &DebugLogger,
 ) -> Result<(), DKGError>
 where
 	B: Block,
@@ -65,6 +69,7 @@ where
 			current_block_number,
 			AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
 			SUBMIT_GENESIS_KEYS_AT,
+			logger,
 		);
 	} else {
 		//dkg_worker.dkg_state.listening_for_pub_key = false;
@@ -74,6 +79,7 @@ where
 			current_block_number,
 			AGGREGATED_PUBLIC_KEYS,
 			SUBMIT_KEYS_AT,
+			logger,
 		);
 		let _ = aggregated_public_keys.remove(&session_id);
 	}
@@ -88,6 +94,7 @@ pub fn perform_storing_of_aggregated_public_keys<B, BE>(
 	current_block_number: NumberFor<B>,
 	aggregated_keys: &[u8],
 	submit_keys: &[u8],
+	logger: &DebugLogger,
 ) where
 	B: Block,
 	BE: Backend<B>,
@@ -95,11 +102,7 @@ pub fn perform_storing_of_aggregated_public_keys<B, BE>(
 	offchain.set(STORAGE_PREFIX, aggregated_keys, &keys.encode());
 	let submit_at = generate_delayed_submit_at::<B>(current_block_number, MAX_SUBMISSION_DELAY);
 	if let Some(submit_at) = submit_at {
-		dkg_logging::debug!(
-			target: "dkg_gadget::storage::public_keys",
-			"Storing aggregated public keys at block {}",
-			submit_at,
-		);
+		logger.debug(format!("Storing aggregated public keys at block {submit_at}"));
 		offchain.set(STORAGE_PREFIX, submit_keys, &submit_at.encode());
 	}
 }

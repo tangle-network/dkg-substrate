@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-	AsyncProtocolParameters, ProtocolType,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+		AsyncProtocolParameters, ProtocolType,
+	},
+	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
@@ -34,36 +37,38 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Keygen(msg) => {
-				dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Handling Keygen inbound message from id={}, session={}", msg.sender_id, session_id);
-				let message: Msg<ProtocolMessage> = match serde_json::from_slice(
-					msg.keygen_msg.as_slice(),
-				) {
-					Ok(message) => message,
-					Err(err) => {
-						dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error deserializing message: {}", err);
-						// Skip this message.
-						return Ok(())
-					},
-				};
+				logger.info_keygen(format!(
+					"Handling Keygen inbound message from id={}, session={}",
+					msg.sender_id, session_id
+				));
+				let message: Msg<ProtocolMessage> =
+					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
+						Ok(message) => message,
+						Err(err) => {
+							logger.error_keygen(format!("Error deserializing message: {err}"));
+							// Skip this message.
+							return Ok(())
+						},
+					};
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
-						dkg_logging::info!("Skipping passing of message to async proto since not intended for local");
+						logger.info_keygen("Skipping passing of message to async proto since not intended for local");
 						return Ok(())
 					}
 				}
 				if let Err(e) = to_async_proto.unbounded_send(message) {
-					dkg_logging::error!(target: "dkg_gadget::async_protocol::keygen", "Error sending message to async proto: {}", e);
+					logger.error_keygen(format!("Error sending message to async proto: {e}"));
 				}
 			},
 
-			err =>
-				dkg_logging::debug!(target: "dkg_gadget::async_protocol::keygen", "Invalid payload received: {:?}", err),
+			err => logger.debug_keygen(format!("Invalid payload received: {err:?}")),
 		}
 
 		Ok(())
@@ -75,7 +80,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		_: Self::AdditionalReturnParam,
 		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
-		dkg_logging::info!(target: "dkg_gadget::async_protocol::keygen", "Completed keygen stage successfully!");
+		params.logger.info_keygen("Completed keygen stage successfully!".to_string());
 		// PublicKeyGossip (we need meta handler to handle this)
 		// when keygen finishes, we gossip the signed key to peers.
 		// [1] create the message, call the "public key gossip" in
@@ -88,8 +93,11 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 			signature: vec![],
 		};
 
-		params.engine.gossip_public_key(pub_key_msg)?;
+		// gossip the public key at the end, storing it locally first because of causal ordering:
+		// the handler of the gossip public key message will need access to the locally stored
+		// public key. Thus, store the public key first, then, broadcast the message.
 		params.engine.store_public_key(local_key.clone(), session_id)?;
+		params.engine.gossip_public_key(pub_key_msg)?;
 
 		Ok(local_key)
 	}

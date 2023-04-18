@@ -95,7 +95,6 @@ pub mod mock;
 mod tests;
 pub mod types;
 pub mod utils;
-use codec::EncodeLike;
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
 	TypedChainId,
@@ -128,10 +127,17 @@ pub mod pallet {
 		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
 		weights::WeightInfo,
 	};
-	use codec::MaxEncodedLen;
-	use dkg_runtime_primitives::ProposalNonce;
-	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
+	use dkg_runtime_primitives::{
+		proposal::{Proposal, ProposalKind},
+		ProposalNonce,
+	};
+	use frame_support::{
+		dispatch::{fmt::Debug, DispatchResultWithPostInfo},
+		pallet_prelude::*,
+	};
 	use frame_system::pallet_prelude::*;
+
+	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -145,9 +151,6 @@ pub mod pallet {
 
 		/// Origin used to administer the pallet
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-
-		/// Proposed transaction blob proposal
-		type Proposal: Parameter + EncodeLike + Into<Vec<u8>> + AsRef<[u8]> + MaxEncodedLen;
 
 		/// Estimate next session rotation
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
@@ -192,6 +195,17 @@ pub mod pallet {
 		type MaxExternalProposerAccounts: Get<u32> + TypeInfo;
 
 		type ProposalHandler: ProposalHandlerTrait;
+
+		/// Max length of a proposal
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>
+			+ Debug
+			+ Clone
+			+ Eq
+			+ PartialEq
+			+ PartialOrd
+			+ Ord
+			+ TypeInfo;
 
 		type WeightInfo: WeightInfo;
 	}
@@ -265,7 +279,7 @@ pub mod pallet {
 		Blake2_256,
 		TypedChainId,
 		Blake2_256,
-		(ProposalNonce, T::Proposal),
+		(ProposalNonce, ProposalOf<T>),
 		ProposalVotes<T::AccountId, T::BlockNumber, T::MaxVotes>,
 	>;
 
@@ -287,17 +301,39 @@ pub mod pallet {
 		/// Proposer removed from set
 		ProposerRemoved { proposer_id: T::AccountId },
 		/// Vote submitted in favour of proposal
-		VoteFor { chain_id: TypedChainId, proposal_nonce: ProposalNonce, who: T::AccountId },
+		VoteFor {
+			kind: ProposalKind,
+			chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+			who: T::AccountId,
+		},
 		/// Vot submitted against proposal
-		VoteAgainst { chain_id: TypedChainId, proposal_nonce: ProposalNonce, who: T::AccountId },
+		VoteAgainst {
+			kind: ProposalKind,
+			chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+			who: T::AccountId,
+		},
 		/// Voting successful for a proposal
-		ProposalApproved { chain_id: TypedChainId, proposal_nonce: ProposalNonce },
+		ProposalApproved {
+			kind: ProposalKind,
+			chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+		},
 		/// Voting rejected a proposal
-		ProposalRejected { chain_id: TypedChainId, proposal_nonce: ProposalNonce },
+		ProposalRejected {
+			kind: ProposalKind,
+			chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+		},
 		/// Execution of call succeeded
-		ProposalSucceeded { chain_id: TypedChainId, proposal_nonce: ProposalNonce },
+		ProposalSucceeded {
+			kind: ProposalKind,
+			chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+		},
 		/// Execution of call failed
-		ProposalFailed { chain_id: TypedChainId, proposal_nonce: ProposalNonce },
+		ProposalFailed { kind: ProposalKind, chain_id: TypedChainId, proposal_nonce: ProposalNonce },
 		/// Proposers have been reset
 		AuthorityProposersReset { proposers: Vec<T::AccountId> },
 	}
@@ -494,7 +530,7 @@ pub mod pallet {
 			nonce: ProposalNonce,
 			src_chain_id: TypedChainId,
 			r_id: ResourceId,
-			prop: T::Proposal,
+			prop: ProposalOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
@@ -516,7 +552,7 @@ pub mod pallet {
 			nonce: ProposalNonce,
 			src_chain_id: TypedChainId,
 			r_id: ResourceId,
-			prop: T::Proposal,
+			prop: ProposalOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
@@ -540,7 +576,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
 			src_chain_id: TypedChainId,
-			prop: T::Proposal,
+			prop: ProposalOf<T>,
 		) -> DispatchResultWithPostInfo {
 			ensure_signed(origin)?;
 
@@ -646,7 +682,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		prop: &ProposalOf<T>,
 		in_favour: bool,
 	) -> DispatchResultWithPostInfo {
 		let now = <frame_system::Pallet<T>>::block_number();
@@ -672,6 +708,7 @@ impl<T: Config> Pallet<T> {
 			Self::deposit_event(Event::VoteFor {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
+				kind: prop.kind(),
 				who,
 			});
 		} else {
@@ -679,6 +716,7 @@ impl<T: Config> Pallet<T> {
 			Self::deposit_event(Event::VoteAgainst {
 				chain_id: src_chain_id,
 				proposal_nonce: nonce,
+				kind: prop.kind(),
 				who,
 			});
 		}
@@ -692,7 +730,7 @@ impl<T: Config> Pallet<T> {
 	fn try_resolve_proposal(
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		if let Some(mut votes) = Votes::<T>::get(src_chain_id, (nonce, prop.clone())) {
 			let now = <frame_system::Pallet<T>>::block_number();
@@ -705,7 +743,7 @@ impl<T: Config> Pallet<T> {
 
 			match status {
 				ProposalStatus::Approved => Self::finalize_execution(src_chain_id, nonce, prop),
-				ProposalStatus::Rejected => Self::cancel_execution(src_chain_id, nonce),
+				ProposalStatus::Rejected => Self::cancel_execution(src_chain_id, nonce, prop),
 				_ => Ok(().into()),
 			}
 		} else {
@@ -719,7 +757,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::commit_vote(who, nonce, src_chain_id, prop, true)?;
 		Self::try_resolve_proposal(nonce, src_chain_id, prop)
@@ -731,7 +769,7 @@ impl<T: Config> Pallet<T> {
 		who: T::AccountId,
 		nonce: ProposalNonce,
 		src_chain_id: TypedChainId,
-		prop: &T::Proposal,
+		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::commit_vote(who, nonce, src_chain_id, prop, false)?;
 		Self::try_resolve_proposal(nonce, src_chain_id, prop)
@@ -741,19 +779,21 @@ impl<T: Config> Pallet<T> {
 	fn finalize_execution(
 		src_chain_id: TypedChainId,
 		nonce: ProposalNonce,
-		prop: &T::Proposal,
+		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved {
 			chain_id: src_chain_id,
 			proposal_nonce: nonce,
+			kind: prop.kind(),
 		});
 		T::ProposalHandler::handle_unsigned_proposal(
-			prop.clone().into(),
+			prop.data().clone(),
 			dkg_runtime_primitives::ProposalAction::Sign(0),
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded {
 			chain_id: src_chain_id,
 			proposal_nonce: nonce,
+			kind: prop.kind(),
 		});
 		Ok(().into())
 	}
@@ -762,10 +802,12 @@ impl<T: Config> Pallet<T> {
 	fn cancel_execution(
 		src_chain_id: TypedChainId,
 		nonce: ProposalNonce,
+		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalRejected {
 			chain_id: src_chain_id,
 			proposal_nonce: nonce,
+			kind: prop.kind(),
 		});
 		Ok(().into())
 	}

@@ -16,9 +16,10 @@ use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use super::{CurrentRoundBlame, ProtocolType};
+use crate::debug_logger::DebugLogger;
 
 pub(crate) struct StateMachineWrapper<
 	T: StateMachine,
@@ -28,6 +29,9 @@ pub(crate) struct StateMachineWrapper<
 	session_id: SessionId,
 	channel_type: ProtocolType<MaxProposalLength>,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
+	// stores a list of received messages
+	received_messages: HashSet<Vec<u8>>,
+	logger: DebugLogger,
 }
 
 impl<
@@ -40,8 +44,16 @@ impl<
 		session_id: SessionId,
 		channel_type: ProtocolType<MaxProposalLength>,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
+		logger: DebugLogger,
 	) -> Self {
-		Self { sm, session_id, channel_type, current_round_blame }
+		Self {
+			sm,
+			session_id,
+			channel_type,
+			current_round_blame,
+			logger,
+			received_messages: HashSet::new(),
+		}
 	}
 
 	fn collect_round_blame(&self) {
@@ -56,33 +68,57 @@ impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 's
 	for StateMachineWrapper<T, MaxProposalLength>
 where
 	T: StateMachine + RoundBlame,
+	<T as StateMachine>::Err: std::fmt::Debug,
+	<T as StateMachine>::MessageBody: serde::Serialize,
 {
 	type Err = T::Err;
 	type Output = T::Output;
 	type MessageBody = T::MessageBody;
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
-		dkg_logging::trace!(
+		self.logger.trace(format!(
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type,
 			self.session_id,
 			self.current_round(),
 			msg.sender
-		);
+		));
+
+		// Before passing to the state machine, make sure that we haven't already received the same
+		// message (this is needed as we use a gossiping protocol to send messages, and we don't
+		// want to process the same message twice)
+		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");
+		if self.received_messages.contains(&msg_serde) {
+			self.logger.trace(format!(
+				"Already received message for {:?} from session={}, round={}, sender={}",
+				self.channel_type,
+				self.session_id,
+				self.current_round(),
+				msg.sender
+			));
+			return Ok(())
+		} else {
+			self.received_messages.insert(msg_serde);
+		}
+
 		let result = self.sm.handle_incoming(msg);
+		if let Some(err) = result.as_ref().err() {
+			self.logger.error(format!("StateMachine error: {err:?}"));
+		}
+
 		self.collect_round_blame();
 		result
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		if !self.sm.message_queue().is_empty() {
-			dkg_logging::trace!(
+			self.logger.trace(format!(
 				"Preparing to drain message queue for {:?} in session={}, round={}, queue size={}",
 				self.channel_type,
 				self.session_id,
 				self.current_round(),
 				self.sm.message_queue().len(),
-			);
+			));
 		}
 		self.sm.message_queue()
 	}
@@ -92,18 +128,18 @@ where
 	}
 
 	fn proceed(&mut self) -> Result<(), Self::Err> {
-		dkg_logging::trace!(
+		self.logger.trace(format!(
 			"Trying to proceed: current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.current_round(),
 			self.round_blame(),
-		);
+		));
 		let result = self.sm.proceed();
-		dkg_logging::trace!(
+		self.logger.trace(format!(
 			"Proceeded through SM: ({:?}), new current round ({:?}), waiting for msgs from parties: ({:?})",
 			self.channel_type,
 			self.current_round(),
 			self.round_blame(),
-		);
+		));
 		self.collect_round_blame();
 		result
 	}

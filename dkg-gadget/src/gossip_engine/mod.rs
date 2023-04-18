@@ -32,7 +32,7 @@ mod network;
 
 pub use network::{GossipHandler, GossipHandlerController, NetworkGossipEngineBuilder};
 
-use crate::{worker::KeystoreExt, DKGKeystore};
+use crate::{debug_logger::DebugLogger, worker::KeystoreExt, DKGKeystore};
 
 /// A GossipEngine that can be used to send DKG messages.
 ///
@@ -41,8 +41,8 @@ use crate::{worker::KeystoreExt, DKGKeystore};
 /// - `gossip` which will send a DKG message to all peers.
 /// - `stream` which will return a stream of DKG messages.
 #[auto_impl(Arc,Box,&)]
-pub trait GossipEngineIface: Send + Sync {
-	type Clock: AtLeast32BitUnsigned + Send + Sync;
+pub trait GossipEngineIface: Send + Sync + 'static {
+	type Clock: AtLeast32BitUnsigned + Send + Sync + 'static;
 	/// Send a DKG message to a specific peer.
 	fn send(
 		&self,
@@ -66,6 +66,9 @@ pub trait GossipEngineIface: Send + Sync {
 
 	/// Clears the Message Queue.
 	fn clear_queue(&self);
+
+	fn local_peer_id(&self) -> PeerId;
+	fn logger(&self) -> &DebugLogger;
 }
 
 /// A Stub implementation of the GossipEngineIface.
@@ -95,6 +98,14 @@ impl GossipEngineIface for () {
 	fn acknowledge_last_message(&self) {}
 
 	fn clear_queue(&self) {}
+
+	fn local_peer_id(&self) -> PeerId {
+		PeerId::random()
+	}
+
+	fn logger(&self) -> &DebugLogger {
+		panic!()
+	}
 }
 
 /// A Handshake message that is sent when a peer connects to us, to verify that the peer Id (which

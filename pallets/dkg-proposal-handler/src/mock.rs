@@ -186,8 +186,8 @@ impl pallet_dkg_proposals::Config for Test {
 	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
+	type MaxProposalLength = MaxProposalLength;
 	type RuntimeEvent = RuntimeEvent;
-	type Proposal = BoundedVec<u8, MaxProposalLength>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
 	type ProposalLifetime = ProposalLifetime;
 	type ProposalHandler = DKGProposalHandler;

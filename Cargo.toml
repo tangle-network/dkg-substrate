@@ -16,7 +16,9 @@ members = [
 	'dkg-primitives',
 	'dkg-runtime-primitives',
 	'dkg-gadget',
-	'dkg-logging'
+	'dkg-logging',
+	'dkg-mock-blockchain',
+	'dkg-test-orchestrator'
 ]
 
 [workspace.dependencies]
@@ -31,6 +33,8 @@ dkg-primitives = { path = "dkg-primitives", default-features = false }
 dkg-standalone-runtime = { version = "3.0.0", path = "standalone/runtime" }
 dkg-logging = { path = "dkg-logging" }
 dkg-rococo-runtime = { default-features = false, path = "parachain/runtime/rococo" }
+dkg-mock-blockchain = { path = "dkg-mock-blockchain", default-features = false }
+dkg-test-orchestrator = { path = "dkg-test-orchestrator", default-features = false }
 
 futures = "0.3.15"
 clap = { version = "4.0.32", features = ["derive"] }
@@ -39,16 +43,18 @@ hex-literal = { package = "hex-literal", version = "0.3.3" }
 jsonrpsee = { version = "0.16.2", features = ["server"] }
 smallvec = { version = "1.6.1", default-features = false }
 log = { version = "0.4.14", default-features = false }
-parking_lot = "0.11"
+parking_lot = "0.12.1"
 thiserror = "1.0"
 hex = { version = "0.4", default-features = false }
 strum = { version = "0.21", features = ["derive"] }
 linked-hash-map = "0.5.4"
 round-based = { version = "0.1.7", features = [] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
+humantime-serde = { version = "1.1.1", default-features = false }
 serde_json = "1.0.59"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
 tokio = { version = "1.17.0", default-features = false, features = ["sync", "macros"] }
+tokio-util = { version = "0.7.7", default-features = false, features = ["codec"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }
 atomic = "0.5.1"
 async-trait = "0.1.53"
@@ -59,6 +65,8 @@ env_logger = "0.9.0"
 webb-proposals = { git = "https://github.com/webb-tools/webb-rs", default-features = false, features = ["scale", "evm", "substrate"], branch = "polkadot-v0.9.39" }
 curv = { package = "curv-kzen", version = "0.10.0", default-features = false }
 libsecp256k1 = { version = "0.7.1", default-features = false }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.5"
 
 scale-info = { version = "2.1.1", default-features = false, features = ["derive"] }
 
@@ -117,6 +125,8 @@ sp-application-crypto = { git = "https://github.com/paritytech/substrate", branc
 sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
+sp-trie = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
+sp-state-machine = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
 
 sc-cli = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
 sc-executor = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
@@ -139,6 +149,7 @@ sc-chain-spec = { default-features = false, git = "https://github.com/paritytech
 sc-rpc = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
 sc-sysinfo = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
 sc-tracing = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
+sc-utils = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39", default-features = false }
 try-runtime-cli = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
 
 cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.39", default-features = false }
@@ -165,6 +176,7 @@ polkadot-cli = { git = "https://github.com/paritytech/polkadot", branch = "relea
 polkadot-primitives = { default-features = false, git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.39"}
 polkadot-service = { default-features = false, git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.39"}
 
+
 xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.39", default-features = false }
 xcm-builder = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.39", default-features = false }
 xcm-executor = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.39", default-features = false }
@@ -180,6 +192,14 @@ frame-benchmarking-cli = { default-features = false, git = "https://github.com/p
 # build deps
 substrate-wasm-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
 substrate-build-script-utils = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.39" }
+
+# utils
+toml = { version = "0.7.2", default-features = false }
+uuid = { version = "1.3.0", default-features = false }
+bytes = { version = "1.4.0", default-features = false }
+bincode2 = { version = "2.0.1", default-features = false }
+structopt = { version = "0.3.26", default-features = false }
+hash-db = { version = "0.15.2", default-features = false }
 
 [profile.release]
 panic = 'unwind'

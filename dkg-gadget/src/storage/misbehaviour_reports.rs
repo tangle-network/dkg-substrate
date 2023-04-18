@@ -16,7 +16,6 @@
 // limitations under the License.
 use crate::{gossip_engine::GossipEngineIface, worker::DKGWorker, Client};
 use codec::Encode;
-use dkg_logging::trace;
 use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::AGGREGATED_MISBEHAVIOUR_REPORTS,
@@ -59,10 +58,8 @@ where
 
 	let mut offchain = maybe_offchain.unwrap();
 	offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
-	trace!(
-		target: "dkg_gadget",
-		"Stored aggregated misbehaviour reports {:?}",
-		reports.encode()
-	);
+	dkg_worker
+		.logger
+		.trace(format!("Stored aggregated misbehaviour reports {:?}", reports.encode()));
 	Ok(())
 }

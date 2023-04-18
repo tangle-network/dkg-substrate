@@ -13,12 +13,13 @@
 // limitations under the License.
 use crate::{
 	async_protocols::BatchKey,
+	debug_logger::DebugLogger,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	metrics::Metrics,
 	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
-	worker::{DKGWorker, HasLatestHeader, KeystoreExt},
+	worker::{DKGWorker, HasLatestHeader, KeystoreExt, TestBundle},
 	Client, DKGApi, DKGKeystore,
 };
 use codec::Encode;
@@ -105,7 +106,27 @@ pub struct DKGProtocolEngine<
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
+	pub test_bundle: Option<TestBundle>,
+	pub logger: DebugLogger,
 	pub _pd: PhantomData<BE>,
+}
+
+impl<
+		B: Block,
+		BE,
+		C,
+		GE,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+{
+	fn send_result_to_test_client(&self, result: Result<(), String>) {
+		if let Some(bundle) = self.test_bundle.as_ref() {
+			if let Some(current_test_id) = *bundle.current_test_id.read() {
+				bundle.to_test_client.send((current_test_id, result)).unwrap();
+			}
+		}
+	}
 }
 
 impl<
@@ -160,6 +181,7 @@ where
 		let client = &self.client;
 
 		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
+			&self.logger,
 			(*msg).clone(),
 			&self.latest_header,
 			client,
@@ -181,7 +203,9 @@ where
 	) -> Result<(), DKGError> {
 		// Call worker.rs: handle_finished_round -> Proposal
 		// aggregate Proposal into Vec<Proposal>
-		dkg_logging::info!(target: "dkg_gadget", "PROCESS VOTE RESULT : session_id {:?}, signature : {:?}", session_id, signature);
+		self.logger.info(format!(
+			"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
+		));
 		let payload_key = unsigned_proposal.key;
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
@@ -200,11 +224,12 @@ where
 			&self.backend,
 			finished_round,
 			payload_key,
+			&self.logger,
 		) {
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
-				dkg_logging::info!(target: "dkg_gadget", "All proposals have resolved for batch {:?}", batch_key);
+				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
 				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
@@ -218,9 +243,15 @@ where
 					&self.latest_header,
 					&self.backend,
 					proposals,
+					&self.logger,
 				);
 			} else {
-				dkg_logging::info!(target: "dkg_gadget", "{}/{} proposals have resolved for batch {:?}", proposals_for_this_batch.len(), batch_key.len, batch_key);
+				self.logger.info(format!(
+					"{}/{} proposals have resolved for batch {:?}",
+					proposals_for_this_batch.len(),
+					batch_key.len,
+					batch_key,
+				));
 			}
 		}
 
@@ -234,6 +265,9 @@ where
 			&mut self.aggregated_public_keys.write(),
 			key,
 		);
+
+		self.send_result_to_test_client(Ok(()));
+
 		Ok(())
 	}
 
@@ -242,6 +276,7 @@ where
 		key: LocalKey<Secp256k1>,
 		session_id: SessionId,
 	) -> Result<(), DKGError> {
+		self.logger.debug(format!("Storing local key for session {session_id:?}"));
 		self.db.store_local_key(session_id, key)
 	}
 

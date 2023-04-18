@@ -99,7 +99,7 @@ it('should be able to sign anchor update proposal', async () => {
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, anchorProposal.header.resourceId);
 	// get alice account to send the transaction to the dkg node.
-	const prop = u8aToHex(anchorProposal.toU8a());
+	const prop = anchorProposal;
 	const proposalCall = polkadotApi.tx.dkgProposals.acknowledgeProposal(
 		anchorProposal.header.nonce,
 		{

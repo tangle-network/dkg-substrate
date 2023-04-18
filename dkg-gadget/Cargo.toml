@@ -9,7 +9,8 @@ edition = { workspace = true }
 
 [features]
 outbound-inspection = []
-tracing = []
+debug-tracing = ["tracing"]
+testing = []
 
 [dependencies]
 futures = { workspace = true }
@@ -34,6 +35,9 @@ sp-core = { workspace = true }
 sp-keystore = { workspace = true }
 sp-runtime = { workspace = true }
 
+uuid = { workspace = true }
+bincode2 = { workspace = true }
+
 sc-client-api = { workspace = true }
 sc-keystore = { workspace = true }
 sc-network = { workspace = true }
@@ -50,14 +54,17 @@ atomic = { workspace = true }
 async-trait = { workspace = true }
 auto_impl = { workspace = true }
 itertools = { workspace = true }
-frame-support = { workspace = true }
 
+hash-db = { workspace = true, optional = true }
 webb-proposals = { workspace = true }
 
 # Local dependencies
 dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-logging = { workspace = true }
+dkg-mock-blockchain = { workspace = true }
+
+tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
 sc-network-test = { workspace = true }
