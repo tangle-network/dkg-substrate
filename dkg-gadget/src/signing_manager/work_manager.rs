@@ -106,6 +106,7 @@ impl<B: BlockT> WorkManager<B> {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let mut lock = self.inner.write();
+        // todo: do not just drop these tasks. Instead, check to see if any are stalled, and if so, restart them by pushing them to the front of the enqueued queue
 		lock.currently_signing_proposals.retain(|job| !job.handle.is_done());
 
 		// now, check to see if there is room to start a new task
