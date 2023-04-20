@@ -416,10 +416,10 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
 						self.logger.warn(
-							"Overwriting rounds will result in termination of previous rounds!"
+							"An active signing round in process, skip creating another round"
 								.to_string(),
 						);
-						lock[async_index as usize] = Some(status_handle)
+						return Err(DKGError::GenericError { reason: "Signing in progress".into() })
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						self.logger.debug(format!(
@@ -1454,13 +1454,6 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
-
-		// if proposals are being signed, skip creating another session
-		if !self.currently_signing_proposals.read().is_empty() {
-			self.logger.info(format!("🕸️  Signing in process, skipping submit unsigned proposal"));
-			return Ok(());
-		}
-
 		let on_chain_dkg = self.get_dkg_pub_key(header);
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
@@ -1643,8 +1636,6 @@ where
 				// has logic to handle errors internally, including misbehaviour monitors
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
-					// clear the currently being signing proposals cache.
-					self.currently_signing_proposals.write().clear();
 					logger.info(format!(
 						"*** SUCCESSFULLY EXECUTED meta signing protocol {_success:?} ***"
 					));
