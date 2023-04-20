@@ -103,7 +103,9 @@ where
 					// NOTE: this will block at each batch of unsigned proposals.
 					// TODO: Consider not blocking here and allowing processing of
 					// each batch of unsigned proposals concurrently
-					futures.try_collect::<()>().await.map(|_| ())?;
+					futures.try_collect::<()>().await.map(|e| DKGError::GenericError {
+						reason: format!("try_collect returned an error"),
+					})?;
 					params.logger.info_signing(format!("🕸️  Concluded all Offline->Voting stages ({count_in_batch} total) for this batch for this node"));
 				} else {
 					params.logger.warn_signing("🕸️  We are not among signers, skipping".to_string());

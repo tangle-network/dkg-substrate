@@ -400,28 +400,20 @@ where
 			// When we are at signing stage, it is using the active rounds.
 			ProtoStageType::Signing => {
 				self.logger
-					.debug(format!("Starting signing protocol (async_index #{async_index})"));
+					.debug(format!("Starting signing protocol (async_index #{async_index}) with (party_index #{party_i})"));
 				let mut lock = self.signing_rounds.write();
 				// first, check if the async_index is already in use and if so, and it is still
 				// running, return an error and print a warning that we will overwrite the previous
 				// round.
 				if let Some(Some(current_round)) = lock.get(async_index as usize) {
-					// check if it has stalled or not, if so, we can overwrite it
-					// TODO: Write more on what we should be going here since it's all the same
-					if current_round.signing_has_stalled(now) {
-						// the round has stalled, so we can overwrite it
-						self.logger.warn(format!(
-							"signing round async index #{async_index} has stalled, overwriting it"
-						));
-						lock[async_index as usize] = Some(status_handle)
-					} else if current_round.is_active() {
+					if current_round.is_active() {
 						self.logger.warn(
 							"An active signing round in process, skip creating another round"
 								.to_string(),
 						);
 						return Err(DKGError::GenericError { reason: "Signing in progress".into() })
 					} else {
-						// the round is not active, nor has it stalled, so we can overwrite it.
+						// the round is not active, could be stalled or cached, overwrite it
 						self.logger.debug(format!(
 							"signing round async index #{async_index} is not active, overwriting it"
 						));
@@ -429,6 +421,9 @@ where
 					}
 				} else {
 					// otherwise, we can safely write to this slot.
+					self.logger.debug(format!(
+						"signing round async index #{async_index} does not exist, creating it"
+					));
 					lock[async_index as usize] = Some(status_handle);
 				}
 			},
@@ -567,12 +562,15 @@ where
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
-					logger.info("The signing meta handler has executed successfully".to_string());
+					logger.info("The signing meta handler has executed successfully for async_index {async_index}".to_string());
 					Ok(async_index)
 				},
 
 				Err(err) => {
-					logger.error(format!("Error executing meta handler {:?}", &err));
+					logger.error(format!(
+						"Error executing meta handler for async_index {async_index} | ERR : {:?}",
+						&err
+					));
 					let _ = err_handler_tx.send(err.clone());
 					// remove proposal hashes, so that they can be reprocessed
 					let mut lock = currently_signing_proposals.write();
@@ -1535,6 +1533,9 @@ where
 			.into_iter()
 			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
 			.collect();
+
+		self.logger
+			.debug(format!("🕸️  PARTY {party_i} | Best Authorities {:?}", best_authorities));
 		let threshold = self.get_signature_threshold(header);
 		let authority_public_key = self.get_authority_public_key();
 		let mut count = 0;
