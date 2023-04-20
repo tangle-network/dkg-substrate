@@ -316,7 +316,7 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let status_handle = AsyncProtocolRemote::new(now, session_id, self.logger.clone());
+		let mut status_handle = AsyncProtocolRemote::new(now, session_id, self.logger.clone());
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
 		let active_local_key = match stage {
@@ -366,6 +366,15 @@ where
 			logger: self.logger.clone(),
 			local_key: active_local_key,
 		};
+
+		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {
+			self.logger.debug(format!("Signing protocol for proposal hash {unsigned_proposal_hash:?} will start later in the work manager"));
+			return Ok(params)
+		}
+
+		// Set the status handle as primary, implying that once it drops, it will stop the async
+		// protocol
+		status_handle.set_as_primary();
 		// Start the respective protocol
 		status_handle.start()?;
 		// Cache the rounds, respectively
@@ -394,39 +403,8 @@ where
 				}
 				*lock = Some(status_handle);
 			},
-			// When we are at signing stage, it is using the active rounds.
-			ProtoStageType::Signing { unsigned_proposal_hash } => {
-				self.logger.debug(format!("Starting signing protocol"));
-				let mut lock = self.signing_rounds.write();
-				// first, check if the async_index is already in use and if so, and it is still
-				// running, return an error and print a warning that we will overwrite the previous
-				// round.
-				if let Some(current_round) = lock.get(&unsigned_proposal_hash) {
-					// check if it has stalled or not, if so, we can overwrite it
-					// TODO: Write more on what we should be going here since it's all the same
-					if current_round.signing_has_stalled(now) {
-						// the round has stalled, so we can overwrite it
-						self.logger.warn(format!(
-							"signing round {unsigned_proposal_hash:?} has stalled, overwriting it"
-						));
-						lock.insert(unsigned_proposal_hash, status_handle);
-					} else if current_round.is_active() {
-						self.logger.warn(
-							"Overwriting rounds will result in termination of previous rounds!"
-								.to_string(),
-						);
-						lock.insert(unsigned_proposal_hash, status_handle);
-					} else {
-						// the round is not active, nor has it stalled, so we can overwrite it.
-						self.logger.debug(format!(
-							"signing round {unsigned_proposal_hash:?} is not active, overwriting it"
-						));
-						lock.insert(unsigned_proposal_hash, status_handle);
-					}
-				} else {
-					// otherwise, we can safely write to this slot.
-					lock.insert(unsigned_proposal_hash, status_handle);
-				}
+			ProtoStageType::Signing { .. } => {
+				unreachable!("Signing stage should not be handled here!")
 			},
 		}
 

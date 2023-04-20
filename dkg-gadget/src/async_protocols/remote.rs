@@ -117,9 +117,13 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			current_round_blame,
 			logger,
 			current_round_blame_tx: Arc::new(current_round_blame_tx),
-			is_primary_remote: true,
+			is_primary_remote: false,
 			session_id,
 		}
+	}
+
+	pub fn set_as_primary(&mut self) {
+		self.is_primary_remote = true;
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
@@ -220,7 +224,7 @@ impl<C> AsyncProtocolRemote<C> {
 				return Ok(())
 			},
 		};
-		self.logger.error(format!("Shutting down meta handler: {}", reason.as_ref()));
+		self.logger.warn(format!("Shutting down meta handler: {}", reason.as_ref()));
 		tx.send(()).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
@@ -255,11 +259,7 @@ impl<C> AsyncProtocolRemote<C> {
 
 impl<C> Drop for AsyncProtocolRemote<C> {
 	fn drop(&mut self) {
-		if Arc::strong_count(&self.status) == 2 || self.is_primary_remote {
-			// at this point, the only instances of this arc are this one, and,
-			// presumably the one in the DKG worker. This one is asserted to be the one
-			// belonging to the async proto. Signal as complete to allow the DKG worker to move
-			// forward
+		if Arc::strong_count(&self.status) == 1 || self.is_primary_remote {
 			if self.get_status() != MetaHandlerStatus::Complete {
 				self.logger.info(format!(
 					"MetaAsyncProtocol is ending: {:?}, History: {:?}",

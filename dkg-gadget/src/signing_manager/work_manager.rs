@@ -82,10 +82,12 @@ impl<B: BlockT> WorkManager<B> {
 	pub fn push_task(
 		&self,
 		unsigned_proposal_hash: [u8; 32],
-		handle: AsyncProtocolRemote<NumberFor<B>>,
+		mut handle: AsyncProtocolRemote<NumberFor<B>>,
 		task: Pin<Box<dyn SendFuture<'static, ()>>>,
 	) -> Result<(), DKGError> {
 		let mut lock = self.inner.write();
+		// set as primary, that way on drop, the async protocol ends
+		handle.set_as_primary();
 		let job = Job {
 			task: Arc::new(RwLock::new(Some(task.into()))),
 			handle,
@@ -106,7 +108,8 @@ impl<B: BlockT> WorkManager<B> {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let mut lock = self.inner.write();
-        // todo: do not just drop these tasks. Instead, check to see if any are stalled, and if so, restart them by pushing them to the front of the enqueued queue
+		// todo: do not just drop these tasks. Instead, check to see if any are stalled, and if so,
+		// restart them by pushing them to the front of the enqueued queue
 		lock.currently_signing_proposals.retain(|job| !job.handle.is_done());
 
 		// now, check to see if there is room to start a new task
@@ -119,11 +122,13 @@ impl<B: BlockT> WorkManager<B> {
 						job.proposal_hash
 					));
 				}
-				let job_clone = job.clone();
+				let task = job.task.clone();
+				// Put the job inside here, that way the drop code does not get called right away,
+				// killing the process
 				lock.currently_signing_proposals.insert(job);
 				// run the task
 				let task = async move {
-					let task = job_clone.task.write().take().unwrap();
+					let task = task.write().take().unwrap();
 					task.into_inner().await
 				};
 
@@ -173,10 +178,7 @@ impl<B: BlockT> Hash for Job<B> {
 
 impl<B: BlockT> Drop for Job<B> {
 	fn drop(&mut self) {
-		// There should only ever be two instances of a Job:
-		// one inside the currently_enqueed set, and one inside the actual running task
-		// Thus, if one of this gets dropped, we should remove it from the set
-		if Arc::strong_count(&self.proposal_hash) == 2 {
+		if Arc::strong_count(&self.proposal_hash) == 1 {
 			self.logger.info_signing(format!(
 				"Will remove job {:?} from currently_signing_proposals",
 				self.proposal_hash

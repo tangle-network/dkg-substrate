@@ -20,7 +20,7 @@ use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents};
 use sc_keystore::LocalKeystore;
-use sc_network::{NetworkService, NetworkStateInfo, ProtocolName};
+use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -100,9 +100,10 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: Arc<NetworkService<B, B::Hash>>,
-
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
+	/// For logging
+	pub debug_logger: DebugLogger,
 	/// Phantom block type
 	pub _block: PhantomData<B>,
 }
@@ -128,11 +129,8 @@ where
 		prometheus_registry,
 		local_keystore,
 		_block,
+		debug_logger,
 	} = dkg_params;
-
-	// setup debug logging
-	let local_peer_id = network.local_peer_id();
-	let debug_logger = DebugLogger::new(local_peer_id, None);
 
 	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
 	let keygen_gossip_protocol = NetworkGossipEngineBuilder::new(

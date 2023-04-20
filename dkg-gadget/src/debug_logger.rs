@@ -104,7 +104,9 @@ impl DebugLogger {
 	fn log_to_file<T: std::fmt::Debug>(&self, target: &str, level: &str, message: T) {
 		if let Some(file) = &self.to_file_io {
 			let message = format!("[{target}] [{level}]: {message:?}");
-			file.send(message).unwrap();
+			if let Err(err) = file.send(message) {
+				error!(target: "dkg_gadget", "failed to send log message to file: {err:?}");
+			}
 		}
 	}
 }

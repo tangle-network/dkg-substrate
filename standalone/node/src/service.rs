@@ -15,12 +15,14 @@
 
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
+use dkg_gadget::debug_logger::DebugLogger;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::BlockBackend;
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 pub use sc_executor::NativeElseWasmExecutor;
 use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
+use sc_network_common::service::NetworkStateInfo;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
@@ -172,7 +174,10 @@ fn remote_keystore(_url: &str) -> Result<Arc<LocalKeystore>, &'static str> {
 }
 
 /// Builds a new service for a full client.
-pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
+pub fn new_full(
+	mut config: Configuration,
+	debug_output: Option<std::fs::File>,
+) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
 		backend,
@@ -255,6 +260,10 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			Some(keystore_container.sync_keystore()),
 		);
 
+		// setup debug logging
+		let local_peer_id = network.local_peer_id();
+		let debug_logger = DebugLogger::new(local_peer_id, debug_output);
+
 		let dkg_params = dkg_gadget::DKGParams {
 			client: client.clone(),
 			backend: backend.clone(),
@@ -263,6 +272,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 			prometheus_registry: prometheus_registry.clone(),
 			local_keystore: keystore_container.local_keystore(),
 			_block: std::marker::PhantomData::<Block>,
+			debug_logger,
 		};
 
 		// Start the DKG gadget.
