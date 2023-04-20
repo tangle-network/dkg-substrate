@@ -1643,6 +1643,8 @@ where
 				// has logic to handle errors internally, including misbehaviour monitors
 				let mut results = futures::future::select_ok(futures).await.into_iter();
 				if let Some((_success, _losing_futures)) = results.next() {
+					// clear the currently being signing proposals cache.
+					self.currently_signing_proposals.write().clear();
 					logger.info(format!(
 						"*** SUCCESSFULLY EXECUTED meta signing protocol {_success:?} ***"
 					));
