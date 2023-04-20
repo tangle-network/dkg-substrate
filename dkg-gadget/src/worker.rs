@@ -567,7 +567,7 @@ where
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
-					logger.info("The meta handler has executed successfully".to_string());
+					logger.info("The signing meta handler has executed successfully".to_string());
 					Ok(async_index)
 				},
 
@@ -1454,6 +1454,13 @@ where
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
+
+		// if proposals are being signed, skip creating another session
+		if !self.currently_signing_proposals.read().is_empty() {
+			self.logger.info(format!("🕸️  Signing in process, skipping submit unsigned proposal"));
+			return Ok(());
+		}
+
 		let on_chain_dkg = self.get_dkg_pub_key(header);
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
