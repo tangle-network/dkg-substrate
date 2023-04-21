@@ -2,7 +2,10 @@ use crate::{
 	async_protocols::remote::AsyncProtocolRemote, debug_logger::DebugLogger, utils::SendFuture,
 	NumberFor,
 };
-use dkg_primitives::types::DKGError;
+use dkg_primitives::{
+	crypto::Public,
+	types::{DKGError, SignedDKGMessage},
+};
 use parking_lot::RwLock;
 use sp_api::BlockT;
 use std::{
@@ -47,10 +50,9 @@ impl<B: BlockT> WorkManager<B> {
 
 			let job_receiver = async move {
 				while let Some(unsigned_proposal_hash) = rx.recv().await {
-					job_receiver_worker.logger.info_signing(format!(
-						"[worker] Received job {:?}",
-						unsigned_proposal_hash
-					));
+					job_receiver_worker
+						.logger
+						.info_signing(format!("[worker] Received job {unsigned_proposal_hash:?}",));
 					job_receiver_worker.poll();
 				}
 			};
@@ -91,7 +93,7 @@ impl<B: BlockT> WorkManager<B> {
 		let job = Job {
 			task: Arc::new(RwLock::new(Some(task.into()))),
 			handle,
-			proposal_hash: Arc::new(unsigned_proposal_hash),
+			proposal_hash: unsigned_proposal_hash,
 			tasks: self.inner.clone(),
 			logger: self.logger.clone(),
 		};
@@ -110,12 +112,26 @@ impl<B: BlockT> WorkManager<B> {
 		let mut lock = self.inner.write();
 		// todo: do not just drop these tasks. Instead, check to see if any are stalled, and if so,
 		// restart them by pushing them to the front of the enqueued queue
-		lock.currently_signing_proposals.retain(|job| !job.handle.is_done());
+		let cur_count = lock.currently_signing_proposals.len();
+		lock.currently_signing_proposals.retain(|job| {
+			let is_done = job.handle.is_done();
+			self.logger
+				.info_signing(format!("[worker] Job {:?} is done: {}", job.proposal_hash, is_done));
+			!is_done
+		});
+
+		let new_count = lock.currently_signing_proposals.len();
+		if cur_count != new_count {
+			self.logger
+				.info_signing(format!("[worker] {} jobs dropped", cur_count - new_count));
+		}
 
 		// now, check to see if there is room to start a new task
 		let tasks_to_start = self.max_tasks - lock.currently_signing_proposals.len();
 		for _ in 0..tasks_to_start {
 			if let Some(job) = lock.enqueued_signing_proposals.pop_front() {
+				self.logger
+					.info_signing(format!("[worker] Starting job {:?}", job.proposal_hash));
 				if let Err(err) = job.handle.start() {
 					self.logger.error_signing(format!(
 						"Failed to start job {:?}: {err:?}",
@@ -133,7 +149,7 @@ impl<B: BlockT> WorkManager<B> {
 				};
 
 				// Spawn the task. When it finishes, it will clean itself up
-				let _ = tokio::task::spawn(task);
+				tokio::task::spawn(task);
 			}
 		}
 	}
@@ -141,20 +157,57 @@ impl<B: BlockT> WorkManager<B> {
 	pub fn job_exists(&self, job: &[u8; 32]) -> bool {
 		let lock = self.inner.read();
 		lock.currently_signing_proposals.contains(job) ||
-			lock.enqueued_signing_proposals.iter().any(|j| &*j.proposal_hash == job)
+			lock.enqueued_signing_proposals.iter().any(|j| &j.proposal_hash == job)
+	}
+
+	pub fn deliver_message(&self, msg: Arc<SignedDKGMessage<Public>>) {
+		self.logger.debug_signing(format!(
+			"Delivered message is intended for session_id = {}",
+			msg.msg.session_id
+		));
+		let lock = self.inner.read();
+
+		// check the enqueued
+		for task in lock.enqueued_signing_proposals.iter() {
+			if task.handle.session_id == msg.msg.session_id {
+				self.logger.debug(format!(
+					"Message is for this signing execution in session: {}",
+					task.handle.session_id
+				));
+				if let Err(_err) = task.handle.deliver_message(msg) {
+					self.logger.warn_signing("Failed to deliver message to signing task");
+				}
+				return
+			}
+		}
+
+		// check the currently signing
+		for task in lock.currently_signing_proposals.iter() {
+			if task.handle.session_id == msg.msg.session_id {
+				self.logger.debug(format!(
+					"Message is for this signing execution in session: {}",
+					task.handle.session_id
+				));
+				if let Err(_err) = task.handle.deliver_message(msg) {
+					self.logger.warn_signing("Failed to deliver message to signing task");
+				}
+				return
+			}
+		}
 	}
 }
 
-#[derive(Clone)]
 pub struct Job<B: BlockT> {
 	// wrap in an arc to get the strong count for this job
-	proposal_hash: Arc<[u8; 32]>,
+	proposal_hash: [u8; 32],
 	// a reference to the set of currently signing proposals. Used for deleting itself from the set
 	tasks: Arc<RwLock<WorkManagerInner<B>>>,
 	logger: DebugLogger,
 	handle: AsyncProtocolRemote<NumberFor<B>>,
-	task: Arc<RwLock<Option<SyncWrapper<Pin<Box<dyn SendFuture<'static, ()>>>>>>>,
+	task: Arc<RwLock<Option<SyncFuture<()>>>>,
 }
+
+pub type SyncFuture<T> = SyncWrapper<Pin<Box<dyn SendFuture<'static, T>>>>;
 
 impl<B: BlockT> std::borrow::Borrow<[u8; 32]> for Job<B> {
 	fn borrow(&self) -> &[u8; 32] {
@@ -178,13 +231,11 @@ impl<B: BlockT> Hash for Job<B> {
 
 impl<B: BlockT> Drop for Job<B> {
 	fn drop(&mut self) {
-		if Arc::strong_count(&self.proposal_hash) == 1 {
-			self.logger.info_signing(format!(
-				"Will remove job {:?} from currently_signing_proposals",
-				self.proposal_hash
-			));
-			self.tasks.write().currently_signing_proposals.remove(self);
-			let _ = self.handle.shutdown("shutdown from Job::drop");
-		}
+		self.logger.info_signing(format!(
+			"Will remove job {:?} from currently_signing_proposals",
+			self.proposal_hash
+		));
+		self.tasks.write().currently_signing_proposals.remove(self);
+		let _ = self.handle.shutdown("shutdown from Job::drop");
 	}
 }

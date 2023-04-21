@@ -76,7 +76,7 @@ where
 				params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
 				let batch_key = params.get_next_batch_key();
 
-				params.logger.debug_signing(format!("Received unsigned proposal"));
+				params.logger.debug_signing("Received unsigned proposal");
 
 				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
 					params.logger.info_signing(format!("Offline stage index: {offline_i}"));
@@ -92,9 +92,7 @@ where
 					)?
 					.await?;
 
-					params
-						.logger
-						.info_signing(format!("🕸️  Concluded Offline->Voting stage for this node"));
+					params.logger.info_signing("Concluded Offline->Voting stage for this node");
 				} else {
 					params.logger.warn_signing("🕸️  We are not among signers, skipping".to_string());
 					return Err(DKGError::GenericError {

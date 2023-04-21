@@ -190,7 +190,10 @@ impl<C> AsyncProtocolRemote<C> {
 		if self.broadcaster.receiver_count() != 0 && self.is_active() {
 			self.broadcaster.send(msg).map(|_| ())
 		} else {
-			// do not forward the message
+			// do not forward the message (TODO: Consider enqueuing messages for rounds not yet
+			// active other nodes may be active, but this node is still in the process of "waking
+			// up"). Thus, by not delivering a message here, we may be preventing this node from
+			// joining.
 			Ok(())
 		}
 	}

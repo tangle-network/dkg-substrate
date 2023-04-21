@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use dkg_primitives::{types::DKGError, MaxProposalLength, UnsignedProposal};
+use dkg_primitives::{
+	types::{DKGError, SignedDKGMessage},
+	MaxProposalLength, UnsignedProposal,
+};
 
 use self::work_manager::WorkManager;
 use crate::{
@@ -58,6 +61,10 @@ where
 {
 	pub fn new(logger: DebugLogger) -> Self {
 		Self { work_manager: WorkManager::<B>::new(logger, 5), _pd: Default::default() }
+	}
+
+	pub fn deliver_message(&self, message: Arc<SignedDKGMessage<Public>>) {
+		self.work_manager.deliver_message(message)
 	}
 
 	/// This function is called each time a new block is finalized.
@@ -134,20 +141,21 @@ where
 
 		for unsigned_proposal in unsigned_proposals {
 			/*
-			   create a seed s where s is keccak256(pk, fN=at, keccak256(unsingedProposal))
+			   create a seed s where s is keccak256(pk, fN=at, unsingedProposal)
 			   you take this seed and use it as a seed to random number generator.
 			   generate a t+1 signing set from this RNG
 			   if we are in this set, we send it to the signing manager, and continue.
 			   if we are not, we continue the loop.
 			*/
-			let unsigned_proposal_hash = sp_core::keccak_256(&unsigned_proposal.encode());
+			let unsigned_proposal_bytes = unsigned_proposal.encode();
 			let concat_data = dkg_pub_key
 				.clone()
 				.into_iter()
 				.chain(at.encode())
-				.chain(unsigned_proposal_hash)
+				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
+			let unsigned_proposal_hash = unsigned_proposal.hash().unwrap();
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)

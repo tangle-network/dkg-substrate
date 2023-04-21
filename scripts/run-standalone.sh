@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+# ensure we kill all child processes when we exit
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 #define default ports
 ports=(30304 30305 30308)

@@ -1222,28 +1222,7 @@ where
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
-				if let Some(rounds) = self.rounds.read().as_ref() {
-					self.logger.debug(format!(
-						"Message is for signing execution in session {}",
-						rounds.session_id
-					));
-					if rounds.session_id == msg.msg.session_id {
-						self.logger.debug(format!(
-							"Message is for this signing execution in session: {}",
-							rounds.session_id
-						));
-						if let Err(err) = rounds.deliver_message(msg) {
-							self.handle_dkg_error(DKGError::CriticalError {
-								reason: err.to_string(),
-							})
-						}
-					} else {
-						let message =
-							format!("Message is for another signing round: {}", rounds.session_id);
-						self.logger.error(&message);
-						return Err(DKGError::GenericError { reason: message })
-					}
-				}
+				self.signing_manager.deliver_message(msg);
 
 				Ok(())
 			},
