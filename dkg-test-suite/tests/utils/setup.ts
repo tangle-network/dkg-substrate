@@ -98,26 +98,31 @@ export async function fastForwardTo(
 }
 
 export const printValidators = async function (api: ApiPromise) {
-	const [{ nonce: accountNonce }, now, validators] = await Promise.all([
+	const [nonceValue, nowValue, validatorsValue] = await Promise.all([
 		api.query.system.account(ALICE),
 		api.query.timestamp.now(),
 		api.query.session.validators(),
 	]);
+	console.log("nonceValue: ", nonceValue.toJSON());
+	const nonce = nonceValue.toJSON()?["nonce"]:0;
+	const now = nowValue.toJSON()?["now"]:0;
+	const validators = validatorsValue.toJSON();
+	console.log("Validators: ", validators);
 
-	console.log(`accountNonce(${ALICE}) ${accountNonce}`);
-	console.log(`last block timestamp ${now.toNumber()}`);
+	console.log(`accountNonce(${ALICE}) ${nonce}`);
+	console.log(`last block timestamp ${now}`);
 
-	if (validators && validators.length > 0) {
+	if (validators && Object.keys(validators).length > 0) {
 		const validatorBalances = await Promise.all(
-			validators.map((authorityId) => api.query.system.account(authorityId))
+			Object.values(validators).map((authorityId) => api.query.system.account(authorityId))
 		);
 
 		console.log(
 			'validators',
-			validators.map((authorityId, index) => ({
+			Object.values(validators).map((authorityId, index) => ({
 				address: authorityId.toString(),
-				balance: validatorBalances[index].data.free.toHuman(),
-				nonce: validatorBalances[index].nonce.toHuman(),
+				balance: validatorBalances[index].toJSON()?["data"]?["free"]:0:0,
+				nonce: validatorBalances[index].toJSON()?["nonce"]:0,
 			}))
 		);
 	}
@@ -265,40 +270,35 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
-		// Subscribe to system events via storage
-		const unsub = await api.query.system.events((events) => {
-			const handleUnsub = () => {
-				// Unsubscribe from the storage
-				unsub();
-				// Resolve the promise
-				resolve(void 0);
-			};
-
-			// Loop through the Vec<EventRecord>
-			events.forEach((record) => {
-				const { event } = record;
-				if (event.section === pallet && event.method === eventVariant) {
-					console.log(
-						`Event (${event.section}.${event.method}) =>`,
-						event.data.toJSON()
-					);
-					if (dataQuery) {
-						event.data.forEach((value, index) => {
-							const jsonData = value.toJSON();
-							if (jsonData instanceof Object) {
-								Object.keys(jsonData).map((key) => {
-									if (key === dataQuery.key) {
-										handleUnsub();
-									}
-								});
-							}
-						});
-					} else {
-						handleUnsub();
+		while (true) {
+			const eventsValueRaw = await api.query.system.events();
+			const eventsValues = eventsValueRaw.toJSON();
+			if (eventsValues) {
+				for (const record of Object.values(eventsValues)) {
+					const { event } = record;
+					if (event.section === pallet && event.method === eventVariant) {
+						const data = event["data"];
+						console.log(
+							`Event (${event.section}.${event.method}) =>`,
+							data
+						);
+						if (dataQuery) {
+							Object.values(data).forEach(value => {
+								if (value instanceof Object) {
+									Object.keys(value).map((key) => {
+										if (key === dataQuery.key) {
+											return Promise.resolve();
+										}
+									});
+								}
+							});
+						} else {
+							return Promise.resolve();
+						}
 					}
 				}
-			});
-		});
+			}
+		}
 	});
 }
 
@@ -409,3 +409,7 @@ export function ethAddressFromUncompressedPublicKey(
 	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
 	return address as `0x${string}`;
 }
+function unsub() {
+	throw new Error('Function not implemented.');
+}
+
