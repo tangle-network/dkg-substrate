@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-import '@webb-tools/types';
+import '@webb-tools/dkg-substrate-types';
 import { sudoTx, waitForEvent } from './utils/setup';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
 import { localChain, polkadotApi, signatureVBridge } from './utils/util';

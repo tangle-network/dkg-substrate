@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import '@webb-tools/types';
+import '@webb-tools/dkg-substrate-types';
 import { waitForEvent, waitForTheNextSession } from './utils/setup';
 
 import { Keyring } from '@polkadot/api';

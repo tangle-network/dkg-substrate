@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-import '@webb-tools/types';
+import '@webb-tools/dkg-substrate-types';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import child from 'child_process';
