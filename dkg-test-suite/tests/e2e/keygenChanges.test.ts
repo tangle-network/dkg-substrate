@@ -151,7 +151,7 @@ describe('Keygen Changes Flow', function () {
 		);
 		// then, we shall query the current best authorities.
 		const currentBestAuthorities = await api.query.dkg.bestAuthorities();
-		expect(currentBestAuthorities.length).to.equal(
+		expect(currentBestAuthorities.encodedLength).to.equal(
 			2,
 			'Current best authorities should be 2'
 		);
@@ -177,7 +177,7 @@ describe('Keygen Changes Flow', function () {
 			'Next keygen threshold should be 3'
 		);
 		const nextBestAuthorities = await api.query.dkg.nextBestAuthorities();
-		expect(nextBestAuthorities.length).to.equal(
+		expect(nextBestAuthorities.encodedLength).to.equal(
 			3,
 			'Next best authorities should be 3'
 		);
@@ -192,7 +192,7 @@ describe('Keygen Changes Flow', function () {
 			'Keygen threshold should be now equal to 3'
 		);
 		const bestAuthorities = await api.query.dkg.bestAuthorities();
-		expect(bestAuthorities.length).to.equal(3, 'Best authorities should be 3');
+		expect(bestAuthorities.encodedLength).to.equal(3, 'Best authorities should be 3');
 		// query the current DKG public key.
 		const currentDkgPublicKey = await fetchDkgPublicKey(api);
 		// now wait for the next session, we expect the dkg to rotate.
