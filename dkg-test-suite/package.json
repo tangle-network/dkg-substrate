@@ -46,7 +46,7 @@
 		"typescript": "4.5.4"
 	},
 	"engines": {
-		"node": "17.x.x"
+		"node": "18.x.x"
 	},
 	"devDependencies": {
 		"husky": "^7.0.4",
