@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  */
+import type { Codec } from '@polkadot/types-codec/types';
 import '@webb-tools/dkg-substrate-types';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
@@ -98,32 +99,30 @@ export async function fastForwardTo(
 }
 
 export const printValidators = async function (api: ApiPromise) {
-	const [nonceValue, nowValue, validatorsValue] = await Promise.all([
-		api.query.system.account(ALICE),
+	const [accountNonce, now, validators] = await Promise.all([
+		api.query.system.account(ALICE).then((account) => api.registry.createType(`number`, account.toU8a())),
 		api.query.timestamp.now(),
-		api.query.session.validators(),
+		api.query.session.validators().then((account) => api.registry.createType(`Vec<Address>`, account.toU8a())),
 	]);
-	console.log("nonceValue: ", nonceValue.toJSON());
-	const nonce = nonceValue.toJSON()?["nonce"]:0;
-	const now = nowValue.toJSON()?["now"]:0;
-	const validators = validatorsValue.toJSON();
-	console.log("Validators: ", validators);
 
-	console.log(`accountNonce(${ALICE}) ${nonce}`);
-	console.log(`last block timestamp ${now}`);
+	console.log(`accountNonce(${ALICE}) ${accountNonce}`);
+	console.log(`last block timestamp ${now.toHuman()}`);
 
-	if (validators && Object.keys(validators).length > 0) {
+	if (validators && validators.length > 0) {
 		const validatorBalances = await Promise.all(
-			Object.values(validators).map((authorityId) => api.query.system.account(authorityId))
+			validators.map((authorityId) => api.query.system.account(authorityId))
 		);
 
 		console.log(
 			'validators',
-			Object.values(validators).map((authorityId, index) => ({
-				address: authorityId.toString(),
-				balance: validatorBalances[index].toJSON()?["data"]?["free"]:0:0,
-				nonce: validatorBalances[index].toJSON()?["nonce"]:0,
-			}))
+			validators.map((authorityId, index) => {
+				const balance = validatorBalances[index].toJSON();
+				({
+					address: authorityId.toString(),
+					balance: balance?["data"]?["free"]:0:0,
+					nonce: balance?["nonce"]:0,
+				})
+			})
 		);
 	}
 };
@@ -270,32 +269,34 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
-		while (true) {
-			const eventsValueRaw = await api.query.system.events();
-			const eventsValues = eventsValueRaw.toJSON();
-			if (eventsValues) {
-				for (const record of Object.values(eventsValues)) {
-					const { event } = record;
-					if (event.section === pallet && event.method === eventVariant) {
-						const data = event["data"];
-						console.log(
-							`Event (${event.section}.${event.method}) =>`,
-							data
-						);
-						if (dataQuery) {
-							Object.values(data).forEach(value => {
-								if (value instanceof Object) {
-									Object.keys(value).map((key) => {
-										if (key === dataQuery.key) {
-											return Promise.resolve();
-										}
-									});
+		// Subscribe to system events via storage
+		const events = await api.query.system.events();
+		console.log('events: ', events.toJSON());
+		const eventsJson = events.toJSON()?["data"]: [];
+		// Loop through the Vec<EventRecord>
+		for (var event of Object.values(eventsJson)) {
+			const section = event?["section"]:"";
+			const method = event?["method"]:"";
+			const data = event?["data"]:"";
+			if (section === pallet && method === eventVariant) {
+				console.log(
+					`Event ($section}.${method}) =>`,
+					data
+				);
+				if (dataQuery) {
+					for (const value of Object.values(data)) {
+						const valueCodec = value as unknown as Codec;
+						const jsonData = valueCodec.toJSON();
+						if (jsonData instanceof Object) {
+							Object.keys(jsonData).map((key) => {
+								if (key === dataQuery.key) {
+									return resolve(void 0);
 								}
 							});
-						} else {
-							return Promise.resolve();
 						}
 					}
+				} else {
+					return resolve(void 0);
 				}
 			}
 		}
@@ -409,7 +410,3 @@ export function ethAddressFromUncompressedPublicKey(
 	const address = ethers.utils.getAddress(`0x${pubKeyHash.slice(-40)}`); // take the last 20 bytes and convert it to an address.
 	return address as `0x${string}`;
 }
-function unsub() {
-	throw new Error('Function not implemented.');
-}
-
