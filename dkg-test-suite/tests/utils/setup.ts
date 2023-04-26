@@ -269,36 +269,42 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
-		// Subscribe to system events via storage
-		const events = await api.query.system.events();
-		console.log('events: ', events.toJSON());
-		const eventsJson = events.toJSON()?["data"]: [];
-		// Loop through the Vec<EventRecord>
-		for (var event of Object.values(eventsJson)) {
-			const section = event?["section"]:"";
-			const method = event?["method"]:"";
-			const data = event?["data"]:"";
-			if (section === pallet && method === eventVariant) {
-				console.log(
-					`Event ($section}.${method}) =>`,
-					data
-				);
-				if (dataQuery) {
-					for (const value of Object.values(data)) {
-						const valueCodec = value as unknown as Codec;
-						const jsonData = valueCodec.toJSON();
-						if (jsonData instanceof Object) {
-							Object.keys(jsonData).map((key) => {
-								if (key === dataQuery.key) {
-									return resolve(void 0);
-								}
-							});
+		while (true) {
+			// Subscribe to system events via storage
+			const events = await api.query.system.events();
+			const eventsJson = events.toJSON();
+			const eventsValue = api.registry.createType("Vec<EventRecord>", events.toU8a());
+			// Loop through the Vec<EventRecord>
+			for (var event of eventsValue) {
+				console.log("Checking event: ", event);
+				const section = event.event.section;
+				const method = event.event.method;
+				const data = event.event.data;
+				console.log("Event section = ", section, ", method = ", method);
+				console.log("Event musteq  = ", pallet, ", method = ", eventVariant);
+				if (section === pallet && method === eventVariant) {
+					console.log(
+						`Event ($section}.${method}) =>`,
+						data
+					);
+					if (dataQuery) {
+						for (const value of data) {
+							const jsonData = value.toJSON();
+							if (jsonData instanceof Object) {
+								Object.keys(jsonData).map((key) => {
+									if (key === dataQuery.key) {
+										return resolve(void 0);
+									}
+								});
+							}
 						}
+					} else {
+						return resolve(void 0);
 					}
-				} else {
-					return resolve(void 0);
 				}
 			}
+
+			await sleep(2000);
 		}
 	});
 }
