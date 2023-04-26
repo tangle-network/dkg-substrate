@@ -18,8 +18,8 @@ use super::*;
 use crate as pallet_dkg_proposals;
 use codec::{Decode, Encode};
 pub use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
-	MaxSignatureLength, DKG_ENGINE_ID,
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxProposalLength,
+	MaxReporters, MaxSignatureLength, DKG_ENGINE_ID,
 };
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
@@ -240,8 +240,6 @@ impl pallet_collator_selection::Config for Test {
 }
 
 parameter_types! {
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxProposalLength : u32 = 10_000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxVotes : u32 = 100;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
