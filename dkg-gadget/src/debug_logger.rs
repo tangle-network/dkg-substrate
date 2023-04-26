@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use dkg_logging::{debug, error, info, trace, warn};
 use std::{io::Write, sync::Arc};
 

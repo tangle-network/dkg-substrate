@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+#![allow(clippy::unwrap_used)]
 use crate as pallet_dkg_proposal_handler;
 use codec::{Decode, Encode};
 pub use dkg_runtime_primitives::{

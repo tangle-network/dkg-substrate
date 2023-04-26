@@ -71,7 +71,13 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 					}
 				}
 
-				if local_ty.get_unsigned_proposal().unwrap().hash().unwrap() != msg.key.as_slice() {
+				if local_ty
+					.get_unsigned_proposal()
+					.expect("Unsigned proposal not found")
+					.hash()
+					.expect("Unsigned proposal hash failed") !=
+					msg.key.as_slice()
+				{
 					//dkg_logging::info!("Skipping passing of message to async proto since not
 					// correct unsigned proposal");
 					return Ok(())

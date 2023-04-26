@@ -34,13 +34,13 @@ pub fn get_arana_bootnodes() -> Vec<MultiaddrWithPeerId> {
 	vec![
 		"/ip4/140.82.21.142/tcp/30333/p2p/12D3KooWPU2eWyZrDMVtNBiKYKLGPJw8EDjbkYeXMyotmdVBKNnx"
 			.parse()
-			.unwrap(),
+			.expect("Invalid bootnodes!"),
 		"/ip4/149.28.81.60/tcp/30333/p2p/12D3KooWHXiHVg1YX9PHsa8NrS5ZWEoaKBydqZvLoegw2bcTiCtf"
 			.parse()
-			.unwrap(),
+			.expect("Invalid bootnodes!"),
 		"/ip4/45.32.66.129/tcp/30333/p2p/12D3KooWPEpgPPBArgEa1v7X7YR5UiZ6BLxmCsNqC8F6fJ6cULLc"
 			.parse()
-			.unwrap(),
+			.expect("Invalid bootnodes!"),
 	]
 }
 

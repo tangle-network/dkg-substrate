@@ -50,4 +50,4 @@ jobs:
         run: |
           sudo apt-get install protobuf-compiler &&
           cargo +nightly fmt --all -- --check &&
-          cargo clippy -Zunstable-options -- -D warnings
+          cargo clippy -Zunstable-options -- -D warnings -D clippy::unwrap_used

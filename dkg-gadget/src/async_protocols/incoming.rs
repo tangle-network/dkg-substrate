@@ -99,7 +99,11 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
 				// only clone if the downstream receiver expects this type
-				let sender = self.msg.payload.async_proto_only_get_sender_id().unwrap();
+				let sender = self
+					.msg
+					.payload
+					.async_proto_only_get_sender_id()
+					.expect("Could not get sender id");
 				if sender != stream_type.get_i() {
 					if self.msg.session_id == this_session_id {
 						verify

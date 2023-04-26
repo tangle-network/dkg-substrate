@@ -93,7 +93,7 @@ fn generate_invulnerables<PK: Clone + Into<AccountId>>(
 		.iter()
 		.map(|pk| {
 			let account: AccountId = pk.0.clone().into();
-			let aura_id = AuraId::from_slice(account.as_ref()).unwrap();
+			let aura_id = AuraId::from_slice(account.as_ref()).expect("invalid aura id");
 			(account, aura_id, pk.clone().1)
 		})
 		.collect()
