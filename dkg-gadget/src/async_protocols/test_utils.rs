@@ -48,7 +48,10 @@ impl BlockchainInterface for TestDummyIface {
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
 		dkg_logging::info!(
 			"Sending message through iface id={}",
-			unsigned_msg.payload.async_proto_only_get_sender_id().unwrap()
+			unsigned_msg
+				.payload
+				.async_proto_only_get_sender_id()
+				.expect("Could not get sender id")
 		);
 		let faux_signed_message = SignedDKGMessage { msg: unsigned_msg, signature: None };
 		self.sender

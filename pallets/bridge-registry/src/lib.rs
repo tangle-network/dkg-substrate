@@ -183,6 +183,8 @@ pub mod pallet {
 		BridgeNotFound,
 		/// Too many resources.
 		TooManyResources,
+		/// Input out of bounds
+		OutOfBounds,
 	}
 
 	#[pallet::hooks]
@@ -290,7 +292,9 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLen
 					// Create the bridge record
 					let bridge_metadata = BridgeMetadata {
 						info: Default::default(),
-						resource_ids: vec![src_resource_id, dest_resource_id].try_into().unwrap(),
+						resource_ids: vec![src_resource_id, dest_resource_id]
+							.try_into()
+							.map_err(|_| Error::<T, I>::OutOfBounds)?,
 					};
 					Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
 					// Increment the next bridge index
