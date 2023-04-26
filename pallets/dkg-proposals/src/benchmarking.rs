@@ -17,8 +17,11 @@ use super::*;
 
 #[allow(unused)]
 use crate::Pallet;
-use codec::Decode;
-use dkg_runtime_primitives::{ProposalNonce, ResourceId, TypedChainId};
+use codec::{Decode, Encode};
+use dkg_runtime_primitives::{
+	proposal::Proposal, DKGPayloadKey, FunctionSignature, ProposalHeader, ProposalKind,
+	ProposalNonce, TypedChainId,
+};
 use frame_benchmarking::{account, benchmarks, whitelisted_caller};
 use frame_system::RawOrigin;
 use sp_std::vec;
@@ -27,6 +30,32 @@ const CHAIN_IDENTIFIER: u32 = 10;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 	frame_system::Pallet::<T>::assert_last_event(generic_event.into());
+}
+
+pub fn make_proposal<T: Config>(
+	prop: Proposal<<T as Config>::MaxProposalLength>,
+) -> Proposal<<T as Config>::MaxProposalLength> {
+	// Create the proposal Header
+	let r_id = ResourceId::from([
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+		0, 1,
+	]);
+	let function_signature = FunctionSignature::from([0x26, 0x57, 0x88, 0x01]);
+	let nonce = ProposalNonce::from(1);
+	let header = ProposalHeader::new(r_id, function_signature, nonce);
+	let mut buf = vec![];
+	header.encode_to(&mut buf);
+	// N bytes parameter
+	buf.extend_from_slice(&[0u8; 64]);
+
+	match prop {
+		Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, .. } =>
+			Proposal::<<T as Config>::MaxProposalLength>::Unsigned {
+				kind: ProposalKind::AnchorUpdate,
+				data: buf.try_into().unwrap(),
+			},
+		_ => panic!("Invalid proposal type"),
+	}
 }
 
 benchmarks! {
@@ -99,18 +128,21 @@ benchmarks! {
 		let nonce = 1;
 		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
-		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
+		let proposal = make_proposal::<T>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![].try_into().unwrap(),
+		});
 		Proposers::<T>::insert(caller.clone(), true);
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, true).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, true).unwrap();
 		}
-	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal_bytes)
+	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
 	verify {
-		assert_last_event::<T>(Event::VoteFor{ chain_id, proposal_nonce: nonce.into(), who: caller}.into());
+		assert_last_event::<T>(Event::VoteFor{ chain_id, proposal_nonce: nonce.into(), who: caller, kind: proposal.kind()}.into());
 	}
 
 	reject_proposal {
@@ -123,18 +155,21 @@ benchmarks! {
 		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
 		let bytes = vec![0u8; 12];
-		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
+		let proposal = make_proposal::<T>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![].try_into().unwrap(),
+		});
 		Proposers::<T>::insert(caller.clone(), true);
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, false).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, false).unwrap();
 		}
-	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal_bytes)
+	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
 	verify {
-		assert_last_event::<T>(Event::VoteAgainst{ chain_id, proposal_nonce: nonce.into(), who: caller}.into());
+		assert_last_event::<T>(Event::VoteAgainst{ chain_id, proposal_nonce: nonce.into(), who: caller,kind: proposal.kind()}.into());
 	}
 
 	eval_vote_state {
@@ -145,19 +180,22 @@ benchmarks! {
 		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
 		let bytes = vec![0u8; c as usize];
 		let bytes = vec![0u8; 12];
-		let proposal_bytes: T::Proposal = T::Proposal::decode(&mut &bytes[..]).unwrap();
+		let proposal = make_proposal::<T>(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![].try_into().unwrap(),
+		});
 		Proposers::<T>::insert(caller.clone(), true);
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
 			Proposers::<T>::insert(who.clone(), true);
-			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal_bytes, false).unwrap();
+			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, false).unwrap();
 		}
 
-		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id, &proposal_bytes, true).unwrap();
-	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal_bytes.clone())
+		Pallet::<T>::commit_vote(caller.clone(), nonce, chain_id, &proposal, true).unwrap();
+	}: _(RawOrigin::Signed(caller.clone()), nonce, chain_id,  proposal.clone())
 	verify {
-		assert!(Votes::<T>::get(chain_id, (nonce, proposal_bytes)).is_some());
+		assert!(Votes::<T>::get(chain_id, (nonce, proposal)).is_some());
 	}
 }
