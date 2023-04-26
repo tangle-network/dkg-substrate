@@ -71,7 +71,10 @@ where
 		// Authenticate the message against the current authorities
 		let reporter = dkg_worker.authenticate_msg_origin(
 			is_main_round,
-			(authorities.clone().unwrap().0.into(), authorities.unwrap().1.into()),
+			(
+				authorities.clone().expect("Authorities not found!").0.into(),
+				authorities.expect("Authorities not found!").1.into(),
+			),
 			&signed_payload,
 			&msg.signature,
 		)?;

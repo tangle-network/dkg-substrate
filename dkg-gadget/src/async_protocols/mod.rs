@@ -581,7 +581,10 @@ where
 				}),
 				ProtocolType::Offline { unsigned_proposal, .. } =>
 					DKGMsgPayload::Offline(DKGOfflineMessage {
-						key: Vec::from(&unsigned_proposal.hash().unwrap() as &[u8]),
+						key: Vec::from(
+							&unsigned_proposal.hash().expect("Cannot hash unsigned proposal!")
+								as &[u8],
+						),
 						signer_set_id: party_id as u64,
 						offline_msg: serialized_body,
 						async_index,
@@ -682,6 +685,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // allow unwraps in tests
 mod tests {
 	use dkg_primitives::crypto::AuthorityId;
 	use sp_application_crypto::ByteArray;
