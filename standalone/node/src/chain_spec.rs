@@ -368,7 +368,7 @@ fn testnet_genesis(
 				resource_ids: bounded_vec![RESOURCE_ID_HERMES_ATHENA, RESOURCE_ID_ATHENA_HERMES],
 				info: BridgeInfo {
 					additional: Default::default(),
-					display: SerdeData::from_str("hermes-athena").unwrap()
+					display: SerdeData::from_str("hermes-athena").expect("serialisation failed!")
 				}
 			}],
 			..Default::default()

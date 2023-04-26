@@ -56,7 +56,7 @@ where
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
 
-	let mut offchain = maybe_offchain.unwrap();
+	let mut offchain = maybe_offchain.expect("Should never happen, checked above");
 	offchain.set(STORAGE_PREFIX, AGGREGATED_MISBEHAVIOUR_REPORTS, &reports.clone().encode());
 	dkg_worker
 		.logger

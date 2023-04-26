@@ -145,6 +145,7 @@ pub fn convert_to_eth_address(pub_key: &GE) -> Result<String, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
 	use super::{convert_to_checksum_eth_address, convert_to_eth_address, recover_pub_key_raw, GE};
 	use curv::{

@@ -685,6 +685,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // allow unwraps in tests
 mod tests {
 	use dkg_primitives::crypto::AuthorityId;
 	use sp_application_crypto::ByteArray;

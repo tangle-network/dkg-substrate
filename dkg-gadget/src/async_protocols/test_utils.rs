@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)] // allow unwraps in tests
 use crate::{
 	async_protocols::{blockchain_interface::BlockchainInterface, BatchKey},
 	proposal::make_signed_proposal,
