@@ -384,8 +384,9 @@ export async function sudoTx(
 	const alice = keyring.addFromUri('//Alice');
 	return new Promise(async (resolve, _reject) => {
 		const unsub = await api.tx.sudo
-			.sudo(call)
+			.sudo(call.method.toHex())
 			.signAndSend(alice, ({ status }) => {
+				console.log("Status: ", status);
 				if (status.isFinalized) {
 					unsub();
 					resolve();
@@ -401,7 +402,7 @@ export async function triggerDkgManuaIncrementNonce(
 	const alice = keyring.addFromUri('//Alice');
 	const call = api.tx.dkg.manualIncrementNonce();
 	const unsub = await api.tx.sudo
-		.sudo(call)
+		.sudo(call.method.toHex())
 		.signAndSend(alice, ({ status }) => {
 			if (status.isFinalized) {
 				unsub();

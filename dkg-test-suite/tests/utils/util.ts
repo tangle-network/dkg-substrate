@@ -14,15 +14,15 @@
  * limitations under the License.
  *
  */
-import { options } from '@webb-tools/api';
 import { ACC1_PK, ACC2_PK, SECONDS } from './constants';
 import { ApiPromise } from '@polkadot/api';
 import { ChildProcess, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { ethers } from 'ethers';
-import { LocalEvmChain } from '@webb-tools/test-utils';
-import { VBridge, Utility } from '@webb-tools/protocol-solidity';
+import { BigNumber, ethers } from 'ethers';
+import { LocalEvmChain } from '@webb-tools/evm-test-utils';
+import { Utility } from '@webb-tools/protocol-solidity';
+import { VBridge } from '@webb-tools/vbridge';
 import { MintableToken } from '@webb-tools/tokens';
 import {
 	ethAddressFromUncompressedPublicKey,
@@ -49,7 +49,7 @@ export let wallet2: ethers.Wallet;
 export let smallZkComponents: Utility.ZkComponents;
 export let largeZkComponents: Utility.ZkComponents;
 
-export let signatureVBridge: VBridge.VBridge;
+export let signatureVBridge: VBridge;
 
 export const executeBefore = async () => {
 	// delete the tmp directory if it exists.
@@ -160,7 +160,7 @@ export const executeBefore = async () => {
 	);
 	console.log('deployed the VBridge');
 
-	polkadotApi = await ApiPromise.create(options());
+	polkadotApi = await ApiPromise.create();
 
 	// Get the dkg public key
 	const dkgPublicKey = await waitUntilDKGPublicKeyStoredOnChain(polkadotApi);
@@ -192,7 +192,7 @@ export const handleSetup = async (governor: string) => {
 		localChain.typedChainId
 	)!;
 	const token = await MintableToken.tokenFromAddress(tokenAddress, wallet1);
-	let tx = await token.approveSpending(anchor.contract.address);
+	let tx = await token.approveSpending(anchor.contract.address, BigNumber.from(999999999999999));
 	await tx.wait();
 	await token.mintTokens(wallet1.address, ethers.utils.parseEther('1000'));
 
@@ -204,7 +204,7 @@ export const handleSetup = async (governor: string) => {
 		localChain2.typedChainId
 	)!;
 	const token2 = await MintableToken.tokenFromAddress(tokenAddress2, wallet2);
-	tx = await token2.approveSpending(anchor2.contract.address);
+	tx = await token2.approveSpending(anchor2.contract.address, BigNumber.from(999999999999999));
 	await tx.wait();
 	await token2.mintTokens(wallet2.address, ethers.utils.parseEther('1000'));
 

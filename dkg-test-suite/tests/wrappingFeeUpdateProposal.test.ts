@@ -15,7 +15,7 @@
  *
  */
 import { waitForEvent, sudoTx } from './utils/setup';
-import { GovernedTokenWrapper } from '@webb-tools/tokens';
+import { FungibleTokenWrapper } from '@webb-tools/tokens';
 import { hexToNumber, hexToU8a, u8aToHex } from '@polkadot/util';
 import {
 	WrappingFeeUpdateProposal,
@@ -35,7 +35,7 @@ import { registerResourceId } from '@webb-tools/test-utils';
 it('should be able to sign wrapping fee update proposal', async () => {
 	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
-	let governedToken = GovernedTokenWrapper.connect(
+	let governedToken = FungibleTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);

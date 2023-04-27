@@ -15,7 +15,7 @@
  *
  */
 import { sudoTx, waitForEvent } from './utils/setup';
-import { GovernedTokenWrapper } from '@webb-tools/tokens';
+import { FungibleTokenWrapper } from '@webb-tools/tokens';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
 import {
 	ResourceIdUpdateProposal,
@@ -52,12 +52,13 @@ it('should be able to sign resource id update proposal', async () => {
 		proposalNonce
 	);
 
-	// Let's create a new GovernedTokenWrapper and set the resourceId for it via
+	// Let's create a new FungibleTokenWrapper and set the resourceId for it via
 	// the ResourceIdUpdate Proposal
 	const dummyAddress = '0x1111111111111111111111111111111111111111';
-	const governedToken = await GovernedTokenWrapper.createGovernedTokenWrapper(
+	const governedToken = await FungibleTokenWrapper.createFungibleTokenWrapper(
 		'token-e2e-test',
 		'te2e',
+		0,
 		dummyAddress,
 		dummyAddress,
 		'10000000000000000000000000',
@@ -139,7 +140,7 @@ it('should be able to sign resource id update proposal', async () => {
 	await tx2.wait();
 
 	expect(
-		await bridgeSide.contract._resourceIDToHandlerAddress(
+		await bridgeSide.contract._resourceIdToHandlerAddress(
 			newResourceId.toString()
 		)
 	).to.eq(handlerAddress);

@@ -60,10 +60,12 @@ it('should be able to sign anchor update proposal', async () => {
 	await anchor.transact(
 		[],
 		[outputUtxo],
-		{},
+		0,
 		0,
 		wallet1.address,
-		wallet1.address
+		wallet1.address,
+		"0x",
+		{}
 	);
 
 	// now check the new merkel root.
@@ -93,7 +95,7 @@ it('should be able to sign anchor update proposal', async () => {
 
 	const anchorProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
 		proposalHeader,
-		newMerkleRoot1,
+		newMerkleRoot1.toString(),
 		srcResourceId
 	);
 	// register proposal resourceId.
@@ -106,7 +108,7 @@ it('should be able to sign anchor update proposal', async () => {
 			Evm: localChain.evmId,
 		},
 		resourceId.toU8a(),
-		prop
+		prop.toU8a()
 	);
 
 	// The acknowledgeProposal call should come from someone in the proposer set
@@ -171,7 +173,7 @@ it('should be able to sign anchor update proposal', async () => {
 	);
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
-	const val = await contract._resourceIDToHandlerAddress(resourceId.toString());
+	const val = await contract._resourceIdToHandlerAddress(resourceId.toString());
 	const anchorHandlerAddress = await anchor2.getHandler();
 	expect(val).to.eq(anchorHandlerAddress);
 	const tx2 = await contract.executeProposalWithSignature(
