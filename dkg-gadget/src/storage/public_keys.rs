@@ -57,7 +57,7 @@ where
 	if maybe_offchain.is_none() {
 		return Err(DKGError::GenericError { reason: "No offchain storage available".to_string() })
 	}
-	let offchain = maybe_offchain.unwrap();
+	let offchain = maybe_offchain.expect("checked above");
 	let keys = aggregated_public_keys.get(&session_id).ok_or_else(|| DKGError::CriticalError {
 		reason: format!("Aggregated public key for session {session_id} does not exist in map"),
 	})?;

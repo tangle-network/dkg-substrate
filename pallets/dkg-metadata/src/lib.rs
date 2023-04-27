@@ -646,6 +646,8 @@ pub mod pallet {
 		InvalidControllerAccount,
 		/// Input is out of bounds
 		OutOfBounds,
+		/// Cannot retreive signer from ecdsa signature
+		CannotRetreiveSigner,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -849,7 +851,7 @@ pub mod pallet {
 			let authorities: Vec<T::DKGId> =
 				Self::best_authorities().iter().map(|id| id.1.clone()).collect();
 
-			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities);
+			let dict = Self::process_public_key_submissions(keys_and_signatures, authorities)?;
 			let threshold = Self::signature_threshold();
 
 			let mut accepted = false;
@@ -909,7 +911,7 @@ pub mod pallet {
 
 			let next_authorities: Vec<T::DKGId> =
 				Self::next_best_authorities().iter().map(|id| id.1.clone()).collect();
-			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities);
+			let dict = Self::process_public_key_submissions(keys_and_signatures, next_authorities)?;
 			let threshold = Self::next_signature_threshold();
 
 			// Loop through the keys, and if we find one that has enough signatures, store it.
@@ -974,9 +976,10 @@ pub mod pallet {
 		pub fn submit_public_key_signature(
 			origin: OriginFor<T>,
 			signature_proposal: RefreshProposalSigned,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			ensure_none(origin)?;
-			ensure!(Self::next_dkg_public_key().is_some(), Error::<T>::NoNextPublicKey);
+			let (_, next_pub_key) =
+				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
 			ensure!(
 				Self::next_public_key_signature().is_none(),
 				Error::<T>::AlreadySubmittedSignature
@@ -991,8 +994,6 @@ pub mod pallet {
 			let bounded_signature: BoundedVec<_, _> =
 				signature.clone().try_into().map_err(|_| Error::<T>::InvalidSignature)?;
 			ensure!(!used_signatures.contains(&bounded_signature), Error::<T>::UsedSignature);
-
-			let (_, next_pub_key) = Self::next_dkg_public_key().unwrap();
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
 			let data = RefreshProposal {
@@ -1031,7 +1032,7 @@ pub mod pallet {
 			let current_block = <frame_system::Pallet<T>>::block_number();
 			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 
-			Ok(().into())
+			Ok(())
 		}
 
 		/// Submits misbehaviour reports on chain. Signatures of the offending authority are
@@ -1134,10 +1135,12 @@ pub mod pallet {
 								// If we cannot find any authority by highest reputation
 								// pick the first authority
 								let highest_reputation_authority =
-									if authorities_ordered_by_reputation.is_empty() {
-										non_jailed_non_next_best_authorities[0].clone()
+									if let Some(most_reputed_authority) =
+										authorities_ordered_by_reputation.pop()
+									{
+										most_reputed_authority.0
 									} else {
-										authorities_ordered_by_reputation.pop().unwrap().0
+										non_jailed_non_next_best_authorities[0].clone()
 									};
 
 								let next_best_authorities: BoundedVec<_, _> =
@@ -1520,7 +1523,7 @@ impl<T: Config> Pallet<T> {
 	pub fn process_public_key_submissions(
 		aggregated_keys: AggregatedPublicKeys,
 		authorities: Vec<T::DKGId>,
-	) -> BTreeMap<Vec<u8>, Vec<T::DKGId>> {
+	) -> Result<BTreeMap<Vec<u8>, Vec<T::DKGId>>, DispatchError> {
 		let mut dict: BTreeMap<Vec<u8>, Vec<T::DKGId>> = BTreeMap::new();
 
 		for (pub_key, signature) in aggregated_keys.keys_and_signatures {
@@ -1537,19 +1540,23 @@ impl<T: Config> Pallet<T> {
 			let (maybe_authority, success) =
 				verify_signer_from_set_ecdsa(maybe_signers, &pub_key, &signature);
 
+			let authority = maybe_authority.ok_or(Error::<T>::CannotRetreiveSigner)?;
+
 			if success {
-				let authority = T::DKGId::from(maybe_authority.unwrap());
+				let authority = T::DKGId::from(authority);
 				if !dict.contains_key(&pub_key) {
 					dict.insert(pub_key.clone(), Vec::new());
 				}
-				let temp = dict.get_mut(&pub_key).unwrap();
+				let temp = dict
+					.get_mut(&pub_key)
+					.expect("this should never panic, key inserted previously!");
 				if !temp.contains(&authority) {
 					temp.push(authority);
 				}
 			}
 		}
 
-		dict
+		Ok(dict)
 	}
 
 	pub fn process_misbehaviour_reports(
@@ -1583,20 +1590,19 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn store_consensus_log(
-		authority_ids: Vec<T::DKGId>,
-		next_authority_ids: Vec<T::DKGId>,
+		authority_ids: BoundedVec<T::DKGId, T::MaxAuthorities>,
+		next_authority_ids: BoundedVec<T::DKGId, T::MaxAuthorities>,
 		active_set_id: dkg_runtime_primitives::AuthoritySetId,
 	) {
-		let bounded_authorities: BoundedVec<_, _> = authority_ids.try_into().unwrap();
 		let log: DigestItem = DigestItem::Consensus(
 			DKG_ENGINE_ID,
 			ConsensusLog::AuthoritiesChange {
 				active: AuthoritySet::<T::DKGId, T::MaxAuthorities> {
-					authorities: bounded_authorities,
+					authorities: authority_ids,
 					id: active_set_id,
 				},
 				queued: AuthoritySet::<T::DKGId, T::MaxAuthorities> {
-					authorities: next_authority_ids.try_into().unwrap(),
+					authorities: next_authority_ids,
 					id: active_set_id.saturating_add(1),
 				},
 			}
@@ -1634,11 +1640,14 @@ impl<T: Config> Pallet<T> {
 		let next_id = Self::next_authority_set_id();
 		// We continue to rotate the next authority set in case of failure of the previous
 		// next authorities to generate a key, thus preventing a signature from being produced.
-		let bounded_next_authority_ids: BoundedVec<_, _> =
-			next_authority_ids.clone().try_into().unwrap();
+		let bounded_next_authority_ids: BoundedVec<_, _> = next_authority_ids
+			.clone()
+			.try_into()
+			.expect("This should never overflow, since read from bounded storage");
 		NextAuthorities::<T>::put(&bounded_next_authority_ids);
-		let bounded_next_authorities_accounts: BoundedVec<_, _> =
-			next_authorities_accounts.try_into().unwrap();
+		let bounded_next_authorities_accounts: BoundedVec<_, _> = next_authorities_accounts
+			.try_into()
+			.expect("This should never overflow, since read from bounded storage");
 		NextAuthoritiesAccounts::<T>::put(&bounded_next_authorities_accounts);
 		NextAuthoritySetId::<T>::put(next_id.saturating_add(1));
 		let new_best_authorities = Self::next_best_authorities();
@@ -1663,7 +1672,7 @@ impl<T: Config> Pallet<T> {
 		let bounded_authorities: BoundedVec<_, _> =
 			Self::get_best_authorities(Self::next_keygen_threshold() as usize, &next_authority_ids)
 				.try_into()
-				.unwrap();
+				.expect("This should never overflow, since read from bounded storage");
 		NextBestAuthorities::<T>::put(bounded_authorities);
 		// Switch on forced for forceful rotations
 		let v = if forced {
@@ -1678,32 +1687,42 @@ impl<T: Config> Pallet<T> {
 			SignatureThreshold::<T>::put(new_current_signature_threshold);
 			KeygenThreshold::<T>::put(new_current_keygen_threshold);
 			// Update the new and next authorities
-			let bounded_authority_ids: BoundedVec<_, _> =
-				new_authority_ids.clone().try_into().unwrap();
+			let bounded_authority_ids: BoundedVec<_, _> = new_authority_ids
+				.try_into()
+				.expect("This should never overflow, since read from bounded storage");
 			Authorities::<T>::put(&bounded_authority_ids);
-			let bounded_authority_accounts: BoundedVec<_, _> =
-				new_authorities_accounts.try_into().unwrap();
+			let bounded_authority_accounts: BoundedVec<_, _> = new_authorities_accounts
+				.try_into()
+				.expect("This should never overflow, since read from bounded storage");
 			CurrentAuthoritiesAccounts::<T>::put(&bounded_authority_accounts);
 			BestAuthorities::<T>::put(new_best_authorities);
 			// Update the set id after changing
 			AuthoritySetId::<T>::put(next_id);
 			// Deposit a consensus log about the authority set change
-			Self::store_consensus_log(new_authority_ids, next_authority_ids, next_id);
+			Self::store_consensus_log(bounded_authority_ids, bounded_next_authority_ids, next_id);
 			// Delete next records
 			NextDKGPublicKey::<T>::kill();
 			NextPublicKeySignature::<T>::kill();
 			// Record historical refresh record
 			Self::insert_historical_refresh(
-				&(dkg_pub_key.0, dkg_pub_key.clone().1.into()),
-				&(next_pub_key.0, next_pub_key.clone().1.into()),
-				&next_pub_key_signature,
+				&(dkg_pub_key.0, dkg_pub_key.clone().1),
+				&(next_pub_key.0, next_pub_key.clone().1),
+				next_pub_key_signature.clone(),
 			);
 			// Set new keys
 			DKGPublicKey::<T>::put(next_pub_key.clone());
 			DKGPublicKeySignature::<T>::put(next_pub_key_signature.clone());
 			PreviousPublicKey::<T>::put(dkg_pub_key);
-			UsedSignatures::<T>::mutate(|val| {
-				val.try_push(pub_key_signature.clone()).unwrap();
+			let _ = UsedSignatures::<T>::try_mutate(|val| {
+				let added = val.try_push(pub_key_signature.clone());
+				if added.is_err() {
+					// this should never happen, log error message that size limit has reached
+					log::warn!(
+						target: "runtime::dkg_metadata",
+						"UsedSignature limit reached!",
+					);
+				};
+				added
 			});
 			// and increment the nonce
 			let current_nonce = Self::refresh_nonce();
@@ -1745,11 +1764,14 @@ impl<T: Config> Pallet<T> {
 		);
 		assert!(Authorities::<T>::get().is_empty(), "Authorities are already initialized!");
 		// Initialize current authorities
-		let bounded_authorities: BoundedVec<_, _> = authorities.to_vec().try_into().unwrap();
+		let bounded_authorities: BoundedVec<_, _> =
+			authorities.to_vec().try_into().expect("Genesis Authorities out of bounds!");
 		Authorities::<T>::put(bounded_authorities.clone());
 		AuthoritySetId::<T>::put(0);
-		let bounded_authority_account_ids: BoundedVec<_, _> =
-			authority_account_ids.to_vec().try_into().unwrap();
+		let bounded_authority_account_ids: BoundedVec<_, _> = authority_account_ids
+			.to_vec()
+			.try_into()
+			.expect("Genesis Authorities accounts out of bounds!");
 		CurrentAuthoritiesAccounts::<T>::put(bounded_authority_account_ids.clone());
 		// Initialize next authorities
 		NextAuthorities::<T>::put(bounded_authorities);
@@ -1762,13 +1784,17 @@ impl<T: Config> Pallet<T> {
 			"best_authorities: {:?}",
 			best_authorities,
 		);
-		let bounded_best_authorities: BoundedVec<_, _> =
-			best_authorities.to_vec().try_into().unwrap();
+		let bounded_best_authorities: BoundedVec<_, _> = best_authorities
+			.to_vec()
+			.try_into()
+			.expect("Genesis Best Authorities out of bounds!");
 		BestAuthorities::<T>::put(bounded_best_authorities);
 		let next_best_authorities =
 			Self::get_best_authorities(Self::keygen_threshold() as usize, authorities);
-		let bounded_next_best_authorities: BoundedVec<_, _> =
-			next_best_authorities.to_vec().try_into().unwrap();
+		let bounded_next_best_authorities: BoundedVec<_, _> = next_best_authorities
+			.to_vec()
+			.try_into()
+			.expect("Genesis Next Best Authorities out of bounds!");
 		NextBestAuthorities::<T>::put(bounded_next_best_authorities);
 
 		<T::OnAuthoritySetChangeHandler as OnAuthoritySetChangeHandler<
@@ -2040,16 +2066,16 @@ impl<T: Config> Pallet<T> {
 	/// public key before rotation, the next round's public key, and the refresh
 	/// signature signed by the current key refreshing the next.
 	pub fn insert_historical_refresh(
-		dkg_pub_key: &(dkg_runtime_primitives::AuthoritySetId, Vec<u8>),
-		next_pub_key: &(dkg_runtime_primitives::AuthoritySetId, Vec<u8>),
-		next_pub_key_signature: &[u8],
+		dkg_pub_key: &(dkg_runtime_primitives::AuthoritySetId, BoundedVec<u8, T::MaxKeyLength>),
+		next_pub_key: &(dkg_runtime_primitives::AuthoritySetId, BoundedVec<u8, T::MaxKeyLength>),
+		next_pub_key_signature: BoundedVec<u8, T::MaxSignatureLength>,
 	) {
 		HistoricalRounds::<T>::insert(
 			next_pub_key.0,
 			RoundMetadata {
-				curr_round_pub_key: dkg_pub_key.1.clone().try_into().unwrap(),
-				next_round_pub_key: next_pub_key.clone().1.try_into().unwrap(),
-				refresh_signature: next_pub_key_signature.to_vec().try_into().unwrap(),
+				curr_round_pub_key: dkg_pub_key.1.clone(),
+				next_round_pub_key: next_pub_key.clone().1,
+				refresh_signature: next_pub_key_signature,
 			},
 		);
 	}

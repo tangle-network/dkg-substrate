@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 #![cfg(test)]
-
+#![allow(clippy::unwrap_used)]
 use super::{
 	mock::{
 		assert_events, new_test_ext, AccountId, Balances, ChainIdentifier, DKGProposals,

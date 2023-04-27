@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)] // allow unwraps in tests
 pub mod data_types;
 pub mod mock_blockchain_config;
 pub mod server;
