@@ -5,7 +5,7 @@
 //! In summary, running this test orchestrator is an "all in one" replacement
 //! for needing to run multiple clients. Each individual DKG node's stdout will be
 //! piped to the temporary directory
-
+#![allow(clippy::unwrap_used)] // allow unwraps in tests
 use crate::in_memory_gossip_engine::InMemoryGossipEngine;
 use dkg_gadget::worker::TestBundle;
 use dkg_mock_blockchain::*;

@@ -1186,7 +1186,9 @@ where
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let dkg_msg = signed_dkg_msg.msg;
 		let encoded = dkg_msg.encode();
-		let signature = signed_dkg_msg.signature.unwrap();
+		let signature = signed_dkg_msg.signature.ok_or(DKGError::GenericError {
+			reason: "Signature not found in signed_dkg_msg".into(),
+		})?;
 		// Get authority accounts
 		let mut authorities: Option<(Vec<AuthorityId>, Vec<AuthorityId>)> = None;
 		if let Some(header) = latest_header.read().clone() {
@@ -1201,7 +1203,11 @@ where
 		let check_signers = |xs: &[AuthorityId]| {
 			return dkg_runtime_primitives::utils::verify_signer_from_set_ecdsa(
 				xs.iter()
-					.map(|x| ecdsa::Public::from_raw(to_slice_33(&x.encode()).unwrap()))
+					.map(|x| {
+						let slice_33 =
+							to_slice_33(&x.encode()).expect("AuthorityId encoding failed!");
+						ecdsa::Public::from_raw(slice_33)
+					})
 					.collect(),
 				&encoded,
 				&signature,
@@ -1209,7 +1215,8 @@ where
 			.1
 		};
 
-		if check_signers(&authorities.clone().unwrap().0) || check_signers(&authorities.unwrap().1)
+		if check_signers(&authorities.clone().expect("Checked for empty authorities above").0) ||
+			check_signers(&authorities.expect("Checked for empty authorities above").1)
 		{
 			Ok(dkg_msg)
 		} else {
@@ -1450,7 +1457,11 @@ where
 			})
 		}
 
-		Ok(Public::from(maybe_signer.unwrap()))
+		let signer = maybe_signer.ok_or(DKGError::GenericError {
+			reason: "verify_signer_from_set_ecdsa could not determin signer!".to_string(),
+		})?;
+
+		Ok(Public::from(signer))
 	}
 
 	fn submit_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
@@ -1861,7 +1872,9 @@ pub trait KeystoreExt {
 	fn get_keystore(&self) -> &DKGKeystore;
 	fn get_authority_public_key(&self) -> Public {
 		self.get_keystore()
-			.authority_id(&self.get_keystore().public_keys().unwrap())
+			.authority_id(
+				&self.get_keystore().public_keys().expect("Could not find authority public key"),
+			)
 			.unwrap_or_else(|| panic!("Could not find authority public key"))
 	}
 

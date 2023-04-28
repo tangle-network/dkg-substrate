@@ -76,7 +76,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 	}
 
 	let current_block_number = {
-		let header = latest_header.as_ref().unwrap();
+		let header = latest_header.as_ref().expect("Should not happen, checked above");
 		header.number()
 	};
 
@@ -87,7 +87,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 			Some(ser_props) => OffchainSignedProposals::<NumberFor<B>, MaxProposalLength>::decode(
 				&mut &ser_props[..],
 			)
-			.unwrap(),
+			.expect("Unable to decode offchain signed proposal!"),
 			None => Default::default(),
 		};
 

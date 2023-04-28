@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)] // allow unwraps in tests
 use crate::{
 	async_protocols::{blockchain_interface::BlockchainInterface, BatchKey},
 	proposal::make_signed_proposal,
@@ -48,7 +49,10 @@ impl BlockchainInterface for TestDummyIface {
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
 		dkg_logging::info!(
 			"Sending message through iface id={}",
-			unsigned_msg.payload.async_proto_only_get_sender_id().unwrap()
+			unsigned_msg
+				.payload
+				.async_proto_only_get_sender_id()
+				.expect("Could not get sender id")
 		);
 		let faux_signed_message = SignedDKGMessage { msg: unsigned_msg, signature: None };
 		self.sender

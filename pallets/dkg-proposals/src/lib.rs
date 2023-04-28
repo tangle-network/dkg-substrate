@@ -410,7 +410,8 @@ pub mod pallet {
 				ChainNonces::<T>::insert(chain_id, ProposalNonce::from(0));
 			}
 			for (r_id, r_data) in self.initial_r_ids.iter() {
-				let bounded_input: BoundedVec<_, _> = r_data.clone().try_into().unwrap();
+				let bounded_input: BoundedVec<_, _> =
+					r_data.clone().try_into().expect("Genesis resources is too large");
 				Resources::<T>::insert(*r_id, bounded_input);
 			}
 
@@ -964,21 +965,24 @@ impl<T: Config>
 		{
 			ProposerCount::<T>::put(Self::proposer_count().saturating_add(1));
 			Proposers::<T>::insert(authority_account, true);
-			// TODO: Return result to avoid panic
+
 			let bounded_external_account: BoundedVec<_, _> =
-				external_account.clone().try_into().unwrap();
+				external_account.clone().try_into().expect("External account outside limits!");
 			ExternalProposerAccounts::<T>::insert(authority_account, bounded_external_account);
 		}
 		// Update the new authorities that are also proposers
-		// TODO: Return result to avoid panic
-		let bounded_authorities: BoundedVec<_, _> = authorities.try_into().unwrap();
+		let bounded_authorities: BoundedVec<_, _> = authorities
+			.try_into()
+			.expect("This should never happen, bounded authorities outside limits!");
 		AuthorityProposers::<T>::put(bounded_authorities.clone());
 		// Update the external accounts of the new authorities
-		// TODO: Return result to avoid panic
 		let mut bounded_new_external_accounts: BoundedVec<_, _> = Default::default();
 		for item in new_external_accounts {
-			let bounded_item: BoundedVec<_, _> = item.try_into().unwrap();
-			bounded_new_external_accounts.try_push(bounded_item).unwrap();
+			let bounded_item: BoundedVec<_, _> =
+				item.try_into().expect("New External account outside limits!");
+			bounded_new_external_accounts
+				.try_push(bounded_item)
+				.expect("New External account count outside limits!");
 		}
 		ExternalAuthorityProposerAccounts::<T>::put(bounded_new_external_accounts);
 		Self::deposit_event(Event::<T>::AuthorityProposersReset {

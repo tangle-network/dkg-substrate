@@ -81,7 +81,8 @@ mod serde_ {
 		type Err = ();
 
 		fn from_str(s: &str) -> Result<Self, Self::Err> {
-			Ok(SerdeData(Data::Raw(s.as_bytes().to_vec().try_into().unwrap())))
+			let raw_data = s.as_bytes().to_vec().try_into().map_err(|_| ())?;
+			Ok(SerdeData(Data::Raw(raw_data)))
 		}
 	}
 
@@ -96,7 +97,13 @@ mod serde_ {
 		where
 			E: serde::de::Error,
 		{
-			Ok(SerdeData(Data::Raw(hex::decode(v).unwrap().try_into().unwrap())))
+			use serde::de::{Error, Unexpected};
+			let v_hex_decoded =
+				hex::decode(v).map_err(|_| Error::invalid_value(Unexpected::Str(v), &self))?;
+			let v_bounded = v_hex_decoded
+				.try_into()
+				.map_err(|_| Error::invalid_value(Unexpected::Str(v), &self))?;
+			Ok(SerdeData(Data::Raw(v_bounded)))
 		}
 	}
 	impl<'de> Deserialize<'de> for SerdeData {

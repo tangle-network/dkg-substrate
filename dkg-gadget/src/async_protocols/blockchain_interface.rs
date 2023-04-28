@@ -123,7 +123,10 @@ impl<
 	fn send_result_to_test_client(&self, result: Result<(), String>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
 			if let Some(current_test_id) = *bundle.current_test_id.read() {
-				bundle.to_test_client.send((current_test_id, result)).unwrap();
+				let _ = bundle
+					.to_test_client
+					.send((current_test_id, result))
+					.map_err(|err| format!("send_result_to_test_client failed with error: {err}"));
 			}
 		}
 	}
@@ -230,7 +233,7 @@ where
 
 			if proposals_for_this_batch.len() == batch_key.len {
 				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-				let proposals = lock.remove(&batch_key).unwrap(); // safe unwrap since lock is held
+				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_resuls"); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
 				if let Some(metrics) = self.metrics.as_ref() {

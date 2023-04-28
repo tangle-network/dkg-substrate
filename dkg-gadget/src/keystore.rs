@@ -199,6 +199,7 @@ impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // allow unwraps in tests
 mod tests {
 	use std::sync::Arc;
 

@@ -213,7 +213,9 @@ where
 				SignManual::new(message.clone(), completed_offline_stage)
 					.map_err(|err| Self::convert_mpc_sign_error_to_dkg_error_signing(err))?;
 
-			let partial_sig_bytes = serde_json::to_vec(&partial_signature).unwrap();
+			let partial_sig_bytes = serde_json::to_vec(&partial_signature).map_err(|_| {
+				DKGError::GenericError { reason: "Partial signature is invalid".to_string() }
+			})?;
 
 			let payload = DKGMsgPayload::Vote(DKGVoteMessage {
 				party_ind: *offline_i.as_ref(),
