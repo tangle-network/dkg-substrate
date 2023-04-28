@@ -627,6 +627,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 	fn handle_signed_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
+		signature: Vec<u8>,
 	) -> DispatchResult {
 		// Attempt to remove all previous unsigned refresh proposals too
 		// This may also remove ProposerSetUpdate proposals that haven't been signed
@@ -635,6 +636,14 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// need to be used to update the governors on the respective webb Apps anyway.
 		let remaining_untyped_proposals: usize =
 			UnsignedProposalQueue::<T>::iter_key_prefix(TypedChainId::None).count();
+
+		// emit an event for the signed refresh proposal
+		Self::deposit_event(Event::<T>::ProposalSigned {
+			key: DKGPayloadKey::RefreshVote(proposal.nonce),
+			target_chain: TypedChainId::None,
+			data: proposal.pub_key,
+			signature,
+		});
 
 		for i in 0..remaining_untyped_proposals {
 			let index = i as u32;
