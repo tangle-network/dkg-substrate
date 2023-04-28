@@ -157,7 +157,7 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			0,
 			wallet1.address,
 			wallet1.address,
-			"0x",
+			wallet1.address,
 			{}
 		);
 
