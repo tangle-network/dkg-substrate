@@ -31,17 +31,17 @@ cd "$PROJECT_ROOT"
 
 echo "*** Start Webb DKG Node ***"
 # Alice
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/alice --chain local -lerror --alice \
+./target/release/dkg-standalone-node --base-path=./tmp/alice --chain local --validator -lerror --alice \
   --rpc-cors all --ws-external \
   --port 30304 \
   --ws-port 9944 &
 # Bob
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/bob --chain local -lerror --bob \
+./target/release/dkg-standalone-node --base-path=./tmp/bob --chain local --validator -lerror --bob \
   --rpc-cors all --ws-external \
   --port 30305 \
   --ws-port 9945 &
 # Charlie
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/charlie --chain local -linfo --charlie \
+./target/release/dkg-standalone-node --base-path=./tmp/charlie --chain local --validator -linfo --charlie \
     --rpc-cors all --ws-external \
     --ws-port 9948 \
     --port 30308 \
@@ -51,5 +51,5 @@ cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/charlie --cha
     -ldkg_metadata=debug \
     -lruntime::dkg_proposal_handler=debug \
     -lruntime::offchain=debug \
-    -ldkg_proposal_handler=debug
+    -ldkg_proposal_handler=debug --unsafe-rpc-external --rpc-methods=unsafe
 popd
