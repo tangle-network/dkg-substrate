@@ -1017,7 +1017,7 @@ pub mod pallet {
 					Error::<T>::InvalidSignature
 				})?;
 			// Remove unsigned refresh proposal from queue
-			T::ProposalHandler::handle_signed_refresh_proposal(data)?;
+			T::ProposalHandler::handle_signed_refresh_proposal(data, signature.clone())?;
 			let bounded_signature: BoundedVec<_, _> =
 				signature.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
 			NextPublicKeySignature::<T>::put(bounded_signature);

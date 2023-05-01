@@ -176,6 +176,7 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_refresh_proposal(
 		_proposal: RefreshProposal,
+		_signature: Vec<u8>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
