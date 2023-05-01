@@ -52,13 +52,7 @@ use super::KeygenPartyId;
 pub trait BlockchainInterface: Send + Sync + Unpin {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
-	type MaxProposalLength: Get<u32>
-		+ Clone
-		+ Send
-		+ Sync
-		+ std::fmt::Debug
-		+ 'static
-		+ Unpin;
+	type MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 
 	async fn verify_signature_against_authorities(
 		&self,

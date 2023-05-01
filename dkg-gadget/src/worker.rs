@@ -771,7 +771,8 @@ where
 			session_id,
 			threshold,
 			ProtoStageType::Genesis,
-		).await;
+		)
+		.await;
 		Ok(())
 	}
 
@@ -836,7 +837,8 @@ where
 			session_id,
 			threshold,
 			ProtoStageType::Queued,
-		).await;
+		)
+		.await;
 		Ok(())
 	}
 

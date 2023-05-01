@@ -104,7 +104,7 @@ where
 					.try_push(bounded_signature)
 					.map_err(|_| DKGError::InputOutOfBounds)?;
 			}
-	
+
 			reports.clone()
 		};
 

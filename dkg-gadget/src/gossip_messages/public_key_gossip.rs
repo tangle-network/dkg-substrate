@@ -79,7 +79,7 @@ where
 
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let session_id = msg.session_id;
-		
+
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.

@@ -18,9 +18,10 @@ use futures::Stream;
 use round_based::Msg;
 use sp_runtime::traits::Get;
 use std::{
+	marker::PhantomData,
 	pin::Pin,
 	sync::Arc,
-	task::{Context, Poll}, marker::PhantomData,
+	task::{Context, Poll},
 };
 
 use crate::debug_logger::DebugLogger;
@@ -35,11 +36,11 @@ pub struct IncomingAsyncProtocolWrapper<
 > {
 	stream: Pin<Box<dyn Stream<Item = Result<Msg<T::IncomingMapped>, DKGError>> + Send + 'static>>,
 	logger: DebugLogger,
-	_pd: PhantomData<(BI, MaxProposalLength)>
+	_pd: PhantomData<(BI, MaxProposalLength)>,
 }
 
 impl<
-		T: TransformIncoming +,
+		T: TransformIncoming,
 		BI: BlockchainInterface + 'static,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + Unpin + 'static,
 	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
@@ -145,7 +146,9 @@ impl<
 		T: TransformIncoming,
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> Unpin for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength> {}
+	> Unpin for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
+{
+}
 
 impl<
 		T: TransformIncoming,
