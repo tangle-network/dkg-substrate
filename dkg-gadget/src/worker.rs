@@ -420,7 +420,7 @@ where
 		}
 	}
 
-	fn spawn_keygen_protocol(
+	async fn spawn_keygen_protocol(
 		&self,
 		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
@@ -482,13 +482,13 @@ where
 
 					Err(err) => {
 						self.logger.error(format!("Error starting meta handler {:?}", &err));
-						self.handle_dkg_error(err);
+						self.handle_dkg_error(err).await;
 					},
 				}
 			},
 
 			Err(err) => {
-				self.handle_dkg_error(err);
+				self.handle_dkg_error(err).await;
 			},
 		}
 	}
@@ -771,7 +771,7 @@ where
 			session_id,
 			threshold,
 			ProtoStageType::Genesis,
-		);
+		).await;
 		Ok(())
 	}
 
@@ -836,7 +836,7 @@ where
 			session_id,
 			threshold,
 			ProtoStageType::Queued,
-		);
+		).await;
 		Ok(())
 	}
 
@@ -1234,8 +1234,9 @@ where
 		dkg_msg: SignedDKGMessage<Public>,
 	) -> Result<(), DKGError> {
 		metric_inc!(self, dkg_inbound_messages);
+		let rounds = self.rounds.read().clone();
 		// discard the message if from previous round
-		if let Some(current_round) = self.rounds.read().as_ref() {
+		if let Some(current_round) = &rounds {
 			if dkg_msg.msg.session_id < current_round.session_id {
 				self.logger.warn(format!(
 					"Message is for already completed round: {}, Discarding message",
@@ -1248,7 +1249,7 @@ where
 		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
-				if let Some(rounds) = self.rounds.read().as_ref() {
+				if let Some(rounds) = &rounds {
 					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
@@ -1260,7 +1261,7 @@ where
 					}
 				}
 
-				if let Some(rounds) = self.next_rounds.read().as_ref() {
+				if let Some(rounds) = &rounds {
 					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
@@ -1451,26 +1452,20 @@ where
 
 	/// Wait for initial finalized block
 	async fn initialization(&mut self) {
-		use futures::future;
-		self.client
-			.finality_notification_stream()
-			.take_while(|notif| async move {
-				if let Some((active, queued)) = self.validator_set(&notif.header).await {
-					// Cache the authority sets and best authorities
-					*self.best_authorities.write() = self.get_best_authorities(&notif.header).await;
-					*self.current_validator_set.write() = active;
-					*self.queued_validator_set.write() = queued;
-					// Route this to the finality notification handler
-					self.handle_finality_notification(notif.clone()).await;
-					self.logger.debug("Initialization complete");
-					// End the initialization stream
-					false
-				} else {
-					true
-				}
-			})
-			.for_each(|_| future::ready(()))
-			.await;
+		let mut stream = self.client.finality_notification_stream();
+		while let Some(notif) = stream.next().await {
+			if let Some((active, queued)) = self.validator_set(&notif.header).await {
+				// Cache the authority sets and best authorities
+				*self.best_authorities.write() = self.get_best_authorities(&notif.header).await;
+				*self.current_validator_set.write() = active;
+				*self.queued_validator_set.write() = queued;
+				// Route this to the finality notification handler
+				self.handle_finality_notification(notif.clone()).await;
+				self.logger.debug("Initialization complete");
+				// End the initialization stream
+				return
+			}
+		}
 	}
 
 	// *** Main run loop ***
@@ -1578,7 +1573,7 @@ where
 		tokio::spawn(async move {
 			while let Ok(error) = error_handler_rx.recv().await {
 				logger.debug("Going to handle Error");
-				self_.handle_dkg_error(error);
+				self_.handle_dkg_error(error).await;
 			}
 		})
 	}

@@ -83,29 +83,31 @@ where
 		)?;
 		dkg_worker.logger.debug(format!("Reporter: {reporter:?}"));
 		// Add new report to the aggregated reports
-		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
-		let reports = lock
-			.entry((msg.misbehaviour_type, msg.session_id, msg.offender.clone()))
-			.or_insert_with(|| AggregatedMisbehaviourReports {
-				misbehaviour_type: msg.misbehaviour_type,
-				session_id: msg.session_id,
-				offender: msg.offender.clone(),
-				reporters: Default::default(),
-				signatures: Default::default(),
-			});
-		dkg_worker.logger.debug(format!("Reports: {reports:?}"));
-		if !reports.reporters.contains(&reporter) {
-			reports.reporters.try_push(reporter).map_err(|_| DKGError::InputOutOfBounds)?;
-			let bounded_signature =
-				msg.signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
-			reports
-				.signatures
-				.try_push(bounded_signature)
-				.map_err(|_| DKGError::InputOutOfBounds)?;
-		}
+		let reports = {
+			let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+			let reports = lock
+				.entry((msg.misbehaviour_type, msg.session_id, msg.offender.clone()))
+				.or_insert_with(|| AggregatedMisbehaviourReports {
+					misbehaviour_type: msg.misbehaviour_type,
+					session_id: msg.session_id,
+					offender: msg.offender.clone(),
+					reporters: Default::default(),
+					signatures: Default::default(),
+				});
+			dkg_worker.logger.debug(format!("Reports: {reports:?}"));
+			if !reports.reporters.contains(&reporter) {
+				reports.reporters.try_push(reporter).map_err(|_| DKGError::InputOutOfBounds)?;
+				let bounded_signature =
+					msg.signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?;
+				reports
+					.signatures
+					.try_push(bounded_signature)
+					.map_err(|_| DKGError::InputOutOfBounds)?;
+			}
+	
+			reports.clone()
+		};
 
-		// Try to store reports offchain
-		let reports = reports.clone();
 		try_store_offchain(dkg_worker, &reports).await?;
 	}
 

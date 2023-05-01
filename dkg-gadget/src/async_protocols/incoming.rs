@@ -40,7 +40,7 @@ pub struct IncomingAsyncProtocolWrapper<
 
 impl<
 		T: TransformIncoming +,
-		BI: BlockchainInterface,
+		BI: BlockchainInterface + 'static,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + Unpin + 'static,
 	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
@@ -145,11 +145,17 @@ impl<
 		T: TransformIncoming,
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Unpin for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength> {}
+
+impl<
+		T: TransformIncoming,
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> Stream for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	type Item = Msg<T::IncomingMapped>;
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		match futures::ready!(Pin::new(&mut self.stream.as_mut()).poll_next(cx)) {
+		match futures::ready!(self.as_mut().stream.as_mut().poll_next(cx)) {
 			Some(Ok(msg)) => Poll::Ready(Some(msg)),
 			Some(Err(err)) => {
 				self.logger.error(format!("Error in incoming stream: {err:?}"));

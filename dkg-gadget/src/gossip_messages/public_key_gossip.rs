@@ -79,16 +79,19 @@ where
 
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let session_id = msg.session_id;
+		
+		// Fetch the current threshold for the DKG. We will use the
+		// current threshold to determine if we have enough signatures
+		// to submit the next DKG public key.
+		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
+
 		let mut lock = dkg_worker.aggregated_public_keys.write();
 		let aggregated_public_keys = lock.entry(session_id).or_default();
 
 		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
 		}
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
+
 		dkg_worker.logger.debug(format!(
 			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id,
