@@ -54,7 +54,7 @@ const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 1;
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
@@ -69,17 +69,17 @@ where
 
 	/// This function is called each time a new block is finalized.
 	/// It will then start a signing process for each of the proposals.
-	pub fn on_block_finalized(
+	pub async fn on_block_finalized(
 		&self,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) -> Result<(), DKGError> {
-		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header);
+		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
 		let at = header.hash();
 		// Check whether the worker is in the best set or return
-		let party_i = match dkg_worker.get_party_index(header) {
+		let party_i = match dkg_worker.get_party_index(header).await {
 			Some(party_index) => {
 				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
 				KeygenPartyId::try_from(party_index)?
@@ -92,22 +92,26 @@ where
 			},
 		};
 
-		let unsigned_proposals = match dkg_worker.client.runtime_api().get_unsigned_proposals(at) {
+		dkg_worker.logger.info_signing("About to get unsigned proposals ...");
+
+		let unsigned_proposals = match dkg_worker
+			.exec_client_function(move |client| client.runtime_api().get_unsigned_proposals(at))
+			.await
+		{
 			Ok(res) => {
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
+					// lets limit the max proposals we sign at one time to prevent overflow
+					if filtered_unsigned_proposals.len() >= MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET {
+						break
+					}
+
 					if let Some(hash) = proposal.hash() {
+						// only submit the job if it isn't already running
 						if !self.work_manager.job_exists(&hash) {
 							// update unsigned proposal counter
 							metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
 							filtered_unsigned_proposals.push(proposal);
-						}
-
-						// lets limit the max proposals we sign at one time to prevent overflow
-						if filtered_unsigned_proposals.len() >=
-							MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET
-						{
-							break
 						}
 					}
 				}
@@ -133,10 +137,11 @@ where
 
 		let best_authorities: Vec<_> = dkg_worker
 			.get_best_authorities(header)
+			.await
 			.into_iter()
 			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
 			.collect();
-		let threshold = dkg_worker.get_signature_threshold(header);
+		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
 		for unsigned_proposal in unsigned_proposals {
@@ -189,7 +194,7 @@ where
 							dkg_worker
 								.logger
 								.error(format!("Error creating signing protocol: {:?}", &err));
-							dkg_worker.handle_dkg_error(err.clone());
+							dkg_worker.handle_dkg_error(err.clone()).await;
 							return Err(err)
 						},
 					}

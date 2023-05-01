@@ -20,9 +20,8 @@ use sp_runtime::traits::Get;
 use std::{
 	pin::Pin,
 	sync::Arc,
-	task::{Context, Poll},
+	task::{Context, Poll}, marker::PhantomData,
 };
-use tokio_stream::wrappers::BroadcastStream;
 
 use crate::debug_logger::DebugLogger;
 
@@ -30,42 +29,54 @@ use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, 
 
 /// Used to filter and transform incoming messages from the DKG worker
 pub struct IncomingAsyncProtocolWrapper<
-	T,
+	T: TransformIncoming,
 	BI,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 > {
-	pub receiver: BroadcastStream<T>,
-	session_id: SessionId,
-	engine: Arc<BI>,
+	stream: Pin<Box<dyn Stream<Item = Result<Msg<T::IncomingMapped>, DKGError>> + Send + 'static>>,
 	logger: DebugLogger,
-	ty: ProtocolType<MaxProposalLength>,
+	_pd: PhantomData<(BI, MaxProposalLength)>
 }
 
 impl<
-		T: TransformIncoming,
+		T: TransformIncoming +,
 		BI: BlockchainInterface,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + Unpin + 'static,
 	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	pub fn new(
-		receiver: tokio::sync::broadcast::Receiver<T>,
+		mut receiver: tokio::sync::broadcast::Receiver<T>,
 		ty: ProtocolType<MaxProposalLength>,
-		params: &AsyncProtocolParameters<BI, MaxAuthorities>,
+		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
-		Self {
-			receiver: BroadcastStream::new(receiver),
-			session_id: params.session_id,
-			engine: params.engine.clone(),
-			logger: params.logger.clone(),
-			ty,
-		}
+		let logger = params.logger.clone();
+
+		let stream = async_stream::try_stream! {
+			while let Ok(msg) = receiver.recv().await {
+				match msg.transform(&params.engine, &ty, params.session_id, &params.logger).await {
+					Ok(Some(msg)) => yield msg,
+
+					Ok(None) => continue,
+
+					Err(err) => {
+						params.logger.warn(format!(
+							"While mapping signed message, received an error: {err:?}"
+						));
+						continue
+					},
+				}
+			}
+		};
+
+		Self { stream: Box::pin(stream), logger, _pd: Default::default() }
 	}
 }
 
+#[async_trait::async_trait]
 pub trait TransformIncoming: Clone + Send + 'static {
-	type IncomingMapped;
+	type IncomingMapped: Send;
 
-	fn transform<
+	async fn transform<
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	>(
@@ -79,9 +90,10 @@ pub trait TransformIncoming: Clone + Send + 'static {
 		Self: Sized;
 }
 
+#[async_trait::async_trait]
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	type IncomingMapped = DKGMessage<Public>;
-	fn transform<
+	async fn transform<
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	>(
@@ -108,6 +120,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 					if self.msg.session_id == this_session_id {
 						verify
 							.verify_signature_against_authorities(self)
+							.await
 							.map(|body| Some(Msg { sender, receiver: None, body }))
 					} else {
 						logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
@@ -128,38 +141,21 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	}
 }
 
-impl<T, BI, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> Stream
-	for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
-where
-	T: TransformIncoming,
-	BI: BlockchainInterface,
+impl<
+		T: TransformIncoming,
+		BI: BlockchainInterface,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> Stream for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	type Item = Msg<T::IncomingMapped>;
-
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let Self { receiver, ty, engine, session_id, logger } = &mut *self;
-		let mut receiver = Pin::new(receiver);
-
-		loop {
-			match futures::ready!(receiver.as_mut().poll_next(cx)) {
-				Some(Ok(msg)) => match msg.transform(&**engine, &*ty, *session_id, &*logger) {
-					Ok(Some(msg)) => return Poll::Ready(Some(msg)),
-
-					Ok(None) => continue,
-
-					Err(err) => {
-						logger.warn(format!(
-							"While mapping signed message, received an error: {err:?}"
-						));
-						continue
-					},
-				},
-				Some(Err(err)) => {
-					logger.error(format!("Stream RECV error: {err:?}"));
-					continue
-				},
-				None => return Poll::Ready(None),
-			}
+		match futures::ready!(Pin::new(&mut self.stream.as_mut()).poll_next(cx)) {
+			Some(Ok(msg)) => Poll::Ready(Some(msg)),
+			Some(Err(err)) => {
+				self.logger.error(format!("Error in incoming stream: {err:?}"));
+				self.poll_next(cx)
+			},
+			None => Poll::Ready(None),
 		}
 	}
 }

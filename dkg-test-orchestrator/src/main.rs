@@ -29,6 +29,8 @@ struct Args {
 	config_path: PathBuf,
 	#[structopt(short = "t", long = "tmp")]
 	tmp_path: PathBuf,
+	#[structopt(long)]
+	clean: bool,
 }
 
 #[tokio::main]
@@ -174,6 +176,13 @@ fn validate_args(args: &Args) -> Result<(), String> {
 
 	if !tmp_path.is_dir() {
 		return Err(format!("{:?} is not a valid tmp path", args.tmp_path))
+	}
+
+	if args.clean {
+		std::fs::remove_dir_all(tmp_path)
+			.map_err(|err| format!("Failed to clean tmp path: {err:?}"))?;
+		std::fs::create_dir(tmp_path)
+			.map_err(|err| format!("Failed to create tmp path: {err:?}"))?;
 	}
 
 	Ok(())

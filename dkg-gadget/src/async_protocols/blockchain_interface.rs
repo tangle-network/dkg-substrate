@@ -47,8 +47,9 @@ use webb_proposals::Proposal;
 
 use super::KeygenPartyId;
 
+#[async_trait::async_trait]
 #[auto_impl::auto_impl(Arc,&,&mut)]
-pub trait BlockchainInterface: Send + Sync {
+pub trait BlockchainInterface: Send + Sync + Unpin {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 	type MaxProposalLength: Get<u32>
@@ -57,9 +58,9 @@ pub trait BlockchainInterface: Send + Sync {
 		+ Sync
 		+ std::fmt::Debug
 		+ 'static
-		+ std::fmt::Debug;
+		+ Unpin;
 
-	fn verify_signature_against_authorities(
+	async fn verify_signature_against_authorities(
 		&self,
 		message: Arc<SignedDKGMessage<Public>>,
 	) -> Result<DKGMessage<Public>, DKGError>;
@@ -163,13 +164,14 @@ where
 	}
 }
 
+#[async_trait::async_trait]
 impl<B, BE, C, GE> BlockchainInterface
 	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	GE: GossipEngineIface + 'static,
 {
@@ -177,7 +179,7 @@ where
 	type GossipEngine = Arc<GE>;
 	type MaxProposalLength = MaxProposalLength;
 
-	fn verify_signature_against_authorities(
+	async fn verify_signature_against_authorities(
 		&self,
 		msg: Arc<SignedDKGMessage<Public>>,
 	) -> Result<DKGMessage<Public>, DKGError> {
@@ -189,6 +191,7 @@ where
 			&self.latest_header,
 			client,
 		)
+		.await
 	}
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {

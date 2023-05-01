@@ -114,7 +114,7 @@ where
 pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {

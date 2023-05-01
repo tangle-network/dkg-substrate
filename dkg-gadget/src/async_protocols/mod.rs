@@ -632,7 +632,7 @@ where
 		// the below wrapper will map signed messages into unsigned messages
 		let incoming = params.handle.broadcaster.subscribe();
 		let incoming_wrapper =
-			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
+			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), params.clone());
 		// we use fuse here, since normally, once a stream has returned `None` from calling
 		// `next()` any further calls could exhibit bad behavior such as block forever, panic, never
 		// return, etc. that's why we use fuse here to ensure that it has defined semantics,

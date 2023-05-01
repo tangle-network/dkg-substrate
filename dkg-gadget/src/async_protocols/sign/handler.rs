@@ -179,7 +179,7 @@ where
 
 			// the below wrapper will map signed messages into unsigned messages
 			let incoming = rx;
-			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
+			let mut incoming_wrapper = IncomingAsyncProtocolWrapper::new(incoming, ty, params.clone());
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 

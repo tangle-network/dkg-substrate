@@ -245,8 +245,8 @@ pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 	#[cfg(feature = "testing")]
 	#[allow(clippy::unwrap_used)] // allow unwraps in tests
-	pub fn testing_dummy() -> Self {
-		let data = BoundedVec::try_from(vec![0, 1, 2]).unwrap();
+	pub fn testing_dummy(data: Vec<u8>) -> Self {
+		let data = BoundedVec::try_from(data).unwrap();
 		Self {
 			typed_chain_id: webb_proposals::TypedChainId::None,
 			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),

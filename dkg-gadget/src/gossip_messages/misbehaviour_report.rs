@@ -29,13 +29,13 @@ use dkg_runtime_primitives::{
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, NumberFor};
 
-pub(crate) fn handle_misbehaviour_report<B, BE, C, GE>(
+pub(crate) async fn handle_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<AuthorityId>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -44,7 +44,10 @@ where
 {
 	// Get authority accounts
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
-	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
+	let authorities = dkg_worker
+		.validator_set(header)
+		.await
+		.map(|a| (a.0.authorities, a.1.authorities));
 	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
 	}
@@ -103,19 +106,19 @@ where
 
 		// Try to store reports offchain
 		let reports = reports.clone();
-		try_store_offchain(dkg_worker, &reports)?;
+		try_store_offchain(dkg_worker, &reports).await?;
 	}
 
 	Ok(())
 }
 
-pub(crate) fn gossip_misbehaviour_report<B, BE, C, GE>(
+pub(crate) async fn gossip_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	report: DKGMisbehaviourMessage,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -173,36 +176,43 @@ where
 			Err(e) => dkg_worker.logger.error(format!("🕸️  Error signing DKG message: {e:?}")),
 		}
 
-		let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
-		let reports = lock
-			.entry((report.misbehaviour_type, report.session_id, report.offender.clone()))
-			.or_insert_with(|| AggregatedMisbehaviourReports {
-				misbehaviour_type: report.misbehaviour_type,
-				session_id: report.session_id,
-				offender: report.offender.clone(),
-				reporters: Default::default(),
-				signatures: Default::default(),
-			});
+		let reports = {
+			let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
+			let reports = lock
+				.entry((report.misbehaviour_type, report.session_id, report.offender.clone()))
+				.or_insert_with(|| AggregatedMisbehaviourReports {
+					misbehaviour_type: report.misbehaviour_type,
+					session_id: report.session_id,
+					offender: report.offender.clone(),
+					reporters: Default::default(),
+					signatures: Default::default(),
+				});
 
-		if reports.reporters.contains(&public) {
-			return Ok(())
-		}
+			if reports.reporters.contains(&public) {
+				return Ok(())
+			}
 
-		reports.reporters.try_push(public).map_err(|_| DKGError::InputOutOfBounds)?;
-		reports
-			.signatures
-			.try_push(encoded_signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?)
-			.map_err(|_| DKGError::InputOutOfBounds)?;
+			reports.reporters.try_push(public).map_err(|_| DKGError::InputOutOfBounds)?;
+			reports
+				.signatures
+				.try_push(encoded_signature.try_into().map_err(|_| DKGError::InputOutOfBounds)?)
+				.map_err(|_| DKGError::InputOutOfBounds)?;
 
-		dkg_worker
-			.logger
-			.debug("Gossiping misbehaviour report and signature".to_string());
+			dkg_worker
+				.logger
+				.debug("Gossiping misbehaviour report and signature".to_string());
 
-		let reports = (*reports).clone();
+			(*reports).clone()
+		};
+
 		// Try to store reports offchain
-		if try_store_offchain(dkg_worker, &reports).is_ok() {
+		if try_store_offchain(dkg_worker, &reports).await.is_ok() {
 			// remove the report from the queue
-			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
+			dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
+				report.misbehaviour_type,
+				report.session_id,
+				report.offender,
+			));
 		}
 		Ok(())
 	} else {
@@ -211,13 +221,13 @@ where
 	}
 }
 
-pub(crate) fn try_store_offchain<B, BE, C, GE>(
+pub(crate) async fn try_store_offchain<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
@@ -226,7 +236,7 @@ where
 	// Fetch the current threshold for the DKG. We will use the
 	// current threshold to determine if we have enough signatures
 	// to submit the next DKG public key.
-	let threshold = dkg_worker.get_signature_threshold(header) as usize;
+	let threshold = dkg_worker.get_signature_threshold(header).await as usize;
 	dkg_worker.logger.debug(format!(
 		"DKG threshold: {}, reports: {}",
 		threshold,

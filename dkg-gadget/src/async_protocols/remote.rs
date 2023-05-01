@@ -168,6 +168,10 @@ impl<C> AsyncProtocolRemote<C> {
 			self.status_history.lock().push(status);
 			self.status.store(status, Ordering::SeqCst);
 		} else {
+			// for now, set the state anyways
+			self.status_history.lock().push(status);
+			self.status.store(status, Ordering::SeqCst);
+
 			self.logger.error(format!(
 				"Invalid status update: {:?} -> {:?}",
 				self.get_status(),

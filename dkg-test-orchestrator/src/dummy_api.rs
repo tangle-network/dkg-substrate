@@ -633,10 +633,10 @@ impl
 
 	fn get_unsigned_proposals(
 		&self,
-		_: H256,
+		hash: H256,
 	) -> ApiResult<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>> {
 		// TODO: parameter to increase number of proposals
-		Ok(vec![UnsignedProposal::testing_dummy()])
+		Ok(vec![UnsignedProposal::testing_dummy(hash.encode())])
 	}
 
 	fn get_max_extrinsic_delay(
