@@ -219,11 +219,19 @@ mod deadlock_detection {
 	pub fn deadlock_detect() {
 		static HAS_STARTED: AtomicBool = AtomicBool::new(false);
 		use parking_lot::deadlock;
-		use std::{thread, time::Duration, sync::atomic::AtomicBool};
+		use std::{sync::atomic::AtomicBool, thread, time::Duration};
 
 		// Create a background thread which checks for deadlocks every 10s
 		thread::spawn(move || {
-			if HAS_STARTED.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).unwrap_or(true) {
+			if HAS_STARTED
+				.compare_exchange(
+					false,
+					true,
+					std::sync::atomic::Ordering::SeqCst,
+					std::sync::atomic::Ordering::SeqCst,
+				)
+				.unwrap_or(true)
+			{
 				println!("Deadlock detector already started");
 				return
 			}
