@@ -204,14 +204,13 @@ where
 	};
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
-	deadlock_detection::deadlock_detect();
 
 	worker.run().await;
 	keygen_handle.abort();
 	signing_handle.abort();
 }
 
-mod deadlock_detection {
+pub mod deadlock_detection {
 	#[cfg(not(feature = "testing"))]
 	pub fn deadlock_detect() {}
 

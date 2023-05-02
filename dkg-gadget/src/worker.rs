@@ -1472,6 +1472,7 @@ where
 
 	// *** Main run loop ***
 	pub async fn run(mut self) {
+		crate::deadlock_detection::deadlock_detect();
 		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
 		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;

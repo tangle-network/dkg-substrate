@@ -235,7 +235,6 @@ impl<B: BlockT> Drop for Job<B> {
 			"Will remove job {:?} from currently_signing_proposals",
 			self.proposal_hash
 		));
-		self.tasks.write().currently_signing_proposals.remove(self);
 		let _ = self.handle.shutdown("shutdown from Job::drop");
 	}
 }
