@@ -416,10 +416,10 @@ where
 						lock[async_index as usize] = Some(status_handle)
 					} else if current_round.is_active() {
 						self.logger.warn(
-							"Overwriting rounds will result in termination of previous rounds!"
+							"An active signing round in process, skip creating another round"
 								.to_string(),
 						);
-						lock[async_index as usize] = Some(status_handle)
+						return Err(DKGError::GenericError { reason: "Signing in progress".into() })
 					} else {
 						// the round is not active, nor has it stalled, so we can overwrite it.
 						self.logger.debug(format!(
