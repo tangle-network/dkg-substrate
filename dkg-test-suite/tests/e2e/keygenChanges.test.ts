@@ -54,11 +54,11 @@ describe('Keygen Changes Flow', function () {
 		if (fs.existsSync(tmpDir)) {
 			fs.rmSync(tmpDir, { recursive: true });
 		}
-		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
+		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: true });
+		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: true });
 		charlieNode = startStandaloneNode('charlie', {
 			tmp: true,
-			printLogs: false,
+			printLogs: true,
 		});
 
 		api = await ApiPromise.create({

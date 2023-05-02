@@ -58,9 +58,9 @@ export const executeBefore = async () => {
 	if (fs.existsSync(tmpDir)) {
 		fs.rmSync(tmpDir, { recursive: true });
 	}
-	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
-	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: false });
+	aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: true });
+	bobNode = startStandaloneNode('bob', { tmp: true, printLogs: true });
+	charlieNode = startStandaloneNode('charlie', { tmp: true, printLogs: true });
 
 	console.log('started alice, bob, charlie nodes');
 
