@@ -106,7 +106,7 @@ it('should be able to sign anchor update proposal', async () => {
 			Evm: localChain.evmId,
 		},
 		resourceId.toU8a(),
-		prop
+		prop.toU8a()
 	);
 
 	// The acknowledgeProposal call should come from someone in the proposer set
