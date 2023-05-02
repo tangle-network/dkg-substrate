@@ -31,6 +31,7 @@
             # We want the unwrapped version, wrapped comes with nixpkgs' toolchain
             pkgs.rust-analyzer-unwrapped
             # Nodejs for test suite
+			pkgs.nodePackages.typescript-language-server
             pkgs.nodejs_18
             pkgs.nodePackages.yarn
             # Finally the toolchain
