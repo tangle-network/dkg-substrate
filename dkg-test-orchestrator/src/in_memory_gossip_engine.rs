@@ -53,6 +53,7 @@ impl InMemoryGossipEngine {
 		n_blocks: u64,
 		keyring: dkg_gadget::keyring::Keyring,
 		key_store: &dyn SyncCryptoStore,
+		logger: &DebugLogger,
 	) -> Self {
 		let public_key: crypto::Public =
 			SyncCryptoStore::ecdsa_generate_new(key_store, KEY_TYPE, Some(&keyring.to_seed()))
@@ -61,7 +62,7 @@ impl InMemoryGossipEngine {
 				.into();
 
 		let this_peer = PeerId::random();
-		let stream = MultiSubscribableStream::new("stream notifier");
+		let stream = MultiSubscribableStream::new("stream notifier", logger.clone());
 		self.mapping.lock().insert(this_peer, public_key.clone());
 		assert!(self.clients.lock().insert(this_peer, Default::default()).is_none());
 		self.notifier.lock().insert(this_peer, stream);
@@ -80,12 +81,8 @@ impl InMemoryGossipEngine {
 			this_peer: Some(this_peer),
 			this_peer_public_key: Some(public_key),
 			mapping: self.mapping.clone(),
-			logger: None,
+			logger: Some(logger.clone()),
 		}
-	}
-
-	pub fn set_logger(&mut self, logger: DebugLogger) {
-		self.logger = Some(logger);
 	}
 
 	pub fn peer_id(&self) -> (&PeerId, &AuthorityId) {

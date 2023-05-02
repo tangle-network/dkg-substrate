@@ -204,8 +204,47 @@ where
 	};
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
+	deadlock_detection::deadlock_detect();
 
 	worker.run().await;
 	keygen_handle.abort();
 	signing_handle.abort();
+}
+
+mod deadlock_detection {
+	#[cfg(not(feature = "testing"))]
+	pub fn deadlock_detect() {}
+
+	#[cfg(feature = "testing")]
+	pub fn deadlock_detect() {
+		static HAS_STARTED: AtomicBool = AtomicBool::new(false);
+		use parking_lot::deadlock;
+		use std::{thread, time::Duration, sync::atomic::AtomicBool};
+
+		// Create a background thread which checks for deadlocks every 10s
+		thread::spawn(move || {
+			if HAS_STARTED.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).unwrap_or(true) {
+				println!("Deadlock detector already started");
+				return
+			}
+
+			println!("Deadlock detector started");
+			loop {
+				thread::sleep(Duration::from_secs(5));
+				let deadlocks = deadlock::check_deadlock();
+				if deadlocks.is_empty() {
+					continue
+				}
+
+				println!("{} deadlocks detected", deadlocks.len());
+				for (i, threads) in deadlocks.iter().enumerate() {
+					println!("Deadlock #{}", i);
+					for t in threads {
+						println!("Thread Id {:#?}", t.thread_id());
+						println!("{:#?}", t.backtrace());
+					}
+				}
+			}
+		});
+	}
 }

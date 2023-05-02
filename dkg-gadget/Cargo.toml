@@ -10,7 +10,7 @@ edition = { workspace = true }
 [features]
 outbound-inspection = []
 debug-tracing = ["tracing"]
-testing = []
+testing = ["parking_lot/deadlock_detection"]
 
 [dependencies]
 futures = { workspace = true }
@@ -56,6 +56,7 @@ auto_impl = { workspace = true }
 itertools = { workspace = true }
 sync_wrapper = { workspace = true }
 async-stream = { workspace = true }
+lazy_static = { workspace = true }
 
 hash-db = { workspace = true, optional = true }
 webb-proposals = { workspace = true }

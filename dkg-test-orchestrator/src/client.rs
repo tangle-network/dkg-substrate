@@ -60,8 +60,14 @@ impl TestClient {
 
 		let this = TestClient {
 			inner: TestClientState {
-				finality_stream: Arc::new(MultiSubscribableStream::new("finality_stream")),
-				import_stream: Arc::new(MultiSubscribableStream::new("import_stream")),
+				finality_stream: Arc::new(MultiSubscribableStream::new(
+					"finality_stream",
+					logger.clone(),
+				)),
+				import_stream: Arc::new(MultiSubscribableStream::new(
+					"import_stream",
+					logger.clone(),
+				)),
 				api,
 				offchain_storage: Default::default(),
 				local_test_cases: Arc::new(Mutex::new(Default::default())),
@@ -90,6 +96,7 @@ impl TestClient {
 			logger
 				.info(format!("Complete: orchestrator<=>DKG communications for peer {peer_id:?}"));
 			while let Some(packet) = rx.next().await {
+				logger.info("Received a packet");
 				match packet {
 					ProtocolPacket::InitialHandshake => {
 						// pong back the handshake response
@@ -109,6 +116,7 @@ impl TestClient {
 									.local_test_cases
 									.lock()
 									.insert(trace_id, None);
+								logger.info("Passing finality notification to the client");
 								this_for_orchestrator_rx.inner.finality_stream.send(notification);
 							},
 							MockBlockchainEvent::ImportNotification { notification } => {
@@ -117,6 +125,7 @@ impl TestClient {
 									.local_test_cases
 									.lock()
 									.insert(trace_id, None);
+								logger.info("Passing import notification to the client");
 								this_for_orchestrator_rx.inner.import_stream.send(notification);
 							},
 						}
@@ -147,12 +156,13 @@ impl TestClient {
 // to arbitrarily subscribe to the stream and receive all events.
 pub struct MultiSubscribableStream<T> {
 	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>,
+	logger: DebugLogger,
 	tag: &'static str,
 }
 
 impl<T: Clone> MultiSubscribableStream<T> {
-	pub fn new(tag: &'static str) -> Self {
-		Self { inner: parking_lot::RwLock::new(vec![]), tag }
+	pub fn new(tag: &'static str, logger: DebugLogger) -> Self {
+		Self { inner: parking_lot::RwLock::new(vec![]), tag, logger }
 	}
 
 	pub fn subscribe(&self) -> TracingUnboundedReceiver<T> {
@@ -164,9 +174,17 @@ impl<T: Clone> MultiSubscribableStream<T> {
 
 	pub fn send(&self, t: T) {
 		let mut lock = self.inner.write();
+
+		if lock.is_empty() {
+			self.logger.error("No subscribers to send to");
+		}
+
 		assert!(!lock.is_empty());
+		let count_init = lock.len();
 		// receiver will naturally drop when no longer used.
-		lock.retain(|tx| tx.unbounded_send(t.clone()).is_ok())
+		lock.retain(|tx| tx.unbounded_send(t.clone()).is_ok());
+		let diff = count_init - lock.len();
+		self.logger.info(format!("Dropped {diff} subscribers (init: {count_init}"));
 	}
 }
 
