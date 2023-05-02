@@ -80,9 +80,9 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		let status = Arc::new(Atomic::new(MetaHandlerStatus::Beginning));
 		let status_history = Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning]));
 
-		let status_debug = status.clone();
-		let status_history_debug = status_history.clone();
-		let logger_debug = logger.clone();
+		// let status_debug = status.clone();
+		// let status_history_debug = status_history.clone();
+		// let logger_debug = logger.clone();
 
 		// The purpose of this task is to log the status of the meta handler
 		// in the case that it is stalled/not-progressing. This is useful for debugging.
