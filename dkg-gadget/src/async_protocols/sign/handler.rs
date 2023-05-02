@@ -101,7 +101,7 @@ where
 				}
 			} else {
 				return Err(DKGError::GenericError {
-					reason: "Will skip keygen since local key does not exist".to_string(),
+					reason: "Will skip signing since local key does not exist".to_string(),
 				})
 			}
 

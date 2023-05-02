@@ -31,11 +31,7 @@ impl DebugLogger {
 			}
 		});
 
-		Self {
-			identifier: Arc::new(identifier.to_string().into()),
-			to_file_io: tx.into(),
-			file_handle,
-		}
+		Self { identifier: Arc::new(identifier.to_string().into()), to_file_io: tx, file_handle }
 	}
 
 	pub fn set_id<T: ToString>(&self, id: T) {
@@ -127,7 +123,7 @@ impl DebugLogger {
 
 	fn log_to_file<T: std::fmt::Debug>(&self, target: &str, level: &str, message: T) {
 		let time = INIT_TIME.elapsed();
-		let message = format!("[{time:?}] [{target}] [{level}]: {message:?}");
+		let message = format!("[{target}] [{level}] [{time:?}] : {message:?}");
 		if let Err(err) = self.to_file_io.send(message) {
 			error!(target: "dkg_gadget", "failed to send log message to file: {err:?}");
 		}

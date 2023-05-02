@@ -554,13 +554,20 @@ where
 						.expect("message receiver should be a valid KeygenPartyId");
 					// try to find the authority id in the list of authorities by the
 					// KeygenPartyId
-					params.best_authorities.iter().find_map(|(id, p)| {
+					let ret = params.best_authorities.iter().find_map(|(id, p)| {
 						if id == &keygen_party_id {
 							Some(p.clone())
 						} else {
 							None
 						}
-					})
+					});
+					if ret.is_none() {
+						params.logger.error(format!(
+							"Failed to find authority id for KeygenPartyId={:?}",
+							keygen_party_id
+						));
+					}
+					ret
 				},
 				None => None,
 			};

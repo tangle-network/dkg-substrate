@@ -88,7 +88,7 @@ where
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
 		// want to process the same message twice)
 		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");
-		if self.received_messages.contains(&msg_serde) {
+		if !self.received_messages.insert(msg_serde) {
 			self.logger.trace(format!(
 				"Already received message for {:?} from session={}, round={}, sender={}",
 				self.channel_type,
@@ -96,9 +96,7 @@ where
 				self.current_round(),
 				msg.sender
 			));
-		//return Ok(())
-		} else {
-			self.received_messages.insert(msg_serde);
+			return Ok(())
 		}
 
 		let result = self.sm.handle_incoming(msg);

@@ -160,7 +160,7 @@ where
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash = unsigned_proposal.hash().unwrap();
+			let unsigned_proposal_hash = unsigned_proposal.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)

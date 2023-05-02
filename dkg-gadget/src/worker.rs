@@ -1237,6 +1237,7 @@ where
 	) -> Result<(), DKGError> {
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
+		self.logger.info(format!("Processing incoming DKG message: {:?} | {:?}", dkg_msg.msg.session_id, rounds.as_ref().map(|x| x.session_id)));
 		// discard the message if from previous round
 		if let Some(current_round) = &rounds {
 			if dkg_msg.msg.session_id < current_round.session_id {
@@ -1248,21 +1249,11 @@ where
 			}
 		}
 
-		match &dkg_msg.msg.payload {
+		let is_delivery_type = matches!(dkg_msg.msg.payload, DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..));
+
+		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
-				if let Some(rounds) = &rounds {
-					if rounds.session_id == msg.msg.session_id {
-						if let Err(err) = rounds.deliver_message(msg) {
-							self.handle_dkg_error(DKGError::CriticalError {
-								reason: err.to_string(),
-							})
-							.await
-						}
-						return Ok(())
-					}
-				}
-
 				if let Some(rounds) = &rounds {
 					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
@@ -1281,7 +1272,7 @@ where
 				let msg = Arc::new(dkg_msg);
 				self.signing_manager.deliver_message(msg);
 
-				Ok(())
+				return Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
@@ -1318,7 +1309,13 @@ where
 
 				Ok(())
 			},
+		};
+
+		if is_delivery_type {
+			self.logger.warn(format!("Did not deliver message! res: {res:?}"));
 		}
+
+		res
 	}
 
 	async fn handle_dkg_report(&self, dkg_report: DKGReport) {

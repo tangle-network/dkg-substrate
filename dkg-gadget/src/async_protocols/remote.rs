@@ -100,7 +100,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 				}
 
 				logger_debug.debug(format!(
-					"AsyncProtocolRemote status: {status:?} ||||| history: {status_history:?}",
+					"AsyncProtocolRemote status: {status:?} ||||| history: {status_history:?} ||||| session_id: {session_id:?}",
 				));
 			}
 		});

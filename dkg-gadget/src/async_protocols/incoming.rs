@@ -34,10 +34,13 @@ pub struct IncomingAsyncProtocolWrapper<
 	BI,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 > {
-	stream: Pin<Box<dyn Stream<Item = Result<Msg<T::IncomingMapped>, DKGError>> + Send + 'static>>,
+	stream: IncomingStreamMapped<T::IncomingMapped>,
 	logger: DebugLogger,
 	_pd: PhantomData<(BI, MaxProposalLength)>,
 }
+
+pub type IncomingStreamMapped<T> =
+	Pin<Box<dyn Stream<Item = Result<Msg<T>, DKGError>> + Send + 'static>>;
 
 impl<
 		T: TransformIncoming,

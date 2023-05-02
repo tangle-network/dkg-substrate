@@ -94,7 +94,6 @@ impl<B: BlockT> WorkManager<B> {
 			task: Arc::new(RwLock::new(Some(task.into()))),
 			handle,
 			proposal_hash: unsigned_proposal_hash,
-			tasks: self.inner.clone(),
 			logger: self.logger.clone(),
 		};
 		lock.enqueued_signing_proposals.push_back(job);
@@ -144,7 +143,7 @@ impl<B: BlockT> WorkManager<B> {
 				lock.currently_signing_proposals.insert(job);
 				// run the task
 				let task = async move {
-					let task = task.write().take().unwrap();
+					let task = task.write().take().expect("Should not happen");
 					task.into_inner().await
 				};
 
@@ -200,8 +199,6 @@ impl<B: BlockT> WorkManager<B> {
 pub struct Job<B: BlockT> {
 	// wrap in an arc to get the strong count for this job
 	proposal_hash: [u8; 32],
-	// a reference to the set of currently signing proposals. Used for deleting itself from the set
-	tasks: Arc<RwLock<WorkManagerInner<B>>>,
 	logger: DebugLogger,
 	handle: AsyncProtocolRemote<NumberFor<B>>,
 	task: Arc<RwLock<Option<SyncFuture<()>>>>,
