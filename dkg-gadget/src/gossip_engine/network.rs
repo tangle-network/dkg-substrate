@@ -477,7 +477,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 		// first task, handles the incoming messages/Commands from the controller.
 		let self0 = self.clone();
-		let incoming_messages_task = tokio::spawn(async move {
+		let incoming_messages_task = crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
 			while let Some(message) = incoming_messages.next().await {
 				match message {
 					Ok(ToHandler::SendMessage { recipient, message }) =>
@@ -486,13 +486,13 @@ impl<B: Block + 'static> GossipHandler<B> {
 					_ => {},
 				}
 			}
-		});
+		}));
 
 		// a timer that fires every few ms to check if there are messages in the queue, and if so,
 		// notify the listener.
 		let self1 = self.clone();
 		let mut timer = tokio::time::interval(core::time::Duration::from_millis(100));
-		let timer_task = tokio::spawn(async move {
+		let timer_task = crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
 			loop {
 				timer.tick().await;
 				let queue = self1.message_queue.read();
@@ -500,15 +500,15 @@ impl<B: Block + 'static> GossipHandler<B> {
 					let _ = self1.message_notifications_channel.send(());
 				}
 			}
-		});
+		}));
 
 		let self2 = self.clone();
 		// second task, handles the incoming messages/events from the network stream.
-		let network_events_task = tokio::spawn(async move {
+		let network_events_task = crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
 			while let Some(event) = event_stream.next().await {
 				self2.handle_network_event(event).await;
 			}
-		});
+		}));
 
 		// wait for the first task to finish or error out.
 		//

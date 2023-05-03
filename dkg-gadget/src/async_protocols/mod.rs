@@ -62,6 +62,7 @@ use self::{
 };
 use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
 use incoming::IncomingAsyncProtocolWrapper;
+use multi_party_ecdsa::MessageRoundID;
 
 pub struct AsyncProtocolParameters<
 	BI: BlockchainInterface,
@@ -374,8 +375,7 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
-	<SM as StateMachine>::MessageBody: Send,
-	<SM as StateMachine>::MessageBody: Serialize,
+	<SM as StateMachine>::MessageBody: Send + Serialize + MessageRoundID,
 	<SM as StateMachine>::Output: Send,
 {
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
@@ -474,17 +474,18 @@ where
 
 	// Spawn the 3 tasks
 	// 1. The inbound task (we will abort that task if the protocol finished)
-	let handle = tokio::spawn(inbound_signed_message_receiver);
+	let handle = crate::utils::ExplicitPanicFuture::new(tokio::spawn(inbound_signed_message_receiver));
 	// 2. The outbound task (will stop if the protocol finished, after flushing the messages to the
 	// network.)
-	let handle2 = tokio::spawn(outgoing_to_wire);
+	let handle2 = crate::utils::ExplicitPanicFuture::new(tokio::spawn(outgoing_to_wire));
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
 		params
 			.logger
 			.info(format!("🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res));
-		// Abort the inbound task
+		// Abort the inbound task after sleeping awhile to give time for tasks to finish
+		tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 		handle.abort();
 		// Wait for the outbound task to finish
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
@@ -509,7 +510,7 @@ fn generate_outgoing_to_wire_fn<
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
 where
-	<SM as StateMachine>::MessageBody: Serialize,
+	<SM as StateMachine>::MessageBody: Serialize + Send + MessageRoundID,
 	<SM as StateMachine>::MessageBody: Send,
 	<SM as StateMachine>::Output: Send,
 {
@@ -531,8 +532,8 @@ where
 			};
 
 			params.logger.info(format!(
-				"Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})",
-				params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty
+				"Async proto sent outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
+				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
@@ -613,6 +614,7 @@ where
 			// check the status of the async protocol.
 			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
+				// TODO: consider telling the task running this to shut this off in 1s to allow time for additional messages to be sent
 				params.logger.debug(
 					"🕸️  Async proto is completed or terminated, breaking out of incoming loop",
 				);

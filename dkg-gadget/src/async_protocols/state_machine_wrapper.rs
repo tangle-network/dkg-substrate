@@ -16,8 +16,8 @@ use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
-use std::{collections::HashSet, sync::Arc};
-
+use std::{collections::HashSet, sync::Arc, fmt::Debug};
+use crate::async_protocols::MessageRoundID;
 use super::{CurrentRoundBlame, ProtocolType};
 use crate::debug_logger::DebugLogger;
 
@@ -35,7 +35,7 @@ pub(crate) struct StateMachineWrapper<
 }
 
 impl<
-		T: StateMachine + RoundBlame,
+		T: StateMachine + RoundBlame + Debug,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> StateMachineWrapper<T, MaxProposalLength>
 {
@@ -58,6 +58,7 @@ impl<
 
 	fn collect_round_blame(&self) {
 		let (unreceived_messages, blamed_parties) = self.round_blame();
+		self.logger.debug(format!("Round blame: {blamed_parties:?}"));
 		let _ = self
 			.current_round_blame
 			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
@@ -67,9 +68,9 @@ impl<
 impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> StateMachine
 	for StateMachineWrapper<T, MaxProposalLength>
 where
-	T: StateMachine + RoundBlame,
+	T: StateMachine + RoundBlame + Debug,
 	<T as StateMachine>::Err: std::fmt::Debug,
-	<T as StateMachine>::MessageBody: serde::Serialize,
+	<T as StateMachine>::MessageBody: serde::Serialize + MessageRoundID,
 {
 	type Err = T::Err;
 	type Output = T::Output;
@@ -80,9 +81,12 @@ where
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type,
 			self.session_id,
-			self.current_round(),
+			msg.body.round_id(),
 			msg.sender
 		));
+		self.logger.trace(format!("SM Before: {:?}", &self.sm));
+
+		self.collect_round_blame();
 
 		// Before passing to the state machine, make sure that we haven't already received the same
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
@@ -96,15 +100,15 @@ where
 				self.current_round(),
 				msg.sender
 			));
-			return Ok(())
+			//return Ok(())
 		}
 
 		let result = self.sm.handle_incoming(msg);
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
 		}
+		self.logger.trace(format!("SM After: {:?}", &self.sm));
 
-		self.collect_round_blame();
 		result
 	}
 
