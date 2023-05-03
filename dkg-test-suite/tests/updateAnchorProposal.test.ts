@@ -64,7 +64,7 @@ it('should be able to sign anchor update proposal', async () => {
 		0,
 		wallet1.address,
 		wallet1.address,
-		wallet1.address,
+		'',
 		{}
 	);
 
