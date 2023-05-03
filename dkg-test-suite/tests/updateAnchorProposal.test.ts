@@ -78,7 +78,7 @@ it('should be able to sign anchor update proposal', async () => {
 		localChain2.evmId
 	);
 	const functionSignature = hexToU8a(
-		anchor.contract.interface.getSighash('updateEdge(bytes32,uint32,bytes32)')
+		anchor.contract.interface.getSighash('updateEdge(uint256,uint32,bytes32)')
 	);
 	const nonce = Number(await anchor.contract.getProposalNonce()) + 1;
 	const proposalHeader = new ProposalHeader(
