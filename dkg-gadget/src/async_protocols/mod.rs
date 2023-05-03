@@ -474,7 +474,8 @@ where
 
 	// Spawn the 3 tasks
 	// 1. The inbound task (we will abort that task if the protocol finished)
-	let handle = crate::utils::ExplicitPanicFuture::new(tokio::spawn(inbound_signed_message_receiver));
+	let handle =
+		crate::utils::ExplicitPanicFuture::new(tokio::spawn(inbound_signed_message_receiver));
 	// 2. The outbound task (will stop if the protocol finished, after flushing the messages to the
 	// network.)
 	let handle2 = crate::utils::ExplicitPanicFuture::new(tokio::spawn(outgoing_to_wire));
@@ -484,8 +485,6 @@ where
 		params
 			.logger
 			.info(format!("🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res));
-		// Abort the inbound task after sleeping awhile to give time for tasks to finish
-		tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 		handle.abort();
 		// Wait for the outbound task to finish
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
@@ -535,6 +534,13 @@ where
 				"Async proto sent outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
+
+			params.logger.round_event(crate::RoundsEventType::SentMessage {
+				session: params.session_id as _,
+				round: unsigned_message.body.round_id() as _,
+				sender: unsigned_message.sender as _,
+				receiver: unsigned_message.receiver as _,
+			});
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -614,7 +620,8 @@ where
 			// check the status of the async protocol.
 			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
-				// TODO: consider telling the task running this to shut this off in 1s to allow time for additional messages to be sent
+				// TODO: consider telling the task running this to shut this off in 1s to allow time
+				// for additional messages to be sent
 				params.logger.debug(
 					"🕸️  Async proto is completed or terminated, breaking out of incoming loop",
 				);

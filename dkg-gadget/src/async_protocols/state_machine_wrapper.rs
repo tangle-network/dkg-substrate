@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::{CurrentRoundBlame, ProtocolType};
+use crate::{async_protocols::MessageRoundID, debug_logger::DebugLogger};
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
-use std::{collections::HashSet, sync::Arc, fmt::Debug};
-use crate::async_protocols::MessageRoundID;
-use super::{CurrentRoundBlame, ProtocolType};
-use crate::debug_logger::DebugLogger;
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 pub(crate) struct StateMachineWrapper<
 	T: StateMachine,
@@ -77,13 +76,19 @@ where
 	type MessageBody = T::MessageBody;
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+		let (session, round, sender, receiver) =
+			(self.session_id as _, msg.body.round_id() as _, msg.sender as _, msg.receiver as _);
+
 		self.logger.trace(format!(
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
-			self.channel_type,
-			self.session_id,
-			msg.body.round_id(),
-			msg.sender
+			self.channel_type, session, round, sender
 		));
+		self.logger.round_event(crate::RoundsEventType::ReceivedMessage {
+			session,
+			round,
+			sender,
+			receiver,
+		});
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
 
 		self.collect_round_blame();
@@ -95,10 +100,7 @@ where
 		if !self.received_messages.insert(msg_serde) {
 			self.logger.trace(format!(
 				"Already received message for {:?} from session={}, round={}, sender={}",
-				self.channel_type,
-				self.session_id,
-				self.current_round(),
-				msg.sender
+				self.channel_type, session, round, sender
 			));
 			//return Ok(())
 		}
@@ -106,6 +108,13 @@ where
 		let result = self.sm.handle_incoming(msg);
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
+		} else {
+			self.logger.round_event(crate::RoundsEventType::ProcessedMessage {
+				session,
+				round,
+				sender,
+				receiver,
+			});
 		}
 		self.logger.trace(format!("SM After: {:?}", &self.sm));
 
@@ -142,6 +151,11 @@ where
 			self.current_round(),
 			self.round_blame(),
 		));
+		self.logger.round_event(crate::RoundsEventType::ProceededToRound {
+			session: self.session_id as _,
+			round: self.current_round() as _,
+		});
+
 		self.collect_round_blame();
 		result
 	}

@@ -1237,7 +1237,11 @@ where
 	) -> Result<(), DKGError> {
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
-		self.logger.info(format!("Processing incoming DKG message: {:?} | {:?}", dkg_msg.msg.session_id, rounds.as_ref().map(|x| x.session_id)));
+		self.logger.info(format!(
+			"Processing incoming DKG message: {:?} | {:?}",
+			dkg_msg.msg.session_id,
+			rounds.as_ref().map(|x| x.session_id)
+		));
 		// discard the message if from previous round
 		if let Some(current_round) = &rounds {
 			if dkg_msg.msg.session_id < current_round.session_id {
@@ -1249,7 +1253,10 @@ where
 			}
 		}
 
-		let is_delivery_type = matches!(dkg_msg.msg.payload, DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..));
+		let is_delivery_type = matches!(
+			dkg_msg.msg.payload,
+			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..)
+		);
 
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {

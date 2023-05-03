@@ -69,9 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let signing_n = n_clients as u16;
 
 	// logging for the dummy api only
-	let output = std::fs::File::create(args.tmp_path.join("dummy_api.log"))?;
+	let output = args.tmp_path.join("dummy_api.log");
 	let dummy_api_logger =
-		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output));
+		dkg_gadget::debug_logger::DebugLogger::new("dummy-api".to_string(), Some(output))?;
 
 	let api = &crate::dummy_api::DummyApi::new(
 		keygen_t,
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let current_test_id = Arc::new(RwLock::new(None));
 		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 		// pass the dummy api logger initially, with the intent of overwriting it later
-		let logger = dkg_gadget::debug_logger::DebugLogger::new("pre-init", None);
+		let logger = dkg_gadget::debug_logger::DebugLogger::new("pre-init", None)?;
 		let key_store: dkg_gadget::keystore::DKGKeystore =
 			dkg_gadget::keystore::DKGKeystore::new_default(logger.clone());
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
@@ -104,10 +104,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		// set the loggers for the gossip engines
 		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
 		let peer_id = *peer_id;
-		let output = std::fs::File::create(args.tmp_path.join(format!("{peer_id}.log")))?;
+		let output = args.tmp_path.join(format!("{peer_id}.log"));
 		// output the logs for this specific peer to a file
 		logger.set_id(peer_id);
-		logger.set_output(output);
+		logger.set_output(Some(output))?;
 
 		let client = Arc::new(
 			crate::client::TestClient::connect(

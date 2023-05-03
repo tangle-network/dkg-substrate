@@ -152,8 +152,6 @@ where
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
 			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
-			
-			
 			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
