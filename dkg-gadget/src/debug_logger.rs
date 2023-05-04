@@ -115,21 +115,23 @@ impl DebugLogger {
 		let events_file_handle = Arc::new(RwLock::new(events_file));
 		let events_fh_task = events_file_handle.clone();
 
-		tokio::task::spawn(async move {
-			while let Some(message) = rx.recv().await {
-				match message {
-					MessageType::Default(message) =>
-						if let Some(file) = fh_task.write().as_mut() {
-							writeln!(file, "{message}").unwrap();
+		if tokio::runtime::Handle::try_current().is_ok() {
+			tokio::task::spawn(async move {
+				while let Some(message) = rx.recv().await {
+					match message {
+						MessageType::Default(message) =>
+							if let Some(file) = fh_task.write().as_mut() {
+								writeln!(file, "{message}").unwrap();
+							},
+						MessageType::Event(event) => {
+							if let Some(file) = events_fh_task.write().as_mut() {
+								writeln!(file, "{event:?}").unwrap();
+							}
 						},
-					MessageType::Event(event) => {
-						if let Some(file) = events_fh_task.write().as_mut() {
-							writeln!(file, "{event:?}").unwrap();
-						}
-					},
+					}
 				}
-			}
-		});
+			});
+		}
 
 		Ok(Self {
 			identifier: Arc::new(identifier.to_string().into()),
