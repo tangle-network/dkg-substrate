@@ -119,7 +119,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::Saturating,
+	traits::{Saturating, Zero},
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
@@ -762,6 +762,14 @@ impl<T: Config> Pallet<T> {
 	fn get_expected_signer(block_number: T::BlockNumber) -> Option<T::AccountId> {
 		let current_authorities = pallet_dkg_metadata::CurrentAuthoritiesAccounts::<T>::get();
 		let block_as_u32: u32 = block_number.try_into().unwrap_or_default();
+
+		// sanity check
+		if current_authorities.is_empty() || block_as_u32.is_zero() {
+			// we can safely return None here,
+			// the calling function will submit the proposal anyway
+			return None
+		}
+
 		let submitter_index: u32 = block_as_u32 % current_authorities.len() as u32;
 		current_authorities.get(submitter_index as usize).cloned()
 	}
@@ -790,10 +798,11 @@ impl<T: Config> Pallet<T> {
 
 		// check if its our turn to submit proposals
 		if let Some(expected_signer_account) = Self::get_expected_signer(block_number) {
-			// the signer does not have a method to read all avilable public keys, we instead sign a
-			// dummy message and read the current pub key from the signature.
+			// the signer does not have a method to read all available public keys, we instead sign
+			// a dummy message and read the current pub key from the signature.
 			let signature = signer.sign_message(b"test");
-			let account: &T::AccountId = &signature.first().unwrap().0.id;
+			let account: &T::AccountId =
+				&signature.first().expect("Unable to retreive signed message").0.id; // the unwrap here is ok since we checked if can_sign() is true above
 
 			if account != &expected_signer_account {
 				log::debug!(
