@@ -194,7 +194,7 @@ impl DKGKeystore {
 
 impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
 	fn from(store: Option<SyncCryptoStorePtr>) -> Self {
-		Self(store, DebugLogger::new("DKGKeystore", None).unwrap())
+		Self(store, DebugLogger::new("DKGKeystore", None).expect("Should not fail"))
 	}
 }
 
