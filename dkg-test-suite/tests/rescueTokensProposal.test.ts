@@ -18,7 +18,7 @@ import { waitForEvent, sudoTx, sleep } from './utils/setup';
 import { BigNumber } from 'ethers';
 import {
 	Treasury,
-	GovernedTokenWrapper,
+	FungibleTokenWrapper,
 	MintableToken,
 } from '@webb-tools/tokens';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
@@ -42,7 +42,7 @@ import { expect } from 'chai';
 it('should be able to sign and execute rescue token proposal', async () => {
 	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
-	const governedToken = GovernedTokenWrapper.connect(
+	const governedToken = FungibleTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);
@@ -139,9 +139,9 @@ it('should be able to sign and execute rescue token proposal', async () => {
 		// Now we wrap and deposit, the wrapping fee should accumulate to the treasury
 		const wrappingFee = await governedToken.contract.getFee();
 		await governedToken.grantMinterRole(anchor.contract.address);
-		let tx = await mintableToken.approveSpending(anchor.contract.address);
+		let tx = await mintableToken.approveSpending(anchor.contract.address, BigNumber.from('100000000000000000000000000'));
 		await tx.wait();
-		tx = await mintableToken.approveSpending(governedToken.contract.address);
+		tx = await mintableToken.approveSpending(governedToken.contract.address, BigNumber.from('100000000000000000000000000'));
 		await tx.wait();
 		await mintableToken.mintTokens(wallet1.address, '100000000000000000000000');
 		const outputUtxo = await CircomUtxo.generateUtxo({
@@ -150,13 +150,14 @@ it('should be able to sign and execute rescue token proposal', async () => {
 			chainId: localChain.typedChainId.toString(),
 			curve: 'Bn254',
 		});
-		await anchor.transactWrap(
-			mintableToken.contract.address,
+		await anchor.transact(
 			[],
 			[outputUtxo],
 			0,
+			0,
 			wallet1.address,
 			wallet1.address,
+			mintableTokenAddress,
 			{}
 		);
 

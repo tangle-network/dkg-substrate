@@ -80,30 +80,30 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		let status = Arc::new(Atomic::new(MetaHandlerStatus::Beginning));
 		let status_history = Arc::new(Mutex::new(vec![MetaHandlerStatus::Beginning]));
 
-		let status_debug = status.clone();
-		let status_history_debug = status_history.clone();
-		let logger_debug = logger.clone();
+		// let status_debug = status.clone();
+		// let status_history_debug = status_history.clone();
+		// let logger_debug = logger.clone();
 
 		// The purpose of this task is to log the status of the meta handler
 		// in the case that it is stalled/not-progressing. This is useful for debugging.
-		tokio::task::spawn(async move {
-			loop {
-				tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-				let status = status_debug.load(Ordering::Relaxed);
-				if [MetaHandlerStatus::Terminated, MetaHandlerStatus::Complete].contains(&status) {
-					break
-				}
-				let status_history = status_history_debug.lock();
+		// tokio::task::spawn(async move {
+		// 	loop {
+		// 		tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+		// 		let status = status_debug.load(Ordering::Relaxed);
+		// 		if [MetaHandlerStatus::Terminated, MetaHandlerStatus::Complete].contains(&status) {
+		// 			break
+		// 		}
+		// 		let status_history = status_history_debug.lock();
 
-				if status == MetaHandlerStatus::Beginning && status_history.len() == 1 {
-					continue
-				}
+		// 		if status == MetaHandlerStatus::Beginning && status_history.len() == 1 {
+		// 			continue
+		// 		}
 
-				logger_debug.debug(format!(
-					"AsyncProtocolRemote status: {status:?} ||||| history: {status_history:?}",
-				));
-			}
-		});
+		// 		logger_debug.debug(format!(
+		// 			"AsyncProtocolRemote status: {status:?} ||||| history: {status_history:?}",
+		// 		));
+		// 	}
+		// });
 
 		Self {
 			status,

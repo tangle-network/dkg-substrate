@@ -302,14 +302,14 @@ impl pallet_timestamp::Config for Runtime {
 
 #[cfg(feature = "integration-tests")]
 parameter_types! {
-  pub const Period: BlockNumber = HOURS;
+  pub const Period: BlockNumber = MINUTES;
   pub const Offset: BlockNumber = 0;
 }
 
 #[cfg(not(feature = "integration-tests"))]
 parameter_types! {
   // How often we trigger a new session.
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = HOURS;
   pub const Offset: BlockNumber = 0;
 }
 
