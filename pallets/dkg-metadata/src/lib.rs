@@ -536,7 +536,7 @@ pub mod pallet {
 	/// Accounts for the current authorities
 	#[pallet::storage]
 	#[pallet::getter(fn current_authorities_accounts)]
-	pub(super) type CurrentAuthoritiesAccounts<T: Config> =
+	pub type CurrentAuthoritiesAccounts<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, T::MaxAuthorities>, ValueQuery>;
 
 	/// Authority account ids scheduled for the next session

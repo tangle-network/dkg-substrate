@@ -112,7 +112,7 @@ use dkg_runtime_primitives::{
 	StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
-use frame_system::offchain::{AppCrypto, SendSignedTransaction, Signer};
+use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
 pub use pallet::*;
 use sp_runtime::{
 	offchain::{
@@ -756,6 +756,16 @@ impl<T: Config> Pallet<T> {
 		StoredUnsignedProposalOf::<T> { proposal, timestamp }
 	}
 
+	// ** Calculate the turn of authorities to submit transactions **
+	// we use a simple round robin algorithm to determine who submits the proposal on-chain, this
+	// avoids all the validators trying to submit at the same time.
+	fn get_expected_signer(block_number: T::BlockNumber) -> Option<T::AccountId> {
+		let current_authorities = pallet_dkg_metadata::CurrentAuthoritiesAccounts::<T>::get();
+		let block_as_u32: u32 = block_number.try_into().unwrap_or_default();
+		let submitter_index: u32 = block_as_u32 % current_authorities.len() as u32;
+		current_authorities.get(submitter_index as usize).cloned()
+	}
+
 	// *** Offchain worker methods ***
 
 	/// Offchain worker function that submits signed proposals from the offchain storage on-chain
@@ -769,16 +779,36 @@ impl<T: Config> Pallet<T> {
 		if next_unsigned_at > block_number {
 			return Err("Too early to send unsigned transaction")
 		}
+
+		// ensure we have the signer setup
+		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+			)
+		}
+
+		// check if its our turn to submit proposals
+		if let Some(expected_signer_account) = Self::get_expected_signer(block_number) {
+			// the signer does not have a method to read all avilable public keys, we instead sign a
+			// dummy message and read the current pub key from the signature.
+			let signature = signer.sign_message(b"test");
+			let account: &T::AccountId = &signature.first().unwrap().0.id;
+
+			if account != &expected_signer_account {
+				log::debug!(
+					target: "runtime::dkg_proposal_handler",
+					"submit_signed_proposal_onchain: Not our turn to sign, selected signer is {:?}",
+					expected_signer_account
+				);
+				return Ok(())
+			}
+		}
+
 		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK);
 		{
 			let _guard = lock.lock();
 
-			let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
-			if !signer.can_sign() {
-				return Err(
-					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
-			}
 			match Self::get_next_offchain_signed_proposal(block_number) {
 				Ok(next_proposals) => {
 					log::debug!(
@@ -786,6 +816,12 @@ impl<T: Config> Pallet<T> {
 						"submit_signed_proposal_onchain: found {} proposals to submit before filtering\n {:?}",
 						next_proposals.len(), next_proposals
 					);
+
+					// early exit if nothing to submit
+					if next_proposals.is_empty() {
+						return Ok(())
+					}
+
 					// We filter out all proposals that are already on chain
 					let filtered_proposals = next_proposals
 						.iter()
