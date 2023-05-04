@@ -44,17 +44,17 @@ cd "$PROJECT_ROOT"
 
 echo "*** Start Webb DKG Node ***"
 # Alice
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/alice --chain local -lerror --alice --output-path=./tmp/alice/output.log \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
   --rpc-cors all --ws-external \
   --port ${ports[0]} \
   --ws-port 9944 &
 # Bob
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/bob --chain local -lerror --bob --output-path=./tmp/bob/output.log \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
   --rpc-cors all --ws-external \
   --port ${ports[1]} \
   --ws-port 9945 &
 # Charlie
-cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/charlie --chain local -linfo --charlie --output-path=./tmp/charlie/output.log \
+./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
     --rpc-cors all --ws-external \
     --ws-port 9948 \
     --port ${ports[2]} \
@@ -64,5 +64,5 @@ cargo run --bin dkg-standalone-node --release -- --base-path=./tmp/charlie --cha
     -ldkg_metadata=debug \
     -lruntime::dkg_proposal_handler=debug \
     -lruntime::offchain=debug \
-    -ldkg_proposal_handler=debug
+    -ldkg_proposal_handler=debug --unsafe-rpc-external --rpc-methods=unsafe
 popd

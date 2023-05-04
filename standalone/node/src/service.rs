@@ -260,6 +260,11 @@ pub fn new_full(
 			Some(keystore_container.sync_keystore()),
 		);
 
+		dkg_primitives::utils::insert_dkg_account_keys_into_keystore(
+			&config,
+			Some(keystore_container.sync_keystore()),
+		);
+
 		// setup debug logging
 		let local_peer_id = network.local_peer_id();
 		let debug_logger = DebugLogger::new(local_peer_id, debug_output);

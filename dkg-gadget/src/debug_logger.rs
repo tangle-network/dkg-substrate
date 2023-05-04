@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
 }
 
 // names for mapping the uuids to a human-readable name
-const NAMES: &'static [&'static str] = &[
+const NAMES: &[&str] = &[
 	"Alice", "Bob", "Charlie", "Dave", "Eve", "Faythe", "Grace", "Heidi", "Ivan", "Judy",
 	"Mallory", "Niaj", "Olivia", "Peggy", "Rupert", "Sybil", "Trent", "Walter", "Wendy", "Zach",
 ];

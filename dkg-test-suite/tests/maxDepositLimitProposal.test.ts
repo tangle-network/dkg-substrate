@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-import '@webb-tools/types';
+import '@webb-tools/dkg-substrate-types';
 import { sudoTx, waitForEvent } from './utils/setup';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';
 import { localChain, polkadotApi, signatureVBridge } from './utils/util';
@@ -26,6 +26,7 @@ import {
 	ResourceId,
 } from '@webb-tools/sdk-core';
 import { registerResourceId } from '@webb-tools/test-utils';
+import type { WebbProposalsProposal } from '@polkadot/types/lookup';
 
 it('should be able to update max deposit limit', async () => {
 	const vAnchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
@@ -85,7 +86,7 @@ it('should be able to update max deposit limit', async () => {
 		},
 		key
 	);
-
+	const signedDkgProposalValue = polkadotApi.registry.createType("Option<WebbProposalsProposal>", proposal.toU8a());
 	const signedDkgProposal = proposal.unwrap().asSigned;
 
 	// perfect! now we need to send it to the signature bridge.
