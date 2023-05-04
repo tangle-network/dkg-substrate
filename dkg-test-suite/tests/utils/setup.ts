@@ -14,7 +14,8 @@
  * limitations under the License.
  *
  */
-import '@webb-tools/types';
+import type { Codec } from '@polkadot/types-codec/types';
+import '@webb-tools/dkg-substrate-types';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import child from 'child_process';
@@ -98,14 +99,14 @@ export async function fastForwardTo(
 }
 
 export const printValidators = async function (api: ApiPromise) {
-	const [{ nonce: accountNonce }, now, validators] = await Promise.all([
-		api.query.system.account(ALICE),
+	const [accountNonce, now, validators] = await Promise.all([
+		api.query.system.account(ALICE).then((account) => api.registry.createType(`number`, account.toU8a())),
 		api.query.timestamp.now(),
-		api.query.session.validators(),
+		api.query.session.validators().then((account) => api.registry.createType(`Vec<Address>`, account.toU8a())),
 	]);
 
 	console.log(`accountNonce(${ALICE}) ${accountNonce}`);
-	console.log(`last block timestamp ${now.toNumber()}`);
+	console.log(`last block timestamp ${now.toHuman()}`);
 
 	if (validators && validators.length > 0) {
 		const validatorBalances = await Promise.all(
@@ -114,11 +115,14 @@ export const printValidators = async function (api: ApiPromise) {
 
 		console.log(
 			'validators',
-			validators.map((authorityId, index) => ({
-				address: authorityId.toString(),
-				balance: validatorBalances[index].data.free.toHuman(),
-				nonce: validatorBalances[index].nonce.toHuman(),
-			}))
+			validators.map((authorityId, index) => {
+				const balance = validatorBalances[index].toJSON();
+				({
+					address: authorityId.toString(),
+					balance: balance?["data"]?["free"]:0:0,
+					nonce: balance?["nonce"]:0,
+				})
+			})
 		);
 	}
 };
@@ -192,7 +196,7 @@ export function startStandaloneNode(
 						`/ip4/127.0.0.1/tcp/${ports['alice'].p2p}/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp`,
 				  ]),
 			// only print logs from the alice node
-			...(authority === 'alice' && options.printLogs
+			...(authority === 'alice'
 				? [
 						'-ldkg=debug',
 						'-ldkg_metadata=debug',
@@ -265,40 +269,43 @@ export async function waitForEvent(
 	dataQuery?: { key: string }
 ): Promise<void> {
 	return new Promise(async (resolve, _rej) => {
-		// Subscribe to system events via storage
-		const unsub = await api.query.system.events((events) => {
-			const handleUnsub = () => {
-				// Unsubscribe from the storage
-				unsub();
-				// Resolve the promise
-				resolve(void 0);
-			};
-
+		while (true) {
+			// Subscribe to system events via storage
+			const events = await api.query.system.events();
+			const eventsJson = events.toJSON();
+			const eventsValue = api.registry.createType("Vec<EventRecord>", events.toU8a());
 			// Loop through the Vec<EventRecord>
-			events.forEach((record) => {
-				const { event } = record;
-				if (event.section === pallet && event.method === eventVariant) {
+			for (var event of eventsValue) {
+				console.log("Checking event: ", event);
+				const section = event.event.section;
+				const method = event.event.method;
+				const data = event.event.data;
+				console.log("Event section = ", section, ", method = ", method);
+				console.log("Event musteq  = ", pallet, ", method = ", eventVariant);
+				if (section === pallet && method === eventVariant) {
 					console.log(
-						`Event (${event.section}.${event.method}) =>`,
-						event.data.toJSON()
+						`Event ($section}.${method}) =>`,
+						data
 					);
 					if (dataQuery) {
-						event.data.forEach((value, index) => {
+						for (const value of data) {
 							const jsonData = value.toJSON();
 							if (jsonData instanceof Object) {
 								Object.keys(jsonData).map((key) => {
 									if (key === dataQuery.key) {
-										handleUnsub();
+										return resolve(void 0);
 									}
 								});
 							}
-						});
+						}
 					} else {
-						handleUnsub();
+						return resolve(void 0);
 					}
 				}
-			});
-		});
+			}
+
+			await sleep(2000);
+		}
 	});
 }
 
@@ -377,8 +384,9 @@ export async function sudoTx(
 	const alice = keyring.addFromUri('//Alice');
 	return new Promise(async (resolve, _reject) => {
 		const unsub = await api.tx.sudo
-			.sudo(call)
+			.sudo(call.method.toHex())
 			.signAndSend(alice, ({ status }) => {
+				console.log("Status: ", status);
 				if (status.isFinalized) {
 					unsub();
 					resolve();
@@ -394,7 +402,7 @@ export async function triggerDkgManuaIncrementNonce(
 	const alice = keyring.addFromUri('//Alice');
 	const call = api.tx.dkg.manualIncrementNonce();
 	const unsub = await api.tx.sudo
-		.sudo(call)
+		.sudo(call.method.toHex())
 		.signAndSend(alice, ({ status }) => {
 			if (status.isFinalized) {
 				unsub();

@@ -15,7 +15,7 @@
  *
  */
 import { sleep, waitForEvent, sudoTx } from './utils/setup';
-import { MintableToken, GovernedTokenWrapper } from '@webb-tools/tokens';
+import { MintableToken, FungibleTokenWrapper } from '@webb-tools/tokens';
 import { hexToU8a, u8aToHex } from '@polkadot/util';
 import {
 	TokenAddProposal,
@@ -37,7 +37,7 @@ import { registerResourceId } from '@webb-tools/test-utils';
 it('should be able to sign token add & remove proposal', async () => {
 	const anchor = signatureVBridge.getVAnchor(localChain.typedChainId)!;
 	const governedTokenAddress = anchor.token!;
-	let governedToken = GovernedTokenWrapper.connect(
+	let governedToken = FungibleTokenWrapper.connect(
 		governedTokenAddress,
 		wallet1
 	);
@@ -55,7 +55,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		functionSignature,
 		nonce
 	);
-	// Create Mintable Token to add to GovernedTokenWrapper
+	// Create Mintable Token to add to FungibleTokenWrapper
 	//Create an ERC20 Token
 	const tokenToAdd = await MintableToken.createToken(
 		'testToken',

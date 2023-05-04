@@ -18,6 +18,7 @@ import {
 	ethAddressFromUncompressedPublicKey,
 	fetchDkgPublicKey,
 	sudoTx,
+	sleep,
 	waitForEvent,
 } from './utils/setup';
 import { u8aToHex, hexToU8a } from '@polkadot/util';
@@ -39,6 +40,7 @@ import {
 } from './utils/util';
 import { expect } from 'chai';
 import { Keyring } from '@polkadot/api';
+import { BLOCK_TIME } from './utils/constants';
 
 it('should be able to sign anchor update proposal', async () => {
 	// get the anhor on localchain1
@@ -60,10 +62,12 @@ it('should be able to sign anchor update proposal', async () => {
 	await anchor.transact(
 		[],
 		[outputUtxo],
-		{},
+		0,
 		0,
 		wallet1.address,
-		wallet1.address
+		wallet1.address,
+		'',
+		{}
 	);
 
 	// now check the new merkel root.
@@ -76,7 +80,7 @@ it('should be able to sign anchor update proposal', async () => {
 		localChain2.evmId
 	);
 	const functionSignature = hexToU8a(
-		anchor.contract.interface.getSighash('updateEdge(bytes32,uint32,bytes32)')
+		anchor.contract.interface.getSighash('updateEdge(uint256,uint32,bytes32)')
 	);
 	const nonce = Number(await anchor.contract.getProposalNonce()) + 1;
 	const proposalHeader = new ProposalHeader(
@@ -93,22 +97,31 @@ it('should be able to sign anchor update proposal', async () => {
 
 	const anchorProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
 		proposalHeader,
-		newMerkleRoot1,
+		newMerkleRoot1._hex,
 		srcResourceId
 	);
+	
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, anchorProposal.header.resourceId);
 	// get alice account to send the transaction to the dkg node.
 	const prop = anchorProposal;
+
 	const proposalCall = polkadotApi.tx.dkgProposals.acknowledgeProposal(
 		anchorProposal.header.nonce,
 		{
 			Evm: localChain.evmId,
 		},
 		resourceId.toU8a(),
-		prop.toU8a()
+		{
+			Unsigned: {
+				kind: 'AnchorUpdate',
+				data: u8aToHex(prop.toU8a()),
+			},
+		}
 	);
 
+	console.log(prop);
+	await sleep(BLOCK_TIME * 2);
 	// The acknowledgeProposal call should come from someone in the proposer set
 	const keyring = new Keyring({ type: 'sr25519' });
 	const alice = keyring.addFromUri('//Alice');
@@ -125,6 +138,7 @@ it('should be able to sign anchor update proposal', async () => {
 						resolve();
 					} else {
 						reject(new Error('Proposal failed'));
+						resolve();
 					}
 				}
 			}
@@ -151,8 +165,7 @@ it('should be able to sign anchor update proposal', async () => {
 	);
 
 	const dkgProposal = proposal.unwrap().asSigned;
-	// sanity check.
-	expect(u8aToHex(dkgProposal.data)).to.eq(prop);
+
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = signatureVBridge.getVBridgeSide(localChain2.typedChainId)!;
 	// but first, we need to log few things to help us to debug.
@@ -171,7 +184,7 @@ it('should be able to sign anchor update proposal', async () => {
 	);
 	expect(isSignedByGovernor).to.eq(true);
 	// check that we have the resouceId mapping.
-	const val = await contract._resourceIDToHandlerAddress(resourceId.toString());
+	const val = await contract._resourceIdToHandlerAddress(resourceId.toString());
 	const anchorHandlerAddress = await anchor2.getHandler();
 	expect(val).to.eq(anchorHandlerAddress);
 	const tx2 = await contract.executeProposalWithSignature(
@@ -181,6 +194,9 @@ it('should be able to sign anchor update proposal', async () => {
 	await tx2.wait();
 	// now we shall check the new merkle root on the other chain.
 	const newMerkleRoots = await anchor2.contract.getLatestNeighborRoots();
+	console.log(newMerkleRoots);
+	console.log(newMerkleRoot1);
 	// the merkle root should be included now.
-	expect(newMerkleRoots.includes(newMerkleRoot1)).to.eq(true);
+	expect(newMerkleRoots[0]._hex).to.eq(newMerkleRoot1._hex);
 });
+

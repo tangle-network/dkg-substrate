@@ -54,11 +54,11 @@ describe('Keygen Changes Flow', function () {
 		if (fs.existsSync(tmpDir)) {
 			fs.rmSync(tmpDir, { recursive: true });
 		}
-		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
+		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: true });
+		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: true });
 		charlieNode = startStandaloneNode('charlie', {
 			tmp: true,
-			printLogs: false,
+			printLogs: true,
 		});
 
 		api = await ApiPromise.create({
@@ -69,6 +69,7 @@ describe('Keygen Changes Flow', function () {
 	// This test requires at least 3 sessions.
 	// 3 sessions = 3 * 10 blocks = 30 blocks = 30 * 6 seconds = 180 seconds.
 	it('should be able to decrease the Keygen Threshold', async () => {
+		console.log("Beginning first test");
 		// first query the current keygen threshold value.
 		const currentKeygenThreshold = await api.query.dkg.keygenThreshold();
 		expect(currentKeygenThreshold.toHex()).to.equal(
@@ -150,7 +151,8 @@ describe('Keygen Changes Flow', function () {
 			'Keygen threshold at the start should be 2'
 		);
 		// then, we shall query the current best authorities.
-		const currentBestAuthorities = await api.query.dkg.bestAuthorities();
+		const currentBestAuthoritiesValue = await api.query.dkg.bestAuthorities();
+		const currentBestAuthorities = api.registry.createType(`Vec<(u16,DkgRuntimePrimitivesCryptoPublic)>`, currentBestAuthoritiesValue.toU8a())
 		expect(currentBestAuthorities.length).to.equal(
 			2,
 			'Current best authorities should be 2'
@@ -176,7 +178,8 @@ describe('Keygen Changes Flow', function () {
 			'0x0003',
 			'Next keygen threshold should be 3'
 		);
-		const nextBestAuthorities = await api.query.dkg.nextBestAuthorities();
+		const nextBestAuthoritiesValue = await api.query.dkg.nextBestAuthorities();
+		const nextBestAuthorities = api.registry.createType(`Vec<(u16,DkgRuntimePrimitivesCryptoPublic)>`, nextBestAuthoritiesValue.toU8a())
 		expect(nextBestAuthorities.length).to.equal(
 			3,
 			'Next best authorities should be 3'
@@ -191,7 +194,8 @@ describe('Keygen Changes Flow', function () {
 			'0x0003',
 			'Keygen threshold should be now equal to 3'
 		);
-		const bestAuthorities = await api.query.dkg.bestAuthorities();
+		const bestAuthoritiesValue = await api.query.dkg.bestAuthorities();
+		const bestAuthorities = api.registry.createType(`Vec<(u16,DkgRuntimePrimitivesCryptoPublic)>`, bestAuthoritiesValue.toU8a())
 		expect(bestAuthorities.length).to.equal(3, 'Best authorities should be 3');
 		// query the current DKG public key.
 		const currentDkgPublicKey = await fetchDkgPublicKey(api);

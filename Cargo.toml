@@ -62,7 +62,7 @@ auto_impl = "1.0.0"
 itertools = "0.10.3"
 rstest = "0.12.0"
 env_logger = "0.9.0"
-webb-proposals = { git = "https://github.com/webb-tools/webb-rs", default-features = false, features = ["scale", "evm", "substrate"], branch = "polkadot-v0.9.39" }
+webb-proposals = { git = "https://github.com/webb-tools/webb-rs", default-features = false, features = ["scale", "evm", "substrate"] }
 curv = { package = "curv-kzen", version = "0.10.0", default-features = false }
 libsecp256k1 = { version = "0.7.1", default-features = false }
 tracing = "0.1.37"
