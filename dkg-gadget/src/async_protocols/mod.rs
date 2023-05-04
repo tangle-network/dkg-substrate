@@ -570,8 +570,7 @@ where
 					});
 					if ret.is_none() {
 						params.logger.error(format!(
-							"Failed to find authority id for KeygenPartyId={:?}",
-							keygen_party_id
+							"Failed to find authority id for KeygenPartyId={keygen_party_id:?}"
 						));
 					}
 					ret

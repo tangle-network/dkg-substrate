@@ -89,10 +89,10 @@ impl Debug for RoundsEvent {
 				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}")
 			},
 			RoundsEventType::ProceededToRound { session, round } => {
-				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {} for session {} ~~~~~~~~~~~~~~~~~", round, session)
+				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {round} for session {session} ~~~~~~~~~~~~~~~~~")
 			},
 			RoundsEventType::PartyIndexChanged { previous, new } => {
-				writeln!(f, "!!!! Party index changed from {} to {} !!!!", previous, new)
+				writeln!(f, "!!!! Party index changed from {previous} to {new} !!!!")
 			},
 		}
 	}
@@ -120,7 +120,7 @@ impl DebugLogger {
 				match message {
 					MessageType::Default(message) =>
 						if let Some(file) = fh_task.write().as_mut() {
-							writeln!(file, "{}", message).unwrap();
+							writeln!(file, "{message}").unwrap();
 						},
 					MessageType::Event(event) => {
 						if let Some(file) = events_fh_task.write().as_mut() {
@@ -157,7 +157,7 @@ impl DebugLogger {
 		let len = names_map.len();
 		assert!(len < NAMES.len());
 		names_map.insert(id.clone(), NAMES[len]);
-		*self.identifier.write() = id.to_string();
+		*self.identifier.write() = id;
 	}
 
 	pub fn set_output(&self, file: Option<std::path::PathBuf>) -> std::io::Result<()> {

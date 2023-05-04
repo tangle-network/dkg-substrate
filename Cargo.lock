@@ -4563,6 +4563,7 @@ dependencies = [
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.8.2"
+source = "git+https://github.com/webb-tools/multi-party-ecdsa.git#3eda11aadc5ac28810d4f6be95e706ee67f37a34"
 dependencies = [
  "centipede",
  "curv-kzen",
@@ -6692,6 +6693,7 @@ dependencies = [
 [[package]]
 name = "round-based"
 version = "0.1.7"
+source = "git+https://github.com/webb-tools/round-based-protocol#959126f9f6edce16d4ee95954091b93e33a83140"
 dependencies = [
  "async-stream",
  "futures",

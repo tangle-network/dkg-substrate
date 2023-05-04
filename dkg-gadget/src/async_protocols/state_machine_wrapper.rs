@@ -31,6 +31,7 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
+	outgoing_history: Vec<Msg<T::MessageBody>>
 }
 
 impl<
@@ -52,6 +53,7 @@ impl<
 			current_round_blame,
 			logger,
 			received_messages: HashSet::new(),
+			outgoing_history: Vec::new(),
 		}
 	}
 
@@ -93,6 +95,14 @@ where
 
 		self.collect_round_blame();
 
+		if round < self.current_round().into() {
+			self.logger.trace(format!(
+				"Message for {:?} from session={}, round={} is outdated, ignoring",
+				self.channel_type, session, round
+			));
+			return Ok(())
+		}
+
 		// Before passing to the state machine, make sure that we haven't already received the same
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
 		// want to process the same message twice)
@@ -102,7 +112,7 @@ where
 				"Already received message for {:?} from session={}, round={}, sender={}",
 				self.channel_type, session, round, sender
 			));
-			//return Ok(())
+			return Ok(())
 		}
 
 		let result = self.sm.handle_incoming(msg);
@@ -123,6 +133,19 @@ where
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		if !self.sm.message_queue().is_empty() {
+			// store outgoing messages in history
+			let mut last_2_rounds = vec![];
+			let current_round = self.current_round();
+			let current_round_minus_1 = current_round.saturating_sub(1);
+			self.outgoing_history.extend(self.sm.message_queue().clone());
+			for message in &self.outgoing_history {
+				let message_round = message.body.round_id();
+				if message_round >= current_round_minus_1 && message_round <= current_round {
+					last_2_rounds.push(message.clone());
+				}
+			}
+			// pass all messages in outgoing_history to the state machine
+			*self.sm.message_queue() = last_2_rounds;
 			self.logger.trace(format!(
 				"Preparing to drain message queue for {:?} in session={}, round={}, queue size={}",
 				self.channel_type,
