@@ -31,7 +31,7 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
-	outgoing_history: Vec<Msg<T::MessageBody>>
+	outgoing_history: Vec<Msg<T::MessageBody>>,
 }
 
 impl<
