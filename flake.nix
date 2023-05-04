@@ -1,5 +1,5 @@
 {
-  description = "Webb DKG Substrate development environment";
+  description = "Webb DKG development environment";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -24,6 +24,10 @@
             pkgs.gmp
             pkgs.protobuf
             pkgs.pkg-config
+            # Needed for rocksdb-sys
+            pkgs.clang
+            pkgs.libclang.lib
+            pkgs.rustPlatform.bindgenHook
             # Mold Linker for faster builds (only on Linux)
             (lib.optionals pkgs.stdenv.isLinux pkgs.mold)
           ];
@@ -31,7 +35,7 @@
             # We want the unwrapped version, wrapped comes with nixpkgs' toolchain
             pkgs.rust-analyzer-unwrapped
             # Nodejs for test suite
-			pkgs.nodePackages.typescript-language-server
+            pkgs.nodePackages.typescript-language-server
             pkgs.nodejs_18
             pkgs.nodePackages.yarn
             # Finally the toolchain
