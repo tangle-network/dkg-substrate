@@ -1237,6 +1237,7 @@ where
 	) -> Result<(), DKGError> {
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
+		let next_rounds = self.next_rounds.read().clone();
 		self.logger.info(format!(
 			"Processing incoming DKG message: {:?} | {:?}",
 			dkg_msg.msg.session_id,
@@ -1264,6 +1265,18 @@ where
 				if let Some(rounds) = &rounds {
 					if rounds.session_id == msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(msg) {
+							self.handle_dkg_error(DKGError::CriticalError {
+								reason: err.to_string(),
+							})
+							.await
+						}
+						return Ok(())
+					}
+				}
+
+				if let Some(next_rounds) = next_rounds {
+					if next_rounds.session_id == msg.msg.session_id {
+						if let Err(err) = next_rounds.deliver_message(msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
