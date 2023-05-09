@@ -1,5 +1,5 @@
 use dkg_gadget::debug_logger::DebugLogger;
-use dkg_mock_blockchain::TestBlock;
+use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
 use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal};
 use hash_db::HashDB;
 use parking_lot::RwLock;
@@ -30,6 +30,17 @@ pub struct DummyApiInner {
 	pub authority_sets:
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
+	pub unsigned_proposals: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>
+}
+
+impl MutableBlockchain for DummyApi {
+	fn set_unsigned_proposals(&self, propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>) {
+		self.inner.write().unsigned_proposals = propos;
+	}
+
+	fn set_pub_key(&self, session: u64, key: Vec<u8>) {
+		self.inner.write().dkg_keys.insert(session, key);
+	}
 }
 
 impl DummyApi {
@@ -44,7 +55,7 @@ impl DummyApi {
 		let mut dkg_keys = HashMap::new();
 		// add a empty-key for the genesis block to drive the DKG forward
 		dkg_keys.insert(0 as _, vec![]);
-		for x in 1..=n_sessions {
+		for x in 1..=(n_sessions+1) {
 			// add dummy keys for all other sessions
 			dkg_keys.insert(x as _, vec![0, 1, 2, 3, 4, 5]);
 		}
@@ -57,6 +68,7 @@ impl DummyApi {
 				signing_n,
 				authority_sets: HashMap::new(),
 				dkg_keys,
+				unsigned_proposals: vec![],
 			})),
 			logger,
 		}
@@ -633,10 +645,9 @@ impl
 
 	fn get_unsigned_proposals(
 		&self,
-		hash: H256,
+		_hash: H256,
 	) -> ApiResult<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>> {
-		// TODO: parameter to increase number of proposals
-		Ok(vec![UnsignedProposal::testing_dummy(hash.encode())])
+		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 
 	fn get_max_extrinsic_delay(

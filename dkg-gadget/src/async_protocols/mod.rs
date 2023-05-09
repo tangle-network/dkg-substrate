@@ -535,7 +535,7 @@ where
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
 
-			params.logger.round_event(crate::RoundsEventType::SentMessage {
+			params.logger.round_event(&proto_ty, crate::RoundsEventType::SentMessage {
 				session: params.session_id as _,
 				round: unsigned_message.body.round_id() as _,
 				sender: unsigned_message.sender as _,

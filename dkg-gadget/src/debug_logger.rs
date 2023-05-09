@@ -2,13 +2,22 @@
 use dkg_logging::{debug, error, info, trace, warn};
 use parking_lot::RwLock;
 use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
+use sp_core::Get;
+use crate::async_protocols::ProtocolType;
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
 	identifier: Arc<RwLock<String>>,
 	to_file_io: tokio::sync::mpsc::UnboundedSender<MessageType>,
 	file_handle: Arc<RwLock<Option<std::fs::File>>>,
-	events_file_handle: Arc<RwLock<Option<std::fs::File>>>,
+	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
+	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AsyncProtocolType {
+	Keygen,
+	Signing
 }
 
 #[derive(Debug)]
@@ -32,6 +41,7 @@ const NAMES: &[&str] = &[
 pub struct RoundsEvent {
 	name: String,
 	event: RoundsEventType,
+	proto: AsyncProtocolType
 }
 pub enum RoundsEventType {
 	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
@@ -60,10 +70,10 @@ fn get_legible_name(idx: Option<u16>) -> String {
 			if let Some(name) = NAMES_MAP.read().get(&uuid).cloned() {
 				name.to_string()
 			} else {
-				"Unknown".to_string()
+				party_i.to_string()
 			}
 		} else {
-			"Unknown".to_string()
+			party_i.to_string()
 		}
 	} else {
 		"everyone".to_string()
@@ -106,14 +116,17 @@ impl DebugLogger {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
 
-		let (file, events_file) = Self::get_files(file)?;
+		let (file, events_file_keygen, events_file_signing) = Self::get_files(file)?;
 
 		let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let file_handle = Arc::new(RwLock::new(file));
 		let fh_task = file_handle.clone();
 
-		let events_file_handle = Arc::new(RwLock::new(events_file));
+		let events_file_handle = Arc::new(RwLock::new(events_file_keygen));
 		let events_fh_task = events_file_handle.clone();
+
+		let events_file_handle_signing = Arc::new(RwLock::new(events_file_signing));
+		let events_fh_task_signing = events_file_handle_signing.clone();
 
 		if tokio::runtime::Handle::try_current().is_ok() {
 			tokio::task::spawn(async move {
@@ -124,8 +137,17 @@ impl DebugLogger {
 								writeln!(file, "{message}").unwrap();
 							},
 						MessageType::Event(event) => {
-							if let Some(file) = events_fh_task.write().as_mut() {
-								writeln!(file, "{event:?}").unwrap();
+							match event.proto {
+								AsyncProtocolType::Keygen => {
+									if let Some(file) = events_fh_task.write().as_mut() {
+										writeln!(file, "{event:?}").unwrap();
+									}
+								}
+								AsyncProtocolType::Signing => {
+									if let Some(file) = events_fh_task_signing.write().as_mut() {
+										writeln!(file, "{event:?}").unwrap();
+									}
+								}
 							}
 						},
 					}
@@ -137,19 +159,21 @@ impl DebugLogger {
 			identifier: Arc::new(identifier.to_string().into()),
 			to_file_io: tx,
 			file_handle,
-			events_file_handle,
+			events_file_handle_keygen: events_file_handle,
+			events_file_handle_signing,
 		})
 	}
 
 	fn get_files(
 		base_output: Option<std::path::PathBuf>,
-	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>)> {
+	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>)> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
-			let events_file = std::fs::File::create(format!("{}.events", file_path.display()))?;
-			Ok((Some(file), Some(events_file)))
+			let events_file = std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
+			let events_file_signing = std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
+			Ok((Some(file), Some(events_file), Some(events_file_signing)))
 		} else {
-			Ok((None, None))
+			Ok((None, None, None))
 		}
 	}
 
@@ -163,9 +187,10 @@ impl DebugLogger {
 	}
 
 	pub fn set_output(&self, file: Option<std::path::PathBuf>) -> std::io::Result<()> {
-		let (file, event_file) = Self::get_files(file)?;
+		let (file, event_file, signing_file) = Self::get_files(file)?;
 		*self.file_handle.write() = file;
-		*self.events_file_handle.write() = event_file;
+		*self.events_file_handle_keygen.write() = event_file;
+		*self.events_file_handle_signing.write() = signing_file;
 		Ok(())
 	}
 
@@ -256,8 +281,9 @@ impl DebugLogger {
 		}
 	}
 
-	pub fn round_event(&self, event: RoundsEventType) {
+	pub fn round_event<T: Into<AsyncProtocolType>>(&self, proto: T, event: RoundsEventType) {
 		let id = self.identifier.read().clone();
+		let proto = proto.into();
 		if let Some(sender) = event.sender() {
 			if matches!(event, RoundsEventType::SentMessage { .. }) {
 				let prev_val = PARTY_I_MAP.write().insert(sender, id.clone());
@@ -270,9 +296,19 @@ impl DebugLogger {
 		}
 
 		let name = if let Some(val) = NAMES_MAP.read().get(&id) { val.to_string() } else { id };
-		let event = RoundsEvent { name, event };
+		let event = RoundsEvent { name, event, proto };
 		if let Err(err) = self.to_file_io.send(MessageType::Event(event)) {
 			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
+		}
+	}
+}
+
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>> for AsyncProtocolType {
+	fn from(value: &ProtocolType<T>) -> Self {
+		if matches!(value, ProtocolType::Keygen { .. }) {
+			AsyncProtocolType::Keygen
+		} else {
+			AsyncProtocolType::Signing
 		}
 	}
 }

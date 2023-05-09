@@ -85,7 +85,7 @@ where
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type, session, round, sender
 		));
-		self.logger.round_event(crate::RoundsEventType::ReceivedMessage {
+		self.logger.round_event(&self.channel_type, crate::RoundsEventType::ReceivedMessage {
 			session,
 			round,
 			sender,
@@ -119,7 +119,7 @@ where
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
 		} else {
-			self.logger.round_event(crate::RoundsEventType::ProcessedMessage {
+			self.logger.round_event(&self.channel_type, crate::RoundsEventType::ProcessedMessage {
 				session,
 				round,
 				sender,
@@ -174,7 +174,7 @@ where
 			self.current_round(),
 			self.round_blame(),
 		));
-		self.logger.round_event(crate::RoundsEventType::ProceededToRound {
+		self.logger.round_event(&self.channel_type, crate::RoundsEventType::ProceededToRound {
 			session: self.session_id as _,
 			round: self.current_round() as _,
 		});

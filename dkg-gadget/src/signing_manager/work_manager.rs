@@ -170,7 +170,7 @@ impl<B: BlockT> WorkManager<B> {
 		for task in lock.enqueued_signing_proposals.iter() {
 			if task.handle.session_id == msg.msg.session_id {
 				self.logger.debug(format!(
-					"Message is for this signing execution in session: {}",
+					"Message is for this ENQUEUED signing execution in session: {}",
 					task.handle.session_id
 				));
 				if let Err(_err) = task.handle.deliver_message(msg) {
@@ -184,7 +184,7 @@ impl<B: BlockT> WorkManager<B> {
 		for task in lock.currently_signing_proposals.iter() {
 			if task.handle.session_id == msg.msg.session_id {
 				self.logger.debug(format!(
-					"Message is for this signing execution in session: {}",
+					"Message is for this signing CURRENT execution in session: {}",
 					task.handle.session_id
 				));
 				if let Err(_err) = task.handle.deliver_message(msg) {

@@ -115,12 +115,12 @@ impl<
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 {
-	fn send_result_to_test_client(&self, result: Result<(), String>) {
+	fn send_result_to_test_client(&self, result: Result<(), String>, pub_key: Option<Vec<u8>>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
 			if let Some(current_test_id) = *bundle.current_test_id.read() {
 				let _ = bundle
 					.to_test_client
-					.send((current_test_id, result))
+					.send((current_test_id, result, pub_key))
 					.map_err(|err| format!("send_result_to_test_client failed with error: {err}"));
 			}
 		}
@@ -259,6 +259,7 @@ where
 	}
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+		let public_key = key.pub_key.clone();
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
@@ -266,7 +267,7 @@ where
 			key,
 		);
 
-		self.send_result_to_test_client(Ok(()));
+		self.send_result_to_test_client(Ok(()), Some(public_key));
 
 		Ok(())
 	}

@@ -53,13 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		config.positive_cases + config.error_cases.as_ref().map(|r| r.len()).unwrap_or(0);
 	let bind_addr = config.bind.clone();
 
-	// first, spawn the orchestrator/mock-blockchain
-	let orchestrator_task = MockBlockchain::new(config).await?.execute();
-	let orchestrator_handle = tokio::task::spawn(orchestrator_task);
-	// give time for the orchestrator to bind
-	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-
-	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
 	// the gossip engine and the dummy api share a state between ALL clients in this process
 	// we will use the SAME gossip engine for both keygen and signing
 	let gossip_engine = &InMemoryGossipEngine::new();
@@ -81,6 +74,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		n_blocks,
 		dummy_api_logger.clone(),
 	);
+
+	// first, spawn the orchestrator/mock-blockchain
+	let orchestrator_task = MockBlockchain::new(config, api.clone()).await?.execute();
+	let orchestrator_handle = tokio::task::spawn(orchestrator_task);
+	// give time for the orchestrator to bind
+	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+	let children_processes_dkg_clients = futures::stream::FuturesUnordered::new();
 
 	// setup the clients
 	for idx in 0..n_clients {

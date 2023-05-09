@@ -126,8 +126,6 @@ where
 	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	// Next keygen round, always taken and restarted each session
 	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
-	// Signing rounds, created everytime there are unique unsigned proposals
-	pub signing_rounds: Shared<HashMap<[u8; 32], AsyncProtocolRemote<NumberFor<B>>>>,
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
@@ -164,7 +162,7 @@ where
 /// Used only for tests
 #[derive(Clone)]
 pub struct TestBundle {
-	pub to_test_client: UnboundedSender<(uuid::Uuid, Result<(), String>)>,
+	pub to_test_client: UnboundedSender<(uuid::Uuid, Result<(), String>, Option<Vec<u8>>)>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 }
 
@@ -187,7 +185,6 @@ where
 			metrics: self.metrics.clone(),
 			rounds: self.rounds.clone(),
 			next_rounds: self.next_rounds.clone(),
-			signing_rounds: self.signing_rounds.clone(),
 			best_authorities: self.best_authorities.clone(),
 			next_best_authorities: self.next_best_authorities.clone(),
 			latest_header: self.latest_header.clone(),
@@ -257,7 +254,6 @@ where
 			metrics: Arc::new(metrics),
 			rounds: Arc::new(RwLock::new(None)),
 			next_rounds: Arc::new(RwLock::new(None)),
-			signing_rounds: Arc::new(RwLock::new(HashMap::new())),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			next_best_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
@@ -475,6 +471,7 @@ where
 							}
 						};
 
+						self.logger.debug(format!("Started Keygen Protocol for session {session_id} with status {status:?}"));
 						// spawn on parallel thread
 						self.logger.info("Started a new thread for task".to_string());
 						let _handle = tokio::task::spawn(task);
@@ -502,8 +499,12 @@ where
 		&self,
 		optional_session_id: Option<SessionId>,
 	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
-		let current_session_id =
-			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id);
+		let current_session_id = if let Some(sid) = optional_session_id {
+			Some(sid)
+		} else {
+			self.rounds.read().as_ref().map(|r| r.session_id).or(optional_session_id)
+		};
+
 		let next_session_id = current_session_id.map(|s| s + 1);
 		let active_local_key =
 			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
@@ -569,7 +570,6 @@ where
 	}
 
 	/// Get the next DKG public key
-	#[allow(dead_code)]
 	pub async fn get_next_dkg_pub_key(
 		&self,
 		header: &B::Header,
@@ -882,7 +882,7 @@ where
 			self.maybe_enact_next_authorities(header).await;
 			self.maybe_rotate_local_sessions(header).await;
 			if let Err(e) = self.handle_unsigned_proposals(header).await {
-				self.logger.error(format!("🕸️  Error submitting unsigned proposals: {e:?}"));
+				self.logger.error(format!("🕸️  Error running handle_unsigned_proposals: {e:?}"));
 			}
 		}
 	}
@@ -930,6 +930,8 @@ where
 			return
 		}
 
+		self.logger.debug("Running maybe_enact_next_authorities");
+
 		// Get the active and queued validators to check for updates
 		if let Some((_active, queued)) = self.validator_set(header).await {
 			self.logger.debug("🕸️  Session progress percentage above threshold, proceed with enact new authorities");
@@ -946,7 +948,9 @@ where
 				"🕸️  QUEUED DKG STATUS: {:?}",
 				self.next_rounds.read().as_ref().map(|r| r.status.clone())
 			));
-			if queued_keygen_finished {
+			let test_harness_mode = self.test_bundle.is_some();
+
+			if queued_keygen_finished && !test_harness_mode {
 				return
 			}
 
@@ -957,7 +961,6 @@ where
 
 			self.logger
 				.debug(format!("🕸️  NEXT DKG KEY ON CHAIN: {}", next_dkg_key.is_some()));
-			let test_harness_mode = self.test_bundle.is_some();
 			// Start a keygen if we don't have one OR if there is no queued key on chain.
 			if (!has_next_rounds && next_dkg_key.is_none()) || test_harness_mode {
 				self.logger.debug(format!(
@@ -1053,6 +1056,7 @@ where
 			self.logger
 				.debug(format!("🕸️  QUEUED AUTHORITY SET ID: {queued_authority_set_id:?}"));
 			if set_id != queued_authority_set_id {
+				self.logger.debug(format!("🕸️  Queued authority set id {queued_authority_set_id} is not the same as the on chain authority set id {set_id}, will not rotate the local sessions."));
 				return
 			}
 			// Update the validator sets
@@ -1080,10 +1084,6 @@ where
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
 			// clear the currently being signing proposals cache.
 			self.currently_signing_proposals.write().clear();
-			// Reset all the signing rounds.
-			self.signing_rounds.write().values().for_each(|v| {
-				let _ = v.shutdown("Rotating next round");
-			});
 			// Reset per session metrics
 			if let Some(metrics) = self.metrics.as_ref() {
 				metrics.reset_session_metrics();
@@ -1238,19 +1238,23 @@ where
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
 		let next_rounds = self.next_rounds.read().clone();
+		let is_keygen_type = matches!(dkg_msg.msg.payload, DKGMsgPayload::Keygen { .. });
 		self.logger.info(format!(
 			"Processing incoming DKG message: {:?} | {:?}",
 			dkg_msg.msg.session_id,
 			rounds.as_ref().map(|x| x.session_id)
 		));
-		// discard the message if from previous round
+
+		// discard the message if from previous round (keygen checking only. SigningManagerV2 internally handles session checks)
 		if let Some(current_round) = &rounds {
-			if dkg_msg.msg.session_id < current_round.session_id {
-				self.logger.warn(format!(
-					"Message is for already completed round: {}, Discarding message",
-					dkg_msg.msg.session_id
-				));
-				return Ok(())
+			if is_keygen_type {
+				if dkg_msg.msg.session_id < current_round.session_id {
+					self.logger.warn(format!(
+						"Message is for already completed round: {}, Discarding message",
+						dkg_msg.msg.session_id
+					));
+					return Ok(())
+				}
 			}
 		}
 

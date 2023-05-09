@@ -1855,6 +1855,7 @@ dependencies = [
  "atomic",
  "bincode2",
  "bytes",
+ "dkg-runtime-primitives",
  "futures",
  "humantime-serde",
  "log",
