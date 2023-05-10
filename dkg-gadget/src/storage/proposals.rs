@@ -103,8 +103,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 			.clone()
 			.proposals
 			.into_iter()
-			.map(|prop| prop.0)
-			.flatten()
+			.flat_map(|prop| prop.0)
 			.map(|prop| prop.data().clone())
 			.collect::<Vec<_>>();
 
@@ -112,7 +111,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		// we need to compare the data to ensure that the proposal is a duplicate, otherwise the
 		// signatures can be different for a same proposal
 		signed_proposals
-			.retain(|prop| !current_list_of_saved_signed_proposals_data.contains(&prop.data()));
+			.retain(|prop| !current_list_of_saved_signed_proposals_data.contains(prop.data()));
 
 		if let Some(submit_at) = submit_at {
 			prop_wrapper.proposals.push((signed_proposals, submit_at))
