@@ -37,13 +37,14 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	signed_proposals: Vec<Proposal<MaxProposalLength>>,
+	mut signed_proposals: Vec<Proposal<MaxProposalLength>>,
 	logger: &DebugLogger,
 ) where
 	B: Block,
 	BE: Backend<B>,
 	C: Client<B, BE>,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	MaxProposalLength:
+		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + std::cmp::PartialEq,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	C::Api: DKGApi<
 		B,
@@ -96,6 +97,22 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		// batch stored in offchain storage
 		let submit_at =
 			generate_delayed_submit_at::<B>(*current_block_number, MAX_SUBMISSION_DELAY);
+
+		// lets create a vector of the data of all the proposals currently in offchain storage
+		let current_list_of_saved_signed_proposals_data: Vec<Vec<u8>> = prop_wrapper
+			.clone()
+			.proposals
+			.into_iter()
+			.map(|prop| prop.0)
+			.flatten()
+			.map(|prop| prop.data().clone())
+			.collect::<Vec<_>>();
+
+		// lets remove any duplicates
+		// we need to compare the data to ensure that the proposal is a duplicate, otherwise the
+		// signatures can be different for a same proposal
+		signed_proposals
+			.retain(|prop| !current_list_of_saved_signed_proposals_data.contains(&prop.data()));
 
 		if let Some(submit_at) = submit_at {
 			prop_wrapper.proposals.push((signed_proposals, submit_at))
