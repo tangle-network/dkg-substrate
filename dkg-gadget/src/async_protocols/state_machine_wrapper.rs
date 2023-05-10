@@ -85,12 +85,10 @@ where
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type, session, round, sender
 		));
-		self.logger.round_event(&self.channel_type, crate::RoundsEventType::ReceivedMessage {
-			session,
-			round,
-			sender,
-			receiver,
-		});
+		self.logger.round_event(
+			&self.channel_type,
+			crate::RoundsEventType::ReceivedMessage { session, round, sender, receiver },
+		);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
 
 		self.collect_round_blame();
@@ -119,12 +117,10 @@ where
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
 		} else {
-			self.logger.round_event(&self.channel_type, crate::RoundsEventType::ProcessedMessage {
-				session,
-				round,
-				sender,
-				receiver,
-			});
+			self.logger.round_event(
+				&self.channel_type,
+				crate::RoundsEventType::ProcessedMessage { session, round, sender, receiver },
+			);
 		}
 		self.logger.trace(format!("SM After: {:?}", &self.sm));
 
@@ -154,6 +150,7 @@ where
 				self.sm.message_queue().len(),
 			));
 		}
+
 		self.sm.message_queue()
 	}
 
@@ -174,10 +171,13 @@ where
 			self.current_round(),
 			self.round_blame(),
 		));
-		self.logger.round_event(&self.channel_type, crate::RoundsEventType::ProceededToRound {
-			session: self.session_id as _,
-			round: self.current_round() as _,
-		});
+		self.logger.round_event(
+			&self.channel_type,
+			crate::RoundsEventType::ProceededToRound {
+				session: self.session_id as _,
+				round: self.current_round() as _,
+			},
+		);
 
 		self.collect_round_blame();
 		result

@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
+use crate::async_protocols::ProtocolType;
 use dkg_logging::{debug, error, info, trace, warn};
 use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 use sp_core::Get;
-use crate::async_protocols::ProtocolType;
+use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
@@ -17,7 +17,7 @@ pub struct DebugLogger {
 #[derive(Debug, Copy, Clone)]
 pub enum AsyncProtocolType {
 	Keygen,
-	Signing
+	Signing,
 }
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ const NAMES: &[&str] = &[
 pub struct RoundsEvent {
 	name: String,
 	event: RoundsEventType,
-	proto: AsyncProtocolType
+	proto: AsyncProtocolType,
 }
 pub enum RoundsEventType {
 	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
@@ -136,19 +136,17 @@ impl DebugLogger {
 							if let Some(file) = fh_task.write().as_mut() {
 								writeln!(file, "{message}").unwrap();
 							},
-						MessageType::Event(event) => {
-							match event.proto {
-								AsyncProtocolType::Keygen => {
-									if let Some(file) = events_fh_task.write().as_mut() {
-										writeln!(file, "{event:?}").unwrap();
-									}
+						MessageType::Event(event) => match event.proto {
+							AsyncProtocolType::Keygen => {
+								if let Some(file) = events_fh_task.write().as_mut() {
+									writeln!(file, "{event:?}").unwrap();
 								}
-								AsyncProtocolType::Signing => {
-									if let Some(file) = events_fh_task_signing.write().as_mut() {
-										writeln!(file, "{event:?}").unwrap();
-									}
+							},
+							AsyncProtocolType::Signing => {
+								if let Some(file) = events_fh_task_signing.write().as_mut() {
+									writeln!(file, "{event:?}").unwrap();
 								}
-							}
+							},
 						},
 					}
 				}
@@ -169,8 +167,10 @@ impl DebugLogger {
 	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>)> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
-			let events_file = std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
-			let events_file_signing = std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
+			let events_file =
+				std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
+			let events_file_signing =
+				std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
 			Ok((Some(file), Some(events_file), Some(events_file_signing)))
 		} else {
 			Ok((None, None, None))
@@ -303,7 +303,9 @@ impl DebugLogger {
 	}
 }
 
-impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>> for AsyncProtocolType {
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+	for AsyncProtocolType
+{
 	fn from(value: &ProtocolType<T>) -> Self {
 		if matches!(value, ProtocolType::Keygen { .. }) {
 			AsyncProtocolType::Keygen

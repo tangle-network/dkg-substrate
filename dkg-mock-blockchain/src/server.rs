@@ -3,6 +3,7 @@ use crate::{
 	MockBlockchainEvent, TestBlock, TestCase,
 };
 use atomic::Atomic;
+use dkg_runtime_primitives::UnsignedProposal;
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
 use std::{
@@ -16,7 +17,6 @@ use tokio::{
 	sync::{mpsc, Mutex, RwLock},
 };
 use uuid::Uuid;
-use dkg_runtime_primitives::UnsignedProposal;
 
 pub type PeerId = sc_network::PeerId;
 
@@ -30,7 +30,7 @@ pub struct MockBlockchain<T: Clone> {
 	// the orchestrator receives updates from its client sub-tasks from this receiver
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
-	blockchain: T
+	blockchain: T,
 }
 
 /// For communicating between the orchestrator task and each spawned client sub-task
@@ -46,7 +46,7 @@ enum ClientToOrchestratorEvent {
 #[derive(Debug)]
 struct TestResult {
 	result: Result<(), String>,
-	pub_key: Option<Vec<u8>>
+	pub_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -90,7 +90,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			orchestrator_state,
 			to_orchestrator,
 			orchestrator_rx: Arc::new(Mutex::new(Some(orchestrator_rx))),
-			blockchain
+			blockchain,
 		})
 	}
 
@@ -160,7 +160,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 						},
 						ProtocolPacket::ClientToBlockchain { event } => {
 							let trace_id = event.trace_id;
-							let result = TestResult { result: event.result, pub_key: event.pub_key };
+							let result =
+								TestResult { result: event.result, pub_key: event.pub_key };
 							self.to_orchestrator
 								.send(ClientToOrchestratorEvent::TestResult {
 									peer_id: *peer_id,
@@ -239,7 +240,11 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 							// we are ready to begin testing rounds
 							std::mem::drop(clients);
 							// TODO: proper impl of this
-							self.blockchain.set_unsigned_proposals(vec![UnsignedProposal::testing_dummy((*session_id).to_be_bytes().to_vec())]);
+							self.blockchain.set_unsigned_proposals(vec![
+								UnsignedProposal::testing_dummy(
+									(*session_id).to_be_bytes().to_vec(),
+								),
+							]);
 							self.orchestrator_begin_next_round(&mut test_cases, session_id).await;
 						}
 					},
@@ -253,7 +258,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 							log_invalid_signal(&o_state, &client_update),
 						ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
 							if let Some(pub_key) = &result.pub_key {
-								// set the public key that way other nodes can verify that the public key was submitted
+								// set the public key that way other nodes can verify that the
+								// public key was submitted
 								self.blockchain.set_pub_key(*session_id, pub_key.clone());
 							}
 
@@ -399,8 +405,10 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 	MockBlockchainEvent::FinalityNotification { notification }
 }
 
-
 pub trait MutableBlockchain: Clone + Send + 'static {
-	fn set_unsigned_proposals(&self, propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>);
+	fn set_unsigned_proposals(
+		&self,
+		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+	);
 	fn set_pub_key(&self, session: u64, key: Vec<u8>);
 }

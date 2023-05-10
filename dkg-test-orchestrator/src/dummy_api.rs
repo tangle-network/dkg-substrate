@@ -30,11 +30,14 @@ pub struct DummyApiInner {
 	pub authority_sets:
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
-	pub unsigned_proposals: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>
+	pub unsigned_proposals: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
 }
 
 impl MutableBlockchain for DummyApi {
-	fn set_unsigned_proposals(&self, propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>) {
+	fn set_unsigned_proposals(
+		&self,
+		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+	) {
 		self.inner.write().unsigned_proposals = propos;
 	}
 
@@ -55,7 +58,7 @@ impl DummyApi {
 		let mut dkg_keys = HashMap::new();
 		// add a empty-key for the genesis block to drive the DKG forward
 		dkg_keys.insert(0 as _, vec![]);
-		for x in 1..=(n_sessions+1) {
+		for x in 1..=(n_sessions + 1) {
 			// add dummy keys for all other sessions
 			dkg_keys.insert(x as _, vec![0, 1, 2, 3, 4, 5]);
 		}

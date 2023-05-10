@@ -302,7 +302,7 @@ impl pallet_timestamp::Config for Runtime {
 
 #[cfg(feature = "integration-tests")]
 parameter_types! {
-  pub const Period: BlockNumber = MINUTES;
+  pub const Period: BlockNumber = 20; // 20
   pub const Offset: BlockNumber = 0;
 }
 

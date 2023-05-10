@@ -110,6 +110,13 @@ pub enum DKGMsgPayload {
 }
 
 impl DKGMsgPayload {
+	pub fn unsigned_proposal_hash(&self) -> Option<&[u8; 32]> {
+		match self {
+			DKGMsgPayload::Offline(msg) => Some(&msg.unsigned_proposal_hash),
+			DKGMsgPayload::Vote(msg) => Some(&msg.unsigned_proposal_hash),
+			_ => None,
+		}
+	}
 	/// NOTE: this is hacky
 	/// TODO: Change enums for keygen, offline, vote
 	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
@@ -150,6 +157,8 @@ pub struct DKGOfflineMessage {
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
+	// the unsigned proposal this message is associated with
+	pub unsigned_proposal_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -161,6 +170,8 @@ pub struct DKGVoteMessage {
 	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
+	// the unsigned proposal this message is associated with
+	pub unsigned_proposal_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

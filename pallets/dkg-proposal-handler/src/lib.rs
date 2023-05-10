@@ -390,10 +390,11 @@ pub mod pallet {
 							});
 							log::error!(
 								target: "runtime::dkg_proposal_handler",
-								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",
+								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?} | ERR: {}",
 								kind,
 								data,
-								signature
+								signature,
+								e.ty()
 							);
 							// skip it.
 							continue

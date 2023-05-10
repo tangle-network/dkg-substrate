@@ -12,6 +12,7 @@ use sc_utils::mpsc::*;
 use sp_api::{offchain::storage::InMemOffchainStorage, BlockT, ProvideRuntimeApi};
 
 use crate::dummy_api::*;
+use dkg_gadget::worker::TestClientPayload;
 use sp_runtime::testing::H256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
@@ -47,7 +48,7 @@ impl TestClient {
 		mock_bc_addr: T,
 		peer_id: PeerId,
 		api: DummyApi,
-		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>, Option<Vec<u8>>)>,
+		mut from_dkg_worker: UnboundedReceiver<TestClientPayload>,
 		latest_test_uuid: Arc<RwLock<Option<Uuid>>>,
 		logger: DebugLogger,
 	) -> std::io::Result<Self> {

@@ -166,9 +166,14 @@ impl<B: BlockT> WorkManager<B> {
 		));
 		let lock = self.inner.read();
 
+		let msg_unsigned_proposal_hash =
+			msg.msg.payload.unsigned_proposal_hash().expect("Bad message type");
+
 		// check the enqueued
 		for task in lock.enqueued_signing_proposals.iter() {
-			if task.handle.session_id == msg.msg.session_id {
+			if task.handle.session_id == msg.msg.session_id &&
+				&task.proposal_hash == msg_unsigned_proposal_hash
+			{
 				self.logger.debug(format!(
 					"Message is for this ENQUEUED signing execution in session: {}",
 					task.handle.session_id
@@ -182,7 +187,9 @@ impl<B: BlockT> WorkManager<B> {
 
 		// check the currently signing
 		for task in lock.currently_signing_proposals.iter() {
-			if task.handle.session_id == msg.msg.session_id {
+			if task.handle.session_id == msg.msg.session_id &&
+				&task.proposal_hash == msg_unsigned_proposal_hash
+			{
 				self.logger.debug(format!(
 					"Message is for this signing CURRENT execution in session: {}",
 					task.handle.session_id

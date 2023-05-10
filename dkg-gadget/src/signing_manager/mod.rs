@@ -50,6 +50,7 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 
 // 1 unsigned proposal per signing set
 const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 1;
+const MAX_RUNNING_TASKS: usize = 5;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -60,7 +61,10 @@ where
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	pub fn new(logger: DebugLogger) -> Self {
-		Self { work_manager: WorkManager::<B>::new(logger, 5), _pd: Default::default() }
+		Self {
+			work_manager: WorkManager::<B>::new(logger, MAX_RUNNING_TASKS),
+			_pd: Default::default(),
+		}
 	}
 
 	pub fn deliver_message(&self, message: Arc<SignedDKGMessage<Public>>) {

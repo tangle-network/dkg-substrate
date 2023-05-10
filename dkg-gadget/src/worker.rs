@@ -162,9 +162,11 @@ where
 /// Used only for tests
 #[derive(Clone)]
 pub struct TestBundle {
-	pub to_test_client: UnboundedSender<(uuid::Uuid, Result<(), String>, Option<Vec<u8>>)>,
+	pub to_test_client: UnboundedSender<TestClientPayload>,
 	pub current_test_id: Arc<RwLock<Option<uuid::Uuid>>>,
 }
+
+pub type TestClientPayload = (uuid::Uuid, Result<(), String>, Option<Vec<u8>>);
 
 // Implementing Clone for DKGWorker is required for the async protocol
 impl<B, BE, C, GE> Clone for DKGWorker<B, BE, C, GE>
@@ -1245,16 +1247,15 @@ where
 			rounds.as_ref().map(|x| x.session_id)
 		));
 
-		// discard the message if from previous round (keygen checking only. SigningManagerV2 internally handles session checks)
+		// discard the message if from previous round (keygen checking only. SigningManagerV2
+		// internally handles session checks)
 		if let Some(current_round) = &rounds {
-			if is_keygen_type {
-				if dkg_msg.msg.session_id < current_round.session_id {
-					self.logger.warn(format!(
-						"Message is for already completed round: {}, Discarding message",
-						dkg_msg.msg.session_id
-					));
-					return Ok(())
-				}
+			if dkg_msg.msg.session_id < current_round.session_id && is_keygen_type {
+				self.logger.warn(format!(
+					"Message is for already completed round: {}, Discarding message",
+					dkg_msg.msg.session_id
+				));
+				return Ok(())
 			}
 		}
 
