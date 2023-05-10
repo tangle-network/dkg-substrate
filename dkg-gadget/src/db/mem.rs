@@ -36,7 +36,6 @@ impl super::DKGDbBackend for DKGInMemoryDb {
 		let lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
 			reason: format!("Failed to lock local_keys: {e}"),
 		})?;
-		dkg_logging::info!(target: "dkg", "[XBZ] getting {:?} | local_keys: {:?}", session_id, lock.keys().collect::<Vec<_>>());
 		Ok(lock.get(&session_id).cloned())
 	}
 
@@ -48,7 +47,6 @@ impl super::DKGDbBackend for DKGInMemoryDb {
 		let mut lock = self.local_keys.lock().map_err(|e| DKGError::CriticalError {
 			reason: format!("Failed to lock local_keys: {e}"),
 		})?;
-		dkg_logging::info!(target: "dkg", "[XBZ] storing local key for session: {:?}", session_id);
 		lock.insert(session_id, local_key);
 		Ok(())
 	}
