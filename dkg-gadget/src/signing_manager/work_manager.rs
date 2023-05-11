@@ -116,7 +116,14 @@ impl<B: BlockT> WorkManager<B> {
 		lock.currently_signing_proposals.retain(|job| {
 			let is_stalled = job.handle.signing_has_stalled(now);
 			if is_stalled {
-				// delete this task, knowing the blockchain will restart it for us
+				self.logger.info_signing(format!(
+					"[worker] Job {:?} is stalled, shutting down",
+					hex::encode(job.proposal_hash)
+				));
+				// the task is stalled, lets be pedantic and shutdown
+				let _ = job.handle.shutdown("Stalled!");
+				// return false so that the proposals are released from the currently signing
+				// proposals
 				return false
 			}
 
