@@ -20,8 +20,6 @@ use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
 
-pub const MAX_SIGNING_SETS: usize = 2;
-
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -294,7 +292,6 @@ where
 			.map(|set| {
 				set.into_iter()
 					.flat_map(KeygenPartyId::try_from)
-					.take(MAX_SIGNING_SETS)
 					.collect::<Vec<_>>()
 			})
 			.map_err(|err| DKGError::CreateOfflineStage {
