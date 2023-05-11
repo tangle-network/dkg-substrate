@@ -293,11 +293,7 @@ where
 		}
 
 		select_random_set(seed, final_set, t + 1)
-			.map(|set| {
-				set.into_iter()
-					.flat_map(KeygenPartyId::try_from)
-					.collect::<Vec<_>>()
-			})
+			.map(|set| set.into_iter().flat_map(KeygenPartyId::try_from).collect::<Vec<_>>())
 			.map_err(|err| DKGError::CreateOfflineStage {
 				reason: format!("generate_signers failed, reason: {err}"),
 			})
