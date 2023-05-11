@@ -27,6 +27,7 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+        with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
 
@@ -80,6 +81,7 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+        with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
 
