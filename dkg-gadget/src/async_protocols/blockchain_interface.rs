@@ -149,9 +149,9 @@ impl<
 	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
-	BE: Backend<B>,
+	BE: Backend<B> + 'static,
 	GE: GossipEngineIface,
-	C: Client<B, BE>,
+	C: Client<B, BE> + 'static,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header

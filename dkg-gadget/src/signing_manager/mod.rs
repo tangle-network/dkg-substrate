@@ -11,7 +11,7 @@ use crate::{
 	gossip_engine::GossipEngineIface,
 	metric_inc,
 	utils::SendFuture,
-	worker::{DKGWorker, KeystoreExt, ProtoStageType},
+	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
 };
 use codec::Encode;
@@ -60,9 +60,9 @@ where
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
-	pub fn new(logger: DebugLogger) -> Self {
+	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>) -> Self {
 		Self {
-			work_manager: WorkManager::<B>::new(logger, MAX_RUNNING_TASKS),
+			work_manager: WorkManager::<B>::new(logger, clock, MAX_RUNNING_TASKS),
 			_pd: Default::default(),
 		}
 	}

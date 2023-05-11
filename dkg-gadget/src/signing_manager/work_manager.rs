@@ -1,6 +1,6 @@
 use crate::{
 	async_protocols::remote::AsyncProtocolRemote, debug_logger::DebugLogger, utils::SendFuture,
-	NumberFor,
+	worker::HasLatestHeader, NumberFor,
 };
 use dkg_primitives::{
 	crypto::Public,
@@ -19,6 +19,7 @@ use sync_wrapper::SyncWrapper;
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
 	inner: Arc<RwLock<WorkManagerInner<B>>>,
+	clock: Arc<dyn HasLatestHeader<B>>,
 	// for now, use a hard-coded value for the number of tasks
 	max_tasks: usize,
 	logger: DebugLogger,
@@ -31,13 +32,14 @@ pub struct WorkManagerInner<B: BlockT> {
 }
 
 impl<B: BlockT> WorkManager<B> {
-	pub fn new(logger: DebugLogger, max_tasks: usize) -> Self {
+	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>, max_tasks: usize) -> Self {
 		let (to_handler, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let this = Self {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
 				currently_signing_proposals: HashSet::new(),
 				enqueued_signing_proposals: VecDeque::new(),
 			})),
+			clock: Arc::new(clock),
 			max_tasks,
 			logger,
 			to_handler,
@@ -108,12 +110,15 @@ impl<B: BlockT> WorkManager<B> {
 	fn poll(&self) {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
+		let now = self.clock.get_latest_block_number();
 		let mut lock = self.inner.write();
-		// todo: do not just drop these tasks. Instead, check to see if any are stalled, and if so,
-		// restart them by pushing them to the front of the enqueued queue
 		let cur_count = lock.currently_signing_proposals.len();
 		lock.currently_signing_proposals.retain(|job| {
-			//let is_stalled = job.handle.signing_has_stalled();
+			let is_stalled = job.handle.signing_has_stalled(now);
+			if is_stalled {
+				// delete this task, knowing the blockchain will restart it for us
+				return false
+			}
 
 			let is_done = job.handle.is_done();
 			self.logger.info_signing(format!(

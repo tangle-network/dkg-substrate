@@ -242,7 +242,8 @@ where
 		} = worker_params;
 
 		let (error_handler, _) = tokio::sync::broadcast::channel(1024);
-		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone());
+		let clock = Clock { latest_header: latest_header.clone() };
+		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock);
 		DKGWorker {
 			client,
 			misbehaviour_tx: None,
@@ -1642,7 +1643,7 @@ impl KeystoreExt for DKGKeystore {
 }
 
 #[auto_impl::auto_impl(&mut, &, Arc)]
-pub trait HasLatestHeader<B: Block> {
+pub trait HasLatestHeader<B: Block>: Send + Sync + 'static {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>>;
 	/// Gets latest block number from latest block header
 	fn get_latest_block_number(&self) -> NumberFor<B> {
@@ -1657,12 +1658,22 @@ pub trait HasLatestHeader<B: Block> {
 impl<B, BE, C, GE> HasLatestHeader<B> for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
-	BE: Backend<B>,
+	BE: Backend<B> + 'static,
 	GE: GossipEngineIface,
-	C: Client<B, BE>,
+	C: Client<B, BE> + 'static,
 	MaxProposalLength: Get<u32>,
 	MaxAuthorities: Get<u32>,
 {
+	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
+		&self.latest_header
+	}
+}
+
+pub struct Clock<B: Block> {
+	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+}
+
+impl<B: Block> HasLatestHeader<B> for Clock<B> {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
 	}
