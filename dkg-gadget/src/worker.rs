@@ -77,8 +77,6 @@ pub const STORAGE_SET_RETRY_NUM: usize = 5;
 
 pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
-pub const MAX_SIGNING_SETS: u64 = 2;
-
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
 pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;

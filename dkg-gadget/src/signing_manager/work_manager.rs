@@ -113,9 +113,15 @@ impl<B: BlockT> WorkManager<B> {
 		// restart them by pushing them to the front of the enqueued queue
 		let cur_count = lock.currently_signing_proposals.len();
 		lock.currently_signing_proposals.retain(|job| {
+			//let is_stalled = job.handle.signing_has_stalled();
+
 			let is_done = job.handle.is_done();
-			self.logger
-				.info_signing(format!("[worker] Job {:?} is done: {}", job.proposal_hash, is_done));
+			self.logger.info_signing(format!(
+				"[worker] Job {:?} is done: {}",
+				hex::encode(job.proposal_hash),
+				is_done
+			));
+
 			!is_done
 		});
 
@@ -129,8 +135,10 @@ impl<B: BlockT> WorkManager<B> {
 		let tasks_to_start = self.max_tasks - lock.currently_signing_proposals.len();
 		for _ in 0..tasks_to_start {
 			if let Some(job) = lock.enqueued_signing_proposals.pop_front() {
-				self.logger
-					.info_signing(format!("[worker] Starting job {:?}", job.proposal_hash));
+				self.logger.info_signing(format!(
+					"[worker] Starting job {:?}",
+					hex::encode(job.proposal_hash)
+				));
 				if let Err(err) = job.handle.start() {
 					self.logger.error_signing(format!(
 						"Failed to start job {:?}: {err:?}",
