@@ -27,6 +27,8 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+          # This will help speed up builds in a pipeline
+          cache-on-failure: "true"
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,6 +80,8 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+          # This will help speed up builds in a pipeline
+          cache-on-failure: "true"
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
