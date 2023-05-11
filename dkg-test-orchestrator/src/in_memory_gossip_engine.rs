@@ -82,7 +82,7 @@ impl InMemoryGossipEngine {
 		// TODO: make the configurable
 		let mut lock = dummy_api.inner.write();
 		// add +1 to allow calls for queued_authorities at block=n_blocks to not fail
-		for x in 0..n_blocks + 1 {
+		for x in 0..=(n_blocks + 1) {
 			lock.authority_sets.entry(x).or_default().force_push(public_key.clone());
 		}
 

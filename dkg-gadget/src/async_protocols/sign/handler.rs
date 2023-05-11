@@ -171,6 +171,7 @@ where
 		batch_key: BatchKey,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let protocol = Box::pin(async move {
+			let unsigned_proposal_hash = unsigned_proposal.hash().expect("Should not fail");
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
@@ -211,6 +212,7 @@ where
 				// are allowing for parallelism now
 				round_key: Vec::from(&hash_of_proposal as &[u8]),
 				partial_signature: partial_sig_bytes,
+				unsigned_proposal_hash,
 			});
 
 			let id = params.authority_public_key.as_ref().clone();

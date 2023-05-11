@@ -64,11 +64,12 @@ describe.skip('Misbehavior Flow', function () {
 		if (fs.existsSync(tmpDir)) {
 			fs.rmSync(tmpDir, { recursive: true });
 		}
-		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false });
-		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false });
+		aliceNode = startStandaloneNode('alice', { tmp: true, printLogs: false, output_dir: tmpDir });
+		bobNode = startStandaloneNode('bob', { tmp: true, printLogs: false, output_dir: tmpDir });
 		charlieNode = startStandaloneNode('charlie', {
 			tmp: true,
 			printLogs: false,
+			output_dir: tmpDir,
 		});
 
 		api = await ApiPromise.create({

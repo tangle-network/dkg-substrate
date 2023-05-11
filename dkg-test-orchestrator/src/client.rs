@@ -12,6 +12,7 @@ use sc_utils::mpsc::*;
 use sp_api::{offchain::storage::InMemOffchainStorage, BlockT, ProvideRuntimeApi};
 
 use crate::dummy_api::*;
+use dkg_gadget::worker::TestClientPayload;
 use sp_runtime::testing::H256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
@@ -47,7 +48,7 @@ impl TestClient {
 		mock_bc_addr: T,
 		peer_id: PeerId,
 		api: DummyApi,
-		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>)>,
+		mut from_dkg_worker: UnboundedReceiver<TestClientPayload>,
 		latest_test_uuid: Arc<RwLock<Option<Uuid>>>,
 		logger: DebugLogger,
 	) -> std::io::Result<Self> {
@@ -77,13 +78,13 @@ impl TestClient {
 		let _this_for_dkg_listener = this.clone();
 		let logger0 = logger.clone();
 		let dkg_worker_listener = async move {
-			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
+			while let Some((trace_id, result, pub_key)) = from_dkg_worker.recv().await {
 				logger0.info(format!(
 					"The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}"
 				));
 
 				let packet = ProtocolPacket::ClientToBlockchain {
-					event: MockClientResponse { result, trace_id },
+					event: MockClientResponse { result, trace_id, pub_key },
 				};
 				tx0.lock().await.send(packet).await.unwrap();
 			}

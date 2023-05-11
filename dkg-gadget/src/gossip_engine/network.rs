@@ -654,7 +654,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		match message.is_valid(who) {
 			Ok(v) =>
 				if v {
-					self.logger.debug("Handshake message from peer {who} is valid");
+					self.logger.debug(format!("Handshake message from peer {who} is valid"));
 				} else {
 					self.logger.warn(format!("Handshake message from peer {who} is invalid"));
 					self.service.report_peer(who, rep::PEER_IMPERSONATED);

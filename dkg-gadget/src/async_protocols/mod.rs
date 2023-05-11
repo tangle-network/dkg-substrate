@@ -318,6 +318,10 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 			_ => None,
 		}
 	}
+
+	pub fn get_unsigned_proposal_hash(&self) -> Option<[u8; 32]> {
+		self.get_unsigned_proposal().and_then(|x| x.hash())
+	}
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug> Debug
@@ -515,6 +519,7 @@ where
 {
 	Box::pin(async move {
 		let mut outgoing_rx = outgoing_rx.fuse();
+		let unsigned_proposal_hash = proto_ty.get_unsigned_proposal_hash();
 		// take all unsigned messages, then sign them and send outbound
 		loop {
 			// Here is a few explanations about the next few lines:
@@ -535,12 +540,15 @@ where
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
 
-			params.logger.round_event(crate::RoundsEventType::SentMessage {
-				session: params.session_id as _,
-				round: unsigned_message.body.round_id() as _,
-				sender: unsigned_message.sender as _,
-				receiver: unsigned_message.receiver as _,
-			});
+			params.logger.round_event(
+				&proto_ty,
+				crate::RoundsEventType::SentMessage {
+					session: params.session_id as _,
+					round: unsigned_message.body.round_id() as _,
+					sender: unsigned_message.sender as _,
+					receiver: unsigned_message.receiver as _,
+				},
+			);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -590,6 +598,8 @@ where
 						),
 						signer_set_id: party_id as u64,
 						offline_msg: serialized_body,
+						unsigned_proposal_hash: unsigned_proposal_hash
+							.expect("Cannot hash unsigned proposal!"),
 					}),
 				_ => {
 					unreachable!(

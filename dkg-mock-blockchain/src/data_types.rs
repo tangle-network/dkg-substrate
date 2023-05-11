@@ -38,6 +38,7 @@ pub enum AttachedCommand {
 pub struct MockClientResponse {
 	pub result: Result<(), String>,
 	pub trace_id: Uuid,
+	pub pub_key: Option<Vec<u8>>,
 }
 
 /// For keeping track of various events sent to subscribing clients
