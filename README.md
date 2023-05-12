@@ -179,6 +179,15 @@ Ensure `protobuf` dependency is installed correctly.
 brew install protobuf
 ```
 
+## Installation Using Nix 💻
+
+1. Install [Nix](https://nixos.org/download.html)
+2. Enable Flakes (if you are not already see here: [Flakes](https://nixos.wiki/wiki/Flakes))
+3. If you have [`direnv`](https://github.com/nix-community/nix-direnv#installation) installed, everything should work out of the box.
+4. Alternatively, you can run `nix develop` in the root of this repo to get a shell with all the dependencies installed.
+5. Happy hacking!
+
+
 <h1 id="usage"> Usage </h1>
 
 <h2 style="border-bottom:none"> Quick Start ⚡ </h2>
