@@ -17,7 +17,7 @@ use std::{
 use sync_wrapper::SyncWrapper;
 
 // How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS : u64 = 500;
+const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
@@ -63,7 +63,9 @@ impl<B: BlockT> WorkManager<B> {
 			};
 
 			let periodic_poller = async move {
-				let mut interval = tokio::time::interval(std::time::Duration::from_millis(JOB_POLL_INTERVAL_IN_MILLISECONDS));
+				let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+					JOB_POLL_INTERVAL_IN_MILLISECONDS,
+				));
 				loop {
 					interval.tick().await;
 					this_worker.poll();
