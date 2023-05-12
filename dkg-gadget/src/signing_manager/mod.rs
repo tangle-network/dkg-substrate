@@ -51,7 +51,7 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 // 1 unsigned proposal per signing set
 const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 1;
 // the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 2;
+const MAX_RUNNING_TASKS: usize = 1;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
