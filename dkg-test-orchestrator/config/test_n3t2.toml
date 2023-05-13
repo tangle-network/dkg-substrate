@@ -6,6 +6,7 @@ n_clients = 3
 threshold = 2
 # the minimum latency in the network. Each client will receive updates at
 # min_simulated_latency + random(0, 0.25*min_simulated_latency)
-min_simulated_latency = "100ms"
+min_simulated_latency = "0ms"
 # The number of positive cases to run
 positive_cases = 10
+unsigned_proposals_per_session = 1

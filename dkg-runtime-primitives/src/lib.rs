@@ -249,8 +249,8 @@ impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 		let data = BoundedVec::try_from(data).unwrap();
 		Self {
 			typed_chain_id: webb_proposals::TypedChainId::None,
-			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),
-			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data },
+			key: DKGPayloadKey::AnchorCreateProposal(webb_proposals::Nonce(0)),
+			proposal: Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data },
 		}
 	}
 	pub fn hash(&self) -> Option<[u8; 32]> {

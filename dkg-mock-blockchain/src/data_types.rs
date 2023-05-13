@@ -35,10 +35,9 @@ pub enum AttachedCommand {
 /// about its internal state back to the MockBlockchain server for centralized
 /// introspection
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MockClientResponse {
-	pub result: Result<(), String>,
-	pub trace_id: Uuid,
-	pub pub_key: Option<Vec<u8>>,
+pub enum MockClientResponse {
+	Keygen { result: Result<(), String>, trace_id: Uuid, pub_key: Vec<u8> },
+	Sign { result: Result<(), String>, trace_id: Uuid },
 }
 
 /// For keeping track of various events sent to subscribing clients

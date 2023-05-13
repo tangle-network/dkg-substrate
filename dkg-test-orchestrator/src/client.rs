@@ -83,9 +83,13 @@ impl TestClient {
 					"The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}"
 				));
 
-				let packet = ProtocolPacket::ClientToBlockchain {
-					event: MockClientResponse { result, trace_id, pub_key },
+				let event = if let Some(pub_key) = pub_key {
+					MockClientResponse::Keygen { result, trace_id, pub_key }
+				} else {
+					MockClientResponse::Sign { result, trace_id }
 				};
+
+				let packet = ProtocolPacket::ClientToBlockchain { event };
 				tx0.lock().await.send(packet).await.unwrap();
 			}
 

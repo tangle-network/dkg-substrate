@@ -230,7 +230,7 @@ where
 
 			if proposals_for_this_batch.len() == batch_key.len {
 				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_resuls"); // safe unwrap since lock is held
+				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
 				if let Some(metrics) = self.metrics.as_ref() {
@@ -245,6 +245,8 @@ where
 					proposals,
 					&self.logger,
 				);
+				// send None to signify this was a signing result
+				self.send_result_to_test_client(Ok(()), None);
 			} else {
 				self.logger.info(format!(
 					"{}/{} proposals have resolved for batch {:?}",

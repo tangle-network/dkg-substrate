@@ -1,11 +1,12 @@
 use crate::{
 	mock_blockchain_config::MockBlockchainConfig, transport::*, FinalityNotification,
-	MockBlockchainEvent, TestBlock, TestCase,
+	MockBlockchainEvent, MockClientResponse, TestBlock, TestCase,
 };
 use atomic::Atomic;
 use dkg_runtime_primitives::UnsignedProposal;
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
+use sp_runtime::app_crypto::sp_core::hashing::sha2_256;
 use std::{
 	collections::{HashMap, VecDeque},
 	net::SocketAddr,
@@ -44,9 +45,9 @@ enum ClientToOrchestratorEvent {
 }
 
 #[derive(Debug)]
-struct TestResult {
-	result: Result<(), String>,
-	pub_key: Option<Vec<u8>>,
+enum TestResult {
+	Keygen { result: Result<(), String>, pub_key: Vec<u8> },
+	Sign { result: Result<(), String> },
 }
 
 #[derive(Debug)]
@@ -72,7 +73,8 @@ enum OrchestratorState {
 struct ConnectedClientState {
 	// a map from tracing id => test case. Once the test case passes
 	// for the specific client, the test case will be removed from the list
-	outstanding_tasks: HashMap<Uuid, crate::TestCase>,
+	outstanding_tasks_keygen: HashMap<Uuid, crate::TestCase>,
+	outstanding_tasks_signing: HashMap<Uuid, crate::TestCase>,
 	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent>,
 }
 
@@ -131,7 +133,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			// create a channel for allowing the orchestrator to send this sub-task commands
 			let (orchestrator_to_this_task, mut orchestrator_rx) = mpsc::unbounded_channel();
 			let state = ConnectedClientState {
-				outstanding_tasks: Default::default(),
+				outstanding_tasks_keygen: Default::default(),
+				outstanding_tasks_signing: Default::default(),
 				orchestrator_to_client_subtask: orchestrator_to_this_task,
 			};
 
@@ -159,9 +162,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 							panic!("Received invalid packet {pkt:?} inside to_orchestrator for {peer_id:?}")
 						},
 						ProtocolPacket::ClientToBlockchain { event } => {
-							let trace_id = event.trace_id;
-							let result =
-								TestResult { result: event.result, pub_key: event.pub_key };
+							let (result, trace_id) = match event {
+								MockClientResponse::Keygen { result, trace_id, pub_key } =>
+									(TestResult::Keygen { result, pub_key }, trace_id),
+								MockClientResponse::Sign { result, trace_id } =>
+									(TestResult::Sign { result }, trace_id),
+							};
+
 							self.to_orchestrator
 								.send(ClientToOrchestratorEvent::TestResult {
 									peer_id: *peer_id,
@@ -205,8 +212,9 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 	async fn orchestrate(self) -> std::io::Result<()> {
 		let mut test_cases = self.generate_test_cases();
 		let mut client_to_orchestrator_rx = self.orchestrator_rx.lock().await.take().unwrap();
-		let session_id: &mut u64 = &mut 0;
-		let mut current_round_completed_count = 0;
+		let mut current_round_completed_count_keygen = 0;
+		let mut current_round_completed_count_signing = 0;
+		let intra_test_phase = &mut IntraTestPhase::new();
 
 		let cl = self.clients.clone();
 		let state = self.orchestrator_state.clone();
@@ -216,14 +224,19 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			let mut interval = tokio::time::interval(Duration::from_secs(5));
 			loop {
 				interval.tick().await;
+				log::info!(target: "dkg", "Orchestrator state is {state:?}", state = state.load(Ordering::SeqCst));
 				if state.load(Ordering::SeqCst) != OrchestratorState::AwaitingRoundCompletion {
 					continue
 				}
 
 				let clients = cl.read().await;
 				for (id, client) in clients.iter() {
-					if !client.outstanding_tasks.is_empty() {
-						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding task(s)", tasks = client.outstanding_tasks.len());
+					if !client.outstanding_tasks_keygen.is_empty() {
+						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding KEYGEN task(s)", tasks = client.outstanding_tasks_keygen.len());
+					}
+
+					if !client.outstanding_tasks_signing.is_empty() {
+						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding SIGNING task(s)", tasks = client.outstanding_tasks_signing.len());
 					}
 				}
 			}
@@ -239,13 +252,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 						if clients.len() == self.config.n_clients {
 							// we are ready to begin testing rounds
 							std::mem::drop(clients);
-							// TODO: proper impl of this
-							self.blockchain.set_unsigned_proposals(vec![
-								UnsignedProposal::testing_dummy(
-									(*session_id).to_be_bytes().to_vec(),
-								),
-							]);
-							self.orchestrator_begin_next_round(&mut test_cases, session_id).await;
+							self.orchestrator_begin_next_round(&mut test_cases, intra_test_phase)
+								.await;
 						}
 					},
 
@@ -257,35 +265,94 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 						ClientToOrchestratorEvent::ClientReady =>
 							log_invalid_signal(&o_state, &client_update),
 						ClientToOrchestratorEvent::TestResult { peer_id, trace_id, result } => {
-							if let Some(pub_key) = &result.pub_key {
-								// set the public key that way other nodes can verify that the
-								// public key was submitted
-								self.blockchain.set_pub_key(*session_id, pub_key.clone());
-							}
+							let res = match result {
+								TestResult::Keygen { result, pub_key } => {
+									// set the public key that way other nodes can verify that
+									// the public key was submitted
+									// TODO: Make sure that we set_next_public key based on input
+									self.blockchain.set_pub_key(
+										intra_test_phase.round_number(),
+										pub_key.clone(),
+									);
+
+									result
+								},
+
+								TestResult::Sign { result } => result,
+							};
 
 							let mut clients = self.clients.write().await;
 							let client = clients.get_mut(peer_id).unwrap();
-							if let Err(err) = &result.result {
-								log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed test {trace_id:?}. Reason: {err:?}");
-							// do not remove from map. At the end , any remaining tasks will
-							// cause the orchestrator to have a nonzero exit code (useful for
-							// pipeline testing)
-							} else {
-								log::info!(target: "dkg", "Peer {peer_id:?} successfully completed test {trace_id:?}");
-								// remove from map
-								assert!(client.outstanding_tasks.remove(trace_id).is_some());
-							}
 
 							// regardless of success, increment completed count for the current
 							// round
-							current_round_completed_count += 1;
+							if matches!(result, TestResult::Keygen { .. }) &&
+								matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
+							{
+								if let Err(err) = res {
+									log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed KEYGEN test {trace_id:?}. Reason: {err:?}");
+								} else {
+									log::info!(target: "dkg", "Peer {peer_id:?} successfully completed KEYGEN test {trace_id:?}");
+									client.outstanding_tasks_keygen.remove(trace_id);
+								}
+								current_round_completed_count_keygen += 1;
+							}
+
+							if matches!(result, TestResult::Sign { .. }) &&
+								matches!(intra_test_phase, IntraTestPhase::Signing { .. })
+							{
+								if let Err(err) = res {
+									log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed SIGNING test {trace_id:?}. Reason: {err:?}");
+								} else {
+									log::info!(target: "dkg", "Peer {peer_id:?} successfully completed SIGNING test {trace_id:?}");
+									assert!(client
+										.outstanding_tasks_signing
+										.remove(trace_id)
+										.is_some());
+								}
+								current_round_completed_count_signing += 1;
+							}
 						},
 					}
 
 					// at the end, check if the round is complete
-					if current_round_completed_count == self.config.n_clients {
-						current_round_completed_count = 0; // reset to 0 for next round
-						self.orchestrator_begin_next_round(&mut test_cases, session_id).await
+					let keygen_complete =
+						current_round_completed_count_keygen == self.config.n_clients;
+					if keygen_complete && matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
+					{
+						// keygen is complete, and, we are ready to rotate into either the next
+						// session, or the next test phase (i.e., signing)
+						if intra_test_phase.unsigned_proposals_count() > 0 {
+							// since there are unsigned proposals, we need to keep the current
+							// session and begin the signing tests
+							intra_test_phase.keygen_to_signing();
+							// only do this to create a new block header
+							intra_test_phase.increment_round_number();
+							self.begin_next_test_print(intra_test_phase).await;
+							self.send_finality_notification(intra_test_phase).await;
+							continue
+						} else {
+							// there are no unsigned proposals, so we can move on to the next
+							// session
+						}
+					}
+
+					let signing_complete =
+						if self.config.unsigned_proposals_per_session.unwrap_or(0) > 0 {
+							let current_round_unsigned_proposals_needed =
+								intra_test_phase.unsigned_proposals_count();
+							current_round_completed_count_signing ==
+								self.config.n_clients * current_round_unsigned_proposals_needed
+						} else {
+							// pretend signing is complete to move on to the next session/round
+							true
+						};
+
+					if keygen_complete && signing_complete {
+						current_round_completed_count_keygen = 0; // reset to 0 for next round
+						current_round_completed_count_signing = 0;
+						intra_test_phase.increment_round_number();
+						self.orchestrator_begin_next_round(&mut test_cases, intra_test_phase).await
 					}
 				},
 				o_state @ OrchestratorState::Complete =>
@@ -319,35 +386,45 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 	async fn orchestrator_begin_next_round(
 		&self,
 		test_cases: &mut VecDeque<TestCase>,
-		round_number: &mut u64,
+		test_phase: &mut IntraTestPhase,
 	) {
 		log::info!(target: "dkg", "[Orchestrator] Running next round!");
 
 		if let Some(next_case) = test_cases.pop_front() {
-			for x in (1..=3).rev() {
-				log::info!(target: "dkg", "[Orchestrator] Beginning next test in {x}");
-				tokio::time::sleep(Duration::from_millis(1000)).await
-			}
+			self.begin_next_test_print(test_phase).await;
 
+			// the first round will not have any unsigned proposals since we're waiting for keygen
+			// otherwise, preload the unsigned proposals
+			let round_number = test_phase.round_number();
+			let unsigned_proposals = if round_number >= 1 {
+				let unsigned_proposals =
+					(0..self.config.unsigned_proposals_per_session.unwrap_or(0))
+						.map(|idx| {
+							// ensure a unique unsigned proposal per session per proposal
+							let mut bytes = round_number.to_be_bytes().to_vec();
+							bytes.extend_from_slice(&idx.to_be_bytes());
+							let hash = sha2_256(&bytes);
+							UnsignedProposal::testing_dummy(hash.to_vec())
+						})
+						.collect::<Vec<_>>();
+				if !unsigned_proposals.is_empty() {
+					Some(unsigned_proposals)
+				// self.blockchain.set_unsigned_proposals(unsigned_proposals);
+				} else {
+					None
+				}
+			} else {
+				None
+			};
+
+			// begin the next test
+			test_phase.session_init(unsigned_proposals, next_case);
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
-			let trace_id = Uuid::new_v4();
 			// phase 1: send finality notifications to each client
-			let mut write = self.clients.write().await;
-			let next_finality_notification = create_mocked_finality_blockchain_event(*round_number);
-			for (_id, client) in write.iter_mut() {
-				client.outstanding_tasks.insert(trace_id, next_case.clone());
-				// First, send out a MockBlockChainEvent (happens before each round occurs)
-				client
-					.orchestrator_to_client_subtask
-					.send(OrchestratorToClientEvent::BlockChainEvent {
-						trace_id,
-						event: next_finality_notification.clone(),
-					})
-					.unwrap();
-			}
+			self.send_finality_notification(test_phase).await;
 
-			// increment the round number
-			*round_number += 1;
+		// increment the round number for next session to be +1
+		// *round_number += 1;
 		} else {
 			log::info!(target: "dkg", "Orchestrator has finished running all tests");
 			self.orchestrator_set_state(OrchestratorState::Complete);
@@ -355,12 +432,14 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			// check to see the final state
 			let read = self.clients.read().await;
 			for (peer_id, client_state) in &*read {
-				let outstanding_tasks = &client_state.outstanding_tasks;
+				let outstanding_tasks_keygen = &client_state.outstanding_tasks_keygen;
+				let outstanding_tasks_signing = &client_state.outstanding_tasks_signing;
 				// the client should have no outstanding tasks if successful
-				let success = outstanding_tasks.is_empty();
+				let success =
+					outstanding_tasks_keygen.is_empty() && outstanding_tasks_signing.is_empty();
 				if !success {
 					exit_code = 1;
-					log::info!(target: "dkg", "Peer {peer_id:?} final state FAILURE | Failed tasks: {outstanding_tasks:?}")
+					log::info!(target: "dkg", "Peer {peer_id:?} final state FAILURE | Failed tasks: KEYGEN: {outstanding_tasks_keygen:?}, SIGNING: {outstanding_tasks_signing:?}")
 				} else {
 					log::info!(target: "dkg", "Peer {peer_id:?} SUCCESS!")
 				}
@@ -377,8 +456,55 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		}
 	}
 
+	async fn begin_next_test_print(&self, test_phase: &IntraTestPhase) {
+		let test_round = test_phase.round_number();
+		let test_phase = match test_phase {
+			IntraTestPhase::Keygen { .. } => "KEYGEN",
+			IntraTestPhase::Signing { .. } => "SIGNING",
+		};
+
+		for x in (1..=3).rev() {
+			log::info!(target: "dkg", "[Orchestrator] Beginning next {test_phase} test for session {test_round} in {x}");
+			tokio::time::sleep(Duration::from_millis(1000)).await
+		}
+	}
+
 	fn orchestrator_set_state(&self, state: OrchestratorState) {
 		self.orchestrator_state.store(state, Ordering::SeqCst);
+	}
+
+	async fn send_finality_notification(&self, test_phase: &mut IntraTestPhase) {
+		// phase 1: send finality notifications to each client
+		let round_number = test_phase.round_number();
+		let trace_id = test_phase.trace_id();
+		let next_case = test_phase.test_case().unwrap().clone();
+
+		let mut write = self.clients.write().await;
+		let next_finality_notification = create_mocked_finality_blockchain_event(round_number);
+		for (_id, client) in write.iter_mut() {
+			match test_phase {
+				IntraTestPhase::Keygen { trace_id, .. } => {
+					client.outstanding_tasks_keygen.insert(*trace_id, next_case.clone());
+					// always set the unsigned props to empty to ensure no signing protocol executes
+					self.blockchain.set_unsigned_proposals(vec![]);
+				},
+				IntraTestPhase::Signing { trace_id, queued_unsigned_proposals, .. } => {
+					if let Some(unsigned_propos) = queued_unsigned_proposals.clone() {
+						client.outstanding_tasks_signing.insert(*trace_id, next_case.clone());
+						self.blockchain.set_unsigned_proposals(unsigned_propos);
+					}
+				},
+			}
+
+			// Send out a MockBlockChainEvent
+			client
+				.orchestrator_to_client_subtask
+				.send(OrchestratorToClientEvent::BlockChainEvent {
+					trace_id,
+					event: next_finality_notification.clone(),
+				})
+				.unwrap();
+		}
 	}
 }
 
@@ -411,4 +537,103 @@ pub trait MutableBlockchain: Clone + Send + 'static {
 		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
 	);
 	fn set_pub_key(&self, session: u64, key: Vec<u8>);
+}
+
+enum IntraTestPhase {
+	Keygen {
+		trace_id: Uuid,
+		queued_unsigned_proposals:
+			Option<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>>,
+		round_number: u64,
+		test_case: Option<TestCase>,
+	},
+	Signing {
+		trace_id: Uuid,
+		queued_unsigned_proposals:
+			Option<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>>,
+		round_number: u64,
+		test_case: TestCase,
+	},
+}
+
+impl IntraTestPhase {
+	fn new() -> Self {
+		Self::Keygen {
+			trace_id: Uuid::new_v4(),
+			queued_unsigned_proposals: None,
+			round_number: 0,
+			test_case: None,
+		}
+	}
+
+	fn keygen_to_signing(&mut self) {
+		if let Self::Keygen { trace_id, queued_unsigned_proposals, round_number, test_case } = self
+		{
+			let queued_unsigned_proposals = queued_unsigned_proposals.take();
+			let test_case = test_case.take().unwrap();
+			*self = Self::Signing {
+				trace_id: *trace_id,
+				queued_unsigned_proposals,
+				round_number: *round_number,
+				test_case,
+			};
+		} else {
+			panic!("Invalid call to keygen_to_signing")
+		}
+	}
+
+	fn session_init(
+		&mut self,
+		unsigned_proposals: Option<
+			Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+		>,
+		test_case: TestCase,
+	) {
+		// rotate signing into keygen, or keygen into keygen if there are no signing tests.
+		// Does not increment the round number, as this should be done manually elsewhere
+		let round_number = self.round_number();
+		*self = Self::Keygen {
+			trace_id: Uuid::new_v4(),
+			queued_unsigned_proposals: unsigned_proposals,
+			round_number,
+			test_case: Some(test_case),
+		};
+	}
+
+	fn increment_round_number(&mut self) {
+		match self {
+			Self::Keygen { round_number, .. } => *round_number += 1,
+			Self::Signing { round_number, .. } => *round_number += 1,
+		}
+	}
+
+	fn round_number(&self) -> u64 {
+		match self {
+			Self::Keygen { round_number, .. } => *round_number,
+			Self::Signing { round_number, .. } => *round_number,
+		}
+	}
+
+	fn unsigned_proposals_count(&self) -> usize {
+		match self {
+			Self::Keygen { queued_unsigned_proposals, .. } =>
+				queued_unsigned_proposals.as_ref().map(|v| v.len()).unwrap_or(0),
+			Self::Signing { queued_unsigned_proposals, .. } =>
+				queued_unsigned_proposals.as_ref().map(|v| v.len()).unwrap_or(0),
+		}
+	}
+
+	fn trace_id(&self) -> Uuid {
+		match self {
+			Self::Keygen { trace_id, .. } => *trace_id,
+			Self::Signing { trace_id, .. } => *trace_id,
+		}
+	}
+
+	fn test_case(&self) -> Option<&TestCase> {
+		match self {
+			Self::Keygen { test_case, .. } => test_case.as_ref(),
+			Self::Signing { test_case, .. } => Some(test_case),
+		}
+	}
 }

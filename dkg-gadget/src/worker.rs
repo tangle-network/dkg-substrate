@@ -849,7 +849,10 @@ where
 			if latest_header.number() >= header.number() {
 				// We've already seen this block, ignore it.
 				self.logger.debug(
-					"🕸️  Latest header is greater than or equal to current header, returning...",
+					format!("🕸️  Latest header {} is greater than or equal to current header {}, returning...",
+					latest_header.number(),
+					header.number()
+					)
 				);
 				return
 			}
