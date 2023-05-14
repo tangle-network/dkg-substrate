@@ -174,8 +174,8 @@ where
 	keygen_gossip_engine.set_gossip_enabled(true);
 	signing_gossip_engine.set_gossip_enabled(true);
 
-	keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
-	signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
 
 	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
 	let signing_handle = tokio::spawn(signing_gossip_handler.run());
