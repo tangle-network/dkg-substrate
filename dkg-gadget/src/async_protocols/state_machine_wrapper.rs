@@ -130,12 +130,8 @@ where
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		// only send current round + previous round messages if we're running the keygen protocol
 		if !self.sm.message_queue().is_empty() &&
-			matches!(
-				self.channel_type,
-				ProtocolType::Keygen { .. } |
-					ProtocolType::Offline { .. } |
-					ProtocolType::Voting { .. }
-			) {
+			matches!(self.channel_type, ProtocolType::Keygen { .. })
+		{
 			// store outgoing messages in history
 			let mut last_2_rounds = vec![];
 			let current_round = self.current_round();

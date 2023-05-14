@@ -1531,20 +1531,16 @@ where
 
 	fn spawn_keygen_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
 		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
-		let mut keygen_stream = keygen_gossip_engine
-			.message_available_notification()
-			.filter_map(move |_| futures::future::ready(keygen_gossip_engine.peek_last_message()));
+		let mut keygen_stream = keygen_gossip_engine.get_stream().unwrap();
 		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(msg) = keygen_stream.next().await {
+			while let Some(msg) = keygen_stream.recv().await {
 				self_.logger.debug(format!(
 					"Going to handle keygen message for session {}",
 					msg.msg.session_id
 				));
 				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {
-						self_.keygen_gossip_engine.acknowledge_last_message();
-					},
+					Ok(_) => {},
 					Err(e) => {
 						self_.logger.error(format!("Error processing keygen message: {e:?}"));
 					},
@@ -1555,20 +1551,16 @@ where
 
 	fn spawn_signing_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
 		let signing_gossip_engine = self.signing_gossip_engine.clone();
-		let mut signing_stream = signing_gossip_engine
-			.message_available_notification()
-			.filter_map(move |_| futures::future::ready(signing_gossip_engine.peek_last_message()));
+		let mut signing_stream = signing_gossip_engine.get_stream().unwrap();
 		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(msg) = signing_stream.next().await {
+			while let Some(msg) = signing_stream.recv().await {
 				self_.logger.debug(format!(
 					"Going to handle signing message for session {}",
 					msg.msg.session_id
 				));
 				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {
-						self_.signing_gossip_engine.acknowledge_last_message();
-					},
+					Ok(_) => {},
 					Err(e) => {
 						self_.logger.error(format!("Error processing signing message: {e:?}"));
 					},
