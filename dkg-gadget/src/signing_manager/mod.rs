@@ -260,7 +260,7 @@ where
 				},
 
 				Err(err) => {
-					logger.error(format!("Error executing meta handler {:?}", &err));
+					logger.error(format!("Error executing SIGNING meta handler {:?}", &err));
 					let _ = err_handler_tx.send(err.clone());
 					Err(err)
 				},

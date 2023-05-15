@@ -1,9 +1,17 @@
 #![allow(clippy::unwrap_used)]
 use crate::async_protocols::ProtocolType;
 use dkg_logging::{debug, error, info, trace, warn};
+use dkg_primitives::types::DKGMsgPayload;
 use parking_lot::RwLock;
-use sp_core::Get;
-use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
+use serde::Serialize;
+use sp_core::{bytes::to_hex, hashing::sha2_256, Get};
+use std::{
+	collections::{hash_map::Entry, HashMap},
+	fmt::Debug,
+	io::Write,
+	sync::Arc,
+	time::{Duration, Instant},
+};
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
@@ -13,6 +21,20 @@ pub struct DebugLogger {
 	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
 }
+
+lazy_static::lazy_static! {
+	static ref CHECKPOINTS: parking_lot::Mutex<HashMap<MessageKey, Checkpoint>> = parking_lot::Mutex::new(HashMap::new());
+}
+
+#[derive(Debug)]
+struct Checkpoint {
+	stage: &'static str,
+	init_time: Instant,
+	ty: AsyncProtocolType,
+}
+
+// we will use the encoding of the message itself as the key
+pub type MessageKey = Vec<u8>;
 
 #[derive(Debug, Copy, Clone)]
 pub enum AsyncProtocolType {
@@ -128,7 +150,33 @@ impl DebugLogger {
 		let events_file_handle_signing = Arc::new(RwLock::new(events_file_signing));
 		let events_fh_task_signing = events_file_handle_signing.clone();
 
+		let this = Self {
+			identifier: Arc::new(identifier.to_string().into()),
+			to_file_io: tx,
+			file_handle,
+			events_file_handle_keygen: events_file_handle,
+			events_file_handle_signing,
+		};
+
+		let this_task = this.clone();
+
 		if tokio::runtime::Handle::try_current().is_ok() {
+			tokio::task::spawn(async move {
+				let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
+				loop {
+					ticker.tick().await;
+					let lock = CHECKPOINTS.lock();
+					for stage in lock.values() {
+						if stage.init_time.elapsed() > Duration::from_secs(4) {
+							this_task.info(format!(
+								"Checkpoint for a {:?} message is currently stalled at {}",
+								stage.ty, stage.stage
+							));
+						}
+					}
+				}
+			});
+
 			tokio::task::spawn(async move {
 				while let Some(message) = rx.recv().await {
 					match message {
@@ -151,15 +199,14 @@ impl DebugLogger {
 					}
 				}
 			});
+		} else {
+			return Err(std::io::Error::new(
+				std::io::ErrorKind::Other,
+				"Tokio runtime not initialized",
+			))
 		}
 
-		Ok(Self {
-			identifier: Arc::new(identifier.to_string().into()),
-			to_file_io: tx,
-			file_handle,
-			events_file_handle_keygen: events_file_handle,
-			events_file_handle_signing,
-		})
+		Ok(this)
 	}
 
 	fn get_files(
@@ -297,9 +344,79 @@ impl DebugLogger {
 
 		let name = if let Some(val) = NAMES_MAP.read().get(&id) { val.to_string() } else { id };
 		let event = RoundsEvent { name, event, proto };
+		self.debug(format!("round event: {event:?}"));
 		if let Err(err) = self.to_file_io.send(MessageType::Event(event)) {
 			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
 		}
+	}
+
+	pub fn checkpoint<T: Serialize, R: Into<AsyncProtocolType>>(
+		&self,
+		proto_ty: R,
+		message: T,
+		checkpoint: &'static str,
+		is_init: bool,
+	) {
+		self.checkpoint_raw(
+			proto_ty,
+			serde_json::to_vec(&message).expect("failed to serialize message"),
+			checkpoint,
+			is_init,
+		)
+	}
+
+	pub fn checkpoint_raw<R: Into<AsyncProtocolType>>(
+		&self,
+		proto_ty: R,
+		message: Vec<u8>,
+		checkpoint: &'static str,
+		is_init: bool,
+	) {
+		let mut map = CHECKPOINTS.lock();
+		if is_init {
+			let checkpoint_s =
+				Checkpoint { stage: checkpoint, init_time: Instant::now(), ty: proto_ty.into() };
+			match map.entry(message.clone()) {
+				Entry::Occupied(_) => {
+					self.warn(format!("Checkpoint {checkpoint} failed since the message already existed when it shouldn't have"));
+				},
+				Entry::Vacant(empty) => {
+					empty.insert(checkpoint_s);
+					self.log_checkpoint(checkpoint, &message);
+				},
+			}
+		} else {
+			if let Some(entry) = map.get_mut(&message) {
+				entry.stage = checkpoint;
+				self.log_checkpoint(checkpoint, &message);
+			} else {
+				// this happens for duplicated messages
+			}
+		}
+	}
+
+	pub fn clear_checkpoints(&self) {
+		let mut map = CHECKPOINTS.lock();
+		map.clear();
+	}
+
+	pub fn clear_checkpoint<T: Serialize>(&self, message: T) {
+		self.clear_checkpoint_raw(
+			serde_json::to_vec(&message).expect("failed to serialize message"),
+		)
+	}
+
+	pub fn clear_checkpoint_raw<T: Into<Vec<u8>>>(&self, message: T) {
+		let mut map = CHECKPOINTS.lock();
+		let message = message.into();
+		if map.remove(&message).is_some() {
+			self.log_checkpoint("FINISHED", &message);
+		}
+	}
+
+	fn log_checkpoint<T: AsRef<[u8]>>(&self, status: &'static str, message: T) {
+		let encoded = to_hex(&sha2_256(message.as_ref()), true);
+		self.info(format!("[Checkpoint] proceeded to {status} for {encoded}"));
 	}
 }
 
@@ -308,6 +425,16 @@ impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ Pro
 {
 	fn from(value: &ProtocolType<T>) -> Self {
 		if matches!(value, ProtocolType::Keygen { .. }) {
+			AsyncProtocolType::Keygen
+		} else {
+			AsyncProtocolType::Signing
+		}
+	}
+}
+
+impl From<&'_ DKGMsgPayload> for AsyncProtocolType {
+	fn from(value: &'_ DKGMsgPayload) -> Self {
+		if matches!(value, DKGMsgPayload::Keygen { .. }) {
 			AsyncProtocolType::Keygen
 		} else {
 			AsyncProtocolType::Signing

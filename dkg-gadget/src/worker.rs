@@ -1100,6 +1100,7 @@ where
 	}
 
 	async fn handle_finality_notification(&self, notification: FinalityNotification<B>) {
+		self.logger.clear_checkpoints();
 		self.logger.trace(format!("🕸️  Finality notification: {notification:?}"));
 		// Handle finality notifications
 		self.process_block_notification(&notification.header).await;
@@ -1266,6 +1267,12 @@ where
 			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..)
 		);
 
+		let payload_msg = dkg_msg.payload_message();
+		let payload = dkg_msg.msg.payload.clone();
+		if is_delivery_type {
+			self.logger.checkpoint_raw(&payload, payload_msg.clone(), "CP4", false);
+		}
+
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
@@ -1340,6 +1347,8 @@ where
 
 		if is_delivery_type {
 			self.logger.warn(format!("Did not deliver message! res: {res:?}"));
+			self.logger
+				.checkpoint_raw(&payload, payload_msg.clone(), "CP4-undelivered", false);
 		}
 
 		res
@@ -1539,6 +1548,9 @@ where
 					"Going to handle keygen message for session {}",
 					msg.msg.session_id
 				));
+				self_
+					.logger
+					.checkpoint_raw(&msg.msg.payload, msg.payload_message(), "CP3", false);
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {
@@ -1559,6 +1571,9 @@ where
 					"Going to handle signing message for session {}",
 					msg.msg.session_id
 				));
+				self_
+					.logger
+					.checkpoint_raw(&msg.msg.payload, msg.payload_message(), "CP3", false);
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {

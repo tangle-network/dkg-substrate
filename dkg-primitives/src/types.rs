@@ -75,14 +75,22 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 	{
 		// in case of Keygen or Offline, we only need to hash the inner raw message bytes that
 		// are going to be sent to the state machine.
-		let bytes_to_hash = match self.msg.payload {
+		let bytes_to_hash = self.payload_message();
+		<<B::Header as Header>::Hashing as Hash>::hash_of(&bytes_to_hash)
+	}
+
+	pub fn payload_message(&self) -> Vec<u8> {
+		self.msg.payload.payload_message()
+	}
+}
+
+impl DKGMsgPayload {
+	pub fn payload_message(&self) -> Vec<u8> {
+		match self {
 			DKGMsgPayload::Keygen(ref m) => m.keygen_msg.clone(),
 			DKGMsgPayload::Offline(ref m) => m.offline_msg.clone(),
-			DKGMsgPayload::Vote(ref m) => m.encode(),
-			DKGMsgPayload::PublicKeyBroadcast(ref m) => m.encode(),
-			DKGMsgPayload::MisbehaviourBroadcast(ref m) => m.encode(),
-		};
-		<<B::Header as Header>::Hashing as Hash>::hash_of(&bytes_to_hash)
+			this => this.encode(),
+		}
 	}
 }
 

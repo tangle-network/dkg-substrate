@@ -57,6 +57,7 @@ impl<
 
 		let stream = async_stream::try_stream! {
 			while let Ok(msg) = receiver.recv().await {
+				params.logger.checkpoint_raw(&ty, msg.payload_message(), "CP5-incoming", false);
 				match msg.transform(&params.engine, &ty, params.session_id, &params.logger).await {
 					Ok(Some(msg)) => yield msg,
 
@@ -80,6 +81,8 @@ impl<
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped: Send;
 
+	fn payload_message(&self) -> Vec<u8>;
+
 	async fn transform<
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
@@ -97,6 +100,11 @@ pub trait TransformIncoming: Clone + Send + 'static {
 #[async_trait::async_trait]
 impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	type IncomingMapped = DKGMessage<Public>;
+
+	fn payload_message(&self) -> Vec<u8> {
+		self.msg.payload.payload_message()
+	}
+
 	async fn transform<
 		BI: BlockchainInterface,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
@@ -114,24 +122,50 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
 			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
+				let payload_message = self.payload_message();
+				logger.checkpoint_raw(
+					stream_type,
+					payload_message.clone(),
+					"CP5-incoming-2",
+					false,
+				);
 				// only clone if the downstream receiver expects this type
 				let sender = self
 					.msg
 					.payload
 					.async_proto_only_get_sender_id()
 					.expect("Could not get sender id");
-				if sender != stream_type.get_i() {
-					if self.msg.session_id == this_session_id {
-						verify
-							.verify_signature_against_authorities(self)
-							.await
-							.map(|body| Some(Msg { sender, receiver: None, body }))
+				logger.checkpoint_raw(
+					stream_type,
+					payload_message.clone(),
+					"CP5-incoming-3",
+					false,
+				);
+				if self.msg.session_id == this_session_id {
+					logger.checkpoint_raw(
+						stream_type,
+						payload_message.clone(),
+						"CP5-incoming-4",
+						false,
+					);
+					if let Ok(Some(msg)) = verify
+						.verify_signature_against_authorities(self)
+						.await
+						.map(|body| Some(Msg { sender, receiver: None, body }))
+					{
+						logger.checkpoint_raw(
+							stream_type,
+							payload_message.clone(),
+							"CP5-incoming-5",
+							false,
+						);
+						Ok(Some(msg))
 					} else {
-						logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
+						logger.warn("Could not verify signature of message");
 						Ok(None)
 					}
 				} else {
-					logger.trace("Will skip passing message to state machine since sender is self");
+					logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
 					Ok(None)
 				}
 			},

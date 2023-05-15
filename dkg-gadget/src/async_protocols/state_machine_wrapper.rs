@@ -89,6 +89,7 @@ where
 			&self.channel_type,
 			crate::RoundsEventType::ReceivedMessage { session, round, sender, receiver },
 		);
+		self.logger.checkpoint(&self.channel_type, &msg, "CP-in-state-machine", false);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
 
 		self.collect_round_blame();
@@ -98,6 +99,7 @@ where
 				"Message for {:?} from session={}, round={} is outdated, ignoring",
 				self.channel_type, session, round
 			));
+			self.logger.clear_checkpoint(&msg);
 			return Ok(())
 		}
 
@@ -110,10 +112,11 @@ where
 				"Already received message for {:?} from session={}, round={}, sender={}",
 				self.channel_type, session, round, sender
 			));
+			self.logger.clear_checkpoint(&msg);
 			return Ok(())
 		}
 
-		let result = self.sm.handle_incoming(msg);
+		let result = self.sm.handle_incoming(msg.clone());
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
 		} else {
@@ -121,6 +124,7 @@ where
 				&self.channel_type,
 				crate::RoundsEventType::ProcessedMessage { session, round, sender, receiver },
 			);
+			self.logger.clear_checkpoint(&msg);
 		}
 		self.logger.trace(format!("SM After: {:?}", &self.sm));
 

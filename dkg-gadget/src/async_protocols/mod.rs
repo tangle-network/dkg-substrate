@@ -536,9 +536,11 @@ where
 			};
 
 			params.logger.info(format!(
-				"Async proto sent outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
+				"Async proto will send outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
+
+			params.logger.checkpoint(&proto_ty, &unsigned_message, "CP0", true);
 
 			params.logger.round_event(
 				&proto_ty,
@@ -608,6 +610,7 @@ where
 				},
 			};
 
+			params.logger.checkpoint(&proto_ty, &unsigned_message, "CP1", false);
 			let id = params.authority_public_key.as_ref().clone();
 			let unsigned_dkg_message = DKGMessage {
 				sender_id: id,
@@ -621,6 +624,7 @@ where
 					.logger
 					.error(format!("Async proto failed to send outbound message: {err:?}"));
 			} else {
+				params.logger.checkpoint(&proto_ty, &unsigned_message, "CP2", false);
 				params
 					.logger
 					.info(format!("🕸️  Async proto sent outbound message: {:?}", &proto_ty));

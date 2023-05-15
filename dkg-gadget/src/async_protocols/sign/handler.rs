@@ -23,10 +23,14 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 
-use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
-	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
+use crate::{
+	async_protocols::{
+		blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper,
+		new_inner, remote::MetaHandlerStatus, state_machine::StateMachineHandler,
+		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
+		ProtocolType, Threshold,
+	},
+	debug_logger::AsyncProtocolType,
 };
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
@@ -225,6 +229,14 @@ where
 				payload,
 				session_id: params.session_id,
 			};
+
+			params.logger.checkpoint_raw(
+				AsyncProtocolType::Signing,
+				unsigned_dkg_message.payload.payload_message(),
+				"CP0",
+				true,
+			);
+
 			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
 
 			// we only need a threshold count of sigs
@@ -236,7 +248,13 @@ where
 			));
 
 			while let Some(msg) = incoming_wrapper.next().await {
-				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
+				params.logger.checkpoint_raw(
+					AsyncProtocolType::Signing,
+					msg.body.payload.payload_message(),
+					"CP-recv-voting",
+					false,
+				);
+				if let DKGMsgPayload::Vote(ref dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
 						params.logger.info_signing("Found matching round key!".to_string());
@@ -248,6 +266,7 @@ where
 						params
 							.logger
 							.info_signing(format!("There are now {} partial sigs ...", sigs.len()));
+						params.logger.clear_checkpoint_raw(msg.body.payload.payload_message());
 						if sigs.len() == number_of_partial_sigs {
 							break
 						}
