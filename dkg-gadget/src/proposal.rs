@@ -13,8 +13,9 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{debug_logger::DebugLogger, Client};
+use crate::Client;
 use codec::Encode;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,

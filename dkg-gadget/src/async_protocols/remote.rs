@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
+use crate::async_protocols::CurrentRoundBlame;
 use atomic::Atomic;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
 use parking_lot::Mutex;

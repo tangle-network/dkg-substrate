@@ -60,9 +60,11 @@ use self::{
 	blockchain_interface::BlockchainInterface, remote::AsyncProtocolRemote,
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
-use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use crate::{utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use dkg_logging::*;
 use incoming::IncomingAsyncProtocolWrapper;
 use multi_party_ecdsa::MessageRoundID;
+use serde::de::DeserializeOwned;
 
 pub struct AsyncProtocolParameters<
 	BI: BlockchainInterface,
@@ -379,7 +381,7 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
-	<SM as StateMachine>::MessageBody: Send + Serialize + MessageRoundID,
+	<SM as StateMachine>::MessageBody: Send + Serialize + DeserializeOwned + MessageRoundID,
 	<SM as StateMachine>::Output: Send,
 {
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
@@ -675,6 +677,12 @@ where
 					break
 				},
 			};
+			params.logger.checkpoint_raw(
+				&channel_type,
+				unsigned_message.body.payload.payload_message(),
+				"CP6-incoming-1",
+				false,
+			);
 
 			if SM::handle_unsigned_message(
 				&to_async_proto,
@@ -797,5 +805,26 @@ mod tests {
 		let authority_id =
 			authorities.get(my_keygen_id.to_index()).expect("authority id should exist");
 		assert_eq!(authority_id, &my_authority_id);
+	}
+}
+
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+	for AsyncProtocolType
+{
+	fn from(value: &ProtocolType<T>) -> Self {
+		match value {
+			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
+			ProtocolType::Offline { .. } => AsyncProtocolType::Signing,
+			ProtocolType::Voting { .. } => AsyncProtocolType::Voting,
+		}
+	}
+}
+
+pub fn dkg_msg_payload_to_async_proto(value: &DKGMsgPayload) -> AsyncProtocolType {
+	match value {
+		DKGMsgPayload::Keygen { .. } => AsyncProtocolType::Keygen,
+		DKGMsgPayload::Offline { .. } => AsyncProtocolType::Signing,
+		DKGMsgPayload::Vote { .. } => AsyncProtocolType::Voting,
+		_ => AsyncProtocolType::Unknown,
 	}
 }

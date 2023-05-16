@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-	debug_logger::DebugLogger, storage::proposals::generate_delayed_submit_at,
-	worker::MAX_SUBMISSION_DELAY, Client,
-};
+use crate::{storage::proposals::generate_delayed_submit_at, worker::MAX_SUBMISSION_DELAY, Client};
 use codec::Encode;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, SessionId};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId,

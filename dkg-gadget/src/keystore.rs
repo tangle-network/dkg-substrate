@@ -26,7 +26,8 @@ use dkg_runtime_primitives::{
 use sc_keystore::LocalKeystore;
 use std::sync::Arc;
 
-use crate::{debug_logger::DebugLogger, error};
+use crate::error;
+use dkg_logging::*;
 
 /// A DKG specific keystore implemented as a `Newtype`. This is basically a
 /// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize

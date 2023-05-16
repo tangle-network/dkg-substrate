@@ -11,15 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{
-	async_protocols::{
-		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
-		Threshold,
-	},
-	debug_logger::DebugLogger,
+use crate::async_protocols::{
+	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, OfflinePartyId, ProtocolType,
+	Threshold,
 };
 use async_trait::async_trait;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
@@ -44,17 +42,19 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 
 	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
-		msg: Msg<DKGMessage<Public>>,
+		msg_orig: Msg<DKGMessage<Public>>,
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
-		let DKGMessage { payload, .. } = msg.body;
+		let payload_message = msg_orig.body.payload.payload_message();
+		let DKGMessage { payload, .. } = msg_orig.body;
 
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Offline(msg) => {
+				logger.checkpoint_raw(local_ty, payload_message.clone(), "CP6-incoming-2", false);
 				let message: Msg<OfflineProtocolMessage> =
-					match serde_json::from_slice(msg.offline_msg.as_slice()) {
+					match serde_json::from_slice(&msg.offline_msg) {
 						Ok(msg) => msg,
 						Err(err) => {
 							logger.error_signing(format!(
@@ -64,12 +64,17 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 							return Ok(())
 						},
 					};
+
+				logger.checkpoint_raw(local_ty, payload_message.clone(), "CP6-incoming-3", false);
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
 						logger.info_signing("Skipping passing of message to async proto since not intended for local");
+						logger.clear_checkpoint_raw(payload_message.clone());
 						return Ok(())
 					}
 				}
+
+				logger.checkpoint_raw(local_ty, payload_message.clone(), "CP6-incoming-4", false);
 
 				if local_ty
 					.get_unsigned_proposal()
@@ -83,8 +88,17 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 					return Ok(())
 				}
 
+				logger.checkpoint_raw(local_ty, payload_message.clone(), "CP6-incoming-5", false);
+
 				if let Err(err) = to_async_proto.unbounded_send(message) {
 					logger.error_signing(format!("Error sending message to async proto: {err}"));
+				} else {
+					logger.checkpoint_raw(
+						local_ty,
+						payload_message.clone(),
+						"CP6-incoming-6",
+						false,
+					);
 				}
 			},
 

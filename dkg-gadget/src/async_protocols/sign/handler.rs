@@ -23,15 +23,12 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::broadcast::Receiver;
 
-use crate::{
-	async_protocols::{
-		blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper,
-		new_inner, remote::MetaHandlerStatus, state_machine::StateMachineHandler,
-		AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
-		ProtocolType, Threshold,
-	},
-	debug_logger::AsyncProtocolType,
+use crate::async_protocols::{
+	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
+	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
+	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
 };
+use dkg_logging::*;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
 };

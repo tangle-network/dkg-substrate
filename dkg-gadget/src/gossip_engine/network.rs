@@ -40,8 +40,9 @@
 //! engine, and it is verified then it will be added to the Engine's internal stream of DKG
 //! messages, later the DKG Gadget will read this stream and process the DKG message.
 
-use crate::{debug_logger::DebugLogger, metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
+use crate::{metrics::Metrics, worker::HasLatestHeader, DKGKeystore};
 use codec::{Decode, Encode};
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::StreamExt;
@@ -621,6 +622,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
 		// Check if the message has a recipient
+		// NOTE: DISABLED for now due to bug in recipient_id
+		/*
 		let maybe_peer_id = match &message.msg.recipient_id {
 			Some(recipient_id) => self.authority_id_to_peer_id.read().get(recipient_id).cloned(),
 			None => None,
@@ -637,7 +640,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		} else {
 			self.logger
 				.debug("No specific recipient, broadcasting message to all peers".to_string());
-		}
+		}*/
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
 			let peers_map = self.peers.read();

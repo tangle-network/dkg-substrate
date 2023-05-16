@@ -16,11 +16,11 @@
 
 use crate::{
 	async_protocols::{blockchain_interface::DKGProtocolEngine, KeygenPartyId},
-	debug_logger::DebugLogger,
 	utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
+use dkg_logging::*;
 use sc_network::NetworkService;
 use sp_consensus::SyncOracle;
 
@@ -57,7 +57,10 @@ use dkg_runtime_primitives::{
 };
 
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler},
+	async_protocols::{
+		dkg_msg_payload_to_async_proto, remote::AsyncProtocolRemote, AsyncProtocolParameters,
+		GenericAsyncHandler,
+	},
 	error,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{
@@ -1268,9 +1271,9 @@ where
 		);
 
 		let payload_msg = dkg_msg.payload_message();
-		let payload = dkg_msg.msg.payload.clone();
+		let payload = dkg_msg_payload_to_async_proto(&dkg_msg.msg.payload);
 		if is_delivery_type {
-			self.logger.checkpoint_raw(&payload, payload_msg.clone(), "CP4", false);
+			self.logger.checkpoint_raw(payload, payload_msg.clone(), "CP4", false);
 		}
 
 		let res = match &dkg_msg.msg.payload {
@@ -1348,7 +1351,7 @@ where
 		if is_delivery_type {
 			self.logger.warn(format!("Did not deliver message! res: {res:?}"));
 			self.logger
-				.checkpoint_raw(&payload, payload_msg.clone(), "CP4-undelivered", false);
+				.checkpoint_raw(payload, payload_msg.clone(), "CP4-undelivered", false);
 		}
 
 		res
@@ -1548,9 +1551,8 @@ where
 					"Going to handle keygen message for session {}",
 					msg.msg.session_id
 				));
-				self_
-					.logger
-					.checkpoint_raw(&msg.msg.payload, msg.payload_message(), "CP3", false);
+				let proto_ty = dkg_msg_payload_to_async_proto(&msg.msg.payload);
+				self_.logger.checkpoint_raw(proto_ty, msg.payload_message(), "CP3", false);
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {
@@ -1571,9 +1573,8 @@ where
 					"Going to handle signing message for session {}",
 					msg.msg.session_id
 				));
-				self_
-					.logger
-					.checkpoint_raw(&msg.msg.payload, msg.payload_message(), "CP3", false);
+				let proto_ty = dkg_msg_payload_to_async_proto(&msg.msg.payload);
+				self_.logger.checkpoint_raw(proto_ty, msg.payload_message(), "CP3", false);
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {

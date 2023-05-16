@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use super::{CurrentRoundBlame, ProtocolType};
-use crate::{async_protocols::MessageRoundID, debug_logger::DebugLogger};
+use crate::async_protocols::MessageRoundID;
+use dkg_logging::*;
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
+use serde::de::DeserializeOwned;
 use sp_runtime::traits::Get;
 use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
@@ -31,7 +33,7 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
-	outgoing_history: Vec<Msg<T::MessageBody>>,
+	outgoing_history: HashSet<UniqueMessage>,
 }
 
 impl<
@@ -53,7 +55,7 @@ impl<
 			current_round_blame,
 			logger,
 			received_messages: HashSet::new(),
-			outgoing_history: Vec::new(),
+			outgoing_history: HashSet::new(),
 		}
 	}
 
@@ -71,7 +73,7 @@ impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 's
 where
 	T: StateMachine + RoundBlame + Debug,
 	<T as StateMachine>::Err: std::fmt::Debug,
-	<T as StateMachine>::MessageBody: serde::Serialize + MessageRoundID,
+	<T as StateMachine>::MessageBody: serde::Serialize + DeserializeOwned + MessageRoundID,
 {
 	type Err = T::Err;
 	type Output = T::Output;
@@ -106,6 +108,7 @@ where
 		// Before passing to the state machine, make sure that we haven't already received the same
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
 		// want to process the same message twice)
+
 		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");
 		if !self.received_messages.insert(msg_serde) {
 			self.logger.trace(format!(
@@ -119,6 +122,8 @@ where
 		let result = self.sm.handle_incoming(msg.clone());
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
+			self.logger
+				.checkpoint(&self.channel_type, &msg, "CP-in-state-machine-ERR", false);
 		} else {
 			self.logger.round_event(
 				&self.channel_type,
@@ -132,19 +137,36 @@ where
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
+		self.logger.debug("StateMachineWrapper::message_queue");
 		// only send current round + previous round messages if we're running the keygen protocol
 		if !self.sm.message_queue().is_empty() &&
-			matches!(self.channel_type, ProtocolType::Keygen { .. })
-		{
+			matches!(
+				self.channel_type,
+				ProtocolType::Keygen { .. } | ProtocolType::Offline { .. }
+			) {
 			// store outgoing messages in history
 			let mut last_2_rounds = vec![];
 			let current_round = self.current_round();
 			let current_round_minus_1 = current_round.saturating_sub(1);
-			self.outgoing_history.extend(self.sm.message_queue().clone());
+			for message in self.sm.message_queue().clone() {
+				self.outgoing_history.insert(UniqueMessage {
+					sender: message.sender,
+					receiver: message.receiver,
+					body: bincode2::serialize(&message.body).unwrap(),
+				});
+			}
 			for message in &self.outgoing_history {
-				let message_round = message.body.round_id();
+				// TODO: optimize by using HashMap<round_id, HashSet<>> instead of iterating over
+				// all messages
+				let body: T::MessageBody =
+					bincode2::deserialize(&message.body).expect("Failed to deserialize message");
+				let message_round = body.round_id();
 				if message_round >= current_round_minus_1 && message_round <= current_round {
-					last_2_rounds.push(message.clone());
+					last_2_rounds.push(Msg {
+						body,
+						sender: message.sender,
+						receiver: message.receiver,
+					});
 				}
 			}
 			// pass all messages in outgoing_history to the state machine
@@ -231,4 +253,11 @@ impl<
 	fn round_blame(&self) -> (u16, Vec<u16>) {
 		self.sm.round_blame()
 	}
+}
+
+#[derive(Eq, PartialEq, Hash)]
+struct UniqueMessage {
+	sender: u16,
+	receiver: Option<u16>,
+	body: Vec<u8>,
 }

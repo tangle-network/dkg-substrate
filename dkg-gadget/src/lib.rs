@@ -14,7 +14,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use debug_logger::DebugLogger;
+use dkg_logging::*;
 use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
 use parking_lot::RwLock;
 use prometheus::Registry;
@@ -42,11 +42,10 @@ mod utils;
 pub mod worker;
 
 pub mod async_protocols;
-pub mod debug_logger;
 pub mod gossip_messages;
 pub mod storage;
 
-pub use debug_logger::RoundsEventType;
+pub use dkg_logging::*;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 

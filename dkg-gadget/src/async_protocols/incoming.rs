@@ -24,7 +24,7 @@ use std::{
 	task::{Context, Poll},
 };
 
-use crate::debug_logger::DebugLogger;
+use dkg_logging::*;
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 

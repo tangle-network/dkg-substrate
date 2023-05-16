@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use crate::debug_logger::DebugLogger;
 use curv::elliptic::curves::Secp256k1;
+use dkg_logging::*;
 use dkg_primitives::{
 	types::DKGError,
 	utils::{decrypt_data, encrypt_data},

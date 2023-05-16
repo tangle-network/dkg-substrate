@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
-use crate::debug_logger::DebugLogger;
 use async_trait::async_trait;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, DKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;

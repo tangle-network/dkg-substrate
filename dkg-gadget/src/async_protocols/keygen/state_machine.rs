@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-	async_protocols::{
-		blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
-		AsyncProtocolParameters, ProtocolType,
-	},
-	debug_logger::DebugLogger,
+use crate::async_protocols::{
+	blockchain_interface::BlockchainInterface, state_machine::StateMachineHandler,
+	AsyncProtocolParameters, ProtocolType,
 };
 use async_trait::async_trait;
+use dkg_logging::*;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::channel::mpsc::UnboundedSender;
@@ -47,15 +45,14 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 					"Handling Keygen inbound message from id={}, session={}",
 					msg.sender_id, session_id
 				));
-				let message: Msg<ProtocolMessage> =
-					match serde_json::from_slice(msg.keygen_msg.as_slice()) {
-						Ok(message) => message,
-						Err(err) => {
-							logger.error_keygen(format!("Error deserializing message: {err}"));
-							// Skip this message.
-							return Ok(())
-						},
-					};
+				let message: Msg<ProtocolMessage> = match serde_json::from_slice(&msg.keygen_msg) {
+					Ok(message) => message,
+					Err(err) => {
+						logger.error_keygen(format!("Error deserializing message: {err}"));
+						// Skip this message.
+						return Ok(())
+					},
+				};
 
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {

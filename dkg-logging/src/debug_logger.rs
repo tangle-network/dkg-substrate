@@ -1,10 +1,8 @@
 #![allow(clippy::unwrap_used)]
-use crate::async_protocols::ProtocolType;
-use dkg_logging::{debug, error, info, trace, warn};
-use dkg_primitives::types::DKGMsgPayload;
+use crate::{debug, error, info, trace, warn};
+use hex::ToHex;
 use parking_lot::RwLock;
 use serde::Serialize;
-use sp_core::{bytes::to_hex, hashing::sha2_256, Get};
 use std::{
 	collections::{hash_map::Entry, HashMap},
 	fmt::Debug,
@@ -20,6 +18,7 @@ pub struct DebugLogger {
 	file_handle: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
+	events_file_handle_voting: Arc<RwLock<Option<std::fs::File>>>,
 }
 
 lazy_static::lazy_static! {
@@ -40,6 +39,8 @@ pub type MessageKey = Vec<u8>;
 pub enum AsyncProtocolType {
 	Keygen,
 	Signing,
+	Voting,
+	Unknown,
 }
 
 #[derive(Debug)]
@@ -130,6 +131,9 @@ impl Debug for RoundsEvent {
 	}
 }
 
+type DebugFiles =
+	(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>);
+
 impl DebugLogger {
 	pub fn new<T: ToString>(
 		identifier: T,
@@ -138,7 +142,8 @@ impl DebugLogger {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
 
-		let (file, events_file_keygen, events_file_signing) = Self::get_files(file)?;
+		let (file, events_file_keygen, events_file_signing, events_file_voting) =
+			Self::get_files(file)?;
 
 		let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let file_handle = Arc::new(RwLock::new(file));
@@ -150,12 +155,16 @@ impl DebugLogger {
 		let events_file_handle_signing = Arc::new(RwLock::new(events_file_signing));
 		let events_fh_task_signing = events_file_handle_signing.clone();
 
+		let events_file_handle_voting = Arc::new(RwLock::new(events_file_voting));
+		let events_fh_task_voting = events_file_handle_voting.clone();
+
 		let this = Self {
 			identifier: Arc::new(identifier.to_string().into()),
 			to_file_io: tx,
 			file_handle,
 			events_file_handle_keygen: events_file_handle,
 			events_file_handle_signing,
+			events_file_handle_voting,
 		};
 
 		let this_task = this.clone();
@@ -166,10 +175,11 @@ impl DebugLogger {
 				loop {
 					ticker.tick().await;
 					let lock = CHECKPOINTS.lock();
-					for stage in lock.values() {
+					for (msg, stage) in lock.iter() {
 						if stage.init_time.elapsed() > Duration::from_secs(4) {
+							let message = message_to_fmt(msg);
 							this_task.info(format!(
-								"Checkpoint for a {:?} message is currently stalled at {}",
+								"Checkpoint for a {:?} message ({message}) is currently stalled at {}",
 								stage.ty, stage.stage
 							));
 						}
@@ -195,6 +205,14 @@ impl DebugLogger {
 									writeln!(file, "{event:?}").unwrap();
 								}
 							},
+							AsyncProtocolType::Voting => {
+								if let Some(file) = events_fh_task_voting.write().as_mut() {
+									writeln!(file, "{event:?}").unwrap();
+								}
+							},
+							AsyncProtocolType::Unknown => {
+								// ignored
+							},
 						},
 					}
 				}
@@ -209,18 +227,18 @@ impl DebugLogger {
 		Ok(this)
 	}
 
-	fn get_files(
-		base_output: Option<std::path::PathBuf>,
-	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>)> {
+	fn get_files(base_output: Option<std::path::PathBuf>) -> std::io::Result<DebugFiles> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
 			let events_file =
 				std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
 			let events_file_signing =
 				std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
-			Ok((Some(file), Some(events_file), Some(events_file_signing)))
+			let events_file_voting =
+				std::fs::File::create(format!("{}.voting.events", file_path.display()))?;
+			Ok((Some(file), Some(events_file), Some(events_file_signing), Some(events_file_voting)))
 		} else {
-			Ok((None, None, None))
+			Ok((None, None, None, None))
 		}
 	}
 
@@ -234,10 +252,11 @@ impl DebugLogger {
 	}
 
 	pub fn set_output(&self, file: Option<std::path::PathBuf>) -> std::io::Result<()> {
-		let (file, event_file, signing_file) = Self::get_files(file)?;
+		let (file, keygen_file, signing_file, voting_file) = Self::get_files(file)?;
 		*self.file_handle.write() = file;
-		*self.events_file_handle_keygen.write() = event_file;
+		*self.events_file_handle_keygen.write() = keygen_file;
 		*self.events_file_handle_signing.write() = signing_file;
+		*self.events_file_handle_voting.write() = voting_file;
 		Ok(())
 	}
 
@@ -372,23 +391,26 @@ impl DebugLogger {
 		checkpoint: &'static str,
 		is_init: bool,
 	) {
+		let ty = proto_ty.into();
+		if matches!(ty, AsyncProtocolType::Unknown) {
+			return
+		}
 		let mut map = CHECKPOINTS.lock();
 		if is_init {
-			let checkpoint_s =
-				Checkpoint { stage: checkpoint, init_time: Instant::now(), ty: proto_ty.into() };
+			let checkpoint_s = Checkpoint { stage: checkpoint, init_time: Instant::now(), ty };
 			match map.entry(message.clone()) {
 				Entry::Occupied(_) => {
 					self.warn(format!("Checkpoint {checkpoint} failed since the message already existed when it shouldn't have"));
 				},
 				Entry::Vacant(empty) => {
 					empty.insert(checkpoint_s);
-					self.log_checkpoint(checkpoint, &message);
+					self.log_checkpoint(checkpoint, ty, &message);
 				},
 			}
 		} else {
 			if let Some(entry) = map.get_mut(&message) {
 				entry.stage = checkpoint;
-				self.log_checkpoint(checkpoint, &message);
+				self.log_checkpoint(checkpoint, ty, &message);
 			} else {
 				// this happens for duplicated messages
 			}
@@ -409,35 +431,29 @@ impl DebugLogger {
 	pub fn clear_checkpoint_raw<T: Into<Vec<u8>>>(&self, message: T) {
 		let mut map = CHECKPOINTS.lock();
 		let message = message.into();
-		if map.remove(&message).is_some() {
-			self.log_checkpoint("FINISHED", &message);
+		if let Some(val) = map.remove(&message) {
+			self.log_checkpoint("FINISHED", val.ty, &message);
 		}
 	}
 
-	fn log_checkpoint<T: AsRef<[u8]>>(&self, status: &'static str, message: T) {
-		let encoded = to_hex(&sha2_256(message.as_ref()), true);
-		self.info(format!("[Checkpoint] proceeded to {status} for {encoded}"));
+	fn log_checkpoint<T: AsRef<[u8]>>(
+		&self,
+		status: &'static str,
+		proto: AsyncProtocolType,
+		message: T,
+	) {
+		let encoded = message_to_fmt(message);
+		self.info(format!("[Checkpoint-{proto:?}] proceeded to {status} for {encoded}"));
 	}
 }
 
-impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
-	for AsyncProtocolType
-{
-	fn from(value: &ProtocolType<T>) -> Self {
-		if matches!(value, ProtocolType::Keygen { .. }) {
-			AsyncProtocolType::Keygen
-		} else {
-			AsyncProtocolType::Signing
-		}
-	}
+fn message_to_fmt<T: AsRef<[u8]>>(message: T) -> String {
+	sha(message.as_ref()).encode_hex()
 }
 
-impl From<&'_ DKGMsgPayload> for AsyncProtocolType {
-	fn from(value: &'_ DKGMsgPayload) -> Self {
-		if matches!(value, DKGMsgPayload::Keygen { .. }) {
-			AsyncProtocolType::Keygen
-		} else {
-			AsyncProtocolType::Signing
-		}
-	}
+fn sha(s: &[u8]) -> Vec<u8> {
+	use sha3::Digest;
+	let mut hasher = sha3::Sha3_256::default();
+	hasher.update(s);
+	hasher.finalize().to_vec()
 }

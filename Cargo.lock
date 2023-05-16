@@ -1842,6 +1842,13 @@ dependencies = [
 name = "dkg-logging"
 version = "0.1.0"
 dependencies = [
+ "hex",
+ "lazy_static",
+ "parking_lot 0.12.1",
+ "serde",
+ "serde_json",
+ "sha3 0.10.8",
+ "tokio",
  "tracing",
  "tracing-filter",
  "tracing-subscriber 0.3.17",
@@ -2284,7 +2291,7 @@ dependencies = [
  "parity-scale-codec",
  "rlp",
  "scale-info",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "triehash",
 ]
 
@@ -3646,9 +3653,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3afef3b6eff9ce9d8ff9b3601125eec7f0c8cbac7abd14f355d053fa56c98768"
+checksum = "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
 dependencies = [
  "cpufeatures",
 ]
@@ -4641,7 +4648,7 @@ dependencies = [
  "digest 0.10.6",
  "multihash-derive",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "unsigned-varint",
 ]
 
@@ -8302,9 +8309,9 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54c2bb1a323307527314a36bfb73f24febb08ce2b8a554bf4ffd6f51ad15198c"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.6",
  "keccak",
@@ -8689,7 +8696,7 @@ dependencies = [
  "byteorder",
  "digest 0.10.6",
  "sha2 0.10.6",
- "sha3 0.10.7",
+ "sha3 0.10.8",
  "sp-std",
  "twox-hash",
 ]

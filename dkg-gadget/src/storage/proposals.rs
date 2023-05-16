@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	debug_logger::DebugLogger,
 	utils::find_index,
 	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
 	Client,
 };
 use codec::{Decode, Encode};
+use dkg_logging::*;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,

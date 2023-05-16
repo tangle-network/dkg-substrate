@@ -13,7 +13,6 @@
 // limitations under the License.
 use crate::{
 	async_protocols::BatchKey,
-	debug_logger::DebugLogger,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	metrics::Metrics,
@@ -24,6 +23,7 @@ use crate::{
 };
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
+use dkg_logging::*;
 use dkg_primitives::{
 	types::{
 		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,

@@ -1,7 +1,8 @@
 use crate::{
-	async_protocols::remote::AsyncProtocolRemote, debug_logger::DebugLogger, utils::SendFuture,
-	worker::HasLatestHeader, NumberFor,
+	async_protocols::remote::AsyncProtocolRemote, utils::SendFuture, worker::HasLatestHeader,
+	NumberFor,
 };
+use dkg_logging::*;
 use dkg_primitives::{
 	crypto::Public,
 	types::{DKGError, SignedDKGMessage},

@@ -48,11 +48,14 @@ thiserror = "1.0"
 hex = { version = "0.4", default-features = false }
 strum = { version = "0.21", features = ["derive"] }
 linked-hash-map = "0.5.4"
+sha3 = "0.10.8"
 round-based = { git = "https://github.com/webb-tools/round-based-protocol", features = [] }
+#round-based = { path = "../round-based-protocol", features = [] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 humantime-serde = { version = "1.1.1", default-features = false }
 serde_json = "1.0.59"
 multi-party-ecdsa = { git = "https://github.com/webb-tools/multi-party-ecdsa.git" }
+#multi-party-ecdsa = { path = "../multi-party-ecdsa" }
 tokio = { version = "1.28.0", default-features = false, features = ["sync", "macros"] }
 tokio-util = { version = "0.7.7", default-features = false, features = ["codec"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }

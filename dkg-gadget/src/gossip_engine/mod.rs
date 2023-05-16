@@ -30,7 +30,8 @@ mod network;
 
 pub use network::{GossipHandler, GossipHandlerController, NetworkGossipEngineBuilder};
 
-use crate::{debug_logger::DebugLogger, worker::KeystoreExt, DKGKeystore};
+use crate::{worker::KeystoreExt, DKGKeystore};
+use dkg_logging::*;
 
 /// A GossipEngine that can be used to send DKG messages.
 ///

@@ -5,6 +5,9 @@ use tracing_subscriber::{
 	EnvFilter,
 };
 
+pub mod debug_logger;
+pub use debug_logger::*;
+
 pub fn setup_log() {
 	let _ = SubscriberBuilder::default()
 		.with_line_number(true)
