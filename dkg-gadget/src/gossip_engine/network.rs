@@ -45,9 +45,9 @@ use codec::{Decode, Encode};
 use dkg_logging::*;
 use dkg_primitives::types::{DKGError, SignedDKGMessage};
 use dkg_runtime_primitives::crypto::AuthorityId;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use linked_hash_map::LinkedHashMap;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use sc_network::{multiaddr, Event, NetworkService, NetworkStateInfo, PeerId, ProtocolName};
 use sc_network_common::{
 	config, error,
@@ -55,17 +55,18 @@ use sc_network_common::{
 };
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
-	collections::{hash_map::Entry, HashMap, HashSet},
+	collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
 	hash::Hash,
 	iter,
 	marker::PhantomData,
 	num::NonZeroUsize,
+	pin::Pin,
 	sync::{
-		atomic::{AtomicBool, Ordering},
+		atomic::{AtomicBool, AtomicU8, Ordering},
 		Arc,
 	},
 };
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub struct NetworkGossipEngineBuilder {
@@ -115,18 +116,23 @@ impl NetworkGossipEngineBuilder {
 		// background task and the controller.
 		// since we have two things here we will need two channels:
 		// 1. a channel to send commands to the background task (Controller -> Background).
-		let (handler_channel, handler_channel_rx) = tokio::sync::mpsc::unbounded_channel();
-		let (message_channel_tx, message_channel_rx) = tokio::sync::mpsc::unbounded_channel();
+		let (handler_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
+		let (message_notifications_channel, _) = broadcast::channel(MAX_PENDING_MESSAGES);
 		let gossip_enabled = Arc::new(AtomicBool::new(false));
+		let processing_already_seen_messages_enabled = Arc::new(AtomicBool::new(false));
+		let message_queue = Arc::new(RwLock::new(VecDeque::new()));
 		let handler = GossipHandler {
 			latest_header,
 			keystore: self.keystore,
 			protocol_name: self.protocol_name.clone(),
-			to_receiver: message_channel_tx,
-			incoming_messages_stream: Arc::new(Mutex::new(Some(handler_channel_rx))),
+			my_channel: handler_channel.clone(),
+			message_queue: message_queue.clone(),
+			message_notifications_channel: message_notifications_channel.clone(),
 			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
 			authority_id_to_peer_id: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: processing_already_seen_messages_enabled
+				.clone(),
 			service,
 			peers: Arc::new(RwLock::new(HashMap::new())),
 			logger: logger.clone(),
@@ -139,8 +145,10 @@ impl NetworkGossipEngineBuilder {
 			local_peer_id,
 			protocol_name: self.protocol_name,
 			handler_channel,
-			message_notifications_channel: Arc::new(Mutex::new(Some(message_channel_rx))),
+			message_notifications_channel,
 			gossip_enabled,
+			processing_already_seen_messages_enabled,
+			message_queue,
 			logger,
 			_pd: Default::default(),
 		};
@@ -154,6 +162,9 @@ const MAX_KNOWN_MESSAGES: usize = 10240; // ~300kb per peer + overhead.
 
 /// Maximum allowed size for a DKG Signed Message notification.
 const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
+
+/// Maximum number of messages request we keep at any moment.
+const MAX_PENDING_MESSAGES: usize = 8192;
 
 /// Maximum number of duplicate messages that a single peer can send us.
 ///
@@ -173,18 +184,66 @@ mod rep {
 	pub const DUPLICATE_MESSAGE: Rep = Rep::new(-(1 << 12), "Duplicate message");
 }
 
+/// A wrapper around a [`SignedDKGMessage`] that also keeps track of how many time we tried to
+/// process (read from the queue) that message and depending on that counter, we can decide to
+/// ignore the message if it has been processed too many times but no progress has been made.
+#[derive(Debug)]
+struct DKGMessageWrapper<AuthorityId> {
+	inner: SignedDKGMessage<AuthorityId>,
+	read_count: AtomicU8,
+}
+
+impl DKGMessageWrapper<AuthorityId> {
+	/// Maximum number of times we try to process a message before we ignore it.
+	const MAX_READ_COUNT: u8 = 5;
+	/// Create a new [`DKGMessageWrapper`].
+	fn new(inner: SignedDKGMessage<AuthorityId>) -> Self {
+		Self { inner, read_count: AtomicU8::new(0) }
+	}
+
+	/// Returns the current read count.
+	fn read_count(&self) -> u8 {
+		self.read_count.load(Ordering::Relaxed)
+	}
+
+	/// Returns a clone of the inner [`SignedDKGMessage`]
+	/// and increases the read count by one, ignoring the message if the read count is too high.
+	fn read(&self) -> SignedDKGMessage<AuthorityId> {
+		self.read_count.fetch_add(1, Ordering::Relaxed);
+		self.inner.clone()
+	}
+
+	/// Returns a clone of the inner [`SignedDKGMessage`] if the read count is less than the
+	/// [`Self::MAX_READ_COUNT`].
+	fn try_read(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		if self.read_count() < Self::MAX_READ_COUNT {
+			Some(self.read())
+		} else {
+			None
+		}
+	}
+
+	/// Unwraps the inner [`SignedDKGMessage`].
+	fn unwrap(self) -> SignedDKGMessage<AuthorityId> {
+		self.inner
+	}
+}
+
 /// Controls the behaviour of a [`GossipHandler`] it is connected to.
 #[derive(Clone)]
 pub struct GossipHandlerController<B: Block> {
 	local_peer_id: PeerId,
 	protocol_name: ProtocolName,
 	/// a channel to send commands to the background task (Controller -> Background).
-	handler_channel: tokio::sync::mpsc::UnboundedSender<ToHandler>,
-	/// where messages are received
-	message_notifications_channel:
-		Arc<Mutex<Option<UnboundedReceiver<SignedDKGMessage<AuthorityId>>>>>,
+	handler_channel: broadcast::Sender<ToHandler>,
+	/// A simple channel to send notifications whenever we receive a message from a peer.
+	message_notifications_channel: broadcast::Sender<()>,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	message_queue: Arc<RwLock<VecDeque<DKGMessageWrapper<AuthorityId>>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
 	logger: DebugLogger,
 	/// Used to keep type information about the block. May
 	/// be useful for the future, so keeping it here
@@ -213,6 +272,7 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		));
 		self.handler_channel
 			.send(ToHandler::SendMessage { recipient, message })
+			.map(|_| ())
 			.map_err(|_| DKGError::GenericError {
 				reason: "Failed to send message to handler".into(),
 			})
@@ -226,8 +286,70 @@ impl<B: Block> super::GossipEngineIface for GossipHandlerController<B> {
 		})
 	}
 
-	fn get_stream(&self) -> Option<UnboundedReceiver<SignedDKGMessage<AuthorityId>>> {
-		self.message_notifications_channel.lock().take()
+	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
+		// We need to create a new receiver of the channel, so that we can receive messages
+		// from anywhere, without actually fight the rustc borrow checker.
+		let stream = self.message_notifications_channel.subscribe();
+		tokio_stream::wrappers::BroadcastStream::new(stream)
+			.filter_map(|m| futures::future::ready(m.ok()))
+			.boxed()
+	}
+
+	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+		let mut lock = self.message_queue.write();
+		let msg = match lock.front() {
+			Some(value) => value.try_read(),
+			None => {
+				self.logger.debug("No message to dequeue");
+				return None
+			},
+		};
+		match msg {
+			Some(msg) => {
+				self.logger.debug(format!(
+					"Protocol : {:?} | Dequeuing message: {}",
+					self.protocol_name,
+					msg.message_hash::<B>()
+				));
+				Some(msg)
+			},
+			None => {
+				self.logger.debug(format!(
+					"Protocol : {:?} | Message already read too many times, ignoring",
+					self.protocol_name
+				));
+				// We have already read this message too many times, so we remove it from the queue.
+				let _ = lock.pop_front();
+				None
+			},
+		}
+	}
+
+	fn acknowledge_last_message(&self) {
+		let mut lock = self.message_queue.write();
+		let msg = lock.pop_front().map(|m| m.unwrap());
+		match msg {
+			Some(msg) => {
+				self.logger.debug(format!(
+					"Protocol : {:?} | Acknowledging message: {}",
+					self.protocol_name,
+					msg.message_hash::<B>()
+				));
+			},
+			None => {
+				self.logger.debug(format!(
+					"Protocol : {:?} | No message to acknowledge",
+					self.protocol_name
+				));
+			},
+		}
+	}
+
+	fn clear_queue(&self) {
+		self.logger
+			.debug(format!("Protocol : {:?} | Clearing message queue", self.protocol_name));
+		let mut lock = self.message_queue.write();
+		lock.clear();
 	}
 }
 /// an Enum Representing the commands that can be sent to the background task.
@@ -244,6 +366,11 @@ impl<B: Block> GossipHandlerController<B> {
 	pub fn set_gossip_enabled(&self, enabled: bool) {
 		self.gossip_enabled.store(enabled, Ordering::Relaxed);
 	}
+
+	/// Controls whether we process already seen messages or not.
+	pub fn set_processing_already_seen_messages_enabled(&self, enabled: bool) {
+		self.processing_already_seen_messages_enabled.store(enabled, Ordering::Relaxed);
+	}
 }
 
 /// Handler for gossiping messages. Call [`GossipHandler::run`] to start the processing.
@@ -257,9 +384,10 @@ pub struct GossipHandler<B: Block + 'static> {
 	latest_header: Arc<RwLock<Option<B::Header>>>,
 	/// The DKG Keystore.
 	keystore: DKGKeystore,
+	/// A Buffer of messages that we have received from the network, but not yet processed.
+	message_queue: Arc<RwLock<VecDeque<DKGMessageWrapper<AuthorityId>>>>,
 	/// A Simple notification stream to notify the caller that we have messages in the queue.
-	to_receiver: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<AuthorityId>>,
-	incoming_messages_stream: Arc<Mutex<Option<UnboundedReceiver<ToHandler>>>>,
+	message_notifications_channel: broadcast::Sender<()>,
 	/// As multiple peers can send us the same message, we group
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
@@ -275,6 +403,10 @@ pub struct GossipHandler<B: Block + 'static> {
 	authority_id_to_peer_id: Arc<RwLock<HashMap<AuthorityId, PeerId>>>,
 	/// Whether the gossip mechanism is enabled or not.
 	gossip_enabled: Arc<AtomicBool>,
+	/// Whether we should process already seen messages or not.
+	processing_already_seen_messages_enabled: Arc<AtomicBool>,
+	/// A Channel to receive commands from the controller.
+	my_channel: broadcast::Sender<ToHandler>,
 	logger: DebugLogger,
 	/// Prometheus metrics.
 	metrics: Arc<Option<Metrics>>,
@@ -286,13 +418,17 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 			protocol_name: self.protocol_name.clone(),
 			latest_header: self.latest_header.clone(),
 			keystore: self.keystore.clone(),
-			to_receiver: self.to_receiver.clone(),
-			incoming_messages_stream: self.incoming_messages_stream.clone(),
+			message_queue: self.message_queue.clone(),
+			message_notifications_channel: self.message_notifications_channel.clone(),
 			pending_messages_peers: self.pending_messages_peers.clone(),
 			service: self.service.clone(),
 			peers: self.peers.clone(),
 			authority_id_to_peer_id: self.authority_id_to_peer_id.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
+			processing_already_seen_messages_enabled: self
+				.processing_already_seen_messages_enabled
+				.clone(),
+			my_channel: self.my_channel.clone(),
 			logger: self.logger.clone(),
 			metrics: self.metrics.clone(),
 		}
@@ -331,11 +467,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Turns the [`GossipHandler`] into a future that should run forever and not be
 	/// interrupted.
 	pub async fn run(self) {
-		let mut incoming_messages = self
-			.incoming_messages_stream
-			.lock()
-			.take()
-			.expect("incoming_messages_stream taken");
+		let stream = self.my_channel.subscribe();
+		let mut incoming_messages = tokio_stream::wrappers::BroadcastStream::new(stream);
 		let mut event_stream = self.service.event_stream("dkg-handler");
 		self.logger.debug("Starting the DKG Gossip Handler");
 
@@ -345,23 +478,40 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 		// first task, handles the incoming messages/Commands from the controller.
 		let self0 = self.clone();
-		let incoming_messages_task = tokio::spawn(async move {
-			while let Some(message) = incoming_messages.recv().await {
-				match message {
-					ToHandler::SendMessage { recipient, message } =>
-						self0.send_signed_dkg_message(recipient, message),
-					ToHandler::Gossip(v) => self0.gossip_dkg_signed_message(v),
+		let incoming_messages_task =
+			crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
+				while let Some(message) = incoming_messages.next().await {
+					match message {
+						Ok(ToHandler::SendMessage { recipient, message }) =>
+							self0.send_signed_dkg_message(recipient, message),
+						Ok(ToHandler::Gossip(v)) => self0.gossip_dkg_signed_message(v),
+						_ => {},
+					}
+				}
+			}));
+
+		// a timer that fires every few ms to check if there are messages in the queue, and if so,
+		// notify the listener.
+		let self1 = self.clone();
+		let mut timer = tokio::time::interval(core::time::Duration::from_millis(100));
+		let timer_task = crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
+			loop {
+				timer.tick().await;
+				let queue = self1.message_queue.read();
+				if !queue.is_empty() {
+					let _ = self1.message_notifications_channel.send(());
 				}
 			}
-		});
+		}));
 
 		let self2 = self.clone();
 		// second task, handles the incoming messages/events from the network stream.
-		let network_events_task = tokio::spawn(async move {
-			while let Some(event) = event_stream.next().await {
-				self2.handle_network_event(event).await;
-			}
-		});
+		let network_events_task =
+			crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
+				while let Some(event) = event_stream.next().await {
+					self2.handle_network_event(event).await;
+				}
+			}));
 
 		// wait for the first task to finish or error out.
 		//
@@ -379,8 +529,12 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// events   task should have finished as well.
 		// 3. The timer task, however, will never finish, unless the node is shutting down, in which
 		//  case the network events task should have finished as well.
-		let _result =
-			futures::future::select_all(vec![network_events_task, incoming_messages_task]).await;
+		let _result = futures::future::select_all(vec![
+			network_events_task,
+			incoming_messages_task,
+			timer_task,
+		])
+		.await;
 		self.logger.error("The DKG Gossip Handler has finished!!".to_string());
 	}
 
@@ -541,8 +695,16 @@ impl<B: Block + 'static> GossipHandler<B> {
 		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
 			peer.known_messages.insert(message.message_hash::<B>());
 			let mut pending_messages_peers = self.pending_messages_peers.write();
-			let send_the_message = |message: SignedDKGMessage<AuthorityId>| {
-				if let Err(e) = self.to_receiver.send(message) {
+			let enqueue_the_message = || {
+				let mut queue_lock = self.message_queue.write();
+				queue_lock.push_back(DKGMessageWrapper::new(message.clone()));
+				drop(queue_lock);
+				let recv_count = self.message_notifications_channel.receiver_count();
+				if recv_count == 0 {
+					self.logger
+						.warn("No one is going to process the message notification!!!".to_string());
+				}
+				if let Err(e) = self.message_notifications_channel.send(()) {
 					self.logger.error(format!(
 						"Failed to send message notification to DKG controller: {e:?}"
 					));
@@ -558,7 +720,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_new_signed_messages.inc();
 					}
-					send_the_message(message.clone());
+					enqueue_the_message();
 					entry.insert(HashSet::from([who]));
 					// This good, this peer is good, they sent us a message we didn't know about.
 					// we should add some good reputation to them.
@@ -593,8 +755,10 @@ impl<B: Block + 'static> GossipHandler<B> {
 						}
 					}
 
-					// send the old message anyways
-					send_the_message(message.clone());
+					// check if we shall process this old message or not.
+					if self.processing_already_seen_messages_enabled.load(Ordering::Relaxed) {
+						enqueue_the_message();
+					}
 				},
 			}
 		}
