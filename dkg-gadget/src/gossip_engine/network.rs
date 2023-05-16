@@ -331,7 +331,11 @@ impl<B: Block + 'static> GossipHandler<B> {
 	/// Turns the [`GossipHandler`] into a future that should run forever and not be
 	/// interrupted.
 	pub async fn run(self) {
-		let mut incoming_messages = self.incoming_messages_stream.lock().take().unwrap();
+		let mut incoming_messages = self
+			.incoming_messages_stream
+			.lock()
+			.take()
+			.expect("incoming_messages_stream taken");
 		let mut event_stream = self.service.event_stream("dkg-handler");
 		self.logger.debug("Starting the DKG Gossip Handler");
 

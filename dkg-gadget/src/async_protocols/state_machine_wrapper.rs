@@ -152,7 +152,7 @@ where
 				self.outgoing_history.insert(UniqueMessage {
 					sender: message.sender,
 					receiver: message.receiver,
-					body: bincode2::serialize(&message.body).unwrap(),
+					body: bincode2::serialize(&message.body).expect("bad serialization"),
 				});
 			}
 			for message in &self.outgoing_history {
