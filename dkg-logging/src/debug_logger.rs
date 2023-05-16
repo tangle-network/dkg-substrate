@@ -218,10 +218,7 @@ impl DebugLogger {
 				}
 			});
 		} else {
-			return Err(std::io::Error::new(
-				std::io::ErrorKind::Other,
-				"Tokio runtime not initialized",
-			))
+			this.warn("Tokio runtime not initialized, will not run file i/o");
 		}
 
 		Ok(this)
