@@ -69,7 +69,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
 						logger.info_signing("Skipping passing of message to async proto since not intended for local");
-						logger.clear_checkpoint_raw(payload_message.clone());
+						logger.clear_checkpoint_raw(payload_message);
 						return Ok(())
 					}
 				}
@@ -93,12 +93,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 				if let Err(err) = to_async_proto.unbounded_send(message) {
 					logger.error_signing(format!("Error sending message to async proto: {err}"));
 				} else {
-					logger.checkpoint_raw(
-						local_ty,
-						payload_message.clone(),
-						"CP6-incoming-6",
-						false,
-					);
+					logger.checkpoint_raw(local_ty, payload_message, "CP6-incoming-6", false);
 				}
 			},
 

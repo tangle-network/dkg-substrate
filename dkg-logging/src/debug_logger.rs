@@ -407,13 +407,9 @@ impl DebugLogger {
 					self.log_checkpoint(checkpoint, ty, &message);
 				},
 			}
-		} else {
-			if let Some(entry) = map.get_mut(&message) {
-				entry.stage = checkpoint;
-				self.log_checkpoint(checkpoint, ty, &message);
-			} else {
-				// this happens for duplicated messages
-			}
+		} else if let Some(entry) = map.get_mut(&message) {
+			entry.stage = checkpoint;
+			self.log_checkpoint(checkpoint, ty, &message);
 		}
 	}
 
