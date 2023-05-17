@@ -167,7 +167,7 @@ export function startStandaloneNode(
 		.execSync('git rev-parse --show-toplevel')
 		.toString()
 		.trim();
-	const nodePath = `${gitRoot}/target/release/dkg-standalone-node`;
+	const nodePath = `${gitRoot}/target/debug/dkg-standalone-node`;
 	const ports = {
 		alice: { ws: 9944, http: 9933, p2p: 30333 },
 		bob: { ws: 9945, http: 9934, p2p: 30334 },

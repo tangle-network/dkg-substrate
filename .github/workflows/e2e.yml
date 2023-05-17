@@ -63,7 +63,7 @@ jobs:
         run: dvc pull
 
       - name: Build Standalone Node for E2E Tests (Release)
-        run: cargo build --release -p dkg-standalone-node --features integration-tests
+        run: cargo build -p dkg-standalone-node --features integration-tests
 
       - name: Run E2E Tests
         run: cd dkg-test-suite && yarn test:e2e
@@ -118,7 +118,7 @@ jobs:
         run: dvc pull
 
       - name: Build Standalone Node for Integration Tests (Release)
-        run: cargo build --release -p dkg-standalone-node
+        run: cargo build -p dkg-standalone-node
 
       - name: Run Proposals E2E Tests
         run: cd dkg-test-suite && yarn test:proposals

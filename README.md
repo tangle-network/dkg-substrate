@@ -1,6 +1,6 @@
 <div align="center">
 <a href="https://www.webb.tools/">
-    
+
 ![Webb Logo](./assets/webb_banner_light.png#gh-light-mode-only)
 ![Webb Logo](./assets/webb_banner_dark.png#gh-dark-mode-only)
   </a>
@@ -35,7 +35,7 @@
     <li><a href="#test">Testing</a></li>
     <li><a href="#contribute">Contributing</a></li>
     <li><a href="#license">License</a></li>
-  </ul>  
+  </ul>
 </details>
 
 <h1 id="start"> Getting Started  🎉 </h1>
@@ -70,7 +70,7 @@ rustup target add wasm32-unknown-unknown
 
 Great! Now your Rust environment is ready! 🚀🚀
 
-Lastly, install 
+Lastly, install
 
   - [DVC](https://dvc.org/) is used for fetching large ZK files and managing them alongside git
   - [substrate.io](https://docs.substrate.io/main-docs/install/) may require additional dependencies
@@ -157,7 +157,7 @@ Ensure `gmp` dependency is installed correctly.
 brew install gmp
 ```
 
-If you are still receiving an issue with `gmp`, you may need to adjust your path to the `gmp` lib. Below is a suggestive fix, but paths are machine / environment specific. 
+If you are still receiving an issue with `gmp`, you may need to adjust your path to the `gmp` lib. Below is a suggestive fix, but paths are machine / environment specific.
 
 Run:
 
@@ -171,7 +171,7 @@ Then:
 export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib:$(brew --prefix)/opt/gmp/lib
 ```
 
-This should be added to your bash_profile as well. 
+This should be added to your bash_profile as well.
 
 Ensure `protobuf` dependency is installed correctly.
 
@@ -257,15 +257,15 @@ cargo test
 
 ```
 # Build the dkg-standalone node
-cargo build --release -p dkg-standalone-node --features=integration-tests,testing
+cargo build -p dkg-standalone-node --features=integration-tests,testing
 
 # run the orchestrator, making sure to use the proper config
-cargo run --package dkg-test-orchestrator --release --features=testing -- --config /path/to/orchestrator_config.toml
+cargo run --package dkg-test-orchestrator --features=testing -- --config /path/to/orchestrator_config.toml
 ```
 
 ### To run E2E tests
 
-1. Run `cargo build --release -p dkg-standalone-node --features integration-tests`
+1. Run `cargo build -p dkg-standalone-node --features integration-tests`
 2. Run `cd dkg-test-suite && dvc pull`
 3. Run `cd dkg-test-suite`
 4. Run `yarn install`
@@ -276,7 +276,7 @@ cargo run --package dkg-test-orchestrator --release --features=testing -- --conf
 ### E2E tests w/tracing
 `tracing` is a feature that can be useful for analyzing causality inside the DKG. To enable tracing, the `dkg-standalone-node` must be compiled with the feature `tracing` enabled.
 ```
-1. Compile dkg-standalone-node with tracing: `cargo build --package dkg-standalone-node --release --features=tracing,integration-tests`
+1. Compile dkg-standalone-node with tracing: `cargo build --package dkg-standalone-node --features=tracing,integration-tests`
 2. Run the nodes, setting the env-vars to trace: `RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice`
 ```
 
