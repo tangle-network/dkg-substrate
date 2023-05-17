@@ -46,6 +46,7 @@ impl InMemoryGossipEngine {
 		}
 	}
 
+	#[allow(dead_code)]
 	fn public_to_peer_id(&self, public: AuthorityId) -> Option<PeerId> {
 		let mapping = self.mapping.lock();
 		for (peer_id, public_key) in mapping.iter() {
@@ -131,11 +132,6 @@ impl GossipEngineIface for InMemoryGossipEngine {
 
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError> {
-		if let Some(recipient) = message.msg.recipient_id.clone() {
-			let recipient = self.public_to_peer_id(recipient).unwrap();
-			return self.send(recipient, message)
-		}
-
 		let mut clients = self.clients.lock();
 		let notifiers = self.notifier.lock();
 		let (this_peer, _) = self.peer_id();

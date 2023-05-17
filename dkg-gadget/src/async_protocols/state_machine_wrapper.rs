@@ -132,9 +132,7 @@ where
 		if !self.sm.message_queue().is_empty() &&
 			matches!(
 				self.channel_type,
-				ProtocolType::Keygen { .. } |
-					ProtocolType::Offline { .. } |
-					ProtocolType::Voting { .. }
+				ProtocolType::Keygen { .. } | ProtocolType::Offline { .. }
 			) {
 			// store outgoing messages in history
 			let mut last_2_rounds = vec![];

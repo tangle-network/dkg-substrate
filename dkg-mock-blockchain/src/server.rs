@@ -391,8 +391,6 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		log::info!(target: "dkg", "[Orchestrator] Running next round!");
 
 		if let Some(next_case) = test_cases.pop_front() {
-			self.begin_next_test_print(test_phase).await;
-
 			// the first round will not have any unsigned proposals since we're waiting for keygen
 			// otherwise, preload the unsigned proposals
 			let round_number = test_phase.round_number();
@@ -419,6 +417,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 
 			// begin the next test
 			test_phase.session_init(unsigned_proposals, next_case);
+			self.begin_next_test_print(test_phase).await;
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
 			// phase 1: send finality notifications to each client
 			self.send_finality_notification(test_phase).await;
