@@ -790,8 +790,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 
 	fn gossip_dkg_signed_message(&self, message: SignedDKGMessage<AuthorityId>) {
 		// Check if the message has a recipient
-		// NOTE: DISABLED for now due to bug in recipient_id
-		/*
+
 		let maybe_peer_id = match &message.msg.recipient_id {
 			Some(recipient_id) => self.authority_id_to_peer_id.read().get(recipient_id).cloned(),
 			None => None,
@@ -800,7 +799,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		if let Some(peer_id) = maybe_peer_id {
 			self.logger.debug(format!("Sending message to recipient {peer_id} using p2p"));
 			self.send_signed_dkg_message(peer_id, message);
-			return
+		// NOTE: due to bug in recipient_id, we will both send and gossip the message
+		// return
 		} else if let Some(recipient_id) = &message.msg.recipient_id {
 			self.logger.debug(format!(
 				"No direct connection to {recipient_id}, falling back to gossiping"
@@ -808,7 +808,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 		} else {
 			self.logger
 				.debug("No specific recipient, broadcasting message to all peers".to_string());
-		}*/
+		}
 		// Otherwise, we fallback to sending the message to all peers.
 		let peer_ids = {
 			let peers_map = self.peers.read();
