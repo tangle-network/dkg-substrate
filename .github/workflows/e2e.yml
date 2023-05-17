@@ -62,7 +62,7 @@ jobs:
       - name: Populate Fixtures
         run: dvc pull
 
-      - name: Build Standalone Node for E2E Tests (Release)
+      - name: Build Standalone Node for E2E Tests
         run: cargo build -p dkg-standalone-node --features integration-tests
 
       - name: Run E2E Tests
@@ -117,7 +117,7 @@ jobs:
       - name: Populate Fixtures
         run: dvc pull
 
-      - name: Build Standalone Node for Integration Tests (Release)
+      - name: Build Standalone Node for Integration Tests
         run: cargo build -p dkg-standalone-node
 
       - name: Run Proposals E2E Tests
