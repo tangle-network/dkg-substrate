@@ -203,3 +203,6 @@ hash-db = { version = "0.15.2", default-features = false }
 
 [profile.release]
 panic = 'unwind'
+
+[profile.dev]
+opt-level = 1
