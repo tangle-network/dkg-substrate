@@ -796,8 +796,9 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// If we have a peer id, we send the message to that peer directly.
 		if let Some(peer_id) = maybe_peer_id {
 			self.logger.debug(format!("Sending message to recipient {peer_id} using p2p"));
-			self.send_signed_dkg_message(peer_id, message);
-			return
+			self.send_signed_dkg_message(peer_id, message.clone());
+		// potential bug "fix"
+		//return
 		} else if let Some(recipient_id) = &message.msg.recipient_id {
 			self.logger.debug(format!(
 				"No direct connection to {recipient_id}, falling back to gossiping"
