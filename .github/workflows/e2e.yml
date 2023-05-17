@@ -30,6 +30,7 @@ jobs:
         with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
+          shared-key: "rust"
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -84,6 +85,7 @@ jobs:
         with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
+          shared-key: "rust"
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
