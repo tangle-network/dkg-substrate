@@ -167,10 +167,9 @@ impl DebugLogger {
 	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>)> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
-			let events_file =
-				std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
+			let events_file = std::fs::File::create(format!("{}.keygen.log", file_path.display()))?;
 			let events_file_signing =
-				std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
+				std::fs::File::create(format!("{}.signing.log", file_path.display()))?;
 			Ok((Some(file), Some(events_file), Some(events_file_signing)))
 		} else {
 			Ok((None, None, None))
