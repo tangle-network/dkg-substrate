@@ -33,12 +33,11 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.3.0
+      - name: cache
+        uses: actions/cache@v3
         with:
-          # This will help speed up builds in a pipeline
-          cache-on-failure: "true"
-          cache-all-crates: "true"
+          path: [ '~/.cargo/registry', 'target/release', 'target/debug' ]
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,6 +77,12 @@ jobs:
       - name: Run E2E Tests
         run: cd dkg-test-suite && yarn test:e2e
 
+      - name: cache
+        uses: actions/cache@v3
+        with:
+          path: [ '~/.cargo/registry', 'target/release', 'target/debug' ]
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
   integration-tests:
     name: integration-tests
     runs-on: ubuntu-latest
@@ -98,12 +103,11 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.3.0
+      - name: cache
+        uses: actions/cache@v3
         with:
-          # This will help speed up builds in a pipeline
-          cache-on-failure: "true"
-          cache-all-crates: "true"
+          path: [ '~/.cargo/registry', 'target/release', 'target/debug' ]
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -142,3 +146,10 @@ jobs:
 
       - name: Run Proposals E2E Tests
         run: cd dkg-test-suite && yarn test:proposals
+
+      - name: cache
+        if: always()
+        uses: actions/cache@v3
+        with:
+          path: ['~/.cargo/registry', 'target/release', 'target/debug']
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
