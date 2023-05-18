@@ -35,9 +35,12 @@ jobs:
 
       - name: cache
         if: always()
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
-          path: '~/.cargo/registry,target/release,target/debug'
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
           key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}
 
       - name: Install toolchain
@@ -80,9 +83,12 @@ jobs:
 
       - name: cache
         if: always()
-        uses: actions/cache@v3
+        uses: actions/cache/save@v3
         with:
-          path: '~/.cargo/registry,target/release,target/debug'
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
           key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}
 
   integration-tests:
@@ -107,9 +113,12 @@ jobs:
 
       - name: cache
         if: always()
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
-          path: '~/.cargo/registry,target/release,target/debug'
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
           key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}
 
       - name: Install toolchain
@@ -152,7 +161,10 @@ jobs:
 
       - name: cache
         if: always()
-        uses: actions/cache@v3
+        uses: actions/cache/save@v3
         with:
-          path: '~/.cargo/registry,target/release,target/debug'
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
           key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}
