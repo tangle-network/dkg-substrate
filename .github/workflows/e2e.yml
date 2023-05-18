@@ -34,7 +34,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.3.0
         with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
@@ -99,7 +99,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.3.0
         with:
           # This will help speed up builds in a pipeline
           cache-on-failure: "true"
