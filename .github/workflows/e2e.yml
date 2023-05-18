@@ -31,7 +31,7 @@ jobs:
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.2
+        uses: mozilla-actions/sccache-action@master
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -95,7 +95,7 @@ jobs:
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.2
+        uses: mozilla-actions/sccache-action@master
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
