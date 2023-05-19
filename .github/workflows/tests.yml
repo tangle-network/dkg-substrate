@@ -37,6 +37,16 @@ jobs:
       - name: Checkout Sources
         uses: actions/checkout@v2
 
+      - name: Restore Cache
+        if: always()
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-tests
+
       - name: Install Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -51,4 +61,16 @@ jobs:
         run: sudo apt-get install protobuf-compiler
 
       - name: Run tests
+        env:
+          CARGO_INCREMENTAL: 1
         run: cargo nextest run
+
+      - name: Save Cache
+        if: always()
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-tests
