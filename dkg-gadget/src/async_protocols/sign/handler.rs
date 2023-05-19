@@ -20,7 +20,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
 
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 use tokio::sync::broadcast::Receiver;
 
 use crate::async_protocols::{
@@ -227,14 +227,13 @@ where
 				session_id: params.session_id,
 			};
 
-			params.logger.checkpoint_raw(
-				AsyncProtocolType::Signing,
-				unsigned_dkg_message.payload.payload_message(),
-				"CP0",
-				true,
-			);
-
-			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
+			// we have no synchronization mechanism post-offline stage. Sometimes, messages
+			// don't get delivered. Thus, we sent multiple messages, and, wait for a while to let
+			// other nodes "show up"
+			for _ in 0..3 {
+				params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
+				tokio::time::sleep(Duration::from_millis(100)).await;
+			}
 
 			// we only need a threshold count of sigs
 			let number_of_partial_sigs = threshold as usize;
@@ -243,6 +242,8 @@ where
 			params.logger.info_signing(format!(
 				"Must obtain {number_of_partial_sigs} partial sigs to continue ..."
 			));
+
+			let mut received_sigs = HashSet::new();
 
 			while let Some(msg) = incoming_wrapper.next().await {
 				params.logger.checkpoint_raw(
@@ -254,11 +255,22 @@ where
 				if let DKGMsgPayload::Vote(ref dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
+						if !received_sigs.insert(msg.sender) {
+							params.logger.info_signing(format!(
+								"Received duplicate partial sig from {}",
+								msg.sender
+							));
+							continue
+						}
 						params.logger.info_signing("Found matching round key!".to_string());
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)
 						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						params.logger.debug(format!(
+							"[Sig] Received from {} sig {:?}",
+							dkg_vote_msg.party_ind, partial
+						));
 						sigs.push(partial);
 						params
 							.logger
@@ -277,7 +289,7 @@ where
 
 			params
 				.logger
-				.error_signing(format!("RD0 on {offline_i} for {hash_of_proposal:?}"));
+				.info_signing(format!("RD0 on {offline_i} for {hash_of_proposal:?}"));
 
 			if sigs.len() != number_of_partial_sigs {
 				params.logger.error_signing(format!(

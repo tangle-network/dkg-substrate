@@ -227,13 +227,10 @@ impl DebugLogger {
 	fn get_files(base_output: Option<std::path::PathBuf>) -> std::io::Result<DebugFiles> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
-			let events_file =
-				std::fs::File::create(format!("{}.keygen.events", file_path.display()))?;
+			let events_file = std::fs::File::create(format!("{}.keygen.log", file_path.display()))?;
 			let events_file_signing =
-				std::fs::File::create(format!("{}.signing.events", file_path.display()))?;
-			let events_file_voting =
-				std::fs::File::create(format!("{}.voting.events", file_path.display()))?;
-			Ok((Some(file), Some(events_file), Some(events_file_signing), Some(events_file_voting)))
+				std::fs::File::create(format!("{}.signing.log", file_path.display()))?;
+			Ok((Some(file), Some(events_file), Some(events_file_signing)))
 		} else {
 			Ok((None, None, None, None))
 		}

@@ -46,7 +46,7 @@ impl InMemoryGossipEngine {
 		}
 	}
 
-	/*
+	#[allow(dead_code)]
 	fn public_to_peer_id(&self, public: AuthorityId) -> Option<PeerId> {
 		let mapping = self.mapping.lock();
 		for (peer_id, public_key) in mapping.iter() {

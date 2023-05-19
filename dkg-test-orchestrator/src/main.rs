@@ -51,11 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// in other words, the each block gets 1 test case
 	let mut n_blocks =
 		config.positive_cases + config.error_cases.as_ref().map(|r| r.len()).unwrap_or(0);
-
-	if config.unsigned_proposals_per_session.is_some() {
-		n_blocks *= 2; // 2 test rounds per test case
-	}
-
+	n_blocks *= 2; // 2 test rounds per test case
 	let bind_addr = config.bind.clone();
 
 	// the gossip engine and the dummy api share a state between ALL clients in this process
