@@ -4,9 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches:
-      - "**" # matches every branch
-
   workflow_dispatch:
 
 env:
