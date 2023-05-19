@@ -43,7 +43,7 @@ jobs:
         with:
           path: |
             /tmp/.buildx-cache
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-images
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker
 
       - name: Build and push
         id: docker_build
@@ -62,4 +62,4 @@ jobs:
         with:
           path: |
             /tmp/.buildx-cache
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-images
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker
