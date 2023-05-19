@@ -281,7 +281,7 @@ where
 
 			params
 				.logger
-				.error_signing(format!("RD0 on {offline_i} for {hash_of_proposal:?}"));
+				.info_signing(format!("RD0 on {offline_i} for {hash_of_proposal:?}"));
 
 			if sigs.len() != number_of_partial_sigs {
 				params.logger.error_signing(format!(

@@ -25,11 +25,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Configure sccache
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
+      - name: Restore Cache
+        if: always()
+        uses: actions/cache/restore@v3
         with:
-          # This will help speed up builds in a pipeline
-          cache-on-failure: "true"
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-e2e
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -62,10 +74,22 @@ jobs:
         run: dvc pull
 
       - name: Build Standalone Node for E2E Tests (Release)
+        env:
+          CARGO_INCREMENTAL: 1
         run: cargo build --release -p dkg-standalone-node --features integration-tests
 
       - name: Run E2E Tests
         run: cd dkg-test-suite && yarn test:e2e
+
+      - name: Save Cache
+        if: always()
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-e2e
 
   integration-tests:
     name: integration-tests
@@ -79,11 +103,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Configure sccache
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
+      - name: Restore Cache
+        if: always()
+        uses: actions/cache/restore@v3
         with:
-          # This will help speed up builds in a pipeline
-          cache-on-failure: "true"
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-integration-tests
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -116,7 +152,19 @@ jobs:
         run: dvc pull
 
       - name: Build Standalone Node for Integration Tests (Release)
+        env:
+          CARGO_INCREMENTAL: 1
         run: cargo build --release -p dkg-standalone-node
 
       - name: Run Proposals E2E Tests
         run: cd dkg-test-suite && yarn test:proposals
+
+      - name: Save Cache
+        if: always()
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-integration-tests
