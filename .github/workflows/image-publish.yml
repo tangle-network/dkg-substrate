@@ -9,7 +9,6 @@ on:
     tags:
       - v*
   pull_request:
-    branches: [ master ]
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
