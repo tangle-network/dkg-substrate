@@ -43,7 +43,7 @@ jobs:
         with:
           path: |
             /tmp/.buildx-cache
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker-image
 
       - name: Build and push
         id: docker_build
@@ -57,9 +57,9 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Save Cache
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/cache/save@v3
         with:
           path: |
             /tmp/.buildx-cache
-          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-docker-image

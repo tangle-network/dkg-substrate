@@ -82,7 +82,7 @@ jobs:
         run: cd dkg-test-suite && yarn test:e2e
 
       - name: Save Cache
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/cache/save@v3
         with:
           path: |
@@ -160,7 +160,7 @@ jobs:
         run: cd dkg-test-suite && yarn test:proposals
 
       - name: Save Cache
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/cache/save@v3
         with:
           path: |
