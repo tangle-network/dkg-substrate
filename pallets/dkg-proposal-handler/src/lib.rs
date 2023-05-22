@@ -298,6 +298,8 @@ pub mod pallet {
 		ProposalsLengthOverflow,
 		/// Proposal out of bounds
 		ProposalOutOfBounds,
+		/// Duplicate signed proposal
+		CannotOverwriteSignedProposal,
 	}
 
 	#[pallet::hooks]
@@ -703,6 +705,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		log::debug!(
 			target: "runtime::dkg_proposal_handler",
 			"submit_signed_proposal: signature is valid"
+		);
+		// ensure we are not overwriting an existing signed proposal
+		ensure!(
+			SignedProposals::<T>::get(id.typed_chain_id, id.key).is_none(),
+			Error::<T>::CannotOverwriteSignedProposal
 		);
 		// Update storage
 		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());

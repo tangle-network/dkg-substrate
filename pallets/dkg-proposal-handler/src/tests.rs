@@ -14,10 +14,10 @@
 //
 #![allow(clippy::unwrap_used)]
 use crate as pallet_dkg_proposal_handler;
-use crate::{mock::*, UnsignedProposalQueue};
+use crate::{mock::*, Error, UnsignedProposalQueue};
 use codec::Encode;
 use frame_support::{
-	assert_err, assert_ok,
+	assert_err, assert_noop, assert_ok,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 };
@@ -380,28 +380,12 @@ fn submit_signed_proposal_already_exists() {
 			true
 		);
 
-		assert_ok!(DKGProposalHandler::submit_signed_proposals(
-			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
-			vec![signed_proposal]
-		));
-
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_none(),
-			"{}",
-			true
-		);
-		assert!(
-			DKGProposalHandler::signed_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
+		assert_noop!(
+			DKGProposalHandler::submit_signed_proposals(
+				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
+				vec![signed_proposal]
+			),
+			Error::<Test>::CannotOverwriteSignedProposal
 		);
 	});
 }
