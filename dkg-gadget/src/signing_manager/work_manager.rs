@@ -7,7 +7,7 @@ use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
 };
 use parking_lot::RwLock;
-use sp_api::{BlockT};
+use sp_api::BlockT;
 use std::{
 	collections::{HashSet, VecDeque},
 	hash::{Hash, Hasher},
@@ -156,7 +156,7 @@ impl<B: BlockT> WorkManager<B> {
 			self.logger.info_signing(format!(
 				"[worker] Stall detected, not starting new proposal, will wait for next polling",
 			));
-			return;
+			return
 		}
 
 		// now, check to see if there is room to start a new task
