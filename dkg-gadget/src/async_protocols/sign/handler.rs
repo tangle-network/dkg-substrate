@@ -79,6 +79,10 @@ where
 				params.logger.debug_signing("Received unsigned proposal");
 
 				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
+					params.logger.info_signing(format!(
+						"Party Index converted to offline stage Index : {:?}",
+						params.party_i
+					));
 					params.logger.info_signing(format!("Offline stage index: {offline_i}"));
 
 					GenericAsyncHandler::new_offline(

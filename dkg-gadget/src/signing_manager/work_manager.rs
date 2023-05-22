@@ -7,7 +7,7 @@ use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
 };
 use parking_lot::RwLock;
-use sp_api::BlockT;
+use sp_api::{BlockT};
 use std::{
 	collections::{HashSet, VecDeque},
 	hash::{Hash, Hasher},
@@ -118,6 +118,7 @@ impl<B: BlockT> WorkManager<B> {
 		let now = self.clock.get_latest_block_number();
 		let mut lock = self.inner.write();
 		let cur_count = lock.currently_signing_proposals.len();
+		let mut did_stall = false;
 		lock.currently_signing_proposals.retain(|job| {
 			let is_stalled = job.handle.signing_has_stalled(now);
 			if is_stalled {
@@ -127,6 +128,8 @@ impl<B: BlockT> WorkManager<B> {
 				));
 				// the task is stalled, lets be pedantic and shutdown
 				let _ = job.handle.shutdown("Stalled!");
+				did_stall = true;
+				// setup the last stall as this block
 				// return false so that the proposals are released from the currently signing
 				// proposals
 				return false
@@ -146,6 +149,14 @@ impl<B: BlockT> WorkManager<B> {
 		if cur_count != new_count {
 			self.logger
 				.info_signing(format!("[worker] {} jobs dropped", cur_count - new_count));
+		}
+
+		// if we just detected a stall, let's give a cool-off time
+		if did_stall {
+			self.logger.info_signing(format!(
+				"[worker] Stall detected, not starting new proposal, will wait for next polling",
+			));
+			return;
 		}
 
 		// now, check to see if there is room to start a new task
