@@ -75,7 +75,7 @@ jobs:
         run: cargo run --package dkg-test-orchestrator --features=debug-tracing -- --tmp ./tmp --clean --threshold 3 --n 5 --bind 127.0.0.1:7777 --n-tests 10 -p 2
 
       - name: Save Cache
-        if: $ {{ !cancelled() }}
+        if: ${{ !cancelled() }}
         uses: actions/cache/save@v3
         with:
           path: |
