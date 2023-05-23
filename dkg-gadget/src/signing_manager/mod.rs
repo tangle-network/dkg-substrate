@@ -151,7 +151,7 @@ where
 
 		for unsigned_proposal in unsigned_proposals {
 			/*
-			   create a seed s where s is keccak256(pk, fN=at, unsingedProposal)
+			   create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
 			   you take this seed and use it as a seed to random number generator.
 			   generate a t+1 signing set from this RNG
 			   if we are in this set, we send it to the signing manager, and continue.
