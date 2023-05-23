@@ -12,12 +12,14 @@ pub struct DebugLogger {
 	file_handle: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
+	events_file_handle_voting: Arc<RwLock<Option<std::fs::File>>>,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum AsyncProtocolType {
 	Keygen,
-	Signing,
+	Signing { hash: [u8; 32] },
+	Voting { hash: [u8; 32] },
 }
 
 #[derive(Debug)]
@@ -63,6 +65,16 @@ impl RoundsEventType {
 	}
 }
 
+impl AsyncProtocolType {
+	fn hash(&self) -> Option<&[u8; 32]> {
+		match self {
+			AsyncProtocolType::Keygen => None,
+			AsyncProtocolType::Signing { hash } => Some(hash),
+			AsyncProtocolType::Voting { hash } => Some(hash),
+		}
+	}
+}
+
 fn get_legible_name(idx: Option<u16>) -> String {
 	if let Some(party_i) = idx {
 		let party_i = party_i as usize;
@@ -83,23 +95,26 @@ fn get_legible_name(idx: Option<u16>) -> String {
 impl Debug for RoundsEvent {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let me = &self.name;
+		let hash_opt = self.proto.hash().map(hex::encode);
+		let hash_str =
+			hash_opt.map(|hash| format!(" unsigned proposal {hash}")).unwrap_or_default();
 		match &self.event {
 			RoundsEventType::SentMessage { session, round, receiver, .. } => {
 				let receiver = get_legible_name(*receiver);
-				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}")
+				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}{hash_str}")
 			},
 			RoundsEventType::ReceivedMessage { session, round, sender, receiver } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}")
+				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
 			},
 			RoundsEventType::ProcessedMessage { session, round, sender, receiver } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}")
+				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
 			},
 			RoundsEventType::ProceededToRound { session, round } => {
-				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {round} for session {session} ~~~~~~~~~~~~~~~~~")
+				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {round} for session {session} {hash_str} ~~~~~~~~~~~~~~~~~")
 			},
 			RoundsEventType::PartyIndexChanged { previous, new } => {
 				writeln!(f, "!!!! Party index changed from {previous} to {new} !!!!")
@@ -107,6 +122,9 @@ impl Debug for RoundsEvent {
 		}
 	}
 }
+
+type EventFiles =
+	(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>);
 
 impl DebugLogger {
 	pub fn new<T: ToString>(
@@ -116,7 +134,8 @@ impl DebugLogger {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
 
-		let (file, events_file_keygen, events_file_signing) = Self::get_files(file)?;
+		let (file, events_file_keygen, events_file_signing, events_file_voting) =
+			Self::get_files(file)?;
 
 		let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let file_handle = Arc::new(RwLock::new(file));
@@ -127,6 +146,9 @@ impl DebugLogger {
 
 		let events_file_handle_signing = Arc::new(RwLock::new(events_file_signing));
 		let events_fh_task_signing = events_file_handle_signing.clone();
+
+		let events_file_handle_voting = Arc::new(RwLock::new(events_file_voting));
+		let events_fh_task_voting = events_file_handle_voting.clone();
 
 		if tokio::runtime::Handle::try_current().is_ok() {
 			tokio::task::spawn(async move {
@@ -142,8 +164,13 @@ impl DebugLogger {
 									writeln!(file, "{event:?}").unwrap();
 								}
 							},
-							AsyncProtocolType::Signing => {
+							AsyncProtocolType::Signing { .. } => {
 								if let Some(file) = events_fh_task_signing.write().as_mut() {
+									writeln!(file, "{event:?}").unwrap();
+								}
+							},
+							AsyncProtocolType::Voting { .. } => {
+								if let Some(file) = events_fh_task_voting.write().as_mut() {
 									writeln!(file, "{event:?}").unwrap();
 								}
 							},
@@ -159,20 +186,21 @@ impl DebugLogger {
 			file_handle,
 			events_file_handle_keygen: events_file_handle,
 			events_file_handle_signing,
+			events_file_handle_voting,
 		})
 	}
 
-	fn get_files(
-		base_output: Option<std::path::PathBuf>,
-	) -> std::io::Result<(Option<std::fs::File>, Option<std::fs::File>, Option<std::fs::File>)> {
+	fn get_files(base_output: Option<std::path::PathBuf>) -> std::io::Result<EventFiles> {
 		if let Some(file_path) = &base_output {
 			let file = std::fs::File::create(file_path)?;
 			let events_file = std::fs::File::create(format!("{}.keygen.log", file_path.display()))?;
 			let events_file_signing =
 				std::fs::File::create(format!("{}.signing.log", file_path.display()))?;
-			Ok((Some(file), Some(events_file), Some(events_file_signing)))
+			let events_file_voting =
+				std::fs::File::create(format!("{}.voting.log", file_path.display()))?;
+			Ok((Some(file), Some(events_file), Some(events_file_signing), Some(events_file_voting)))
 		} else {
-			Ok((None, None, None))
+			Ok((None, None, None, None))
 		}
 	}
 
@@ -186,10 +214,11 @@ impl DebugLogger {
 	}
 
 	pub fn set_output(&self, file: Option<std::path::PathBuf>) -> std::io::Result<()> {
-		let (file, event_file, signing_file) = Self::get_files(file)?;
+		let (file, event_file, signing_file, voting_file) = Self::get_files(file)?;
 		*self.file_handle.write() = file;
 		*self.events_file_handle_keygen.write() = event_file;
 		*self.events_file_handle_signing.write() = signing_file;
+		*self.events_file_handle_voting.write() = voting_file;
 		Ok(())
 	}
 
@@ -306,10 +335,12 @@ impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ Pro
 	for AsyncProtocolType
 {
 	fn from(value: &ProtocolType<T>) -> Self {
-		if matches!(value, ProtocolType::Keygen { .. }) {
-			AsyncProtocolType::Keygen
-		} else {
-			AsyncProtocolType::Signing
+		match value {
+			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
+			ProtocolType::Offline { unsigned_proposal, .. } =>
+				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+			ProtocolType::Voting { unsigned_proposal, .. } =>
+				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
 		}
 	}
 }

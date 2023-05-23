@@ -153,9 +153,9 @@ impl<B: BlockT> WorkManager<B> {
 
 		// if we just detected a stall, let's give a cool-off time
 		if did_stall {
-			self.logger.info_signing(format!(
+			self.logger.info_signing(
 				"[worker] Stall detected, not starting new proposal, will wait for next polling",
-			));
+			);
 			return
 		}
 
