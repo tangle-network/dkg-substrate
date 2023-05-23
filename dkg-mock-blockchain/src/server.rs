@@ -74,7 +74,7 @@ struct ConnectedClientState {
 	// a map from tracing id => test case. Once the test case passes
 	// for the specific client, the test case will be removed from the list
 	outstanding_tasks_keygen: HashMap<Uuid, crate::TestCase>,
-	outstanding_tasks_signing: HashMap<Uuid, crate::TestCase>,
+	outstanding_tasks_signing: HashMap<Uuid, Vec<crate::TestCase>>,
 	orchestrator_to_client_subtask: mpsc::UnboundedSender<OrchestratorToClientEvent>,
 }
 
@@ -236,7 +236,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 					}
 
 					if !client.outstanding_tasks_signing.is_empty() {
-						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding SIGNING task(s)", tasks = client.outstanding_tasks_signing.len());
+						log::warn!(target: "dkg", "Client {id:?} has {tasks:?} outstanding SIGNING task(s)", tasks = client.outstanding_tasks_signing.values().map(|r| r.len()).sum::<usize>());
 					}
 				}
 			}
@@ -305,12 +305,18 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 									log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed SIGNING test {trace_id:?}. Reason: {err:?}");
 								} else {
 									log::info!(target: "dkg", "Peer {peer_id:?} successfully completed SIGNING test {trace_id:?}");
-									assert!(client
+									let entry = client
 										.outstanding_tasks_signing
-										.remove(trace_id)
-										.is_some());
+										.get_mut(trace_id)
+										.expect("Should exist");
+									assert!(entry.pop().is_some());
+									if entry.is_empty() {
+										// remove from map
+										client.outstanding_tasks_signing.remove(trace_id);
+									}
 								}
 								current_round_completed_count_signing += 1;
+								log::info!(target: "dkg", "RBX {}", current_round_completed_count_signing);
 							}
 						},
 					}
@@ -430,9 +436,6 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			self.orchestrator_set_state(OrchestratorState::AwaitingRoundCompletion);
 			// phase 1: send finality notifications to each client
 			self.send_finality_notification(test_phase).await;
-
-		// increment the round number for next session to be +1
-		// *round_number += 1;
 		} else {
 			log::info!(target: "dkg", "Orchestrator has finished running all tests");
 			self.orchestrator_set_state(OrchestratorState::Complete);
@@ -498,7 +501,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 				},
 				IntraTestPhase::Signing { trace_id, queued_unsigned_proposals, .. } => {
 					if let Some(unsigned_propos) = queued_unsigned_proposals.clone() {
-						client.outstanding_tasks_signing.insert(*trace_id, next_case.clone());
+						for _ in 0..unsigned_propos.len() {
+							client
+								.outstanding_tasks_signing
+								.entry(*trace_id)
+								.or_default()
+								.push(next_case.clone());
+						}
 						self.blockchain.set_unsigned_proposals(unsigned_propos);
 					}
 				},
