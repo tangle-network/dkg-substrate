@@ -26,11 +26,21 @@ mod in_memory_gossip_engine;
 struct Args {
 	#[structopt(short = "c", long = "config")]
 	// path to the configuration for the mock blockchain
-	config_path: PathBuf,
+	config_path: Option<PathBuf>,
 	#[structopt(short = "t", long = "tmp")]
 	tmp_path: PathBuf,
 	#[structopt(long)]
 	clean: bool,
+	#[structopt(long)]
+	threshold: Option<u16>,
+	#[structopt(long)]
+	n: Option<u16>,
+	#[structopt(long)]
+	bind: Option<String>,
+	#[structopt(long)]
+	n_tests: Option<usize>,
+	#[structopt(short = "p")]
+	proposals_per_test: Option<usize>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -43,8 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// before launching the DKGs, make sure to run to setup the logging
 	dkg_logging::setup_simple_log();
 
-	let data = tokio::fs::read_to_string(&args.config_path).await?;
-	let config: MockBlockchainConfig = toml::from_str(&data)?;
+	let config = args_to_config(&args)?;
 	let n_clients = config.n_clients;
 	let t = config.threshold;
 	// set the number of blocks to the sum of the number of positive and negative cases
@@ -171,14 +180,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn validate_args(args: &Args) -> Result<(), String> {
-	let config_path = &args.config_path;
-	let tmp_path = &args.tmp_path;
-	if !config_path.is_file() {
-		return Err(format!("{:?} is not a valid config path", args.config_path))
+	if let Some(config_path) = &args.config_path {
+		if !config_path.is_file() {
+			return Err(format!("{:?} is not a valid config path", args.config_path))
+		}
 	}
+
+	let tmp_path = &args.tmp_path;
 
 	if !tmp_path.is_dir() {
 		return Err(format!("{:?} is not a valid tmp path", args.tmp_path))
+	}
+
+	if args.proposals_per_test.is_some() ||
+		args.n.is_some() ||
+		args.threshold.is_some() ||
+		args.n_tests.is_some() ||
+		args.bind.is_some()
+	{
+		if args.proposals_per_test.is_none() ||
+			args.n.is_none() ||
+			args.threshold.is_none() ||
+			args.n_tests.is_none() ||
+			args.bind.is_none()
+		{
+			return Err("If any of the following arguments are specified, all of them must be specified: proposals-per-test, n, threshold, n-tests, bind".to_string())
+		}
+
+		if args.config_path.is_some() {
+			return Err("Either the config path or a manual set of args must be passed".to_string())
+		}
 	}
 
 	if args.clean {
@@ -189,4 +220,30 @@ fn validate_args(args: &Args) -> Result<(), String> {
 	}
 
 	Ok(())
+}
+
+fn args_to_config(args: &Args) -> Result<MockBlockchainConfig, String> {
+	if let Some(config_path) = &args.config_path {
+		let config = std::fs::read_to_string(config_path)
+			.map_err(|err| format!("Failed to read config file: {err:?}"))?;
+		let config: MockBlockchainConfig = toml::from_str(&config)
+			.map_err(|err| format!("Failed to parse config file: {err:?}"))?;
+		Ok(config)
+	} else {
+		let n = args.n.unwrap() as _;
+		let threshold = args.threshold.unwrap() as _;
+		let n_tests = args.n_tests.unwrap();
+		let proposals_per_test = args.proposals_per_test.unwrap();
+		let bind = args.bind.clone().unwrap();
+		let config = MockBlockchainConfig {
+			threshold,
+			min_simulated_latency: None,
+			positive_cases: n_tests,
+			error_cases: None,
+			bind,
+			n_clients: n,
+			unsigned_proposals_per_session: Some(proposals_per_test),
+		};
+		Ok(config)
+	}
 }

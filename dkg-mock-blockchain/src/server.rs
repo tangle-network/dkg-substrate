@@ -342,7 +342,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 							let current_round_unsigned_proposals_needed =
 								intra_test_phase.unsigned_proposals_count();
 							current_round_completed_count_signing ==
-								self.config.n_clients * current_round_unsigned_proposals_needed
+								(self.config.threshold + 1) *
+									current_round_unsigned_proposals_needed
 						} else {
 							// pretend signing is complete to move on to the next session/round
 							true
@@ -352,6 +353,8 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 						current_round_completed_count_keygen = 0; // reset to 0 for next round
 						current_round_completed_count_signing = 0;
 						intra_test_phase.increment_round_number();
+						// clear all signing + keygen tests, since t+1 are needed, not n
+						self.clear_tasks().await;
 						self.orchestrator_begin_next_round(&mut test_cases, intra_test_phase).await
 					}
 				},
@@ -361,6 +364,12 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		}
 
 		Err(generic_error("client_to_orchestrator_tx's all dropped"))
+	}
+
+	async fn clear_tasks(&self) {
+		let mut clients = self.clients.write().await;
+		clients.values_mut().for_each(|client| client.outstanding_tasks_signing.clear());
+		clients.values_mut().for_each(|client| client.outstanding_tasks_keygen.clear());
 	}
 
 	fn generate_test_cases(&self) -> VecDeque<TestCase> {
@@ -521,6 +530,8 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 	let header = sp_runtime::generic::Header::<u64, _>::new_from_number(block_number);
 	let mut slice = [0u8; 32];
 	slice[..8].copy_from_slice(&block_number.to_be_bytes());
+	// add random uuid to ensure uniqueness
+	slice[8..24].copy_from_slice(&Uuid::new_v4().to_u128_le().to_be_bytes());
 
 	let hash = sp_runtime::testing::H256::from(slice);
 	let summary = FinalizeSummary { header, finalized: vec![hash], stale_heads: vec![] };
