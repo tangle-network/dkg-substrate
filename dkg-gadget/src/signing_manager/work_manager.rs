@@ -19,6 +19,9 @@ use sync_wrapper::SyncWrapper;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
+// How many block to cooldown after a stall
+const BLOCKS_TO_WAIT_AFTER_STALL: u32 = 2;
+
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
 	inner: Arc<RwLock<WorkManagerInner<B>>>,
@@ -27,6 +30,7 @@ pub struct WorkManager<B: BlockT> {
 	max_tasks: usize,
 	logger: DebugLogger,
 	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
+	last_stall: Option<<<B as BlockT>::Header as sp_api::HeaderT>::Number>,
 }
 
 pub struct WorkManagerInner<B: BlockT> {
@@ -46,11 +50,12 @@ impl<B: BlockT> WorkManager<B> {
 			max_tasks,
 			logger,
 			to_handler,
+			last_stall: None,
 		};
 
-		let this_worker = this.clone();
+		let mut this_worker = this.clone();
 		let handler = async move {
-			let job_receiver_worker = this_worker.clone();
+			let mut job_receiver_worker = this_worker.clone();
 			let logger = job_receiver_worker.logger.clone();
 
 			let job_receiver = async move {
@@ -112,13 +117,12 @@ impl<B: BlockT> WorkManager<B> {
 			})
 	}
 
-	fn poll(&self) {
+	fn poll(&mut self) {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let now = self.clock.get_latest_block_number();
 		let mut lock = self.inner.write();
 		let cur_count = lock.currently_signing_proposals.len();
-		let mut did_stall = false;
 		lock.currently_signing_proposals.retain(|job| {
 			let is_stalled = job.handle.signing_has_stalled(now);
 			if is_stalled {
@@ -128,7 +132,8 @@ impl<B: BlockT> WorkManager<B> {
 				));
 				// the task is stalled, lets be pedantic and shutdown
 				let _ = job.handle.shutdown("Stalled!");
-				did_stall = true;
+				// update the last stall block
+				self.last_stall = Some(now);
 				// setup the last stall as this block
 				// return false so that the proposals are released from the currently signing
 				// proposals
@@ -152,11 +157,17 @@ impl<B: BlockT> WorkManager<B> {
 		}
 
 		// if we just detected a stall, let's give a cool-off time
-		if did_stall {
-			self.logger.info_signing(
-				"[worker] Stall detected, not starting new proposal, will wait for next polling",
-			);
-			return
+		if let Some(last_stall) = self.last_stall {
+			if (now - last_stall) > BLOCKS_TO_WAIT_AFTER_STALL.into() {
+				self.logger.info_signing(
+					"[worker] Stall backoff time completed, clearing the last stall block",
+				);
+				self.last_stall = None;
+			} else {
+				self.logger
+					.info_signing("[worker] We are in cooldown mode after a stall, skip execution");
+				return
+			}
 		}
 
 		// now, check to see if there is room to start a new task
