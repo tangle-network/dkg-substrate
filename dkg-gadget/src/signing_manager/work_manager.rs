@@ -53,9 +53,9 @@ impl<B: BlockT> WorkManager<B> {
 			last_stall: Arc::new(RwLock::new(None)),
 		};
 
-		let mut this_worker = this.clone();
+		let this_worker = this.clone();
 		let handler = async move {
-			let mut job_receiver_worker = this_worker.clone();
+			let job_receiver_worker = this_worker.clone();
 			let logger = job_receiver_worker.logger.clone();
 
 			let job_receiver = async move {
@@ -117,7 +117,7 @@ impl<B: BlockT> WorkManager<B> {
 			})
 	}
 
-	fn poll(&mut self) {
+	fn poll(&self) {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let now = self.clock.get_latest_block_number();
