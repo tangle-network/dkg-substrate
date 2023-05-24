@@ -30,7 +30,7 @@ pub struct WorkManager<B: BlockT> {
 	max_tasks: usize,
 	logger: DebugLogger,
 	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
-	last_stall: Option<<<B as BlockT>::Header as sp_api::HeaderT>::Number>,
+	last_stall: Arc<RwLock<Option<<<B as BlockT>::Header as sp_api::HeaderT>::Number>>>,
 }
 
 pub struct WorkManagerInner<B: BlockT> {
@@ -50,7 +50,7 @@ impl<B: BlockT> WorkManager<B> {
 			max_tasks,
 			logger,
 			to_handler,
-			last_stall: None,
+			last_stall: Arc::new(RwLock::new(None)),
 		};
 
 		let mut this_worker = this.clone();
@@ -133,7 +133,7 @@ impl<B: BlockT> WorkManager<B> {
 				// the task is stalled, lets be pedantic and shutdown
 				let _ = job.handle.shutdown("Stalled!");
 				// update the last stall block
-				self.last_stall = Some(now);
+				*self.last_stall.write() = Some(now);
 				// setup the last stall as this block
 				// return false so that the proposals are released from the currently signing
 				// proposals
@@ -157,16 +157,20 @@ impl<B: BlockT> WorkManager<B> {
 		}
 
 		// if we just detected a stall, let's give a cool-off time
-		if let Some(last_stall) = self.last_stall {
-			if (now - last_stall) > BLOCKS_TO_WAIT_AFTER_STALL.into() {
-				self.logger.info_signing(
-					"[worker] Stall backoff time completed, clearing the last stall block",
-				);
-				self.last_stall = None;
-			} else {
-				self.logger
-					.info_signing("[worker] We are in cooldown mode after a stall, skip execution");
-				return
+		{
+			let mut last_stall_lock = self.last_stall.write();
+			if let Some(last_stall) = &mut *last_stall_lock {
+				if (now - *last_stall) > BLOCKS_TO_WAIT_AFTER_STALL.into() {
+					self.logger.info_signing(
+						"[worker] Stall backoff time completed, clearing the last stall block",
+					);
+					*last_stall_lock = None;
+				} else {
+					self.logger.info_signing(
+						"[worker] We are in cooldown mode after a stall, skip execution",
+					);
+					return
+				}
 			}
 		}
 

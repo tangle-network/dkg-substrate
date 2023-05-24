@@ -416,6 +416,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 							// ensure a unique unsigned proposal per session per proposal
 							let mut bytes = round_number.to_be_bytes().to_vec();
 							bytes.extend_from_slice(&idx.to_be_bytes());
+							bytes.extend_from_slice(Uuid::new_v4().as_ref());
 							let hash = sha2_256(&bytes);
 							UnsignedProposal::testing_dummy(hash.to_vec())
 						})
