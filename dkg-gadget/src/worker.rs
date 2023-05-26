@@ -39,6 +39,7 @@ use std::{
 		atomic::{AtomicUsize, Ordering},
 		Arc,
 	},
+	time::Duration,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -372,8 +373,6 @@ where
 		// Set the status handle as primary, implying that once it drops, it will stop the async
 		// protocol
 		status_handle.set_as_primary();
-		// Start the respective protocol
-		status_handle.start()?;
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
@@ -453,10 +452,19 @@ where
 					// so we can safely assume that we are in the queued state.
 					DKGMsgStatus::QUEUED
 				};
+				let start_handle = async_proto_params.handle.clone();
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let task = async move {
+							tokio::time::sleep(Duration::from_millis(500)).await;
+							if let Err(err) = start_handle.start() {
+								logger.error_keygen(format!(
+									"Error starting keygen protocol: {err:?}"
+								));
+								return
+							}
+
 							match meta_handler.await {
 								Ok(_) => {
 									logger.info(

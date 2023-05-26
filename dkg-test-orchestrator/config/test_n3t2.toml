@@ -9,4 +9,4 @@ threshold = 2
 min_simulated_latency = "0ms"
 # The number of positive cases to run
 positive_cases = 10
-unsigned_proposals_per_session = 1
+unsigned_proposals_per_session = 5
