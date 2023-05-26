@@ -87,7 +87,8 @@ pub const KEYGEN_TIMEOUT: u32 = 10;
 pub const OFFLINE_TIMEOUT: u32 = 2;
 
 /// The sign timeout limit in blocks before we consider misbehaviours
-pub const SIGN_TIMEOUT: u32 = 3;
+/// The timeout here is high because we have backoff, which can delay the proposals sign
+pub const SIGN_TIMEOUT: u32 = 10;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
