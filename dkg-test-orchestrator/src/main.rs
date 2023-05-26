@@ -5,12 +5,17 @@
 //! In summary, running this test orchestrator is an "all in one" replacement
 //! for needing to run multiple clients. Each individual DKG node's stdout will be
 //! piped to the temporary directory
-#![allow(clippy::unwrap_used)] // allow unwraps in tests
+#![allow(clippy::unwrap_used)]
+extern crate core;
+
+// allow unwraps in tests
 use crate::in_memory_gossip_engine::InMemoryGossipEngine;
 use dkg_gadget::worker::TestBundle;
 use dkg_mock_blockchain::*;
+use dkg_runtime_primitives::{crypto, KEY_TYPE};
 use futures::TryStreamExt;
 use parking_lot::RwLock;
+use sp_keystore::SyncCryptoStore;
 use std::{path::PathBuf, sync::Arc};
 use structopt::StructOpt;
 
@@ -65,7 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// the gossip engine and the dummy api share a state between ALL clients in this process
 	// we will use the SAME gossip engine for both keygen and signing
-	let gossip_engine = &InMemoryGossipEngine::new();
+	let keygen_gossip_engine = &InMemoryGossipEngine::new();
+	let signing_gossip_engine = &InMemoryGossipEngine::new();
 	let keygen_t = t as u16;
 	let keygen_n = n_clients as u16;
 	let signing_t = t as u16;
@@ -100,25 +106,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 		// pass the dummy api logger initially, with the intent of overwriting it later
 		let logger = dkg_gadget::debug_logger::DebugLogger::new("pre-init", None)?;
-		let key_store: dkg_gadget::keystore::DKGKeystore =
+		let mut key_store: dkg_gadget::keystore::DKGKeystore =
 			dkg_gadget::keystore::DKGKeystore::new_default(logger.clone());
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
-		let keygen_gossip_engine = gossip_engine.clone_for_new_peer(
+
+		let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
+			key_store.as_dyn_crypto_store().unwrap(),
+			KEY_TYPE,
+			Some(&keyring.to_seed()),
+		)
+		.ok()
+		.unwrap()
+		.into();
+		let peer_id = PeerId::random();
+		// output the logs for this specific peer to a file
+		let output = args.tmp_path.join(format!("{peer_id}.log"));
+		let logger = dkg_gadget::debug_logger::DebugLogger::new(peer_id, Some(output))?;
+		let keygen_gossip_engine = keygen_gossip_engine.clone_for_new_peer(
 			api,
 			n_blocks as _,
-			keyring,
-			key_store.as_dyn_crypto_store().unwrap(),
+			peer_id,
+			public_key.clone(),
 			&logger,
 		);
-		let signing_gossip_engine = keygen_gossip_engine.clone();
+		let signing_gossip_engine = signing_gossip_engine.clone_for_new_peer(
+			api,
+			n_blocks as _,
+			peer_id,
+			public_key,
+			&logger,
+		);
 
-		// set the loggers for the gossip engines
-		let (peer_id, _public_key) = keygen_gossip_engine.peer_id();
-		let peer_id = *peer_id;
-		let output = args.tmp_path.join(format!("{peer_id}.log"));
-		// output the logs for this specific peer to a file
-		logger.set_id(peer_id);
-		logger.set_output(Some(output))?;
+		key_store.set_logger(logger.clone());
 
 		let client = Arc::new(
 			crate::client::TestClient::connect(

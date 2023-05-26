@@ -2,11 +2,9 @@
 use crate::async_protocols::ProtocolType;
 use dkg_logging::{debug, error, info, trace, warn};
 use parking_lot::RwLock;
-use sp_core::Get;
-use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 use serde::Serialize;
-use sp_core::bytes::to_hex;
-use sp_core::hashing::sha2_256;
+use sp_core::{bytes::to_hex, hashing::sha2_256, Get};
+use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
@@ -49,12 +47,36 @@ pub struct RoundsEvent {
 	proto: AsyncProtocolType,
 }
 pub enum RoundsEventType {
-	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16>, msg_hash: String },
-	ReceivedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> , msg_hash: String },
-	ProcessedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16>, msg_hash: String },
-	ProceededToRound { session: usize, round: usize },
+	SentMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ReceivedMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ProcessedMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ProceededToRound {
+		session: usize,
+		round: usize,
+	},
 	// this probably shouldn't happen, but just in case, we will emit events if this does occur
-	PartyIndexChanged { previous: usize, new: usize },
+	PartyIndexChanged {
+		previous: usize,
+		new: usize,
+	},
 }
 
 impl RoundsEventType {
@@ -340,7 +362,7 @@ pub fn message_to_string_hash<T: Serialize>(msg: T) -> String {
 	to_hex(&message, false)
 }
 
-pub fn raw_message_to_hash(payload: &Vec<u8>) -> String {
+pub fn raw_message_to_hash(payload: &[u8]) -> String {
 	let message = sha2_256(payload);
 	to_hex(&message, false)
 }

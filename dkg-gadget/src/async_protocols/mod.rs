@@ -624,7 +624,7 @@ where
 						round: unsigned_message.body.round_id() as _,
 						sender: unsigned_message.sender as _,
 						receiver: unsigned_message.receiver as _,
-						msg_hash
+						msg_hash,
 					},
 				);
 			}

@@ -88,7 +88,13 @@ where
 		let msg_hash = crate::debug_logger::message_to_string_hash(&msg);
 		self.logger.round_event(
 			&self.channel_type,
-			crate::RoundsEventType::ReceivedMessage { session, round, sender, receiver, msg_hash: msg_hash.clone() },
+			crate::RoundsEventType::ReceivedMessage {
+				session,
+				round,
+				sender,
+				receiver,
+				msg_hash: msg_hash.clone(),
+			},
 		);
 		let debug_before = format!("{:?}", self.sm);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
@@ -128,7 +134,13 @@ where
 			}
 			self.logger.round_event(
 				&self.channel_type,
-				crate::RoundsEventType::ProcessedMessage { session, round, sender, receiver, msg_hash },
+				crate::RoundsEventType::ProcessedMessage {
+					session,
+					round,
+					sender,
+					receiver,
+					msg_hash,
+				},
 			);
 		}
 
@@ -140,10 +152,8 @@ where
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		// only send current round + previous round messages if we're running the keygen protocol
 		if !self.sm.message_queue().is_empty() &&
-			matches!(
-				self.channel_type,
-				ProtocolType::Offline { .. }
-			) {
+			matches!(self.channel_type, ProtocolType::Offline { .. })
+		{
 			// store outgoing messages in history
 			let mut last_2_rounds = vec![];
 			let current_round = self.current_round();

@@ -116,7 +116,7 @@ impl DKGMsgPayload {
 			DKGMsgPayload::Vote(msg) => &msg.partial_signature,
 			DKGMsgPayload::Keygen(msg) => &msg.keygen_msg,
 			DKGMsgPayload::PublicKeyBroadcast(msg) => &msg.pub_key,
-			DKGMsgPayload::MisbehaviourBroadcast(msg) => &msg.signature
+			DKGMsgPayload::MisbehaviourBroadcast(msg) => &msg.signature,
 		}
 	}
 	pub fn unsigned_proposal_hash(&self) -> Option<&[u8; 32]> {
