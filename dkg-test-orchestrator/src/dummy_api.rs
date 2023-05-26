@@ -650,7 +650,7 @@ impl
 		&self,
 		_hash: H256,
 	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {
-		Ok(self.inner.read().unsigned_proposals.clone())
+		Ok((self.inner.read().unsigned_proposals.clone(), 1u64))
 	}
 
 	fn get_max_extrinsic_delay(
