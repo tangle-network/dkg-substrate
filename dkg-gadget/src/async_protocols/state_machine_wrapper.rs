@@ -150,7 +150,7 @@ where
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-		// only send current round + previous round messages if we're running the keygen protocol
+		// only send current round + previous round messages if we're running the signing protocol
 		if !self.sm.message_queue().is_empty() &&
 			matches!(self.channel_type, ProtocolType::Offline { .. })
 		{
