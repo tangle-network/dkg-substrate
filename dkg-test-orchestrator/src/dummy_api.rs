@@ -649,7 +649,7 @@ impl
 	fn get_unsigned_proposals(
 		&self,
 		_hash: H256,
-	) -> ApiResult<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>> {
+	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 
