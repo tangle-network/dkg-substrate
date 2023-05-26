@@ -182,7 +182,6 @@ impl<C> AsyncProtocolRemote<C> {
 
 	pub fn is_active(&self) -> bool {
 		let status = self.get_status();
-		status != MetaHandlerStatus::Beginning &&
 			status != MetaHandlerStatus::Complete &&
 			status != MetaHandlerStatus::Terminated
 	}

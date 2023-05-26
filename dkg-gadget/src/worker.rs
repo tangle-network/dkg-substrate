@@ -1545,8 +1545,9 @@ where
 		let self_ = self.clone();
 		tokio::spawn(async move {
 			while let Some(msg) = keygen_stream.next().await {
+				let msg_hash = crate::debug_logger::raw_message_to_hash(msg.msg.payload.payload());
 				self_.logger.debug(format!(
-					"Going to handle keygen message for session {}",
+					"Going to handle keygen message for session {} | hash: {msg_hash}",
 					msg.msg.session_id
 				));
 				match self_.process_incoming_dkg_message(msg).await {

@@ -4,6 +4,9 @@ use dkg_logging::{debug, error, info, trace, warn};
 use parking_lot::RwLock;
 use sp_core::Get;
 use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
+use serde::Serialize;
+use sp_core::bytes::to_hex;
+use sp_core::hashing::sha2_256;
 
 #[derive(Clone, Debug)]
 pub struct DebugLogger {
@@ -46,9 +49,9 @@ pub struct RoundsEvent {
 	proto: AsyncProtocolType,
 }
 pub enum RoundsEventType {
-	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
-	ReceivedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
-	ProcessedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
+	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16>, msg_hash: String },
+	ReceivedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> , msg_hash: String },
+	ProcessedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16>, msg_hash: String },
 	ProceededToRound { session: usize, round: usize },
 	// this probably shouldn't happen, but just in case, we will emit events if this does occur
 	PartyIndexChanged { previous: usize, new: usize },
@@ -99,19 +102,19 @@ impl Debug for RoundsEvent {
 		let hash_str =
 			hash_opt.map(|hash| format!(" unsigned proposal {hash}")).unwrap_or_default();
 		match &self.event {
-			RoundsEventType::SentMessage { session, round, receiver, .. } => {
+			RoundsEventType::SentMessage { session, round, receiver, msg_hash, .. } => {
 				let receiver = get_legible_name(*receiver);
-				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}{hash_str} | {msg_hash}")
 			},
-			RoundsEventType::ReceivedMessage { session, round, sender, receiver } => {
+			RoundsEventType::ReceivedMessage { session, round, sender, receiver, msg_hash } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}{hash_str}| {msg_hash}")
 			},
-			RoundsEventType::ProcessedMessage { session, round, sender, receiver } => {
+			RoundsEventType::ProcessedMessage { session, round, sender, receiver, msg_hash } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}{hash_str}| {msg_hash}")
 			},
 			RoundsEventType::ProceededToRound { session, round } => {
 				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {round} for session {session} {hash_str} ~~~~~~~~~~~~~~~~~")
@@ -329,6 +332,17 @@ impl DebugLogger {
 			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
 		}
 	}
+}
+
+pub fn message_to_string_hash<T: Serialize>(msg: T) -> String {
+	let message = serde_json::to_vec(&msg).expect("message_to_string_hash");
+	let message = sha2_256(&message);
+	to_hex(&message, false)
+}
+
+pub fn raw_message_to_hash(payload: &Vec<u8>) -> String {
+	let message = sha2_256(payload);
+	to_hex(&message, false)
 }
 
 impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>

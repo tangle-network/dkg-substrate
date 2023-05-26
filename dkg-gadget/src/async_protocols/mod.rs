@@ -535,20 +535,13 @@ where
 				},
 			};
 
+			let msg_hash = crate::debug_logger::message_to_string_hash(&unsigned_message);
+
 			params.logger.info(format!(
-				"Async proto sent outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
+				"Async proto about to send outbound message in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
 
-			params.logger.round_event(
-				&proto_ty,
-				crate::RoundsEventType::SentMessage {
-					session: params.session_id as _,
-					round: unsigned_message.body.round_id() as _,
-					sender: unsigned_message.sender as _,
-					receiver: unsigned_message.receiver as _,
-				},
-			);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -624,6 +617,16 @@ where
 				params
 					.logger
 					.info(format!("🕸️  Async proto sent outbound message: {:?}", &proto_ty));
+				params.logger.round_event(
+					&proto_ty,
+					crate::RoundsEventType::SentMessage {
+						session: params.session_id as _,
+						round: unsigned_message.body.round_id() as _,
+						sender: unsigned_message.sender as _,
+						receiver: unsigned_message.receiver as _,
+						msg_hash
+					},
+				);
 			}
 
 			// check the status of the async protocol.
