@@ -77,9 +77,6 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-/// Gossip message resending limit for outbound messages
-pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
-
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 

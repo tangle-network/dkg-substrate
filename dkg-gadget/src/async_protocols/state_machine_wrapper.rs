@@ -59,7 +59,7 @@ impl<
 
 	fn collect_round_blame(&self) {
 		let (unreceived_messages, blamed_parties) = self.round_blame();
-		self.logger.debug(format!("Round blame: {blamed_parties:?}"));
+		self.logger.debug(format!("Not received messages from : {blamed_parties:?}"));
 		let _ = self
 			.current_round_blame
 			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
