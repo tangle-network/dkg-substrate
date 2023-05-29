@@ -79,8 +79,6 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
-
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 

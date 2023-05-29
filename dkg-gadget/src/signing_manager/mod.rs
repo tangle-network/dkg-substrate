@@ -20,6 +20,8 @@ use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
 
+pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
+
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -81,7 +83,7 @@ where
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
 		let at = header.hash();
-		let _test_mode = dkg_worker.test_bundle.is_some();
+		let test_mode = dkg_worker.test_bundle.is_some();
 		// Check whether the worker is in the best set or return
 		let party_i = match dkg_worker.get_party_index(header).await {
 			Some(party_index) => {
@@ -107,6 +109,15 @@ where
 				res.sort_by(|a, b| a.1.cmp(&b.1));
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
+					// lets limit the max proposals we sign at one time to prevent overflow
+					// NOTE: for test mode, we want to stress test the system, so we don't limit the
+					// number of proposals
+					if filtered_unsigned_proposals.len() >= MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET &&
+						!test_mode
+					{
+						break
+					}
+
 					if let Some(hash) = proposal.0.hash() {
 						// only submit the job if it isn't already running
 						if !self.work_manager.job_exists(&hash) {
