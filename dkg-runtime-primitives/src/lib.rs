@@ -302,7 +302,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
+		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

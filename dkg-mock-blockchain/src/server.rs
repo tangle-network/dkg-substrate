@@ -554,7 +554,7 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 pub trait MutableBlockchain: Clone + Send + 'static {
 	fn set_unsigned_proposals(
 		&self,
-		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 	);
 	fn set_pub_key(&self, session: u64, key: Vec<u8>);
 }
@@ -570,7 +570,7 @@ enum IntraTestPhase {
 	Signing {
 		trace_id: Uuid,
 		queued_unsigned_proposals:
-			Option<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>>,
+			Option<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>>,
 		round_number: u64,
 		test_case: TestCase,
 	},
@@ -590,10 +590,19 @@ impl IntraTestPhase {
 		if let Self::Keygen { trace_id, queued_unsigned_proposals, round_number, test_case } = self
 		{
 			let queued_unsigned_proposals = queued_unsigned_proposals.take();
+			let mut queued_unsigned_proposals_with_expiry: Vec<(
+				UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>,
+				u64,
+			)> = Default::default();
+			for prop in queued_unsigned_proposals.iter() {
+				for p in prop.iter() {
+					queued_unsigned_proposals_with_expiry.push((p.clone(), 1_u64));
+				}
+			}
 			let test_case = test_case.take().unwrap();
 			*self = Self::Signing {
 				trace_id: *trace_id,
-				queued_unsigned_proposals,
+				queued_unsigned_proposals: Some(queued_unsigned_proposals_with_expiry),
 				round_number: *round_number,
 				test_case,
 			};
