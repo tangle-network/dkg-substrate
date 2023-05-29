@@ -197,3 +197,15 @@ pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }
+
+/// An unsigned proposal represented in pallet storage
+/// We store the creation timestamp to purge expired proposals
+#[derive(
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
+)]
+pub struct SignedProposalBatch<MaxLength: Get<u32>> {
+	/// Proposals data
+	pub proposals: Vec<Proposal<MaxLength>>,
+	/// Creation timestamp
+	pub signature: Vec<u8>,
+}
