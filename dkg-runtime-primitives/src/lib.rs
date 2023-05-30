@@ -120,11 +120,6 @@ pub type MaxResources = CustomU32Getter<32>;
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
 
-#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals<BlockNumber, MaxLength: Get<u32>> {
-	pub proposals: Vec<(Vec<Proposal<MaxLength>>, BlockNumber)>,
-}
-
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
 
 #[derive(Eq, PartialEq, Clone, Encode, Default, Decode, RuntimeDebug, TypeInfo)]
@@ -156,12 +151,6 @@ pub struct AggregatedMisbehaviourReports<
 	pub reporters: BoundedVec<DKGId, MaxReporters>,
 	/// A list of signed reports
 	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxReporters>,
-}
-
-impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
-	fn default() -> Self {
-		Self { proposals: Default::default() }
-	}
 }
 
 pub mod crypto {

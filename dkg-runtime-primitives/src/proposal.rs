@@ -14,7 +14,7 @@
 //
 use frame_support::{
 	pallet_prelude::{ConstU32, Get},
-	RuntimeDebug,
+	RuntimeDebug, BoundedVec
 };
 use sp_std::hash::{Hash, Hasher};
 
@@ -198,14 +198,19 @@ pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
 	pub timestamp: Timestamp,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct OffchainSignedProposalBatches<MaxLength: Get<u32>, MaxProposals : Get<u32>, MaxSignatureLen: Get<u32>>  {
+	pub batches: Vec<SignedProposalBatch<MaxLength, MaxProposals, MaxSignatureLen>>,
+}
+
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(
 	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
 )]
-pub struct SignedProposalBatch<MaxLength: Get<u32>> {
+pub struct SignedProposalBatch<MaxLength: Get<u32>, MaxProposals : Get<u32>, MaxSignatureLen: Get<u32>> {
 	/// Proposals data
-	pub proposals: Vec<Proposal<MaxLength>>,
-	/// Creation timestamp
-	pub signature: Vec<u8>,
+	pub proposals: BoundedVec<Proposal<MaxLength>, MaxProposals>,
+	/// Signature for proposals
+	pub signature: BoundedVec<u8, MaxSignatureLen>,
 }

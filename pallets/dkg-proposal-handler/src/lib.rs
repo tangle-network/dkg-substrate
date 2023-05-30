@@ -108,8 +108,8 @@
 use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce,
-	StoredUnsignedProposal, TypedChainId,
+	DKGPayloadKey, OffchainSignedProposalBatches, ProposalAction, ProposalHandlerTrait,
+	ProposalNonce, SignedProposalBatch, StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
@@ -119,7 +119,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{Saturating, Zero},
+	traits::{AtLeast32BitUnsigned, Saturating, Zero},
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
@@ -152,6 +152,12 @@ pub mod pallet {
 		<T as Config>::MaxProposalLength,
 	>;
 
+	pub type SignedProposalBatchOf<T> = SignedProposalBatch<
+		<T as Config>::MaxProposalLength,
+		<T as Config>::MaxProposalsPerBatch,
+		<T as pallet_dkg_metadata::Config>::MaxSignatureLength,
+	>;
+
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config:
@@ -166,7 +172,14 @@ pub mod pallet {
 		type SignedProposalHandler: OnSignedProposal<DispatchError, Self::MaxProposalLength>;
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
-		type MaxSubmissionsPerBatch: Get<u16>;
+		type MaxProposalsPerBatch: Get<u32>
+			+ Debug
+			+ Clone
+			+ Eq
+			+ PartialEq
+			+ PartialOrd
+			+ Ord
+			+ TypeInfo;
 		/// Max blocks to store an unsigned proposal
 		#[pallet::constant]
 		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
@@ -180,6 +193,15 @@ pub mod pallet {
 			+ PartialOrd
 			+ Ord
 			+ TypeInfo;
+		// The batchId for a signed proposal batch
+		type BatchId: Member
+			+ Parameter
+			+ Default
+			+ Encode
+			+ Decode
+			+ AtLeast32BitUnsigned
+			+ MaxEncodedLen
+			+ Copy;
 
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
@@ -222,17 +244,17 @@ pub mod pallet {
 		Blake2_128Concat,
 		TypedChainId,
 		Blake2_128Concat,
-		DKGPayloadKey,
-		Proposal<T::MaxProposalLength>,
+		T::BatchId,
+		SignedProposalBatchOf<T>,
 	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// RuntimeEvent Emitted when we encounter a Proposal with invalid Signature.
-		InvalidProposalSignature {
-			/// The Type of the Proposal.
-			kind: ProposalKind,
+		InvalidProposalBatchSignature {
+			/// The list of proposals
+			proposals: SignedProposalBatchOf<T>,
 			/// Proposal Payload.
 			data: Vec<u8>,
 			/// The Invalid Signature.
@@ -366,10 +388,10 @@ pub mod pallet {
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
 			_origin: OriginFor<T>,
-			props: Vec<Proposal<T::MaxProposalLength>>,
+			props: Vec<SignedProposalBatchOf<T>>,
 		) -> DispatchResultWithPostInfo {
 			ensure!(
-				props.len() <= T::MaxSubmissionsPerBatch::get() as usize,
+				props.len() <= T::MaxProposalsPerBatch::get() as usize,
 				Error::<T>::ProposalsLengthOverflow
 			);
 
@@ -380,53 +402,55 @@ pub mod pallet {
 				&props,
 			);
 
-			for prop in &props {
-				if let Proposal::Signed { kind, ref data, ref signature, .. } = prop {
-					let result =
-						ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(signature, data);
-					match result {
-						Ok(_) => {
-							// Do nothing, it is all good.
-						},
-						Err(e) => {
-							// this is a bad signature.
-							// we emit it as an RuntimeEvent.
-							Self::deposit_event(Event::InvalidProposalSignature {
-								kind: *kind,
-								data: data.clone().into(),
-								expected_public_key: e.expected_public_key(),
-								actual_public_key: e.actual_public_key(),
-								invalid_signature: signature.clone().into(),
-							});
-							log::error!(
-								target: "runtime::dkg_proposal_handler",
-								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?} | ERR: {}",
-								kind,
-								data,
-								signature,
-								e.ty()
-							);
-							// skip it.
-							continue
-						},
-					}
+			for prop_batch in &props {
+				// generate the data by concat the proposal data
+				let data = Self::generate_data_to_sign_from_proposal_batch(prop_batch.clone());
 
-					// now we need to log the data and signature
-					log::debug!(
-						target: "runtime::dkg_proposal_handler",
-						"submit_signed_proposal: data: {:?}, signature: {:?}",
-						data,
-						signature
-					);
-
-					let prop = prop.clone();
-
-					Self::handle_signed_proposal(prop)?;
-
-					continue
+				// check the signature is valid
+				let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
+					&prop_batch.signature,
+					&data,
+				);
+				match result {
+					Ok(_) => {
+						// Do nothing, it is all good.
+					},
+					Err(e) => {
+						// this is a bad signature.
+						// we emit it as an RuntimeEvent.
+						Self::deposit_event(Event::InvalidProposalBatchSignature {
+							proposals: prop_batch.clone(),
+							data: data.clone().into(),
+							expected_public_key: e.expected_public_key(),
+							actual_public_key: e.actual_public_key(),
+							invalid_signature: prop_batch.signature.clone().into(),
+						});
+						log::error!(
+							target: "runtime::dkg_proposal_handler",
+							"Invalid proposal signature with data: {:?}, sig: {:?} | ERR: {}",
+							data,
+							prop_batch.signature,
+							e.ty()
+						);
+						// skip it.
+						continue
+					},
 				}
 
-				return Err(Error::<T>::ProposalSignatureInvalid.into())
+				// now we need to log the data and signature
+				log::debug!(
+					target: "runtime::dkg_proposal_handler",
+					"submit_signed_proposal: data: {:?}, signature: {:?}",
+					data,
+					prop_batch.signature
+				);
+
+				// lets mark each proposal as signed
+				for proposal in prop_batch.proposals.iter() {
+					Self::handle_signed_proposal(proposal.clone())?;
+				}
+
+				continue
 			}
 
 			// now increment the block number at which we expect next unsigned transaction.
@@ -715,13 +739,17 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			target: "runtime::dkg_proposal_handler",
 			"submit_signed_proposal: signature is valid"
 		);
-		// ensure we are not overwriting an existing signed proposal
-		ensure!(
-			SignedProposals::<T>::get(id.typed_chain_id, id.key).is_none(),
-			Error::<T>::CannotOverwriteSignedProposal
-		);
+
+		// ---------------------- TODO --------------------------
+		// // ensure we are not overwriting an existing signed proposal
+		// ensure!(
+		// 	SignedProposals::<T>::get(id.typed_chain_id, id.key).is_none(),
+		// 	Error::<T>::CannotOverwriteSignedProposal
+		// );
+
 		// Update storage
-		SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
+		//SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
+
 		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
 		// Emit RuntimeEvent so frontend can react to it.
 		Self::deposit_event(Event::<T>::ProposalSigned {
@@ -753,15 +781,17 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Checks whether a signed proposal exists in the `SignedProposals` storage
-	pub fn is_not_existing_proposal(prop: &Proposal<T::MaxProposalLength>) -> bool {
-		if prop.is_signed() {
-			match decode_proposal_identifier(prop) {
-				Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
-				Err(_) => false,
-			}
-		} else {
-			false
-		}
+	// TODO
+	pub fn is_not_existing_proposal(prop: &SignedProposalBatchOf<T>) -> bool {
+		// if prop.is_signed() {
+		// 	match decode_proposal_identifier(prop) {
+		// 		Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
+		// 		Err(_) => false,
+		// 	}
+		// } else {
+		// 	false
+		// }
+		true
 	}
 
 	/// Returns `StoredUnsignedProposal` from proposal by inserting current BlockNumber
@@ -790,12 +820,24 @@ impl<T: Config> Pallet<T> {
 		current_authorities.get(submitter_index as usize).cloned()
 	}
 
+	fn generate_data_to_sign_from_proposal_batch(
+		proposal_batch: SignedProposalBatchOf<T>,
+	) -> Vec<u8> {
+		// TODO
+		// to generate data, lets just create a vector of proposal data and generate a hash
+		// let mut proposal_data_vec: Vec<Vec<u8>> = Vec::new();
+		// for proposal in proposal_batch.proposals.iter() {
+		// 	proposal_data_vec.push(&proposal.data());
+		// }
+		sp_core::keccak_256(b"test").into()
+	}
+
 	// *** Offchain worker methods ***
 
 	/// Offchain worker function that submits signed proposals from the offchain storage on-chain
 	///
 	/// The function submits batches of signed proposals on-chain in batches of
-	/// `T::MaxSubmissionsPerBatch`. Proposals are stored offchain and target specific block numbers
+	/// `T::MaxProposalsPerBatch`. Proposals are stored offchain and target specific block numbers
 	/// for submission. This function polls all relevant proposals ready for submission at the
 	/// current block number
 	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
@@ -834,11 +876,11 @@ impl<T: Config> Pallet<T> {
 		{
 			let _guard = lock.lock();
 
-			match Self::get_next_offchain_signed_proposal(block_number) {
+			match Self::get_next_offchain_signed_proposals() {
 				Ok(next_proposals) => {
 					log::debug!(
 						target: "runtime::dkg_proposal_handler",
-						"submit_signed_proposal_onchain: found {} proposals to submit before filtering\n {:?}",
+						"submit_signed_proposal_onchain: found {} proposal batches to submit before filtering\n {:?}",
 						next_proposals.len(), next_proposals
 					);
 
@@ -858,10 +900,9 @@ impl<T: Config> Pallet<T> {
 						"submit_signed_proposal_onchain: found {} proposals to submit after filtering\n {:?}",
 						filtered_proposals.len(), filtered_proposals
 					);
-					// We split the vector into chunks of `T::MaxSubmissionsPerBatch` length and
+					// We split the vector into chunks of `T::MaxProposalsPerBatch` length and
 					// submit those chunks
-					for chunk in
-						filtered_proposals.chunks(T::MaxSubmissionsPerBatch::get() as usize)
+					for chunk in filtered_proposals.chunks(T::MaxProposalsPerBatch::get() as usize)
 					{
 						let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
 						let result = signer
@@ -899,61 +940,47 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// Returns the list of signed proposals ready for on-chain submission at the given
-	/// `block_number`
-	fn get_next_offchain_signed_proposal(
-		block_number: T::BlockNumber,
-	) -> Result<Vec<Proposal<T::MaxProposalLength>>, &'static str> {
+	/// Returns the list of signed proposals ready for on-chain submission
+	fn get_next_offchain_signed_proposals() -> Result<
+		Vec<
+			SignedProposalBatch<
+				T::MaxProposalLength,
+				T::MaxProposalsPerBatch,
+				T::MaxSignatureLength,
+			>,
+		>,
+		&'static str,
+	> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut all_proposals = Vec::new();
-		let res = proposals_ref
-			.mutate::<OffchainSignedProposals<T::BlockNumber, T::MaxProposalLength>, _, _>(|res| {
-				match res {
-					Ok(Some(mut prop_wrapper)) => {
-						// log the proposals
-						log::debug!(
-							target: "runtime::dkg_proposal_handler",
-							"Offchain signed proposals: {:?}",
-							prop_wrapper.proposals
-						);
-						// log how many proposal batches are left
-						log::debug!(
-							target: "runtime::dkg_proposal_handler",
-							"Offchain signed proposals left: {}",
-							prop_wrapper.proposals.len()
-						);
-						// We get all batches whose submission delay has been satisfied
-						all_proposals =
-							prop_wrapper
-								.proposals
-								.iter()
-								.filter_map(|(props, submit_at)| {
-									if *submit_at <= block_number {
-										Some(props)
-									} else {
-										None
-									}
-								})
-								.flatten()
-								.cloned()
-								.collect::<Vec<_>>();
-						// then we need to keep only the batches that are not yet submitted
-						prop_wrapper.proposals.retain(|(_, submit_at)| *submit_at > block_number);
-						Ok(prop_wrapper)
-					},
-					Ok(None) => Err("No signed proposals key stored"),
-					Err(e) => {
-						// log the error
-						log::warn!(
-							target: "runtime::dkg_proposal_handler",
-							"Failed to read offchain signed proposals: {:?}",
-							e
-						);
-						Err("Error decoding offchain signed proposals")
-					},
-				}
-			});
+		let res = proposals_ref.mutate::<OffchainSignedProposalBatches<
+			T::MaxProposalLength,
+			T::MaxProposalsPerBatch,
+			T::MaxSignatureLength,
+		>, _, _>(|res| {
+			match res {
+				Ok(Some(mut prop_wrapper)) => {
+					// log the proposals
+					log::debug!(
+						target: "runtime::dkg_proposal_handler",
+						"Offchain signed proposals: {:?}",
+						prop_wrapper
+					);
+					Ok(prop_wrapper)
+				},
+				Ok(None) => Err("No signed proposals key stored"),
+				Err(e) => {
+					// log the error
+					log::warn!(
+						target: "runtime::dkg_proposal_handler",
+						"Failed to read offchain signed proposals: {:?}",
+						e
+					);
+					Err("Error decoding offchain signed proposals")
+				},
+			}
+		});
 
 		if res.is_err() {
 			return Err("Unable to get next proposal batch")
