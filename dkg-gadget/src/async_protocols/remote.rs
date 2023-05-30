@@ -182,20 +182,26 @@ impl<C> AsyncProtocolRemote<C> {
 
 	pub fn is_active(&self) -> bool {
 		let status = self.get_status();
-		status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated
+		status != MetaHandlerStatus::Beginning &&
+			status != MetaHandlerStatus::Complete &&
+			status != MetaHandlerStatus::Terminated
 	}
 
 	pub fn deliver_message(
 		&self,
 		msg: Arc<SignedDKGMessage<Public>>,
 	) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
-		if self.broadcaster.receiver_count() != 0 && self.is_active() {
+		let status = self.get_status();
+		let can_deliver =
+			status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated;
+		if self.broadcaster.receiver_count() != 0 && can_deliver {
 			self.broadcaster.send(msg).map(|_| ())
 		} else {
 			// do not forward the message (TODO: Consider enqueuing messages for rounds not yet
 			// active other nodes may be active, but this node is still in the process of "waking
 			// up"). Thus, by not delivering a message here, we may be preventing this node from
 			// joining.
+			self.logger.warn(format!("Did not deliver message {:?}", msg.msg.payload));
 			Ok(())
 		}
 	}
