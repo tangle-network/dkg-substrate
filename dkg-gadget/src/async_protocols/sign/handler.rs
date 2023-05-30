@@ -152,7 +152,7 @@ where
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
 		};
-		let early_handle = params.handle.broadcaster.subscribe();
+		let early_handle = params.handle.subscribe();
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
 			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),

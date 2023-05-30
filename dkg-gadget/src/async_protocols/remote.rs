@@ -23,7 +23,9 @@ use std::sync::{atomic::Ordering, Arc};
 
 pub struct AsyncProtocolRemote<C> {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
-	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+	broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+	// allows messages to become enqueued before the protocol is started
+	init_handle: ReceiveHandle,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
@@ -37,10 +39,14 @@ pub struct AsyncProtocolRemote<C> {
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
 
+type ReceiveHandle =
+	Arc<Mutex<Option<tokio::sync::broadcast::Receiver<Arc<SignedDKGMessage<Public>>>>>>;
+
 impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 	fn clone(&self) -> Self {
 		Self {
 			status: self.status.clone(),
+			init_handle: self.init_handle.clone(),
 			broadcaster: self.broadcaster.clone(),
 			start_tx: self.start_tx.clone(),
 			start_rx: self.start_rx.clone(),
@@ -71,7 +77,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(at: C, session_id: SessionId, logger: DebugLogger) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
-		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
+		let (broadcaster, init_handle) = tokio::sync::broadcast::channel(4096);
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
 
 		let (current_round_blame_tx, current_round_blame) =
@@ -109,6 +115,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			status,
 			status_history,
 			broadcaster,
+			init_handle: Arc::new(Mutex::new(Some(init_handle))),
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
@@ -185,6 +192,14 @@ impl<C> AsyncProtocolRemote<C> {
 		status != MetaHandlerStatus::Beginning &&
 			status != MetaHandlerStatus::Complete &&
 			status != MetaHandlerStatus::Terminated
+	}
+
+	pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Arc<SignedDKGMessage<Public>>> {
+		if let Some(rx) = self.init_handle.lock().take() {
+			rx
+		} else {
+			self.broadcaster.subscribe()
+		}
 	}
 
 	pub fn deliver_message(

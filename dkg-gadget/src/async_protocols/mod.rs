@@ -655,7 +655,7 @@ where
 {
 	Box::pin(async move {
 		// the below wrapper will map signed messages into unsigned messages
-		let incoming = params.handle.broadcaster.subscribe();
+		let incoming = params.handle.subscribe();
 		let incoming_wrapper =
 			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), params.clone());
 		// we use fuse here, since normally, once a stream has returned `None` from calling
