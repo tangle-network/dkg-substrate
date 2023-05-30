@@ -9,7 +9,7 @@ use dkg_primitives::{
 use parking_lot::RwLock;
 use sp_api::BlockT;
 use std::{
-	collections::{HashSet, VecDeque},
+	collections::{HashMap, HashSet, VecDeque},
 	hash::{Hash, Hasher},
 	pin::Pin,
 	sync::Arc,
@@ -18,7 +18,7 @@ use sync_wrapper::SyncWrapper;
 
 // How often to poll the jobs to check completion status. A longer delay allows
 // for more time to enqueue messages for protocols that have initialized but not started
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 750;
+const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
@@ -32,6 +32,7 @@ pub struct WorkManager<B: BlockT> {
 pub struct WorkManagerInner<B: BlockT> {
 	pub currently_signing_proposals: HashSet<Job<B>>,
 	pub enqueued_signing_proposals: VecDeque<Job<B>>,
+	pub enqueued_messages: HashMap<[u8; 32], VecDeque<Arc<SignedDKGMessage<Public>>>>,
 }
 
 impl<B: BlockT> WorkManager<B> {
@@ -40,6 +41,7 @@ impl<B: BlockT> WorkManager<B> {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
 				currently_signing_proposals: HashSet::new(),
 				enqueued_signing_proposals: VecDeque::new(),
+				enqueued_messages: HashMap::new(),
 			})),
 			clock: Arc::new(clock),
 			max_tasks,
@@ -139,6 +141,25 @@ impl<B: BlockT> WorkManager<B> {
 						"Failed to start job {:?}: {err:?}",
 						job.proposal_hash
 					));
+				} else {
+					// deliver all the enqueued messages to the protocol now
+					if let Some(mut enqueued_messages) =
+						lock.enqueued_messages.remove(&job.proposal_hash)
+					{
+						self.logger.info_signing(format!(
+							"Will now deliver {} enqueued message(s) to the async protocol for {:?}",
+							enqueued_messages.len(),
+							job.proposal_hash
+						));
+						while let Some(message) = enqueued_messages.pop_front() {
+							if let Err(err) = job.handle.deliver_message(message) {
+								self.logger.error_signing(format!(
+									"Unabel to deliver message for job {:?}: {err:?}",
+									job.proposal_hash
+								));
+							}
+						}
+					}
 				}
 				let task = job.task.clone();
 				// Put the job inside here, that way the drop code does not get called right away,
@@ -167,7 +188,7 @@ impl<B: BlockT> WorkManager<B> {
 			"Delivered message is intended for session_id = {}",
 			msg.msg.session_id
 		));
-		let lock = self.inner.read();
+		let mut lock = self.inner.write();
 
 		let msg_unsigned_proposal_hash =
 			msg.msg.payload.unsigned_proposal_hash().expect("Bad message type");
@@ -203,6 +224,15 @@ impl<B: BlockT> WorkManager<B> {
 				return
 			}
 		}
+
+		// if the protocol is neither started nor enqueued, then, this message may be for a future
+		// async protocol. Store the message
+		self.logger
+			.info_signing(format!("Enqueuing message for {msg_unsigned_proposal_hash:?}"));
+		lock.enqueued_messages
+			.entry(*msg_unsigned_proposal_hash)
+			.or_default()
+			.push_back(msg)
 	}
 }
 
