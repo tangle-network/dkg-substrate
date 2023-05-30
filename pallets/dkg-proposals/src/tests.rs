@@ -325,25 +325,25 @@ fn create_successful_proposal() {
 
 		assert_events(vec![
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_B),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_C),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 			}),
@@ -353,7 +353,7 @@ fn create_successful_proposal() {
 				data: proposal.data().clone(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 			}),
@@ -431,25 +431,25 @@ fn create_unsucessful_proposal() {
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_events(vec![
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_B),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteAgainst {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				kind: proposal.kind(),
 				proposal_nonce: prop_id,
 				who: mock_pub_key(PROPOSER_C),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalRejected {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 			}),
@@ -509,7 +509,7 @@ fn execute_after_threshold_change() {
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
 		assert_events(vec![
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 				who: mock_pub_key(PROPOSER_A),
@@ -518,7 +518,7 @@ fn execute_after_threshold_change() {
 				new_threshold: 1,
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalApproved {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 			}),
@@ -528,7 +528,7 @@ fn execute_after_threshold_change() {
 				data: proposal.data().clone(),
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposalSucceeded {
-				chain_id: typed_chain_id,
+				src_chain_id: typed_chain_id,
 				proposal_nonce: prop_id,
 				kind: proposal.kind(),
 			}),
@@ -619,7 +619,7 @@ fn proposal_expires() {
 		assert_eq!(prop, expected);
 
 		assert_events(vec![RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::VoteFor {
-			chain_id: typed_chain_id,
+			src_chain_id: typed_chain_id,
 			proposal_nonce: prop_id,
 			kind: proposal.kind(),
 			who: mock_pub_key(PROPOSER_A),
