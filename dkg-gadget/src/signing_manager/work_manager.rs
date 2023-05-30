@@ -16,8 +16,9 @@ use std::{
 };
 use sync_wrapper::SyncWrapper;
 
-// How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
+// How often to poll the jobs to check completion status. A longer delay allows
+// for more time to enqueue messages for protocols that have initialized but not started
+const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 750;
 
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
@@ -26,7 +27,6 @@ pub struct WorkManager<B: BlockT> {
 	// for now, use a hard-coded value for the number of tasks
 	max_tasks: usize,
 	logger: DebugLogger,
-	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 }
 
 pub struct WorkManagerInner<B: BlockT> {
@@ -36,7 +36,6 @@ pub struct WorkManagerInner<B: BlockT> {
 
 impl<B: BlockT> WorkManager<B> {
 	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>, max_tasks: usize) -> Self {
-		let (to_handler, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let this = Self {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
 				currently_signing_proposals: HashSet::new(),
@@ -45,40 +44,16 @@ impl<B: BlockT> WorkManager<B> {
 			clock: Arc::new(clock),
 			max_tasks,
 			logger,
-			to_handler,
 		};
 
 		let this_worker = this.clone();
 		let handler = async move {
-			let job_receiver_worker = this_worker.clone();
-			let logger = job_receiver_worker.logger.clone();
-
-			let job_receiver = async move {
-				while let Some(unsigned_proposal_hash) = rx.recv().await {
-					job_receiver_worker
-						.logger
-						.info_signing(format!("[worker] Received job {unsigned_proposal_hash:?}",));
-					job_receiver_worker.poll();
-				}
-			};
-
-			let periodic_poller = async move {
-				let mut interval = tokio::time::interval(std::time::Duration::from_millis(
-					JOB_POLL_INTERVAL_IN_MILLISECONDS,
-				));
-				loop {
-					interval.tick().await;
-					this_worker.poll();
-				}
-			};
-
-			tokio::select! {
-				_ = job_receiver => {
-					logger.error_signing("[worker] job_receiver exited");
-				},
-				_ = periodic_poller => {
-					logger.error_signing("[worker] periodic_poller exited");
-				}
+			let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+				JOB_POLL_INTERVAL_IN_MILLISECONDS,
+			));
+			loop {
+				interval.tick().await;
+				this_worker.poll();
 			}
 		};
 
@@ -103,13 +78,12 @@ impl<B: BlockT> WorkManager<B> {
 			proposal_hash: unsigned_proposal_hash,
 			logger: self.logger.clone(),
 		};
+
 		lock.enqueued_signing_proposals.push_back(job);
 
-		self.to_handler
-			.send(unsigned_proposal_hash)
-			.map_err(|_| DKGError::GenericError {
-				reason: "Failed to send job to worker".to_string(),
-			})
+		// the task is now initialized, and will enqueue any early messages
+		// until the next poll.
+		Ok(())
 	}
 
 	fn poll(&self) {
