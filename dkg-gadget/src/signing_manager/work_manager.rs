@@ -165,7 +165,7 @@ impl<B: BlockT> WorkManager<B> {
 				if let Err(err) = job.handle.start() {
 					self.logger.error_signing(format!(
 						"Failed to start job {:?}: {err:?}",
-						job.proposal_hash
+						hex::encode(job.proposal_hash)
 					));
 				} else {
 					// deliver all the enqueued messages to the protocol now
@@ -175,13 +175,13 @@ impl<B: BlockT> WorkManager<B> {
 						self.logger.info_signing(format!(
 							"Will now deliver {} enqueued message(s) to the async protocol for {:?}",
 							enqueued_messages.len(),
-							job.proposal_hash
+							hex::encode(job.proposal_hash)
 						));
 						while let Some(message) = enqueued_messages.pop_front() {
 							if let Err(err) = job.handle.deliver_message(message) {
 								self.logger.error_signing(format!(
 									"Unable to deliver message for job {:?}: {err:?}",
-									job.proposal_hash
+									hex::encode(job.proposal_hash)
 								));
 							}
 						}
@@ -254,7 +254,7 @@ impl<B: BlockT> WorkManager<B> {
 		// if the protocol is neither started nor enqueued, then, this message may be for a future
 		// async protocol. Store the message
 		self.logger
-			.info_signing(format!("Enqueuing message for {msg_unsigned_proposal_hash:?}"));
+			.info_signing(format!("Enqueuing message for {:?}", hex::encode(msg_unsigned_proposal_hash)));
 		lock.enqueued_messages
 			.entry(*msg_unsigned_proposal_hash)
 			.or_default()
@@ -296,7 +296,7 @@ impl<B: BlockT> Drop for Job<B> {
 	fn drop(&mut self) {
 		self.logger.info_signing(format!(
 			"Will remove job {:?} from currently_signing_proposals",
-			self.proposal_hash
+			hex::encode(self.proposal_hash)
 		));
 		let _ = self.handle.shutdown("shutdown from Job::drop");
 	}
