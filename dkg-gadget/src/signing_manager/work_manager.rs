@@ -253,8 +253,10 @@ impl<B: BlockT> WorkManager<B> {
 
 		// if the protocol is neither started nor enqueued, then, this message may be for a future
 		// async protocol. Store the message
-		self.logger
-			.info_signing(format!("Enqueuing message for {:?}", hex::encode(msg_unsigned_proposal_hash)));
+		self.logger.info_signing(format!(
+			"Enqueuing message for {:?}",
+			hex::encode(msg_unsigned_proposal_hash)
+		));
 		lock.enqueued_messages
 			.entry(*msg_unsigned_proposal_hash)
 			.or_default()
