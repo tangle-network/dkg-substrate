@@ -154,7 +154,7 @@ impl<B: BlockT> WorkManager<B> {
 						while let Some(message) = enqueued_messages.pop_front() {
 							if let Err(err) = job.handle.deliver_message(message) {
 								self.logger.error_signing(format!(
-									"Unabel to deliver message for job {:?}: {err:?}",
+									"Unable to deliver message for job {:?}: {err:?}",
 									job.proposal_hash
 								));
 							}
