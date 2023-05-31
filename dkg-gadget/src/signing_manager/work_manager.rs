@@ -63,7 +63,7 @@ impl<B: BlockT> WorkManager<B> {
 					job_receiver_worker
 						.logger
 						.info_signing(format!("[worker] Received job {task_hash:?}",));
-					//job_receiver_worker.poll();
+					job_receiver_worker.poll();
 				}
 			};
 

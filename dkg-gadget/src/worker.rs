@@ -39,7 +39,6 @@ use std::{
 		atomic::{AtomicUsize, Ordering},
 		Arc,
 	},
-	time::Duration,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -457,7 +456,6 @@ where
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let task = async move {
-							tokio::time::sleep(Duration::from_millis(500)).await;
 							if let Err(err) = start_handle.start() {
 								logger.error_keygen(format!(
 									"Error starting keygen protocol: {err:?}"
