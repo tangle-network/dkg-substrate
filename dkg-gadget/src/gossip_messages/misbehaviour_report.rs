@@ -148,6 +148,7 @@ where
 		let status =
 			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
+			associated_block_id: vec![],
 			sender_id: public.clone(),
 			// We need to gossip this misbehaviour, so no specific recipient.
 			recipient_id: None,

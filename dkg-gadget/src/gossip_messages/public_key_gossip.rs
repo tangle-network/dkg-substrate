@@ -152,6 +152,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 		let status =
 			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
+			associated_block_id: vec![], // we don't need to associate this message with a block
 			sender_id: public.clone(),
 			// we need to gossip the final public key to all parties, so no specific recipient in
 			// this case.

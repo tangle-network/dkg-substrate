@@ -9,7 +9,7 @@ use dkg_primitives::{
 use parking_lot::RwLock;
 use sp_api::BlockT;
 use std::{
-	collections::{HashSet, VecDeque},
+	collections::{HashMap, HashSet, VecDeque},
 	hash::{Hash, Hasher},
 	pin::Pin,
 	sync::Arc,
@@ -19,9 +19,6 @@ use sync_wrapper::SyncWrapper;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
-// How many block to cooldown after a stall
-const BLOCKS_TO_WAIT_AFTER_STALL: u32 = 2;
-
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
 	inner: Arc<RwLock<WorkManagerInner<B>>>,
@@ -30,12 +27,12 @@ pub struct WorkManager<B: BlockT> {
 	max_tasks: usize,
 	logger: DebugLogger,
 	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
-	last_stall: Arc<RwLock<Option<<<B as BlockT>::Header as sp_api::HeaderT>::Number>>>,
 }
 
 pub struct WorkManagerInner<B: BlockT> {
 	pub active_tasks: HashSet<Job<B>>,
 	pub enqueued_tasks: VecDeque<Job<B>>,
+	pub enqueued_messages: HashMap<[u8; 32], VecDeque<Arc<SignedDKGMessage<Public>>>>,
 }
 
 impl<B: BlockT> WorkManager<B> {
@@ -45,12 +42,12 @@ impl<B: BlockT> WorkManager<B> {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
 				active_tasks: HashSet::new(),
 				enqueued_tasks: VecDeque::new(),
+				enqueued_messages: HashMap::new(),
 			})),
 			clock: Arc::new(clock),
 			max_tasks,
 			logger,
 			to_handler,
-			last_stall: Arc::new(RwLock::new(None)),
 		};
 
 		let this_worker = this.clone();
@@ -124,15 +121,16 @@ impl<B: BlockT> WorkManager<B> {
 		lock.active_tasks.retain(|job| {
 			let is_stalled = job.handle.signing_has_stalled(now);
 			if is_stalled {
+				// if stalled, lets log the start and now blocks for logging purposes
 				self.logger.info_signing(format!(
-					"[worker] Job {:?} is stalled, shutting down",
-					hex::encode(job.task_hash)
+					"[worker] Job {:?} | Started at {:?} | Now {:?} | is stalled, shutting down",
+					hex::encode(job.task_hash),
+					job.handle.started_at,
+					now
 				));
+
 				// the task is stalled, lets be pedantic and shutdown
 				let _ = job.handle.shutdown("Stalled!");
-				// update the last stall block
-				*self.last_stall.write() = Some(now);
-				// setup the last stall as this block
 				// return false so that the proposals are released from the currently signing
 				// proposals
 				return false
@@ -154,24 +152,6 @@ impl<B: BlockT> WorkManager<B> {
 				.info_signing(format!("[worker] {} jobs dropped", cur_count - new_count));
 		}
 
-		// if we just detected a stall, let's give a cool-off time
-		{
-			let mut last_stall_lock = self.last_stall.write();
-			if let Some(last_stall) = &mut *last_stall_lock {
-				if (now - *last_stall) > BLOCKS_TO_WAIT_AFTER_STALL.into() {
-					self.logger.info_signing(
-						"[worker] Stall backoff time completed, clearing the last stall block",
-					);
-					*last_stall_lock = None;
-				} else {
-					self.logger.info_signing(
-						"[worker] We are in cooldown mode after a stall, skip execution",
-					);
-					return
-				}
-			}
-		}
-
 		// now, check to see if there is room to start a new task
 		let tasks_to_start = self.max_tasks - lock.active_tasks.len();
 		for _ in 0..tasks_to_start {
@@ -181,8 +161,29 @@ impl<B: BlockT> WorkManager<B> {
 					hex::encode(job.task_hash)
 				));
 				if let Err(err) = job.handle.start() {
-					self.logger
-						.error_signing(format!("Failed to start job {:?}: {err:?}", job.task_hash));
+					self.logger.error_signing(format!(
+						"Failed to start job {:?}: {err:?}",
+						hex::encode(job.task_hash)
+					));
+				} else {
+					// deliver all the enqueued messages to the protocol now
+					if let Some(mut enqueued_messages) =
+						lock.enqueued_messages.remove(&job.task_hash)
+					{
+						self.logger.info_signing(format!(
+							"Will now deliver {} enqueued message(s) to the async protocol for {:?}",
+							enqueued_messages.len(),
+							hex::encode(job.task_hash)
+						));
+						while let Some(message) = enqueued_messages.pop_front() {
+							if let Err(err) = job.handle.deliver_message(message) {
+								self.logger.error_signing(format!(
+									"Unable to deliver message for job {:?}: {err:?}",
+									hex::encode(job.task_hash)
+								));
+							}
+						}
+					}
 				}
 				let task = job.task.clone();
 				// Put the job inside here, that way the drop code does not get called right away,
@@ -210,7 +211,7 @@ impl<B: BlockT> WorkManager<B> {
 			"Delivered message is intended for session_id = {}",
 			msg.msg.session_id
 		));
-		let lock = self.inner.read();
+		let mut lock = self.inner.write();
 
 		let msg_unsigned_proposal_hash =
 			msg.msg.payload.unsigned_proposal_hash().expect("Bad message type");
@@ -246,6 +247,17 @@ impl<B: BlockT> WorkManager<B> {
 				return
 			}
 		}
+
+		// if the protocol is neither started nor enqueued, then, this message may be for a future
+		// async protocol. Store the message
+		self.logger.info_signing(format!(
+			"Enqueuing message for {:?}",
+			hex::encode(msg_unsigned_proposal_hash)
+		));
+		lock.enqueued_messages
+			.entry(*msg_unsigned_proposal_hash)
+			.or_default()
+			.push_back(msg)
 	}
 }
 
@@ -283,7 +295,7 @@ impl<B: BlockT> Drop for Job<B> {
 	fn drop(&mut self) {
 		self.logger.info_signing(format!(
 			"Will remove job {:?} from currently_signing_proposals",
-			self.task_hash
+			hex::encode(self.task_hash)
 		));
 		let _ = self.handle.shutdown("shutdown from Job::drop");
 	}

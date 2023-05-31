@@ -151,8 +151,9 @@ where
 			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
+			associated_block_id: params.associated_block_id.clone(),
 		};
-		let early_handle = params.handle.broadcaster.subscribe();
+		let early_handle = params.handle.subscribe();
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
 			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
@@ -180,6 +181,7 @@ where
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 				i: offline_i,
+				associated_block_id: params.associated_block_id.clone(),
 			};
 
 			// the below wrapper will map signed messages into unsigned messages
@@ -222,6 +224,7 @@ where
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
+				associated_block_id: params.associated_block_id.clone(),
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
@@ -253,12 +256,21 @@ where
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
 						if !received_sigs.insert(msg.sender) {
-							params.logger.info_signing(format!(
+							params.logger.warn_signing(format!(
 								"Received duplicate partial sig from {}",
 								msg.sender
 							));
 							continue
 						}
+
+						if msg.body.associated_block_id != params.associated_block_id {
+							params.logger.warn_signing(format!(
+								"Received partial sig from {} with wrong associated block id",
+								msg.sender
+							));
+							continue
+						}
+
 						params.logger.info_signing("Found matching round key!".to_string());
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
