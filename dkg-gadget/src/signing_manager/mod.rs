@@ -198,6 +198,7 @@ where
 						ProtoStageType::Signing { unsigned_proposal_hash },
 						unsigned_proposal.0,
 						signing_set,
+						*header.number(),
 					) {
 						Ok((handle, task)) => {
 							// send task to the work manager
@@ -239,6 +240,7 @@ where
 		stage: ProtoStageType,
 		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		signing_set: Vec<KeygenPartyId>,
+		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
 		let async_proto_params = dkg_worker.generate_async_proto_params(
@@ -248,6 +250,7 @@ where
 			session_id,
 			stage,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
+			associated_block_id,
 		)?;
 
 		let handle = async_proto_params.handle.clone();

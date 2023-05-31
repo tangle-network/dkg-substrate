@@ -115,6 +115,7 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
 				// only clone if the downstream receiver expects this type
+				let associated_block_id = stream_type.get_associated_block_id();
 				let sender = self
 					.msg
 					.payload
@@ -122,10 +123,15 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 					.expect("Could not get sender id");
 				if sender != stream_type.get_i() {
 					if self.msg.session_id == this_session_id {
-						verify
-							.verify_signature_against_authorities(self)
-							.await
-							.map(|body| Some(Msg { sender, receiver: None, body }))
+						if associated_block_id == &self.msg.associated_block_id {
+							verify
+								.verify_signature_against_authorities(self)
+								.await
+								.map(|body| Some(Msg { sender, receiver: None, body }))
+						} else {
+							logger.warn(format!("Will skip passing message to state machine since not for this associated block, msg block {:?} expected block {:?}", self.msg.associated_block_id, associated_block_id));
+							Ok(None)
+						}
 					} else {
 						logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
 						Ok(None)

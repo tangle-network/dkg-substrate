@@ -300,6 +300,7 @@ where
 		session_id: SessionId,
 		stage: ProtoStageType,
 		protocol_name: &str,
+		associated_block: NumberFor<B>,
 	) -> Result<
 		AsyncProtocolParameters<
 			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
@@ -360,6 +361,7 @@ where
 			handle: status_handle.clone(),
 			logger: self.logger.clone(),
 			local_key: active_local_key,
+			associated_block_id: associated_block.encode(),
 		};
 
 		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {
@@ -415,12 +417,14 @@ where
 		}
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	async fn spawn_keygen_protocol(
 		&self,
 		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
+		associated_block: NumberFor<B>,
 		threshold: u16,
 		stage: ProtoStageType,
 	) {
@@ -431,6 +435,7 @@ where
 			session_id,
 			stage,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
+			associated_block,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler.clone();
@@ -768,6 +773,7 @@ where
 			authority_public_key,
 			party_i,
 			session_id,
+			*header.number(),
 			threshold,
 			ProtoStageType::Genesis,
 		)
@@ -834,6 +840,7 @@ where
 			authority_public_key,
 			party_i,
 			session_id,
+			*header.number(),
 			threshold,
 			ProtoStageType::Queued,
 		)
