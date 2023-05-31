@@ -6,7 +6,7 @@
 
 .idea
 **/.DS_Store
-
+.vscode
 
 # The cache for docker container dependency
 .cargo
