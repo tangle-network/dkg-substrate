@@ -96,7 +96,6 @@ where
 				msg_hash: msg_hash.clone(),
 			},
 		);
-		let debug_before = format!("{:?}", self.sm);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
 
 		self.collect_round_blame();
@@ -125,13 +124,6 @@ where
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
 		} else {
-			let debug_after = format!("{:?}", self.sm);
-			// a message that is properly received should always increment the number of round
-			// messages recieved. If it doesn't, we log that here
-			if debug_before == debug_after {
-				self.logger
-					.error("!!! Bug: message processed but did not actually alter the state");
-			}
 			self.logger.round_event(
 				&self.channel_type,
 				crate::RoundsEventType::ProcessedMessage {
@@ -151,6 +143,7 @@ where
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
 		// only send current round + previous round messages if we're running the signing protocol
+		/*
 		if !self.sm.message_queue().is_empty() &&
 			matches!(self.channel_type, ProtocolType::Offline { .. })
 		{
@@ -174,7 +167,7 @@ where
 				self.current_round(),
 				self.sm.message_queue().len(),
 			));
-		}
+		}*/
 
 		self.sm.message_queue()
 	}
