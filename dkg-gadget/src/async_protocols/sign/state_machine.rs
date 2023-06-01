@@ -48,11 +48,14 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
+		let payload_raw = msg.body.payload.payload().clone();
+		logger.checkpoint_message_raw(&payload_raw, "CP-2.6-incoming");
 		let DKGMessage { payload, .. } = msg.body;
 
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Offline(msg) => {
+				logger.checkpoint_message_raw(&payload_raw, "CP-2.7-incoming");
 				let message: Msg<OfflineProtocolMessage> =
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,
@@ -64,9 +67,11 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 							return Ok(())
 						},
 					};
+				logger.checkpoint_message_raw(&payload_raw, "CP-2.8-incoming");
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
 						logger.info_signing("Skipping passing of message to async proto since not intended for local");
+						logger.clear_checkpoint_for_message_raw(&payload_raw);
 						return Ok(())
 					}
 				}
@@ -78,13 +83,15 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 					.expect("Unsigned proposal hash failed") !=
 					msg.key.as_slice()
 				{
-					//dkg_logging::info!("Skipping passing of message to async proto since not
-					// correct unsigned proposal");
+					logger.warn_signing("Skipping passing of message to async proto since not correct unsigned proposal");
+					logger.clear_checkpoint_for_message_raw(&payload_raw);
 					return Ok(())
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
 					logger.error_signing(format!("Error sending message to async proto: {err}"));
+				} else {
+					logger.checkpoint_message_raw(&payload_raw, "CP-2.9-incoming");
 				}
 			},
 

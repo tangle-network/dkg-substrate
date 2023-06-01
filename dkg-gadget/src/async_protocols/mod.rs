@@ -61,6 +61,7 @@ use self::{
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
 use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use dkg_logging::debug_logger::AsyncProtocolType;
 use incoming::IncomingAsyncProtocolWrapper;
 use multi_party_ecdsa::MessageRoundID;
 
@@ -641,6 +642,7 @@ where
 						msg_hash,
 					},
 				);
+				params.logger.checkpoint_message(&unsigned_message, "CP0");
 			}
 
 			// check the status of the async protocol.
@@ -688,6 +690,10 @@ where
 					break
 				},
 			};
+
+			params
+				.logger
+				.checkpoint_message_raw(unsigned_message.body.payload.payload(), "CP-2.5-incoming");
 
 			if SM::handle_unsigned_message(
 				&to_async_proto,
@@ -810,5 +816,19 @@ mod tests {
 		let authority_id =
 			authorities.get(my_keygen_id.to_index()).expect("authority id should exist");
 		assert_eq!(authority_id, &my_authority_id);
+	}
+}
+
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+	for AsyncProtocolType
+{
+	fn from(value: &ProtocolType<T>) -> Self {
+		match value {
+			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
+			ProtocolType::Offline { unsigned_proposal, .. } =>
+				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+			ProtocolType::Voting { unsigned_proposal, .. } =>
+				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+		}
 	}
 }

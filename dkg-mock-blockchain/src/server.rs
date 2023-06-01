@@ -3,6 +3,7 @@ use crate::{
 	MockBlockchainEvent, MockClientResponse, TestBlock, TestCase,
 };
 use atomic::Atomic;
+use dkg_logging::debug_logger::DebugLogger;
 use dkg_runtime_primitives::UnsignedProposal;
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
@@ -32,6 +33,7 @@ pub struct MockBlockchain<T: Clone> {
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
 	blockchain: T,
+	logger: DebugLogger,
 }
 
 /// For communicating between the orchestrator task and each spawned client sub-task
@@ -79,7 +81,11 @@ struct ConnectedClientState {
 }
 
 impl<T: MutableBlockchain> MockBlockchain<T> {
-	pub async fn new(config: MockBlockchainConfig, blockchain: T) -> std::io::Result<Self> {
+	pub async fn new(
+		config: MockBlockchainConfig,
+		blockchain: T,
+		logger: DebugLogger,
+	) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
 		let (to_orchestrator, orchestrator_rx) = mpsc::unbounded_channel();
@@ -93,6 +99,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			to_orchestrator,
 			orchestrator_rx: Arc::new(Mutex::new(Some(orchestrator_rx))),
 			blockchain,
+			logger,
 		})
 	}
 
@@ -469,6 +476,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 	}
 
 	async fn begin_next_test_print(&self, test_phase: &IntraTestPhase) {
+		self.logger.clear_checkpoints();
 		let test_round = test_phase.round_number();
 		let test_phase = match test_phase {
 			IntraTestPhase::Keygen { .. } => "KEYGEN",

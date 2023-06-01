@@ -1552,6 +1552,7 @@ where
 					"Going to handle keygen message for session {} | hash: {msg_hash}",
 					msg.msg.session_id
 				));
+				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-keygen");
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {
@@ -1573,6 +1574,7 @@ where
 					"Going to handle signing message for session {}",
 					msg.msg.session_id
 				));
+				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-signing");
 				match self_.process_incoming_dkg_message(msg).await {
 					Ok(_) => {},
 					Err(e) => {

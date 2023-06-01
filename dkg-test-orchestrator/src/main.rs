@@ -92,7 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	);
 
 	// first, spawn the orchestrator/mock-blockchain
-	let orchestrator_task = MockBlockchain::new(config, api.clone()).await?.execute();
+	let orchestrator_task = MockBlockchain::new(config, api.clone(), dummy_api_logger.clone())
+		.await?
+		.execute();
 	let orchestrator_handle = tokio::task::spawn(orchestrator_task);
 	// give time for the orchestrator to bind
 	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;

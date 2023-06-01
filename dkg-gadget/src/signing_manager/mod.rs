@@ -51,7 +51,7 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 }
 
 // the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 2;
+const MAX_RUNNING_TASKS: usize = 10;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where

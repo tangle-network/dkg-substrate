@@ -42,7 +42,7 @@ mod utils;
 pub mod worker;
 
 pub mod async_protocols;
-pub mod debug_logger;
+pub use dkg_logging::debug_logger;
 pub mod gossip_messages;
 pub mod storage;
 

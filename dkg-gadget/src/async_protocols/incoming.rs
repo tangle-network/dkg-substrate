@@ -110,10 +110,12 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	where
 		Self: Sized,
 	{
+		logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2-incoming");
 		match (stream_type, &self.msg.payload) {
 			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
 			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
+				logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.1-incoming");
 				// only clone if the downstream receiver expects this type
 				let associated_block_id = stream_type.get_associated_block_id();
 				let sender = self
@@ -122,12 +124,31 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 					.async_proto_only_get_sender_id()
 					.expect("Could not get sender id");
 				if sender != stream_type.get_i() {
+					logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.2-incoming");
 					if self.msg.session_id == this_session_id {
+						logger
+							.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.3-incoming");
 						if associated_block_id == &self.msg.associated_block_id {
-							verify
-								.verify_signature_against_authorities(self)
-								.await
-								.map(|body| Some(Msg { sender, receiver: None, body }))
+							logger.checkpoint_message_raw(
+								self.msg.payload.payload(),
+								"CP-2.4-incoming",
+							);
+							let payload = self.msg.payload.payload().clone();
+							match verify.verify_signature_against_authorities(self).await {
+								Ok(body) => {
+									logger.checkpoint_message_raw(
+										&payload,
+										"CP-2.4-verified-incoming",
+									);
+									Ok(Some(Msg { sender, receiver: None, body }))
+								},
+								Err(err) => {
+									let err_msg = format!("Unable to verify message: {err:?}");
+									logger.error(&err_msg);
+									logger.checkpoint_message_raw(&payload, err_msg);
+									Err(err)
+								},
+							}
 						} else {
 							logger.warn(format!("Will skip passing message to state machine since not for this associated block, msg block {:?} expected block {:?}", self.msg.associated_block_id, associated_block_id));
 							Ok(None)

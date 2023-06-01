@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
-use crate::async_protocols::ProtocolType;
-use dkg_logging::{debug, error, info, trace, warn};
+use crate::{debug, error, info, trace, warn};
+use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use serde::Serialize;
-use sp_core::{bytes::to_hex, hashing::sha2_256, Get};
+use sp_core::{bytes::to_hex, hashing::sha2_256};
 use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 
 #[derive(Clone, Debug)]
@@ -14,6 +14,16 @@ pub struct DebugLogger {
 	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_voting: Arc<RwLock<Option<std::fs::File>>>,
+	checkpoints_enabled: bool,
+}
+
+struct Checkpoint {
+	checkpoint: String,
+	message_hash: String,
+}
+
+lazy_static! {
+	static ref CHECKPOINTS: RwLock<HashMap<String, Checkpoint>> = RwLock::new(HashMap::new());
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -159,6 +169,25 @@ impl DebugLogger {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
 
+		let checkpoints_enabled = std::env::var("CHECKPOINTS").unwrap_or_default() == "enabled";
+		if checkpoints_enabled {
+			static HAS_CHECKPOINT_TRACKER_RUN: std::sync::atomic::AtomicBool =
+				std::sync::atomic::AtomicBool::new(false);
+			if !HAS_CHECKPOINT_TRACKER_RUN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+				// spawn a task to periodically print out the last checkpoint for each message
+				println!("Running checkpoint tracker");
+				tokio::task::spawn(async move {
+					loop {
+						tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+						let lock = CHECKPOINTS.read();
+						for checkpoint in lock.values() {
+							warn!(target: "dkg", "Checkpoint for {} last at {}", checkpoint.message_hash, checkpoint.checkpoint);
+						}
+					}
+				});
+			}
+		}
+
 		let (file, events_file_keygen, events_file_signing, events_file_voting) =
 			Self::get_files(file)?;
 
@@ -212,6 +241,7 @@ impl DebugLogger {
 			events_file_handle_keygen: events_file_handle,
 			events_file_handle_signing,
 			events_file_handle_voting,
+			checkpoints_enabled,
 		})
 	}
 
@@ -354,6 +384,46 @@ impl DebugLogger {
 			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
 		}
 	}
+
+	pub fn checkpoint_message<T: Serialize>(&self, msg: T, checkpoint: impl Into<String>) {
+		if self.checkpoints_enabled {
+			let hash = message_to_string_hash(&msg);
+			CHECKPOINTS.write().insert(
+				hash.clone(),
+				Checkpoint { checkpoint: checkpoint.into(), message_hash: hash },
+			);
+		}
+	}
+
+	pub fn checkpoint_message_raw(&self, payload: &[u8], checkpoint: impl Into<String>) {
+		if self.checkpoints_enabled {
+			let hash = raw_message_to_hash(payload);
+			CHECKPOINTS.write().insert(
+				hash.clone(),
+				Checkpoint { checkpoint: checkpoint.into(), message_hash: hash },
+			);
+		}
+	}
+
+	pub fn clear_checkpoints(&self) {
+		if self.checkpoints_enabled {
+			CHECKPOINTS.write().clear();
+		}
+	}
+
+	pub fn clear_checkpoint_for_message<T: Serialize>(&self, msg: T) {
+		if self.checkpoints_enabled {
+			let hash = message_to_string_hash(&msg);
+			CHECKPOINTS.write().remove(&hash);
+		}
+	}
+
+	pub fn clear_checkpoint_for_message_raw(&self, payload: &[u8]) {
+		if self.checkpoints_enabled {
+			let hash = raw_message_to_hash(payload);
+			CHECKPOINTS.write().remove(&hash);
+		}
+	}
 }
 
 pub fn message_to_string_hash<T: Serialize>(msg: T) -> String {
@@ -365,18 +435,4 @@ pub fn message_to_string_hash<T: Serialize>(msg: T) -> String {
 pub fn raw_message_to_hash(payload: &[u8]) -> String {
 	let message = sha2_256(payload);
 	to_hex(&message, false)
-}
-
-impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
-	for AsyncProtocolType
-{
-	fn from(value: &ProtocolType<T>) -> Self {
-		match value {
-			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
-			ProtocolType::Offline { unsigned_proposal, .. } =>
-				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
-			ProtocolType::Voting { unsigned_proposal, .. } =>
-				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
-		}
-	}
 }

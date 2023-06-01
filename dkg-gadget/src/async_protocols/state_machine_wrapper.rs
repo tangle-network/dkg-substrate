@@ -31,6 +31,7 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
+	#[allow(dead_code)]
 	outgoing_history: Vec<Msg<T::MessageBody>>,
 }
 
@@ -105,6 +106,7 @@ where
 				"Message for {:?} from session={}, round={} is outdated, ignoring",
 				self.channel_type, session, round
 			));
+			self.logger.clear_checkpoint_for_message(&msg);
 			return Ok(())
 		}
 
@@ -117,12 +119,14 @@ where
 				"Already received message for {:?} from session={}, round={}, sender={}",
 				self.channel_type, session, round, sender
 			));
+			self.logger.clear_checkpoint_for_message(&msg);
 			return Ok(())
 		}
 
-		let result = self.sm.handle_incoming(msg);
+		let result = self.sm.handle_incoming(msg.clone());
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
+			self.logger.checkpoint_message(&msg, format!("IN-STATE-MACHINE-ERR: {err:?}"))
 		} else {
 			self.logger.round_event(
 				&self.channel_type,
@@ -134,6 +138,7 @@ where
 					msg_hash,
 				},
 			);
+			self.logger.clear_checkpoint_for_message(&msg);
 		}
 
 		self.logger.trace(format!("SM After: {:?}", &self.sm));
