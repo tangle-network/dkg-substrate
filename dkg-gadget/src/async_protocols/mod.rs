@@ -674,7 +674,12 @@ where
 {
 	Box::pin(async move {
 		// the below wrapper will map signed messages into unsigned messages
-		let incoming = params.handle.subscribe();
+		let incoming = params
+			.handle
+			.rx_keygen_signing
+			.lock()
+			.take()
+			.expect("rx_keygen_signing already taken");
 		let incoming_wrapper =
 			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), params.clone());
 		// we use fuse here, since normally, once a stream has returned `None` from calling

@@ -49,14 +49,14 @@ impl<
 	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	pub fn new(
-		mut receiver: tokio::sync::broadcast::Receiver<T>,
+		mut receiver: tokio::sync::mpsc::UnboundedReceiver<T>,
 		ty: ProtocolType<MaxProposalLength>,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
 		let logger = params.logger.clone();
 
 		let stream = async_stream::try_stream! {
-			while let Ok(msg) = receiver.recv().await {
+			while let Some(msg) = receiver.recv().await {
 				match msg.transform(&params.engine, &ty, params.session_id, &params.logger).await {
 					Ok(Some(msg)) => yield msg,
 

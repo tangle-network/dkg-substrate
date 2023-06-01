@@ -8,5 +8,5 @@ threshold = 2
 # min_simulated_latency + random(0, 0.25*min_simulated_latency)
 min_simulated_latency = "0ms"
 # The number of positive cases to run
-positive_cases = 10
+positive_cases = 100
 unsigned_proposals_per_session = 11

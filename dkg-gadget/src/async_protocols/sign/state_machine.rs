@@ -20,7 +20,7 @@ use crate::{
 	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
@@ -28,15 +28,11 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 };
 use round_based::{Msg, StateMachine};
 
-use std::sync::Arc;
-use tokio::sync::broadcast::Receiver;
-
 #[async_trait]
 impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage {
 	type AdditionalReturnParam = (
 		UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		OfflinePartyId,
-		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
 		BatchKey,
 	);
@@ -106,22 +102,23 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: Self::AdditionalReturnParam,
 	) -> Result<(), DKGError> {
-		params.logger.info_signing("Completed offline stage successfully!".to_string());
+		params.logger.info_signing("Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
 		//
 		// NOTE: we pass the generated offline stage id for the i in voting to keep
 		// consistency
+		let rx_handle = params.handle.rx_voting.lock().take().expect("rx_voting not found");
 		let logger = params.logger.clone();
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
 			unsigned_proposal.0,
 			unsigned_proposal.1,
+			rx_handle,
 			unsigned_proposal.2,
 			unsigned_proposal.3,
-			unsigned_proposal.4,
 		) {
 			Ok(voting_stage) => {
 				logger.info_signing("Starting voting stage...".to_string());
