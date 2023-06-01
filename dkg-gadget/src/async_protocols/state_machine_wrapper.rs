@@ -31,6 +31,7 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
+	#[allow(dead_code)]
 	outgoing_history: Vec<Msg<T::MessageBody>>,
 }
 
@@ -85,9 +86,16 @@ where
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
 			self.channel_type, session, round, sender
 		));
+		let msg_hash = crate::debug_logger::message_to_string_hash(&msg);
 		self.logger.round_event(
 			&self.channel_type,
-			crate::RoundsEventType::ReceivedMessage { session, round, sender, receiver },
+			crate::RoundsEventType::ReceivedMessage {
+				session,
+				round,
+				sender,
+				receiver,
+				msg_hash: msg_hash.clone(),
+			},
 		);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
 
@@ -98,6 +106,7 @@ where
 				"Message for {:?} from session={}, round={} is outdated, ignoring",
 				self.channel_type, session, round
 			));
+			self.logger.clear_checkpoint_for_message(&msg);
 			return Ok(())
 		}
 
@@ -110,30 +119,39 @@ where
 				"Already received message for {:?} from session={}, round={}, sender={}",
 				self.channel_type, session, round, sender
 			));
+			self.logger.clear_checkpoint_for_message(&msg);
 			return Ok(())
 		}
 
-		let result = self.sm.handle_incoming(msg);
+		let result = self.sm.handle_incoming(msg.clone());
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
+			self.logger.checkpoint_message(&msg, format!("IN-STATE-MACHINE-ERR: {err:?}"))
 		} else {
 			self.logger.round_event(
 				&self.channel_type,
-				crate::RoundsEventType::ProcessedMessage { session, round, sender, receiver },
+				crate::RoundsEventType::ProcessedMessage {
+					session,
+					round,
+					sender,
+					receiver,
+					msg_hash,
+				},
 			);
+			self.logger.clear_checkpoint_for_message(&msg);
 		}
+
 		self.logger.trace(format!("SM After: {:?}", &self.sm));
 
 		result
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-		// only send current round + previous round messages if we're running the keygen protocol
+		// only send current round + previous round messages if we're running the signing protocol
+		/*
 		if !self.sm.message_queue().is_empty() &&
-			matches!(
-				self.channel_type,
-				ProtocolType::Keygen { .. } | ProtocolType::Offline { .. }
-			) {
+			matches!(self.channel_type, ProtocolType::Offline { .. })
+		{
 			// store outgoing messages in history
 			let mut last_2_rounds = vec![];
 			let current_round = self.current_round();
@@ -154,7 +172,7 @@ where
 				self.current_round(),
 				self.sm.message_queue().len(),
 			));
-		}
+		}*/
 
 		self.sm.message_queue()
 	}

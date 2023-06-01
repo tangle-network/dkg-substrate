@@ -42,7 +42,7 @@ mod utils;
 pub mod worker;
 
 pub mod async_protocols;
-pub mod debug_logger;
+pub use dkg_logging::debug_logger;
 pub mod gossip_messages;
 pub mod storage;
 
@@ -174,8 +174,8 @@ where
 	keygen_gossip_engine.set_gossip_enabled(true);
 	signing_gossip_engine.set_gossip_enabled(true);
 
-	keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
-	signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
 
 	let keygen_handle =
 		crate::utils::ExplicitPanicFuture::new(tokio::spawn(keygen_gossip_handler.run()));

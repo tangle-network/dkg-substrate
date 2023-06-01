@@ -51,7 +51,7 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 }
 
 // the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 1;
+const MAX_RUNNING_TASKS: usize = 4;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -68,7 +68,7 @@ where
 		}
 	}
 
-	pub fn deliver_message(&self, message: Arc<SignedDKGMessage<Public>>) {
+	pub fn deliver_message(&self, message: SignedDKGMessage<Public>) {
 		self.work_manager.deliver_message(message)
 	}
 

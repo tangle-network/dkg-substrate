@@ -14,18 +14,16 @@
 
 //! Webb Custom DKG Gossip Engine.
 
-use std::pin::Pin;
-
 use auto_impl::auto_impl;
 use dkg_primitives::{
 	crypto::AuthoritySignature,
 	types::{DKGError, SignedDKGMessage},
 };
 use dkg_runtime_primitives::crypto::AuthorityId;
-use futures::{Stream, StreamExt};
 use sc_network::PeerId;
 use sp_application_crypto::RuntimeAppPublic;
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A Gossip Engine for DKG, that uses [`sc_network::NetworkService`] as a backend.
 mod network;
@@ -51,21 +49,9 @@ pub trait GossipEngineIface: Send + Sync + 'static {
 	) -> Result<(), DKGError>;
 	/// Send a DKG message to all peers.
 	fn gossip(&self, message: SignedDKGMessage<AuthorityId>) -> Result<(), DKGError>;
-	/// A stream that sends messages when they are ready to be polled from the message queue.
-	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>>;
-	/// Peek the front of the message queue.
-	///
-	/// Note that this will not remove the message from the queue, it will only return it. For
-	/// removing the message from the queue, use `acknowledge_last_message`.
-	///
-	/// Returns `None` if there are no messages in the queue.
-	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>>;
-	/// Acknowledge the last message (the front of the queue) and mark it as processed, then removes
-	/// it from the queue.
-	fn acknowledge_last_message(&self);
-
-	/// Clears the Message Queue.
-	fn clear_queue(&self);
+	/// A stream that sends messages. Should only return once with Some, then None thereafter
+	/// to reinforce a single read stream rather than multiple points in the codebase
+	fn get_stream(&self) -> Option<UnboundedReceiver<SignedDKGMessage<AuthorityId>>>;
 
 	fn local_peer_id(&self) -> PeerId;
 	fn logger(&self) -> &DebugLogger;
@@ -87,17 +73,9 @@ impl GossipEngineIface for () {
 		Ok(())
 	}
 
-	fn message_available_notification(&self) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
-		futures::stream::pending().boxed()
-	}
-
-	fn peek_last_message(&self) -> Option<SignedDKGMessage<AuthorityId>> {
+	fn get_stream(&self) -> Option<UnboundedReceiver<SignedDKGMessage<AuthorityId>>> {
 		None
 	}
-
-	fn acknowledge_last_message(&self) {}
-
-	fn clear_queue(&self) {}
 
 	fn local_peer_id(&self) -> PeerId {
 		PeerId::random()
