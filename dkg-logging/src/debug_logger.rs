@@ -79,7 +79,7 @@ pub enum RoundsEventType {
 		msg_hash: String,
 	},
 	ProceededToRound {
-		session: usize,
+		session: u64,
 		round: usize,
 	},
 	// this probably shouldn't happen, but just in case, we will emit events if this does occur
