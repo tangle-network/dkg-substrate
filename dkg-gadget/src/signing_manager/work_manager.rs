@@ -32,7 +32,7 @@ pub struct WorkManager<B: BlockT> {
 pub struct WorkManagerInner<B: BlockT> {
 	pub active_tasks: HashSet<Job<B>>,
 	pub enqueued_tasks: VecDeque<Job<B>>,
-	pub enqueued_messages: HashMap<[u8; 32], VecDeque<Arc<SignedDKGMessage<Public>>>>,
+	pub enqueued_messages: HashMap<[u8; 32], VecDeque<SignedDKGMessage<Public>>>,
 }
 
 impl<B: BlockT> WorkManager<B> {
@@ -137,11 +137,11 @@ impl<B: BlockT> WorkManager<B> {
 			}
 
 			let is_done = job.handle.is_done();
-			self.logger.info_signing(format!(
+			/*self.logger.info_signing(format!(
 				"[worker] Job {:?} is done: {}",
 				hex::encode(job.task_hash),
 				is_done
-			));
+			));*/
 
 			!is_done
 		});
@@ -206,7 +206,7 @@ impl<B: BlockT> WorkManager<B> {
 		lock.active_tasks.contains(job) || lock.enqueued_tasks.iter().any(|j| &j.task_hash == job)
 	}
 
-	pub fn deliver_message(&self, msg: Arc<SignedDKGMessage<Public>>) {
+	pub fn deliver_message(&self, msg: SignedDKGMessage<Public>) {
 		self.logger.debug_signing(format!(
 			"Delivered message is intended for session_id = {}",
 			msg.msg.session_id

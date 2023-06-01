@@ -170,7 +170,7 @@ where
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
-		rx: tokio::sync::mpsc::UnboundedReceiver<Arc<SignedDKGMessage<Public>>>,
+		rx: tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {

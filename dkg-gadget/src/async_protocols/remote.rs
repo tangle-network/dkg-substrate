@@ -23,8 +23,8 @@ use std::sync::{atomic::Ordering, Arc};
 
 pub struct AsyncProtocolRemote<C> {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
-	tx_keygen_signing: tokio::sync::mpsc::UnboundedSender<Arc<SignedDKGMessage<Public>>>,
-	tx_voting: tokio::sync::mpsc::UnboundedSender<Arc<SignedDKGMessage<Public>>>,
+	tx_keygen_signing: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
+	tx_voting: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
 	pub(crate) rx_keygen_signing: MessageReceiverHandle,
 	pub(crate) rx_voting: MessageReceiverHandle,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
@@ -41,7 +41,7 @@ pub struct AsyncProtocolRemote<C> {
 }
 
 type MessageReceiverHandle =
-	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Arc<SignedDKGMessage<Public>>>>>>;
+	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>>>>;
 
 impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 	fn clone(&self) -> Self {
@@ -198,10 +198,11 @@ impl<C> AsyncProtocolRemote<C> {
 		status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated
 	}
 
+	#[allow(clippy::result_large_err)]
 	pub fn deliver_message(
 		&self,
-		msg: Arc<SignedDKGMessage<Public>>,
-	) -> Result<(), tokio::sync::mpsc::error::SendError<Arc<SignedDKGMessage<Public>>>> {
+		msg: SignedDKGMessage<Public>,
+	) -> Result<(), tokio::sync::mpsc::error::SendError<SignedDKGMessage<Public>>> {
 		let status = self.get_status();
 		let can_deliver =
 			status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated;

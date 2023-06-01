@@ -56,7 +56,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 
 	async fn verify_signature_against_authorities(
 		&self,
-		message: Arc<SignedDKGMessage<Public>>,
+		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError>;
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
 	fn process_vote_result(
@@ -175,13 +175,13 @@ where
 
 	async fn verify_signature_against_authorities(
 		&self,
-		msg: Arc<SignedDKGMessage<Public>>,
+		msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
 		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
 			&self.logger,
-			(*msg).clone(),
+			msg,
 			&self.latest_header,
 			client,
 		)

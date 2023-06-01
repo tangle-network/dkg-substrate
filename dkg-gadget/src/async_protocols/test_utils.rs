@@ -42,7 +42,7 @@ impl BlockchainInterface for TestDummyIface {
 
 	async fn verify_signature_against_authorities(
 		&self,
-		message: Arc<SignedDKGMessage<Public>>,
+		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		Ok(message.msg.clone())
 	}

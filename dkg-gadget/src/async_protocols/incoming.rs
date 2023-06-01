@@ -20,7 +20,6 @@ use sp_runtime::traits::Get;
 use std::{
 	marker::PhantomData,
 	pin::Pin,
-	sync::Arc,
 	task::{Context, Poll},
 };
 
@@ -95,7 +94,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 }
 
 #[async_trait::async_trait]
-impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
+impl TransformIncoming for SignedDKGMessage<Public> {
 	type IncomingMapped = DKGMessage<Public>;
 	async fn transform<
 		BI: BlockchainInterface,

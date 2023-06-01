@@ -1279,10 +1279,9 @@ where
 
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
-				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = &rounds {
-					if rounds.session_id == msg.msg.session_id {
-						if let Err(err) = rounds.deliver_message(msg) {
+					if rounds.session_id == dkg_msg.msg.session_id {
+						if let Err(err) = rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1293,8 +1292,8 @@ where
 				}
 
 				if let Some(next_rounds) = next_rounds {
-					if next_rounds.session_id == msg.msg.session_id {
-						if let Err(err) = next_rounds.deliver_message(msg) {
+					if next_rounds.session_id == dkg_msg.msg.session_id {
+						if let Err(err) = next_rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1304,12 +1303,14 @@ where
 					}
 				}
 
+				// TODO: if the message belongs to neither, investigate if we maybe need to enqueue
+				// the message (did someone else's protocol start before ours, and neither of our
+				// rounds are set-up?)
+
 				Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
-				let msg = Arc::new(dkg_msg);
-				self.signing_manager.deliver_message(msg);
-
+				self.signing_manager.deliver_message(dkg_msg);
 				return Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
