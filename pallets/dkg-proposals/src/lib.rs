@@ -303,37 +303,41 @@ pub mod pallet {
 		/// Vote submitted in favour of proposal
 		VoteFor {
 			kind: ProposalKind,
-			chain_id: TypedChainId,
+			src_chain_id: TypedChainId,
 			proposal_nonce: ProposalNonce,
 			who: T::AccountId,
 		},
 		/// Vot submitted against proposal
 		VoteAgainst {
 			kind: ProposalKind,
-			chain_id: TypedChainId,
+			src_chain_id: TypedChainId,
 			proposal_nonce: ProposalNonce,
 			who: T::AccountId,
 		},
 		/// Voting successful for a proposal
 		ProposalApproved {
 			kind: ProposalKind,
-			chain_id: TypedChainId,
+			src_chain_id: TypedChainId,
 			proposal_nonce: ProposalNonce,
 		},
 		/// Voting rejected a proposal
 		ProposalRejected {
 			kind: ProposalKind,
-			chain_id: TypedChainId,
+			src_chain_id: TypedChainId,
 			proposal_nonce: ProposalNonce,
 		},
 		/// Execution of call succeeded
 		ProposalSucceeded {
 			kind: ProposalKind,
-			chain_id: TypedChainId,
+			src_chain_id: TypedChainId,
 			proposal_nonce: ProposalNonce,
 		},
 		/// Execution of call failed
-		ProposalFailed { kind: ProposalKind, chain_id: TypedChainId, proposal_nonce: ProposalNonce },
+		ProposalFailed {
+			kind: ProposalKind,
+			src_chain_id: TypedChainId,
+			proposal_nonce: ProposalNonce,
+		},
 		/// Proposers have been reset
 		AuthorityProposersReset { proposers: Vec<T::AccountId> },
 	}
@@ -707,7 +711,7 @@ impl<T: Config> Pallet<T> {
 		if in_favour {
 			votes.votes_for.try_push(who.clone()).map_err(|_| Error::<T>::OutOfBounds)?;
 			Self::deposit_event(Event::VoteFor {
-				chain_id: src_chain_id,
+				src_chain_id,
 				proposal_nonce: nonce,
 				kind: prop.kind(),
 				who,
@@ -715,7 +719,7 @@ impl<T: Config> Pallet<T> {
 		} else {
 			votes.votes_against.try_push(who.clone()).map_err(|_| Error::<T>::OutOfBounds)?;
 			Self::deposit_event(Event::VoteAgainst {
-				chain_id: src_chain_id,
+				src_chain_id,
 				proposal_nonce: nonce,
 				kind: prop.kind(),
 				who,
@@ -783,7 +787,7 @@ impl<T: Config> Pallet<T> {
 		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalApproved {
-			chain_id: src_chain_id,
+			src_chain_id,
 			proposal_nonce: nonce,
 			kind: prop.kind(),
 		});
@@ -792,7 +796,7 @@ impl<T: Config> Pallet<T> {
 			dkg_runtime_primitives::ProposalAction::Sign(0),
 		)?;
 		Self::deposit_event(Event::ProposalSucceeded {
-			chain_id: src_chain_id,
+			src_chain_id,
 			proposal_nonce: nonce,
 			kind: prop.kind(),
 		});
@@ -806,7 +810,7 @@ impl<T: Config> Pallet<T> {
 		prop: &ProposalOf<T>,
 	) -> DispatchResultWithPostInfo {
 		Self::deposit_event(Event::ProposalRejected {
-			chain_id: src_chain_id,
+			src_chain_id,
 			proposal_nonce: nonce,
 			kind: prop.kind(),
 		});
