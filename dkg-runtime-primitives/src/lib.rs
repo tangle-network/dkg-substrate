@@ -80,11 +80,8 @@ pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 
-/// The offline timeout limit in blocks before we consider misbehaviours
-pub const OFFLINE_TIMEOUT: u32 = 2;
-
 /// The sign timeout limit in blocks before we consider proposal as stalled
-pub const SIGN_TIMEOUT: u32 = 2;
+pub const SIGN_TIMEOUT: u32 = 10;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";

@@ -140,21 +140,24 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	}
 
 	pub fn keygen_has_stalled(&self, now: C) -> bool {
-		self.keygen_is_not_complete() && (now >= self.started_at + KEYGEN_TIMEOUT.into())
+		self.has_stalled(now, KEYGEN_TIMEOUT)
 	}
 
 	pub fn signing_has_stalled(&self, now: C) -> bool {
-		self.signing_is_not_complete() && (now >= self.started_at + SIGN_TIMEOUT.into())
+		self.has_stalled(now, SIGN_TIMEOUT)
 	}
 
-	pub fn keygen_is_not_complete(&self) -> bool {
-		self.get_status() != MetaHandlerStatus::Complete ||
-			self.get_status() == MetaHandlerStatus::Terminated
-	}
+	fn has_stalled(&self, now: C, timeout: u32) -> bool {
+		let state = self.get_status();
 
-	pub fn signing_is_not_complete(&self) -> bool {
-		self.get_status() != MetaHandlerStatus::Complete ||
-			self.get_status() == MetaHandlerStatus::Terminated
+		// if the state is terminated, preemptively assume we are stalled
+		// to allow other tasks to take this one's place
+		if state == MetaHandlerStatus::Terminated {
+			return true
+		}
+
+		// otherwise, if we have timed-out, no matter the state, we are stalled
+		now >= self.started_at + timeout.into()
 	}
 }
 
