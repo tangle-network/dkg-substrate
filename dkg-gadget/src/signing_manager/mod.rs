@@ -20,6 +20,8 @@ use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
 
+pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
+
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -48,10 +50,8 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	}
 }
 
-// 1 unsigned proposal per signing set
-const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 1;
 // the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 1;
+const MAX_RUNNING_TASKS: usize = 4;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -68,7 +68,7 @@ where
 		}
 	}
 
-	pub fn deliver_message(&self, message: Arc<SignedDKGMessage<Public>>) {
+	pub fn deliver_message(&self, message: SignedDKGMessage<Public>) {
 		self.work_manager.deliver_message(message)
 	}
 
@@ -104,7 +104,9 @@ where
 			.exec_client_function(move |client| client.runtime_api().get_unsigned_proposals(at))
 			.await
 		{
-			Ok(res) => {
+			Ok(mut res) => {
+				// sort proposals by timestamp, we want to pick the oldest proposal to sign
+				res.sort_by(|a, b| a.1.cmp(&b.1));
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
 					// lets limit the max proposals we sign at one time to prevent overflow
@@ -116,7 +118,7 @@ where
 						break
 					}
 
-					if let Some(hash) = proposal.hash() {
+					if let Some(hash) = proposal.0.hash() {
 						// only submit the job if it isn't already running
 						if !self.work_manager.job_exists(&hash) {
 							// update unsigned proposal counter
@@ -170,7 +172,8 @@ where
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash = unsigned_proposal.hash().expect("unable to hash proposal");
+			let unsigned_proposal_hash =
+				unsigned_proposal.0.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -193,8 +196,9 @@ where
 						session_id,
 						threshold,
 						ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal,
+						unsigned_proposal.0,
 						signing_set,
+						*header.number(),
 					) {
 						Ok((handle, task)) => {
 							// send task to the work manager
@@ -236,6 +240,7 @@ where
 		stage: ProtoStageType,
 		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
 		signing_set: Vec<KeygenPartyId>,
+		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
 		let async_proto_params = dkg_worker.generate_async_proto_params(
@@ -245,6 +250,7 @@ where
 			session_id,
 			stage,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
+			associated_block_id,
 		)?;
 
 		let handle = async_proto_params.handle.clone();

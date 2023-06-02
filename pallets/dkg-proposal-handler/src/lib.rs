@@ -768,14 +768,17 @@ impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
 	pub fn get_unsigned_proposals(
-	) -> Vec<dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>> {
+	) -> Vec<(dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>, T::BlockNumber)> {
 		UnsignedProposalQueue::<T>::iter()
 			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
-				dkg_runtime_primitives::UnsignedProposal {
-					typed_chain_id,
-					key,
-					proposal: stored_unsigned_proposal.proposal,
-				}
+				(
+					dkg_runtime_primitives::UnsignedProposal {
+						typed_chain_id,
+						key,
+						proposal: stored_unsigned_proposal.proposal,
+					},
+					stored_unsigned_proposal.timestamp,
+				)
 			})
 			.collect()
 	}

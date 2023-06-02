@@ -3,6 +3,7 @@ use crate::{
 	MockBlockchainEvent, MockClientResponse, TestBlock, TestCase,
 };
 use atomic::Atomic;
+use dkg_logging::debug_logger::DebugLogger;
 use dkg_runtime_primitives::UnsignedProposal;
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
@@ -32,6 +33,7 @@ pub struct MockBlockchain<T: Clone> {
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
 	blockchain: T,
+	logger: DebugLogger,
 }
 
 /// For communicating between the orchestrator task and each spawned client sub-task
@@ -79,7 +81,11 @@ struct ConnectedClientState {
 }
 
 impl<T: MutableBlockchain> MockBlockchain<T> {
-	pub async fn new(config: MockBlockchainConfig, blockchain: T) -> std::io::Result<Self> {
+	pub async fn new(
+		config: MockBlockchainConfig,
+		blockchain: T,
+		logger: DebugLogger,
+	) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
 		let (to_orchestrator, orchestrator_rx) = mpsc::unbounded_channel();
@@ -93,6 +99,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			to_orchestrator,
 			orchestrator_rx: Arc::new(Mutex::new(Some(orchestrator_rx))),
 			blockchain,
+			logger,
 		})
 	}
 
@@ -469,6 +476,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 	}
 
 	async fn begin_next_test_print(&self, test_phase: &IntraTestPhase) {
+		self.logger.clear_checkpoints();
 		let test_round = test_phase.round_number();
 		let test_phase = match test_phase {
 			IntraTestPhase::Keygen { .. } => "KEYGEN",
@@ -554,7 +562,7 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 pub trait MutableBlockchain: Clone + Send + 'static {
 	fn set_unsigned_proposals(
 		&self,
-		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 	);
 	fn set_pub_key(&self, session: u64, key: Vec<u8>);
 }
@@ -570,7 +578,7 @@ enum IntraTestPhase {
 	Signing {
 		trace_id: Uuid,
 		queued_unsigned_proposals:
-			Option<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>>,
+			Option<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>>,
 		round_number: u64,
 		test_case: TestCase,
 	},
@@ -590,10 +598,19 @@ impl IntraTestPhase {
 		if let Self::Keygen { trace_id, queued_unsigned_proposals, round_number, test_case } = self
 		{
 			let queued_unsigned_proposals = queued_unsigned_proposals.take();
+			let mut queued_unsigned_proposals_with_expiry: Vec<(
+				UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>,
+				u64,
+			)> = Default::default();
+			for prop in queued_unsigned_proposals.iter() {
+				for p in prop.iter() {
+					queued_unsigned_proposals_with_expiry.push((p.clone(), 1_u64));
+				}
+			}
 			let test_case = test_case.take().unwrap();
 			*self = Self::Signing {
 				trace_id: *trace_id,
-				queued_unsigned_proposals,
+				queued_unsigned_proposals: Some(queued_unsigned_proposals_with_expiry),
 				round_number: *round_number,
 				test_case,
 			};

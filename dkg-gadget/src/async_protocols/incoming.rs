@@ -20,7 +20,6 @@ use sp_runtime::traits::Get;
 use std::{
 	marker::PhantomData,
 	pin::Pin,
-	sync::Arc,
 	task::{Context, Poll},
 };
 
@@ -49,14 +48,14 @@ impl<
 	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
 {
 	pub fn new(
-		mut receiver: tokio::sync::broadcast::Receiver<T>,
+		mut receiver: tokio::sync::mpsc::UnboundedReceiver<T>,
 		ty: ProtocolType<MaxProposalLength>,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
 		let logger = params.logger.clone();
 
 		let stream = async_stream::try_stream! {
-			while let Ok(msg) = receiver.recv().await {
+			while let Some(msg) = receiver.recv().await {
 				match msg.transform(&params.engine, &ty, params.session_id, &params.logger).await {
 					Ok(Some(msg)) => yield msg,
 
@@ -95,7 +94,7 @@ pub trait TransformIncoming: Clone + Send + 'static {
 }
 
 #[async_trait::async_trait]
-impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
+impl TransformIncoming for SignedDKGMessage<Public> {
 	type IncomingMapped = DKGMessage<Public>;
 	async fn transform<
 		BI: BlockchainInterface,
@@ -110,22 +109,49 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 	where
 		Self: Sized,
 	{
+		logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2-incoming");
 		match (stream_type, &self.msg.payload) {
 			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
 			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
 			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
+				logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.1-incoming");
 				// only clone if the downstream receiver expects this type
+				let associated_block_id = stream_type.get_associated_block_id();
 				let sender = self
 					.msg
 					.payload
 					.async_proto_only_get_sender_id()
 					.expect("Could not get sender id");
 				if sender != stream_type.get_i() {
+					logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.2-incoming");
 					if self.msg.session_id == this_session_id {
-						verify
-							.verify_signature_against_authorities(self)
-							.await
-							.map(|body| Some(Msg { sender, receiver: None, body }))
+						logger
+							.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.3-incoming");
+						if associated_block_id == &self.msg.associated_block_id {
+							logger.checkpoint_message_raw(
+								self.msg.payload.payload(),
+								"CP-2.4-incoming",
+							);
+							let payload = self.msg.payload.payload().clone();
+							match verify.verify_signature_against_authorities(self).await {
+								Ok(body) => {
+									logger.checkpoint_message_raw(
+										&payload,
+										"CP-2.4-verified-incoming",
+									);
+									Ok(Some(Msg { sender, receiver: None, body }))
+								},
+								Err(err) => {
+									let err_msg = format!("Unable to verify message: {err:?}");
+									logger.error(&err_msg);
+									logger.checkpoint_message_raw(&payload, err_msg);
+									Err(err)
+								},
+							}
+						} else {
+							logger.warn(format!("Will skip passing message to state machine since not for this associated block, msg block {:?} expected block {:?}", self.msg.associated_block_id, associated_block_id));
+							Ok(None)
+						}
 					} else {
 						logger.warn(format!("Will skip passing message to state machine since not for this round, msg round {:?} this session {:?}", self.msg.session_id, this_session_id));
 						Ok(None)

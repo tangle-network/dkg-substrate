@@ -57,6 +57,8 @@ pub struct DKGMessage<AuthorityId> {
 	pub session_id: SessionId,
 	/// enum for active or queued
 	pub status: DKGMsgStatus,
+	/// The bytes of the round ID
+	pub associated_block_id: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -110,6 +112,15 @@ pub enum DKGMsgPayload {
 }
 
 impl DKGMsgPayload {
+	pub fn payload(&self) -> &Vec<u8> {
+		match self {
+			DKGMsgPayload::Offline(msg) => &msg.offline_msg,
+			DKGMsgPayload::Vote(msg) => &msg.partial_signature,
+			DKGMsgPayload::Keygen(msg) => &msg.keygen_msg,
+			DKGMsgPayload::PublicKeyBroadcast(msg) => &msg.pub_key,
+			DKGMsgPayload::MisbehaviourBroadcast(msg) => &msg.signature,
+		}
+	}
 	pub fn unsigned_proposal_hash(&self) -> Option<&[u8; 32]> {
 		match self {
 			DKGMsgPayload::Offline(msg) => Some(&msg.unsigned_proposal_hash),

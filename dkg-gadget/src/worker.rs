@@ -79,8 +79,6 @@ pub const MAX_SUBMISSION_DELAY: u32 = 3;
 
 pub const MAX_KEYGEN_RETRIES: usize = 5;
 
-pub const MAX_UNSIGNED_PROPOSALS_PER_SIGNING_SET: usize = 2;
-
 /// How many blocks to keep the proposal hash in out local cache.
 pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
@@ -302,6 +300,7 @@ where
 		session_id: SessionId,
 		stage: ProtoStageType,
 		protocol_name: &str,
+		associated_block: NumberFor<B>,
 	) -> Result<
 		AsyncProtocolParameters<
 			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
@@ -362,6 +361,7 @@ where
 			handle: status_handle.clone(),
 			logger: self.logger.clone(),
 			local_key: active_local_key,
+			associated_block_id: associated_block.encode(),
 		};
 
 		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {
@@ -372,8 +372,6 @@ where
 		// Set the status handle as primary, implying that once it drops, it will stop the async
 		// protocol
 		status_handle.set_as_primary();
-		// Start the respective protocol
-		status_handle.start()?;
 		// Cache the rounds, respectively
 		match stage {
 			ProtoStageType::Genesis => {
@@ -417,12 +415,14 @@ where
 		}
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	async fn spawn_keygen_protocol(
 		&self,
 		best_authorities: Vec<(KeygenPartyId, Public)>,
 		authority_public_key: Public,
 		party_i: KeygenPartyId,
 		session_id: SessionId,
+		associated_block: NumberFor<B>,
 		threshold: u16,
 		stage: ProtoStageType,
 	) {
@@ -433,6 +433,7 @@ where
 			session_id,
 			stage,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
+			associated_block,
 		) {
 			Ok(async_proto_params) => {
 				let err_handler_tx = self.error_handler.clone();
@@ -453,10 +454,18 @@ where
 					// so we can safely assume that we are in the queued state.
 					DKGMsgStatus::QUEUED
 				};
+				let start_handle = async_proto_params.handle.clone();
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let task = async move {
+							if let Err(err) = start_handle.start() {
+								logger.error_keygen(format!(
+									"Error starting keygen protocol: {err:?}"
+								));
+								return
+							}
+
 							match meta_handler.await {
 								Ok(_) => {
 									logger.info(
@@ -770,6 +779,7 @@ where
 			authority_public_key,
 			party_i,
 			session_id,
+			*header.number(),
 			threshold,
 			ProtoStageType::Genesis,
 		)
@@ -836,6 +846,7 @@ where
 			authority_public_key,
 			party_i,
 			session_id,
+			*header.number(),
 			threshold,
 			ProtoStageType::Queued,
 		)
@@ -1268,10 +1279,9 @@ where
 
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
-				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = &rounds {
-					if rounds.session_id == msg.msg.session_id {
-						if let Err(err) = rounds.deliver_message(msg) {
+					if rounds.session_id == dkg_msg.msg.session_id {
+						if let Err(err) = rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1282,8 +1292,8 @@ where
 				}
 
 				if let Some(next_rounds) = next_rounds {
-					if next_rounds.session_id == msg.msg.session_id {
-						if let Err(err) = next_rounds.deliver_message(msg) {
+					if next_rounds.session_id == dkg_msg.msg.session_id {
+						if let Err(err) = next_rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
 							})
@@ -1293,12 +1303,14 @@ where
 					}
 				}
 
+				// TODO: if the message belongs to neither, investigate if we maybe need to enqueue
+				// the message (did someone else's protocol start before ours, and neither of our
+				// rounds are set-up?)
+
 				Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
-				let msg = Arc::new(dkg_msg);
-				self.signing_manager.deliver_message(msg);
-
+				self.signing_manager.deliver_message(dkg_msg);
 				return Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
@@ -1531,20 +1543,19 @@ where
 
 	fn spawn_keygen_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
 		let keygen_gossip_engine = self.keygen_gossip_engine.clone();
-		let mut keygen_stream = keygen_gossip_engine
-			.message_available_notification()
-			.filter_map(move |_| futures::future::ready(keygen_gossip_engine.peek_last_message()));
+		let mut keygen_stream =
+			keygen_gossip_engine.get_stream().expect("keygen gossip stream already taken");
 		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(msg) = keygen_stream.next().await {
+			while let Some(msg) = keygen_stream.recv().await {
+				let msg_hash = crate::debug_logger::raw_message_to_hash(msg.msg.payload.payload());
 				self_.logger.debug(format!(
-					"Going to handle keygen message for session {}",
+					"Going to handle keygen message for session {} | hash: {msg_hash}",
 					msg.msg.session_id
 				));
+				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-keygen");
 				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {
-						self_.keygen_gossip_engine.acknowledge_last_message();
-					},
+					Ok(_) => {},
 					Err(e) => {
 						self_.logger.error(format!("Error processing keygen message: {e:?}"));
 					},
@@ -1555,20 +1566,18 @@ where
 
 	fn spawn_signing_messages_stream_task(&self) -> tokio::task::JoinHandle<()> {
 		let signing_gossip_engine = self.signing_gossip_engine.clone();
-		let mut signing_stream = signing_gossip_engine
-			.message_available_notification()
-			.filter_map(move |_| futures::future::ready(signing_gossip_engine.peek_last_message()));
+		let mut signing_stream =
+			signing_gossip_engine.get_stream().expect("signing gossip stream already taken");
 		let self_ = self.clone();
 		tokio::spawn(async move {
-			while let Some(msg) = signing_stream.next().await {
+			while let Some(msg) = signing_stream.recv().await {
 				self_.logger.debug(format!(
 					"Going to handle signing message for session {}",
 					msg.msg.session_id
 				));
+				self_.logger.checkpoint_message_raw(msg.msg.payload.payload(), "CP1-signing");
 				match self_.process_incoming_dkg_message(msg).await {
-					Ok(_) => {
-						self_.signing_gossip_engine.acknowledge_last_message();
-					},
+					Ok(_) => {},
 					Err(e) => {
 						self_.logger.error(format!("Error processing signing message: {e:?}"));
 					},

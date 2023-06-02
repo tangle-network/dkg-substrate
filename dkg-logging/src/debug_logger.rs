@@ -1,8 +1,9 @@
 #![allow(clippy::unwrap_used)]
-use crate::async_protocols::ProtocolType;
-use dkg_logging::{debug, error, info, trace, warn};
+use crate::{debug, error, info, trace, warn};
+use lazy_static::lazy_static;
 use parking_lot::RwLock;
-use sp_core::Get;
+use serde::Serialize;
+use sp_core::{bytes::to_hex, hashing::sha2_256};
 use std::{collections::HashMap, fmt::Debug, io::Write, sync::Arc, time::Instant};
 
 #[derive(Clone, Debug)]
@@ -13,6 +14,16 @@ pub struct DebugLogger {
 	events_file_handle_keygen: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_signing: Arc<RwLock<Option<std::fs::File>>>,
 	events_file_handle_voting: Arc<RwLock<Option<std::fs::File>>>,
+	checkpoints_enabled: bool,
+}
+
+struct Checkpoint {
+	checkpoint: String,
+	message_hash: String,
+}
+
+lazy_static! {
+	static ref CHECKPOINTS: RwLock<HashMap<String, Checkpoint>> = RwLock::new(HashMap::new());
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -46,12 +57,36 @@ pub struct RoundsEvent {
 	proto: AsyncProtocolType,
 }
 pub enum RoundsEventType {
-	SentMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
-	ReceivedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
-	ProcessedMessage { session: usize, round: usize, sender: u16, receiver: Option<u16> },
-	ProceededToRound { session: usize, round: usize },
+	SentMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ReceivedMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ProcessedMessage {
+		session: usize,
+		round: usize,
+		sender: u16,
+		receiver: Option<u16>,
+		msg_hash: String,
+	},
+	ProceededToRound {
+		session: u64,
+		round: usize,
+	},
 	// this probably shouldn't happen, but just in case, we will emit events if this does occur
-	PartyIndexChanged { previous: usize, new: usize },
+	PartyIndexChanged {
+		previous: usize,
+		new: usize,
+	},
 }
 
 impl RoundsEventType {
@@ -99,19 +134,19 @@ impl Debug for RoundsEvent {
 		let hash_str =
 			hash_opt.map(|hash| format!(" unsigned proposal {hash}")).unwrap_or_default();
 		match &self.event {
-			RoundsEventType::SentMessage { session, round, receiver, .. } => {
+			RoundsEventType::SentMessage { session, round, receiver, msg_hash, .. } => {
 				let receiver = get_legible_name(*receiver);
-				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} sent a message to {receiver} for session {session} round {round}{hash_str} | {msg_hash}")
 			},
-			RoundsEventType::ReceivedMessage { session, round, sender, receiver } => {
+			RoundsEventType::ReceivedMessage { session, round, sender, receiver, msg_hash } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} received a {msg_type} message from {sender} for session {session} round {round}{hash_str}| {msg_hash}")
 			},
-			RoundsEventType::ProcessedMessage { session, round, sender, receiver } => {
+			RoundsEventType::ProcessedMessage { session, round, sender, receiver, msg_hash } => {
 				let msg_type = receiver.map(|_| "direct").unwrap_or("broadcast");
 				let sender = get_legible_name(Some(*sender));
-				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}{hash_str}")
+				writeln!(f, "{me} processed a {msg_type} message from {sender} for session {session} round {round}{hash_str}| {msg_hash}")
 			},
 			RoundsEventType::ProceededToRound { session, round } => {
 				writeln!(f, "\n~~~~~~~~~~~~~~~~~ {me} Proceeded to round {round} for session {session} {hash_str} ~~~~~~~~~~~~~~~~~")
@@ -133,6 +168,25 @@ impl DebugLogger {
 	) -> std::io::Result<Self> {
 		// use a channel for sending file I/O requests to a dedicated thread to avoid blocking the
 		// DKG workers
+
+		let checkpoints_enabled = std::env::var("CHECKPOINTS").unwrap_or_default() == "enabled";
+		if checkpoints_enabled {
+			static HAS_CHECKPOINT_TRACKER_RUN: std::sync::atomic::AtomicBool =
+				std::sync::atomic::AtomicBool::new(false);
+			if !HAS_CHECKPOINT_TRACKER_RUN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+				// spawn a task to periodically print out the last checkpoint for each message
+				println!("Running checkpoint tracker");
+				tokio::task::spawn(async move {
+					loop {
+						tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+						let lock = CHECKPOINTS.read();
+						for checkpoint in lock.values() {
+							warn!(target: "dkg", "Checkpoint for {} last at {}", checkpoint.message_hash, checkpoint.checkpoint);
+						}
+					}
+				});
+			}
+		}
 
 		let (file, events_file_keygen, events_file_signing, events_file_voting) =
 			Self::get_files(file)?;
@@ -187,6 +241,7 @@ impl DebugLogger {
 			events_file_handle_keygen: events_file_handle,
 			events_file_handle_signing,
 			events_file_handle_voting,
+			checkpoints_enabled,
 		})
 	}
 
@@ -329,18 +384,55 @@ impl DebugLogger {
 			error!(target: "dkg_gadget", "failed to send event message to file: {err:?}");
 		}
 	}
-}
 
-impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
-	for AsyncProtocolType
-{
-	fn from(value: &ProtocolType<T>) -> Self {
-		match value {
-			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
-			ProtocolType::Offline { unsigned_proposal, .. } =>
-				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
-			ProtocolType::Voting { unsigned_proposal, .. } =>
-				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+	pub fn checkpoint_message<T: Serialize>(&self, msg: T, checkpoint: impl Into<String>) {
+		if self.checkpoints_enabled {
+			let hash = message_to_string_hash(&msg);
+			CHECKPOINTS.write().insert(
+				hash.clone(),
+				Checkpoint { checkpoint: checkpoint.into(), message_hash: hash },
+			);
 		}
 	}
+
+	pub fn checkpoint_message_raw(&self, payload: &[u8], checkpoint: impl Into<String>) {
+		if self.checkpoints_enabled {
+			let hash = raw_message_to_hash(payload);
+			CHECKPOINTS.write().insert(
+				hash.clone(),
+				Checkpoint { checkpoint: checkpoint.into(), message_hash: hash },
+			);
+		}
+	}
+
+	pub fn clear_checkpoints(&self) {
+		if self.checkpoints_enabled {
+			CHECKPOINTS.write().clear();
+		}
+	}
+
+	pub fn clear_checkpoint_for_message<T: Serialize>(&self, msg: T) {
+		if self.checkpoints_enabled {
+			let hash = message_to_string_hash(&msg);
+			CHECKPOINTS.write().remove(&hash);
+		}
+	}
+
+	pub fn clear_checkpoint_for_message_raw(&self, payload: &[u8]) {
+		if self.checkpoints_enabled {
+			let hash = raw_message_to_hash(payload);
+			CHECKPOINTS.write().remove(&hash);
+		}
+	}
+}
+
+pub fn message_to_string_hash<T: Serialize>(msg: T) -> String {
+	let message = serde_json::to_vec(&msg).expect("message_to_string_hash");
+	let message = sha2_256(&message);
+	to_hex(&message, false)
+}
+
+pub fn raw_message_to_hash(payload: &[u8]) -> String {
+	let message = sha2_256(payload);
+	to_hex(&message, false)
 }

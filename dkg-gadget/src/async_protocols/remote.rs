@@ -14,7 +14,7 @@
 
 use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
 use atomic::Atomic;
-use dkg_primitives::types::{DKGError, SessionId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,10 @@ use std::sync::{atomic::Ordering, Arc};
 
 pub struct AsyncProtocolRemote<C> {
 	pub(crate) status: Arc<Atomic<MetaHandlerStatus>>,
-	pub(crate) broadcaster: tokio::sync::broadcast::Sender<Arc<SignedDKGMessage<Public>>>,
+	tx_keygen_signing: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
+	tx_voting: tokio::sync::mpsc::UnboundedSender<SignedDKGMessage<Public>>,
+	pub(crate) rx_keygen_signing: MessageReceiverHandle,
+	pub(crate) rx_voting: MessageReceiverHandle,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
 	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
@@ -37,11 +40,17 @@ pub struct AsyncProtocolRemote<C> {
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
 
+type MessageReceiverHandle =
+	Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>>>>;
+
 impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 	fn clone(&self) -> Self {
 		Self {
 			status: self.status.clone(),
-			broadcaster: self.broadcaster.clone(),
+			tx_keygen_signing: self.tx_keygen_signing.clone(),
+			tx_voting: self.tx_voting.clone(),
+			rx_keygen_signing: self.rx_keygen_signing.clone(),
+			rx_voting: self.rx_voting.clone(),
 			start_tx: self.start_tx.clone(),
 			start_rx: self.start_rx.clone(),
 			stop_tx: self.stop_tx.clone(),
@@ -71,7 +80,8 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(at: C, session_id: SessionId, logger: DebugLogger) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
-		let (broadcaster, _) = tokio::sync::broadcast::channel(4096);
+		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
+		let (tx_voting, rx_voting) = tokio::sync::mpsc::unbounded_channel();
 		let (start_tx, start_rx) = tokio::sync::oneshot::channel();
 
 		let (current_round_blame_tx, current_round_blame) =
@@ -107,8 +117,11 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 
 		Self {
 			status,
+			tx_keygen_signing,
+			tx_voting,
+			rx_keygen_signing: Arc::new(Mutex::new(Some(rx_keygen_signing))),
+			rx_voting: Arc::new(Mutex::new(Some(rx_voting))),
 			status_history,
-			broadcaster,
 			started_at: at,
 			start_tx: Arc::new(Mutex::new(Some(start_tx))),
 			start_rx: Arc::new(Mutex::new(Some(start_rx))),
@@ -182,30 +195,31 @@ impl<C> AsyncProtocolRemote<C> {
 
 	pub fn is_active(&self) -> bool {
 		let status = self.get_status();
-		status != MetaHandlerStatus::Beginning &&
-			status != MetaHandlerStatus::Complete &&
-			status != MetaHandlerStatus::Terminated
+		status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated
 	}
 
+	#[allow(clippy::result_large_err)]
 	pub fn deliver_message(
 		&self,
-		msg: Arc<SignedDKGMessage<Public>>,
-	) -> Result<(), tokio::sync::broadcast::error::SendError<Arc<SignedDKGMessage<Public>>>> {
-		if self.broadcaster.receiver_count() != 0 && self.is_active() {
-			self.broadcaster.send(msg).map(|_| ())
+		msg: SignedDKGMessage<Public>,
+	) -> Result<(), tokio::sync::mpsc::error::SendError<SignedDKGMessage<Public>>> {
+		let status = self.get_status();
+		let can_deliver =
+			status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated;
+		if can_deliver {
+			if matches!(msg.msg.payload, DKGMsgPayload::Vote(..)) {
+				self.tx_voting.send(msg)
+			} else {
+				self.tx_keygen_signing.send(msg)
+			}
 		} else {
 			// do not forward the message (TODO: Consider enqueuing messages for rounds not yet
 			// active other nodes may be active, but this node is still in the process of "waking
 			// up"). Thus, by not delivering a message here, we may be preventing this node from
 			// joining.
+			self.logger.warn(format!("Did not deliver message {:?}", msg.msg.payload));
 			Ok(())
 		}
-	}
-
-	/// Determines if there are any active listeners
-	#[allow(dead_code)]
-	pub fn is_receiving(&self) -> bool {
-		self.broadcaster.receiver_count() != 0
 	}
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines

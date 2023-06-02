@@ -23,3 +23,4 @@ sc-network = { workspace = true }
 sc-utils = { workspace = true }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 dkg-runtime-primitives = { workspace = true, features = ["testing", "std"] }
+dkg-logging = { workspace = true }

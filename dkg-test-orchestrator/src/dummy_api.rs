@@ -30,13 +30,14 @@ pub struct DummyApiInner {
 	pub authority_sets:
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
-	pub unsigned_proposals: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+	pub unsigned_proposals:
+		Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 }
 
 impl MutableBlockchain for DummyApi {
 	fn set_unsigned_proposals(
 		&self,
-		propos: Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
+		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 	) {
 		self.inner.write().unsigned_proposals = propos;
 	}
@@ -649,7 +650,7 @@ impl
 	fn get_unsigned_proposals(
 		&self,
 		_hash: H256,
-	) -> ApiResult<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>> {
+	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 

@@ -61,6 +61,7 @@ use self::{
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
 use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use dkg_logging::debug_logger::AsyncProtocolType;
 use incoming::IncomingAsyncProtocolWrapper;
 use multi_party_ecdsa::MessageRoundID;
 
@@ -74,6 +75,7 @@ pub struct AsyncProtocolParameters<
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
+	pub associated_block_id: Vec<u8>,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -134,6 +136,7 @@ impl<
 			engine: self.engine.clone(),
 			keystore: self.keystore.clone(),
 			current_validator_set: self.current_validator_set.clone(),
+			associated_block_id: self.associated_block_id.clone(),
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
 			party_i: self.party_i,
@@ -287,23 +290,34 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 		i: KeygenPartyId,
 		t: u16,
 		n: u16,
+		associated_block_id: Vec<u8>,
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
+		associated_block_id: Vec<u8>,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
+		associated_block_id: Vec<u8>,
 	},
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
 	ProtocolType<MaxProposalLength>
 {
+	pub const fn get_associated_block_id(&self) -> &Vec<u8> {
+		match self {
+			Self::Keygen { associated_block_id: associated_round_id, .. } => associated_round_id,
+			Self::Offline { associated_block_id: associated_round_id, .. } => associated_round_id,
+			Self::Voting { associated_block_id: associated_round_id, .. } => associated_round_id,
+		}
+	}
+
 	pub const fn get_i(&self) -> u16 {
 		match self {
 			Self::Keygen { i, .. } => i.0,
@@ -329,13 +343,13 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ProtocolType::Keygen { ty, i, t, n } => {
+			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id } => {
 				let ty = match ty {
 					KeygenRound::ACTIVE => "ACTIVE",
 					KeygenRound::QUEUED => "QUEUED",
 					KeygenRound::UNKNOWN => "UNKNOWN",
 				};
-				write!(f, "{ty} | Keygen: (i, t, n) = ({i}, {t}, {n})")
+				write!(f, "{ty} | Keygen: (i, t, n, r) = ({i}, {t}, {n}, {associated_round_id:?})")
 			},
 			ProtocolType::Offline { i, unsigned_proposal, .. } => {
 				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
@@ -535,20 +549,13 @@ where
 				},
 			};
 
+			let msg_hash = crate::debug_logger::message_to_string_hash(&unsigned_message);
+
 			params.logger.info(format!(
-				"Async proto sent outbound request in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
+				"Async proto about to send outbound message in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
 				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
 
-			params.logger.round_event(
-				&proto_ty,
-				crate::RoundsEventType::SentMessage {
-					session: params.session_id as _,
-					round: unsigned_message.body.round_id() as _,
-					sender: unsigned_message.sender as _,
-					receiver: unsigned_message.receiver as _,
-				},
-			);
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -610,6 +617,7 @@ where
 
 			let id = params.authority_public_key.as_ref().clone();
 			let unsigned_dkg_message = DKGMessage {
+				associated_block_id: params.associated_block_id.clone(),
 				sender_id: id,
 				recipient_id: maybe_recipient_id,
 				status,
@@ -624,6 +632,17 @@ where
 				params
 					.logger
 					.info(format!("🕸️  Async proto sent outbound message: {:?}", &proto_ty));
+				params.logger.round_event(
+					&proto_ty,
+					crate::RoundsEventType::SentMessage {
+						session: params.session_id as _,
+						round: unsigned_message.body.round_id() as _,
+						sender: unsigned_message.sender as _,
+						receiver: unsigned_message.receiver as _,
+						msg_hash,
+					},
+				);
+				params.logger.checkpoint_message(&unsigned_message, "CP0");
 			}
 
 			// check the status of the async protocol.
@@ -655,7 +674,12 @@ where
 {
 	Box::pin(async move {
 		// the below wrapper will map signed messages into unsigned messages
-		let incoming = params.handle.broadcaster.subscribe();
+		let incoming = params
+			.handle
+			.rx_keygen_signing
+			.lock()
+			.take()
+			.expect("rx_keygen_signing already taken");
 		let incoming_wrapper =
 			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), params.clone());
 		// we use fuse here, since normally, once a stream has returned `None` from calling
@@ -671,6 +695,10 @@ where
 					break
 				},
 			};
+
+			params
+				.logger
+				.checkpoint_message_raw(unsigned_message.body.payload.payload(), "CP-2.5-incoming");
 
 			if SM::handle_unsigned_message(
 				&to_async_proto,
@@ -793,5 +821,19 @@ mod tests {
 		let authority_id =
 			authorities.get(my_keygen_id.to_index()).expect("authority id should exist");
 		assert_eq!(authority_id, &my_authority_id);
+	}
+}
+
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+	for AsyncProtocolType
+{
+	fn from(value: &ProtocolType<T>) -> Self {
+		match value {
+			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
+			ProtocolType::Offline { unsigned_proposal, .. } =>
+				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+			ProtocolType::Voting { unsigned_proposal, .. } =>
+				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+		}
 	}
 }

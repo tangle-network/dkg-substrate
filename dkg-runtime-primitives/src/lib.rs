@@ -77,18 +77,14 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-/// Gossip message resending limit for outbound messages
-pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
-
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 
 /// The offline timeout limit in blocks before we consider misbehaviours
 pub const OFFLINE_TIMEOUT: u32 = 2;
 
-/// The sign timeout limit in blocks before we consider misbehaviours
-/// The timeout here is high because we have backoff, which can delay the proposals sign
-pub const SIGN_TIMEOUT: u32 = 10;
+/// The sign timeout limit in blocks before we consider proposal as stalled
+pub const SIGN_TIMEOUT: u32 = 2;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -291,7 +287,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
+		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

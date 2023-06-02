@@ -1842,6 +1842,13 @@ dependencies = [
 name = "dkg-logging"
 version = "0.1.0"
 dependencies = [
+ "hex",
+ "lazy_static",
+ "parking_lot 0.12.1",
+ "serde",
+ "serde_json",
+ "sp-core",
+ "tokio",
  "tracing",
  "tracing-filter",
  "tracing-subscriber 0.3.17",
@@ -1855,6 +1862,7 @@ dependencies = [
  "atomic",
  "bincode2",
  "bytes",
+ "dkg-logging",
  "dkg-runtime-primitives",
  "futures",
  "humantime-serde",

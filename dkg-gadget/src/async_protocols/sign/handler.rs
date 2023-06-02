@@ -21,13 +21,13 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 };
 
 use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
-use tokio::sync::broadcast::Receiver;
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
 	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
 };
+use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
 };
@@ -151,11 +151,11 @@ where
 			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
+			associated_block_id: params.associated_block_id.clone(),
 		};
-		let early_handle = params.handle.broadcaster.subscribe();
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
-			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
+			(unsigned_proposal, offline_i, threshold, batch_key),
 			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
@@ -170,7 +170,7 @@ where
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
-		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
+		rx: tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
@@ -180,12 +180,16 @@ where
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 				i: offline_i,
+				associated_block_id: params.associated_block_id.clone(),
 			};
 
-			// the below wrapper will map signed messages into unsigned messages
-			let incoming = rx;
+			params.logger.round_event(
+				&ty,
+				RoundsEventType::ProceededToRound { session: params.session_id, round: 0 },
+			);
+
 			let mut incoming_wrapper =
-				IncomingAsyncProtocolWrapper::new(incoming, ty, params.clone());
+				IncomingAsyncProtocolWrapper::new(rx, ty.clone(), params.clone());
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
@@ -222,6 +226,7 @@ where
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
+				associated_block_id: params.associated_block_id.clone(),
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
@@ -249,21 +254,37 @@ where
 			let mut received_sigs = HashSet::new();
 
 			while let Some(msg) = incoming_wrapper.next().await {
+				let payload = msg.body.payload.payload().clone();
+				params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received");
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-2");
 						if !received_sigs.insert(msg.sender) {
-							params.logger.info_signing(format!(
+							params.logger.warn_signing(format!(
 								"Received duplicate partial sig from {}",
 								msg.sender
 							));
+							params.logger.clear_checkpoint_for_message_raw(&payload);
 							continue
 						}
+
+						if msg.body.associated_block_id != params.associated_block_id {
+							params.logger.warn_signing(format!(
+								"Received partial sig from {} with wrong associated block id",
+								msg.sender
+							));
+							params.logger.clear_checkpoint_for_message_raw(&payload);
+							continue
+						}
+
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-3");
 						params.logger.info_signing("Found matching round key!".to_string());
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)
 						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-4");
 						params.logger.debug(format!(
 							"[Sig] Received from {} sig {:?}",
 							dkg_vote_msg.party_ind, partial
@@ -272,6 +293,13 @@ where
 						params
 							.logger
 							.info_signing(format!("There are now {} partial sigs ...", sigs.len()));
+						params.logger.round_event(
+							&ty,
+							RoundsEventType::ProceededToRound {
+								session: params.session_id,
+								round: sigs.len(),
+							},
+						);
 						if sigs.len() == number_of_partial_sigs {
 							break
 						}
@@ -314,7 +342,12 @@ where
 				params.session_id,
 				batch_key,
 				message,
-			)
+			)?;
+			params.logger.round_event(
+				&ty,
+				RoundsEventType::ProceededToRound { session: params.session_id, round: 9999999999 },
+			);
+			Ok(())
 		});
 
 		Ok(GenericAsyncHandler { protocol })
