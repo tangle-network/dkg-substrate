@@ -92,6 +92,9 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 // Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
+// type of BatchId for batch storage in proposal handler pallet
+pub type BatchId = u32;
+
 // Max length for proposals
 pub type MaxProposalLength = CustomU32Getter<10_000>;
 
@@ -100,6 +103,9 @@ pub type MaxAuthorities = CustomU32Getter<100>;
 
 // Max reporters
 pub type MaxReporters = CustomU32Getter<100>;
+
+/// Max proposals in a batch
+pub type MaxProposalsInBatch = CustomU32Getter<10>;
 
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<512>;
@@ -287,7 +293,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
+		fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, N>>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

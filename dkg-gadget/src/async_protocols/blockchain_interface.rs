@@ -32,7 +32,8 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
+	MaxProposalsInBatch, MaxSignatureLength, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -86,6 +87,9 @@ pub struct DKGProtocolEngine<
 	GE,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 > {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
@@ -103,7 +107,7 @@ pub struct DKGProtocolEngine<
 	pub metrics: Arc<Option<Metrics>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
-	pub _pd: PhantomData<BE>,
+	pub _pd: PhantomData<(BE, BatchId, MaxProposalsInBatch, MaxSignatureLength)>,
 }
 
 impl<
@@ -113,7 +117,21 @@ impl<
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	>
+	DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	>
 {
 	fn send_result_to_test_client(&self, result: Result<(), String>, pub_key: Option<Vec<u8>>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
@@ -133,7 +151,21 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> KeystoreExt
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
@@ -146,8 +178,21 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
-where
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> HasLatestHeader<B>
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	> where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface,
@@ -160,13 +205,25 @@ where
 
 #[async_trait::async_trait]
 impl<B, BE, C, GE> BlockchainInterface
-	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
-where
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	> where
 	B: Block,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 	BE: Backend<B> + Unpin + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug + Unpin,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
@@ -237,7 +294,16 @@ where
 					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 				}
 
-				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength, MaxAuthorities>(
+				save_signed_proposals_in_storage::<
+					B,
+					C,
+					BE,
+					MaxProposalLength,
+					MaxAuthorities,
+					BatchId,
+					MaxProposalsInBatch,
+					MaxSignatureLength,
+				>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,
 					&self.latest_header,

@@ -15,7 +15,10 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use debug_logger::DebugLogger;
-use dkg_runtime_primitives::{crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId, BatchId, DKGApi, MaxAuthorities, MaxProposalLength, MaxProposalsInBatch,
+	MaxSignatureLength,
+};
 use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents};

@@ -1003,8 +1003,8 @@ impl_runtime_apis! {
 		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
-	fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, BlockNumber)> {
-	  DKGProposalHandler::get_unsigned_proposals()
+	fn get_unsigned_proposal_batches() -> Vec<(UnsignedProposal<MaxProposalLength>, BlockNumber)> {
+	  DKGProposalHandler::get_unsigned_proposal_batches()
 	}
 
 	fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {

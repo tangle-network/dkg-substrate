@@ -21,7 +21,7 @@ use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposals,
+	AuthoritySet, DKGApi, OffchainSignedProposalBatches, SignedProposalBatch
 };
 use parking_lot::RwLock;
 use rand::Rng;
@@ -32,12 +32,21 @@ use std::sync::Arc;
 use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
-pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxAuthorities>(
+pub(crate) fn save_signed_proposals_in_storage<
+	B,
+	C,
+	BE,
+	MaxProposalLength,
+	MaxAuthorities,
+	BatchId,
+	MaxProposalsInBatch,
+	MaxSignatureLength,
+>(
 	authority_public_key: &Public,
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	mut signed_proposals: Vec<Proposal<MaxProposalLength>>,
+	mut signed_proposals: Vec<SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>>,
 	logger: &DebugLogger,
 ) where
 	B: Block,
@@ -46,6 +55,11 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 	MaxProposalLength:
 		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + std::cmp::PartialEq,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
+	MaxProposalsInBatch:
+		Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
+	MaxSignatureLength:
+		Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + codec::Encode + codec::Decode,
 	C::Api: DKGApi<
 		B,
 		AuthorityId,
@@ -85,9 +99,12 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		let old_val = offchain.get(STORAGE_PREFIX, OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut prop_wrapper = match old_val.clone() {
-			Some(ser_props) => OffchainSignedProposals::<NumberFor<B>, MaxProposalLength>::decode(
-				&mut &ser_props[..],
-			)
+			Some(ser_props) => OffchainSignedProposalBatches::<
+				BatchId,
+				MaxProposalLength,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>::decode(&mut &ser_props[..])
 			.expect("Unable to decode offchain signed proposal!"),
 			None => Default::default(),
 		};
@@ -101,9 +118,8 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 		// lets create a vector of the data of all the proposals currently in offchain storage
 		let current_list_of_saved_signed_proposals_data: Vec<Vec<u8>> = prop_wrapper
 			.clone()
-			.proposals
+			.batches
 			.into_iter()
-			.flat_map(|prop| prop.0)
 			.map(|prop| prop.data().clone())
 			.collect::<Vec<_>>();
 
@@ -114,7 +130,7 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 			.retain(|prop| !current_list_of_saved_signed_proposals_data.contains(prop.data()));
 
 		if let Some(submit_at) = submit_at {
-			prop_wrapper.proposals.push((signed_proposals, submit_at))
+			prop_wrapper.batches.push(signed_proposals)
 		};
 
 		for _i in 1..STORAGE_SET_RETRY_NUM {

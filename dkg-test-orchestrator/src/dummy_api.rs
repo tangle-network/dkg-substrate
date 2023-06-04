@@ -647,7 +647,7 @@ impl
 		Ok(None)
 	}
 
-	fn get_unsigned_proposals(
+	fn get_unsigned_proposal_batches(
 		&self,
 		_hash: H256,
 	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {

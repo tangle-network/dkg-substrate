@@ -109,7 +109,7 @@ use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	DKGPayloadKey, OffchainSignedProposalBatches, ProposalAction, ProposalHandlerTrait,
-	ProposalNonce, SignedProposalBatch, StoredUnsignedProposal, TypedChainId,
+	ProposalNonce, SignedProposalBatch, StoredUnsignedProposalBatch, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
@@ -124,6 +124,12 @@ use sp_runtime::{
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
 pub use weights::WeightInfo;
+
+mod impls;
+pub use impls::*;
+
+mod functions;
+pub use functions::*;
 
 #[cfg(test)]
 mod mock;
@@ -146,13 +152,17 @@ pub mod pallet {
 
 	use super::*;
 
-	/// Unsigned proposal for this pallet
-	pub type StoredUnsignedProposalOf<T> = StoredUnsignedProposal<
-		<T as frame_system::Config>::BlockNumber,
+	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;
+
+	pub type StoredUnsignedProposalBatchOf<T> = StoredUnsignedProposalBatch<
+		<T as Config>::BatchId,
 		<T as Config>::MaxProposalLength,
+		<T as Config>::MaxProposalsPerBatch,
+		<T as frame_system::Config>::BlockNumber,
 	>;
 
 	pub type SignedProposalBatchOf<T> = SignedProposalBatch<
+		<T as Config>::BatchId,
 		<T as Config>::MaxProposalLength,
 		<T as Config>::MaxProposalsPerBatch,
 		<T as pallet_dkg_metadata::Config>::MaxSignatureLength,
@@ -217,24 +227,30 @@ pub mod pallet {
 
 	/// All unsigned proposals.
 	#[pallet::storage]
-	#[pallet::getter(fn unsigned_proposals)]
+	#[pallet::getter(fn unsigned_proposal_queue)]
 	pub type UnsignedProposalQueue<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		TypedChainId,
 		Blake2_128Concat,
-		DKGPayloadKey,
-		StoredUnsignedProposalOf<T>,
+		T::BatchId,
+		StoredUnsignedProposalBatchOf<T>,
 	>;
 
-	/// Defines the block when next unsigned transaction will be accepted.
-	///
-	/// To prevent spam of unsigned (and unpayed!) transactions on the network,
-	/// we only allow one transaction every `T::UnsignedInterval` blocks.
-	/// This storage entry defines when new transaction is going to be accepted.
+	/// Defines the next batch id available
 	#[pallet::storage]
-	#[pallet::getter(fn next_unsigned_at)]
-	pub(super) type NextUnsignedAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+	#[pallet::getter(fn next_batch_id)]
+	pub(super) type NextBatchId<T: Config> = StorageValue<_, T::BatchId, ValueQuery>;
+
+	/// Staging queue for unsigned proposals
+	#[pallet::storage]
+	#[pallet::getter(fn unsigned_proposals)]
+	pub type UnsignedProposals<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		TypedChainId,
+		BoundedVec<ProposalOf<T>, T::MaxProposalsPerBatch>,
+	>;
 
 	/// All signed proposals.
 	#[pallet::storage]
@@ -322,6 +338,10 @@ pub mod pallet {
 		ProposalOutOfBounds,
 		/// Duplicate signed proposal
 		CannotOverwriteSignedProposal,
+		/// Unable to accept new unsigned proposal
+		UnsignedProposalQueueOverflow,
+		/// Math overflow
+		ArithmeticOverflow,
 	}
 
 	#[pallet::hooks]
@@ -339,43 +359,43 @@ pub mod pallet {
 		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
 		/// and remove storage.
 		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
-			use dkg_runtime_primitives::ProposalKind::*;
-			// fetch all unsigned proposals
-			let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
-			let unsigned_proposals_len = unsigned_proposals.len() as u64;
-			remaining_weight =
-				remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+			// 	use dkg_runtime_primitives::ProposalKind::*;
+			// 	// fetch all unsigned proposals
+			// 	let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
+			// 	let unsigned_proposals_len = unsigned_proposals.len() as u64;
+			// 	remaining_weight =
+			// 		remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
 
-			// filter out proposals to delete
-			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
-				|(_, _, StoredUnsignedProposal { proposal, timestamp })| {
-					let kind = proposal.kind();
+			// 	// filter out proposals to delete
+			// 	let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
+			// 		|(_, _, StoredUnsignedProposal { proposal, timestamp })| {
+			// 			let kind = proposal.kind();
 
-					// Skip expiration for keygen related proposals
-					match kind {
-						Refresh | ProposerSetUpdate => return false,
-						_ => (),
-					};
-					let time_passed = now.checked_sub(timestamp).unwrap_or_default();
-					time_passed > T::UnsignedProposalExpiry::get()
-				},
-			);
+			// 			// Skip expiration for keygen related proposals
+			// 			match kind {
+			// 				Refresh | ProposerSetUpdate => return false,
+			// 				_ => (),
+			// 			};
+			// 			let time_passed = now.checked_sub(timestamp).unwrap_or_default();
+			// 			time_passed > T::UnsignedProposalExpiry::get()
+			// 		},
+			// 	);
 
-			// remove unsigned proposal until we run out of weight
-			for expired_proposal in unsigned_proposal_past_expiry {
-				remaining_weight =
-					remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
+			// 	// remove unsigned proposal until we run out of weight
+			// 	for expired_proposal in unsigned_proposal_past_expiry {
+			// 		remaining_weight =
+			// 			remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
 
-				if remaining_weight.is_zero() {
-					break
-				}
-				Self::deposit_event(Event::<T>::ProposalRemoved {
-					target_chain: expired_proposal.0,
-					key: expired_proposal.1,
-					expired: true,
-				});
-				UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
-			}
+			// 		if remaining_weight.is_zero() {
+			// 			break
+			// 		}
+			// 		Self::deposit_event(Event::<T>::ProposalRemoved {
+			// 			target_chain: expired_proposal.0,
+			// 			key: expired_proposal.1,
+			// 			expired: true,
+			// 		});
+			// 		UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
+			// 	}
 
 			remaining_weight
 		}
@@ -403,8 +423,7 @@ pub mod pallet {
 			);
 
 			for prop_batch in &props {
-				// generate the data by concat the proposal data
-				let data = Self::generate_data_to_sign_from_proposal_batch(prop_batch.clone());
+				let data = prop_batch.data();
 
 				// check the signature is valid
 				let result = ensure_signed_by_dkg::<pallet_dkg_metadata::Pallet<T>>(
@@ -446,16 +465,11 @@ pub mod pallet {
 				);
 
 				// lets mark each proposal as signed
-				for proposal in prop_batch.proposals.iter() {
-					Self::handle_signed_proposal(proposal.clone())?;
-				}
+				Self::handle_signed_proposal_batch(prop_batch.clone())?;
 
 				continue
 			}
 
-			// now increment the block number at which we expect next unsigned transaction.
-			let current_block = <frame_system::Pallet<T>>::block_number();
-			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
 			Ok(().into())
 		}
 
@@ -483,11 +497,7 @@ pub mod pallet {
 							target_chain: v.typed_chain_id,
 							data: prop.data().clone(),
 						});
-						UnsignedProposalQueue::<T>::insert(
-							v.typed_chain_id,
-							v.key,
-							Self::stored_unsigned_proposal_from_unsigned_proposal(prop),
-						);
+						Self::store_unsigned_proposal(prop, v)?;
 						Ok(().into())
 					},
 					Err(e) => Err(Self::handle_validation_error(e).into()),
@@ -513,18 +523,9 @@ pub mod pallet {
 				TransactionSource::Local | TransactionSource::InBlock => {},
 				_ => return InvalidTransaction::Call.into(),
 			}
-			// Now let's check if the transaction has any chance to succeed.
+
 			let current_block = <frame_system::Pallet<T>>::block_number();
-			let next_unsigned_at = <NextUnsignedAt<T>>::get();
-			if next_unsigned_at > current_block {
-				frame_support::log::debug!(
-					target: "runtime::dkg_metadata",
-					"validate unsigned: early block: current: {:?}, next_unsigned_at: {:?}",
-					current_block,
-					next_unsigned_at,
-				);
-				return InvalidTransaction::Stale.into()
-			}
+
 			// Next, let's check that we call the right function.
 			// Here we will use match stmt, to match over the call and see if it is
 			// one of the functions we allow. if not we should return
@@ -557,16 +558,6 @@ pub mod pallet {
 						T::UnsignedPriority::get()
 							.saturating_sub(current_block.try_into().unwrap_or_default()),
 					)
-					// This transaction does not require anything else to go before into the pool.
-					// In theory we could require `previous_unsigned_at` transaction to go first,
-					// but it's not necessary in our case.
-					//.and_requires()
-					// We set the `provides` tag to be the same as `next_unsigned_at`. This makes
-					// sure only one transaction produced after `next_unsigned_at` will ever
-					// get to the transaction pool and will end up in the block.
-					// We can still have multiple transactions compete for the same "spot",
-					// and the one with higher priority will replace other one in the pool.
-					.and_provides(next_unsigned_at)
 					// The transaction is only valid for next 5 blocks. After that it's
 					// going to be revalidated by the pool.
 					.longevity(5)
@@ -579,437 +570,5 @@ pub mod pallet {
 					.build()
 			}
 		}
-	}
-}
-
-impl<T: Config> ProposalHandlerTrait for Pallet<T> {
-	type MaxProposalLength = T::MaxProposalLength;
-
-	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::AnchorUpdate };
-		match decode_proposal_identifier(&proposal) {
-			Ok(v) => {
-				Self::deposit_event(Event::<T>::ProposalAdded {
-					key: v.key,
-					target_chain: v.typed_chain_id,
-					data: proposal.data().clone(),
-				});
-				UnsignedProposalQueue::<T>::insert(
-					v.typed_chain_id,
-					v.key,
-					Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
-				);
-				Ok(())
-			},
-			Err(e) => Err(Self::handle_validation_error(e).into()),
-		}
-	}
-
-	fn handle_unsigned_proposer_set_update_proposal(
-		proposal: Vec<u8>,
-		_action: ProposalAction,
-	) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let unsigned_proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::ProposerSetUpdate };
-		match decode_proposal_identifier(&unsigned_proposal) {
-			Ok(v) => {
-				Self::deposit_event(Event::<T>::ProposalAdded {
-					key: v.key,
-					target_chain: v.typed_chain_id,
-					data: unsigned_proposal.data().clone(),
-				});
-
-				UnsignedProposalQueue::<T>::insert(
-					v.typed_chain_id,
-					v.key,
-					Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
-				);
-
-				Ok(())
-			},
-			Err(e) => Err(Self::handle_validation_error(e).into()),
-		}
-	}
-
-	fn handle_unsigned_refresh_proposal(
-		proposal: dkg_runtime_primitives::RefreshProposal,
-	) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.encode().try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let unsigned_proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::Refresh };
-
-		Self::deposit_event(Event::<T>::ProposalAdded {
-			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: TypedChainId::None,
-			data: unsigned_proposal.data().clone(),
-		});
-
-		// Add new refresh proposal to the queue
-		UnsignedProposalQueue::<T>::insert(
-			TypedChainId::None,
-			DKGPayloadKey::RefreshVote(proposal.nonce),
-			Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
-		);
-
-		Ok(())
-	}
-
-	fn handle_signed_refresh_proposal(
-		proposal: dkg_runtime_primitives::RefreshProposal,
-		signature: Vec<u8>,
-	) -> DispatchResult {
-		// Attempt to remove all previous unsigned refresh proposals too
-		// This may also remove ProposerSetUpdate proposals that haven't been signed
-		// yet, but given that this action is only to clean storage when a refresh
-		// fails, we can assume that the previous proposer set update will nonetheless
-		// need to be used to update the governors on the respective webb Apps anyway.
-		let remaining_untyped_proposals: usize =
-			UnsignedProposalQueue::<T>::iter_key_prefix(TypedChainId::None).count();
-
-		// emit an event for the signed refresh proposal
-		Self::deposit_event(Event::<T>::ProposalSigned {
-			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: TypedChainId::None,
-			data: proposal.pub_key,
-			signature,
-		});
-
-		for i in 0..remaining_untyped_proposals {
-			let index = i as u32;
-			// Ensure we break when we reach the bottom
-			if proposal.nonce.saturating_sub(ProposalNonce(index)) == ProposalNonce(0u32) {
-				break
-			}
-			// Otherwise continue removing old refresh votes
-			UnsignedProposalQueue::<T>::remove(
-				TypedChainId::None,
-				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
-			);
-
-			Self::deposit_event(Event::<T>::ProposalRemoved {
-				key: DKGPayloadKey::RefreshVote(
-					proposal.nonce.saturating_sub(ProposalNonce(index)),
-				),
-				target_chain: TypedChainId::None,
-				expired: false,
-			});
-		}
-
-		Ok(())
-	}
-
-	fn handle_signed_proposal(prop: Proposal<T::MaxProposalLength>) -> DispatchResult {
-		let id = match decode_proposal_identifier(&prop) {
-			Ok(v) => v,
-			Err(e) => return Err(Self::handle_validation_error(e).into()),
-		};
-		// Log the chain id and nonce
-		log::debug!(
-			target: "runtime::dkg_proposal_handler",
-			"submit_signed_proposal: chain: {:?}, payload_key: {:?}",
-			id.typed_chain_id,
-			id.key,
-		);
-
-		ensure!(
-			UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, id.key),
-			Error::<T>::ProposalDoesNotExists
-		);
-		// Log that proposal exist in the unsigned queue
-		log::debug!(
-			target: "runtime::dkg_proposal_handler",
-			"submit_signed_proposal: proposal exist in the unsigned queue"
-		);
-		let (data, sig) = match prop.signature() {
-			Some(sig) => (prop.data().clone(), sig),
-			None => return Err(Error::<T>::ProposalSignatureInvalid.into()),
-		};
-		ensure!(
-			Self::validate_proposal_signature(&data, &sig),
-			Error::<T>::ProposalSignatureInvalid
-		);
-		// Log that the signature is valid
-		log::debug!(
-			target: "runtime::dkg_proposal_handler",
-			"submit_signed_proposal: signature is valid"
-		);
-
-		// ---------------------- TODO --------------------------
-		// // ensure we are not overwriting an existing signed proposal
-		// ensure!(
-		// 	SignedProposals::<T>::get(id.typed_chain_id, id.key).is_none(),
-		// 	Error::<T>::CannotOverwriteSignedProposal
-		// );
-
-		// Update storage
-		//SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
-
-		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
-		// Emit RuntimeEvent so frontend can react to it.
-		Self::deposit_event(Event::<T>::ProposalSigned {
-			key: id.key,
-			target_chain: id.typed_chain_id,
-			data: data.to_vec(),
-			signature: sig.to_vec(),
-		});
-		// Finally let any handlers handle the signed proposal
-		T::SignedProposalHandler::on_signed_proposal(prop)?;
-		Ok(())
-	}
-}
-
-impl<T: Config> Pallet<T> {
-	// *** API methods ***
-
-	pub fn get_unsigned_proposals(
-	) -> Vec<(dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>, T::BlockNumber)> {
-		UnsignedProposalQueue::<T>::iter()
-			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
-				(
-					dkg_runtime_primitives::UnsignedProposal {
-						typed_chain_id,
-						key,
-						proposal: stored_unsigned_proposal.proposal,
-					},
-					stored_unsigned_proposal.timestamp,
-				)
-			})
-			.collect()
-	}
-
-	/// Checks whether a signed proposal exists in the `SignedProposals` storage
-	// TODO
-	pub fn is_not_existing_proposal(prop: &SignedProposalBatchOf<T>) -> bool {
-		// if prop.is_signed() {
-		// 	match decode_proposal_identifier(prop) {
-		// 		Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, v.key),
-		// 		Err(_) => false,
-		// 	}
-		// } else {
-		// 	false
-		// }
-		true
-	}
-
-	/// Returns `StoredUnsignedProposal` from proposal by inserting current BlockNumber
-	pub fn stored_unsigned_proposal_from_unsigned_proposal(
-		proposal: Proposal<T::MaxProposalLength>,
-	) -> StoredUnsignedProposalOf<T> {
-		let timestamp = <frame_system::Pallet<T>>::block_number();
-		StoredUnsignedProposalOf::<T> { proposal, timestamp }
-	}
-
-	// ** Calculate the turn of authorities to submit transactions **
-	// we use a simple round robin algorithm to determine who submits the proposal on-chain, this
-	// avoids all the validators trying to submit at the same time.
-	fn get_expected_signer(block_number: T::BlockNumber) -> Option<T::AccountId> {
-		let current_authorities = pallet_dkg_metadata::CurrentAuthoritiesAccounts::<T>::get();
-		let block_as_u32: u32 = block_number.try_into().unwrap_or_default();
-
-		// sanity check
-		if current_authorities.is_empty() || block_as_u32.is_zero() {
-			// we can safely return None here,
-			// the calling function will submit the proposal anyway
-			return None
-		}
-
-		let submitter_index: u32 = block_as_u32 % current_authorities.len() as u32;
-		current_authorities.get(submitter_index as usize).cloned()
-	}
-
-	fn generate_data_to_sign_from_proposal_batch(
-		proposal_batch: SignedProposalBatchOf<T>,
-	) -> Vec<u8> {
-		// TODO
-		// to generate data, lets just create a vector of proposal data and generate a hash
-		// let mut proposal_data_vec: Vec<Vec<u8>> = Vec::new();
-		// for proposal in proposal_batch.proposals.iter() {
-		// 	proposal_data_vec.push(&proposal.data());
-		// }
-		sp_core::keccak_256(b"test").into()
-	}
-
-	// *** Offchain worker methods ***
-
-	/// Offchain worker function that submits signed proposals from the offchain storage on-chain
-	///
-	/// The function submits batches of signed proposals on-chain in batches of
-	/// `T::MaxProposalsPerBatch`. Proposals are stored offchain and target specific block numbers
-	/// for submission. This function polls all relevant proposals ready for submission at the
-	/// current block number
-	fn submit_signed_proposal_onchain(block_number: T::BlockNumber) -> Result<(), &'static str> {
-		let next_unsigned_at = <NextUnsignedAt<T>>::get();
-		if next_unsigned_at > block_number {
-			return Err("Too early to send unsigned transaction")
-		}
-
-		// ensure we have the signer setup
-		let signer = Signer::<T, <T as Config>::OffChainAuthId>::all_accounts();
-		if !signer.can_sign() {
-			return Err(
-				"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-			)
-		}
-
-		// check if its our turn to submit proposals
-		if let Some(expected_signer_account) = Self::get_expected_signer(block_number) {
-			// the signer does not have a method to read all available public keys, we instead sign
-			// a dummy message and read the current pub key from the signature.
-			let signature = signer.sign_message(b"test");
-			let account: &T::AccountId =
-				&signature.first().expect("Unable to retreive signed message").0.id; // the unwrap here is ok since we checked if can_sign() is true above
-
-			if account != &expected_signer_account {
-				log::debug!(
-					target: "runtime::dkg_proposal_handler",
-					"submit_signed_proposal_onchain: Not our turn to sign, selected signer is {:?}",
-					expected_signer_account
-				);
-				return Ok(())
-			}
-		}
-
-		let mut lock = StorageLock::<Time>::new(SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK);
-		{
-			let _guard = lock.lock();
-
-			match Self::get_next_offchain_signed_proposals() {
-				Ok(next_proposals) => {
-					log::debug!(
-						target: "runtime::dkg_proposal_handler",
-						"submit_signed_proposal_onchain: found {} proposal batches to submit before filtering\n {:?}",
-						next_proposals.len(), next_proposals
-					);
-
-					// early exit if nothing to submit
-					if next_proposals.is_empty() {
-						return Ok(())
-					}
-
-					// We filter out all proposals that are already on chain
-					let filtered_proposals = next_proposals
-						.iter()
-						.cloned()
-						.filter(Self::is_not_existing_proposal)
-						.collect::<Vec<_>>();
-					log::debug!(
-						target: "runtime::dkg_proposal_handler",
-						"submit_signed_proposal_onchain: found {} proposals to submit after filtering\n {:?}",
-						filtered_proposals.len(), filtered_proposals
-					);
-					// We split the vector into chunks of `T::MaxProposalsPerBatch` length and
-					// submit those chunks
-					for chunk in filtered_proposals.chunks(T::MaxProposalsPerBatch::get() as usize)
-					{
-						let call = Call::<T>::submit_signed_proposals { props: chunk.to_vec() };
-						let result = signer
-							.send_signed_transaction(|_| call.clone())
-							.into_iter()
-							.map(|(_, r)| r)
-							.collect::<Result<Vec<_>, _>>()
-							.map_err(|()| "Unable to submit unsigned transaction.");
-						// Display error if the signed tx fails.
-						if result.is_err() {
-							log::error!(
-								target: "runtime::dkg_proposal_handler",
-								"failure: failed to send unsigned transaction to chain: {:?}",
-								call,
-							);
-						} else {
-							// log the result of the transaction submission
-							log::debug!(
-								target: "runtime::dkg_proposal_handler",
-								"Submitted unsigned transaction for signed proposal: {:?}",
-								call,
-							);
-						}
-					}
-				},
-				Err(e) => {
-					log::trace!(
-						target: "runtime::dkg_proposal_handler",
-						"Failed to get next signed proposal: {}",
-						e
-					);
-				},
-			};
-			Ok(())
-		}
-	}
-
-	/// Returns the list of signed proposals ready for on-chain submission
-	fn get_next_offchain_signed_proposals() -> Result<
-		Vec<
-			SignedProposalBatch<
-				T::MaxProposalLength,
-				T::MaxProposalsPerBatch,
-				T::MaxSignatureLength,
-			>,
-		>,
-		&'static str,
-	> {
-		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-
-		let mut all_proposals = Vec::new();
-		let res = proposals_ref.mutate::<OffchainSignedProposalBatches<
-			T::MaxProposalLength,
-			T::MaxProposalsPerBatch,
-			T::MaxSignatureLength,
-		>, _, _>(|res| {
-			match res {
-				Ok(Some(mut prop_wrapper)) => {
-					// log the proposals
-					log::debug!(
-						target: "runtime::dkg_proposal_handler",
-						"Offchain signed proposals: {:?}",
-						prop_wrapper
-					);
-					Ok(prop_wrapper)
-				},
-				Ok(None) => Err("No signed proposals key stored"),
-				Err(e) => {
-					// log the error
-					log::warn!(
-						target: "runtime::dkg_proposal_handler",
-						"Failed to read offchain signed proposals: {:?}",
-						e
-					);
-					Err("Error decoding offchain signed proposals")
-				},
-			}
-		});
-
-		if res.is_err() {
-			return Err("Unable to get next proposal batch")
-		}
-
-		Ok(all_proposals)
-	}
-
-	// *** Validation methods ***
-
-	fn validate_proposal_signature(data: &[u8], signature: &[u8]) -> bool {
-		dkg_runtime_primitives::utils::validate_ecdsa_signature(data, signature)
-	}
-
-	fn handle_validation_error(error: ValidationError) -> Error<T> {
-		match error {
-			ValidationError::InvalidParameter(_) => Error::<T>::ProposalFormatInvalid,
-			ValidationError::UnimplementedProposalKind => Error::<T>::ProposalFormatInvalid,
-			ValidationError::InvalidProposalBytesLength => Error::<T>::InvalidProposalBytesLength,
-		}
-	}
-
-	// *** Utility methods ***
-
-	#[cfg(feature = "runtime-benchmarks")]
-	pub fn signed_proposals_len() -> usize {
-		SignedProposals::<T>::iter_keys().count()
 	}
 }

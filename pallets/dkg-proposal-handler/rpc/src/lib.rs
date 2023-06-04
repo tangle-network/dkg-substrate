@@ -33,7 +33,7 @@ pub trait DKGProposalHandlerApi<BlockHash, Proposal> {
 	///
 	/// Returns the (full) a Vec<Proposal> of the proposals.
 	#[method(name = "dkgProposals_getUnsignedProposals")]
-	fn get_unsigned_proposals(&self, at: Option<BlockHash>) -> RpcResult<Vec<Proposal>>;
+	fn get_unsigned_proposal_batches(&self, at: Option<BlockHash>) -> RpcResult<Vec<Proposal>>;
 }
 
 /// A struct that implements the `DKGProposalHandlerApi`.
@@ -58,10 +58,10 @@ where
 	C: HeaderBackend<Block> + ProvideRuntimeApi<Block> + Send + Sync + 'static,
 	C::Api: DKGProposalHandlerApi<Block, Proposal>,
 {
-	fn get_unsigned_proposals(&self, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<Element>> {
+	fn get_unsigned_proposal_batches(&self, at: Option<<Block as BlockT>::Hash>) -> RpcResult<Vec<Element>> {
 		let api = self.client.runtime_api();
 		let at = BlockId::hash(at.unwrap_or_else(|| self.client.info().best_hash));
-		api.get_unsigned_proposals(at)
+		api.get_unsigned_proposal_batches(at)
 			.map_err(|e| error::Error::UnsignedProposalRequestFailed)
 			.map_err(Into::into)
 	}

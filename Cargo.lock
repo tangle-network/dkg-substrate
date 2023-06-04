@@ -1908,6 +1908,7 @@ dependencies = [
 name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
+ "ethabi",
  "ethereum",
  "ethereum-types",
  "frame-support",
@@ -2263,6 +2264,16 @@ checksum = "aa68f1b12764fab894d2755d2518754e71b4fd80ecfb822714a1206c2aab39bf"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "ethabi"
+version = "18.0.0"
+source = "git+https://github.com/rust-ethereum/ethabi#a148a4ae0625208946477522bac69eee51602208"
+dependencies = [
+ "ethereum-types",
+ "hex",
+ "sha3 0.10.7",
 ]
 
 [[package]]

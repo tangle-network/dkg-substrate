@@ -14,7 +14,7 @@
 //
 use frame_support::{
 	pallet_prelude::{ConstU32, Get},
-	RuntimeDebug, BoundedVec
+	BoundedVec, RuntimeDebug,
 };
 use sp_std::hash::{Hash, Hasher};
 
@@ -146,7 +146,10 @@ pub enum ProposalAction {
 	Sign(u8),
 }
 pub trait ProposalHandlerTrait {
+	type BatchId;
 	type MaxProposalLength: Get<u32>;
+	type MaxProposals: Get<u32>;
+	type MaxSignatureLen: Get<u32>;
 
 	fn handle_unsigned_proposal(
 		_proposal: Vec<u8>,
@@ -162,8 +165,13 @@ pub trait ProposalHandlerTrait {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(
-		_prop: Proposal<Self::MaxProposalLength>,
+	fn handle_signed_proposal_batch(
+		_prop: SignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposals,
+			Self::MaxSignatureLen,
+		>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
@@ -183,24 +191,65 @@ pub trait ProposalHandlerTrait {
 }
 
 impl ProposalHandlerTrait for () {
+	type BatchId = u32;
 	type MaxProposalLength = ConstU32<0>;
+	type MaxProposals = ConstU32<0>;
+	type MaxSignatureLen = ConstU32<0>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct OffchainSignedProposalBatches<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	pub batches: Vec<SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>>,
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>> Default
+	for OffchainSignedProposalBatches<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	fn default() -> Self {
+		Self { batches: Default::default() }
+	}
 }
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(
-	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen, Hash
 )]
-pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
-	/// Proposal data
-	pub proposal: Proposal<MaxLength>,
+pub struct StoredUnsignedProposalBatch<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	Timestamp,
+> {
+	/// the batch id for this batch of proposals
+	pub batch_id: BatchId,
+	/// Proposals data
+	pub proposals: BoundedVec<Proposal<MaxLength>, MaxProposals>,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposalBatches<MaxLength: Get<u32>, MaxProposals : Get<u32>, MaxSignatureLen: Get<u32>>  {
-	pub batches: Vec<SignedProposalBatch<MaxLength, MaxProposals, MaxSignatureLen>>,
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, Timestamp>
+	StoredUnsignedProposalBatch<BatchId, MaxLength, MaxProposals, Timestamp>
+{
+	// We generate the data to sign for a proposal batch by doing ethabi::encode
+	// on the data of all proposals in the batch
+	pub fn data(&self) -> Vec<u8> {
+		use ethabi::token::Token;
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
+
+		for proposal in self.proposals.iter() {
+			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
+			vec_proposal_data.push(data_as_token);
+		}
+
+		ethabi::encode(&[Token::Array(vec_proposal_data)])
+	}
 }
 
 /// An unsigned proposal represented in pallet storage
@@ -208,9 +257,34 @@ pub struct OffchainSignedProposalBatches<MaxLength: Get<u32>, MaxProposals : Get
 #[derive(
 	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
 )]
-pub struct SignedProposalBatch<MaxLength: Get<u32>, MaxProposals : Get<u32>, MaxSignatureLen: Get<u32>> {
+pub struct SignedProposalBatch<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	/// the batch id for this batch of proposals
+	pub batch_id: BatchId,
 	/// Proposals data
 	pub proposals: BoundedVec<Proposal<MaxLength>, MaxProposals>,
 	/// Signature for proposals
 	pub signature: BoundedVec<u8, MaxSignatureLen>,
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>>
+	SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	// We generate the data to sign for a proposal batch by doing ethabi::encode
+	// on the data of all proposals in the batch
+	pub fn data(&self) -> Vec<u8> {
+		use ethabi::token::Token;
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
+
+		for proposal in self.proposals.iter() {
+			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
+			vec_proposal_data.push(data_as_token);
+		}
+
+		ethabi::encode(&[Token::Array(vec_proposal_data)])
+	}
 }
