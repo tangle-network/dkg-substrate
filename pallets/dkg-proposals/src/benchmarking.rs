@@ -142,7 +142,7 @@ benchmarks! {
 		}
 	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
 	verify {
-		assert_last_event::<T>(Event::VoteFor{ chain_id, proposal_nonce: nonce.into(), who: caller, kind: proposal.kind()}.into());
+		assert_last_event::<T>(Event::VoteFor{ src_chain_id: chain_id, proposal_nonce: nonce.into(), who: caller, kind: proposal.kind()}.into());
 	}
 
 	reject_proposal {
@@ -169,7 +169,7 @@ benchmarks! {
 		}
 	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
 	verify {
-		assert_last_event::<T>(Event::VoteAgainst{ chain_id, proposal_nonce: nonce.into(), who: caller,kind: proposal.kind()}.into());
+		assert_last_event::<T>(Event::VoteAgainst{ src_chain_id: chain_id, proposal_nonce: nonce.into(), who: caller,kind: proposal.kind()}.into());
 	}
 
 	eval_vote_state {
