@@ -36,7 +36,12 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<ProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		local_ty: &ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::MaxSignatureLength,
+		>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let DKGMessage { payload, session_id, .. } = msg.body;

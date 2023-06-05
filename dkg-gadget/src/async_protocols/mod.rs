@@ -32,7 +32,7 @@ use dkg_primitives::{
 	},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::{MaxAuthorities, UnsignedProposal};
+use dkg_runtime_primitives::{MaxAuthorities, StoredUnsignedProposalBatch, UnsignedProposal};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,
@@ -283,8 +283,12 @@ pub enum KeygenRound {
 }
 
 #[derive(Clone)]
-pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
-{
+pub enum ProtocolType<
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+> {
 	Keygen {
 		ty: KeygenRound,
 		i: KeygenPartyId,
@@ -293,7 +297,14 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 		associated_block_id: Vec<u8>,
 	},
 	Offline {
-		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
+		unsigned_proposal_batch: Arc<
+			StoredUnsignedProposalBatch<
+				BatchId,
+				MaxProposalLength,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>,
+		>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
@@ -301,14 +312,25 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
-		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
+		unsigned_proposal_batch: Arc<
+			StoredUnsignedProposalBatch<
+				BatchId,
+				MaxProposalLength,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>,
+		>,
 		i: OfflinePartyId,
 		associated_block_id: Vec<u8>,
 	},
 }
 
-impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
-	ProtocolType<MaxProposalLength>
+impl<
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
 {
 	pub const fn get_associated_block_id(&self) -> &Vec<u8> {
 		match self {
@@ -338,8 +360,12 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 	}
 }
 
-impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug> Debug
-	for ProtocolType<MaxProposalLength>
+impl<
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
+	> Debug for ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
@@ -388,7 +414,12 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 	additional_param: SM::AdditionalReturnParam,
 	sm: SM,
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
-	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+	channel_type: ProtocolType<
+		<BI as BlockchainInterface>::BatchId,
+		<BI as BlockchainInterface>::MaxProposalLength,
+		<BI as BlockchainInterface>::MaxProposalsInBatch,
+		<BI as BlockchainInterface>::MaxSignatureLength,
+	>,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
@@ -523,7 +554,12 @@ fn generate_outgoing_to_wire_fn<
 >(
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
-	proto_ty: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+	proto_ty: ProtocolType<
+		<BI as BlockchainInterface>::BatchId,
+		<BI as BlockchainInterface>::MaxProposalLength,
+		<BI as BlockchainInterface>::MaxProposalsInBatch,
+		<BI as BlockchainInterface>::MaxSignatureLength,
+	>,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
 where
@@ -597,10 +633,10 @@ where
 					sender_id: party_id,
 					keygen_msg: serialized_body,
 				}),
-				ProtocolType::Offline { unsigned_proposal, .. } =>
+				ProtocolType::Offline { unsigned_proposal_batch, .. } =>
 					DKGMsgPayload::Offline(DKGOfflineMessage {
 						key: Vec::from(
-							&unsigned_proposal.hash().expect("Cannot hash unsigned proposal!")
+							&unsigned_proposal_batch.hash().expect("Cannot hash unsigned proposal!")
 								as &[u8],
 						),
 						signer_set_id: party_id as u64,
@@ -665,7 +701,12 @@ pub fn generate_inbound_signed_message_receiver_fn<
 	BI: BlockchainInterface + 'static,
 >(
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
-	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+	channel_type: ProtocolType<
+		<BI as BlockchainInterface>::BatchId,
+		<BI as BlockchainInterface>::MaxProposalLength,
+		<BI as BlockchainInterface>::MaxProposalsInBatch,
+		<BI as BlockchainInterface>::MaxSignatureLength,
+	>,
 	to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
 ) -> impl SendFuture<'static, ()>
 where
@@ -824,10 +865,17 @@ mod tests {
 	}
 }
 
-impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+impl<
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	> From<&'_ ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>>
 	for AsyncProtocolType
 {
-	fn from(value: &ProtocolType<T>) -> Self {
+	fn from(
+		value: &ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
+	) -> Self {
 		match value {
 			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
 			ProtocolType::Offline { unsigned_proposal, .. } =>

@@ -28,28 +28,24 @@ use crate::debug_logger::DebugLogger;
 use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, ProtocolType};
 
 /// Used to filter and transform incoming messages from the DKG worker
-pub struct IncomingAsyncProtocolWrapper<
-	T: TransformIncoming,
-	BI,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-> {
+pub struct IncomingAsyncProtocolWrapper<T: TransformIncoming, BI> {
 	stream: IncomingStreamMapped<T::IncomingMapped>,
 	logger: DebugLogger,
-	_pd: PhantomData<(BI, MaxProposalLength)>,
+	_pd: PhantomData<(BI)>,
 }
 
 pub type IncomingStreamMapped<T> =
 	Pin<Box<dyn Stream<Item = Result<Msg<T>, DKGError>> + Send + 'static>>;
 
-impl<
-		T: TransformIncoming,
-		BI: BlockchainInterface + 'static,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + Unpin + 'static,
-	> IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
-{
+impl<T: TransformIncoming, BI: BlockchainInterface + 'static> IncomingAsyncProtocolWrapper<T, BI> {
 	pub fn new(
 		mut receiver: tokio::sync::mpsc::UnboundedReceiver<T>,
-		ty: ProtocolType<MaxProposalLength>,
+		ty: ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::MaxSignatureLength,
+		>,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	) -> Self {
 		let logger = params.logger.clone();
@@ -79,13 +75,15 @@ impl<
 pub trait TransformIncoming: Clone + Send + 'static {
 	type IncomingMapped: Send;
 
-	async fn transform<
-		BI: BlockchainInterface,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	>(
+	async fn transform<BI: BlockchainInterface>(
 		self,
 		verify: &BI,
-		stream_type: &ProtocolType<MaxProposalLength>,
+		stream_type: &ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::MaxSignatureLength,
+		>,
 		this_session_id: SessionId,
 		logger: &DebugLogger,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
@@ -96,13 +94,15 @@ pub trait TransformIncoming: Clone + Send + 'static {
 #[async_trait::async_trait]
 impl TransformIncoming for SignedDKGMessage<Public> {
 	type IncomingMapped = DKGMessage<Public>;
-	async fn transform<
-		BI: BlockchainInterface,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	>(
+	async fn transform<BI: BlockchainInterface>(
 		self,
 		verify: &BI,
-		stream_type: &ProtocolType<MaxProposalLength>,
+		stream_type: &ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::MaxSignatureLength,
+		>,
 		this_session_id: SessionId,
 		logger: &DebugLogger,
 	) -> Result<Option<Msg<Self::IncomingMapped>>, DKGError>
@@ -171,20 +171,9 @@ impl TransformIncoming for SignedDKGMessage<Public> {
 	}
 }
 
-impl<
-		T: TransformIncoming,
-		BI: BlockchainInterface,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> Unpin for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
-{
-}
+impl<T: TransformIncoming, BI: BlockchainInterface> Unpin for IncomingAsyncProtocolWrapper<T, BI> {}
 
-impl<
-		T: TransformIncoming,
-		BI: BlockchainInterface,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> Stream for IncomingAsyncProtocolWrapper<T, BI, MaxProposalLength>
-{
+impl<T: TransformIncoming, BI: BlockchainInterface> Stream for IncomingAsyncProtocolWrapper<T, BI> {
 	type Item = Msg<T::IncomingMapped>;
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		match futures::ready!(self.as_mut().stream.as_mut().poll_next(cx)) {

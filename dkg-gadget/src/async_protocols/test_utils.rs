@@ -1,17 +1,17 @@
 #![allow(clippy::unwrap_used)] // allow unwraps in tests
 use crate::{
 	async_protocols::{blockchain_interface::BlockchainInterface, BatchKey},
-	proposal::make_signed_proposal,
+	proposal::make_signed_proposal_batch,
 };
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, DKGPublicKeyMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
-use dkg_runtime_primitives::{crypto::Public, MaxProposalLength, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::Public, DKGSignedPayload, MaxProposalLength, UnsignedProposal,
+};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
@@ -82,7 +82,7 @@ impl BlockchainInterface for TestDummyIface {
 			signature: signature.encode(),
 		};
 
-		let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
+		let prop = make_signed_proposal_batch(ProposalKind::EVM, finished_round).unwrap();
 		lock.entry(batch_key).or_default().push((prop.unwrap(), signature_rec, message));
 
 		Ok(())

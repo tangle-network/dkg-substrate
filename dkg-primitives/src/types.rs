@@ -187,17 +187,6 @@ pub struct DKGVoteMessage {
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGSignedPayload {
-	/// Payload key
-	pub key: Vec<u8>,
-	/// The payload signatures are collected for.
-	pub payload: Vec<u8>,
-	/// Runtime compatible signature for the payload
-	pub signature: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
 pub struct DKGPublicKeyMessage {
 	/// Round ID of DKG protocol
 	pub session_id: SessionId,

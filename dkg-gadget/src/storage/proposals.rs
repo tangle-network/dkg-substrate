@@ -21,7 +21,7 @@ use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposalBatches, SignedProposalBatch
+	AuthoritySet, DKGApi, OffchainSignedProposalBatches, SignedProposalBatch,
 };
 use parking_lot::RwLock;
 use rand::Rng;
@@ -46,7 +46,9 @@ pub(crate) fn save_signed_proposals_in_storage<
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	mut signed_proposals: Vec<SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>>,
+	mut signed_proposals: Vec<
+		SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
+	>,
 	logger: &DebugLogger,
 ) where
 	B: Block,

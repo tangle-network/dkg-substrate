@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
-	MaxProposalLength, UnsignedProposal, BatchId, MaxProposalsInBatch, MaxSignatureLength
+	BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength, UnsignedProposal,
 };
 
 use self::work_manager::WorkManager;
@@ -14,13 +14,11 @@ use crate::{
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
 };
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
 use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
-use dkg_runtime_primitives::{StoredUnsignedProposalBatch, crypto::Public};
+use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
-use std::pin::Pin;
+use std::{collections::hash_map::DefaultHasher, hash::Hash, pin::Pin};
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -100,7 +98,9 @@ where
 		dkg_worker.logger.info_signing("About to get unsigned proposals ...");
 
 		let unsigned_proposals = match dkg_worker
-			.exec_client_function(move |client| client.runtime_api().get_unsigned_proposal_batches(at))
+			.exec_client_function(move |client| {
+				client.runtime_api().get_unsigned_proposal_batches(at)
+			})
 			.await
 		{
 			Ok(mut res) => {
@@ -162,8 +162,7 @@ where
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash =
-				unsigned_proposal.hash().expect("unable to hash proposal");
+			let unsigned_proposal_hash = unsigned_proposal.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -228,7 +227,12 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposal_batch: StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, NumberFor<B>>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			BatchId,
+			MaxProposalLength,
+			MaxProposalsInBatch,
+			NumberFor<B>,
+		>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>

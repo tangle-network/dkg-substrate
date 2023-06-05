@@ -17,7 +17,6 @@ use crate::{
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	metrics::Metrics,
-	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, TestBundle},
 	Client, DKGApi, DKGKeystore,
@@ -25,15 +24,14 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, DKGPublicKeyMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
-	MaxProposalsInBatch, MaxSignatureLength, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, BatchId, DKGSignedPayload, MaxAuthorities,
+	MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch,
+	StoredUnsignedProposalBatch, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -56,6 +54,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	type MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 	type BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 	type MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -65,7 +64,12 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal<Self::MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposalsInBatch,
+			Self::Clock,
+		>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
@@ -102,7 +106,21 @@ pub struct DKGProtocolEngine<
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
-	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal<MaxProposalLength>>>>>,
+	pub vote_results: Arc<
+		RwLock<
+			HashMap<
+				BatchKey,
+				Vec<
+					SignedProposalBatch<
+						BatchId,
+						MaxProposalLength,
+						MaxProposalsInBatch,
+						MaxSignatureLength,
+					>,
+				>,
+			>,
+		>,
+	>,
 	pub is_genesis: bool,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
@@ -233,6 +251,7 @@ impl<B, BE, C, GE> BlockchainInterface
 	type MaxProposalLength = MaxProposalLength;
 	type BatchId = BatchId;
 	type MaxProposalsInBatch = MaxProposalsInBatch;
+	type MaxSignatureLength = MaxSignatureLength;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -257,7 +276,12 @@ impl<B, BE, C, GE> BlockchainInterface
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposalsInBatch,
+			Self::Clock,
+		>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		_message: BigInt,
@@ -267,64 +291,57 @@ impl<B, BE, C, GE> BlockchainInterface
 		self.logger.info(format!(
 			"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
 		));
-		let payload_key = unsigned_proposal.key;
+
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
 		})?;
 
-		let finished_round = DKGSignedPayload {
-			key: session_id.encode(),
-			payload: unsigned_proposal.data().clone(),
-			signature: signature.encode(),
+		let signed_proposal_batch = SignedProposalBatch {
+			batch_id: unsigned_proposal_batch.batch_id,
+			proposals: unsigned_proposal_batch.proposals,
+			signature: signature.encode().try_into().expect("Signature exceeds runtime bounds!"),
 		};
 
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Ok(Some(proposal)) = get_signed_proposal::<B, C, BE, MaxProposalLength, MaxAuthorities>(
-			&self.backend,
-			finished_round,
-			payload_key,
-			&self.logger,
-		) {
-			proposals_for_this_batch.push(proposal);
+		proposals_for_this_batch.push(signed_proposal_batch);
 
-			if proposals_for_this_batch.len() == batch_key.len {
-				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
-				std::mem::drop(lock);
+		if proposals_for_this_batch.len() == batch_key.len {
+			self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
+			let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
+			std::mem::drop(lock);
 
-				if let Some(metrics) = self.metrics.as_ref() {
-					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
-				}
-
-				save_signed_proposals_in_storage::<
-					B,
-					C,
-					BE,
-					MaxProposalLength,
-					MaxAuthorities,
-					BatchId,
-					MaxProposalsInBatch,
-					MaxSignatureLength,
-				>(
-					&self.get_authority_public_key(),
-					&self.current_validator_set,
-					&self.latest_header,
-					&self.backend,
-					proposals,
-					&self.logger,
-				);
-				// send None to signify this was a signing result
-				self.send_result_to_test_client(Ok(()), None);
-			} else {
-				self.logger.info(format!(
-					"{}/{} proposals have resolved for batch {:?}",
-					proposals_for_this_batch.len(),
-					batch_key.len,
-					batch_key,
-				));
+			if let Some(metrics) = self.metrics.as_ref() {
+				metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 			}
+
+			save_signed_proposals_in_storage::<
+				B,
+				C,
+				BE,
+				MaxProposalLength,
+				MaxAuthorities,
+				BatchId,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>(
+				&self.get_authority_public_key(),
+				&self.current_validator_set,
+				&self.latest_header,
+				&self.backend,
+				proposals,
+				&self.logger,
+			);
+			// send None to signify this was a signing result
+			self.send_result_to_test_client(Ok(()), None);
+		} else {
+			self.logger.info(format!(
+				"{}/{} proposals have resolved for batch {:?}",
+				proposals_for_this_batch.len(),
+				batch_key.len,
+				batch_key,
+			));
 		}
 
 		Ok(())

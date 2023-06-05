@@ -22,11 +22,14 @@ use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 pub(crate) struct StateMachineWrapper<
 	T: StateMachine,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 > {
 	sm: T,
 	session_id: SessionId,
-	channel_type: ProtocolType<MaxProposalLength>,
+	channel_type: ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
 	current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
@@ -37,13 +40,21 @@ pub(crate) struct StateMachineWrapper<
 
 impl<
 		T: StateMachine + RoundBlame + Debug,
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> StateMachineWrapper<T, MaxProposalLength>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> StateMachineWrapper<T, BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
 {
 	pub fn new(
 		sm: T,
 		session_id: SessionId,
-		channel_type: ProtocolType<MaxProposalLength>,
+		channel_type: ProtocolType<
+			BatchId,
+			MaxProposalLength,
+			MaxProposalsInBatch,
+			MaxSignatureLength,
+		>,
 		current_round_blame: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 		logger: DebugLogger,
 	) -> Self {
@@ -67,8 +78,14 @@ impl<
 	}
 }
 
-impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> StateMachine
-	for StateMachineWrapper<T, MaxProposalLength>
+impl<
+		T,
+		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> StateMachine
+	for StateMachineWrapper<T, BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
 where
 	T: StateMachine + RoundBlame + Debug,
 	<T as StateMachine>::Err: std::fmt::Debug,
@@ -242,7 +259,11 @@ where
 impl<
 		T: StateMachine + RoundBlame,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> RoundBlame for StateMachineWrapper<T, MaxProposalLength>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> RoundBlame
+	for StateMachineWrapper<T, BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
 {
 	fn round_blame(&self) -> (u16, Vec<u16>) {
 		self.sm.round_blame()

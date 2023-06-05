@@ -219,7 +219,7 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(
-	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
 )]
 pub struct StoredUnsignedProposalBatch<
 	BatchId,
@@ -254,7 +254,6 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, Timestamp>
 
 	pub fn hash(&self) -> Option<[u8; 32]> {
 		Some(crate::keccak_256(&self.data()))
-		
 	}
 }
 
@@ -278,6 +277,19 @@ pub struct SignedProposalBatch<
 }
 
 impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>>
+	From<DKGSignedPayload<BatchId, MaxLength, MaxProposals, MaxSignatureLen>>
+	for SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	fn from(payload: DKGSignedPayload<BatchId, MaxLength, MaxProposals, MaxSignatureLen>) -> Self {
+		SignedProposalBatch {
+			batch_id: payload.batch_id,
+			proposals: payload.payload,
+			signature: payload.signature,
+		}
+	}
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>>
 	SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
 {
 	// We generate the data to sign for a proposal batch by doing ethabi::encode
@@ -293,4 +305,20 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<
 
 		ethabi::encode(&[Token::Array(vec_proposal_data)])
 	}
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct DKGSignedPayload<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	/// Payload key
+	pub batch_id: BatchId,
+	/// The payload signatures are collected for.
+	pub payload: BoundedVec<Proposal<MaxLength>, MaxProposals>,
+	/// Runtime compatible signature for the payload
+	pub signature: BoundedVec<u8, MaxSignatureLen>,
 }

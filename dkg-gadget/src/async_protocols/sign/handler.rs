@@ -13,13 +13,12 @@
 // limitations under the License.
 
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use dkg_runtime_primitives::UnsignedProposal;
+use dkg_runtime_primitives::{StoredUnsignedProposalBatch, UnsignedProposal};
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-use dkg_runtime_primitives::StoredUnsignedProposalBatch;
 use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use crate::async_protocols::{
@@ -46,7 +45,12 @@ where
 	pub fn setup_signing<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
-		unsigned_proposal_batch: StoredUnsignedProposalBatch<<BI as BlockchainInterface>::BatchId, <BI as BlockchainInterface>::MaxProposalLength, <BI as BlockchainInterface>::MaxProposalsInBatch, <BI as BlockchainInterface>::Clock>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		s_l: Vec<KeygenPartyId>,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
@@ -136,7 +140,12 @@ where
 	#[allow(clippy::too_many_arguments)]
 	fn new_offline<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
-		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		offline_i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: LocalKey<Secp256k1>,
@@ -147,7 +156,7 @@ where
 		DKGError,
 	> {
 		let channel_type = ProtocolType::Offline {
-			unsigned_proposal: Arc::new(unsigned_proposal.clone()),
+			unsigned_proposal_batch: Arc::new(unsigned_proposal_batch.clone()),
 			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
@@ -155,7 +164,7 @@ where
 		};
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
-			(unsigned_proposal, offline_i, threshold, batch_key),
+			(unsigned_proposal_batch, offline_i, threshold, batch_key),
 			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
@@ -168,7 +177,12 @@ where
 	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		completed_offline_stage: CompletedOfflineStage,
-		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
+		unsigned_proposal: StoredUnsignedProposalBatch<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		offline_i: OfflinePartyId,
 		rx: tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>,
 		threshold: Threshold,
