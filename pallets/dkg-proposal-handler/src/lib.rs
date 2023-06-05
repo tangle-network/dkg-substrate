@@ -317,6 +317,7 @@ pub mod pallet {
 		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
 		/// and remove storage.
 		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
+			use dkg_runtime_primitives::ProposalKind::*;
 			// fetch all unsigned proposals
 			let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
 			let unsigned_proposals_len = unsigned_proposals.len() as u64;
@@ -325,7 +326,14 @@ pub mod pallet {
 
 			// filter out proposals to delete
 			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
-				|(_, _, StoredUnsignedProposal { timestamp, .. })| {
+				|(_, _, StoredUnsignedProposal { proposal, timestamp })| {
+					let kind = proposal.kind();
+
+					// Skip expiration for keygen related proposals
+					match kind {
+						Refresh | ProposerSetUpdate => return false,
+						_ => (),
+					};
 					let time_passed = now.checked_sub(timestamp).unwrap_or_default();
 					time_passed > T::UnsignedProposalExpiry::get()
 				},
@@ -392,10 +400,11 @@ pub mod pallet {
 							});
 							log::error!(
 								target: "runtime::dkg_proposal_handler",
-								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",
+								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?} | ERR: {}",
 								kind,
 								data,
-								signature
+								signature,
+								e.ty()
 							);
 							// skip it.
 							continue
@@ -731,14 +740,17 @@ impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
 	pub fn get_unsigned_proposals(
-	) -> Vec<dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>> {
+	) -> Vec<(dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>, T::BlockNumber)> {
 		UnsignedProposalQueue::<T>::iter()
 			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
-				dkg_runtime_primitives::UnsignedProposal {
-					typed_chain_id,
-					key,
-					proposal: stored_unsigned_proposal.proposal,
-				}
+				(
+					dkg_runtime_primitives::UnsignedProposal {
+						typed_chain_id,
+						key,
+						proposal: stored_unsigned_proposal.proposal,
+					},
+					stored_unsigned_proposal.timestamp,
+				)
 			})
 			.collect()
 	}

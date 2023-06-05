@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 set -e
+# ensure we kill all child processes when we exit
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+
+#define default ports
+ports=(30304 30305 30308)
+
+#check to see process is not orphaned or already running
+for port in ${ports[@]}; do
+    if [[ $(lsof -i -P -n | grep LISTEN | grep :$port) ]]; then
+      echo "Port $port has a running process. Exiting"
+      exit -1
+    fi
+done
 
 CLEAN=${CLEAN:-false}
 # Parse arguments for the script
@@ -31,20 +44,20 @@ cd "$PROJECT_ROOT"
 
 echo "*** Start Webb DKG Node ***"
 # Alice
-./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
   --rpc-cors all --ws-external \
-  --port 30304 \
+  --port ${ports[0]} \
   --ws-port 9944 &
 # Bob
-./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
   --rpc-cors all --ws-external \
-  --port 30305 \
+  --port ${ports[1]} \
   --ws-port 9945 &
 # Charlie
-./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie \
+./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
     --rpc-cors all --ws-external \
     --ws-port 9948 \
-    --port 30308 \
+    --port ${ports[2]} \
     -ldkg=debug \
     -ldkg_gadget::worker=debug \
     -lruntime::dkg_metadata=debug \

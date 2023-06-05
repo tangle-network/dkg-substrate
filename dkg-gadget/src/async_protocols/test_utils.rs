@@ -34,14 +34,15 @@ pub struct TestDummyIface {
 	pub keygen_key: Arc<Mutex<Option<LocalKey<Secp256k1>>>>,
 }
 
+#[async_trait::async_trait]
 impl BlockchainInterface for TestDummyIface {
 	type Clock = u32;
 	type GossipEngine = ();
 	type MaxProposalLength = MaxProposalLength;
 
-	fn verify_signature_against_authorities(
+	async fn verify_signature_against_authorities(
 		&self,
-		message: Arc<SignedDKGMessage<Public>>,
+		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		Ok(message.msg.clone())
 	}

@@ -100,7 +100,7 @@ it('should be able to sign anchor update proposal', async () => {
 		newMerkleRoot1._hex,
 		srcResourceId
 	);
-	
+
 	// register proposal resourceId.
 	await registerResourceId(polkadotApi, anchorProposal.header.resourceId);
 	// get alice account to send the transaction to the dkg node.

@@ -47,21 +47,16 @@ use webb_proposals::Proposal;
 
 use super::KeygenPartyId;
 
+#[async_trait::async_trait]
 #[auto_impl::auto_impl(Arc,&,&mut)]
-pub trait BlockchainInterface: Send + Sync {
+pub trait BlockchainInterface: Send + Sync + Unpin {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
-	type MaxProposalLength: Get<u32>
-		+ Clone
-		+ Send
-		+ Sync
-		+ std::fmt::Debug
-		+ 'static
-		+ std::fmt::Debug;
+	type MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 
-	fn verify_signature_against_authorities(
+	async fn verify_signature_against_authorities(
 		&self,
-		message: Arc<SignedDKGMessage<Public>>,
+		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError>;
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError>;
 	fn process_vote_result(
@@ -120,12 +115,12 @@ impl<
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 {
-	fn send_result_to_test_client(&self, result: Result<(), String>) {
+	fn send_result_to_test_client(&self, result: Result<(), String>, pub_key: Option<Vec<u8>>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
 			if let Some(current_test_id) = *bundle.current_test_id.read() {
 				let _ = bundle
 					.to_test_client
-					.send((current_test_id, result))
+					.send((current_test_id, result, pub_key))
 					.map_err(|err| format!("send_result_to_test_client failed with error: {err}"));
 			}
 		}
@@ -154,22 +149,23 @@ impl<
 	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
-	BE: Backend<B>,
+	BE: Backend<B> + 'static,
 	GE: GossipEngineIface,
-	C: Client<B, BE>,
+	C: Client<B, BE> + 'static,
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
 	}
 }
 
+#[async_trait::async_trait]
 impl<B, BE, C, GE> BlockchainInterface
 	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
 where
 	B: Block,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
 	GE: GossipEngineIface + 'static,
 {
@@ -177,18 +173,19 @@ where
 	type GossipEngine = Arc<GE>;
 	type MaxProposalLength = MaxProposalLength;
 
-	fn verify_signature_against_authorities(
+	async fn verify_signature_against_authorities(
 		&self,
-		msg: Arc<SignedDKGMessage<Public>>,
+		msg: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
 		let client = &self.client;
 
 		DKGWorker::<_, _, _, GE>::verify_signature_against_authorities_inner(
 			&self.logger,
-			(*msg).clone(),
+			msg,
 			&self.latest_header,
 			client,
 		)
+		.await
 	}
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {
@@ -233,7 +230,7 @@ where
 
 			if proposals_for_this_batch.len() == batch_key.len {
 				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_resuls"); // safe unwrap since lock is held
+				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
 				std::mem::drop(lock);
 
 				if let Some(metrics) = self.metrics.as_ref() {
@@ -248,6 +245,8 @@ where
 					proposals,
 					&self.logger,
 				);
+				// send None to signify this was a signing result
+				self.send_result_to_test_client(Ok(()), None);
 			} else {
 				self.logger.info(format!(
 					"{}/{} proposals have resolved for batch {:?}",
@@ -262,6 +261,7 @@ where
 	}
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+		let public_key = key.pub_key.clone();
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
@@ -269,7 +269,7 @@ where
 			key,
 		);
 
-		self.send_result_to_test_client(Ok(()));
+		self.send_result_to_test_client(Ok(()), Some(public_key));
 
 		Ok(())
 	}

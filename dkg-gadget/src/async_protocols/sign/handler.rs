@@ -14,20 +14,20 @@
 
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use dkg_runtime_primitives::UnsignedProposal;
-use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
+use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
 
-use std::{fmt::Debug, sync::Arc};
-use tokio::sync::broadcast::Receiver;
+use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
 	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
 	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
 };
+use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{
 	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
 };
@@ -46,9 +46,8 @@ where
 	pub fn setup_signing<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
-		unsigned_proposals: Vec<UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>>,
+		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		s_l: Vec<KeygenPartyId>,
-		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
 		let status_handle = params.handle.clone();
@@ -75,36 +74,29 @@ where
 					.map_err(|err| DKGError::StartOffline { reason: err.to_string() })?;
 
 				params.handle.set_status(MetaHandlerStatus::OfflineAndVoting);
-				let count_in_batch = unsigned_proposals.len();
-				let batch_key = params.get_next_batch_key(&unsigned_proposals);
+				let batch_key = params.get_next_batch_key();
 
-				params
-					.logger
-					.debug_signing(format!("Got unsigned proposals count {}", unsigned_proposals.len()));
+				params.logger.debug_signing("Received unsigned proposal");
 
 				if let Ok(offline_i) = params.party_i.try_to_offline_party_id(&s_l) {
+					params.logger.info_signing(format!(
+						"Party Index converted to offline stage Index : {:?}",
+						params.party_i
+					));
 					params.logger.info_signing(format!("Offline stage index: {offline_i}"));
 
-					// create one offline stage for each unsigned proposal
-					let futures = FuturesUnordered::new();
-					for unsigned_proposal in unsigned_proposals {
-						futures.push(Box::pin(GenericAsyncHandler::new_offline(
-							params.clone(),
-							unsigned_proposal,
-							offline_i,
-							s_l.clone(),
-							local_key.clone(),
-							t,
-							batch_key,
-							async_index,
-						)?));
-					}
+					GenericAsyncHandler::new_offline(
+						params.clone(),
+						unsigned_proposal,
+						offline_i,
+						s_l.clone(),
+						local_key.clone(),
+						t,
+						batch_key,
+					)?
+					.await?;
 
-					// NOTE: this will block at each batch of unsigned proposals.
-					// TODO: Consider not blocking here and allowing processing of
-					// each batch of unsigned proposals concurrently
-					futures.try_collect::<()>().await.map(|_| ())?;
-					params.logger.info_signing(format!("🕸️  Concluded all Offline->Voting stages ({count_in_batch} total) for this batch for this node"));
+					params.logger.info_signing("Concluded Offline->Voting stage for this node");
 				} else {
 					params.logger.warn_signing("🕸️  We are not among signers, skipping".to_string());
 					return Err(DKGError::GenericError {
@@ -113,7 +105,7 @@ where
 				}
 			} else {
 				return Err(DKGError::GenericError {
-					reason: "Will skip keygen since local key does not exist".to_string(),
+					reason: "Will skip signing since local key does not exist".to_string(),
 				})
 			}
 
@@ -150,7 +142,6 @@ where
 		local_key: LocalKey<Secp256k1>,
 		threshold: u16,
 		batch_key: BatchKey,
-		async_index: u8,
 	) -> Result<
 		GenericAsyncHandler<'static, <OfflineStage as StateMachineHandler<BI>>::Return>,
 		DKGError,
@@ -160,16 +151,15 @@ where
 			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
+			associated_block_id: params.associated_block_id.clone(),
 		};
-		let early_handle = params.handle.broadcaster.subscribe();
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
-			(unsigned_proposal, offline_i, early_handle, threshold, batch_key),
+			(unsigned_proposal, offline_i, threshold, batch_key),
 			OfflineStage::new(*offline_i.as_ref(), s_l_raw, local_key)
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
-			async_index,
 			DKGMsgStatus::ACTIVE,
 		)
 	}
@@ -180,21 +170,26 @@ where
 		completed_offline_stage: CompletedOfflineStage,
 		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		offline_i: OfflinePartyId,
-		rx: Receiver<Arc<SignedDKGMessage<Public>>>,
+		rx: tokio::sync::mpsc::UnboundedReceiver<SignedDKGMessage<Public>>,
 		threshold: Threshold,
 		batch_key: BatchKey,
-		async_index: u8,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let protocol = Box::pin(async move {
+			let unsigned_proposal_hash = unsigned_proposal.hash().expect("Should not fail");
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 				i: offline_i,
+				associated_block_id: params.associated_block_id.clone(),
 			};
 
-			// the below wrapper will map signed messages into unsigned messages
-			let incoming = rx;
-			let incoming_wrapper = &mut IncomingAsyncProtocolWrapper::new(incoming, ty, &params);
+			params.logger.round_event(
+				&ty,
+				RoundsEventType::ProceededToRound { session: params.session_id, round: 0 },
+			);
+
+			let mut incoming_wrapper =
+				IncomingAsyncProtocolWrapper::new(rx, ty.clone(), params.clone());
 			// the first step is to generate the partial sig based on the offline stage
 			let number_of_parties = params.best_authorities.len();
 
@@ -225,12 +220,13 @@ where
 				// are allowing for parallelism now
 				round_key: Vec::from(&hash_of_proposal as &[u8]),
 				partial_signature: partial_sig_bytes,
-				async_index,
+				unsigned_proposal_hash,
 			});
 
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
+				associated_block_id: params.associated_block_id.clone(),
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
@@ -238,7 +234,14 @@ where
 				payload,
 				session_id: params.session_id,
 			};
-			params.engine.sign_and_send_msg(unsigned_dkg_message)?;
+
+			// we have no synchronization mechanism post-offline stage. Sometimes, messages
+			// don't get delivered. Thus, we sent multiple messages, and, wait for a while to let
+			// other nodes "show up"
+			for _ in 0..3 {
+				params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
+				tokio::time::sleep(Duration::from_millis(100)).await;
+			}
 
 			// we only need a threshold count of sigs
 			let number_of_partial_sigs = threshold as usize;
@@ -248,19 +251,55 @@ where
 				"Must obtain {number_of_partial_sigs} partial sigs to continue ..."
 			));
 
+			let mut received_sigs = HashSet::new();
+
 			while let Some(msg) = incoming_wrapper.next().await {
+				let payload = msg.body.payload.payload().clone();
+				params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received");
 				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-2");
+						if !received_sigs.insert(msg.sender) {
+							params.logger.warn_signing(format!(
+								"Received duplicate partial sig from {}",
+								msg.sender
+							));
+							params.logger.clear_checkpoint_for_message_raw(&payload);
+							continue
+						}
+
+						if msg.body.associated_block_id != params.associated_block_id {
+							params.logger.warn_signing(format!(
+								"Received partial sig from {} with wrong associated block id",
+								msg.sender
+							));
+							params.logger.clear_checkpoint_for_message_raw(&payload);
+							continue
+						}
+
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-3");
 						params.logger.info_signing("Found matching round key!".to_string());
 						let partial = serde_json::from_slice::<PartialSignature>(
 							&dkg_vote_msg.partial_signature,
 						)
 						.map_err(|err| DKGError::GenericError { reason: err.to_string() })?;
+						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-4");
+						params.logger.debug(format!(
+							"[Sig] Received from {} sig {:?}",
+							dkg_vote_msg.party_ind, partial
+						));
 						sigs.push(partial);
 						params
 							.logger
 							.info_signing(format!("There are now {} partial sigs ...", sigs.len()));
+						params.logger.round_event(
+							&ty,
+							RoundsEventType::ProceededToRound {
+								session: params.session_id,
+								round: sigs.len(),
+							},
+						);
 						if sigs.len() == number_of_partial_sigs {
 							break
 						}
@@ -303,7 +342,12 @@ where
 				params.session_id,
 				batch_key,
 				message,
-			)
+			)?;
+			params.logger.round_event(
+				&ty,
+				RoundsEventType::ProceededToRound { session: params.session_id, round: 9999999999 },
+			);
+			Ok(())
 		});
 
 		Ok(GenericAsyncHandler { protocol })

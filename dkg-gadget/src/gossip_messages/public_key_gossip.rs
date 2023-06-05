@@ -32,13 +32,13 @@ use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
-pub(crate) fn handle_public_key_broadcast<B, BE, C, GE>(
+pub(crate) async fn handle_public_key_broadcast<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
@@ -46,7 +46,10 @@ where
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
 	let current_block_number = *header.number();
-	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
+	let authorities = dkg_worker
+		.validator_set(header)
+		.await
+		.map(|a| (a.0.authorities, a.1.authorities));
 	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
 	}
@@ -76,16 +79,19 @@ where
 
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let session_id = msg.session_id;
+
+		// Fetch the current threshold for the DKG. We will use the
+		// current threshold to determine if we have enough signatures
+		// to submit the next DKG public key.
+		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
+
 		let mut lock = dkg_worker.aggregated_public_keys.write();
 		let aggregated_public_keys = lock.entry(session_id).or_default();
 
 		if !aggregated_public_keys.keys_and_signatures.contains(&key_and_sig) {
 			aggregated_public_keys.keys_and_signatures.push(key_and_sig);
 		}
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
+
 		dkg_worker.logger.debug(format!(
 			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id,
@@ -146,6 +152,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 		let status =
 			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
+			associated_block_id: vec![], // we don't need to associate this message with a block
 			sender_id: public.clone(),
 			// we need to gossip the final public key to all parties, so no specific recipient in
 			// this case.

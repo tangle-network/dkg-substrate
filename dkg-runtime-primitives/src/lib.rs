@@ -77,17 +77,11 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-/// Gossip message resending limit for outbound messages
-pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
-
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 
-/// The offline timeout limit in blocks before we consider misbehaviours
-pub const OFFLINE_TIMEOUT: u32 = 2;
-
-/// The sign timeout limit in blocks before we consider misbehaviours
-pub const SIGN_TIMEOUT: u32 = 2;
+/// The sign timeout limit in blocks before we consider proposal as stalled
+pub const SIGN_TIMEOUT: u32 = 10;
 
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -245,12 +239,12 @@ pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 	#[cfg(feature = "testing")]
 	#[allow(clippy::unwrap_used)] // allow unwraps in tests
-	pub fn testing_dummy() -> Self {
-		let data = BoundedVec::try_from(vec![0, 1, 2]).unwrap();
+	pub fn testing_dummy(data: Vec<u8>) -> Self {
+		let data = BoundedVec::try_from(data).unwrap();
 		Self {
 			typed_chain_id: webb_proposals::TypedChainId::None,
-			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),
-			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data },
+			key: DKGPayloadKey::AnchorCreateProposal(webb_proposals::Nonce(0)),
+			proposal: Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data },
 		}
 	}
 	pub fn hash(&self) -> Option<[u8; 32]> {
@@ -301,7 +295,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
+		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]

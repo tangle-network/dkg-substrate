@@ -20,7 +20,7 @@ use crate::{
 	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
@@ -28,15 +28,11 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 };
 use round_based::{Msg, StateMachine};
 
-use std::sync::Arc;
-use tokio::sync::broadcast::Receiver;
-
 #[async_trait]
 impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage {
 	type AdditionalReturnParam = (
 		UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
 		OfflinePartyId,
-		Receiver<Arc<SignedDKGMessage<Public>>>,
 		Threshold,
 		BatchKey,
 	);
@@ -48,11 +44,14 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
+		let payload_raw = msg.body.payload.payload().clone();
+		logger.checkpoint_message_raw(&payload_raw, "CP-2.6-incoming");
 		let DKGMessage { payload, .. } = msg.body;
 
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
 			DKGMsgPayload::Offline(msg) => {
+				logger.checkpoint_message_raw(&payload_raw, "CP-2.7-incoming");
 				let message: Msg<OfflineProtocolMessage> =
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,
@@ -64,9 +63,11 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 							return Ok(())
 						},
 					};
+				logger.checkpoint_message_raw(&payload_raw, "CP-2.8-incoming");
 				if let Some(recv) = message.receiver.as_ref() {
 					if *recv != local_ty.get_i() {
 						logger.info_signing("Skipping passing of message to async proto since not intended for local");
+						logger.clear_checkpoint_for_message_raw(&payload_raw);
 						return Ok(())
 					}
 				}
@@ -78,13 +79,15 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 					.expect("Unsigned proposal hash failed") !=
 					msg.key.as_slice()
 				{
-					//dkg_logging::info!("Skipping passing of message to async proto since not
-					// correct unsigned proposal");
+					logger.warn_signing("Skipping passing of message to async proto since not correct unsigned proposal");
+					logger.clear_checkpoint_for_message_raw(&payload_raw);
 					return Ok(())
 				}
 
 				if let Err(err) = to_async_proto.unbounded_send(message) {
 					logger.error_signing(format!("Error sending message to async proto: {err}"));
+				} else {
+					logger.checkpoint_message_raw(&payload_raw, "CP-2.9-incoming");
 				}
 			},
 
@@ -98,25 +101,24 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 		offline_stage: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		unsigned_proposal: Self::AdditionalReturnParam,
-		async_index: u8,
 	) -> Result<(), DKGError> {
-		params.logger.info_signing("Completed offline stage successfully!".to_string());
+		params.logger.info_signing("Completed offline stage successfully!");
 		// Take the completed offline stage and immediately execute the corresponding voting
 		// stage (this will allow parallelism between offline stages executing across the
 		// network)
 		//
 		// NOTE: we pass the generated offline stage id for the i in voting to keep
 		// consistency
+		let rx_handle = params.handle.rx_voting.lock().take().expect("rx_voting not found");
 		let logger = params.logger.clone();
 		match GenericAsyncHandler::new_voting(
 			params,
 			offline_stage,
 			unsigned_proposal.0,
 			unsigned_proposal.1,
+			rx_handle,
 			unsigned_proposal.2,
 			unsigned_proposal.3,
-			unsigned_proposal.4,
-			async_index,
 		) {
 			Ok(voting_stage) => {
 				logger.info_signing("Starting voting stage...".to_string());
