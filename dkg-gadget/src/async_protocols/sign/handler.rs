@@ -19,7 +19,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-
+use dkg_runtime_primitives::StoredUnsignedProposalBatch;
 use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use crate::async_protocols::{
@@ -46,7 +46,7 @@ where
 	pub fn setup_signing<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
-		unsigned_proposal: UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<<BI as BlockchainInterface>::BatchId, <BI as BlockchainInterface>::MaxProposalLength, <BI as BlockchainInterface>::MaxProposalsInBatch, <BI as BlockchainInterface>::Clock>,
 		s_l: Vec<KeygenPartyId>,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		assert!(threshold + 1 == s_l.len() as u16, "Signing set must be of size threshold + 1");
@@ -87,7 +87,7 @@ where
 
 					GenericAsyncHandler::new_offline(
 						params.clone(),
-						unsigned_proposal,
+						unsigned_proposal_batch,
 						offline_i,
 						s_l.clone(),
 						local_key.clone(),

@@ -356,46 +356,44 @@ pub mod pallet {
 		}
 
 		/// Hook that execute when there is leftover space in a block
-		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
-		/// and remove storage.
+		/// This function will execute on even blocks and move any proposals
+		/// in unsigned proposals to unsigned proposal queue
 		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
-			// 	use dkg_runtime_primitives::ProposalKind::*;
-			// 	// fetch all unsigned proposals
-			// 	let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
-			// 	let unsigned_proposals_len = unsigned_proposals.len() as u64;
-			// 	remaining_weight =
-			// 		remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+			use dkg_runtime_primitives::ProposalKind::*;
 
-			// 	// filter out proposals to delete
-			// 	let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
-			// 		|(_, _, StoredUnsignedProposal { proposal, timestamp })| {
-			// 			let kind = proposal.kind();
+			// execute on even blocks
+			if now % 2_u32.into() != 0_u32.into() {
+				return remaining_weight
+			}
 
-			// 			// Skip expiration for keygen related proposals
-			// 			match kind {
-			// 				Refresh | ProposerSetUpdate => return false,
-			// 				_ => (),
-			// 			};
-			// 			let time_passed = now.checked_sub(timestamp).unwrap_or_default();
-			// 			time_passed > T::UnsignedProposalExpiry::get()
-			// 		},
-			// 	);
+			// fetch all unsigned proposals
+			let unsigned_proposals: Vec<_> = UnsignedProposals::<T>::iter().collect();
+			let unsigned_proposals_len = unsigned_proposals.len() as u64;
+			remaining_weight =
+				remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
 
-			// 	// remove unsigned proposal until we run out of weight
-			// 	for expired_proposal in unsigned_proposal_past_expiry {
-			// 		remaining_weight =
-			// 			remaining_weight.saturating_sub(T::DbWeight::get().writes(One::one()));
+			for (typed_chain_id, unsigned_proposals) in unsigned_proposals {
+				remaining_weight =
+					remaining_weight.saturating_sub(T::DbWeight::get().reads_writes(1, 3));
 
-			// 		if remaining_weight.is_zero() {
-			// 			break
-			// 		}
-			// 		Self::deposit_event(Event::<T>::ProposalRemoved {
-			// 			target_chain: expired_proposal.0,
-			// 			key: expired_proposal.1,
-			// 			expired: true,
-			// 		});
-			// 		UnsignedProposalQueue::<T>::remove(expired_proposal.0, expired_proposal.1);
-			// 	}
+				if remaining_weight.is_zero() {
+					break
+				}
+
+				// TODO : Handle failure gracefully
+				let batch_id = Self::generate_next_batch_id().unwrap();
+				// create new proposal batch
+				let proposal_batch = StoredUnsignedProposalBatchOf::<T> {
+					batch_id,
+					proposals: unsigned_proposals,
+					timestamp: <frame_system::Pallet<T>>::block_number(),
+				};
+				// push the batch to unsigned proposal queue
+				UnsignedProposalQueue::<T>::insert(typed_chain_id, batch_id, proposal_batch);
+
+				// remove the batch from the unsigned proposal list
+				UnsignedProposals::<T>::remove(typed_chain_id);
+			}
 
 			remaining_weight
 		}

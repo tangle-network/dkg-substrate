@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
-	MaxProposalLength, UnsignedProposal,
+	MaxProposalLength, UnsignedProposal, BatchId, MaxProposalsInBatch, MaxSignatureLength
 };
 
 use self::work_manager::WorkManager;
@@ -14,9 +14,11 @@ use crate::{
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hash;
 use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{StoredUnsignedProposalBatch, crypto::Public};
 use sp_api::HeaderT;
 use std::pin::Pin;
 
@@ -106,7 +108,7 @@ where
 				res.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
-					if let Some(hash) = proposal.0.hash() {
+					if let Some(hash) = proposal.hash() {
 						// only submit the job if it isn't already running
 						if !self.work_manager.job_exists(&hash) {
 							// update unsigned proposal counter
@@ -161,7 +163,7 @@ where
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
 			let unsigned_proposal_hash =
-				unsigned_proposal.data().hash().expect("unable to hash proposal");
+				unsigned_proposal.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -184,7 +186,7 @@ where
 						session_id,
 						threshold,
 						ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal.data(),
+						unsigned_proposal,
 						signing_set,
 						*header.number(),
 					) {
@@ -226,7 +228,7 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, NumberFor<B>>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
@@ -247,7 +249,7 @@ where
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
-			unsigned_proposal,
+			unsigned_proposal_batch,
 			signing_set,
 		)?;
 		let logger = dkg_worker.logger.clone();

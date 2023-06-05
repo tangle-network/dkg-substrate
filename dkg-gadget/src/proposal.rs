@@ -18,7 +18,7 @@ use codec::Encode;
 use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
-	RefreshProposalSigned,
+	RefreshProposalSigned, BatchId, MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch
 };
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
@@ -32,7 +32,7 @@ pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
 	logger: &DebugLogger,
-) -> Result<Option<Proposal<MaxProposalLength>>, DKGError>
+) -> Result<Option<SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>>, DKGError>
 where
 	B: Block,
 	BE: Backend<B>,

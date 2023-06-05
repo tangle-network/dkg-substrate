@@ -141,6 +141,7 @@ impl Hash for DKGPayloadKey {
 		self.encode().hash(state)
 	}
 }
+
 pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
@@ -218,7 +219,7 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(
-	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen, Hash
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen
 )]
 pub struct StoredUnsignedProposalBatch<
 	BatchId,
@@ -249,6 +250,11 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, Timestamp>
 		}
 
 		ethabi::encode(&[Token::Array(vec_proposal_data)])
+	}
+
+	pub fn hash(&self) -> Option<[u8; 32]> {
+		Some(crate::keccak_256(&self.data()))
+		
 	}
 }
 

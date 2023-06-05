@@ -54,6 +54,8 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 	type MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -229,6 +231,8 @@ impl<B, BE, C, GE> BlockchainInterface
 	type Clock = NumberFor<B>;
 	type GossipEngine = Arc<GE>;
 	type MaxProposalLength = MaxProposalLength;
+	type BatchId = BatchId;
+	type MaxProposalsInBatch = MaxProposalsInBatch;
 
 	async fn verify_signature_against_authorities(
 		&self,
