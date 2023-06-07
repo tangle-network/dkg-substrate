@@ -14,9 +14,7 @@
 //
 #![allow(clippy::unwrap_used)]
 use crate as pallet_dkg_proposal_handler;
-use crate::{
-	mock::*, ProposalOf, SignedProposalBatchOf, StoredUnsignedProposalBatchOf,
-};
+use crate::{mock::*, ProposalOf, SignedProposalBatchOf, StoredUnsignedProposalBatchOf};
 use codec::Encode;
 use frame_support::{
 	assert_err, assert_ok,
@@ -29,8 +27,8 @@ use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalAction,
-	ProposalHandlerTrait, TransactionV2, TypedChainId,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalAction, ProposalHandlerTrait,
+	TransactionV2, TypedChainId,
 };
 
 use sp_runtime::offchain::storage::MutateStorageError;
@@ -51,9 +49,7 @@ fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 				},
 				_ => {
 					let mut prop_wrapper: Vec<SignedProposalBatchOf<Test>> = Default::default();
-					println!("{:?}", "here");
 					prop_wrapper.push(prop);
-					println!("{prop_wrapper:?}");
 					Ok(prop_wrapper)
 				},
 			},
@@ -64,11 +60,10 @@ fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<SignedProposalBatchOf<Test>> =
-		proposals_ref.get::<SignedProposalBatchOf<Test>>().unwrap();
+	let stored_props: Option<Vec<SignedProposalBatchOf<Test>>> =
+		proposals_ref.get::<Vec<SignedProposalBatchOf<Test>>>().unwrap();
 	assert!(stored_props.is_some(), "{}", true);
-	println!("{:?}", stored_props.clone().unwrap().proposals);
-	assert_eq!(stored_props.unwrap().proposals.len(), num);
+	assert_eq!(stored_props.unwrap().len(), num);
 }
 
 // helper function to skip blocks
@@ -257,38 +252,28 @@ fn store_signed_proposal_offchain() {
 	})
 }
 
-// #[test]
-// fn submit_signed_proposal_onchain_success() {
-// 	execute_test_with(|| {
-// 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
+#[test]
+fn submit_signed_proposal_onchain_success() {
+	execute_test_with(|| {
+		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
-// 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-// 			RuntimeOrigin::root(),
-// 			Proposal::Unsigned {
-// 				kind: ProposalKind::EVM,
-// 				data: tx_v_2.encode().try_into().unwrap()
-// 			},
-// 		));
+		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
+			RuntimeOrigin::root(),
+			Proposal::Unsigned {
+				kind: ProposalKind::EVM,
+				data: tx_v_2.encode().try_into().unwrap()
+			},
+		));
 
-// 		assert!(
-// 			DKGProposalHandler::unsigned_proposals(
-// 				TypedChainId::Evm(0),
-// 				DKGPayloadKey::EVMProposal(0.into())
-// 			)
-// 			.is_some(),
-// 			"{}",
-// 			true
-// 		);
+		let signed_proposal = mock_signed_proposal_batch(tx_v_2);
 
-// 		let signed_proposal = mock_signed_proposal(tx_v_2);
+		add_proposal_to_offchain_storage(signed_proposal);
 
-// 		add_proposal_to_offchain_storage(signed_proposal);
+		assert_ok!(DKGProposalHandler::submit_signed_proposal_onchain(0));
 
-// 		assert_ok!(DKGProposalHandler::submit_signed_proposal_onchain(0));
-
-// 		check_offchain_proposals_num_eq(0);
-// 	});
-// }
+		check_offchain_proposals_num_eq(0);
+	});
+}
 
 // #[test]
 // fn submit_signed_proposal_success() {

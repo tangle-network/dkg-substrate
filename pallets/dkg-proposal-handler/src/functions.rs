@@ -52,11 +52,8 @@ impl<T: Config> Pallet<T> {
 		// create a new batch
 		let current_block = <frame_system::Pallet<T>>::block_number();
 		let batch_id = Self::generate_next_batch_id()?;
-		let batch = StoredUnsignedProposalBatchOf::<T> {
-			proposals,
-			timestamp: current_block,
-			batch_id,
-		};
+		let batch =
+			StoredUnsignedProposalBatchOf::<T> { proposals, timestamp: current_block, batch_id };
 
 		// push the batch to unsigned proposal queue
 		UnsignedProposalQueue::<T>::insert(identifier.typed_chain_id, batch_id, batch);

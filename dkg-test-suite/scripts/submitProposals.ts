@@ -12,7 +12,7 @@ import {
 } from '@webb-tools/sdk-core';
 import { updateCallSignature } from 'typescript';
 
-const PROPOSALS_TO_SEND_IN_ONE_BATCH = 20;
+const PROPOSALS_TO_SEND_IN_ONE_BATCH = 10;
 
 async function run() {
 	const api = await ApiPromise.create({
@@ -26,7 +26,7 @@ async function run() {
 	const resourceId = ResourceId.newFromContractAddress(
 		'0xd30c8839c1145609e564b986f667b273ddcb8496',
 		ChainType.EVM,
-		5001
+		1337
 	);
 
 	const createHeader = (nonce: number) =>
@@ -36,7 +36,7 @@ async function run() {
 	const srcResourceId = ResourceId.newFromContractAddress(
 		'0xe69a847cd5bc0c9480ada0b339d7f0a8cac2b667',
 		ChainType.EVM,
-		5002
+		1338
 	);
 
 	// Print resource IDs

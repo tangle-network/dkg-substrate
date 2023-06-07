@@ -108,7 +108,8 @@
 use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	DKGPayloadKey, OffchainSignedProposalBatches, ProposalAction, ProposalHandlerTrait, SignedProposalBatch, StoredUnsignedProposalBatch, TypedChainId,
+	DKGPayloadKey, OffchainSignedProposalBatches, ProposalAction, ProposalHandlerTrait,
+	SignedProposalBatch, StoredUnsignedProposalBatch, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
@@ -146,8 +147,8 @@ pub mod pallet {
 	use frame_support::dispatch::{fmt::Debug, DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use log;
-	use sp_runtime::traits::{Zero};
-	use webb_proposals::{Proposal};
+	use sp_runtime::traits::Zero;
+	use webb_proposals::Proposal;
 
 	use super::*;
 
@@ -358,8 +359,6 @@ pub mod pallet {
 		/// This function will execute on even blocks and move any proposals
 		/// in unsigned proposals to unsigned proposal queue
 		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
-			
-
 			// execute on even blocks
 			if now % 2_u32.into() != 0_u32.into() {
 				return remaining_weight
