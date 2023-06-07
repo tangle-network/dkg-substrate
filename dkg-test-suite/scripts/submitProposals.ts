@@ -10,10 +10,13 @@ import {
 	ChainType,
 	AnchorUpdateProposal,
 } from '@webb-tools/sdk-core';
+import { updateCallSignature } from 'typescript';
+
+const PROPOSALS_TO_SEND_IN_ONE_BATCH = 20;
 
 async function run() {
 	const api = await ApiPromise.create({
-		provider: new WsProvider('wss://tangle-standalone-archive.webb.tools'),
+		provider: new WsProvider('ws://127.0.0.1:9944'),
 	});
 	await api.isReady;
 	const keyring = new Keyring({ type: 'sr25519' });
@@ -40,61 +43,69 @@ async function run() {
 	console.log('Resource ID: ', resourceId.toString());
 	console.log('Source Resource ID: ', srcResourceId.toString());
 
-	// Create a new anchor proposal every 2 blocks.
-
 	// Fetch account nonce as a starting nonce for the proposals
 	const accountNonce = await api.rpc.system.accountNextIndex(
 		sudoAccount.address
 	);
 	let nonce = accountNonce.toNumber();
-	while(true) {
-		// Create the header
-		const proposalHeader = createHeader(nonce);
-		assert(
-			proposalHeader.toU8a().length === 40,
-			`Proposal header should be 40 bytes, instead it is ${
-				proposalHeader.toString().length
-			} bytes`
-		);
-		// Create the anchor proposal data structure
-		const anchorUpdateProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
-			proposalHeader,
-			'0x0000000000000000000000000000000000000000000000000000000000000000',
-			srcResourceId
-		);
-		console.log('Proposal Bytes:', u8aToHex(anchorUpdateProposal.toU8a()));
-		assert(
-			anchorUpdateProposal.toU8a().length === 104,
-			`Anchor update proposal should be 104 bytes, instead it is ${
-				anchorUpdateProposal.toString().length
-			} bytes`
-		);
-		const kind = api.createType(
-			'WebbProposalsProposalProposalKind',
-			'AnchorUpdate'
-		);
-		const prop = api.createType('WebbProposalsProposal', {
-			Unsigned: {
-				kind,
-				data: u8aToHex(anchorUpdateProposal.toU8a()),
-			},
-		});
-		// Submit the unsigned proposal to the chain
-		const call = api.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
-			prop.toU8a()
-		);
-		// Sign and send the transaction
+
+	// send a batch of 20 proposals every block
+	while (true) {
+		let calls = [];
+
+		for (let i = 0; i < PROPOSALS_TO_SEND_IN_ONE_BATCH; i++) {
+			// Create the header
+			const proposalHeader = createHeader(nonce);
+			assert(
+				proposalHeader.toU8a().length === 40,
+				`Proposal header should be 40 bytes, instead it is ${proposalHeader.toString().length
+				} bytes`
+			);
+			// Create the anchor proposal data structure
+			const anchorUpdateProposal: AnchorUpdateProposal = new AnchorUpdateProposal(
+				proposalHeader,
+				'0x0000000000000000000000000000000000000000000000000000000000000000',
+				srcResourceId
+			);
+			console.log('Proposal Bytes:', u8aToHex(anchorUpdateProposal.toU8a()));
+			assert(
+				anchorUpdateProposal.toU8a().length === 104,
+				`Anchor update proposal should be 104 bytes, instead it is ${anchorUpdateProposal.toString().length
+				} bytes`
+			);
+			const kind = api.createType(
+				'WebbProposalsProposalProposalKind',
+				'AnchorUpdate'
+			);
+			const prop = api.createType('WebbProposalsProposal', {
+				Unsigned: {
+					kind,
+					data: u8aToHex(anchorUpdateProposal.toU8a()),
+				},
+			});
+			// Submit the unsigned proposal to the chain
+			const call = api.tx.dkgProposalHandler.forceSubmitUnsignedProposal(
+				prop.toU8a()
+			);
+
+			calls.push(call);
+
+		}
+
+		let batch_call = api.tx.utility.batch(calls);
+
+		// Sign and send the transaction as one batch
 		await new Promise(async (resolve, reject) => {
 			const unsub = await api.tx.sudo
-			  .sudo(call)
-			  .signAndSend(sudoAccount, (result) => {
-				if (result.isFinalized || result.isInBlock || result.isError) {
-				  unsub();
-				  console.log(result.txHash.toHex(), "is", result.status.type);
-				  resolve(result.isFinalized);
-				}
-			  });
-		  });
+				.sudo(batch_call)
+				.signAndSend(sudoAccount, (result) => {
+					if (result.isFinalized || result.isInBlock || result.isError) {
+						unsub();
+						console.log(result.txHash.toHex(), "is", result.status.type);
+						resolve(result.isFinalized);
+					}
+				});
+		});
 
 		nonce += 1;
 	};

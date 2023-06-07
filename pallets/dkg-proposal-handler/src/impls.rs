@@ -98,15 +98,17 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// fails, we can assume that the previous proposer set update will nonetheless
 		// need to be used to update the governors on the respective webb Apps anyway.
 		// TODO : the limit 5 is arbitrary, we should do a better job of assigning limit
+		// TODO : process this better, there might be proposals other that refresh votwith chainid
+		// none
 		UnsignedProposalQueue::<T>::clear_prefix(TypedChainId::None, 5, None);
 
 		// emit an event for the signed refresh proposal
-		Self::deposit_event(Event::<T>::ProposalSigned {
-			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: TypedChainId::None,
-			data: proposal.pub_key,
-			signature,
-		});
+		// Self::deposit_event(Event::<T>::ProposalSigned {
+		// 	target_chain: TypedChainId::None,
+		// 	proposals:
+		// 	data: proposal.pub_key,
+		// 	signature,
+		// });
 
 		Ok(())
 	}
@@ -119,64 +121,69 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::MaxSignatureLen,
 		>,
 	) -> DispatchResult {
-		// let id = match decode_proposal_identifier(&prop) {
-		// 	Ok(v) => v,
-		// 	Err(e) => return Err(Self::handle_validation_error(e).into()),
-		// };
+		let id = match decode_proposal_identifier(&prop.proposals.first().unwrap()) {
+			Ok(v) => v,
+			Err(e) => return Err(Self::handle_validation_error(e).into()),
+		};
 
-		// // Log the chain id and nonce
-		// log::debug!(
-		// 	target: "runtime::dkg_proposal_handler",
-		// 	"submit_signed_proposal: chain: {:?}, payload_key: {:?}",
-		// 	id.typed_chain_id,
-		// 	id.key,
-		// );
+		// Log the chain id and nonce
+		log::debug!(
+			target: "runtime::dkg_proposal_handler",
+			"submit_signed_proposal: chain: {:?}, payload_key: {:?}",
+			id.typed_chain_id,
+			id.key,
+		);
 
-		// ensure!(
-		// 	UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, id.batch_id),
-		// 	Error::<T>::ProposalDoesNotExists
-		// );
+		ensure!(
+			UnsignedProposalQueue::<T>::contains_key(id.typed_chain_id, prop.batch_id),
+			Error::<T>::ProposalDoesNotExists
+		);
 
-		// // Log that proposal exist in the unsigned queue
-		// log::debug!(
-		// 	target: "runtime::dkg_proposal_handler",
-		// 	"submit_signed_proposal: proposal exist in the unsigned queue"
-		// );
-		// let (data, sig) = match prop.signature {
-		// 	Some(sig) => (prop.data().clone(), sig),
-		// 	None => return Err(Error::<T>::ProposalSignatureInvalid.into()),
-		// };
-		// ensure!(
-		// 	Self::validate_proposal_signature(&data, &sig),
-		// 	Error::<T>::ProposalSignatureInvalid
-		// );
-		// // Log that the signature is valid
-		// log::debug!(
-		// 	target: "runtime::dkg_proposal_handler",
-		// 	"submit_signed_proposal: signature is valid"
-		// );
+		// Log that proposal exist in the unsigned queue
+		log::debug!(
+			target: "runtime::dkg_proposal_handler",
+			"submit_signed_proposal: proposal exist in the unsigned queue"
+		);
 
-		// // ---------------------- TODO --------------------------
-		// // // ensure we are not overwriting an existing signed proposal
-		// // ensure!(
-		// // 	SignedProposals::<T>::get(id.typed_chain_id, id.key).is_none(),
-		// // 	Error::<T>::CannotOverwriteSignedProposal
-		// // );
+		ensure!(
+			Self::validate_proposal_signature(&prop.data(), &prop.signature),
+			Error::<T>::ProposalSignatureInvalid
+		);
+		// Log that the signature is valid
+		log::debug!(
+			target: "runtime::dkg_proposal_handler",
+			"submit_signed_proposal: signature is valid"
+		);
 
-		// // Update storage
-		// //SignedProposals::<T>::insert(id.typed_chain_id, id.key, prop.clone());
+		// ensure we are not overwriting an existing signed proposal
+		ensure!(
+			SignedProposals::<T>::get(id.typed_chain_id, prop.batch_id).is_none(),
+			Error::<T>::CannotOverwriteSignedProposal
+		);
 
-		// //UnsignedProposalQueue::<T>::remove(id.typed_chain_id, id.key);
+		// Update storage
+		SignedProposals::<T>::insert(id.typed_chain_id, prop.batch_id, prop.clone());
 
-		// // Emit RuntimeEvent so frontend can react to it.
-		// Self::deposit_event(Event::<T>::ProposalSigned {
-		// 	key: id.key,
-		// 	target_chain: id.typed_chain_id,
-		// 	data: data.to_vec(),
-		// 	signature: sig.to_vec(),
-		// });
-		// // Finally let any handlers handle the signed proposal
-		// T::SignedProposalHandler::on_signed_proposal(prop)?;
+		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, prop.batch_id);
+
+		// Emit RuntimeEvent so frontend can react to it.
+		Self::deposit_event(Event::<T>::ProposalBatchSigned {
+			proposals: prop.clone(),
+			target_chain: id.typed_chain_id,
+			data: prop.data().to_vec(),
+			signature: prop.signature.to_vec(),
+		});
+
+		// Finally let any handlers handle the signed proposal
+		for proposal in prop.proposals.into_iter() {
+			log::debug!(
+				target: "runtime::dkg_proposal_handler",
+				"submit_signed_proposal: Calling SignedProposalHandler for proposal"
+			);
+			// we dont care about the result here
+			T::SignedProposalHandler::on_signed_proposal(proposal);
+		}
+
 		Ok(())
 	}
 }

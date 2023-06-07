@@ -242,8 +242,14 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, Timestamp>
 	// on the data of all proposals in the batch
 	pub fn data(&self) -> Vec<u8> {
 		use ethabi::token::Token;
-		let mut vec_proposal_data: Vec<Token> = Vec::new();
 
+		// if the proposal batch has just one proposal, the data is the encoded data of
+		// the proposal, this allows us to quickly verify batches with just one proposal
+		if self.proposals.len() == 1 {
+			return self.proposals.first().expect("checked above that len = 1").data().clone()
+		}
+
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
 		for proposal in self.proposals.iter() {
 			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
 			vec_proposal_data.push(data_as_token);
@@ -296,8 +302,14 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<
 	// on the data of all proposals in the batch
 	pub fn data(&self) -> Vec<u8> {
 		use ethabi::token::Token;
-		let mut vec_proposal_data: Vec<Token> = Vec::new();
 
+		// if the proposal batch has just one proposal, the data is the encoded data of
+		// the proposal, this allows us to quickly verify batches with just one proposal
+		if self.proposals.len() == 1 {
+			return self.proposals.first().expect("checked above that len = 1").data().clone()
+		}
+
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
 		for proposal in self.proposals.iter() {
 			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
 			vec_proposal_data.push(data_as_token);

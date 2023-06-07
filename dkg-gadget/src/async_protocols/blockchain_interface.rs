@@ -296,9 +296,27 @@ impl<B, BE, C, GE> BlockchainInterface
 			reason: "Unable to serialize signature".to_string(),
 		})?;
 
+		let mut signed_proposals = vec![];
+
+		// convert all unsigned proposals to signed
+		for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
+			signed_proposals.push(Proposal::Signed {
+				kind: unsigned_proposal.kind(),
+				data: unsigned_proposal
+					.data()
+					.clone()
+					.try_into()
+					.expect("should not happen since its a valid proposal"),
+				signature: signature
+					.encode()
+					.try_into()
+					.expect("Signature exceeds runtime bounds!"),
+			});
+		}
+
 		let signed_proposal_batch = SignedProposalBatch {
 			batch_id: unsigned_proposal_batch.batch_id,
-			proposals: unsigned_proposal_batch.proposals,
+			proposals: signed_proposals.try_into().expect("Proposals exceeds runtime bounds!"),
 			signature: signature.encode().try_into().expect("Signature exceeds runtime bounds!"),
 		};
 

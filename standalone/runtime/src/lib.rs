@@ -25,7 +25,6 @@ use dkg_runtime_primitives::{
 	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength,
 	TypedChainId, UnsignedProposal,
 };
-use pallet_dkg_proposal_handler::StoredUnsignedProposalBatchOf;
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
 	traits::{ConstU16, ConstU32, Everything, U128CurrencyToVote},
@@ -37,6 +36,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
+use pallet_dkg_proposal_handler::StoredUnsignedProposalBatchOf;
 use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
@@ -769,6 +769,13 @@ impl pallet_im_online::Config for Runtime {
 	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
+impl pallet_utility::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PalletsOrigin = OriginCaller;
+	type WeightInfo = ();
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
   pub enum Runtime where
@@ -797,6 +804,7 @@ construct_runtime!(
 	BridgeRegistry: pallet_bridge_registry::<Instance1>,
 	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 	ImOnline: pallet_im_online,
+	Utility: pallet_utility
   }
 );
 

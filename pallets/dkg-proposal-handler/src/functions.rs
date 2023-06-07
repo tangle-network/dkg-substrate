@@ -231,6 +231,7 @@ impl<T: Config> Pallet<T> {
 						"Offchain signed proposals: {:?}",
 						prop_wrapper
 					);
+					all_proposals = prop_wrapper.clone().batches;
 					Ok(prop_wrapper)
 				},
 				Ok(None) => Err("No signed proposals key stored"),

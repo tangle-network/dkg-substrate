@@ -299,11 +299,11 @@ pub mod pallet {
 			expired: bool,
 		},
 		/// RuntimeEvent When a Proposal Gets Signed by DKG.
-		ProposalSigned {
-			/// The Payload Type or the Key.
-			key: DKGPayloadKey,
+		ProposalBatchSigned {
 			/// The Target Chain.
 			target_chain: TypedChainId,
+			// The list of proposals signed
+			proposals: SignedProposalBatchOf<T>,
 			/// The Proposal Data.
 			data: Vec<u8>,
 			/// Signature of the hash of the proposal data.
