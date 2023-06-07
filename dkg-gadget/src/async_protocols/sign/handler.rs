@@ -177,7 +177,7 @@ where
 	pub(crate) fn new_voting<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		completed_offline_stage: CompletedOfflineStage,
-		unsigned_proposal: StoredUnsignedProposalBatch<
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
 			<BI as BlockchainInterface>::BatchId,
 			<BI as BlockchainInterface>::MaxProposalLength,
 			<BI as BlockchainInterface>::MaxProposalsInBatch,
@@ -189,10 +189,10 @@ where
 		batch_key: BatchKey,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let protocol = Box::pin(async move {
-			let unsigned_proposal_hash = unsigned_proposal.hash().expect("Should not fail");
+			let unsigned_proposal_hash = unsigned_proposal_batch.hash().expect("Should not fail");
 			let ty = ProtocolType::Voting {
 				offline_stage: Arc::new(completed_offline_stage.clone()),
-				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
+				unsigned_proposal_batch: Arc::new(unsigned_proposal_batch.clone()),
 				i: offline_i,
 				associated_block_id: params.associated_block_id.clone(),
 			};
@@ -211,9 +211,10 @@ where
 				"Will now begin the voting stage with n={number_of_parties} parties with offline_i={offline_i}"
 			));
 
-			let hash_of_proposal = unsigned_proposal.hash().ok_or_else(|| DKGError::Vote {
-				reason: "The unsigned proposal for this stage is invalid".to_string(),
-			})?;
+			let hash_of_proposal =
+				unsigned_proposal_batch.hash().ok_or_else(|| DKGError::Vote {
+					reason: "The unsigned proposal for this stage is invalid".to_string(),
+				})?;
 
 			let message = BigInt::from_bytes(&hash_of_proposal);
 			let offline_stage_pub_key = &completed_offline_stage.public_key().clone();
@@ -352,7 +353,7 @@ where
 			params.logger.info_signing("RD3");
 			params.engine.process_vote_result(
 				signature,
-				unsigned_proposal,
+				unsigned_proposal_batch,
 				params.session_id,
 				batch_key,
 				message,

@@ -25,6 +25,7 @@ use dkg_runtime_primitives::{
 	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength,
 	TypedChainId, UnsignedProposal,
 };
+use pallet_dkg_proposal_handler::StoredUnsignedProposalBatchOf;
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
 	traits::{ConstU16, ConstU32, Everything, U128CurrencyToVote},
@@ -643,7 +644,8 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type MaxProposalsPerBatch = dkg_runtime_primitives::MaxProposalsInBatch;
+	type BatchId = u32;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = BridgeRegistry;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
@@ -1003,7 +1005,7 @@ impl_runtime_apis! {
 		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
-	fn get_unsigned_proposal_batches() -> Vec<(UnsignedProposal<MaxProposalLength>, BlockNumber)> {
+	fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatchOf<Runtime>> {
 	  DKGProposalHandler::get_unsigned_proposal_batches()
 	}
 

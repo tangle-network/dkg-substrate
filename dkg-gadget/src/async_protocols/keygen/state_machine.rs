@@ -40,7 +40,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 			<BI as BlockchainInterface>::BatchId,
 			<BI as BlockchainInterface>::MaxProposalLength,
 			<BI as BlockchainInterface>::MaxProposalsInBatch,
-			<BI as BlockchainInterface>::MaxSignatureLength,
+			<BI as BlockchainInterface>::Clock,
 		>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {

@@ -287,7 +287,7 @@ pub enum ProtocolType<
 	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	BlockNumber: std::fmt::Debug + 'static + Debug,
 > {
 	Keygen {
 		ty: KeygenRound,
@@ -302,7 +302,7 @@ pub enum ProtocolType<
 				BatchId,
 				MaxProposalLength,
 				MaxProposalsInBatch,
-				MaxSignatureLength,
+				BlockNumber,
 			>,
 		>,
 		i: OfflinePartyId,
@@ -317,7 +317,7 @@ pub enum ProtocolType<
 				BatchId,
 				MaxProposalLength,
 				MaxProposalsInBatch,
-				MaxSignatureLength,
+				BlockNumber,
 			>,
 		>,
 		i: OfflinePartyId,
@@ -329,8 +329,8 @@ impl<
 		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
+		BlockNumber: std::fmt::Debug + 'static + Debug,
+	> ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>
 {
 	pub const fn get_associated_block_id(&self) -> &Vec<u8> {
 		match self {
@@ -347,10 +347,14 @@ impl<
 			Self::Voting { i, .. } => i.0,
 		}
 	}
-	pub fn get_unsigned_proposal(&self) -> Option<&UnsignedProposal<MaxProposalLength>> {
+	pub fn get_unsigned_proposal(
+		&self,
+	) -> Option<
+		&StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>,
+	> {
 		match self {
-			Self::Offline { unsigned_proposal, .. } | Self::Voting { unsigned_proposal, .. } =>
-				Some(unsigned_proposal),
+			Self::Offline { unsigned_proposal_batch, .. } |
+			Self::Voting { unsigned_proposal_batch, .. } => Some(unsigned_proposal_batch),
 			_ => None,
 		}
 	}
@@ -364,8 +368,8 @@ impl<
 		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
 		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
-		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug,
-	> Debug for ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>
+		BlockNumber: std::fmt::Debug + 'static + Debug,
+	> Debug for ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
@@ -377,11 +381,19 @@ impl<
 				};
 				write!(f, "{ty} | Keygen: (i, t, n, r) = ({i}, {t}, {n}, {associated_round_id:?})")
 			},
-			ProtocolType::Offline { i, unsigned_proposal, .. } => {
-				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
+			ProtocolType::Offline { i, unsigned_proposal_batch, .. } => {
+				write!(
+					f,
+					"Offline: (i, proposal) = ({}, {:?})",
+					i, &unsigned_proposal_batch.batch_id
+				)
 			},
-			ProtocolType::Voting { unsigned_proposal, .. } => {
-				write!(f, "Voting: proposal = {:?}", &unsigned_proposal.proposal)
+			ProtocolType::Voting { unsigned_proposal_batch, .. } => {
+				write!(
+					f,
+					"Voting: proposal with batch_id = {:?}",
+					&unsigned_proposal_batch.batch_id
+				)
 			},
 		}
 	}
@@ -418,7 +430,7 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 		<BI as BlockchainInterface>::BatchId,
 		<BI as BlockchainInterface>::MaxProposalLength,
 		<BI as BlockchainInterface>::MaxProposalsInBatch,
-		<BI as BlockchainInterface>::MaxSignatureLength,
+		<BI as BlockchainInterface>::Clock,
 	>,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
@@ -558,7 +570,7 @@ fn generate_outgoing_to_wire_fn<
 		<BI as BlockchainInterface>::BatchId,
 		<BI as BlockchainInterface>::MaxProposalLength,
 		<BI as BlockchainInterface>::MaxProposalsInBatch,
-		<BI as BlockchainInterface>::MaxSignatureLength,
+		<BI as BlockchainInterface>::Clock,
 	>,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
@@ -705,7 +717,7 @@ pub fn generate_inbound_signed_message_receiver_fn<
 		<BI as BlockchainInterface>::BatchId,
 		<BI as BlockchainInterface>::MaxProposalLength,
 		<BI as BlockchainInterface>::MaxProposalsInBatch,
-		<BI as BlockchainInterface>::MaxSignatureLength,
+		<BI as BlockchainInterface>::Clock,
 	>,
 	to_async_proto: UnboundedSender<Msg<<SM as StateMachine>::MessageBody>>,
 ) -> impl SendFuture<'static, ()>
@@ -869,19 +881,21 @@ impl<
 		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> From<&'_ ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>>
+		BlockNumber: std::fmt::Debug + 'static,
+	> From<&'_ ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>>
 	for AsyncProtocolType
 {
 	fn from(
-		value: &ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
+		value: &ProtocolType<BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>,
 	) -> Self {
 		match value {
 			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
-			ProtocolType::Offline { unsigned_proposal, .. } =>
-				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
-			ProtocolType::Voting { unsigned_proposal, .. } =>
-				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+			ProtocolType::Offline { unsigned_proposal_batch, .. } => AsyncProtocolType::Signing {
+				hash: unsigned_proposal_batch.hash().unwrap_or([0u8; 32]),
+			},
+			ProtocolType::Voting { unsigned_proposal_batch, .. } => AsyncProtocolType::Voting {
+				hash: unsigned_proposal_batch.hash().unwrap_or([0u8; 32]),
+			},
 		}
 	}
 }
