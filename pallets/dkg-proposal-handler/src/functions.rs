@@ -7,7 +7,7 @@ impl<T: Config> Pallet<T> {
 
 	pub fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatchOf<T>> {
 		UnsignedProposalQueue::<T>::iter()
-			.map(|(typed_chain_id, batch_id, stored_unsigned_proposal)| stored_unsigned_proposal)
+			.map(|(_typed_chain_id, _batch_id, stored_unsigned_proposal)| stored_unsigned_proposal)
 			.collect()
 	}
 
@@ -53,7 +53,7 @@ impl<T: Config> Pallet<T> {
 		let current_block = <frame_system::Pallet<T>>::block_number();
 		let batch_id = Self::generate_next_batch_id()?;
 		let batch = StoredUnsignedProposalBatchOf::<T> {
-			proposals: proposals.clone(),
+			proposals,
 			timestamp: current_block,
 			batch_id,
 		};
@@ -224,7 +224,7 @@ impl<T: Config> Pallet<T> {
 			T::MaxSignatureLength,
 		>, _, _>(|res| {
 			match res {
-				Ok(Some(mut prop_wrapper)) => {
+				Ok(Some(prop_wrapper)) => {
 					// log the proposals
 					log::debug!(
 						target: "runtime::dkg_proposal_handler",

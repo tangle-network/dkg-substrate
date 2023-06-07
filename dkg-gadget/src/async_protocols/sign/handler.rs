@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use dkg_runtime_primitives::{StoredUnsignedProposalBatch, UnsignedProposal};
+use dkg_runtime_primitives::{StoredUnsignedProposalBatch};
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,

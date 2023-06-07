@@ -15,12 +15,11 @@
 #![allow(clippy::unwrap_used)]
 use crate as pallet_dkg_proposal_handler;
 use crate::{
-	mock::*, Error, ProposalOf, SignedProposalBatchOf, StoredUnsignedProposalBatchOf,
-	UnsignedProposalQueue,
+	mock::*, ProposalOf, SignedProposalBatchOf, StoredUnsignedProposalBatchOf,
 };
 use codec::Encode;
 use frame_support::{
-	assert_err, assert_noop, assert_ok,
+	assert_err, assert_ok,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 	BoundedVec,
@@ -30,10 +29,10 @@ use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, ProposalAction,
-	ProposalHandlerTrait, ProposalHeader, SignedProposalBatch, TransactionV2, TypedChainId,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalAction,
+	ProposalHandlerTrait, TransactionV2, TypedChainId,
 };
-use sp_core::sr25519;
+
 use sp_runtime::offchain::storage::MutateStorageError;
 use webb_proposals::{Proposal, ProposalKind};
 
@@ -54,7 +53,7 @@ fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 					let mut prop_wrapper: Vec<SignedProposalBatchOf<Test>> = Default::default();
 					println!("{:?}", "here");
 					prop_wrapper.push(prop);
-					println!("{:?}", prop_wrapper);
+					println!("{prop_wrapper:?}");
 					Ok(prop_wrapper)
 				},
 			},
@@ -245,12 +244,12 @@ fn store_signed_proposal_offchain() {
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			unsigned_proposal.clone(),
+			unsigned_proposal,
 		));
 
 		let signed_proposal_batch = mock_signed_proposal_batch(tx_v_2);
 
-		println!("{:?}", signed_proposal_batch);
+		println!("{signed_proposal_batch:?}");
 
 		add_proposal_to_offchain_storage(signed_proposal_batch);
 

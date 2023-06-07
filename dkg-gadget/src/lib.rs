@@ -16,8 +16,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use debug_logger::DebugLogger;
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, BatchId, DKGApi, MaxAuthorities, MaxProposalLength, MaxProposalsInBatch,
-	MaxSignatureLength,
+	crypto::AuthorityId, DKGApi, MaxAuthorities, MaxProposalLength,
 };
 use parking_lot::RwLock;
 use prometheus::Registry;

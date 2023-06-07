@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
-	BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength, UnsignedProposal,
+	BatchId, MaxProposalLength, MaxProposalsInBatch,
 };
 
 use self::work_manager::WorkManager;
@@ -18,7 +18,7 @@ use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
-use std::{collections::hash_map::DefaultHasher, hash::Hash, pin::Pin};
+use std::{hash::Hash, pin::Pin};
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;

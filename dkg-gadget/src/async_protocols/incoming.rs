@@ -16,7 +16,7 @@ use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, Sign
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
-use sp_runtime::traits::Get;
+
 use std::{
 	marker::PhantomData,
 	pin::Pin,
@@ -31,7 +31,7 @@ use super::{blockchain_interface::BlockchainInterface, AsyncProtocolParameters, 
 pub struct IncomingAsyncProtocolWrapper<T: TransformIncoming, BI> {
 	stream: IncomingStreamMapped<T::IncomingMapped>,
 	logger: DebugLogger,
-	_pd: PhantomData<(BI)>,
+	_pd: PhantomData<BI>,
 }
 
 pub type IncomingStreamMapped<T> =

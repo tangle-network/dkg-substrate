@@ -89,8 +89,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	}
 
 	fn handle_signed_refresh_proposal(
-		proposal: dkg_runtime_primitives::RefreshProposal,
-		signature: Vec<u8>,
+		_proposal: dkg_runtime_primitives::RefreshProposal,
+		_signature: Vec<u8>,
 	) -> DispatchResult {
 		// Attempt to remove all previous unsigned refresh proposals too
 		// This may also remove ProposerSetUpdate proposals that haven't been signed
@@ -121,7 +121,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::MaxSignatureLen,
 		>,
 	) -> DispatchResult {
-		let id = match decode_proposal_identifier(&prop.proposals.first().unwrap()) {
+		let id = match decode_proposal_identifier(prop.proposals.first().unwrap()) {
 			Ok(v) => v,
 			Err(e) => return Err(Self::handle_validation_error(e).into()),
 		};

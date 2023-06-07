@@ -14,14 +14,14 @@
 use crate::{
 	debug_logger::DebugLogger,
 	utils::find_index,
-	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
+	worker::{STORAGE_SET_RETRY_NUM},
 	Client,
 };
-use codec::{Decode, Encode};
+use codec::{Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposalBatches, SignedProposalBatch,
+	AuthoritySet, DKGApi, SignedProposalBatch,
 };
 use parking_lot::RwLock;
 use rand::Rng;
@@ -29,7 +29,7 @@ use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::sync::Arc;
-use webb_proposals::Proposal;
+
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<
@@ -46,7 +46,7 @@ pub(crate) fn save_signed_proposals_in_storage<
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
 	backend: &Arc<BE>,
-	mut signed_proposals: Vec<
+	signed_proposals: Vec<
 		SignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength>,
 	>,
 	logger: &DebugLogger,
@@ -92,7 +92,7 @@ pub(crate) fn save_signed_proposals_in_storage<
 		return
 	}
 
-	let current_block_number = {
+	let _current_block_number = {
 		let header = latest_header.as_ref().expect("Should not happen, checked above");
 		header.number()
 	};
