@@ -127,9 +127,7 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					logger2.info_signing(format!("Stopper has been called {res1:?}"));
-					Err(DKGError::GenericError {
-						reason: format!("Stopper has been called {res1:?}")
-					})
+					Ok(())
 				}
 			}
 		});

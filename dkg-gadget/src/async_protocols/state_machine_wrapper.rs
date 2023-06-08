@@ -63,14 +63,6 @@ impl<
 			outgoing_history: Vec::new(),
 		}
 	}
-
-	fn collect_round_blame(&self) {
-		let (unreceived_messages, blamed_parties) = self.round_blame();
-		self.logger.debug(format!("Not received messages from : {blamed_parties:?}"));
-		let _ = self
-			.current_round_blame
-			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
-	}
 }
 
 impl<
@@ -110,8 +102,6 @@ where
 			},
 		);
 		self.logger.trace(format!("SM Before: {:?}", &self.sm));
-
-		self.collect_round_blame();
 
 		if round < self.current_round().into() {
 			self.logger.trace(format!(
@@ -214,7 +204,6 @@ where
 			},
 		);
 
-		self.collect_round_blame();
 		result
 	}
 
@@ -261,6 +250,12 @@ impl<
 	for StateMachineWrapper<T, BatchId, MaxProposalLength, MaxProposalsInBatch, BlockNumber>
 {
 	fn round_blame(&self) -> (u16, Vec<u16>) {
-		self.sm.round_blame()
+		let (unreceived_messages, blamed_parties) = self.sm.round_blame();
+		self.logger.debug(format!("Not received messages from : {blamed_parties:?}"));
+		let _ = self.current_round_blame.send(CurrentRoundBlame {
+			unreceived_messages,
+			blamed_parties: blamed_parties.clone(),
+		});
+		(unreceived_messages, blamed_parties)
 	}
 }
