@@ -366,10 +366,8 @@ pub fn mock_signed_proposal_batch(eth_tx: TransactionV2) -> SignedProposalBatchO
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	let unsigned_proposal = Proposal::Unsigned {
-		kind: ProposalKind::AnchorUpdate,
-		data: eth_tx.encode().try_into().unwrap(),
-	};
+	let unsigned_proposal =
+		Proposal::Unsigned { kind: ProposalKind::EVM, data: eth_tx.encode().try_into().unwrap() };
 
 	SignedProposalBatchOf::<Test> {
 		proposals: vec![unsigned_proposal].try_into().unwrap(),

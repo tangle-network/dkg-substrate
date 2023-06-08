@@ -29,9 +29,8 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities,
-	MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch,
-	StoredUnsignedProposalBatch,
+	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
+	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,

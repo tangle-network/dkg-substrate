@@ -21,9 +21,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload};
-use dkg_runtime_primitives::{
-	crypto::Public, MaxAuthorities, StoredUnsignedProposalBatch,
-};
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, StoredUnsignedProposalBatch};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
 	OfflineProtocolMessage, OfflineStage,

@@ -249,15 +249,18 @@ parameter_types! {
 	pub const MaxAuthorityProposers : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxExternalProposerAccounts : u32 = 1000;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxProposalsPerBatch : u32 = 5;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type BatchId = u32;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type MaxProposalLength = MaxProposalLength;
+	type MaxProposalsPerBatch = MaxProposalsPerBatch;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }

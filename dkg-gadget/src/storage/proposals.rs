@@ -11,13 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{
-	debug_logger::DebugLogger,
-	utils::find_index,
-	worker::{STORAGE_SET_RETRY_NUM},
-	Client,
-};
-use codec::{Encode};
+use crate::{debug_logger::DebugLogger, utils::find_index, worker::STORAGE_SET_RETRY_NUM, Client};
+use codec::Encode;
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
@@ -29,7 +24,6 @@ use sc_client_api::Backend;
 use sp_application_crypto::sp_core::offchain::{OffchainStorage, STORAGE_PREFIX};
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::sync::Arc;
-
 
 /// processes signed proposals and puts them in storage
 pub(crate) fn save_signed_proposals_in_storage<
