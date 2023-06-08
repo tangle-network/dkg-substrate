@@ -312,7 +312,13 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let mut status_handle = AsyncProtocolRemote::new(now, session_id, self.logger.clone());
+		let associated_block_id = associated_block.encode();
+		let mut status_handle = AsyncProtocolRemote::new(
+			now,
+			session_id,
+			self.logger.clone(),
+			associated_block_id.clone(),
+		);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
 		let active_local_key = match stage {
@@ -361,7 +367,7 @@ where
 			handle: status_handle.clone(),
 			logger: self.logger.clone(),
 			local_key: active_local_key,
-			associated_block_id: associated_block.encode(),
+			associated_block_id,
 		};
 
 		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {

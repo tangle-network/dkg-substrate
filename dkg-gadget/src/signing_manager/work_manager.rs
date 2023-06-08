@@ -219,7 +219,8 @@ impl<B: BlockT> WorkManager<B> {
 		// check the enqueued
 		for task in lock.enqueued_tasks.iter() {
 			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash
+				&task.task_hash == msg_unsigned_proposal_hash &&
+				msg.msg.associated_block_id == task.handle.associated_block_id
 			{
 				self.logger.debug(format!(
 					"Message is for this ENQUEUED signing execution in session: {}",
@@ -228,6 +229,7 @@ impl<B: BlockT> WorkManager<B> {
 				if let Err(_err) = task.handle.deliver_message(msg) {
 					self.logger.warn_signing("Failed to deliver message to signing task");
 				}
+
 				return
 			}
 		}
@@ -235,7 +237,8 @@ impl<B: BlockT> WorkManager<B> {
 		// check the currently signing
 		for task in lock.active_tasks.iter() {
 			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash
+				&task.task_hash == msg_unsigned_proposal_hash &&
+				msg.msg.associated_block_id == task.handle.associated_block_id
 			{
 				self.logger.debug(format!(
 					"Message is for this signing CURRENT execution in session: {}",
@@ -244,6 +247,7 @@ impl<B: BlockT> WorkManager<B> {
 				if let Err(_err) = task.handle.deliver_message(msg) {
 					self.logger.warn_signing("Failed to deliver message to signing task");
 				}
+
 				return
 			}
 		}
