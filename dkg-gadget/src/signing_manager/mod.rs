@@ -18,7 +18,7 @@ use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
-use std::{hash::Hash, pin::Pin};
+use std::pin::Pin;
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;

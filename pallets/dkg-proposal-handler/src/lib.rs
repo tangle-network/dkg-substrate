@@ -119,7 +119,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{AtLeast32BitUnsigned, Saturating, Zero},
+	traits::{AtLeast32BitUnsigned, Zero},
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};

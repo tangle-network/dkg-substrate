@@ -85,6 +85,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	fn now(&self) -> Self::Clock;
 }
 
+#[allow(clippy::type_complexity)]
 pub struct DKGProtocolEngine<
 	B: Block,
 	BE,

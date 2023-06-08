@@ -748,18 +748,24 @@ fn only_current_authorities_should_make_successful_proposals() {
 fn session_change_should_create_proposer_set_update_proposal() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		roll_to(40);
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None,).is_some(), "{}", true);
-
-		roll_to(41);
-
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None,).is_none(), "{}", true);
-
+		assert!(
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 1).is_some(),
+			"{}",
+			true
+		);
 		roll_to(50);
-
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None,).is_some(), "{}", true);
+		assert!(
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 2).is_some(),
+			"{}",
+			true
+		);
 
 		roll_to(80);
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None,).is_some(), "{}", true);
+		assert!(
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 3).is_some(),
+			"{}",
+			true
+		);
 	})
 }
 

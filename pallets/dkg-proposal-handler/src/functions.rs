@@ -73,7 +73,7 @@ impl<T: Config> Pallet<T> {
 			// and push it to the UnsignedProposalQueue
 			if proposals.len() == T::MaxProposalsPerBatch::get() as usize {
 				// push the batch to unsigned proposal queue
-				Self::create_batch_and_add_to_storage(proposals.clone(), identifier);
+				Self::create_batch_and_add_to_storage(proposals.clone(), identifier)?;
 
 				let mut new_proposals: BoundedVec<_, _> = Default::default();
 
@@ -200,17 +200,9 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Returns the list of signed proposals ready for on-chain submission
-	pub(crate) fn get_next_offchain_signed_proposals() -> Result<
-		Vec<
-			SignedProposalBatch<
-				T::BatchId,
-				T::MaxProposalLength,
-				T::MaxProposalsPerBatch,
-				T::MaxSignatureLength,
-			>,
-		>,
-		&'static str,
-	> {
+	#[allow(clippy::type_complexity)]
+	pub(crate) fn get_next_offchain_signed_proposals(
+	) -> Result<Vec<SignedProposalBatchOf<T>>, &'static str> {
 		let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
 		let mut all_proposals = Vec::new();

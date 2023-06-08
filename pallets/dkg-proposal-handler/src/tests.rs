@@ -49,8 +49,7 @@ fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 					Ok(ser_props)
 				},
 				_ => {
-					let mut prop_wrapper: Vec<SignedProposalBatchOf<Test>> = Default::default();
-					prop_wrapper.push(prop);
+					let prop_wrapper: Vec<SignedProposalBatchOf<Test>> = vec![prop];
 					Ok(prop_wrapper)
 				},
 			},

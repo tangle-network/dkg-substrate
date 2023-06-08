@@ -21,7 +21,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					target_chain: v.typed_chain_id,
 					data: proposal.data().clone(),
 				});
-				Self::store_unsigned_proposal(proposal, v);
+				Self::store_unsigned_proposal(proposal, v)?;
 				Ok(())
 			},
 			Err(e) => Err(Self::handle_validation_error(e).into()),
@@ -46,7 +46,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 						.try_into()
 						.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
 
-				Self::create_batch_and_add_to_storage(batch_proposal, v);
+				Self::create_batch_and_add_to_storage(batch_proposal, v)?;
 
 				Self::deposit_event(Event::<T>::ProposalAdded {
 					key: v.key,
@@ -77,7 +77,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			key: DKGPayloadKey::RefreshVote(proposal.nonce),
 			typed_chain_id: TypedChainId::None,
 		};
-		Self::create_batch_and_add_to_storage(batch_proposal, identifier);
+		Self::create_batch_and_add_to_storage(batch_proposal, identifier)?;
 
 		Self::deposit_event(Event::<T>::ProposalAdded {
 			key: identifier.key,
@@ -100,7 +100,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// TODO : the limit 5 is arbitrary, we should do a better job of assigning limit
 		// TODO : process this better, there might be proposals other that refresh votwith chainid
 		// none
-		UnsignedProposalQueue::<T>::clear_prefix(TypedChainId::None, 5, None);
+		let _ = UnsignedProposalQueue::<T>::clear_prefix(TypedChainId::None, 5, None);
 
 		// emit an event for the signed refresh proposal
 		// Self::deposit_event(Event::<T>::ProposalSigned {
@@ -181,7 +181,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				"submit_signed_proposal: Calling SignedProposalHandler for proposal"
 			);
 			// we dont care about the result here
-			T::SignedProposalHandler::on_signed_proposal(proposal);
+			let _ = T::SignedProposalHandler::on_signed_proposal(proposal);
 		}
 
 		Ok(())
