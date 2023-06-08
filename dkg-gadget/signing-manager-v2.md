@@ -31,6 +31,7 @@ When the DKG worker sends a signed DKG message to the signing manager, the signi
 
 ### The Job Manager
 #### The background worker
+![](../assets/signing_manager_v2_job.png)
 Every 500ms, the `poll` function is executed. The `poll` function checks the set of active jobs, and sees if any have stalled or have finished. Stalled jobs are removed from the set of active jobs. It is up to a future finality notification to re-enqueue this job.
 
 Nexr, `poll` checks the enqueued set of jobs associated with each unsigned proposal, and checks to see if any of these jobs need to be moved into the active set. If `j` active jobs may execute in parallel, and, there are `a` < `j` jobs running , then, `poll` will attempt to move at most `j` - `a` jobs from the enqueued set to the active set. When moved to the active set, the corresponding async protocols are also executed.

@@ -312,14 +312,14 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 									log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed SIGNING test {trace_id:?}. Reason: {err:?}");
 								} else {
 									log::info!(target: "dkg", "Peer {peer_id:?} successfully completed SIGNING test {trace_id:?}");
-									let entry = client
+									if let Some(entry) = client
 										.outstanding_tasks_signing
-										.get_mut(trace_id)
-										.expect("Should exist");
-									assert!(entry.pop().is_some());
-									if entry.is_empty() {
-										// remove from map
-										client.outstanding_tasks_signing.remove(trace_id);
+										.get_mut(trace_id) {
+										assert!(entry.pop().is_some());
+										if entry.is_empty() {
+											// remove from map
+											client.outstanding_tasks_signing.remove(trace_id);
+										}
 									}
 								}
 								current_round_completed_count_signing += 1;
