@@ -16,7 +16,7 @@ const PROPOSALS_TO_SEND_IN_ONE_BATCH = 10;
 
 async function run() {
 	const api = await ApiPromise.create({
-		provider: new WsProvider('ws://127.0.0.1:9944'),
+		provider: new WsProvider('wss://tangle-canary.webb.tools'),
 	});
 	await api.isReady;
 	const keyring = new Keyring({ type: 'sr25519' });
