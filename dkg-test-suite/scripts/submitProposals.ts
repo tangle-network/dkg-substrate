@@ -10,7 +10,6 @@ import {
 	ChainType,
 	AnchorUpdateProposal,
 } from '@webb-tools/sdk-core';
-import { updateCallSignature } from 'typescript';
 
 const PROPOSALS_TO_SEND_IN_ONE_BATCH = 10;
 

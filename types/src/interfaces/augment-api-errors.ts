@@ -69,6 +69,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       BridgeNotFound: AugmentedError<ApiType>;
       /**
+       * Input out of bounds
+       **/
+      OutOfBounds: AugmentedError<ApiType>;
+      /**
        * Parameters haven't been initialized
        **/
       ParametersNotInitialized: AugmentedError<ApiType>;
@@ -102,6 +106,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Already submitted a public key signature
        **/
       AlreadySubmittedSignature: AugmentedError<ApiType>;
+      /**
+       * Cannot retreive signer from ecdsa signature
+       **/
+      CannotRetreiveSigner: AugmentedError<ApiType>;
       /**
        * Must be calling from the controller account
        **/
@@ -165,6 +173,14 @@ declare module '@polkadot/api-base/types/errors' {
     };
     dkgProposalHandler: {
       /**
+       * Math overflow
+       **/
+      ArithmeticOverflow: AugmentedError<ApiType>;
+      /**
+       * Duplicate signed proposal
+       **/
+      CannotOverwriteSignedProposal: AugmentedError<ApiType>;
+      /**
        * Chain id is invalid
        **/
       ChainIdInvalid: AugmentedError<ApiType>;
@@ -208,6 +224,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Errors should have helpful documentation associated with them.
        **/
       StorageOverflow: AugmentedError<ApiType>;
+      /**
+       * Unable to accept new unsigned proposal
+       **/
+      UnsignedProposalQueueOverflow: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -792,6 +812,16 @@ declare module '@polkadot/api-base/types/errors' {
        * and the new runtime.
        **/
       SpecVersionNeedsToIncrease: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    utility: {
+      /**
+       * Too many calls batched.
+       **/
+      TooManyCalls: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

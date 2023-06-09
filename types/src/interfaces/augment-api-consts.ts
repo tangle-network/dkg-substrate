@@ -159,7 +159,7 @@ declare module '@polkadot/api-base/types/consts' {
       /**
        * Max number of signed proposal submissions per batch;
        **/
-      maxSubmissionsPerBatch: u16 & AugmentedConst<ApiType>;
+      maxProposalsPerBatch: u32 & AugmentedConst<ApiType>;
       /**
        * Max blocks to store an unsigned proposal
        **/
@@ -540,6 +540,16 @@ declare module '@polkadot/api-base/types/consts' {
        * transactions.
        **/
       operationalFeeMultiplier: u8 & AugmentedConst<ApiType>;
+      /**
+       * Generic const
+       **/
+      [key: string]: Codec;
+    };
+    utility: {
+      /**
+       * The limit on the number of batched calls.
+       **/
+      batchedCallsLimit: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
