@@ -1,15 +1,14 @@
-# Signing Manager V2
+# Signing Manager
 
 ![](../assets/signing_manager_v2.png)
 
 ## Introduction
 
-The purpose of the Signing Manager V2 is to streamline and improve reliability over Signing Manager V1.
-Whereas in signing manager v1, we attempted to hack around the fact that messages were getting lost by starting many redundant async protocols,
-in signing manager v2, we only start 1 async protocol per unsigned proposal and have eradicated the message loss problem as part of PR [#577](https://github.com/webb-tools/dkg-substrate/pull/577).
+The Signing Manager is the job/work execution and management abstraction used to run threshold-signing protocols over cross-chain messages. The goals for the Signing Manager are to be efficient in the execution of protocols, reliable in the signing of them, and fast in the completion of threshold signing jobs.
+
 
 ## Design
-SigningManagerV2 is comprised of two primary components: The signing manager itself, which is a sort of an intermediary between the DKG worker
+The Signing Manager is comprised of two primary components: The signing manager itself, which is a sort of an intermediary between the DKG worker
 and the job manager, and the job manager, which is responsible for enqueueing, executing, managing, and handling stalled jobs.
 
 ### The DKG Worker
