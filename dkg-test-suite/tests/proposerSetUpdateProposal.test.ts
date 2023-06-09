@@ -39,9 +39,7 @@ import {
 
 it.skip('proposer set update test', async () => {
 	const provider = localChain.provider();
-	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
-		key: 'ProposerSetUpdateProposal',
-	});
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 	const chainIdType = polkadotApi.createType(
 		'WebbProposalsHeaderTypedChainId',
 		{ None: 0 }

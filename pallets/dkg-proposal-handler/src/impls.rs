@@ -98,17 +98,17 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// fails, we can assume that the previous proposer set update will nonetheless
 		// need to be used to update the governors on the respective webb Apps anyway.
 		// TODO : the limit 5 is arbitrary, we should do a better job of assigning limit
-		// TODO : process this better, there might be proposals other that refresh votwith chainid
+		// TODO : process this better, there might be proposals other that refresh vote with chainid
 		// none
 		let _ = UnsignedProposalQueue::<T>::clear_prefix(TypedChainId::None, 5, None);
 
 		// emit an event for the signed refresh proposal
-		// Self::deposit_event(Event::<T>::ProposalSigned {
-		// 	target_chain: TypedChainId::None,
-		// 	proposals:
-		// 	data: proposal.pub_key,
-		// 	signature,
-		// });
+		Self::deposit_event(Event::<T>::ProposalBatchSigned {
+			target_chain: TypedChainId::None,
+			proposals:
+			data: proposal.pub_key,
+			signature,
+		});
 
 		Ok(())
 	}

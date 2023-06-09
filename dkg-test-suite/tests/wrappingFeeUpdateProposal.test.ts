@@ -74,7 +74,7 @@ it('should be able to sign wrapping fee update proposal', async () => {
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned');
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 	// now we need to query the proposal and its signature.
 	const key = {
 		WrappingFeeUpdateProposal: wrappingFeeProposal.header.nonce,

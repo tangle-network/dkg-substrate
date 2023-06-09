@@ -147,9 +147,7 @@ it('should be able to sign anchor update proposal', async () => {
 	await tx;
 
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
-		key: 'anchorUpdateProposal',
-	});
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 
 	console.log('after wait for event');
 

@@ -88,9 +88,7 @@ it('should be able to sign token add & remove proposal', async () => {
 		await sudoTx(polkadotApi, proposalCall);
 
 		// now we need to wait until the proposal to be signed on chain.
-		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
-			key: 'tokenAddProposal',
-		});
+		await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 		// now we need to query the proposal and its signature.
 		const key = {
 			TokenAddProposal: tokenAddProposal.header.nonce,
@@ -167,9 +165,7 @@ it('should be able to sign token add & remove proposal', async () => {
 	await sudoTx(polkadotApi, proposalCall);
 
 	// now we need to wait until the proposal to be signed on chain.
-	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalSigned', {
-		key: 'tokenRemoveProposal',
-	});
+	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 	// now we need to query the proposal and its signature.
 	const key = {
 		TokenRemoveProposal: tokenRemoveProposal.header.nonce,

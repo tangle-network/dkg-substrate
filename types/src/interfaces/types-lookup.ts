@@ -493,7 +493,7 @@ declare module '@polkadot/types/lookup' {
       readonly data: Bytes;
       readonly signature: Bytes;
     } & Struct;
-    readonly type: 'InvalidProposalSignature' | 'ProposalAdded' | 'ProposalRemoved' | 'ProposalSigned';
+    readonly type: 'InvalidProposalSignature' | 'ProposalAdded' | 'ProposalRemoved' | 'ProposalBatchSigned';
   }
 
   /** @name DkgRuntimePrimitivesProposalDkgPayloadKey (51) */

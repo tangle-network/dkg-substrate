@@ -427,7 +427,7 @@ export default {
         targetChain: 'WebbProposalsHeaderTypedChainId',
         expired: 'bool',
       },
-      ProposalSigned: {
+      ProposalBatchSigned: {
         key: 'DkgRuntimePrimitivesProposalDkgPayloadKey',
         targetChain: 'WebbProposalsHeaderTypedChainId',
         data: 'Bytes',
