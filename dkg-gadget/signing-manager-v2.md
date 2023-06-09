@@ -8,7 +8,7 @@ The Signing Manager is the job/work execution and management abstraction used to
 
 
 ## Design
-SigningManager is comprised of two primary components: The signing manager itself, which is a sort of an intermediary between the DKG worker
+The Signing Manager is comprised of two primary components: The signing manager itself, which is a sort of an intermediary between the DKG worker
 and the job manager, and the job manager, which is responsible for enqueueing, executing, managing, and handling stalled jobs.
 
 ### The DKG Worker
