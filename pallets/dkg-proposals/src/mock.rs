@@ -173,7 +173,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type SessionPeriod = Period;
 	type Reputation = u128;
 	type UnsignedInterval = frame_support::traits::ConstU64<0>;
-	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
+	type UnsignedPriority = frame_support::traits::ConstU64<{ 1000 }>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type MaxKeyLength = MaxKeyLength;

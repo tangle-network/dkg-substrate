@@ -252,29 +252,6 @@ fn store_signed_proposal_offchain() {
 	})
 }
 
-// #[test]
-// fn submit_signed_proposal_onchain_success() {
-// 	execute_test_with(|| {
-// 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
-
-// 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-// 			RuntimeOrigin::root(),
-// 			Proposal::Unsigned {
-// 				kind: ProposalKind::EVM,
-// 				data: tx_v_2.encode().try_into().unwrap()
-// 			},
-// 		));
-
-// 		let signed_proposal = mock_signed_proposal_batch(tx_v_2);
-
-// 		add_proposal_to_offchain_storage(signed_proposal);
-
-// 		assert_ok!(DKGProposalHandler::submit_signed_proposal_onchain(0));
-
-// 		check_offchain_proposals_num_eq(0);
-// 	});
-// }
-
 #[test]
 fn submit_signed_proposal_success() {
 	execute_test_with(|| {

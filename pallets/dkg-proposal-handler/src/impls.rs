@@ -1,5 +1,7 @@
 use super::*;
-use dkg_runtime_primitives::handlers::decode_proposals::ProposalIdentifier;
+use dkg_runtime_primitives::{
+	handlers::decode_proposals::ProposalIdentifier, ProposalKind::Refresh,
+};
 use sp_std::vec;
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
@@ -90,25 +92,50 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 
 	fn handle_signed_refresh_proposal(
 		_proposal: dkg_runtime_primitives::RefreshProposal,
-		_signature: Vec<u8>,
+		signature: Vec<u8>,
 	) -> DispatchResult {
 		// Attempt to remove all previous unsigned refresh proposals too
 		// This may also remove ProposerSetUpdate proposals that haven't been signed
 		// yet, but given that this action is only to clean storage when a refresh
 		// fails, we can assume that the previous proposer set update will nonetheless
 		// need to be used to update the governors on the respective webb Apps anyway.
-		// TODO : the limit 5 is arbitrary, we should do a better job of assigning limit
-		// TODO : process this better, there might be proposals other that refresh vote with chainid
-		// none
-		let _ = UnsignedProposalQueue::<T>::clear_prefix(TypedChainId::None, 5, None);
 
-		// emit an event for the signed refresh proposal
-		Self::deposit_event(Event::<T>::ProposalBatchSigned {
-			target_chain: TypedChainId::None,
-			proposals:
-			data: proposal.pub_key,
-			signature,
-		});
+		// TODO : process this better, there could be large amount of proposals other that refresh
+		// vote with chainid none
+		let possible_refresh_proposals =
+			UnsignedProposalQueue::<T>::iter_prefix(TypedChainId::None);
+
+		// This loop assumes that all proposals in UnsignedProposalQueue with TypedChainId::None is
+		// a batch of size one, which is true for our case. Refactor this loop if this assumption is
+		// no longer true.
+		for (batch_id, proposal_batch) in possible_refresh_proposals {
+			for proposal in proposal_batch.proposals.iter() {
+				if proposal.kind() == Refresh {
+					UnsignedProposalQueue::<T>::remove(TypedChainId::None, batch_id);
+
+					// create signed batch from unsigned batch
+					let signed_batch = SignedProposalBatchOf::<T> {
+						batch_id,
+						proposals: proposal_batch.proposals.clone(),
+						signature: signature
+							.clone()
+							.try_into()
+							.expect("proposal signature already checked!"),
+					};
+
+					// emit an event for the signed refresh proposal
+					Self::deposit_event(Event::<T>::ProposalBatchSigned {
+						target_chain: TypedChainId::None,
+						proposals: signed_batch.clone(),
+						data: signed_batch.data(),
+						signature: signature
+							.clone()
+							.try_into()
+							.expect("proposal signature already checked!"),
+					});
+				}
+			}
+		}
 
 		Ok(())
 	}
