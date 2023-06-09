@@ -23,13 +23,14 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, manually_set_proposer_count, mock_ecdsa_key, mock_pub_key,
+	assert_has_event, manually_set_proposer_count, mock_ecdsa_address, mock_pub_key,
 	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder,
+	MaxProposers,
 };
 use codec::Encode;
 use core::panic;
 use dkg_runtime_primitives::{
-	DKGPayloadKey, FunctionSignature, ProposalHeader, ProposalNonce, TypedChainId,
+	DKGPayloadKey, FunctionSignature, MaxKeyLength, ProposalHeader, ProposalNonce, TypedChainId,
 };
 use frame_support::{assert_err, assert_noop, assert_ok};
 use std::vec;
@@ -158,77 +159,41 @@ fn set_get_threshold() {
 	new_test_ext().execute_with(|| {
 		assert_eq!(ProposerThreshold::<Test>::get(), 1);
 
+		let proposers = vec![
+			(mock_pub_key(PROPOSER_A), mock_ecdsa_address(PROPOSER_A)),
+			(mock_pub_key(PROPOSER_B), mock_ecdsa_address(PROPOSER_B)),
+			(mock_pub_key(PROPOSER_C), mock_ecdsa_address(PROPOSER_C)),
+		];
+		let bounded_proposers: BoundedVec<AccountId, MaxProposers> = proposers
+			.iter()
+			.map(|x| x.0)
+			.collect::<Vec<AccountId>>()
+			.try_into()
+			.expect("Too many proposers");
+		Proposers::<Test>::put(bounded_proposers);
+		let bounded_external_accounts: BoundedVec<
+			(AccountId, BoundedVec<u8, MaxKeyLength>),
+			MaxProposers,
+		> = proposers
+			.iter()
+			.map(|x| (x.0.clone(), x.1.clone().try_into().expect("Key size too large")))
+			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
+			.try_into()
+			.expect("Too many proposers");
+		ExternalProposerAccounts::<Test>::put(bounded_external_accounts);
+
 		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(ProposerThreshold::<Test>::get(), TEST_THRESHOLD);
 
-		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), 5));
-		assert_eq!(ProposerThreshold::<Test>::get(), 5);
+		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), 3));
+		assert_eq!(ProposerThreshold::<Test>::get(), 3);
 
 		assert_events(vec![
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
 				new_threshold: TEST_THRESHOLD,
 			}),
 			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerThresholdChanged {
-				new_threshold: 5,
-			}),
-		]);
-	})
-}
-
-#[test]
-fn add_remove_relayer() {
-	new_test_ext().execute_with(|| {
-		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD,));
-		assert_eq!(DKGProposals::proposer_count(), 0);
-
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_A),
-			mock_ecdsa_key(PROPOSER_A)
-		));
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_B),
-			mock_ecdsa_key(PROPOSER_B)
-		));
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_C),
-			mock_ecdsa_key(PROPOSER_C)
-		));
-		assert_eq!(DKGProposals::proposer_count(), 3);
-
-		// Already exists
-		assert_noop!(
-			DKGProposals::add_proposer(
-				RuntimeOrigin::root(),
-				mock_pub_key(PROPOSER_A),
-				mock_ecdsa_key(PROPOSER_A)
-			),
-			Error::<Test>::ProposerAlreadyExists
-		);
-
-		// Confirm removal
-		assert_ok!(DKGProposals::remove_proposer(RuntimeOrigin::root(), mock_pub_key(PROPOSER_B)));
-		assert_eq!(DKGProposals::proposer_count(), 2);
-		assert_noop!(
-			DKGProposals::remove_proposer(RuntimeOrigin::root(), mock_pub_key(PROPOSER_B)),
-			Error::<Test>::ProposerInvalid
-		);
-		assert_eq!(DKGProposals::proposer_count(), 2);
-
-		assert_events(vec![
-			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: mock_pub_key(PROPOSER_A),
-			}),
-			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: mock_pub_key(PROPOSER_B),
-			}),
-			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerAdded {
-				proposer_id: mock_pub_key(PROPOSER_C),
-			}),
-			RuntimeEvent::DKGProposals(pallet_dkg_proposals::Event::ProposerRemoved {
-				proposer_id: mock_pub_key(PROPOSER_B),
+				new_threshold: 3,
 			}),
 		]);
 	})
@@ -426,6 +391,7 @@ fn create_unsucessful_proposal() {
 				status: ProposalStatus::Rejected,
 				expiry: ProposalLifetime::get() + 1,
 			};
+
 		assert_eq!(prop, expected);
 
 		assert_eq!(Balances::free_balance(mock_pub_key(PROPOSER_B)), 0);
@@ -654,7 +620,7 @@ fn should_reset_proposers_if_authorities_changed_during_a_session_change() {
 		assert_has_event(RuntimeEvent::Session(pallet_session::Event::NewSession {
 			session_index: 1,
 		}));
-		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::AuthorityProposersReset {
+		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -671,7 +637,7 @@ fn should_reset_proposers_if_authorities_changed() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		CollatorSelection::leave_intent(RuntimeOrigin::signed(mock_pub_key(PROPOSER_D))).unwrap();
 		roll_to(10);
-		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::AuthorityProposersReset {
+		assert_has_event(RuntimeEvent::DKGProposals(crate::Event::ProposersReset {
 			proposers: vec![
 				mock_pub_key(PROPOSER_A),
 				mock_pub_key(PROPOSER_B),
@@ -820,21 +786,21 @@ fn proposers_iter_keys_should_only_contain_active_proposers() {
 	let r_id = derive_resource_id(src_id.underlying_chain_id(), 0x0100, b"remark");
 
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
-		assert_eq!(Proposers::<Test>::iter_keys().count(), 3);
+		assert_eq!(Proposers::<Test>::get().len(), 3);
 	});
 }
 
 use sp_io::hashing::keccak_256;
 //Tests whether proposer root is correct
 #[test]
-fn should_calculate_corrrect_proposer_set_root() {
+fn should_calculate_correct_proposer_set_root() {
 	ExtBuilder::with_genesis_collators().execute_with(|| {
 		// Initial proposer set is invulnerables even when another collator exists
 		assert_eq!(DKGProposals::proposer_count(), 3);
 		// Get the three invulnerable proposers' ECDSA keys
-		let proposer_a_address = mock_ecdsa_key(3);
-		let proposer_b_address = mock_ecdsa_key(1);
-		let proposer_c_address = mock_ecdsa_key(2);
+		let proposer_a_address = mock_ecdsa_address(1);
+		let proposer_b_address = mock_ecdsa_address(2);
+		let proposer_c_address = mock_ecdsa_address(3);
 
 		let leaf0 = keccak_256(&proposer_a_address[..]);
 		let leaf1 = keccak_256(&proposer_b_address[..]);
@@ -856,10 +822,10 @@ fn should_calculate_corrrect_proposer_set_root() {
 		roll_to(20);
 		// The fourth collator is now in the proposer set as well
 		assert_eq!(DKGProposals::proposer_count(), 4);
-		let proposer_a_address = mock_ecdsa_key(3);
-		let proposer_b_address = mock_ecdsa_key(4);
-		let proposer_c_address = mock_ecdsa_key(1);
-		let proposer_d_address = mock_ecdsa_key(2);
+		let proposer_a_address = mock_ecdsa_address(1);
+		let proposer_b_address = mock_ecdsa_address(2);
+		let proposer_c_address = mock_ecdsa_address(3);
+		let proposer_d_address = mock_ecdsa_address(4);
 		let leaf0 = keccak_256(&proposer_a_address[..]);
 		let leaf1 = keccak_256(&proposer_b_address[..]);
 		let leaf2 = keccak_256(&proposer_c_address[..]);

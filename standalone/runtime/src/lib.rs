@@ -36,7 +36,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
+use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -601,9 +601,11 @@ impl pallet_sudo::Config for Runtime {
 }
 
 parameter_types! {
-  pub const DecayPercentage: Percent = Percent::from_percent(50);
-  pub const UnsignedPriority: u64 = 1 << 20;
-  pub const UnsignedInterval: BlockNumber = 3;
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
+	pub const UnsignedPriority: u64 = 1 << 20;
+	pub const UnsignedInterval: BlockNumber = 3;
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
@@ -628,6 +630,8 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type ProposerSetView = DKGProposals;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -657,14 +661,12 @@ parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 1000;
+	pub const MaxProposers : u32 = 1000;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
@@ -675,8 +677,8 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Period = Period;
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
-	type MaxAuthorityProposers = MaxAuthorityProposers;
-	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
+	type MaxProposers = MaxProposers;
+	type ExternalProposerAccountSize = MaxKeyLength;
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
@@ -1033,6 +1035,10 @@ impl_runtime_apis! {
 
 	fn should_execute_new_keygen() -> bool {
 		DKG::should_execute_new_keygen()
+	}
+
+	fn should_submit_proposer_set_vote() -> bool {
+		DKG::should_submit_proposer_vote()
 	}
   }
 

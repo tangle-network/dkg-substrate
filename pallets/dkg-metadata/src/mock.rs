@@ -14,6 +14,7 @@
 
 // construct_runtime requires this
 #![allow(clippy::from_over_into, clippy::unwrap_used)]
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -126,6 +127,11 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -148,6 +154,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type ProposerSetView = ();
 	type WeightInfo = ();
 }
 

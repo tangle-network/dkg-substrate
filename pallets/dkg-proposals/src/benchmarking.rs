@@ -97,28 +97,6 @@ benchmarks! {
 		assert_last_event::<T>(Event::ChainWhitelisted{ chain_id}.into());
 	}
 
-	add_proposer {
-		let admin = RawOrigin::Root;
-		let v: T::AccountId = account("account", 0, SEED);
-		let another = vec![1u8, 2, 3];
-
-
-	}: _(admin, v.clone(), another)
-	verify {
-		assert_last_event::<T>(Event::ProposerAdded{ proposer_id: v}.into());
-	}
-
-	remove_proposer {
-		let admin = RawOrigin::Root;
-		let v: T::AccountId = account("account", 0, SEED);
-		let another = vec![1u8, 2, 3];
-
-		crate::Pallet::<T>::register_proposer(v.clone(), another).unwrap();
-	}: _(admin, v.clone())
-	verify {
-		assert_last_event::<T>(Event::ProposerRemoved{ proposer_id: v}.into());
-	}
-
 	acknowledge_proposal {
 		let c in 1 .. 500;
 		let caller: T::AccountId = whitelisted_caller();
@@ -132,12 +110,14 @@ benchmarks! {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
 		});
-		Proposers::<T>::insert(caller.clone(), true);
+		let mut proposers: BoundedVec<T::AccountId, T::MaxProposers> = vec![caller.clone()].try_into().expect("Failed to create proposers");
+		Proposers::<T>::put(proposers.clone());
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
-			Proposers::<T>::insert(who.clone(), true);
+			proposers.try_push(who.clone()).expect("Failed to push proposer");
+			Proposers::<T>::put(proposers.clone());
 			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, true).unwrap();
 		}
 	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
@@ -159,12 +139,14 @@ benchmarks! {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
 		});
-		Proposers::<T>::insert(caller.clone(), true);
+		let mut proposers: BoundedVec<T::AccountId, T::MaxProposers> = vec![caller.clone()].try_into().expect("Failed to create proposers");
+		Proposers::<T>::put(proposers.clone());
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
-			Proposers::<T>::insert(who.clone(), true);
+			proposers.try_push(who.clone()).expect("Failed to push proposer");
+			Proposers::<T>::put(proposers.clone());
 			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, false).unwrap();
 		}
 	}: _(RawOrigin::Signed(caller.clone()), nonce.into(), chain_id,  resource_id, proposal.clone())
@@ -184,12 +166,14 @@ benchmarks! {
 			kind: ProposalKind::AnchorUpdate,
 			data: vec![].try_into().unwrap(),
 		});
-		Proposers::<T>::insert(caller.clone(), true);
+		let mut proposers: BoundedVec<T::AccountId, T::MaxProposers> = vec![caller.clone()].try_into().expect("Failed to create proposers");
+		Proposers::<T>::put(proposers.clone());
 		Pallet::<T>::whitelist(chain_id).unwrap();
 		Pallet::<T>::set_proposer_threshold(10).unwrap();
 		for i in 1..9 {
 			let who: T::AccountId = account("account", i, SEED);
-			Proposers::<T>::insert(who.clone(), true);
+			proposers.try_push(who.clone()).expect("Failed to push proposer");
+			Proposers::<T>::put(proposers.clone());
 			Pallet::<T>::commit_vote(who, i.into(), chain_id, &proposal, false).unwrap();
 		}
 

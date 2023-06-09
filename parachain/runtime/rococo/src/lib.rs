@@ -32,7 +32,7 @@ use frame_support::weights::{
 	constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, WeightToFeeCoefficient,
 	WeightToFeeCoefficients, WeightToFeePolynomial,
 };
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
+use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 use pallet_transaction_payment::{CurrencyAdapter, Multiplier};
 use polkadot_runtime_common::SlowAdjustingFeeUpdate;
 use sp_api::impl_runtime_apis;
@@ -489,6 +489,8 @@ parameter_types! {
 	pub const DecayPercentage: Percent = Percent::from_percent(50);
 	pub const UnsignedPriority: u64 = 1 << 20;
 	pub const UnsignedInterval: BlockNumber = 3;
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
@@ -513,6 +515,8 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type ProposerSetView = DKGProposals;
+	type VoteLength = VoteLength;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -542,14 +546,12 @@ parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 1000;
+	pub const MaxProposers : u32 = 1000;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
@@ -560,8 +562,8 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Period = Period;
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
-	type MaxAuthorityProposers = MaxAuthorityProposers;
-	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
+	type MaxProposers = MaxProposers;
+	type ExternalProposerAccountSize = MaxKeyLength;
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
@@ -979,6 +981,10 @@ impl_runtime_apis! {
 
 		fn should_execute_new_keygen() -> bool {
 			DKG::should_execute_new_keygen()
+		}
+		
+		fn should_submit_proposer_set_vote() -> bool {
+			DKG::should_submit_proposer_vote()
 		}
 	}
 

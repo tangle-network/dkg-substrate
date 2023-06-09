@@ -107,7 +107,7 @@ pub type MaxReporters = CustomU32Getter<100>;
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<512>;
 
-/// Max size for signatures
+/// Max size for keys
 pub type MaxKeyLength = CustomU32Getter<512>;
 
 /// Max votes to store onchain
@@ -155,6 +155,25 @@ pub struct AggregatedMisbehaviourReports<
 	pub reporters: BoundedVec<DKGId, MaxReporters>,
 	/// A list of signed reports
 	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxReporters>,
+}
+
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
+pub struct AggregatedProposerSetVotes<
+	DKGId: AsRef<[u8]>,
+	MaxSignatureLength: Get<u32> + Debug + Clone + TypeInfo,
+	MaxVoters: Get<u32> + Debug + Clone + TypeInfo,
+	VoteLength: Get<u32> + Debug + Clone + TypeInfo,
+> {
+	/// The round id the proposer vote is valid for.
+	pub session_id: u64,
+	/// The proposer
+	pub proposer: DKGId,
+	/// The encoded vote
+	pub vote: BoundedVec<u8, VoteLength>,
+	/// A list of voters
+	pub voters: BoundedVec<DKGId, MaxVoters>,
+	/// A list of signed encoded votes
+	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxVoters>,
 }
 
 impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
@@ -318,5 +337,7 @@ sp_api::decl_runtime_apis! {
 		fn refresh_nonce() -> u32;
 		/// Returns true if we should execute an new keygen.
 		fn should_execute_new_keygen() -> bool;
+		/// Returns true if we should execute an proposer set voting protocol.
+		fn should_submit_proposer_set_vote() -> bool;
 	}
 }

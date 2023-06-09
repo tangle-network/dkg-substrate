@@ -13,28 +13,39 @@
 // limitations under the License.
 //
 use frame_support::dispatch::DispatchResultWithPostInfo;
+use sp_runtime::BoundedVec;
 use sp_std::vec::Vec;
 
 pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
-	fn on_authority_set_changed(
-		authority_accounts: Vec<AccountId>,
-		authority_ids: Vec<AuthorityId>,
-	);
+	fn on_authority_set_changed(authority_accounts: &[AccountId], authority_ids: &[AuthorityId]);
 }
 
 impl<AccountId, AuthoritySetId, AuthorityId>
 	OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for ()
 {
-	fn on_authority_set_changed(
-		_authority_accounts: Vec<AccountId>,
-		_authority_ids: Vec<AuthorityId>,
-	) {
+	fn on_authority_set_changed(_authority_accounts: &[AccountId], _authority_ids: &[AuthorityId]) {
 	}
 }
 
+/// A trait for fetching the current and pravious DKG Public Key.
 pub trait GetDKGPublicKey {
 	fn dkg_key() -> Vec<u8>;
 	fn previous_dkg_key() -> Vec<u8>;
+}
+
+/// A trait for fetching the current proposer set.
+pub trait GetProposerSet<AccountId, Bound> {
+	fn get_previous_proposer_set() -> Vec<AccountId>;
+	fn get_previous_external_proposer_accounts() -> Vec<(AccountId, BoundedVec<u8, Bound>)>;
+}
+
+impl<A, B> GetProposerSet<A, B> for () {
+	fn get_previous_proposer_set() -> Vec<A> {
+		Vec::new()
+	}
+	fn get_previous_external_proposer_accounts() -> Vec<(A, BoundedVec<u8, B>)> {
+		Vec::new()
+	}
 }
 
 /// A trait for when the DKG Public Key get changed.
