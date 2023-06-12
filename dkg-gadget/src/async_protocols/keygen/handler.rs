@@ -110,7 +110,7 @@ where
 			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
 		};
 		let i = params.party_i;
-		let associated_round_id = params.associated_block_id.clone();
+		let associated_round_id = params.associated_block_id;
 		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
 			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id };
 		new_inner(

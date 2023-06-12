@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
-use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
+use dkg_runtime_primitives::{associated_block_id_acceptable, crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
 use sp_runtime::traits::Get;
@@ -127,7 +127,10 @@ impl TransformIncoming for SignedDKGMessage<Public> {
 					if self.msg.session_id == this_session_id {
 						logger
 							.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.3-incoming");
-						if associated_block_id == &self.msg.associated_block_id {
+						if associated_block_id_acceptable(
+							associated_block_id,
+							self.msg.associated_block_id,
+						) {
 							logger.checkpoint_message_raw(
 								self.msg.payload.payload(),
 								"CP-2.4-incoming",
