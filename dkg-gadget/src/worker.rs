@@ -313,7 +313,7 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let associated_block_id: u32 = associated_block.saturated_into();
+		let associated_block_id: u64 = associated_block.saturated_into();
 		let mut status_handle =
 			AsyncProtocolRemote::new(now, session_id, self.logger.clone(), associated_block_id);
 		// Fetch the active key. This requires rotating the key to have happened with

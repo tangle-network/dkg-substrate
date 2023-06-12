@@ -58,7 +58,7 @@ pub struct DKGMessage<AuthorityId> {
 	/// enum for active or queued
 	pub status: DKGMsgStatus,
 	/// The round ID
-	pub associated_block_id: u32,
+	pub associated_block_id: u64,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

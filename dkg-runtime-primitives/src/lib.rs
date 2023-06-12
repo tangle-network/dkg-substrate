@@ -85,9 +85,9 @@ pub const SIGN_TIMEOUT: u32 = 10;
 
 /// So long as the associated block id is within this tolerance, we consider the message as
 /// deliverable. This should be less than the SIGN_TIMEOUT
-pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u32 = SIGN_TIMEOUT / 2;
+pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 2) as u64;
 
-pub const fn associated_block_id_acceptable(expected: u32, received: u32) -> bool {
+pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> bool {
 	// favor explicit logic for readability
 	let is_acceptable_above = received >= expected &&
 		received <= expected.saturating_add(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
@@ -332,11 +332,20 @@ sp_api::decl_runtime_apis! {
 
 #[cfg(test)]
 mod tests {
-	use crate::{associated_block_id_acceptable, ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE};
+	use crate::{
+		associated_block_id_acceptable, ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE,
+		SIGN_TIMEOUT,
+	};
+
+	#[test]
+	fn assert_value() {
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
+	}
 
 	#[test]
 	fn test_range_above() {
-		let current_block: u32 = 10;
+		let current_block: u64 = 10;
 		assert!(associated_block_id_acceptable(current_block, current_block));
 		assert!(associated_block_id_acceptable(current_block, current_block + 1));
 		assert!(associated_block_id_acceptable(
