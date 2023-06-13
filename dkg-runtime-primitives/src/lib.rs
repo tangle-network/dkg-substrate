@@ -345,7 +345,7 @@ mod tests {
 
 	#[test]
 	fn test_range_above() {
-		let current_block: u64 = 10;
+		let current_block: u64 = 100;
 		assert!(associated_block_id_acceptable(current_block, current_block));
 		assert!(associated_block_id_acceptable(current_block, current_block + 1));
 		assert!(associated_block_id_acceptable(
@@ -360,7 +360,7 @@ mod tests {
 
 	#[test]
 	fn test_range_below() {
-		let current_block: u64 = 10;
+		let current_block: u64 = 100;
 		assert!(associated_block_id_acceptable(current_block, current_block));
 		assert!(associated_block_id_acceptable(current_block, current_block - 1));
 		assert!(associated_block_id_acceptable(
