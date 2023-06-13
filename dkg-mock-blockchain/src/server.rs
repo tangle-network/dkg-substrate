@@ -312,6 +312,11 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 									log::error!(target: "dkg", "Peer {peer_id:?} unsuccessfully completed SIGNING test {trace_id:?}. Reason: {err:?}");
 								} else {
 									log::info!(target: "dkg", "Peer {peer_id:?} successfully completed SIGNING test {trace_id:?}");
+									println!(
+										"Outstanding tasks {:?}",
+										client.outstanding_tasks_signing
+									);
+									println!("Trace ID {:?}", trace_id);
 									let entry = client
 										.outstanding_tasks_signing
 										.get_mut(trace_id)
