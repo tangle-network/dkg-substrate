@@ -523,7 +523,7 @@ pub mod pallet {
 				_ => return InvalidTransaction::Call.into(),
 			}
 
-			let current_block = <frame_system::Pallet<T>>::block_number();
+			let _current_block = <frame_system::Pallet<T>>::block_number();
 
 			// Next, let's check that we call the right function.
 			// Here we will use match stmt, to match over the call and see if it is

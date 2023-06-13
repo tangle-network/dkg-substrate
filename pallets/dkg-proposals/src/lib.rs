@@ -97,7 +97,7 @@ pub mod types;
 pub mod utils;
 use dkg_runtime_primitives::{
 	traits::OnAuthoritySetChangeHandler, ProposalHandlerTrait, ProposalNonce, ResourceId,
-	TypedChainId, UnsignedProposal,
+	TypedChainId,
 };
 use frame_support::{
 	pallet_prelude::{ensure, DispatchResultWithPostInfo},

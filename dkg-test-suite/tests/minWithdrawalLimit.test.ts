@@ -75,17 +75,21 @@ it('should be able to update min withdrawal limit', async () => {
 	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 
 	// now we need to query the proposal and its signature.
-	const key = {
-		MinWithdrawalLimitUpdateProposal: minLimitProposal.header.nonce,
-	};
-	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
-		{
-			Evm: localChain.evmId,
-		},
-		key
-	);
+	const signedBatchProposals = await polkadotApi.query.dkgProposalHandler.signedProposals.entries();
 
-	const dkgProposal = proposal.unwrap().asSigned;
+	let dkgProposal = null;
+
+	for (const proposalBatch of signedBatchProposals) {
+		let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
+		for (const proposal of proposals) {
+			if (proposal.signed.kind == "MinWithdrawalLimitUpdate") {
+				dkgProposal = proposal.signed;
+				break;
+			}
+		}
+	}
+
+	console.log(dkgProposal);
 
 	// sanity check.
 	expect(dkgProposal.data.toString()).to.eq(prop);

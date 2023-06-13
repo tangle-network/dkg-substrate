@@ -74,18 +74,21 @@ it('should be able to update max deposit limit', async () => {
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 
-	// now we need to query the proposal and its signature.
-	const key = {
-		MaxDepositLimitUpdateProposal: maxLimitProposal.header.nonce,
-	};
-	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
-		{
-			Evm: localChain.evmId,
-		},
-		key
-	);
-	const signedDkgProposalValue = polkadotApi.registry.createType("Option<WebbProposalsProposal>", proposal.toU8a());
-	const signedDkgProposal = proposal.unwrap().asSigned;
+	const signedBatchProposals = await polkadotApi.query.dkgProposalHandler.signedProposals.entries();
+
+	let signedDkgProposal = null;
+
+	for (const proposalBatch of signedBatchProposals) {
+		let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
+		for (const proposal of proposals) {
+			if (proposal.signed.kind == "MaxDepositLimitUpdate") {
+				signedDkgProposal = proposal.signed;
+				break;
+			}
+		}
+	}
+
+	console.log(signedDkgProposal);
 
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = await signatureVBridge.getVBridgeSide(

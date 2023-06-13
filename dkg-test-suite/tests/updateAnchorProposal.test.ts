@@ -149,20 +149,22 @@ it('should be able to sign anchor update proposal', async () => {
 	// now we need to wait until the proposal to be signed on chain.
 	await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
 
-	console.log('after wait for event');
-
 	// now we need to query the proposal and its signature.
-	const key = {
-		AnchorUpdateProposal: anchorProposal.header.nonce,
-	};
-	const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
-		{
-			Evm: localChain2.evmId,
-		},
-		key
-	);
+	const signedBatchProposals = await polkadotApi.query.dkgProposalHandler.signedProposals.entries();
 
-	const dkgProposal = proposal.unwrap().asSigned;
+	let dkgProposal = null;
+
+	for (const proposalBatch of signedBatchProposals) {
+		let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
+		for (const proposal of proposals) {
+			if (proposal.signed.kind == "AnchorUpdate") {
+				dkgProposal = proposal.signed;
+				break;
+			}
+		}
+	}
+
+	console.log(dkgProposal);
 
 	// perfect! now we need to send it to the signature bridge.
 	const bridgeSide = signatureVBridge.getVBridgeSide(localChain2.typedChainId)!;

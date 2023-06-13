@@ -26,7 +26,6 @@ use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
 	types::{DKGError, DKGMessage, DKGPublicKeyMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
-	ProposalKind::Refresh,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
