@@ -85,7 +85,7 @@ pub const SIGN_TIMEOUT: u32 = 10;
 
 /// So long as the associated block id is within this tolerance, we consider the message as
 /// deliverable. This should be less than the SIGN_TIMEOUT
-pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 2) as u64;
+pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 1) as u64;
 
 pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> bool {
 	// favor explicit logic for readability
