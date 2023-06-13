@@ -1428,10 +1428,7 @@ pub mod pallet {
 					// We set base priority to 2**20 and hope it's included before any other
 					// transactions in the pool. Next we tweak the priority by the current block,
 					// so that transactions from older blocks are (more) included first.
-					.priority(
-						T::UnsignedPriority::get()
-							.saturating_sub(current_block.try_into().unwrap_or_default()),
-					)
+					.priority(T::UnsignedPriority::get())
 					// This transaction does not require anything else to go before into the pool.
 					// In theory we could require `previous_unsigned_at` transaction to go first,
 					// but it's not necessary in our case.
@@ -1441,7 +1438,6 @@ pub mod pallet {
 					// get to the transaction pool and will end up in the block.
 					// We can still have multiple transactions compete for the same "spot",
 					// and the one with higher priority will replace other one in the pool.
-					.and_provides(next_unsigned_at)
 					// The transaction is only valid for next 5 blocks. After that it's
 					// going to be revalidated by the pool.
 					.longevity(5)

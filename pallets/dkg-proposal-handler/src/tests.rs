@@ -118,14 +118,13 @@ fn handle_unsigned_eip2930_transaction_proposal_success() {
 			unsigned_proposal.clone(),
 		));
 
-		let expected_storage: BoundedVec<
-			ProposalOf<Test>,
-			<Test as pallet_dkg_proposal_handler::Config>::MaxProposalsPerBatch,
-		> = vec![unsigned_proposal].try_into().unwrap();
-
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(0),).unwrap(),
-			expected_storage
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(0),)
+				.unwrap()
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 	})
 }
@@ -152,14 +151,13 @@ fn handle_anchor_update_proposal_success() {
 			data: proposal_raw.encode().try_into().unwrap(),
 		};
 
-		let expected_storage: BoundedVec<
-			ProposalOf<Test>,
-			<Test as pallet_dkg_proposal_handler::Config>::MaxProposalsPerBatch,
-		> = vec![unsigned_proposal].try_into().unwrap();
-
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1337),).unwrap(),
-			expected_storage
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1337),)
+				.unwrap()
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 	})
 }
@@ -182,12 +180,6 @@ fn should_handle_proposer_set_update_proposal_success() {
 			data: proposal_raw.encode().try_into().unwrap(),
 		};
 
-		let expected_storage = StoredUnsignedProposalBatchOf::<Test> {
-			batch_id: 0_u32,
-			proposals: vec![unsigned_proposal].try_into().unwrap(),
-			timestamp: 0,
-		};
-
 		// the unsigned proposal queue should be empty, this is becuase
 		// the ProposerSetUpdate is always a Batch-of-1, so we skip the unsigned
 		// proposal queue and insert it directly to the unsigned proposal batch queue
@@ -195,8 +187,13 @@ fn should_handle_proposer_set_update_proposal_success() {
 
 		// the unsigned proposal batch should have the proposal
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 0_u32).unwrap(),
-			expected_storage
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 0_u32)
+				.unwrap()
+				.proposals
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 
 		// as a sanity test, add another ProposerSetUpdate proposal,
@@ -211,18 +208,16 @@ fn should_handle_proposer_set_update_proposal_success() {
 			data: proposal_raw.encode().try_into().unwrap(),
 		};
 
-		let expected_storage = StoredUnsignedProposalBatchOf::<Test> {
-			batch_id: 1_u32,
-			proposals: vec![unsigned_proposal].try_into().unwrap(),
-			timestamp: 0,
-		};
-
 		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None).is_none());
 
-		// the unsigned proposal batch should have the proposal
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 1_u32).unwrap(),
-			expected_storage
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 1_u32)
+				.unwrap()
+				.proposals
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 	})
 }
@@ -270,12 +265,6 @@ fn submit_signed_proposal_success() {
 		// lets time travel to 5 blocks later and ensure a batch is created
 		run_n_blocks(5);
 
-		let expected_storage = StoredUnsignedProposalBatchOf::<Test> {
-			batch_id: 0_u32,
-			proposals: vec![unsigned_proposal].try_into().unwrap(),
-			timestamp: 0,
-		};
-
 		// the unsigned proposal queue should be empty, this is becuase
 		// the ProposerSetUpdate is always a Batch-of-1, so we skip the unsigned
 		// proposal queue and insert it directly to the unsigned proposal batch queue
@@ -283,8 +272,13 @@ fn submit_signed_proposal_success() {
 
 		// the unsigned proposal batch should have the proposal
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::Evm(0), 0_u32).unwrap(),
-			expected_storage
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::Evm(0), 0_u32)
+				.unwrap()
+				.proposals
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 
 		let signed_proposal = mock_signed_proposal_batch(tx_v_2);

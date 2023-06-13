@@ -239,7 +239,7 @@ pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities: Get<u32>> {
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,

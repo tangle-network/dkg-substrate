@@ -111,8 +111,12 @@ where
 		};
 		let i = params.party_i;
 		let associated_round_id = params.associated_block_id;
-		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
-			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id };
+		let channel_type: ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		> = ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id };
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)

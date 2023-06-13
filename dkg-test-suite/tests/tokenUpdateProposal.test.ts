@@ -93,11 +93,10 @@ it('should be able to sign token add & remove proposal', async () => {
 		const key = {
 			TokenAddProposal: tokenAddProposal.header.nonce,
 		};
-		const proposal = await polkadotApi.query.dkgProposalHandler.signedProposals(
+		const signedBatchProposals = await polkadotApi.query.dkgProposalHandler.signedProposals(
 			{
 				Evm: localChain.evmId,
-			},
-			key
+			}
 		);
 
 		const dkgProposal = proposal.unwrap().asSigned;

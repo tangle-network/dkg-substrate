@@ -45,9 +45,9 @@ impl MutableBlockchain for DummyApi {
 		&self,
 		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 	) {
-		let proposals = propos.into_iter().map(|(p, _)| p.proposal).collect::<Vec<_>>();
+		let _proposals = propos.into_iter().map(|(p, _)| p.proposal).collect::<Vec<_>>();
 		let batch = StoredUnsignedProposalBatch {
-			proposals: proposals.try_into().unwrap(),
+			proposals: Default::default(),
 			batch_id: 0,
 			timestamp: 0,
 		};

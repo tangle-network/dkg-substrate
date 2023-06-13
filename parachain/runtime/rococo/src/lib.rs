@@ -40,7 +40,7 @@ use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{self, BlakeTwo256, Block as BlockT, IdentifyAccount, StaticLookup, Verify},
-	transaction_validity::{TransactionSource, TransactionValidity},
+	transaction_validity::{TransactionSource, TransactionValidity, TransactionPriority},
 	ApplyExtrinsicResult, FixedPointNumber, MultiSignature, Perquintill, SaturatedConversion,
 };
 use sp_std::prelude::*;
@@ -487,7 +487,7 @@ impl pallet_collator_selection::Config for Runtime {
 
 parameter_types! {
 	pub const DecayPercentage: Percent = Percent::from_percent(50);
-	pub const UnsignedPriority: u64 = 1 << 20;
+	pub const UnsignedPriority: TransactionPriority = TransactionPriority::max_value();
 	pub const UnsignedInterval: BlockNumber = 3;
 }
 

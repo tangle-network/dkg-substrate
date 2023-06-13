@@ -100,7 +100,7 @@ impl BlockchainInterface for TestDummyIface {
 		// convert all unsigned proposals to signed
 		for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
 			signed_proposals.push(Proposal::Signed {
-				kind: unsigned_proposal.kind(),
+				kind: unsigned_proposal.proposal.kind(),
 				data: unsigned_proposal
 					.data()
 					.clone()

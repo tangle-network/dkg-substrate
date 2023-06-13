@@ -143,7 +143,7 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
+	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey, UnsignedProposal};
 	use frame_support::dispatch::{fmt::Debug, DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use log;
@@ -153,6 +153,8 @@ pub mod pallet {
 	use super::*;
 
 	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;
+
+	pub type UnsignedProposalOf<T> = UnsignedProposal<<T as Config>::MaxProposalLength>;
 
 	pub type StoredUnsignedProposalBatchOf<T> = StoredUnsignedProposalBatch<
 		<T as Config>::BatchId,
@@ -201,6 +203,7 @@ pub mod pallet {
 			+ Eq
 			+ PartialEq
 			+ PartialOrd
+			+ MaxEncodedLen
 			+ Ord
 			+ TypeInfo;
 		// The batchId for a signed proposal batch
@@ -249,7 +252,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		TypedChainId,
-		BoundedVec<ProposalOf<T>, T::MaxProposalsPerBatch>,
+		BoundedVec<UnsignedProposalOf<T>, T::MaxProposalsPerBatch>,
 	>;
 
 	/// All signed proposals.
@@ -550,10 +553,7 @@ pub mod pallet {
 					// We set base priority to 2**20 and hope it's included before any other
 					// transactions in the pool. Next we tweak the priority by the current block,
 					// so that transactions from older blocks are (more) included first.
-					.priority(
-						T::UnsignedPriority::get()
-							.saturating_sub(current_block.try_into().unwrap_or_default()),
-					)
+					.priority(T::UnsignedPriority::get())
 					// The transaction is only valid for next 5 blocks. After that it's
 					// going to be revalidated by the pool.
 					.longevity(5)

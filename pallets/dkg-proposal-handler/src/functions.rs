@@ -46,7 +46,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub(crate) fn create_batch_and_add_to_storage(
-		proposals: BoundedVec<ProposalOf<T>, T::MaxProposalsPerBatch>,
+		proposals: BoundedVec<UnsignedProposalOf<T>, T::MaxProposalsPerBatch>,
 		identifier: ProposalIdentifier,
 	) -> DispatchResult {
 		// create a new batch
@@ -66,6 +66,12 @@ impl<T: Config> Pallet<T> {
 		prop: ProposalOf<T>,
 		identifier: ProposalIdentifier,
 	) -> DispatchResult {
+		let new_unsigned_proposal = UnsignedProposalOf::<T> {
+			proposal: prop,
+			key: identifier.key,
+			typed_chain_id: identifier.typed_chain_id,
+		};
+
 		UnsignedProposals::<T>::try_mutate(identifier.typed_chain_id, |proposals| {
 			let proposals = proposals.get_or_insert_with(Default::default);
 
@@ -78,7 +84,7 @@ impl<T: Config> Pallet<T> {
 				let mut new_proposals: BoundedVec<_, _> = Default::default();
 
 				new_proposals
-					.try_push(prop)
+					.try_push(new_unsigned_proposal)
 					.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
 
 				*proposals = new_proposals;
@@ -87,7 +93,7 @@ impl<T: Config> Pallet<T> {
 			}
 
 			proposals
-				.try_push(prop)
+				.try_push(new_unsigned_proposal)
 				.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
 
 			Ok(())

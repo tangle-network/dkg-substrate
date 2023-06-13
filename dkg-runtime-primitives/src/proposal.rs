@@ -223,19 +223,19 @@ impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<
 )]
 pub struct StoredUnsignedProposalBatch<
 	BatchId,
-	MaxLength: Get<u32>,
+	MaxLength: Get<u32> + Clone,
 	MaxProposals: Get<u32>,
 	Timestamp,
 > {
 	/// the batch id for this batch of proposals
 	pub batch_id: BatchId,
 	/// Proposals data
-	pub proposals: BoundedVec<Proposal<MaxLength>, MaxProposals>,
+	pub proposals: BoundedVec<crate::UnsignedProposal<MaxLength>, MaxProposals>,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
 }
 
-impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, Timestamp>
+impl<BatchId, MaxLength: Get<u32> + Clone, MaxProposals: Get<u32>, Timestamp>
 	StoredUnsignedProposalBatch<BatchId, MaxLength, MaxProposals, Timestamp>
 {
 	// We generate the data to sign for a proposal batch by doing ethabi::encode

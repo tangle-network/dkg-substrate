@@ -602,7 +602,7 @@ impl pallet_sudo::Config for Runtime {
 
 parameter_types! {
   pub const DecayPercentage: Percent = Percent::from_percent(50);
-  pub const UnsignedPriority: u64 = 1 << 20;
+  pub const UnsignedPriority: TransactionPriority = TransactionPriority::max_value();
   pub const UnsignedInterval: BlockNumber = 3;
 }
 

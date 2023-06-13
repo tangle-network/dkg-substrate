@@ -38,15 +38,19 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
 		let unsigned_proposal =
 			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::ProposerSetUpdate };
+
 		match decode_proposal_identifier(&unsigned_proposal) {
 			Ok(v) => {
 				// we create a batch and directly insert to the UnsignedProposalQueue
 				// we dont bother adding to unsignedproposals since ProposerSetUpdate proposal
 				// should always be a batch of one
-				let batch_proposal: BoundedVec<_, _> =
-					vec![unsigned_proposal.clone()]
-						.try_into()
-						.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
+				let batch_proposal: BoundedVec<_, _> = vec![UnsignedProposalOf::<T> {
+					typed_chain_id: v.typed_chain_id.clone(),
+					key: v.key.clone(),
+					proposal: unsigned_proposal.clone(),
+				}]
+				.try_into()
+				.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
 
 				Self::create_batch_and_add_to_storage(batch_proposal, v)?;
 
@@ -69,16 +73,22 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		let unsigned_proposal =
 			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::Refresh };
 
-		// we create a batch and directly insert to the UnsignedProposalQueue
-		// we dont bother adding to unsignedproposals since refresh proposal
-		// should always be a batch of one
-		let batch_proposal: BoundedVec<_, _> = vec![unsigned_proposal.clone()]
-			.try_into()
-			.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
 		let identifier = ProposalIdentifier {
 			key: DKGPayloadKey::RefreshVote(proposal.nonce),
 			typed_chain_id: TypedChainId::None,
 		};
+
+		// we create a batch and directly insert to the UnsignedProposalQueue
+		// we dont bother adding to unsignedproposals since refresh proposal
+		// should always be a batch of one
+		let batch_proposal: BoundedVec<_, _> = vec![UnsignedProposalOf::<T> {
+			typed_chain_id: identifier.typed_chain_id,
+			key: identifier.key,
+			proposal: unsigned_proposal.clone(),
+		}]
+		.try_into()
+		.map_err(|_| Error::<T>::UnsignedProposalQueueOverflow)?;
+
 		Self::create_batch_and_add_to_storage(batch_proposal, identifier)?;
 
 		Self::deposit_event(Event::<T>::ProposalAdded {
@@ -110,13 +120,21 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		// no longer true.
 		for (batch_id, proposal_batch) in possible_refresh_proposals {
 			for proposal in proposal_batch.proposals.iter() {
-				if proposal.kind() == Refresh {
+				if proposal.proposal.kind() == Refresh {
 					UnsignedProposalQueue::<T>::remove(TypedChainId::None, batch_id);
+
+					let raw_proposal = &proposal_batch
+						.proposals
+						.first()
+						.expect("should never happen since len is one")
+						.proposal;
 
 					// create signed batch from unsigned batch
 					let signed_batch = SignedProposalBatchOf::<T> {
 						batch_id,
-						proposals: proposal_batch.proposals.clone(),
+						proposals: vec![raw_proposal.clone()]
+							.try_into()
+							.expect("should never happen since len is one"),
 						signature: signature
 							.clone()
 							.try_into()
