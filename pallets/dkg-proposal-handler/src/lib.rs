@@ -345,6 +345,8 @@ pub mod pallet {
 		UnsignedProposalQueueOverflow,
 		/// Math overflow
 		ArithmeticOverflow,
+		/// Batch does not contain proposals
+		EmptyBatch,
 	}
 
 	#[pallet::hooks]
@@ -381,8 +383,19 @@ pub mod pallet {
 					break
 				}
 
-				// TODO : Handle failure gracefully
-				let batch_id = Self::generate_next_batch_id().unwrap();
+				let batch_id_res = Self::generate_next_batch_id();
+
+				if batch_id_res.is_err() {
+					log::debug!(
+						target: "runtime::dkg_proposal_handler",
+						"on_idle: Cannot generate next batch ID: {:?}",
+						batch_id_res,
+					);
+					return remaining_weight
+				}
+
+				let batch_id = batch_id_res.expect("checked above");
+
 				// create new proposal batch
 				let proposal_batch = StoredUnsignedProposalBatchOf::<T> {
 					batch_id,

@@ -45,8 +45,8 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 				// we dont bother adding to unsignedproposals since ProposerSetUpdate proposal
 				// should always be a batch of one
 				let batch_proposal: BoundedVec<_, _> = vec![UnsignedProposalOf::<T> {
-					typed_chain_id: v.typed_chain_id.clone(),
-					key: v.key.clone(),
+					typed_chain_id: v.typed_chain_id,
+					key: v.key,
 					proposal: unsigned_proposal.clone(),
 				}]
 				.try_into()
@@ -146,10 +146,7 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 						target_chain: TypedChainId::None,
 						proposals: signed_batch.clone(),
 						data: signed_batch.data(),
-						signature: signature
-							.clone()
-							.try_into()
-							.expect("proposal signature already checked!"),
+						signature: signature.clone(),
 					});
 				}
 			}
@@ -166,7 +163,11 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			Self::MaxSignatureLen,
 		>,
 	) -> DispatchResult {
-		let id = match decode_proposal_identifier(prop.proposals.first().unwrap()) {
+		ensure!(!prop.proposals.is_empty(), Error::<T>::EmptyBatch);
+
+		let id = match decode_proposal_identifier(
+			prop.proposals.first().expect("Batch cannot be empty, checked above"),
+		) {
 			Ok(v) => v,
 			Err(e) => return Err(Self::handle_validation_error(e).into()),
 		};

@@ -306,27 +306,23 @@ impl<B, BE, C, GE> BlockchainInterface
 		if unsigned_proposal_batch.proposals.len() == 1 {
 			let batch_id = unsigned_proposal_batch.batch_id;
 			let proposal = unsigned_proposal_batch.proposals.first().expect("checked above. qed");
-			match proposal.key {
-				DKGPayloadKey::RefreshVote(nonce) => {
-					self.logger
-						.info(format!("🕸️  Refresh vote with batch_id {batch_id:?} received"));
-					let offchain = &mut self.backend.offchain_storage();
+			if let DKGPayloadKey::RefreshVote(nonce) = proposal.key {
+				self.logger.info(format!("🕸️  Refresh vote with batch_id {batch_id:?} received"));
+				let offchain = &mut self.backend.offchain_storage();
 
-					if let Some(ref mut offchain) = offchain {
-						let refresh_proposal =
-							RefreshProposalSigned { nonce, signature: signature.encode().clone() };
-						let encoded_proposal = refresh_proposal.encode();
-						offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
+				if let Some(ref mut offchain) = offchain {
+					let refresh_proposal =
+						RefreshProposalSigned { nonce, signature: signature.encode() };
+					let encoded_proposal = refresh_proposal.encode();
+					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-						self.logger.trace(format!(
-							"Stored pub_key signature offchain {:?}",
-							signature.encode()
-						));
-					}
+					self.logger.trace(format!(
+						"Stored pub_key signature offchain {:?}",
+						signature.encode()
+					));
+				}
 
-					return Ok(())
-				},
-				_ => {},
+				return Ok(())
 			}
 		}
 

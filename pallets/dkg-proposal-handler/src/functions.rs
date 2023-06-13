@@ -13,7 +13,9 @@ impl<T: Config> Pallet<T> {
 
 	/// Checks whether a signed proposal exists in the `SignedProposals` storage
 	pub fn is_not_existing_proposal_batch(prop: &SignedProposalBatchOf<T>) -> bool {
-		match decode_proposal_identifier(prop.proposals.first().unwrap()) {
+		match decode_proposal_identifier(
+			prop.proposals.first().expect("bactch should not be empty"),
+		) {
 			Ok(v) => !SignedProposals::<T>::contains_key(v.typed_chain_id, prop.batch_id),
 			Err(_) => false,
 		}
