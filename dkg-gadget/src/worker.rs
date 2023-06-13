@@ -30,6 +30,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use parking_lot::RwLock;
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
+use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::ecdsa;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{
@@ -312,13 +313,9 @@ where
 		let authority_public_key = Arc::new(authority_public_key);
 
 		let now = self.get_latest_block_number();
-		let associated_block_id = associated_block.encode();
-		let mut status_handle = AsyncProtocolRemote::new(
-			now,
-			session_id,
-			self.logger.clone(),
-			associated_block_id.clone(),
-		);
+		let associated_block_id: u64 = associated_block.saturated_into();
+		let mut status_handle =
+			AsyncProtocolRemote::new(now, session_id, self.logger.clone(), associated_block_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
 		let active_local_key = match stage {

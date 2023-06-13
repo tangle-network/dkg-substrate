@@ -83,6 +83,21 @@ pub const KEYGEN_TIMEOUT: u32 = 10;
 /// The sign timeout limit in blocks before we consider proposal as stalled
 pub const SIGN_TIMEOUT: u32 = 10;
 
+/// So long as the associated block id is within this tolerance, we consider the message as
+/// deliverable. This should be less than the SIGN_TIMEOUT
+pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 2) as u64;
+
+pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> bool {
+	// favor explicit logic for readability
+	let is_acceptable_above = received >= expected &&
+		received <= expected.saturating_add(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
+	let is_acceptable_below = received < expected &&
+		received >= expected.saturating_sub(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
+	let is_equal = expected == received;
+
+	is_acceptable_above || is_acceptable_below || is_equal
+}
+
 // Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -312,5 +327,49 @@ sp_api::decl_runtime_apis! {
 		fn refresh_nonce() -> u32;
 		/// Returns true if we should execute an new keygen.
 		fn should_execute_new_keygen() -> bool;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::{
+		associated_block_id_acceptable, ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE,
+		SIGN_TIMEOUT,
+	};
+
+	#[test]
+	fn assert_value() {
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
+	}
+
+	#[test]
+	fn test_range_above() {
+		let current_block: u64 = 10;
+		assert!(associated_block_id_acceptable(current_block, current_block));
+		assert!(associated_block_id_acceptable(current_block, current_block + 1));
+		assert!(associated_block_id_acceptable(
+			current_block,
+			current_block + ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE
+		));
+		assert!(!associated_block_id_acceptable(
+			current_block,
+			current_block + ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE + 1
+		));
+	}
+
+	#[test]
+	fn test_range_below() {
+		let current_block: u64 = 10;
+		assert!(associated_block_id_acceptable(current_block, current_block));
+		assert!(associated_block_id_acceptable(current_block, current_block - 1));
+		assert!(associated_block_id_acceptable(
+			current_block,
+			current_block - ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE
+		));
+		assert!(!associated_block_id_acceptable(
+			current_block,
+			current_block - ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE - 1
+		));
 	}
 }

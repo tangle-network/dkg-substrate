@@ -75,7 +75,7 @@ pub struct AsyncProtocolParameters<
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
-	pub associated_block_id: Vec<u8>,
+	pub associated_block_id: u64,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -136,7 +136,7 @@ impl<
 			engine: self.engine.clone(),
 			keystore: self.keystore.clone(),
 			current_validator_set: self.current_validator_set.clone(),
-			associated_block_id: self.associated_block_id.clone(),
+			associated_block_id: self.associated_block_id,
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
 			party_i: self.party_i,
@@ -290,31 +290,31 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 		i: KeygenPartyId,
 		t: u16,
 		n: u16,
-		associated_block_id: Vec<u8>,
+		associated_block_id: u64,
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
-		associated_block_id: Vec<u8>,
+		associated_block_id: u64,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
-		associated_block_id: Vec<u8>,
+		associated_block_id: u64,
 	},
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
 	ProtocolType<MaxProposalLength>
 {
-	pub const fn get_associated_block_id(&self) -> &Vec<u8> {
+	pub const fn get_associated_block_id(&self) -> u64 {
 		match self {
-			Self::Keygen { associated_block_id: associated_round_id, .. } => associated_round_id,
-			Self::Offline { associated_block_id: associated_round_id, .. } => associated_round_id,
-			Self::Voting { associated_block_id: associated_round_id, .. } => associated_round_id,
+			Self::Keygen { associated_block_id, .. } |
+			Self::Offline { associated_block_id, .. } |
+			Self::Voting { associated_block_id, .. } => *associated_block_id,
 		}
 	}
 
@@ -617,7 +617,7 @@ where
 
 			let id = params.authority_public_key.as_ref().clone();
 			let unsigned_dkg_message = DKGMessage {
-				associated_block_id: params.associated_block_id.clone(),
+				associated_block_id: params.associated_block_id,
 				sender_id: id,
 				recipient_id: maybe_recipient_id,
 				status,

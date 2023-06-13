@@ -149,7 +149,7 @@ where
 			i: offline_i,
 			s_l: s_l.clone(),
 			local_key: Arc::new(local_key.clone()),
-			associated_block_id: params.associated_block_id.clone(),
+			associated_block_id: params.associated_block_id,
 		};
 		let s_l_raw = s_l.into_iter().map(|party_i| *party_i.as_ref()).collect();
 		new_inner(
@@ -178,7 +178,7 @@ where
 				offline_stage: Arc::new(completed_offline_stage.clone()),
 				unsigned_proposal: Arc::new(unsigned_proposal.clone()),
 				i: offline_i,
-				associated_block_id: params.associated_block_id.clone(),
+				associated_block_id: params.associated_block_id,
 			};
 
 			params.logger.round_event(
@@ -224,7 +224,7 @@ where
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
-				associated_block_id: params.associated_block_id.clone(),
+				associated_block_id: params.associated_block_id,
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
