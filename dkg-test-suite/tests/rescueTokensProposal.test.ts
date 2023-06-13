@@ -105,15 +105,38 @@ it('should be able to sign and execute rescue token proposal', async () => {
 
 		for (const proposalBatch of signedBatchProposals) {
 			let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
+			console.log("rescue tokens proposal list ", proposals);
 			for (const proposal of proposals) {
-				if (proposal.signed.kind == "MinWithdrawalLimitUpdate") {
+				if (proposal.signed.kind == "WrappingFeeUpdate" && proposal.signed.data == prop) {
 					dkgProposal = proposal.signed;
 					break;
 				}
 			}
 		}
 
-		console.log(dkgProposal);
+		// if we didnt find it, wait for the next batch to be signed and try again
+		// this is a special case where we have to loop since there are two wrapping fee update
+		// proposals in the tests
+		while (dkgProposal == null) {
+			console.log("Didnt find the event we are looking for, wait for next batch to be signed")
+			// now we need to wait until the proposal to be signed on chain.
+			await waitForEvent(polkadotApi, 'dkgProposalHandler', 'ProposalBatchSigned');
+
+			// now we need to query the proposal and its signature.
+			const signedBatchProposals = await polkadotApi.query.dkgProposalHandler.signedProposals.entries();
+
+			for (const proposalBatch of signedBatchProposals) {
+				let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
+				for (const proposal of proposals) {
+					if (proposal.signed.kind == "WrappingFeeUpdate" && proposal.signed.data == prop) {
+						dkgProposal = proposal.signed;
+						break;
+					}
+				}
+			}
+		}
+
+		console.log("rescue tokens proposal", dkgProposal);
 
 		// perfect! now we need to send it to the signature bridge.
 		const bridgeSide = await signatureVBridge.getVBridgeSide(

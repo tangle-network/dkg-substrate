@@ -84,7 +84,7 @@ it('should be able to sign wrapping fee update proposal', async () => {
 	for (const proposalBatch of signedBatchProposals) {
 		let proposals = JSON.parse(proposalBatch[1].toString())['proposals'];
 		for (const proposal of proposals) {
-			if (proposal.signed.kind == "WrappingFeeUpdate") {
+			if (proposal.signed.kind == "WrappingFeeUpdate" && proposal.signed.data == prop) {
 				dkgProposal = proposal.signed;
 				break;
 			}
