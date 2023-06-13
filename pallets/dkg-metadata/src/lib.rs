@@ -1441,6 +1441,7 @@ pub mod pallet {
 					// The transaction is only valid for next 5 blocks. After that it's
 					// going to be revalidated by the pool.
 					.longevity(5)
+					.and_provides(current_block)
 					// It's fine to propagate that transaction to other peers, which means it can be
 					// created even by nodes that don't produce blocks.
 					// Note that sometimes it's better to keep it for yourself (if you are the block
