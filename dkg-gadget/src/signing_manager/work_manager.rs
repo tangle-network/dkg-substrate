@@ -241,8 +241,10 @@ impl<B: BlockT> WorkManager<B> {
 		for task in lock.active_tasks.iter() {
 			if task.handle.session_id == msg.msg.session_id &&
 				&task.task_hash == msg_unsigned_proposal_hash &&
-				msg.msg.associated_block_id == task.handle.associated_block_id
-			{
+				associated_block_id_acceptable(
+					task.handle.associated_block_id,
+					msg.msg.associated_block_id,
+				) {
 				self.logger.debug(format!(
 					"Message is for this signing CURRENT execution in session: {}",
 					task.handle.session_id
