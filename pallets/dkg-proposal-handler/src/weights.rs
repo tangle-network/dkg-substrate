@@ -33,6 +33,7 @@ use core::marker::PhantomData;
 pub trait WeightInfo {
 	fn submit_signed_proposals(n: u32, ) -> Weight;
 	fn force_submit_unsigned_proposal() -> Weight;
+	fn force_remove_unsigned_proposal() -> Weight;
 }
 
 /// Weights for pallet_dkg_proposal_handler using the Substrate node and recommended hardware.
