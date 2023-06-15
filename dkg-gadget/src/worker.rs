@@ -71,6 +71,7 @@ use crate::{
 	utils::find_authorities_change,
 	Client,
 };
+use crate::signing_manager::work_manager::WorkManager;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
@@ -138,9 +139,6 @@ where
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
 	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
-	/// A HashSet of the currently being signed proposals.
-	/// Note: we only store the hash of the proposal here, not the full proposal.
-	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -192,7 +190,6 @@ where
 			aggregated_public_keys: self.aggregated_public_keys.clone(),
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
-			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			test_bundle: self.test_bundle.clone(),
@@ -242,13 +239,17 @@ where
 
 		let (error_handler, _) = tokio::sync::broadcast::channel(1024);
 		let clock = Clock { latest_header: latest_header.clone() };
-		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock);
+		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock.clone());
+		// 2 tasks max: 1 for current, 1 for queued
+		let keygen_handler = WorkManager::new(logger.clone(), clock, 2);
+
 		DKGWorker {
 			client,
 			misbehaviour_tx: None,
 			backend,
 			key_store,
 			db: db_backend,
+			keygen_handler,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
 			metrics: Arc::new(metrics),
@@ -261,7 +262,6 @@ where
 			latest_header,
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
-			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			test_bundle,
 			error_handler,
@@ -1100,8 +1100,6 @@ where
 			*self.next_best_authorities.write() = self.get_next_best_authorities(header).await;
 			// since we just rotate, we reset the keygen retry counter
 			self.keygen_retry_count.store(0, Ordering::Relaxed);
-			// clear the currently being signing proposals cache.
-			self.currently_signing_proposals.write().clear();
 			// Reset per session metrics
 			if let Some(metrics) = self.metrics.as_ref() {
 				metrics.reset_session_metrics();
@@ -1686,6 +1684,14 @@ where
 
 pub struct Clock<B: Block> {
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
+}
+
+impl<B> Clone for Clock<B> {
+	fn clone(&self) -> Self {
+		Self {
+			latest_header: self.latest_header.clone(),
+		}
+	}
 }
 
 impl<B: Block> HasLatestHeader<B> for Clock<B> {

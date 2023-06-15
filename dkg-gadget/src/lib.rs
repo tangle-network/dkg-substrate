@@ -34,6 +34,7 @@ pub mod keystore;
 
 pub mod gossip_engine;
 mod signing_manager;
+mod keygen_manager;
 // mod meta_async_rounds;
 pub mod db;
 mod metrics;
