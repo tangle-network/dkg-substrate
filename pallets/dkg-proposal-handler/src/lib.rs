@@ -483,6 +483,10 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			// Call must come from root (likely from a democracy proposal passing)
 			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(typed_chain_id, key),
+				Error::<T>::ProposalDoesNotExists
+			);
 			UnsignedProposalQueue::<T>::remove(typed_chain_id, key);
 			Self::deposit_event(Event::<T>::ProposalRemoved {
 				target_chain: typed_chain_id,
