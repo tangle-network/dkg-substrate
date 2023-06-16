@@ -1083,7 +1083,7 @@ pub mod pallet {
 				MisbehaviourType::Sign => Self::signature_threshold(),
 			};
 
-			if valid_reporters.len() >= signature_threshold.into() {
+			if valid_reporters.len() > signature_threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
