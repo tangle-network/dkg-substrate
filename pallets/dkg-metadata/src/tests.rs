@@ -114,13 +114,13 @@ fn trigger_emergency_keygen_works() {
 	new_test_ext(vec![1, 2, 3, 4]).execute_with(|| {
 		System::set_block_number(1);
 		DKGMetadata::on_initialize(1);
-		assert!(!DKGMetadata::should_execute_new_keygen());
+		assert_eq!(DKGMetadata::should_execute_new_keygen(), (false, false));
 		assert_ok!(DKGMetadata::trigger_emergency_keygen(RuntimeOrigin::root()));
-		assert!(DKGMetadata::should_execute_new_keygen());
+		assert_eq!(DKGMetadata::should_execute_new_keygen(), (true, true));
 		System::set_block_number(2);
 		DKGMetadata::on_initialize(2);
 		// it should be reset to false after the block is initialized
-		assert!(!DKGMetadata::should_execute_new_keygen());
+		assert_eq!(DKGMetadata::should_execute_new_keygen(), (false, false));
 	});
 }
 

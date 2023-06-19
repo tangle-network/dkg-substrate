@@ -364,10 +364,9 @@ pub mod pallet {
 			// reset the `ShouldExecuteNewKeygen` flag if it is set to true.
 			// this is done to ensure that the flag is reset and only read once per DKG
 			// `on_finality_notification` call.
-			match ShouldExecuteNewKeygen::<T>::get() {
-				(true, _) => ShouldExecuteNewKeygen::<T>::put((false, false)),
-				_ => {},
-			};
+			if let (true, _) = ShouldExecuteNewKeygen::<T>::get() {
+				ShouldExecuteNewKeygen::<T>::put((false, false))
+			}
 
 			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
 			// true : 1. A SessionPeriod of blocks have passed from the LastSessionRotationBlock
