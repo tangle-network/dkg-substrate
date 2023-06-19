@@ -943,7 +943,9 @@ where
 	/// 1. If we already running a keygen protocol, and we detected that we are stalled, this
 	///    method will try to restart the keygen protocol.
 	async fn maybe_enact_next_authorities(&self, header: &B::Header) {
-		if !self.should_execute_new_keygen(header).await {
+		let (execute_keygen, force_execute_keygen) = self.should_execute_new_keygen(header).await;
+
+		if !execute_keygen {
 			self.logger.debug("🕸️  Not executing new keygen protocol");
 			return
 		}
@@ -952,7 +954,22 @@ where
 
 		// Get the active and queued validators to check for updates
 		if let Some((_active, queued)) = self.validator_set(header).await {
-			self.logger.debug("🕸️  Session progress percentage above threshold, proceed with enact new authorities");
+			self.logger
+				.debug("🕸️  should_execute_new_keygen is true, proceed with enact new authorities");
+
+			// for force_execute_keygen, bypass all checks and regenerate the keygen
+			if force_execute_keygen {
+				self.logger
+					.debug("🕸️  force_execute_keygen is true, executing new keygen protocol");
+				// Start the queued DKG setup for the new queued authorities
+				if let Err(e) = self.handle_queued_dkg_setup(header, queued).await {
+					self.logger.error(format!("🕸️  Error handling queued DKG setup: {e:?}"));
+				}
+				// Reset the Retry counter.
+				self.keygen_retry_count.store(0, Ordering::SeqCst);
+				return
+			}
+
 			// Check if there is a keygen is finished:
 			let queued_keygen_finished = self
 				.next_rounds
@@ -969,6 +986,7 @@ where
 			let test_harness_mode = self.test_bundle.is_some();
 
 			if queued_keygen_finished && !test_harness_mode {
+				self.logger.debug(format!("🕸️  QUEUED KEYGEN FINISHED: EXITING"));
 				return
 			}
 
@@ -1471,7 +1489,7 @@ where
 			.collect())
 	}
 
-	async fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
+	async fn should_execute_new_keygen(&self, header: &B::Header) -> (bool, bool) {
 		// query runtime api to check if we should execute new keygen.
 		let at = header.hash();
 		self.exec_client_function(move |client| {
