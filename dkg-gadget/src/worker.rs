@@ -71,6 +71,7 @@ use crate::{
 	utils::find_authorities_change,
 	Client,
 };
+use crate::keygen_manager::KeygenManager;
 use crate::signing_manager::work_manager::WorkManager;
 
 pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -120,10 +121,6 @@ where
 	pub signing_gossip_engine: Arc<GE>,
 	pub db: Arc<dyn crate::db::DKGDbBackend>,
 	pub metrics: Arc<Option<Metrics>>,
-	// Genesis keygen and rotated round
-	pub rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
-	// Next keygen round, always taken and restarted each session
-	pub next_rounds: Shared<Option<AsyncProtocolRemote<NumberFor<B>>>>,
 	/// Cached best authorities
 	pub best_authorities: Shared<Vec<(u16, Public)>>,
 	/// Cached next best authorities
@@ -143,13 +140,12 @@ where
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
-	/// Keep track of the number of how many times we have tried the keygen protocol.
-	pub keygen_retry_count: Arc<AtomicUsize>,
 	/// Used to keep track of network status
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
 	pub signing_manager: SigningManager<B, BE, C, GE>,
+	pub keygen_manager: KeygenManager<B, BE, C, GE>,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
@@ -180,8 +176,6 @@ where
 			keygen_gossip_engine: self.keygen_gossip_engine.clone(),
 			signing_gossip_engine: self.signing_gossip_engine.clone(),
 			metrics: self.metrics.clone(),
-			rounds: self.rounds.clone(),
-			next_rounds: self.next_rounds.clone(),
 			best_authorities: self.best_authorities.clone(),
 			next_best_authorities: self.next_best_authorities.clone(),
 			latest_header: self.latest_header.clone(),
@@ -193,10 +187,10 @@ where
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
 			test_bundle: self.test_bundle.clone(),
-			keygen_retry_count: self.keygen_retry_count.clone(),
 			network: self.network.clone(),
 			logger: self.logger.clone(),
 			signing_manager: self.signing_manager.clone(),
+			keygen_manager: self.keygen_manager.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -241,7 +235,7 @@ where
 		let clock = Clock { latest_header: latest_header.clone() };
 		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock.clone());
 		// 2 tasks max: 1 for current, 1 for queued
-		let keygen_handler = WorkManager::new(logger.clone(), clock, 2);
+		let keygen_manager = KeygenManager::new(logger.clone(), clock.clone());
 
 		DKGWorker {
 			client,
@@ -249,12 +243,10 @@ where
 			backend,
 			key_store,
 			db: db_backend,
-			keygen_handler,
+			keygen_manager,
 			keygen_gossip_engine: Arc::new(keygen_gossip_engine),
 			signing_gossip_engine: Arc::new(signing_gossip_engine),
 			metrics: Arc::new(metrics),
-			rounds: Arc::new(RwLock::new(None)),
-			next_rounds: Arc::new(RwLock::new(None)),
 			best_authorities: Arc::new(RwLock::new(vec![])),
 			next_best_authorities: Arc::new(RwLock::new(vec![])),
 			current_validator_set: Arc::new(RwLock::new(AuthoritySet::empty())),
@@ -265,7 +257,6 @@ where
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			test_bundle,
 			error_handler,
-			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
 			logger,
 			network,
 			signing_manager,
@@ -367,46 +358,17 @@ where
 			associated_block_id,
 		};
 
-		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {
-			self.logger.debug(format!("Signing protocol for proposal hash {unsigned_proposal_hash:?} will start later in the work manager"));
-			return Ok(params)
-		}
+		match &stage {
+			ProtoStageType::Signing { unsigned_proposal_hash } => {
+				self.logger.debug(format!("Signing protocol for proposal hash {unsigned_proposal_hash:?} will start later in the signing manager"));
+				Ok(params)
+			},
 
-		// Set the status handle as primary, implying that once it drops, it will stop the async
-		// protocol
-		status_handle.set_as_primary();
-		// Cache the rounds, respectively
-		match stage {
-			ProtoStageType::Genesis => {
-				self.logger.debug("Starting genesis protocol (obtaining the lock)".to_string());
-				let mut lock = self.rounds.write();
-				self.logger.debug("Starting genesis protocol (got the lock)".to_string());
-				if lock.is_some() {
-					self.logger.warn(
-						"Overwriting rounds will result in termination of previous rounds!"
-							.to_string(),
-					);
-				}
-				*lock = Some(status_handle);
-			},
-			ProtoStageType::Queued => {
-				self.logger.debug("Starting queued protocol (obtaining the lock)".to_string());
-				let mut lock = self.next_rounds.write();
-				self.logger.debug("Starting queued protocol (got the lock)".to_string());
-				if lock.is_some() {
-					self.logger.warn(
-						"Overwriting rounds will result in termination of previous rounds!"
-							.to_string(),
-					);
-				}
-				*lock = Some(status_handle);
-			},
-			ProtoStageType::Signing { .. } => {
-				unreachable!("Signing stage should not be handled here!")
-			},
+			ProtoStageType::Genesis | ProtoStageType::Queued => {
+				self.logger.debug(format!("Protocol for stage {stage:?} will start later in the keygen manager"));
+				Ok(params)
+			}
 		}
-
-		Ok(params)
 	}
 
 	/// Returns the gossip engine based on the protocol_name
@@ -457,22 +419,16 @@ where
 					// so we can safely assume that we are in the queued state.
 					DKGMsgStatus::QUEUED
 				};
-				let start_handle = async_proto_params.handle.clone();
+
+				let remote = async_proto_params.handle.clone();
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let task = async move {
-							if let Err(err) = start_handle.start() {
-								logger.error_keygen(format!(
-									"Error starting keygen protocol: {err:?}"
-								));
-								return
-							}
-
 							match meta_handler.await {
 								Ok(_) => {
 									logger.info(
-										"The meta handler has executed successfully".to_string(),
+										"The keygen meta handler has executed successfully".to_string(),
 									);
 								},
 
@@ -487,7 +443,10 @@ where
 						self.logger.debug(format!("Started Keygen Protocol for session {session_id} with status {status:?}"));
 						// spawn on parallel thread
 						self.logger.info("Started a new thread for task".to_string());
-						let _handle = tokio::task::spawn(task);
+						if let Err(err) = self.keygen_manager.push_task(remote, task) {
+							self.logger.error(format!("Error pushing keygen tasks to keygen manager {:?}", &err));
+							self.handle_dkg_error(err).await;
+						}
 					},
 
 					Err(err) => {
@@ -1253,25 +1212,11 @@ where
 	) -> Result<(), DKGError> {
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
-		let next_rounds = self.next_rounds.read().clone();
-		let is_keygen_type = matches!(dkg_msg.msg.payload, DKGMsgPayload::Keygen { .. });
 		self.logger.info(format!(
 			"Processing incoming DKG message: {:?} | {:?}",
 			dkg_msg.msg.session_id,
 			rounds.as_ref().map(|x| x.session_id)
 		));
-
-		// discard the message if from previous round (keygen checking only. SigningManagerV2
-		// internally handles session checks)
-		if let Some(current_round) = &rounds {
-			if dkg_msg.msg.session_id < current_round.session_id && is_keygen_type {
-				self.logger.warn(format!(
-					"Message is for already completed round: {}, Discarding message",
-					dkg_msg.msg.session_id
-				));
-				return Ok(())
-			}
-		}
 
 		let is_delivery_type = matches!(
 			dkg_msg.msg.payload,
@@ -1280,34 +1225,7 @@ where
 
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
-				if let Some(rounds) = &rounds {
-					if rounds.session_id == dkg_msg.msg.session_id {
-						if let Err(err) = rounds.deliver_message(dkg_msg) {
-							self.handle_dkg_error(DKGError::CriticalError {
-								reason: err.to_string(),
-							})
-							.await
-						}
-						return Ok(())
-					}
-				}
-
-				if let Some(next_rounds) = next_rounds {
-					if next_rounds.session_id == dkg_msg.msg.session_id {
-						if let Err(err) = next_rounds.deliver_message(dkg_msg) {
-							self.handle_dkg_error(DKGError::CriticalError {
-								reason: err.to_string(),
-							})
-							.await
-						}
-						return Ok(())
-					}
-				}
-
-				// TODO: if the message belongs to neither, investigate if we maybe need to enqueue
-				// the message (did someone else's protocol start before ours, and neither of our
-				// rounds are set-up?)
-
+				self.keygen_manager.deliver_message(dkg_msg);
 				Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {

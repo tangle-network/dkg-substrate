@@ -266,6 +266,10 @@ impl<C> AsyncProtocolRemote<C> {
 		self.is_completed()
 	}
 
+	pub fn has_started(&self) -> bool {
+		self.get_status() != MetaHandlerStatus::Beginning
+	}
+
 	pub fn is_signing_finished(&self) -> bool {
 		self.is_completed()
 	}

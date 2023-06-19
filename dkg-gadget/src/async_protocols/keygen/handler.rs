@@ -78,7 +78,7 @@ where
 					logger0.info_keygen("🕸️  Keygen GenericAsyncHandler completed".to_string());
 				},
 				Err(ref err) => {
-					// Do not update the status here, evetually the Keygen will fail and timeout.
+					// Do not update the status here, eventually the Keygen will fail and timeout.
 					logger0.error_keygen(format!("Keygen failed with error: {err:?}"));
 				},
 			};

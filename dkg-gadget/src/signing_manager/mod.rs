@@ -19,6 +19,7 @@ use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
+use crate::signing_manager::work_manager::PollMethod;
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -50,6 +51,8 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 
 // the maximum number of tasks that the work manager tries to assign
 const MAX_RUNNING_TASKS: usize = 4;
+// How often to poll the jobs to check completion status
+const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -61,7 +64,7 @@ where
 {
 	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>) -> Self {
 		Self {
-			work_manager: WorkManager::<B>::new(logger, clock, MAX_RUNNING_TASKS),
+			work_manager: WorkManager::<B>::new(logger, clock, MAX_RUNNING_TASKS, PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS }),
 			_pd: Default::default(),
 		}
 	}

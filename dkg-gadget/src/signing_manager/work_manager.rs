@@ -6,7 +6,7 @@ use dkg_primitives::{
 	crypto::Public,
 	types::{DKGError, SignedDKGMessage},
 };
-use dkg_runtime_primitives::associated_block_id_acceptable;
+use dkg_runtime_primitives::{associated_block_id_acceptable, SessionId};
 use parking_lot::RwLock;
 use sp_api::BlockT;
 use std::{
@@ -17,8 +17,10 @@ use std::{
 };
 use sync_wrapper::SyncWrapper;
 
-// How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
+pub enum PollMethod {
+	Interval { millis: u64 },
+	Manual,
+}
 
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
@@ -36,8 +38,16 @@ pub struct WorkManagerInner<B: BlockT> {
 	pub enqueued_messages: HashMap<[u8; 32], VecDeque<SignedDKGMessage<Public>>>,
 }
 
+#[derive(Debug)]
+pub struct JobMetadata {
+	pub session_id: SessionId,
+	pub is_stalled: bool,
+	pub is_finished: bool,
+	pub has_started: bool,
+}
+
 impl<B: BlockT> WorkManager<B> {
-	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>, max_tasks: usize) -> Self {
+	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>, max_tasks: usize, poll_method: PollMethod) -> Self {
 		let (to_handler, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let this = Self {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
@@ -51,31 +61,32 @@ impl<B: BlockT> WorkManager<B> {
 			to_handler,
 		};
 
-		let this_worker = this.clone();
-		let handler = async move {
-			let job_receiver_worker = this_worker.clone();
-			let logger = job_receiver_worker.logger.clone();
+		if let PollMethod::Interval { millis } = poll_method {
+			let this_worker = this.clone();
+			let handler = async move {
+				let job_receiver_worker = this_worker.clone();
+				let logger = job_receiver_worker.logger.clone();
 
-			let job_receiver = async move {
-				while let Some(task_hash) = rx.recv().await {
-					job_receiver_worker
-						.logger
-						.info_signing(format!("[worker] Received job {task_hash:?}",));
-					job_receiver_worker.poll();
-				}
-			};
+				let job_receiver = async move {
+					while let Some(task_hash) = rx.recv().await {
+						job_receiver_worker
+							.logger
+							.info_signing(format!("[worker] Received job {task_hash:?}",));
+						job_receiver_worker.poll();
+					}
+				};
 
-			let periodic_poller = async move {
-				let mut interval = tokio::time::interval(std::time::Duration::from_millis(
-					JOB_POLL_INTERVAL_IN_MILLISECONDS,
-				));
-				loop {
-					interval.tick().await;
-					this_worker.poll();
-				}
-			};
+				let periodic_poller = async move {
+					let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+						millis,
+					));
+					loop {
+						interval.tick().await;
+						this_worker.poll();
+					}
+				};
 
-			tokio::select! {
+				tokio::select! {
 				_ = job_receiver => {
 					logger.error_signing("[worker] job_receiver exited");
 				},
@@ -83,9 +94,10 @@ impl<B: BlockT> WorkManager<B> {
 					logger.error_signing("[worker] periodic_poller exited");
 				}
 			}
-		};
+			};
 
-		tokio::task::spawn(handler);
+			tokio::task::spawn(handler);
+		}
 
 		this
 	}
@@ -113,7 +125,31 @@ impl<B: BlockT> WorkManager<B> {
 		})
 	}
 
-	fn poll(&self) {
+	// only relevant for keygen
+	pub fn get_active_session_ids(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
+		self.inner.read().active_tasks.iter()
+			.map(|r| JobMetadata {
+				session_id: r.handle.session_id,
+				is_stalled: r.handle.keygen_has_stalled(now),
+				is_finished: r.handle.is_keygen_finished(),
+				has_started: r.handle.has_started(),
+			})
+			.collect()
+	}
+
+	// only relevant for keygen
+	pub fn get_enqueued_session_ids(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
+		self.inner.read().enqueued_tasks.iter()
+			.map(|r| JobMetadata {
+				session_id: r.handle.session_id,
+				is_stalled: r.handle.keygen_has_stalled(now),
+				is_finished: r.handle.is_keygen_finished(),
+				has_started: r.handle.has_started(),
+			})
+			.collect()
+	}
+
+	pub fn poll(&self) {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let now = self.clock.get_latest_block_number();
