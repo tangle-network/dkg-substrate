@@ -55,8 +55,6 @@ pub struct DKGMessage<AuthorityId> {
 	pub payload: DKGMsgPayload,
 	/// Indentifier for the message
 	pub session_id: SessionId,
-	/// enum for active or queued
-	pub status: DKGMsgStatus,
 	/// The round ID
 	pub associated_block_id: u64,
 }

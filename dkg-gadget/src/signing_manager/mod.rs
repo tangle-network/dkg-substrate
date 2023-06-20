@@ -10,6 +10,7 @@ use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, GenericAsyncHandler, KeygenPartyId},
 	gossip_engine::GossipEngineIface,
 	metric_inc,
+	signing_manager::work_manager::PollMethod,
 	utils::SendFuture,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
@@ -19,7 +20,6 @@ use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
-use crate::signing_manager::work_manager::PollMethod;
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -64,7 +64,12 @@ where
 {
 	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>) -> Self {
 		Self {
-			work_manager: WorkManager::<B>::new(logger, clock, MAX_RUNNING_TASKS, PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS }),
+			work_manager: WorkManager::<B>::new(
+				logger,
+				clock,
+				MAX_RUNNING_TASKS,
+				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
+			),
 			_pd: Default::default(),
 		}
 	}

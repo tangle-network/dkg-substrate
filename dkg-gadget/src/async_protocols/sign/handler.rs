@@ -158,7 +158,6 @@ where
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
-			DKGMsgStatus::ACTIVE,
 		)
 	}
 

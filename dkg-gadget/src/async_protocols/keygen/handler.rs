@@ -102,13 +102,9 @@ where
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		t: u16,
 		n: u16,
-		status: DKGMsgStatus,
+		ty: KeygenRound,
 	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler<BI>>::Return>, DKGError>
 	{
-		let ty = match status {
-			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
-			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
-		};
 		let i = params.party_i;
 		let associated_round_id = params.associated_block_id;
 		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
@@ -119,7 +115,6 @@ where
 				.map_err(|err| Self::map_keygen_error_to_dkg_error_keygen(err))?,
 			params,
 			channel_type,
-			status,
 		)
 	}
 
