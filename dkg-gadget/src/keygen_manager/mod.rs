@@ -84,7 +84,9 @@ where
 	}
 
 	pub fn deliver_message(&self, message: SignedDKGMessage<Public>) {
-		self.work_manager.deliver_message(message)
+		let message_task_hash =
+			*message.msg.payload.keygen_protocol_hash().expect("Bad message type");
+		self.work_manager.deliver_message(message, message_task_hash)
 	}
 
 	pub fn session_id_of_active_keygen(&self, now: NumberFor<B>) -> Option<JobMetadata> {
@@ -112,6 +114,7 @@ where
 		let now: u64 = now_n.saturated_into();
 		let current_protocol = self.session_id_of_active_keygen(now_n);
 		let state = self.state();
+		let test_harness_mode = dkg_worker.test_bundle.is_some();
 		dkg_worker.logger.debug(format!(
 			"*** KeygenManager on_block_finalized: now={now}, state={state:?}, current_protocol={current_protocol:?}",
 		));
@@ -165,8 +168,9 @@ where
 		*/
 
 		// check bad states. These should never happen in a well-behaved program
+
 		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::GenesisKeygenCompleted ||
-			state == KeygenState::RunningGenesisKeygen
+			state == KeygenState::RunningGenesisKeygen && !test_harness_mode
 		{
 			dkg_worker.logger.error(format!("Invalid keygen manager state: {now} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
 			return
@@ -187,20 +191,26 @@ where
 			return
 		}
 
-		if now > GENESIS_AUTHORITY_SET_ID && matches!(state, KeygenState::KeygenCompleted { .. }) {
-			if let KeygenState::KeygenCompleted { session_completed } = state {
-				if session_completed + 1 == now {
-					// we need to start a keygen for session `now`:
-					return self
-						.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
-						.await
-				}
+		if now > GENESIS_AUTHORITY_SET_ID &&
+			matches!(
+				state,
+				KeygenState::KeygenCompleted { .. } | KeygenState::GenesisKeygenCompleted
+			) {
+			let session_completed = match state {
+				KeygenState::KeygenCompleted { session_completed } => session_completed,
+				KeygenState::GenesisKeygenCompleted => 0,
+				_ => unreachable!("We already checked this case above"),
+			};
 
-				if session_completed == now {
-					dkg_worker.logger.info("We are complete with the current session's keygen. The job manager will handle cleanup")
-				}
-			} else {
-				unreachable!("We already checked this case above")
+			if session_completed + 1 == now {
+				// we need to start a keygen for session `now`:
+				return self
+					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
+					.await
+			}
+
+			if session_completed == now {
+				dkg_worker.logger.info("We are complete with the current session's keygen. The job manager will handle cleanup")
 			}
 		}
 	}
@@ -255,6 +265,11 @@ where
 
 			dkg_worker.logger.debug(format!("🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | BEST AUTHORITIES: {best_authorities:?}"));
 
+			let keygen_protocol_hash = get_keygen_protocol_hash(
+				session_id,
+				self.active_keygen_retry_id.load(Ordering::SeqCst),
+			);
+
 			if let Some((handle, task)) = dkg_worker
 				.initialize_keygen_protocol(
 					best_authorities,
@@ -264,6 +279,7 @@ where
 					*header.number(),
 					threshold,
 					proto_stage_ty,
+					keygen_protocol_hash,
 				)
 				.await
 			{
@@ -295,17 +311,21 @@ where
 		handle: AsyncProtocolRemote<NumberFor<B>>,
 		task: Pin<Box<dyn SendFuture<'static, ()>>>,
 	) -> Result<(), DKGError> {
-		// keccak_256(compute session ID || retry_id)
-		let mut session_id_bytes = handle.session_id.to_be_bytes().to_vec();
-		let retry_id_bytes = self
-			.active_keygen_retry_id
-			.load(std::sync::atomic::Ordering::Relaxed)
-			.to_be_bytes();
-		session_id_bytes.extend_from_slice(&retry_id_bytes);
-		let task_hash = keccak_256(&session_id_bytes);
+		let task_hash = get_keygen_protocol_hash(
+			handle.session_id,
+			self.active_keygen_retry_id.load(Ordering::Relaxed),
+		);
 		self.work_manager.push_task(task_hash, handle, task)?;
 		// poll to start the task
 		self.work_manager.poll();
 		Ok(())
 	}
+}
+
+fn get_keygen_protocol_hash(session_id: u64, active_keygen_retry_id: usize) -> [u8; 32] {
+	// keccak_256(compute session ID || retry_id)
+	let mut session_id_bytes = session_id.to_be_bytes().to_vec();
+	let retry_id_bytes = active_keygen_retry_id.to_be_bytes();
+	session_id_bytes.extend_from_slice(&retry_id_bytes);
+	keccak_256(&session_id_bytes)
 }

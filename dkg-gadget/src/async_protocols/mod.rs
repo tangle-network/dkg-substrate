@@ -288,6 +288,7 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 		t: u16,
 		n: u16,
 		associated_block_id: u64,
+		keygen_protocol_hash: [u8; 32],
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
@@ -333,6 +334,14 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 	pub fn get_unsigned_proposal_hash(&self) -> Option<[u8; 32]> {
 		self.get_unsigned_proposal().and_then(|x| x.hash())
 	}
+
+	pub fn get_keygen_hash(&self) -> Option<[u8; 32]> {
+		if let Self::Keygen { keygen_protocol_hash, .. } = self {
+			Some(*keygen_protocol_hash)
+		} else {
+			None
+		}
+	}
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug> Debug
@@ -340,13 +349,21 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id } => {
+			ProtocolType::Keygen {
+				ty,
+				i,
+				t,
+				n,
+				associated_block_id: associated_round_id,
+				keygen_protocol_hash,
+			} => {
 				let ty = match ty {
 					KeygenRound::Genesis => "GENESIS",
 					KeygenRound::GenesisNext => "GENESIS_NEXT",
 					KeygenRound::Next => "NEXT",
 				};
-				write!(f, "{ty} | Keygen: (i, t, n, r) = ({i}, {t}, {n}, {associated_round_id:?})")
+				let keygen_protocol_hash = hex::encode(keygen_protocol_hash);
+				write!(f, "{ty} | Keygen: (i, t, n, r)  | hash: {keygen_protocol_hash} = ({i}, {t}, {n}, {associated_round_id:?})")
 			},
 			ProtocolType::Offline { i, unsigned_proposal, .. } => {
 				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
@@ -525,6 +542,7 @@ where
 	Box::pin(async move {
 		let mut outgoing_rx = outgoing_rx.fuse();
 		let unsigned_proposal_hash = proto_ty.get_unsigned_proposal_hash();
+		let keygen_protocol_hash = proto_ty.get_keygen_hash();
 		// take all unsigned messages, then sign them and send outbound
 		loop {
 			// Here is a few explanations about the next few lines:
@@ -587,6 +605,7 @@ where
 				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
 					sender_id: party_id,
 					keygen_msg: serialized_body,
+					keygen_protocol_hash: keygen_protocol_hash.expect("This value should be set"),
 				}),
 				ProtocolType::Offline { unsigned_proposal, .. } =>
 					DKGMsgPayload::Offline(DKGOfflineMessage {

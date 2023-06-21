@@ -37,6 +37,7 @@ where
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
 		status: KeygenRound,
+		keygen_protocol_hash: [u8; 32],
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
@@ -65,7 +66,8 @@ where
 			// Set status of the handle
 			params.handle.set_status(MetaHandlerStatus::Keygen);
 			// Execute the keygen
-			GenericAsyncHandler::new_keygen(params.clone(), t, n, status)?.await?;
+			GenericAsyncHandler::new_keygen(params.clone(), t, n, status, keygen_protocol_hash)?
+				.await?;
 			params.logger.debug_keygen("Keygen stage complete!");
 
 			Ok(())
@@ -103,12 +105,20 @@ where
 		t: u16,
 		n: u16,
 		ty: KeygenRound,
+		keygen_protocol_hash: [u8; 32],
 	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler<BI>>::Return>, DKGError>
 	{
 		let i = params.party_i;
 		let associated_round_id = params.associated_block_id;
 		let channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength> =
-			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id };
+			ProtocolType::Keygen {
+				ty,
+				i,
+				t,
+				n,
+				associated_block_id: associated_round_id,
+				keygen_protocol_hash,
+			};
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)

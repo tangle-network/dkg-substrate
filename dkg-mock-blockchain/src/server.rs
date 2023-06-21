@@ -331,6 +331,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 					// at the end, check if the round is complete
 					let keygen_complete =
 						current_round_completed_count_keygen == self.config.n_clients;
+
 					if keygen_complete && matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
 					{
 						// keygen is complete, and, we are ready to rotate into either the next

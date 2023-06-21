@@ -389,6 +389,7 @@ where
 		associated_block: NumberFor<B>,
 		threshold: u16,
 		stage: ProtoStageType,
+		keygen_protocol_hash: [u8; 32],
 	) -> Option<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>)> {
 		match self.generate_async_proto_params(
 			best_authorities,
@@ -417,7 +418,12 @@ where
 					},
 				};
 
-				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
+				match GenericAsyncHandler::setup_keygen(
+					async_proto_params,
+					threshold,
+					status,
+					keygen_protocol_hash,
+				) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let task = async move {

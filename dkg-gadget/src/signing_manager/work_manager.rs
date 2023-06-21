@@ -17,6 +17,7 @@ use std::{
 };
 use sync_wrapper::SyncWrapper;
 
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum PollMethod {
 	Interval { millis: u64 },
 	Manual,
@@ -29,6 +30,7 @@ pub struct WorkManager<B: BlockT> {
 	// for now, use a hard-coded value for the number of tasks
 	max_tasks: usize,
 	logger: DebugLogger,
+	poll_method: Arc<PollMethod>,
 	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 }
 
@@ -65,6 +67,7 @@ impl<B: BlockT> WorkManager<B> {
 			max_tasks,
 			logger,
 			to_handler,
+			poll_method: Arc::new(poll_method),
 		};
 
 		if let PollMethod::Interval { millis } = poll_method {
@@ -125,9 +128,13 @@ impl<B: BlockT> WorkManager<B> {
 		};
 		lock.enqueued_tasks.push_back(job);
 
-		self.to_handler.send(task_hash).map_err(|_| DKGError::GenericError {
-			reason: "Failed to send job to worker".to_string(),
-		})
+		if *self.poll_method != PollMethod::Manual {
+			self.to_handler.send(task_hash).map_err(|_| DKGError::GenericError {
+				reason: "Failed to send job to worker".to_string(),
+			})
+		} else {
+			Ok(())
+		}
 	}
 
 	// only relevant for keygen
@@ -229,20 +236,17 @@ impl<B: BlockT> WorkManager<B> {
 		lock.active_tasks.contains(job) || lock.enqueued_tasks.iter().any(|j| &j.task_hash == job)
 	}
 
-	pub fn deliver_message(&self, msg: SignedDKGMessage<Public>) {
+	pub fn deliver_message(&self, msg: SignedDKGMessage<Public>, message_task_hash: [u8; 32]) {
 		self.logger.debug_signing(format!(
 			"Delivered message is intended for session_id = {}",
 			msg.msg.session_id
 		));
 		let mut lock = self.inner.write();
 
-		let msg_unsigned_proposal_hash =
-			msg.msg.payload.unsigned_proposal_hash().expect("Bad message type");
-
 		// check the enqueued
 		for task in lock.enqueued_tasks.iter() {
 			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash &&
+				task.task_hash == message_task_hash &&
 				associated_block_id_acceptable(
 					task.handle.associated_block_id,
 					msg.msg.associated_block_id,
@@ -262,7 +266,7 @@ impl<B: BlockT> WorkManager<B> {
 		// check the currently signing
 		for task in lock.active_tasks.iter() {
 			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash &&
+				task.task_hash == message_task_hash &&
 				associated_block_id_acceptable(
 					task.handle.associated_block_id,
 					msg.msg.associated_block_id,
@@ -281,14 +285,9 @@ impl<B: BlockT> WorkManager<B> {
 
 		// if the protocol is neither started nor enqueued, then, this message may be for a future
 		// async protocol. Store the message
-		self.logger.info_signing(format!(
-			"Enqueuing message for {:?}",
-			hex::encode(msg_unsigned_proposal_hash)
-		));
-		lock.enqueued_messages
-			.entry(*msg_unsigned_proposal_hash)
-			.or_default()
-			.push_back(msg)
+		self.logger
+			.info_signing(format!("Enqueuing message for {:?}", hex::encode(message_task_hash)));
+		lock.enqueued_messages.entry(message_task_hash).or_default().push_back(msg)
 	}
 }
 

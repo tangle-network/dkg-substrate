@@ -75,7 +75,9 @@ where
 	}
 
 	pub fn deliver_message(&self, message: SignedDKGMessage<Public>) {
-		self.work_manager.deliver_message(message)
+		let message_task_hash =
+			*message.msg.payload.unsigned_proposal_hash().expect("Bad message type");
+		self.work_manager.deliver_message(message, message_task_hash)
 	}
 
 	/// This function is called each time a new block is finalized.
