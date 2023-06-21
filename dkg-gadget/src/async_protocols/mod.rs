@@ -26,10 +26,7 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{
-		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
-		SessionId,
-	},
+	types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, SessionId},
 	AuthoritySet,
 };
 use dkg_runtime_primitives::{MaxAuthorities, UnsignedProposal};
@@ -272,7 +269,7 @@ impl OfflinePartyId {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeygenRound {
 	/// Executed at the beginning of session 0
 	Genesis,

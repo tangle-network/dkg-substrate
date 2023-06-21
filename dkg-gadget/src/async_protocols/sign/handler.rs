@@ -29,7 +29,7 @@ use crate::async_protocols::{
 };
 use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::FutureExt;
@@ -227,7 +227,6 @@ where
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
-				status: DKGMsgStatus::ACTIVE,
 				payload,
 				session_id: params.session_id,
 			};

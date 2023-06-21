@@ -24,7 +24,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 
 use std::fmt::Debug;
 
-use dkg_primitives::types::{DKGError, DKGMsgStatus};
+use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::MaxAuthorities;
 use futures::FutureExt;
 
@@ -36,7 +36,7 @@ where
 	pub fn setup_keygen<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
-		status: DKGMsgStatus,
+		status: KeygenRound,
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let status_handle = params.handle.clone();
 		let mut stop_rx =

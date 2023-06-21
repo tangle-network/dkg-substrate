@@ -303,11 +303,11 @@ pub struct Job<B: BlockT> {
 impl<B: BlockT> Job<B> {
 	fn metadata(&self, now: NumberFor<B>) -> JobMetadata {
 		JobMetadata {
-			session_id: r.handle.session_id,
-			is_stalled: r.handle.keygen_has_stalled(now),
-			is_finished: r.handle.is_keygen_finished(),
-			has_started: r.handle.has_started(),
-			is_active: r.handle.is_active(),
+			session_id: self.handle.session_id,
+			is_stalled: self.handle.keygen_has_stalled(now),
+			is_finished: self.handle.is_keygen_finished(),
+			has_started: self.handle.has_started(),
+			is_active: self.handle.is_active(),
 		}
 	}
 }

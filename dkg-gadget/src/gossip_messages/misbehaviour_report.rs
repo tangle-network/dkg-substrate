@@ -20,7 +20,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MaxAuthorities, MaxProposalLength,
@@ -56,8 +56,8 @@ where
 		dkg_worker.logger.debug("Received misbehaviour report".to_string());
 
 		let is_main_round = {
-			if let Some(round) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == round.session_id
+			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
+				msg.session_id == session_id
 			} else {
 				false
 			}
@@ -145,14 +145,11 @@ where
 			..report.clone()
 		});
 
-		let status =
-			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			associated_block_id: 0,
 			sender_id: public.clone(),
 			// We need to gossip this misbehaviour, so no specific recipient.
 			recipient_id: None,
-			status,
 			session_id: report.session_id,
 			payload,
 		};

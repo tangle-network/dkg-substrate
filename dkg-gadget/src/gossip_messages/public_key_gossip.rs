@@ -21,8 +21,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGPublicKeyMessage, SessionId,
-	SignedDKGMessage,
+	DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SessionId, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
@@ -60,8 +59,8 @@ where
 			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
 
 		let is_main_round = {
-			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == rounds.session_id
+			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
+				msg.session_id == session_id
 			} else {
 				false
 			}
@@ -149,15 +148,12 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			..msg.clone()
 		});
 
-		let status =
-			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			associated_block_id: 0, // we don't need to associate this message with a block
 			sender_id: public.clone(),
 			// we need to gossip the final public key to all parties, so no specific recipient in
 			// this case.
 			recipient_id: None,
-			status,
 			session_id: msg.session_id,
 			payload,
 		};
