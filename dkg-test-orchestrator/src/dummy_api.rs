@@ -1,6 +1,8 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::TestBlock;
-use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -27,8 +29,7 @@ pub struct DummyApiInner {
 	#[allow(dead_code)]
 	pub signing_n: u16,
 	// maps: block number => list of authorities for that block
-	pub authority_sets:
-		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
+	pub authority_sets: HashMap<u64, BoundedVec<AuthorityId, MaxAuthorities>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
 }
 
@@ -513,8 +514,8 @@ impl
 		TestBlock,
 		AuthorityId,
 		sp_api::NumberFor<TestBlock>,
-		dkg_runtime_primitives::CustomU32Getter<10000>,
-		dkg_runtime_primitives::CustomU32Getter<100>,
+		MaxProposalLength,
+		MaxAuthorities,
 	> for DummyApi
 {
 	fn __runtime_api_internal_call_api_at(
@@ -531,12 +532,7 @@ impl
 	fn authority_set(
 		&self,
 		block: H256,
-	) -> ApiResult<
-		dkg_runtime_primitives::AuthoritySet<
-			AuthorityId,
-			dkg_runtime_primitives::CustomU32Getter<100>,
-		>,
-	> {
+	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
 		let number = self.block_id_to_u64(&block);
 		self.logger.info(format!("Getting authority set for block {number}"));
 		let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
@@ -548,12 +544,7 @@ impl
 	fn queued_authority_set(
 		&self,
 		id: H256,
-	) -> ApiResult<
-		dkg_runtime_primitives::AuthoritySet<
-			AuthorityId,
-			dkg_runtime_primitives::CustomU32Getter<100>,
-		>,
-	> {
+	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
 		let header =
 			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
 		self.authority_set(header.hash())
@@ -677,6 +668,10 @@ impl
 	}
 
 	fn should_execute_new_keygen(&self, _: H256) -> ApiResult<bool> {
+		Ok(true)
+	}
+
+	fn should_submit_proposer_set_vote(&self, _: H256) -> ApiResult<bool> {
 		Ok(true)
 	}
 }

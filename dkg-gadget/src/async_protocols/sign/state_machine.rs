@@ -20,7 +20,7 @@ use crate::{
 	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
@@ -52,7 +52,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
-			DKGMsgPayload::Offline(msg) => {
+			NetworkMsgPayload::Offline(msg) => {
 				let message: Msg<OfflineProtocolMessage> =
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {
 						Ok(msg) => msg,

@@ -104,9 +104,9 @@ use dkg_runtime_primitives::{
 	},
 	traits::{GetDKGPublicKey, GetProposerSet, OnAuthoritySetChangeHandler},
 	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
-	AggregatedMisbehaviourReports, AggregatedProposerSetVotes, AggregatedPublicKeys,
-	AuthorityIndex, AuthoritySet, ConsensusLog, MisbehaviourType, ProposalHandlerTrait,
-	RefreshProposal, RefreshProposalSigned, DKG_ENGINE_ID,
+	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthorityIndex,
+	AuthoritySet, ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal,
+	RefreshProposalSigned, DKG_ENGINE_ID,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -1271,7 +1271,7 @@ pub mod pallet {
 		#[pallet::call_index(7)]
 		pub fn submit_proposer_set_votes(
 			origin: OriginFor<T>,
-			votes: AggregatedProposerSetVotes<
+			votes: AggregatedProposerVotes<
 				T::DKGId,
 				T::MaxSignatureLength,
 				T::MaxReporters,
@@ -1650,7 +1650,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn process_proposer_votes(
-		votes: AggregatedProposerSetVotes<
+		votes: AggregatedProposerVotes<
 			T::DKGId,
 			T::MaxSignatureLength,
 			T::MaxReporters,
@@ -1660,7 +1660,7 @@ impl<T: Config> Pallet<T> {
 		let mut valid_voters = Vec::new();
 		for (inx, signature) in votes.signatures.iter().enumerate() {
 			let mut signed_payload = Vec::new();
-			signed_payload.extend_from_slice(votes.vote.as_ref());
+			signed_payload.extend_from_slice(votes.encoded_vote.as_ref());
 			let previous_proposer_set: Vec<ecdsa::Public> =
 				T::ProposerSetView::get_previous_external_proposer_accounts()
 					.iter()

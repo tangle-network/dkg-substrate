@@ -16,4 +16,5 @@
 // limitations under the License.
 pub mod misbehaviour_reports;
 pub mod proposals;
+pub mod proposer_votes;
 pub mod public_keys;

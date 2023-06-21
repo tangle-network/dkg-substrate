@@ -15,10 +15,10 @@ use std::sync::Arc;
 //
 use crate::{debug_logger::DebugLogger, Client};
 use codec::Encode;
-use dkg_primitives::types::{DKGError, DKGSignedPayload};
+use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
-	RefreshProposalSigned,
+	crypto::AuthorityId, gossip_messages::DKGSignedPayload,
+	offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey, RefreshProposalSigned,
 };
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;

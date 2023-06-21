@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
@@ -95,9 +95,9 @@ impl TransformIncoming for Arc<SignedDKGMessage<Public>> {
 		Self: Sized,
 	{
 		match (stream_type, &self.msg.payload) {
-			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
-			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
-			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
+			(ProtocolType::Keygen { .. }, NetworkMsgPayload::Keygen(..)) |
+			(ProtocolType::Offline { .. }, NetworkMsgPayload::Offline(..)) |
+			(ProtocolType::Voting { .. }, NetworkMsgPayload::Vote(..)) => {
 				// only clone if the downstream receiver expects this type
 				let sender = self
 					.msg

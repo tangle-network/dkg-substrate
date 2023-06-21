@@ -17,6 +17,7 @@
 use crate::{
 	async_protocols::{blockchain_interface::DKGProtocolEngine, KeygenPartyId},
 	debug_logger::DebugLogger,
+	gossip_messages::proposer_vote_gossip::{self, gossip_proposer_vote, handle_proposer_vote},
 	utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
@@ -47,18 +48,16 @@ use std::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SessionId,
-		SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId, SignedDKGMessage},
 	AuthoritySetId, DKGReport, MisbehaviourType,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	gossip_messages::{MisbehaviourMessage, ProposerVoteMessage},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength, UnsignedProposal,
-	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
+	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthoritySet,
+	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MaxVoteLength,
+	MaxVotes, ProposerVote, UnsignedProposal, GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -147,7 +146,10 @@ where
 	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
-	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
+	/// Tracking for the broadcasting proposer votes in the event of emergency fallback
+	pub aggregated_proposer_votes: Shared<AggregatedProposerVotesStore>,
+	/// Misbehaviour sending channel
+	pub misbehaviour_tx: Option<UnboundedSender<MisbehaviourMessage>>,
 	/// A HashSet of the currently being signed proposals.
 	/// Note: we only store the hash of the proposal here, not the full proposal.
 	pub currently_signing_proposals: Shared<HashSet<[u8; 32]>>,
@@ -199,6 +201,7 @@ where
 			queued_validator_set: self.queued_validator_set.clone(),
 			aggregated_public_keys: self.aggregated_public_keys.clone(),
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
+			aggregated_proposer_votes: self.aggregated_proposer_votes.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			currently_signing_proposals: self.currently_signing_proposals.clone(),
 			local_keystore: self.local_keystore.clone(),
@@ -215,6 +218,11 @@ where
 pub type AggregatedMisbehaviourReportStore = HashMap<
 	(MisbehaviourType, SessionId, AuthorityId),
 	AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
+>;
+
+pub type AggregatedProposerVotesStore = HashMap<
+	(SessionId, Vec<u8>),
+	AggregatedProposerVotes<AuthorityId, MaxSignatureLength, MaxAuthorities, MaxVoteLength>,
 >;
 
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
@@ -268,6 +276,7 @@ where
 			latest_header,
 			aggregated_public_keys: Arc::new(RwLock::new(HashMap::new())),
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
+			aggregated_proposer_votes: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			test_bundle,
@@ -946,6 +955,25 @@ where
 				self.logger.error(format!("🕸️  Error submitting unsigned proposals: {e:?}"));
 			}
 		}
+
+		// Attempt to run the proposer set vote protocol in an emergency fallback case
+		// for any application leveraging the DKG. This process effectively falls back
+		// to a multi-sig vote if the DKG has a critical issue, requiring the chain
+		// to `force_change_authorities`.
+		if self.should_submit_proposer_vote(header) {
+			self.submit_proposer_vote(header);
+		}
+	}
+
+	fn submit_proposer_vote(&self, header: &B::Header) {
+		let proposer_vote_msg = ProposerVoteMessage {
+			session_id: todo!(),
+			proposer_leaf_index: todo!(),
+			new_governor: todo!(),
+			proposer_merkle_path: todo!(),
+			signature: todo!(),
+		};
+		gossip_proposer_vote(self, proposer_vote_msg);
 	}
 
 	fn maybe_enact_genesis_authorities(&self, header: &B::Header) {
@@ -1302,7 +1330,7 @@ where
 		}
 
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(_) => {
+			NetworkMsgPayload::Keygen(_) => {
 				let msg = Arc::new(dkg_msg);
 				if let Some(rounds) = self.rounds.read().as_ref() {
 					if rounds.session_id == msg.msg.session_id {
@@ -1328,7 +1356,7 @@ where
 
 				Ok(())
 			},
-			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
+			NetworkMsgPayload::Offline(..) | NetworkMsgPayload::Vote(..) => {
 				let msg = Arc::new(dkg_msg);
 				let async_index = msg.msg.payload.get_async_index();
 				self.logger.debug(format!("Received message for async index {async_index}"));
@@ -1360,7 +1388,7 @@ where
 				}
 				Ok(())
 			},
-			DKGMsgPayload::PublicKeyBroadcast(_) => {
+			NetworkMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
 						match handle_public_key_broadcast(self, dkg_msg) {
@@ -1377,14 +1405,32 @@ where
 				}
 				Ok(())
 			},
-			DKGMsgPayload::MisbehaviourBroadcast(_) => {
+			NetworkMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg) {
 					Ok(dkg_msg) => {
 						match handle_misbehaviour_report(self, dkg_msg) {
 							Ok(()) => (),
-							Err(err) => self
-								.logger
-								.error(format!("🕸️  Error while handling DKG message {err:?}")),
+							Err(err) => self.logger.error(format!(
+								"🕸️  Error while handling misbehaviour message {err:?}"
+							)),
+						};
+					},
+
+					Err(err) => self.logger.error(format!(
+						"Error while verifying signature against authorities: {err:?}"
+					)),
+				}
+
+				Ok(())
+			},
+			NetworkMsgPayload::ProposerVote(_) => {
+				match self.verify_signature_against_authorities(dkg_msg) {
+					Ok(dkg_msg) => {
+						match handle_proposer_vote(self, dkg_msg) {
+							Ok(()) => (),
+							Err(err) => self.logger.error(format!(
+								"🕸️  Error while handling proposer vote message {err:?}"
+							)),
 						};
 					},
 
@@ -1417,7 +1463,7 @@ where
 		};
 
 		let misbehaviour_msg =
-			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
+			MisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
 		let gossip = gossip_misbehaviour_report(self, misbehaviour_msg);
 		if gossip.is_err() {
 			self.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
@@ -1731,6 +1777,15 @@ where
 		self.client.runtime_api().should_execute_new_keygen(at).unwrap_or_default()
 	}
 
+	fn should_submit_proposer_vote(&self, header: &B::Header) -> bool {
+		// query runtime api to check if we should execute new keygen.
+		let at = header.hash();
+		self.client
+			.runtime_api()
+			.should_submit_proposer_set_vote(at)
+			.unwrap_or_default()
+	}
+
 	/// Wait for initial finalized block
 	async fn initialization(&mut self) {
 		use futures::future;
@@ -1839,7 +1894,7 @@ where
 
 	fn spawn_misbehaviour_report_task(
 		&self,
-		mut misbehaviour_rx: UnboundedReceiver<DKGMisbehaviourMessage>,
+		mut misbehaviour_rx: UnboundedReceiver<MisbehaviourMessage>,
 	) -> tokio::task::JoinHandle<()> {
 		let self_ = self.clone();
 		tokio::spawn(async move {

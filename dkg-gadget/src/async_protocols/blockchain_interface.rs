@@ -25,13 +25,12 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	gossip_messages::{DKGSignedPayload, PublicKeyMessage},
 	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
@@ -72,7 +71,7 @@ pub trait BlockchainInterface: Send + Sync {
 		batch_key: BatchKey,
 		message: BigInt,
 	) -> Result<(), DKGError>;
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError>;
 	fn store_public_key(
 		&self,
 		key: LocalKey<Secp256k1>,
@@ -261,7 +260,7 @@ where
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError> {
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),

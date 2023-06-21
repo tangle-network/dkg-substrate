@@ -851,7 +851,7 @@ impl<T: Config> Pallet<T> {
 	/// It is expected that the size of the returned vector is a power of 2.
 	pub fn pre_process_for_merkleize() -> Vec<[u8; 32]> {
 		let height = Self::get_proposer_set_tree_height();
-		// Check for each key that the proposer is valid (should return true)
+		// Hash the external accounts into 32 byte chunks to form the base layer of the merkle tree
 		let mut base_layer: Vec<[u8; 32]> = ExternalProposerAccounts::<T>::get()
 			.into_iter()
 			.map(|accounts| keccak_256(&accounts.1))

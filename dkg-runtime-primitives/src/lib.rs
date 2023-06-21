@@ -16,11 +16,14 @@
 // NOTE: needed to silence warnings about generated code in `decl_runtime_apis`
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
+pub mod ethereum_abi;
+pub mod gossip_messages;
 pub mod handlers;
 pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
+
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
@@ -71,6 +74,10 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 
 /// A typedef for keygen set / session id
 pub type SessionId = u64;
+
+/// Signer set ID
+pub type SignerSetId = u64;
+
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
@@ -89,20 +96,20 @@ pub const OFFLINE_TIMEOUT: u32 = 2;
 /// The sign timeout limit in blocks before we consider misbehaviours
 pub const SIGN_TIMEOUT: u32 = 2;
 
-// Engine ID for DKG
+/// Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
-// Key type for DKG keys
+/// Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
-// Max length for proposals
+/// Max length for proposals
 pub type MaxProposalLength = CustomU32Getter<10_000>;
 
-// Max authorities
-pub type MaxAuthorities = CustomU32Getter<100>;
+/// Max authorities
+pub type MaxAuthorities = CustomU32Getter<1024>;
 
-// Max reporters
-pub type MaxReporters = CustomU32Getter<100>;
+/// Max reporters
+pub type MaxReporters = CustomU32Getter<128>;
 
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<512>;
@@ -115,6 +122,16 @@ pub type MaxVotes = CustomU32Getter<100>;
 
 /// Max resources to store onchain
 pub type MaxResources = CustomU32Getter<32>;
+
+/// Max size for vote proposal
+/// A vote consists of a new address, a leaf index, and a merkle proof
+/// [20 bytes, 4 bytes, 32 * HEIGHT bytes]
+/// If we want to support up to 1000 validators than the max vote length
+/// is 20 + 4 + 32 * 10 = 364 bytes or in bits 2912
+pub type MaxVoteLength = CustomU32Getter<2912>;
+
+/// Proposer vote type
+pub type ProposerVote<V> = BoundedVec<u8, V>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
@@ -158,7 +175,7 @@ pub struct AggregatedMisbehaviourReports<
 }
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
-pub struct AggregatedProposerSetVotes<
+pub struct AggregatedProposerVotes<
 	DKGId: AsRef<[u8]>,
 	MaxSignatureLength: Get<u32> + Debug + Clone + TypeInfo,
 	MaxVoters: Get<u32> + Debug + Clone + TypeInfo,
@@ -166,10 +183,8 @@ pub struct AggregatedProposerSetVotes<
 > {
 	/// The round id the proposer vote is valid for.
 	pub session_id: u64,
-	/// The proposer
-	pub proposer: DKGId,
-	/// The encoded vote
-	pub vote: BoundedVec<u8, VoteLength>,
+	/// The encoded vote according to the Solidity ABI
+	pub encoded_vote: ProposerVote<VoteLength>,
 	/// A list of voters
 	pub voters: BoundedVec<DKGId, MaxVoters>,
 	/// A list of signed encoded votes

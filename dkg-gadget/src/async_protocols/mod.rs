@@ -26,13 +26,13 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{
-		DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGOfflineMessage,
-		SessionId,
-	},
+	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::{MaxAuthorities, UnsignedProposal};
+use dkg_runtime_primitives::{
+	gossip_messages::{DKGKeygenMessage, DKGOfflineMessage},
+	MaxAuthorities, UnsignedProposal,
+};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,
@@ -575,12 +575,12 @@ where
 				None => None,
 			};
 			let payload = match &proto_ty {
-				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
+				ProtocolType::Keygen { .. } => NetworkMsgPayload::Keygen(DKGKeygenMessage {
 					sender_id: party_id,
 					keygen_msg: serialized_body,
 				}),
 				ProtocolType::Offline { unsigned_proposal, .. } =>
-					DKGMsgPayload::Offline(DKGOfflineMessage {
+					NetworkMsgPayload::Offline(DKGOfflineMessage {
 						key: Vec::from(
 							&unsigned_proposal.hash().expect("Cannot hash unsigned proposal!")
 								as &[u8],

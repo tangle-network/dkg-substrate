@@ -14,7 +14,7 @@
 //
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
-use dkg_runtime_primitives::{crypto::AuthorityId, MisbehaviourType};
+use dkg_runtime_primitives::{gossip_messages::*, SignerSetId};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
@@ -23,11 +23,6 @@ pub use dkg_runtime_primitives::SessionId;
 
 pub type FE = Scalar<Secp256k1>;
 pub type GE = Point<Secp256k1>;
-
-/// A typedef for signer set id
-pub type SignerSetId = u64;
-
-pub use dkg_runtime_primitives::DKGPayloadKey;
 
 /// DKGMsgStatus Enum identifies if a message is for an active or queued round
 #[derive(Debug, Copy, Clone, Decode, Encode)]
@@ -52,7 +47,7 @@ pub struct DKGMessage<AuthorityId> {
 	/// If None, the message is broadcasted to all nodes.
 	pub recipient_id: Option<AuthorityId>,
 	/// DKG message contents
-	pub payload: DKGMsgPayload,
+	pub payload: NetworkMsgPayload,
 	/// Indentifier for the message
 	pub session_id: SessionId,
 	/// enum for active or queued
@@ -76,11 +71,12 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 		// in case of Keygen or Offline, we only need to hash the inner raw message bytes that
 		// are going to be sent to the state machine.
 		let bytes_to_hash = match self.msg.payload {
-			DKGMsgPayload::Keygen(ref m) => m.keygen_msg.clone(),
-			DKGMsgPayload::Offline(ref m) => m.offline_msg.clone(),
-			DKGMsgPayload::Vote(ref m) => m.encode(),
-			DKGMsgPayload::PublicKeyBroadcast(ref m) => m.encode(),
-			DKGMsgPayload::MisbehaviourBroadcast(ref m) => m.encode(),
+			NetworkMsgPayload::Keygen(ref m) => m.keygen_msg.clone(),
+			NetworkMsgPayload::Offline(ref m) => m.offline_msg.clone(),
+			NetworkMsgPayload::Vote(ref m) => m.encode(),
+			NetworkMsgPayload::PublicKeyBroadcast(ref m) => m.encode(),
+			NetworkMsgPayload::MisbehaviourBroadcast(ref m) => m.encode(),
+			NetworkMsgPayload::ProposerVote(ref m) => m.encode(),
 		};
 		<<B::Header as Header>::Hashing as Hash>::hash_of(&bytes_to_hash)
 	}
@@ -89,11 +85,12 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 impl<ID> fmt::Display for DKGMessage<ID> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let label = match self.payload {
-			DKGMsgPayload::Keygen(_) => "Keygen",
-			DKGMsgPayload::Offline(_) => "Offline",
-			DKGMsgPayload::Vote(_) => "Vote",
-			DKGMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
-			DKGMsgPayload::MisbehaviourBroadcast(_) => "MisbehaviourBroadcast",
+			NetworkMsgPayload::Keygen(_) => "Keygen",
+			NetworkMsgPayload::Offline(_) => "Offline",
+			NetworkMsgPayload::Vote(_) => "Vote",
+			NetworkMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
+			NetworkMsgPayload::MisbehaviourBroadcast(_) => "MisbehaviourBroadcast",
+			NetworkMsgPayload::ProposerVote(_) => "ProposerVote",
 		};
 		write!(f, "DKGMessage of type {label}")
 	}
@@ -101,115 +98,45 @@ impl<ID> fmt::Display for DKGMessage<ID> {
 
 #[derive(Debug, Clone, Decode, Encode)]
 #[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub enum DKGMsgPayload {
+pub enum NetworkMsgPayload {
 	Keygen(DKGKeygenMessage),
 	Offline(DKGOfflineMessage),
 	Vote(DKGVoteMessage),
-	PublicKeyBroadcast(DKGPublicKeyMessage),
-	MisbehaviourBroadcast(DKGMisbehaviourMessage),
+	PublicKeyBroadcast(PublicKeyMessage),
+	MisbehaviourBroadcast(MisbehaviourMessage),
+	ProposerVote(ProposerVoteMessage),
 }
 
-impl DKGMsgPayload {
-	/// NOTE: this is hacky
+impl NetworkMsgPayload {
 	/// TODO: Change enums for keygen, offline, vote
 	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
 		match self {
-			DKGMsgPayload::Keygen(kg) => Some(kg.sender_id),
-			DKGMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
-			DKGMsgPayload::Vote(vote) => Some(vote.party_ind),
+			NetworkMsgPayload::Keygen(kg) => Some(kg.sender_id),
+			NetworkMsgPayload::Offline(offline) => Some(offline.signer_set_id as u16),
+			NetworkMsgPayload::Vote(vote) => Some(vote.party_ind),
 			_ => None,
 		}
 	}
 
 	pub fn get_type(&self) -> &'static str {
 		match self {
-			DKGMsgPayload::Keygen(_) => "keygen",
-			DKGMsgPayload::Offline(_) => "offline",
-			DKGMsgPayload::Vote(_) => "vote",
-			DKGMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
-			DKGMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
+			NetworkMsgPayload::Keygen(_) => "keygen",
+			NetworkMsgPayload::Offline(_) => "offline",
+			NetworkMsgPayload::Vote(_) => "vote",
+			NetworkMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
+			NetworkMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
+			NetworkMsgPayload::ProposerVote(_) => "proposer_vote",
 		}
 	}
 
 	pub fn get_async_index(&self) -> u8 {
 		match self {
-			DKGMsgPayload::Offline(m) => m.async_index,
-			DKGMsgPayload::Vote(m) => m.async_index,
+			NetworkMsgPayload::Offline(m) => m.async_index,
+			NetworkMsgPayload::Vote(m) => m.async_index,
 			_ => 0,
 		}
 	}
 }
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGKeygenMessage {
-	/// Sender id / party index
-	pub sender_id: u16,
-	/// Serialized keygen msg
-	pub keygen_msg: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGOfflineMessage {
-	// Identifier
-	pub key: Vec<u8>,
-	/// Signer set epoch id
-	pub signer_set_id: SignerSetId,
-	/// Serialized offline stage msg
-	pub offline_msg: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGVoteMessage {
-	/// Party index
-	pub party_ind: u16,
-	/// Key for the vote signature created for
-	pub round_key: Vec<u8>,
-	/// Serialized partial signature
-	pub partial_signature: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGSignedPayload {
-	/// Payload key
-	pub key: Vec<u8>,
-	/// The payload signatures are collected for.
-	pub payload: Vec<u8>,
-	/// Runtime compatible signature for the payload
-	pub signature: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGPublicKeyMessage {
-	/// Round ID of DKG protocol
-	pub session_id: SessionId,
-	/// Public key for the DKG
-	pub pub_key: Vec<u8>,
-	/// Authority's signature for this public key
-	pub signature: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct DKGMisbehaviourMessage {
-	/// Offending type
-	pub misbehaviour_type: MisbehaviourType,
-	/// Misbehaving round
-	pub session_id: SessionId,
-	/// Offending authority's id
-	pub offender: AuthorityId,
-	/// Authority's signature for this report
-	pub signature: Vec<u8>,
-}
-
 pub trait DKGRoundsSM<Payload, Output, Clock> {
 	fn proceed(&mut self, _at: Clock) -> Result<bool, DKGError> {
 		Ok(false)

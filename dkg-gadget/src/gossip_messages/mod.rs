@@ -14,4 +14,5 @@
 //
 pub mod dkg_message;
 pub mod misbehaviour_report;
+pub mod proposer_vote_gossip;
 pub mod public_key_gossip;
