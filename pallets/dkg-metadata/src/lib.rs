@@ -1169,6 +1169,14 @@ pub mod pallet {
 										.unwrap_or_default();
 									Self::update_next_keygen_threshold(new_val);
 									PendingKeygenThreshold::<T>::put(new_val);
+
+									if NextSignatureThreshold::<T>::get() >= NextKeygenThreshold::<T>::get() {
+										// drop signature threshold
+									}
+
+									if PendingSignatureThreshold::<T>::get() >= PendingKeygenThreshold::<T>::get() {
+										// drop signature threshold	
+									}
 								}
 							}
 						}
