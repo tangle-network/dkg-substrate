@@ -986,7 +986,7 @@ where
 			let test_harness_mode = self.test_bundle.is_some();
 
 			if queued_keygen_finished && !test_harness_mode {
-				self.logger.debug(format!("🕸️  QUEUED KEYGEN FINISHED: EXITING"));
+				self.logger.debug("🕸️  QUEUED KEYGEN FINISHED: EXITING".to_string());
 				return
 			}
 
