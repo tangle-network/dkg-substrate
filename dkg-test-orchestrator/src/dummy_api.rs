@@ -691,7 +691,7 @@ impl
 		Ok(0)
 	}
 
-	fn should_execute_new_keygen(&self, _: H256) -> ApiResult<bool> {
-		Ok(true)
+	fn should_execute_new_keygen(&self, _: H256) -> ApiResult<(bool, bool)> {
+		Ok((true, true))
 	}
 }
