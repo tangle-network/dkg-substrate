@@ -14,21 +14,20 @@
 
 use crate::{
 	debug_logger::DebugLogger, storage::proposals::generate_delayed_submit_at,
-	worker::MAX_SUBMISSION_DELAY, Client,
+	worker::MAX_SUBMISSION_DELAY,
 };
 use codec::Encode;
 use dkg_primitives::types::{DKGError, SessionId};
 use dkg_runtime_primitives::{
-	crypto::AuthorityId,
 	offchain::storage_keys::{
 		AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS, SUBMIT_GENESIS_KEYS_AT,
 		SUBMIT_KEYS_AT,
 	},
-	AggregatedPublicKeys, DKGApi, MaxAuthorities,
+	AggregatedPublicKeys,
 };
 use sc_client_api::Backend;
 use sp_api::offchain::{OffchainStorage, STORAGE_PREFIX};
-use sp_runtime::traits::{Block, Get, Header, NumberFor};
+use sp_runtime::traits::{Block, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
 /// stores genesis or next aggregated public keys offchain

@@ -15,13 +15,12 @@ use crate::{
 	debug_logger::DebugLogger,
 	utils::find_index,
 	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
-	Client,
 };
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposals,
+	AuthoritySet, OffchainSignedProposals,
 };
 use parking_lot::RwLock;
 use rand::Rng;

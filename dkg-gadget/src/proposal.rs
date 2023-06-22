@@ -13,21 +13,20 @@ use std::sync::Arc;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use crate::{debug_logger::DebugLogger, Client};
+use crate::debug_logger::DebugLogger;
 use codec::Encode;
 use dkg_primitives::types::{DKGError, DKGSignedPayload};
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGApi, DKGPayloadKey,
-	RefreshProposalSigned,
+	offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG, DKGPayloadKey, RefreshProposalSigned,
 };
 use sc_client_api::Backend;
 use sp_api::offchain::STORAGE_PREFIX;
 use sp_core::offchain::OffchainStorage;
-use sp_runtime::traits::{Block, Get, Header};
+use sp_runtime::traits::{Block, Get};
 use webb_proposals::{Proposal, ProposalKind};
 
 /// Get signed proposal
-pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
+pub(crate) fn get_signed_proposal<B, BE, MaxProposalLength>(
 	backend: &Arc<BE>,
 	finished_round: DKGSignedPayload,
 	payload_key: DKGPayloadKey,
@@ -36,16 +35,7 @@ pub(crate) fn get_signed_proposal<B, C, BE, MaxProposalLength, MaxAuthorities>(
 where
 	B: Block,
 	BE: Backend<B>,
-	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<
-		B,
-		AuthorityId,
-		<<B as Block>::Header as Header>::Number,
-		MaxProposalLength,
-		MaxAuthorities,
-	>,
 {
 	match payload_key {
 		DKGPayloadKey::RefreshVote(nonce) => {

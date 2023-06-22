@@ -220,7 +220,7 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Ok(Some(proposal)) = get_signed_proposal::<B, C, BE, MaxProposalLength, MaxAuthorities>(
+		if let Ok(Some(proposal)) = get_signed_proposal::<B, BE, MaxProposalLength>(
 			&self.backend,
 			finished_round,
 			payload_key,
@@ -262,7 +262,7 @@ where
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
-		gossip_public_key::<B, C, BE, GE>(
+		gossip_public_key::<GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
 			&mut self.aggregated_public_keys.write(),

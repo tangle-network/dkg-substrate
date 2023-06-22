@@ -125,25 +125,15 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE, GE>(
+pub(crate) fn gossip_public_key<GE>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
 	msg: DKGPublicKeyMessage,
 ) where
-	B: Block,
-	BE: Backend<B>,
 	GE: GossipEngineIface,
-	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<
-		B,
-		AuthorityId,
-		<<B as Block>::Header as Header>::Number,
-		MaxProposalLength,
-		MaxAuthorities,
-	>,
 {
 	let public = key_store.get_authority_public_key();
 
