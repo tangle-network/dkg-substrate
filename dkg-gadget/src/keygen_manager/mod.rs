@@ -51,7 +51,6 @@ pub enum KeygenState {
 	Uninitialized,
 	RunningKeygen,
 	RunningGenesisKeygen,
-	GenesisKeygenCompleted,
 	// session_completed denotes the session that executed the keygen, NOT
 	// the generated DKG public key for the next session
 	KeygenCompleted { session_completed: u64 },
@@ -105,6 +104,7 @@ where
 		self.keygen_state.store(state, Ordering::SeqCst);
 	}
 
+	#[allow(clippy::needless_return)]
 	pub async fn on_block_finalized(
 		&self,
 		header: &B::Header,
@@ -114,7 +114,6 @@ where
 		let now: u64 = now_n.saturated_into();
 		let current_protocol = self.session_id_of_active_keygen(now_n);
 		let state = self.state();
-		let test_harness_mode = dkg_worker.test_bundle.is_some();
 		dkg_worker.logger.debug(format!(
 			"*** KeygenManager on_block_finalized: now={now}, state={state:?}, current_protocol={current_protocol:?}",
 		));
@@ -144,12 +143,6 @@ where
 			return
 		}
 
-		if now == GENESIS_AUTHORITY_SET_ID && state == KeygenState::GenesisKeygenCompleted {
-			return self
-				.maybe_start_keygen_for_stage(KeygenRound::GenesisNext, header, dkg_worker)
-				.await
-		}
-
 		if now == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
 			// if we are at genesis, and there is an active keygen, do nothing
 			return
@@ -168,10 +161,7 @@ where
 		*/
 
 		// check bad states. These should never happen in a well-behaved program
-
-		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::GenesisKeygenCompleted ||
-			state == KeygenState::RunningGenesisKeygen && !test_harness_mode
-		{
+		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
 			dkg_worker.logger.error(format!("Invalid keygen manager state: {now} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
 			return
 		}
@@ -191,26 +181,20 @@ where
 			return
 		}
 
-		if now > GENESIS_AUTHORITY_SET_ID &&
-			matches!(
-				state,
-				KeygenState::KeygenCompleted { .. } | KeygenState::GenesisKeygenCompleted
-			) {
+		if now > GENESIS_AUTHORITY_SET_ID && matches!(state, KeygenState::KeygenCompleted { .. }) {
+			// TODO: don't do session_completed + 1 == now check, since the maybe_start_keygen
+			// function will handle this via the session progress check. the +1 is completely
+			// irrelevant
 			let session_completed = match state {
 				KeygenState::KeygenCompleted { session_completed } => session_completed,
-				KeygenState::GenesisKeygenCompleted => 0,
 				_ => unreachable!("We already checked this case above"),
 			};
 
-			if session_completed + 1 == now {
+			if session_completed < now {
 				// we need to start a keygen for session `now`:
 				return self
 					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
 					.await
-			}
-
-			if session_completed == now {
-				dkg_worker.logger.info("We are complete with the current session's keygen. The job manager will handle cleanup")
 			}
 		}
 	}
@@ -293,9 +277,7 @@ where
 					// update states
 					match stage {
 						KeygenRound::Genesis => self.set_state(KeygenState::RunningGenesisKeygen),
-
-						KeygenRound::GenesisNext | KeygenRound::Next =>
-							self.set_state(KeygenState::RunningKeygen),
+						KeygenRound::Next => self.set_state(KeygenState::RunningKeygen),
 					}
 
 					self.latest_executed_session_id.store(Some(session_id), Ordering::Relaxed);

@@ -407,12 +407,7 @@ where
 				let keygen_manager = self.keygen_manager.clone();
 				let status = match stage {
 					ProtoStageType::KeygenGenesis => KeygenRound::Genesis,
-					ProtoStageType::KeygenStandard =>
-						if session_id == GENESIS_AUTHORITY_SET_ID {
-							KeygenRound::GenesisNext
-						} else {
-							KeygenRound::Next
-						},
+					ProtoStageType::KeygenStandard => KeygenRound::Next,
 					ProtoStageType::Signing { .. } => {
 						unreachable!("Should not happen here")
 					},
@@ -429,20 +424,10 @@ where
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
-									match stage {
-										ProtoStageType::KeygenGenesis => {
-											keygen_manager
-												.set_state(KeygenState::GenesisKeygenCompleted);
-										},
-										ProtoStageType::KeygenStandard => {
-											keygen_manager.set_state(
-												KeygenState::KeygenCompleted {
-													session_completed: session_id,
-												},
-											);
-										},
-										_ => {},
-									}
+									keygen_manager.set_state(KeygenState::KeygenCompleted {
+										session_completed: session_id,
+									});
+
 									logger.info(
 										"The keygen meta handler has executed successfully"
 											.to_string(),

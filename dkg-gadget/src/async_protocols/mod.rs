@@ -273,8 +273,6 @@ impl OfflinePartyId {
 pub enum KeygenRound {
 	/// Executed at the beginning of session 0
 	Genesis,
-	/// Executed at the end of session 0
-	GenesisNext,
 	/// Executed at the beginning of each session i > 0
 	Next,
 }
@@ -359,7 +357,6 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 			} => {
 				let ty = match ty {
 					KeygenRound::Genesis => "GENESIS",
-					KeygenRound::GenesisNext => "GENESIS_NEXT",
 					KeygenRound::Next => "NEXT",
 				};
 				let keygen_protocol_hash = hex::encode(keygen_protocol_hash);
