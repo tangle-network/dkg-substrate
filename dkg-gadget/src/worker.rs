@@ -886,7 +886,6 @@ where
 		}
 
 		// Attempt to enact new DKG authorities if sessions have changed
-
 		// The Steps for enacting new DKG authorities are:
 		// 1. Check if the DKG Public Key are not yet set on chain (or not yet generated)
 		// 2. if yes, we start enacting authorities on genesis flow.
