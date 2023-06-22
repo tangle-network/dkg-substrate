@@ -202,7 +202,7 @@ where
 		local_keystore,
 		network: Some(network),
 		test_bundle: None,
-		_marker: PhantomData::default(),
+		_marker: PhantomData,
 	};
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);

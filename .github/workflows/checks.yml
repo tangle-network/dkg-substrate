@@ -46,5 +46,5 @@ jobs:
       - name: Run Linters
         run: |
           sudo apt-get install protobuf-compiler &&
-          cargo +nightly fmt --all -- --check &&
+          cargo fmt --all -- --check &&
           cargo clippy -Zunstable-options -- -D warnings -D clippy::unwrap_used

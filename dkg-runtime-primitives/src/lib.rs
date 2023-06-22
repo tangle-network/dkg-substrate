@@ -320,8 +320,9 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Returns true if we should execute an new keygen.
-		fn should_execute_new_keygen() -> bool;
+		/// Returns (true, false) if we should execute a new keygen.
+		/// Returns (true, true) if we should execute a forced new keygen.
+		fn should_execute_new_keygen() -> (bool, bool);
 	}
 }
 

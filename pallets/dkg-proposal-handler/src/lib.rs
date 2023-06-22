@@ -415,7 +415,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
 		#[pallet::call_index(0)]
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
@@ -490,7 +490,7 @@ pub mod pallet {
 		/// There are certain proposals we'd like to be proposable only
 		/// through root actions. The currently supported proposals are
 		/// 	1. Updating
-		#[pallet::weight(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		#[pallet::call_index(1)]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
@@ -517,6 +517,29 @@ pub mod pallet {
 			} else {
 				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
+		}
+
+		/// Force remove an unsigned proposal from the queue
+		#[pallet::weight(<T as Config>::WeightInfo::force_remove_unsigned_proposal())]
+		#[pallet::call_index(2)]
+		pub fn force_remove_unsigned_proposal(
+			origin: OriginFor<T>,
+			typed_chain_id: TypedChainId,
+			key: DKGPayloadKey,
+		) -> DispatchResultWithPostInfo {
+			// Call must come from root (likely from a democracy proposal passing)
+			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(typed_chain_id, key),
+				Error::<T>::ProposalDoesNotExists
+			);
+			UnsignedProposalQueue::<T>::remove(typed_chain_id, key);
+			Self::deposit_event(Event::<T>::ProposalRemoved {
+				target_chain: typed_chain_id,
+				key,
+				expired: false,
+			});
+			Ok(().into())
 		}
 	}
 
