@@ -364,8 +364,8 @@ pub mod pallet {
 			// reset the `ShouldExecuteNewKeygen` flag if it is set to true.
 			// this is done to ensure that the flag is reset and only read once per DKG
 			// `on_finality_notification` call.
-			if ShouldExecuteNewKeygen::<T>::get() {
-				ShouldExecuteNewKeygen::<T>::put(false);
+			if let (true, _) = ShouldExecuteNewKeygen::<T>::get() {
+				ShouldExecuteNewKeygen::<T>::put((false, false))
 			}
 
 			// Our goal is to trigger the ShouldExecuteNewKeygen if either of the two conditions are
@@ -378,7 +378,8 @@ pub mod pallet {
 				blocks_passed_since_last_session_rotation % 10u32.into() == 0u32.into()
 			{
 				// lets set the ShouldStartDKG to true
-				ShouldExecuteNewKeygen::<T>::put(true);
+				// we dont set force_keygen to true, that is reserved for emergency rotate
+				ShouldExecuteNewKeygen::<T>::put((true, false));
 			}
 
 			// Check if we shall refresh the DKG.
@@ -427,7 +428,8 @@ pub mod pallet {
 	/// Should we start a new Keygen
 	#[pallet::storage]
 	#[pallet::getter(fn should_execute_new_keygen)]
-	pub type ShouldExecuteNewKeygen<T: Config> = StorageValue<_, bool, ValueQuery>;
+	// Should execute new keygen -> (should_execute, force_new_keygen)
+	pub type ShouldExecuteNewKeygen<T: Config> = StorageValue<_, (bool, bool), ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -1083,7 +1085,7 @@ pub mod pallet {
 				MisbehaviourType::Sign => Self::signature_threshold(),
 			};
 
-			if valid_reporters.len() >= signature_threshold.into() {
+			if valid_reporters.len() > signature_threshold.into() {
 				// Deduct one point for misbehaviour report
 				let reputation = AuthorityReputations::<T>::get(&offender);
 				// Compute reputation impact and apply to the offender
@@ -1361,8 +1363,8 @@ pub mod pallet {
 			NextPublicKeySignature::<T>::kill();
 			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
-			// trigger the keygen protocol.
-			<ShouldExecuteNewKeygen<T>>::put(true);
+			// trigger the keygen protocol, activate force_keygen rotation
+			<ShouldExecuteNewKeygen<T>>::put((true, true));
 			Ok(().into())
 		}
 	}

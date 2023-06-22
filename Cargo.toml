@@ -20,6 +20,7 @@ members = [
 	'dkg-mock-blockchain',
 	'dkg-test-orchestrator'
 ]
+resolver = "2"
 
 [workspace.dependencies]
 # Local dependencies

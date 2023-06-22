@@ -32,7 +32,7 @@ use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{collections::HashMap, sync::Arc};
 
 /// stores genesis or next aggregated public keys offchain
-pub(crate) fn store_aggregated_public_keys<B, C, BE, MaxProposalLength>(
+pub(crate) fn store_aggregated_public_keys<B, BE>(
 	backend: &Arc<BE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
 	is_genesis_round: bool,
@@ -43,15 +43,6 @@ pub(crate) fn store_aggregated_public_keys<B, C, BE, MaxProposalLength>(
 where
 	B: Block,
 	BE: Backend<B>,
-	C: Client<B, BE>,
-	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<
-		B,
-		AuthorityId,
-		<<B as Block>::Header as Header>::Number,
-		MaxProposalLength,
-		MaxAuthorities,
-	>,
 {
 	let maybe_offchain = backend.offchain_storage();
 	if maybe_offchain.is_none() {

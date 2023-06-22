@@ -269,6 +269,12 @@ pub enum ProtoStageType {
 	Signing { unsigned_proposal_hash: [u8; 32] },
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct AnticipatedKeygenExecutionStatus {
+	pub execute: bool,
+	pub force_execute: bool,
+}
+
 impl<B, BE, C, GE> DKGWorker<B, BE, C, GE>
 where
 	B: Block,
@@ -691,7 +697,6 @@ where
 		}
 
 		// Attempt to enact new DKG authorities if sessions have changed
-
 		// The Steps for enacting new DKG authorities are:
 		// 1. Check if the DKG Public Key are not yet set on chain (or not yet generated)
 		// 2. if yes, we start enacting authorities on genesis flow.
@@ -1083,13 +1088,19 @@ where
 			.collect())
 	}
 
-	pub async fn should_execute_new_keygen(&self, header: &B::Header) -> bool {
+	pub async fn should_execute_new_keygen(
+		&self,
+		header: &B::Header,
+	) -> AnticipatedKeygenExecutionStatus {
 		// query runtime api to check if we should execute new keygen.
 		let at = header.hash();
-		self.exec_client_function(move |client| {
-			client.runtime_api().should_execute_new_keygen(at).unwrap_or_default()
-		})
-		.await
+		let (execute, force_execute) = self
+			.exec_client_function(move |client| {
+				client.runtime_api().should_execute_new_keygen(at).unwrap_or_default()
+			})
+			.await;
+
+		AnticipatedKeygenExecutionStatus { execute, force_execute }
 	}
 
 	/// Wraps the call in a SpawnBlocking task

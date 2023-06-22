@@ -261,6 +261,44 @@ pub fn make_proposal<const N: usize>(
 }
 
 #[test]
+fn test_invalid_proposal_is_rejected() {
+	let typed_chain_id = TypedChainId::Evm(1);
+	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");
+
+	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
+		let prop_id = ProposalNonce::from(1u32);
+		let proposal = Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: vec![].try_into().unwrap(),
+		};
+
+		// The proposal is invalid and should be rejected
+		assert_noop!(
+			DKGProposals::acknowledge_proposal(
+				RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
+				prop_id,
+				typed_chain_id,
+				r_id,
+				proposal.clone(),
+			),
+			Error::<Test>::InvalidProposal
+		);
+
+		// The proposal is invalid and should be rejected
+		assert_noop!(
+			DKGProposals::reject_proposal(
+				RuntimeOrigin::signed(mock_pub_key(PROPOSER_A)),
+				prop_id,
+				typed_chain_id,
+				r_id,
+				proposal,
+			),
+			Error::<Test>::InvalidProposal
+		);
+	});
+}
+
+#[test]
 fn create_successful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
 	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 0x0100, b"remark");

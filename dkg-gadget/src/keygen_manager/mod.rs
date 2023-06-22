@@ -125,7 +125,7 @@ where
 			));
 			dkg_worker
 				.logger
-				.debug(format!("*** Should execute new keygen? {should_execute_new_keygen}"));
+				.debug(format!("*** Should execute new keygen? {should_execute_new_keygen:?}"));
 
 			/*
 			   Session 0 (beginning): immediately run genesis
@@ -226,7 +226,9 @@ where
 
 		if stage != KeygenRound::Genesis {
 			// we need to ensure session progress is close enough to the end to begin execution
-			if !dkg_worker.should_execute_new_keygen(header).await {
+			let anticipated_execution_status = dkg_worker.should_execute_new_keygen(header).await;
+			if !anticipated_execution_status.execute && !anticipated_execution_status.force_execute
+			{
 				dkg_worker.logger.debug("🕸️  Not executing new keygen protocol");
 				return
 			}

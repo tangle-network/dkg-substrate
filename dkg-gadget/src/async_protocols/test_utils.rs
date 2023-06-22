@@ -44,7 +44,7 @@ impl BlockchainInterface for TestDummyIface {
 		&self,
 		message: SignedDKGMessage<Public>,
 	) -> Result<DKGMessage<Public>, DKGError> {
-		Ok(message.msg.clone())
+		Ok(message.msg)
 	}
 
 	fn sign_and_send_msg(&self, unsigned_msg: DKGMessage<Public>) -> Result<(), DKGError> {

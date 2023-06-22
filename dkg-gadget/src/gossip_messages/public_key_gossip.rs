@@ -105,7 +105,7 @@ where
 			0;
 
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
-			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
+			store_aggregated_public_keys::<B, BE>(
 				&dkg_worker.backend,
 				&mut lock,
 				is_genesis_round,
