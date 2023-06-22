@@ -91,18 +91,29 @@ benchmarks! {
 	}
 
 	force_submit_unsigned_proposal {
-
 		let buf = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 38, 87, 136, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].to_vec();
 
 		let proposal = Proposal::Unsigned {
 			kind: ProposalKind::TokenAdd,
 			data: buf.try_into().unwrap()
 		};
-
 	}: _(RawOrigin::Root, proposal)
-
 	verify {
 		assert!(Pallet::<T>::get_unsigned_proposals().len() == 1);
+	}
+
+	force_remove_unsigned_proposal {
+		let buf = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 38, 87, 136, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].to_vec();
+		let proposal = Proposal::Unsigned {
+			kind: ProposalKind::TokenAdd,
+			data: buf.try_into().unwrap()
+		};
+		Pallet::<T>::force_submit_unsigned_proposal(RawOrigin::Root.into(), proposal.clone()).unwrap();
+		assert!(Pallet::<T>::get_unsigned_proposals().len() == 1);
+		let prop_identifier = decode_proposal_identifier(&proposal).unwrap();
+	}: _(RawOrigin::Root, prop_identifier.typed_chain_id, prop_identifier.key)
+	verify {
+		assert!(Pallet::<T>::get_unsigned_proposals().len() == 0);
 	}
 
 }

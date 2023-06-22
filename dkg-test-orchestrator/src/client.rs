@@ -12,6 +12,7 @@ use sc_utils::mpsc::*;
 use sp_api::{offchain::storage::InMemOffchainStorage, BlockT, ProvideRuntimeApi};
 
 use crate::dummy_api::*;
+use dkg_gadget::worker::TestClientPayload;
 use sp_runtime::testing::H256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::ToSocketAddrs, sync::mpsc::UnboundedReceiver};
@@ -47,7 +48,7 @@ impl TestClient {
 		mock_bc_addr: T,
 		peer_id: PeerId,
 		api: DummyApi,
-		mut from_dkg_worker: UnboundedReceiver<(uuid::Uuid, Result<(), String>)>,
+		mut from_dkg_worker: UnboundedReceiver<TestClientPayload>,
 		latest_test_uuid: Arc<RwLock<Option<Uuid>>>,
 		logger: DebugLogger,
 	) -> std::io::Result<Self> {
@@ -60,8 +61,14 @@ impl TestClient {
 
 		let this = TestClient {
 			inner: TestClientState {
-				finality_stream: Arc::new(MultiSubscribableStream::new("finality_stream")),
-				import_stream: Arc::new(MultiSubscribableStream::new("import_stream")),
+				finality_stream: Arc::new(MultiSubscribableStream::new(
+					"finality_stream",
+					logger.clone(),
+				)),
+				import_stream: Arc::new(MultiSubscribableStream::new(
+					"import_stream",
+					logger.clone(),
+				)),
 				api,
 				offchain_storage: Default::default(),
 				local_test_cases: Arc::new(Mutex::new(Default::default())),
@@ -71,14 +78,18 @@ impl TestClient {
 		let _this_for_dkg_listener = this.clone();
 		let logger0 = logger.clone();
 		let dkg_worker_listener = async move {
-			while let Some((trace_id, result)) = from_dkg_worker.recv().await {
+			while let Some((trace_id, result, pub_key)) = from_dkg_worker.recv().await {
 				logger0.info(format!(
 					"The client {peer_id:?} has finished test {trace_id:?}. Result: {result:?}"
 				));
 
-				let packet = ProtocolPacket::ClientToBlockchain {
-					event: MockClientResponse { result, trace_id },
+				let event = if let Some(pub_key) = pub_key {
+					MockClientResponse::Keygen { result, trace_id, pub_key }
+				} else {
+					MockClientResponse::Sign { result, trace_id }
 				};
+
+				let packet = ProtocolPacket::ClientToBlockchain { event };
 				tx0.lock().await.send(packet).await.unwrap();
 			}
 
@@ -90,6 +101,7 @@ impl TestClient {
 			logger
 				.info(format!("Complete: orchestrator<=>DKG communications for peer {peer_id:?}"));
 			while let Some(packet) = rx.next().await {
+				logger.info("Received a packet");
 				match packet {
 					ProtocolPacket::InitialHandshake => {
 						// pong back the handshake response
@@ -109,6 +121,7 @@ impl TestClient {
 									.local_test_cases
 									.lock()
 									.insert(trace_id, None);
+								logger.info("Passing finality notification to the client");
 								this_for_orchestrator_rx.inner.finality_stream.send(notification);
 							},
 							MockBlockchainEvent::ImportNotification { notification } => {
@@ -117,6 +130,7 @@ impl TestClient {
 									.local_test_cases
 									.lock()
 									.insert(trace_id, None);
+								logger.info("Passing import notification to the client");
 								this_for_orchestrator_rx.inner.import_stream.send(notification);
 							},
 						}
@@ -147,12 +161,13 @@ impl TestClient {
 // to arbitrarily subscribe to the stream and receive all events.
 pub struct MultiSubscribableStream<T> {
 	inner: parking_lot::RwLock<Vec<TracingUnboundedSender<T>>>,
+	logger: DebugLogger,
 	tag: &'static str,
 }
 
 impl<T: Clone> MultiSubscribableStream<T> {
-	pub fn new(tag: &'static str) -> Self {
-		Self { inner: parking_lot::RwLock::new(vec![]), tag }
+	pub fn new(tag: &'static str, logger: DebugLogger) -> Self {
+		Self { inner: parking_lot::RwLock::new(vec![]), tag, logger }
 	}
 
 	pub fn subscribe(&self) -> TracingUnboundedReceiver<T> {
@@ -164,9 +179,17 @@ impl<T: Clone> MultiSubscribableStream<T> {
 
 	pub fn send(&self, t: T) {
 		let mut lock = self.inner.write();
+
+		if lock.is_empty() {
+			self.logger.error("No subscribers to send to");
+		}
+
 		assert!(!lock.is_empty());
+		let count_init = lock.len();
 		// receiver will naturally drop when no longer used.
-		lock.retain(|tx| tx.unbounded_send(t.clone()).is_ok())
+		lock.retain(|tx| tx.unbounded_send(t.clone()).is_ok());
+		let diff = count_init - lock.len();
+		self.logger.info(format!("Dropped {diff} subscribers (init: {count_init}"));
 	}
 }
 

@@ -61,7 +61,9 @@ use self::{
 	state_machine::StateMachineHandler, state_machine_wrapper::StateMachineWrapper,
 };
 use crate::{debug_logger::DebugLogger, utils::SendFuture, worker::KeystoreExt, DKGKeystore};
+use dkg_logging::debug_logger::AsyncProtocolType;
 use incoming::IncomingAsyncProtocolWrapper;
+use multi_party_ecdsa::MessageRoundID;
 
 pub struct AsyncProtocolParameters<
 	BI: BlockchainInterface,
@@ -73,6 +75,7 @@ pub struct AsyncProtocolParameters<
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
+	pub associated_block_id: u64,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -116,13 +119,8 @@ impl<
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> AsyncProtocolParameters<BI, MaxAuthorities>
 {
-	pub fn get_next_batch_key<
-		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	>(
-		&self,
-		batch: &[UnsignedProposal<MaxProposalLength>],
-	) -> BatchKey {
-		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: batch.len() }
+	pub fn get_next_batch_key(&self) -> BatchKey {
+		BatchKey { id: self.batch_id_gen.fetch_add(1, Ordering::SeqCst), len: 1 }
 	}
 }
 
@@ -138,6 +136,7 @@ impl<
 			engine: self.engine.clone(),
 			keystore: self.keystore.clone(),
 			current_validator_set: self.current_validator_set.clone(),
+			associated_block_id: self.associated_block_id,
 			best_authorities: self.best_authorities.clone(),
 			authority_public_key: self.authority_public_key.clone(),
 			party_i: self.party_i,
@@ -291,23 +290,34 @@ pub enum ProtocolType<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::f
 		i: KeygenPartyId,
 		t: u16,
 		n: u16,
+		associated_block_id: u64,
 	},
 	Offline {
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
 		s_l: Vec<KeygenPartyId>,
 		local_key: Arc<LocalKey<Secp256k1>>,
+		associated_block_id: u64,
 	},
 	Voting {
 		offline_stage: Arc<CompletedOfflineStage>,
 		unsigned_proposal: Arc<UnsignedProposal<MaxProposalLength>>,
 		i: OfflinePartyId,
+		associated_block_id: u64,
 	},
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static>
 	ProtocolType<MaxProposalLength>
 {
+	pub const fn get_associated_block_id(&self) -> u64 {
+		match self {
+			Self::Keygen { associated_block_id, .. } |
+			Self::Offline { associated_block_id, .. } |
+			Self::Voting { associated_block_id, .. } => *associated_block_id,
+		}
+	}
+
 	pub const fn get_i(&self) -> u16 {
 		match self {
 			Self::Keygen { i, .. } => i.0,
@@ -322,6 +332,10 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 			_ => None,
 		}
 	}
+
+	pub fn get_unsigned_proposal_hash(&self) -> Option<[u8; 32]> {
+		self.get_unsigned_proposal().and_then(|x| x.hash())
+	}
 }
 
 impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Debug> Debug
@@ -329,13 +343,13 @@ impl<MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'stat
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ProtocolType::Keygen { ty, i, t, n } => {
+			ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id } => {
 				let ty = match ty {
 					KeygenRound::ACTIVE => "ACTIVE",
 					KeygenRound::QUEUED => "QUEUED",
 					KeygenRound::UNKNOWN => "UNKNOWN",
 				};
-				write!(f, "{ty} | Keygen: (i, t, n) = ({i}, {t}, {n})")
+				write!(f, "{ty} | Keygen: (i, t, n, r) = ({i}, {t}, {n}, {associated_round_id:?})")
 			},
 			ProtocolType::Offline { i, unsigned_proposal, .. } => {
 				write!(f, "Offline: (i, proposal) = ({}, {:?})", i, &unsigned_proposal.proposal)
@@ -375,13 +389,11 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 	sm: SM,
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	channel_type: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
-	<SM as StateMachine>::MessageBody: Send,
-	<SM as StateMachine>::MessageBody: Serialize,
+	<SM as StateMachine>::MessageBody: Send + Serialize + MessageRoundID,
 	<SM as StateMachine>::Output: Send,
 {
 	let (incoming_tx_proto, incoming_rx_proto) = SM::generate_channel();
@@ -412,9 +424,7 @@ where
 			logger.info(format!("Running AsyncProtocol with party_index: {}", params.party_i));
 			let res = async_proto.run().await;
 			match res {
-				Ok(v) =>
-					return SM::on_finish(v, params_for_end_of_proto, additional_param, async_index)
-						.await,
+				Ok(v) => return SM::on_finish(v, params_for_end_of_proto, additional_param).await,
 				Err(err) => match err {
 					async_runtime::Error::Recv(e) |
 					async_runtime::Error::Proceed(e) |
@@ -469,7 +479,6 @@ where
 		params.clone(),
 		outgoing_rx,
 		channel_type.clone(),
-		async_index,
 		status,
 	);
 
@@ -483,17 +492,17 @@ where
 
 	// Spawn the 3 tasks
 	// 1. The inbound task (we will abort that task if the protocol finished)
-	let handle = tokio::spawn(inbound_signed_message_receiver);
+	let handle =
+		crate::utils::ExplicitPanicFuture::new(tokio::spawn(inbound_signed_message_receiver));
 	// 2. The outbound task (will stop if the protocol finished, after flushing the messages to the
 	// network.)
-	let handle2 = tokio::spawn(outgoing_to_wire);
+	let handle2 = crate::utils::ExplicitPanicFuture::new(tokio::spawn(outgoing_to_wire));
 	// 3. The async protocol itself
 	let protocol = async move {
 		let res = async_proto.await;
 		params
 			.logger
 			.info(format!("🕸️  Protocol {:?} Ended: {:?}", channel_type.clone(), res));
-		// Abort the inbound task
 		handle.abort();
 		// Wait for the outbound task to finish
 		// TODO: We should probably have a timeout here, and if the outbound task doesn't finish
@@ -515,16 +524,16 @@ fn generate_outgoing_to_wire_fn<
 	params: AsyncProtocolParameters<BI, MaxAuthorities>,
 	outgoing_rx: UnboundedReceiver<Msg<<SM as StateMachine>::MessageBody>>,
 	proto_ty: ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
-	async_index: u8,
 	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
 where
-	<SM as StateMachine>::MessageBody: Serialize,
+	<SM as StateMachine>::MessageBody: Serialize + Send + MessageRoundID,
 	<SM as StateMachine>::MessageBody: Send,
 	<SM as StateMachine>::Output: Send,
 {
 	Box::pin(async move {
 		let mut outgoing_rx = outgoing_rx.fuse();
+		let unsigned_proposal_hash = proto_ty.get_unsigned_proposal_hash();
 		// take all unsigned messages, then sign them and send outbound
 		loop {
 			// Here is a few explanations about the next few lines:
@@ -540,10 +549,13 @@ where
 				},
 			};
 
+			let msg_hash = crate::debug_logger::message_to_string_hash(&unsigned_message);
+
 			params.logger.info(format!(
-				"Async proto sent outbound request in session={} from={:?} to={:?} | (ty: {:?})",
-				params.session_id, unsigned_message.sender, unsigned_message.receiver, &proto_ty
+				"Async proto about to send outbound message in session={} from={:?} to={:?} for round {:?}| (ty: {:?})",
+				params.session_id, unsigned_message.sender, unsigned_message.receiver, unsigned_message.body.round_id(), &proto_ty
 			));
+
 			let party_id = unsigned_message.sender;
 			let serialized_body = match serde_json::to_vec(&unsigned_message) {
 				Ok(value) => value,
@@ -564,13 +576,19 @@ where
 						.expect("message receiver should be a valid KeygenPartyId");
 					// try to find the authority id in the list of authorities by the
 					// KeygenPartyId
-					params.best_authorities.iter().find_map(|(id, p)| {
+					let ret = params.best_authorities.iter().find_map(|(id, p)| {
 						if id == &keygen_party_id {
 							Some(p.clone())
 						} else {
 							None
 						}
-					})
+					});
+					if ret.is_none() {
+						params.logger.error(format!(
+							"Failed to find authority id for KeygenPartyId={keygen_party_id:?}"
+						));
+					}
+					ret
 				},
 				None => None,
 			};
@@ -587,7 +605,8 @@ where
 						),
 						signer_set_id: party_id as u64,
 						offline_msg: serialized_body,
-						async_index,
+						unsigned_proposal_hash: unsigned_proposal_hash
+							.expect("Cannot hash unsigned proposal!"),
 					}),
 				_ => {
 					unreachable!(
@@ -598,6 +617,7 @@ where
 
 			let id = params.authority_public_key.as_ref().clone();
 			let unsigned_dkg_message = DKGMessage {
+				associated_block_id: params.associated_block_id,
 				sender_id: id,
 				recipient_id: maybe_recipient_id,
 				status,
@@ -612,11 +632,24 @@ where
 				params
 					.logger
 					.info(format!("🕸️  Async proto sent outbound message: {:?}", &proto_ty));
+				params.logger.round_event(
+					&proto_ty,
+					crate::RoundsEventType::SentMessage {
+						session: params.session_id as _,
+						round: unsigned_message.body.round_id() as _,
+						sender: unsigned_message.sender as _,
+						receiver: unsigned_message.receiver as _,
+						msg_hash,
+					},
+				);
+				params.logger.checkpoint_message(&unsigned_message, "CP0");
 			}
 
 			// check the status of the async protocol.
 			// if it has completed or terminated then break out of the loop.
 			if params.handle.is_completed() || params.handle.is_terminated() {
+				// TODO: consider telling the task running this to shut this off in 1s to allow time
+				// for additional messages to be sent
 				params.logger.debug(
 					"🕸️  Async proto is completed or terminated, breaking out of incoming loop",
 				);
@@ -641,9 +674,14 @@ where
 {
 	Box::pin(async move {
 		// the below wrapper will map signed messages into unsigned messages
-		let incoming = params.handle.broadcaster.subscribe();
+		let incoming = params
+			.handle
+			.rx_keygen_signing
+			.lock()
+			.take()
+			.expect("rx_keygen_signing already taken");
 		let incoming_wrapper =
-			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), &params);
+			IncomingAsyncProtocolWrapper::new(incoming, channel_type.clone(), params.clone());
 		// we use fuse here, since normally, once a stream has returned `None` from calling
 		// `next()` any further calls could exhibit bad behavior such as block forever, panic, never
 		// return, etc. that's why we use fuse here to ensure that it has defined semantics,
@@ -657,6 +695,10 @@ where
 					break
 				},
 			};
+
+			params
+				.logger
+				.checkpoint_message_raw(unsigned_message.body.payload.payload(), "CP-2.5-incoming");
 
 			if SM::handle_unsigned_message(
 				&to_async_proto,
@@ -779,5 +821,19 @@ mod tests {
 		let authority_id =
 			authorities.get(my_keygen_id.to_index()).expect("authority id should exist");
 		assert_eq!(authority_id, &my_authority_id);
+	}
+}
+
+impl<T: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> From<&'_ ProtocolType<T>>
+	for AsyncProtocolType
+{
+	fn from(value: &ProtocolType<T>) -> Self {
+		match value {
+			ProtocolType::Keygen { .. } => AsyncProtocolType::Keygen,
+			ProtocolType::Offline { unsigned_proposal, .. } =>
+				AsyncProtocolType::Signing { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+			ProtocolType::Voting { unsigned_proposal, .. } =>
+				AsyncProtocolType::Voting { hash: unsigned_proposal.hash().unwrap_or([0u8; 32]) },
+		}
 	}
 }

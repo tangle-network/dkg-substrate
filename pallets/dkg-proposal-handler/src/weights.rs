@@ -33,6 +33,7 @@ use core::marker::PhantomData;
 pub trait WeightInfo {
 	fn submit_signed_proposals(n: u32, ) -> Weight;
 	fn force_submit_unsigned_proposal() -> Weight;
+	fn force_remove_unsigned_proposal() -> Weight;
 }
 
 /// Weights for pallet_dkg_proposal_handler using the Substrate node and recommended hardware.
@@ -71,6 +72,16 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 		Weight::from_parts(12_000_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	/// Storage: DKGProposalHandler UnsignedProposalQueue (r:0 w:1)
+	/// Proof: DKGProposalHandler UnsignedProposalQueue (max_values: None, max_size: Some(20052), added: 22527, mode: MaxEncodedLen)
+	fn force_remove_unsigned_proposal() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 12_000_000 picoseconds.
+		Weight::from_parts(12_000_000, 0)
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
 }
 
 // For backwards compatibility and tests
@@ -101,6 +112,16 @@ impl WeightInfo for () {
 	/// Storage: DKGProposalHandler UnsignedProposalQueue (r:0 w:1)
 	/// Proof: DKGProposalHandler UnsignedProposalQueue (max_values: None, max_size: Some(20052), added: 22527, mode: MaxEncodedLen)
 	fn force_submit_unsigned_proposal() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 12_000_000 picoseconds.
+		Weight::from_parts(12_000_000, 0)
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: DKGProposalHandler UnsignedProposalQueue (r:0 w:1)
+	/// Proof: DKGProposalHandler UnsignedProposalQueue (max_values: None, max_size: Some(20052), added: 22527, mode: MaxEncodedLen)
+	fn force_remove_unsigned_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`

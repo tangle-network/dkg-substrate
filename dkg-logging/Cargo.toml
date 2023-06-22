@@ -13,3 +13,10 @@ edition = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 tracing-filter = "0.1.0-alpha.2"
+parking_lot = { workspace = true }
+serde = { workspace = true }
+sp-core = { workspace = true }
+lazy_static = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }

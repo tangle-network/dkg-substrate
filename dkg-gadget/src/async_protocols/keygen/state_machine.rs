@@ -78,7 +78,6 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		local_key: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		_: Self::AdditionalReturnParam,
-		_: u8,
 	) -> Result<<Self as StateMachine>::Output, DKGError> {
 		params.logger.info_keygen("Completed keygen stage successfully!".to_string());
 		// PublicKeyGossip (we need meta handler to handle this)

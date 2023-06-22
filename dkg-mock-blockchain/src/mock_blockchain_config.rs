@@ -18,6 +18,8 @@ pub struct MockBlockchainConfig {
 	pub positive_cases: usize,
 	// a set of error cases
 	pub error_cases: Option<Vec<ErrorCase>>,
+	// the number of unsigned proposals to send per session
+	pub unsigned_proposals_per_session: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

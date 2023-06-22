@@ -4,9 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches:
-      - "**" # matches every branch
-
   workflow_dispatch:
 
 env:
@@ -61,8 +58,6 @@ jobs:
         run: sudo apt-get install protobuf-compiler
 
       - name: Run tests
-        env:
-          CARGO_INCREMENTAL: 1
         run: cargo nextest run
 
       - name: Save Cache

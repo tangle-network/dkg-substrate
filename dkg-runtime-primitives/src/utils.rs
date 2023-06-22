@@ -131,6 +131,13 @@ pub enum SignatureError {
 }
 
 impl SignatureError {
+	pub fn ty(&self) -> &str {
+		match self {
+			Self::InvalidDKGKey(_) => "InvalidDKGKey",
+			Self::InvalidRecovery(_) => "InvalidRecovery",
+			Self::InvalidECDSASignature(_) => "InvalidECDSASignature",
+		}
+	}
 	pub fn expected_public_key(&self) -> Option<Vec<u8>> {
 		match self {
 			Self::InvalidRecovery(v) => Some(v.expected.clone()),

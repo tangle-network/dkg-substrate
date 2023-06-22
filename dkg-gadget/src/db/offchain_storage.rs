@@ -75,7 +75,7 @@ mod keys {
 impl<B, BE> super::DKGDbBackend for DKGOffchainStorageDb<B, BE>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 {
 	fn get_local_key(
 		&self,

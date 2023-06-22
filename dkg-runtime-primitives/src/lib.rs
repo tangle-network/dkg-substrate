@@ -84,17 +84,26 @@ pub type MmrRootHash = H256;
 /// Authority set id starts with zero at genesis
 pub const GENESIS_AUTHORITY_SET_ID: u64 = 0;
 
-/// Gossip message resending limit for outbound messages
-pub const GOSSIP_MESSAGE_RESENDING_LIMIT: u8 = 5;
-
 /// The keygen timeout limit in blocks before we consider misbehaviours
 pub const KEYGEN_TIMEOUT: u32 = 10;
 
-/// The offline timeout limit in blocks before we consider misbehaviours
-pub const OFFLINE_TIMEOUT: u32 = 2;
+/// The sign timeout limit in blocks before we consider proposal as stalled
+pub const SIGN_TIMEOUT: u32 = 10;
 
-/// The sign timeout limit in blocks before we consider misbehaviours
-pub const SIGN_TIMEOUT: u32 = 2;
+/// So long as the associated block id is within this tolerance, we consider the message as
+/// deliverable. This should be less than the SIGN_TIMEOUT
+pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 2) as u64;
+
+pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> bool {
+	// favor explicit logic for readability
+	let is_acceptable_above = received >= expected &&
+		received <= expected.saturating_add(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
+	let is_acceptable_below = received < expected &&
+		received >= expected.saturating_sub(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
+	let is_equal = expected == received;
+
+	is_acceptable_above || is_acceptable_below || is_equal
+}
 
 /// Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
@@ -279,12 +288,12 @@ pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 	#[cfg(feature = "testing")]
 	#[allow(clippy::unwrap_used)] // allow unwraps in tests
-	pub fn testing_dummy() -> Self {
-		let data = BoundedVec::try_from(vec![0, 1, 2]).unwrap();
+	pub fn testing_dummy(data: Vec<u8>) -> Self {
+		let data = BoundedVec::try_from(data).unwrap();
 		Self {
 			typed_chain_id: webb_proposals::TypedChainId::None,
-			key: DKGPayloadKey::RefreshVote(webb_proposals::Nonce(0)),
-			proposal: Proposal::Unsigned { kind: ProposalKind::Refresh, data },
+			key: DKGPayloadKey::AnchorCreateProposal(webb_proposals::Nonce(0)),
+			proposal: Proposal::Unsigned { kind: ProposalKind::AnchorCreate, data },
 		}
 	}
 	pub fn hash(&self) -> Option<[u8; 32]> {
@@ -335,7 +344,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>>;
+		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
 		/// Get maximum delay before which an offchain extrinsic should be submitted
 		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
@@ -350,9 +359,52 @@ sp_api::decl_runtime_apis! {
 		fn next_pub_key_sig() -> Option<Vec<u8>>;
 		/// Get next nonce value for refresh proposal
 		fn refresh_nonce() -> u32;
-		/// Returns true if we should execute an new keygen.
-		fn should_execute_new_keygen() -> bool;
-		/// Returns true if we should execute an proposer set voting protocol.
-		fn should_submit_proposer_set_vote() -> bool;
+		/// Returns (true, false) if we should execute a new keygen.
+		/// Returns (true, true) if we should execute a forced new keygen.
+		fn should_execute_new_keygen() -> (bool, bool);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::{
+		associated_block_id_acceptable, ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE,
+		SIGN_TIMEOUT,
+	};
+
+	#[test]
+	fn assert_value() {
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
+		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
+	}
+
+	#[test]
+	fn test_range_above() {
+		let current_block: u64 = 10;
+		assert!(associated_block_id_acceptable(current_block, current_block));
+		assert!(associated_block_id_acceptable(current_block, current_block + 1));
+		assert!(associated_block_id_acceptable(
+			current_block,
+			current_block + ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE
+		));
+		assert!(!associated_block_id_acceptable(
+			current_block,
+			current_block + ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE + 1
+		));
+	}
+
+	#[test]
+	fn test_range_below() {
+		let current_block: u64 = 10;
+		assert!(associated_block_id_acceptable(current_block, current_block));
+		assert!(associated_block_id_acceptable(current_block, current_block - 1));
+		assert!(associated_block_id_acceptable(
+			current_block,
+			current_block - ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE
+		));
+		assert!(!associated_block_id_acceptable(
+			current_block,
+			current_block - ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE - 1
+		));
 	}
 }

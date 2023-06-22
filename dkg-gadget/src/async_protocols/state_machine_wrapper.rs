@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::{CurrentRoundBlame, ProtocolType};
+use crate::{async_protocols::MessageRoundID, debug_logger::DebugLogger};
 use dkg_primitives::types::SessionId;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::traits::RoundBlame;
 use round_based::{Msg, StateMachine};
 use sp_runtime::traits::Get;
-use std::{collections::HashSet, sync::Arc};
-
-use super::{CurrentRoundBlame, ProtocolType};
-use crate::debug_logger::DebugLogger;
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 pub(crate) struct StateMachineWrapper<
 	T: StateMachine,
@@ -32,10 +31,12 @@ pub(crate) struct StateMachineWrapper<
 	// stores a list of received messages
 	received_messages: HashSet<Vec<u8>>,
 	logger: DebugLogger,
+	#[allow(dead_code)]
+	outgoing_history: Vec<Msg<T::MessageBody>>,
 }
 
 impl<
-		T: StateMachine + RoundBlame,
+		T: StateMachine + RoundBlame + Debug,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	> StateMachineWrapper<T, MaxProposalLength>
 {
@@ -53,65 +54,107 @@ impl<
 			current_round_blame,
 			logger,
 			received_messages: HashSet::new(),
+			outgoing_history: Vec::new(),
 		}
-	}
-
-	fn collect_round_blame(&self) {
-		let (unreceived_messages, blamed_parties) = self.round_blame();
-		let _ = self
-			.current_round_blame
-			.send(CurrentRoundBlame { unreceived_messages, blamed_parties });
 	}
 }
 
 impl<T, MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static> StateMachine
 	for StateMachineWrapper<T, MaxProposalLength>
 where
-	T: StateMachine + RoundBlame,
+	T: StateMachine + RoundBlame + Debug,
 	<T as StateMachine>::Err: std::fmt::Debug,
-	<T as StateMachine>::MessageBody: serde::Serialize,
+	<T as StateMachine>::MessageBody: serde::Serialize + MessageRoundID,
 {
 	type Err = T::Err;
 	type Output = T::Output;
 	type MessageBody = T::MessageBody;
 
 	fn handle_incoming(&mut self, msg: Msg<Self::MessageBody>) -> Result<(), Self::Err> {
+		let (session, round, sender, receiver) =
+			(self.session_id as _, msg.body.round_id() as _, msg.sender as _, msg.receiver as _);
+
 		self.logger.trace(format!(
 			"Handling incoming message for {:?} from session={}, round={}, sender={}",
-			self.channel_type,
-			self.session_id,
-			self.current_round(),
-			msg.sender
+			self.channel_type, session, round, sender
 		));
+		let msg_hash = crate::debug_logger::message_to_string_hash(&msg);
+		self.logger.round_event(
+			&self.channel_type,
+			crate::RoundsEventType::ReceivedMessage {
+				session,
+				round,
+				sender,
+				receiver,
+				msg_hash: msg_hash.clone(),
+			},
+		);
+		self.logger.trace(format!("SM Before: {:?}", &self.sm));
+
+		if round < self.current_round().into() {
+			self.logger.trace(format!(
+				"Message for {:?} from session={}, round={} is outdated, ignoring",
+				self.channel_type, session, round
+			));
+			self.logger.clear_checkpoint_for_message(&msg);
+			return Ok(())
+		}
 
 		// Before passing to the state machine, make sure that we haven't already received the same
 		// message (this is needed as we use a gossiping protocol to send messages, and we don't
 		// want to process the same message twice)
 		let msg_serde = bincode2::serialize(&msg).expect("Failed to serialize message");
-		if self.received_messages.contains(&msg_serde) {
+		if !self.received_messages.insert(msg_serde) {
 			self.logger.trace(format!(
 				"Already received message for {:?} from session={}, round={}, sender={}",
-				self.channel_type,
-				self.session_id,
-				self.current_round(),
-				msg.sender
+				self.channel_type, session, round, sender
 			));
+			self.logger.clear_checkpoint_for_message(&msg);
 			return Ok(())
-		} else {
-			self.received_messages.insert(msg_serde);
 		}
 
-		let result = self.sm.handle_incoming(msg);
+		let result = self.sm.handle_incoming(msg.clone());
 		if let Some(err) = result.as_ref().err() {
 			self.logger.error(format!("StateMachine error: {err:?}"));
+			self.logger.checkpoint_message(&msg, format!("IN-STATE-MACHINE-ERR: {err:?}"))
+		} else {
+			self.logger.round_event(
+				&self.channel_type,
+				crate::RoundsEventType::ProcessedMessage {
+					session,
+					round,
+					sender,
+					receiver,
+					msg_hash,
+				},
+			);
+			self.logger.clear_checkpoint_for_message(&msg);
 		}
 
-		self.collect_round_blame();
+		self.logger.trace(format!("SM After: {:?}", &self.sm));
+
 		result
 	}
 
 	fn message_queue(&mut self) -> &mut Vec<Msg<Self::MessageBody>> {
-		if !self.sm.message_queue().is_empty() {
+		// only send current round + previous round messages if we're running the signing protocol
+		/*
+		if !self.sm.message_queue().is_empty() &&
+			matches!(self.channel_type, ProtocolType::Offline { .. })
+		{
+			// store outgoing messages in history
+			let mut last_2_rounds = vec![];
+			let current_round = self.current_round();
+			let current_round_minus_1 = current_round.saturating_sub(1);
+			self.outgoing_history.extend(self.sm.message_queue().clone());
+			for message in &self.outgoing_history {
+				let message_round = message.body.round_id();
+				if message_round >= current_round_minus_1 && message_round <= current_round {
+					last_2_rounds.push(message.clone());
+				}
+			}
+			// pass all messages in outgoing_history to the state machine
+			*self.sm.message_queue() = last_2_rounds;
 			self.logger.trace(format!(
 				"Preparing to drain message queue for {:?} in session={}, round={}, queue size={}",
 				self.channel_type,
@@ -119,7 +162,8 @@ where
 				self.current_round(),
 				self.sm.message_queue().len(),
 			));
-		}
+		}*/
+
 		self.sm.message_queue()
 	}
 
@@ -140,7 +184,14 @@ where
 			self.current_round(),
 			self.round_blame(),
 		));
-		self.collect_round_blame();
+		self.logger.round_event(
+			&self.channel_type,
+			crate::RoundsEventType::ProceededToRound {
+				session: self.session_id as _,
+				round: self.current_round() as _,
+			},
+		);
+
 		result
 	}
 
@@ -183,6 +234,12 @@ impl<
 	> RoundBlame for StateMachineWrapper<T, MaxProposalLength>
 {
 	fn round_blame(&self) -> (u16, Vec<u16>) {
-		self.sm.round_blame()
+		let (unreceived_messages, blamed_parties) = self.sm.round_blame();
+		self.logger.debug(format!("Not received messages from : {blamed_parties:?}"));
+		let _ = self.current_round_blame.send(CurrentRoundBlame {
+			unreceived_messages,
+			blamed_parties: blamed_parties.clone(),
+		});
+		(unreceived_messages, blamed_parties)
 	}
 }

@@ -13,11 +13,11 @@ import {
 
 async function run() {
 	const api = await ApiPromise.create({
-		provider: new WsProvider('ws://127.0.0.1:9944'),
+		provider: new WsProvider('wss://tangle-standalone-archive.webb.tools'),
 	});
 	await api.isReady;
 	const keyring = new Keyring({ type: 'sr25519' });
-	const sudoAccount = keyring.addFromUri('//Alice');
+	const sudoAccount = keyring.addFromUri('//TangleStandaloneSudo');
 
 	// 000000000000d30c8839c1145609e564b986f667b273ddcb8496010000001389
 	const resourceId = ResourceId.newFromContractAddress(

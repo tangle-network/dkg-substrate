@@ -19,9 +19,10 @@ use sc_cli::RunCmd;
 pub struct Cli {
 	#[clap(subcommand)]
 	pub subcommand: Option<Subcommand>,
-
 	#[clap(flatten)]
 	pub run: RunCmd,
+	#[arg(long, short = 'o')]
+	pub output_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, clap::Subcommand)]

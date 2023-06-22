@@ -96,7 +96,7 @@ mod tests;
 pub mod types;
 pub mod utils;
 use dkg_runtime_primitives::{
-	traits::{GetProposerSet, OnAuthoritySetChangeHandler},
+	handlers::decode_proposals::decode_proposal_identifier, traits::OnAuthoritySetChangeHandler,
 	ProposalHandlerTrait, ProposalNonce, ResourceId, TypedChainId,
 };
 use frame_support::{
@@ -403,8 +403,8 @@ pub mod pallet {
 		ProposerCountIsZero,
 		/// Input is out of bounds
 		OutOfBounds,
-		/// Queued proposer action set is at capacity
-		QueuedProposerActionsFull,
+		/// Invalid proposal
+		InvalidProposal,
 	}
 
 	#[pallet::genesis_config]
@@ -537,6 +537,12 @@ pub mod pallet {
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
 			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
+			match decode_proposal_identifier(&prop) {
+				Ok(ident) => {
+					ensure!(ident.typed_chain_id == src_chain_id, Error::<T>::InvalidProposal);
+				},
+				Err(_) => return Err(Error::<T>::InvalidProposal.into()),
+			};
 
 			Self::vote_for(who, nonce, src_chain_id, &prop)
 		}
@@ -559,6 +565,12 @@ pub mod pallet {
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
 			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
+			match decode_proposal_identifier(&prop) {
+				Ok(ident) => {
+					ensure!(ident.typed_chain_id == src_chain_id, Error::<T>::InvalidProposal);
+				},
+				Err(_) => return Err(Error::<T>::InvalidProposal.into()),
+			};
 
 			Self::vote_against(who, nonce, src_chain_id, &prop)
 		}

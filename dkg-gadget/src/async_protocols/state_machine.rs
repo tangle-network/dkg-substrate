@@ -30,7 +30,7 @@ pub(crate) type StateMachineTxRx<T> = (
 #[async_trait]
 /// Trait for interfacing between the meta handler and the individual state machines
 pub trait StateMachineHandler<BI: BlockchainInterface + 'static>:
-	StateMachine + RoundBlame + Send
+	StateMachine + RoundBlame + Send + Debug
 where
 	<Self as StateMachine>::Output: Send,
 {
@@ -54,6 +54,5 @@ where
 		result: <Self as StateMachine>::Output,
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		additional_param: Self::AdditionalReturnParam,
-		async_index: u8,
 	) -> Result<Self::Return, DKGError>;
 }

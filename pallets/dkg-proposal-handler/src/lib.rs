@@ -317,6 +317,7 @@ pub mod pallet {
 		/// This function will look for any unsigned proposals past `UnsignedProposalExpiry`
 		/// and remove storage.
 		fn on_idle(now: T::BlockNumber, mut remaining_weight: Weight) -> Weight {
+			use dkg_runtime_primitives::ProposalKind::*;
 			// fetch all unsigned proposals
 			let unsigned_proposals: Vec<_> = UnsignedProposalQueue::<T>::iter().collect();
 			let unsigned_proposals_len = unsigned_proposals.len() as u64;
@@ -325,7 +326,14 @@ pub mod pallet {
 
 			// filter out proposals to delete
 			let unsigned_proposal_past_expiry = unsigned_proposals.into_iter().filter(
-				|(_, _, StoredUnsignedProposal { timestamp, .. })| {
+				|(_, _, StoredUnsignedProposal { proposal, timestamp })| {
+					let kind = proposal.kind();
+
+					// Skip expiration for keygen related proposals
+					match kind {
+						Refresh | ProposerSetUpdate => return false,
+						_ => (),
+					};
 					let time_passed = now.checked_sub(timestamp).unwrap_or_default();
 					time_passed > T::UnsignedProposalExpiry::get()
 				},
@@ -353,7 +361,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_proposals(props.len() as u32))]
 		#[pallet::call_index(0)]
 		#[frame_support::transactional]
 		pub fn submit_signed_proposals(
@@ -392,10 +400,11 @@ pub mod pallet {
 							});
 							log::error!(
 								target: "runtime::dkg_proposal_handler",
-								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?}",
+								"Invalid proposal signature with kind: {:?}, data: {:?}, sig: {:?} | ERR: {}",
 								kind,
 								data,
-								signature
+								signature,
+								e.ty()
 							);
 							// skip it.
 							continue
@@ -431,7 +440,7 @@ pub mod pallet {
 		/// There are certain proposals we'd like to be proposable only
 		/// through root actions. The currently supported proposals are
 		/// 	1. Updating
-		#[pallet::weight(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
 		#[pallet::call_index(1)]
 		pub fn force_submit_unsigned_proposal(
 			origin: OriginFor<T>,
@@ -462,6 +471,29 @@ pub mod pallet {
 			} else {
 				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
+		}
+
+		/// Force remove an unsigned proposal from the queue
+		#[pallet::weight(<T as Config>::WeightInfo::force_remove_unsigned_proposal())]
+		#[pallet::call_index(2)]
+		pub fn force_remove_unsigned_proposal(
+			origin: OriginFor<T>,
+			typed_chain_id: TypedChainId,
+			key: DKGPayloadKey,
+		) -> DispatchResultWithPostInfo {
+			// Call must come from root (likely from a democracy proposal passing)
+			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(typed_chain_id, key),
+				Error::<T>::ProposalDoesNotExists
+			);
+			UnsignedProposalQueue::<T>::remove(typed_chain_id, key);
+			Self::deposit_event(Event::<T>::ProposalRemoved {
+				target_chain: typed_chain_id,
+				key,
+				expired: false,
+			});
+			Ok(().into())
 		}
 	}
 
@@ -731,14 +763,17 @@ impl<T: Config> Pallet<T> {
 	// *** API methods ***
 
 	pub fn get_unsigned_proposals(
-	) -> Vec<dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>> {
+	) -> Vec<(dkg_runtime_primitives::UnsignedProposal<T::MaxProposalLength>, T::BlockNumber)> {
 		UnsignedProposalQueue::<T>::iter()
 			.map(|(typed_chain_id, key, stored_unsigned_proposal)| {
-				dkg_runtime_primitives::UnsignedProposal {
-					typed_chain_id,
-					key,
-					proposal: stored_unsigned_proposal.proposal,
-				}
+				(
+					dkg_runtime_primitives::UnsignedProposal {
+						typed_chain_id,
+						key,
+						proposal: stored_unsigned_proposal.proposal,
+					},
+					stored_unsigned_proposal.timestamp,
+				)
 			})
 			.collect()
 	}

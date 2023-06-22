@@ -98,3 +98,41 @@ pub fn convert_u16_vec_to_usize_vec(input: Vec<u16>) -> Vec<usize> {
 	}
 	usize_vec
 }
+
+use futures::task::Context;
+use tokio::{
+	macros::support::{Pin, Poll},
+	task::{JoinError, JoinHandle},
+};
+
+/// Ensures that if a panic occurs in a task, the panic backtrace prints
+pub struct ExplicitPanicFuture<F> {
+	future: JoinHandle<F>,
+}
+
+impl<F> ExplicitPanicFuture<F> {
+	pub fn new(future: JoinHandle<F>) -> Self {
+		Self { future }
+	}
+
+	pub fn abort(&self) {
+		self.future.abort();
+	}
+}
+
+impl<F> Future for ExplicitPanicFuture<F> {
+	type Output = Result<F, JoinError>;
+
+	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		match futures::ready!(Pin::new(&mut self.future).poll(cx)) {
+			Err(err) =>
+				if err.is_panic() {
+					std::panic::panic_any(err.into_panic())
+				} else {
+					Poll::Ready(Err(err))
+				},
+
+			res => Poll::Ready(res),
+		}
+	}
+}

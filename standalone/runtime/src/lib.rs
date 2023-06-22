@@ -1005,7 +1005,7 @@ impl_runtime_apis! {
 		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
-	fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>> {
+	fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, BlockNumber)> {
 	  DKGProposalHandler::get_unsigned_proposals()
 	}
 
@@ -1033,7 +1033,7 @@ impl_runtime_apis! {
 	  DKG::refresh_nonce()
 	}
 
-	fn should_execute_new_keygen() -> bool {
+	fn should_execute_new_keygen() -> (bool, bool) {
 		DKG::should_execute_new_keygen()
 	}
 

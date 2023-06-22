@@ -20,7 +20,7 @@ use parking_lot::RwLock;
 use prometheus::Registry;
 use sc_client_api::{Backend, BlockchainEvents};
 use sc_keystore::LocalKeystore;
-use sc_network::{NetworkService, NetworkStateInfo, ProtocolName};
+use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
@@ -33,6 +33,7 @@ pub mod keyring;
 pub mod keystore;
 
 pub mod gossip_engine;
+mod signing_manager;
 // mod meta_async_rounds;
 pub mod db;
 mod metrics;
@@ -41,10 +42,11 @@ mod utils;
 pub mod worker;
 
 pub mod async_protocols;
-pub mod debug_logger;
+pub use dkg_logging::debug_logger;
 pub mod gossip_messages;
 pub mod storage;
 
+pub use debug_logger::RoundsEventType;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
 
@@ -99,9 +101,10 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: Arc<NetworkService<B, B::Hash>>,
-
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
+	/// For logging
+	pub debug_logger: DebugLogger,
 	/// Phantom block type
 	pub _block: PhantomData<B>,
 }
@@ -112,7 +115,7 @@ where
 pub async fn start_dkg_gadget<B, BE, C>(dkg_params: DKGParams<B, BE, C>)
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
@@ -127,11 +130,8 @@ where
 		prometheus_registry,
 		local_keystore,
 		_block,
+		debug_logger,
 	} = dkg_params;
-
-	// setup debug logging
-	let local_peer_id = network.local_peer_id();
-	let debug_logger = DebugLogger::new(local_peer_id, None);
 
 	let dkg_keystore: DKGKeystore = DKGKeystore::new(key_store, debug_logger.clone());
 	let keygen_gossip_protocol = NetworkGossipEngineBuilder::new(
@@ -174,11 +174,13 @@ where
 	keygen_gossip_engine.set_gossip_enabled(true);
 	signing_gossip_engine.set_gossip_enabled(true);
 
-	keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
-	signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// keygen_gossip_engine.set_processing_already_seen_messages_enabled(false);
+	// signing_gossip_engine.set_processing_already_seen_messages_enabled(false);
 
-	let keygen_handle = tokio::spawn(keygen_gossip_handler.run());
-	let signing_handle = tokio::spawn(signing_gossip_handler.run());
+	let keygen_handle =
+		crate::utils::ExplicitPanicFuture::new(tokio::spawn(keygen_gossip_handler.run()));
+	let signing_handle =
+		crate::utils::ExplicitPanicFuture::new(tokio::spawn(signing_gossip_handler.run()));
 
 	// In memory backend, not used for now
 	// let db_backend = Arc::new(db::DKGInMemoryDb::new());
@@ -201,7 +203,7 @@ where
 		local_keystore,
 		network: Some(network),
 		test_bundle: None,
-		_marker: PhantomData::default(),
+		_marker: PhantomData,
 	};
 
 	let worker = worker::DKGWorker::<_, _, _, _>::new(worker_params, debug_logger);
@@ -209,4 +211,50 @@ where
 	worker.run().await;
 	keygen_handle.abort();
 	signing_handle.abort();
+}
+
+pub mod deadlock_detection {
+	#[cfg(not(feature = "testing"))]
+	pub fn deadlock_detect() {}
+
+	#[cfg(feature = "testing")]
+	pub fn deadlock_detect() {
+		static HAS_STARTED: AtomicBool = AtomicBool::new(false);
+		use parking_lot::deadlock;
+		use std::{sync::atomic::AtomicBool, thread, time::Duration};
+
+		// Create a background thread which checks for deadlocks every 10s
+		thread::spawn(move || {
+			if HAS_STARTED
+				.compare_exchange(
+					false,
+					true,
+					std::sync::atomic::Ordering::SeqCst,
+					std::sync::atomic::Ordering::SeqCst,
+				)
+				.unwrap_or(true)
+			{
+				println!("Deadlock detector already started");
+				return
+			}
+
+			println!("Deadlock detector started");
+			loop {
+				thread::sleep(Duration::from_secs(5));
+				let deadlocks = deadlock::check_deadlock();
+				if deadlocks.is_empty() {
+					continue
+				}
+
+				println!("{} deadlocks detected", deadlocks.len());
+				for (i, threads) in deadlocks.iter().enumerate() {
+					println!("Deadlock #{i}");
+					for t in threads {
+						println!("Thread Id {:#?}", t.thread_id());
+						println!("{:#?}", t.backtrace());
+					}
+				}
+			}
+		});
+	}
 }
