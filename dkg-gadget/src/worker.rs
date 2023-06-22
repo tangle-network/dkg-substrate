@@ -922,7 +922,7 @@ where
 		let res = match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
 				self.keygen_manager.deliver_message(dkg_msg);
-				Ok(())
+				return Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				self.signing_manager.deliver_message(dkg_msg);

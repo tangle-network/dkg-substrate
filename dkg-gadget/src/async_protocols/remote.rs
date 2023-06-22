@@ -224,11 +224,10 @@ impl<C> AsyncProtocolRemote<C> {
 				self.tx_keygen_signing.send(msg)
 			}
 		} else {
-			// do not forward the message (TODO: Consider enqueuing messages for rounds not yet
-			// active other nodes may be active, but this node is still in the process of "waking
-			// up"). Thus, by not delivering a message here, we may be preventing this node from
-			// joining.
-			self.logger.warn(format!("Did not deliver message {:?}", msg.msg.payload));
+			self.logger.warn(format!(
+				"Did not deliver message due to state {status:?} {:?}",
+				msg.msg.payload
+			));
 			Ok(())
 		}
 	}

@@ -110,88 +110,93 @@ where
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) {
-		let now_n = *header.number();
-		let now: u64 = now_n.saturated_into();
-		let current_protocol = self.session_id_of_active_keygen(now_n);
-		let state = self.state();
-		dkg_worker.logger.debug(format!(
-			"*** KeygenManager on_block_finalized: now={now}, state={state:?}, current_protocol={current_protocol:?}",
-		));
+		if let Some((active, _queued)) = dkg_worker.validator_set(header).await {
+			// poll to clear any tasks that have finished and to make room for a new potential
+			// keygen
+			self.work_manager.poll();
+			let now_n = *header.number();
+			let block_id: u64 = now_n.saturated_into();
+			let session_id = active.id;
+			let current_protocol = self.session_id_of_active_keygen(now_n);
+			let state = self.state();
+			let should_execute_new_keygen = dkg_worker.should_execute_new_keygen(header).await;
+			dkg_worker.logger.debug(format!(
+				"*** KeygenManager on_block_finalized: session={session_id},block={block_id}, state={state:?}, current_protocol={current_protocol:?}",
+			));
+			dkg_worker
+				.logger
+				.debug(format!("*** Should execute new keygen? {should_execute_new_keygen}"));
 
-		/*
-		   Session 0 (beginning): immediately run genesis
-		   Session 0 (ending): run keygen for session 1
-		   Session 1 (ending): run keygen for session 2
-		   Session 2 (ending): run keygen for session 3
-		   Session 3 (ending): run keygen for session 4
-		*/
+			/*
+			   Session 0 (beginning): immediately run genesis
+			   Session 0 (ending): run keygen for session 1
+			   Session 1 (ending): run keygen for session 2
+			   Session 2 (ending): run keygen for session 3
+			   Session 3 (ending): run keygen for session 4
+			*/
 
-		/*
-		   Genesis logic
-		*/
+			/*
+			   Genesis logic
+			*/
 
-		if now == GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
-			// if we are at genesis, and there is no active keygen, create and immediately start()
-			// one
-			return self
-				.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
-				.await
-		}
+			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+				// if we are at genesis, and there is no active keygen, create and immediately
+				// start() one
+				return self
+					.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
+					.await
+			}
 
-		if now == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
-			// if we are at genesis, and genesis keygen is running, do nothing
-			return
-		}
+			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen
+			{
+				// if we are at genesis, and genesis keygen is running, do nothing
+				return
+			}
 
-		if now == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
-			// if we are at genesis, and there is an active keygen, do nothing
-			return
-		}
+			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+				// if we are at genesis, and there is an active keygen, do nothing
+				return
+			}
 
-		if now == GENESIS_AUTHORITY_SET_ID &&
-			matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
-		{
-			// if we are at genesis, and we have completed session-0-ending keygen, do nothing;
-			// cleanup will be handled by the job manager
-			return
-		}
-
-		/*
-		   Non-Genesis logic
-		*/
-
-		// check bad states. These should never happen in a well-behaved program
-		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
-			dkg_worker.logger.error(format!("Invalid keygen manager state: {now} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
-			return
-		}
-
-		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
-			// we joined the network after genesis. We need to start a keygen for session `now`,
-			// so long as the next pub key isn't already on chain
-			if dkg_worker.get_next_dkg_pub_key(header).await.is_none() {
+			if session_id == GENESIS_AUTHORITY_SET_ID &&
+				matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
+			{
+				// if we are at genesis, and we have completed keygen, we may need to begin a keygen
+				// for session 1
 				return self
 					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
 					.await
 			}
-		}
 
-		if now > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
-			// we are in the middle of a keygen. Do nothing
-			return
-		}
+			/*
+			   Non-Genesis logic
+			*/
 
-		if now > GENESIS_AUTHORITY_SET_ID && matches!(state, KeygenState::KeygenCompleted { .. }) {
-			// TODO: don't do session_completed + 1 == now check, since the maybe_start_keygen
-			// function will handle this via the session progress check. the +1 is completely
-			// irrelevant
-			let session_completed = match state {
-				KeygenState::KeygenCompleted { session_completed } => session_completed,
-				_ => unreachable!("We already checked this case above"),
-			};
+			// check bad states. These should never happen in a well-behaved program
+			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
+				dkg_worker.logger.error(format!("Invalid keygen manager state: {session_id} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
+				return
+			}
 
-			if session_completed < now {
-				// we need to start a keygen for session `now`:
+			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+				// we joined the network after genesis. We need to start a keygen for session `now`,
+				// so long as the next pub key isn't already on chain
+				if dkg_worker.get_next_dkg_pub_key(header).await.is_none() {
+					return self
+						.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
+						.await
+				}
+			}
+
+			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+				// we are in the middle of a keygen. Do nothing
+				return
+			}
+
+			if session_id > GENESIS_AUTHORITY_SET_ID &&
+				matches!(state, KeygenState::KeygenCompleted { .. })
+			{
+				// we maybe need to start a keygen for session `session_id`:
 				return self
 					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
 					.await
@@ -205,6 +210,20 @@ where
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) {
+		let authority_set = if let Some((active, queued)) = dkg_worker.validator_set(header).await {
+			match stage {
+				KeygenRound::Genesis => active,
+				KeygenRound::Next => queued,
+			}
+		} else {
+			return
+		};
+
+		let session_id = authority_set.id;
+		dkg_worker
+			.logger
+			.debug(format!("Will attempt to start keygen for session {session_id}"));
+
 		if stage != KeygenRound::Genesis {
 			// we need to ensure session progress is close enough to the end to begin execution
 			if !dkg_worker.should_execute_new_keygen(header).await {
@@ -212,79 +231,87 @@ where
 				return
 			}
 		}
-		// DKG keygen authorities are always taken from the best set of authorities
-		if let Some((authority_set, _queued)) = dkg_worker.validator_set(header).await {
-			let session_id = authority_set.id;
-			// Check whether the worker is in the best set or return
-			let party_i = match dkg_worker.get_party_index(header).await {
-				Some(party_index) => {
-					dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}"));
-					if let Ok(res) = KeygenPartyId::try_from(party_index) {
-						res
-					} else {
-						return
-					}
-				},
-				None => {
-					dkg_worker.logger.info(format!(
-						"🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}"
-					));
-					return
-				},
-			};
 
-			let best_authorities = dkg_worker
-				.get_best_authorities(header)
-				.await
-				.into_iter()
-				.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
-				.collect();
-			let threshold = dkg_worker.get_signature_threshold(header).await;
-			let authority_public_key = dkg_worker.get_authority_public_key();
-			let proto_stage_ty = if stage == KeygenRound::Genesis {
-				ProtoStageType::KeygenGenesis
-			} else {
-				ProtoStageType::KeygenStandard
-			};
+		let party_idx = match stage {
+			KeygenRound::Genesis => dkg_worker.get_party_index(header).await,
+			KeygenRound::Next => dkg_worker.get_next_party_index(header).await,
+		};
 
-			dkg_worker.logger.debug(format!("🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | BEST AUTHORITIES: {best_authorities:?}"));
-
-			let keygen_protocol_hash = get_keygen_protocol_hash(
-				session_id,
-				self.active_keygen_retry_id.load(Ordering::SeqCst),
-			);
-
-			if let Some((handle, task)) = dkg_worker
-				.initialize_keygen_protocol(
-					best_authorities,
-					authority_public_key,
-					party_i,
-					session_id,
-					*header.number(),
-					threshold,
-					proto_stage_ty,
-					keygen_protocol_hash,
-				)
-				.await
-			{
-				if let Err(err) = self.push_task(handle, task) {
-					dkg_worker.logger.error(format!(
-						"🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | ERROR: {err}"
-					));
-
-					dkg_worker.handle_dkg_error(err).await;
+		// Check whether the worker is in the best set or return
+		let party_i = match party_idx {
+			Some(party_index) => {
+				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}"));
+				if let Ok(res) = KeygenPartyId::try_from(party_index) {
+					res
 				} else {
-					// update states
-					match stage {
-						KeygenRound::Genesis => self.set_state(KeygenState::RunningGenesisKeygen),
-						KeygenRound::Next => self.set_state(KeygenState::RunningKeygen),
-					}
-
-					self.latest_executed_session_id.store(Some(session_id), Ordering::Relaxed);
+					return
 				}
-			}
+			},
+			None => {
+				dkg_worker.logger.info(format!(
+					"🕸️  NOT IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}"
+				));
+				return
+			},
+		};
+
+		let best_authorities = match stage {
+			KeygenRound::Genesis => dkg_worker.get_best_authorities(header).await,
+			KeygenRound::Next => dkg_worker.get_next_best_authorities(header).await,
+		};
+
+		let best_authorities = best_authorities
+			.into_iter()
+			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
+			.collect();
+
+		let threshold = match stage {
+			KeygenRound::Genesis => dkg_worker.get_signature_threshold(header).await,
+			KeygenRound::Next => dkg_worker.get_next_signature_threshold(header).await,
+		};
+
+		let authority_public_key = dkg_worker.get_authority_public_key();
+		let proto_stage_ty = if stage == KeygenRound::Genesis {
+			ProtoStageType::KeygenGenesis
 		} else {
-			dkg_worker.logger.warn("Could not obtain validator set")
+			ProtoStageType::KeygenStandard
+		};
+
+		dkg_worker.logger.debug(format!("🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | BEST AUTHORITIES: {best_authorities:?}"));
+
+		let keygen_protocol_hash = get_keygen_protocol_hash(
+			session_id,
+			self.active_keygen_retry_id.load(Ordering::SeqCst),
+		);
+
+		if let Some((handle, task)) = dkg_worker
+			.initialize_keygen_protocol(
+				best_authorities,
+				authority_public_key,
+				party_i,
+				session_id,
+				*header.number(),
+				threshold,
+				proto_stage_ty,
+				keygen_protocol_hash,
+			)
+			.await
+		{
+			if let Err(err) = self.push_task(handle, task) {
+				dkg_worker.logger.error(format!(
+					"🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | ERROR: {err}"
+				));
+
+				dkg_worker.handle_dkg_error(err).await;
+			} else {
+				// update states
+				match stage {
+					KeygenRound::Genesis => self.set_state(KeygenState::RunningGenesisKeygen),
+					KeygenRound::Next => self.set_state(KeygenState::RunningKeygen),
+				}
+
+				self.latest_executed_session_id.store(Some(session_id), Ordering::Relaxed);
+			}
 		}
 	}
 

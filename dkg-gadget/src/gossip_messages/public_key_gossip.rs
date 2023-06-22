@@ -98,11 +98,17 @@ where
 			aggregated_public_keys.keys_and_signatures.len()
 		));
 
+		let is_genesis_round = dkg_worker
+			.keygen_manager
+			.get_latest_executed_session_id()
+			.expect("Should be some") ==
+			0;
+
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
 				&dkg_worker.backend,
 				&mut lock,
-				is_main_round,
+				is_genesis_round,
 				session_id,
 				current_block_number,
 				&dkg_worker.logger,
