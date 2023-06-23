@@ -113,7 +113,7 @@ where
 			)?;
 		} else {
 			dkg_worker.logger.debug(format!(
-				"SESSION {}={tag}| Need more signatures to submit next DKG public key, needs {} more",
+				"SESSION {}={tag} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
 				(threshold + 1) - aggregated_public_keys.keys_and_signatures.len()
 			));

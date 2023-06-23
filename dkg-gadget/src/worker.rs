@@ -444,6 +444,7 @@ where
 								Err(err) => {
 									logger
 										.error(format!("Error executing meta handler {:?}", &err));
+									keygen_manager.set_state(KeygenState::Failed { session_id });
 									let _ = err_handler_tx.send(err.clone());
 									Err(err)
 								},

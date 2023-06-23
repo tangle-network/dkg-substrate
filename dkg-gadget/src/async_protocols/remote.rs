@@ -29,8 +29,8 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) rx_voting: MessageReceiverHandle,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
-	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
-	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
+	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<ShutdownReason>>>>,
+	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ShutdownReason>>>>,
 	pub(crate) started_at: C,
 	pub(crate) is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
@@ -76,6 +76,12 @@ pub enum MetaHandlerStatus {
 	OfflineAndVoting,
 	Complete,
 	Terminated,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ShutdownReason {
+	Stalled,
+	DropCode,
 }
 
 impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
@@ -243,7 +249,7 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines
-	pub fn shutdown<R: AsRef<str>>(&self, reason: R) -> Result<(), DKGError> {
+	pub fn shutdown(&self, reason: ShutdownReason) -> Result<(), DKGError> {
 		// check the state if it is active so that we can send a shutdown signal.
 		let tx = match self.stop_tx.lock().take() {
 			Some(tx) => tx,
@@ -255,8 +261,8 @@ impl<C> AsyncProtocolRemote<C> {
 				return Ok(())
 			},
 		};
-		self.logger.warn(format!("Shutting down meta handler: {}", reason.as_ref()));
-		tx.send(()).map_err(|_| DKGError::GenericError {
+		self.logger.warn(format!("Shutting down meta handler: {reason:?}"));
+		tx.send(reason).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
 	}
@@ -308,7 +314,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 				}
 			}
 
-			let _ = self.shutdown("drop code");
+			let _ = self.shutdown(ShutdownReason::DropCode);
 		}
 	}
 }

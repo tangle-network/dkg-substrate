@@ -56,6 +56,7 @@ pub enum KeygenState {
 	// session_completed denotes the session that executed the keygen, NOT
 	// the generated DKG public key for the next session
 	KeygenCompleted { session_completed: u64 },
+	Failed { session_id: u64 },
 }
 
 // only 1 task at a time may run for keygen
@@ -145,7 +146,7 @@ where
 
 			// it's possible genesis failed and we need to retry
 			if session_id == GENESIS_AUTHORITY_SET_ID &&
-				matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
+				matches!(state, KeygenState::Failed { session_id: 0 })
 			{
 				if dkg_worker.get_dkg_pub_key(header).await.1.is_empty() {
 					dkg_worker.logger.warn(

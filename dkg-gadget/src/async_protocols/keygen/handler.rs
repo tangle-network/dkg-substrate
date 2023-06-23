@@ -24,6 +24,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 
 use std::fmt::Debug;
 
+use crate::async_protocols::remote::ShutdownReason;
 use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::MaxAuthorities;
 use futures::FutureExt;
@@ -92,7 +93,15 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					logger1.info_keygen(format!("Stopper has been called {res1:?}"));
-					Ok(())
+					if let Some(res1) = res1 {
+						if res1 == ShutdownReason::DropCode {
+							Ok(())
+						} else {
+							Err(DKGError::GenericError { reason: "Keygen has stalled".into() })
+						}
+					} else {
+						Ok(())
+					}
 				}
 			}
 		});

@@ -23,9 +23,13 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
-	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
+	blockchain_interface::BlockchainInterface,
+	incoming::IncomingAsyncProtocolWrapper,
+	new_inner,
+	remote::{MetaHandlerStatus, ShutdownReason},
+	state_machine::StateMachineHandler,
+	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
+	ProtocolType, Threshold,
 };
 use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{
@@ -123,7 +127,15 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					logger2.info_signing(format!("Stopper has been called {res1:?}"));
-					Ok(())
+					if let Some(res1) = res1 {
+						if res1 == ShutdownReason::DropCode {
+							Ok(())
+						} else {
+							Err(DKGError::GenericError { reason: "Signing has stalled".into() })
+						}
+					} else {
+						Ok(())
+					}
 				}
 			}
 		});

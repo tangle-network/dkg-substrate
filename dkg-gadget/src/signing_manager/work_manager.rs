@@ -1,6 +1,9 @@
 use crate::{
-	async_protocols::remote::AsyncProtocolRemote, debug_logger::DebugLogger, utils::SendFuture,
-	worker::HasLatestHeader, NumberFor,
+	async_protocols::remote::{AsyncProtocolRemote, ShutdownReason},
+	debug_logger::DebugLogger,
+	utils::SendFuture,
+	worker::HasLatestHeader,
+	NumberFor,
 };
 use dkg_primitives::{
 	crypto::Public,
@@ -160,7 +163,7 @@ impl<B: BlockT> WorkManager<B> {
 				));
 
 				// the task is stalled, lets be pedantic and shutdown
-				let _ = job.handle.shutdown("Stalled!");
+				let _ = job.handle.shutdown(ShutdownReason::Stalled);
 				// return false so that the proposals are released from the currently signing
 				// proposals
 				return false
@@ -343,6 +346,6 @@ impl<B: BlockT> Drop for Job<B> {
 			"Will remove job {:?} from currently_signing_proposals",
 			hex::encode(self.task_hash)
 		));
-		let _ = self.handle.shutdown("shutdown from Job::drop");
+		let _ = self.handle.shutdown(ShutdownReason::DropCode);
 	}
 }
