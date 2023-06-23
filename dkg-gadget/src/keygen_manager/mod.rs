@@ -140,6 +140,26 @@ where
 			*/
 
 			/*
+			   Pre checks
+			*/
+
+			// it's possible genesis failed and we need to retry
+			if session_id == GENESIS_AUTHORITY_SET_ID &&
+				matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
+			{
+				if dkg_worker.get_dkg_pub_key(header).await.1.is_empty() {
+					dkg_worker.logger.warn(
+						"We will trigger another genesis keygen because the previous one failed",
+					);
+					return self
+						.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
+						.await
+				}
+				// if we are at genesis, and genesis keygen is running, do nothing
+				return
+			}
+
+			/*
 			   Genesis logic
 			*/
 
