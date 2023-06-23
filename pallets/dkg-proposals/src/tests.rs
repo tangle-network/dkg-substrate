@@ -291,7 +291,7 @@ fn test_invalid_proposal_is_rejected() {
 				prop_id,
 				typed_chain_id,
 				r_id,
-				proposal.clone(),
+				proposal,
 			),
 			Error::<Test>::InvalidProposal
 		);
