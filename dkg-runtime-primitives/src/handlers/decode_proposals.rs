@@ -46,7 +46,7 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 		return evm::evm_tx::create(proposal.data()).map(|p| ProposalIdentifier {
 			key: DKGPayloadKey::EVMProposal(p.nonce),
 			typed_chain_id: webb_proposals::TypedChainId::Evm(p.chain_id),
-		})
+		});
 	}
 
 	// Otherwise, begin parsing DKG proposal header
@@ -68,6 +68,9 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 		key: DKGPayloadKey::EVMProposal(header.nonce()), // placeholder
 		typed_chain_id: header.resource_id().typed_chain_id(),
 	};
+
+	println!("Hererereree");
+	println!("hehher typed_chain_id: {:?}", identifier.typed_chain_id);
 
 	// we then create a lazy identifier.
 	let maybe_anchor_create = substrate::anchor_create::create(proposal.data())
