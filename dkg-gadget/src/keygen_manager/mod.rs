@@ -31,6 +31,7 @@ pub struct KeygenManager<B: Block, BE, C, GE> {
 	active_keygen_retry_id: Arc<AtomicUsize>,
 	keygen_state: Arc<Atomic<KeygenState>>,
 	latest_executed_session_id: Arc<Atomic<Option<SessionId>>>,
+	pub executed_count: Arc<AtomicUsize>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
@@ -42,6 +43,7 @@ impl<B: Block, BE, C, GE> Clone for KeygenManager<B, BE, C, GE> {
 			active_keygen_retry_id: self.active_keygen_retry_id.clone(),
 			keygen_state: self.keygen_state.clone(),
 			latest_executed_session_id: self.latest_executed_session_id.clone(),
+			executed_count: self.executed_count.clone(),
 		}
 	}
 }
@@ -78,6 +80,7 @@ where
 			active_keygen_retry_id: Arc::new(AtomicUsize::new(0)),
 			keygen_state: Arc::new(Atomic::new(KeygenState::Uninitialized)),
 			latest_executed_session_id: Arc::new(Atomic::new(None)),
+			executed_count: Arc::new(AtomicUsize::new(0)),
 			_pd: Default::default(),
 		}
 	}
@@ -120,8 +123,9 @@ where
 			let current_protocol = self.session_id_of_active_keygen(now_n);
 			let state = self.state();
 			let should_execute_new_keygen = dkg_worker.should_execute_new_keygen(header).await;
+			let executed_count = self.executed_count.load(Ordering::SeqCst);
 			dkg_worker.logger.debug(format!(
-				"*** KeygenManager on_block_finalized: session={session_id},block={block_id}, state={state:?}, current_protocol={current_protocol:?}",
+				"*** KeygenManager on_block_finalized: session={session_id},block={block_id}, state={state:?}, current_protocol={current_protocol:?} | total executed: {executed_count}",
 			));
 			dkg_worker
 				.logger
@@ -242,7 +246,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match party_idx {
 			Some(party_index) => {
-				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST GENESIS AUTHORITIES: session: {session_id}"));
+				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES: session: {session_id}"));
 				if let Ok(res) = KeygenPartyId::try_from(party_index) {
 					res
 				} else {
@@ -327,6 +331,7 @@ where
 			self.active_keygen_retry_id.load(Ordering::Relaxed),
 		);
 		self.work_manager.push_task(task_hash, handle, task)?;
+		let _ = self.executed_count.fetch_add(1, Ordering::SeqCst);
 		// poll to start the task
 		self.work_manager.poll();
 		Ok(())

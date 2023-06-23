@@ -285,8 +285,12 @@ impl<B: BlockT> WorkManager<B> {
 
 		// if the protocol is neither started nor enqueued, then, this message may be for a future
 		// async protocol. Store the message
+		let current_running_session_ids: Vec<SessionId> =
+			lock.active_tasks.iter().map(|job| job.handle.session_id).collect();
+		let enqueued_session_ids: Vec<SessionId> =
+			lock.enqueued_tasks.iter().map(|job| job.handle.session_id).collect();
 		self.logger
-			.info_signing(format!("Enqueuing message for {:?}", hex::encode(message_task_hash)));
+			.info_signing(format!("Enqueuing message for {:?} | current_running_session_ids: {current_running_session_ids:?} | enqueued_session_ids: {enqueued_session_ids:?}", hex::encode(message_task_hash)));
 		lock.enqueued_messages.entry(message_task_hash).or_default().push_back(msg)
 	}
 }

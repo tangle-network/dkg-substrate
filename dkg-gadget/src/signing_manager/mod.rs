@@ -94,7 +94,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match dkg_worker.get_party_index(header).await {
 			Some(party_index) => {
-				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
+				dkg_worker.logger.info(format!("🕸️  SIGNING PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
 				KeygenPartyId::try_from(party_index)?
 			},
 			None => {

@@ -54,9 +54,13 @@ where
 	}
 
 	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
+		let is_genesis_round = msg.session_id == 0;
+
+		let tag = if is_genesis_round { "CURRENT" } else { "NEXT" };
+
 		dkg_worker
 			.logger
-			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
+			.debug(format!("SESSION {}={tag} | Received public key broadcast", msg.session_id));
 
 		let is_main_round = {
 			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
@@ -79,9 +83,8 @@ where
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let session_id = msg.session_id;
 
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
+		// Whether this generated key was for genesis or next, we always use the next since
+		// the threshold is the same for both.
 		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
 
 		let mut lock = dkg_worker.aggregated_public_keys.write();
@@ -92,17 +95,12 @@ where
 		}
 
 		dkg_worker.logger.debug(format!(
-			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
+			"SESSION {}={tag} | Threshold {} | Aggregated pubkeys {} | is_main_round {}",
 			msg.session_id,
 			threshold,
-			aggregated_public_keys.keys_and_signatures.len()
+			aggregated_public_keys.keys_and_signatures.len(),
+			is_main_round
 		));
-
-		let is_genesis_round = dkg_worker
-			.keygen_manager
-			.get_latest_executed_session_id()
-			.expect("Should be some") ==
-			0;
 
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
 			store_aggregated_public_keys::<B, BE>(
@@ -115,7 +113,7 @@ where
 			)?;
 		} else {
 			dkg_worker.logger.debug(format!(
-				"SESSION {} | Need more signatures to submit next DKG public key, needs {} more",
+				"SESSION {}={tag}| Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
 				(threshold + 1) - aggregated_public_keys.keys_and_signatures.len()
 			));

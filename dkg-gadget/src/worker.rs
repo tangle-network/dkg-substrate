@@ -316,8 +316,7 @@ where
 			ProtoStageType::KeygenGenesis => None,
 			ProtoStageType::KeygenStandard => None,
 			ProtoStageType::Signing { .. } => {
-				let optional_session_id = Some(session_id);
-				let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
+				let (active_local_key, _) = self.fetch_local_keys(session_id);
 				active_local_key
 			},
 		};
@@ -471,24 +470,13 @@ where
 	}
 
 	/// Fetch the stored local keys if they exist.
-	///
-	/// The `optional_session_id` is used to fetch the keys for a specific session, only in case
-	/// if `self.rounds` is `None`. This is useful when the node is restarted and we need to fetch
-	/// the keys for the current session.
 	fn fetch_local_keys(
 		&self,
-		optional_session_id: Option<SessionId>,
+		current_session_id: SessionId,
 	) -> (Option<LocalKey<Secp256k1>>, Option<LocalKey<Secp256k1>>) {
-		let current_session_id = if let Some(sid) = optional_session_id {
-			Some(sid)
-		} else {
-			self.keygen_manager.get_latest_executed_session_id().or(optional_session_id)
-		};
-
-		let next_session_id = current_session_id.map(|s| s + 1);
-		let active_local_key =
-			current_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
-		let next_local_key = next_session_id.and_then(|s| self.db.get_local_key(s).ok().flatten());
+		let next_session_id = current_session_id + 1;
+		let active_local_key = self.db.get_local_key(current_session_id).ok().flatten();
+		let next_local_key = self.db.get_local_key(next_session_id).ok().flatten();
 		(active_local_key, next_local_key)
 	}
 
@@ -705,9 +693,6 @@ where
 		if self.get_dkg_pub_key(header).await.1.is_empty() {
 			self.logger
 				.debug("🕸️  Maybe enacting genesis authorities since dkg pub key is empty");
-			// TODO: make sure below's function removes the spawn functionality. Instead, it should
-			// call the keygen manager (for both genesis and queued) and the keygen manager should
-			// spawn the keygen protocol.
 			self.maybe_enact_genesis_authorities(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
 		} else {
