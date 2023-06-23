@@ -96,7 +96,8 @@ mod tests;
 pub mod types;
 pub mod utils;
 use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal_identifier, traits::OnAuthoritySetChangeHandler,
+	handlers::decode_proposals::{decode_proposal_header, decode_proposal_identifier},
+	traits::OnAuthoritySetChangeHandler,
 	ProposalHandlerTrait, ProposalNonce, ResourceId, TypedChainId,
 };
 use frame_support::{
@@ -534,23 +535,28 @@ pub mod pallet {
 		#[pallet::call_index(6)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
-			nonce: ProposalNonce,
-			src_chain_id: TypedChainId,
-			r_id: ResourceId,
 			prop: ProposalOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
-			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
-			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
-			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
-			match decode_proposal_identifier(&prop) {
-				Ok(ident) => {
-					ensure!(ident.typed_chain_id == src_chain_id, Error::<T>::InvalidProposal);
-				},
-				Err(_) => return Err(Error::<T>::InvalidProposal.into()),
-			};
 
-			Self::vote_for(who, nonce, src_chain_id, &prop)
+			let proposal_ident =
+				decode_proposal_identifier(&prop).map_err(|_| Error::<T>::InvalidProposal)?;
+			let proposal_header =
+				decode_proposal_header(prop.data()).map_err(|_| Error::<T>::InvalidProposal)?;
+
+			println!("typed chain id: {:?}", proposal_ident.typed_chain_id);
+
+			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
+			ensure!(
+				Self::chain_whitelisted(proposal_ident.typed_chain_id),
+				Error::<T>::ChainNotWhitelisted
+			);
+			ensure!(
+				Self::resource_exists(proposal_header.resource_id),
+				Error::<T>::ResourceDoesNotExist
+			);
+
+			Self::vote_for(who, proposal_header.nonce, proposal_ident.typed_chain_id, &prop)
 		}
 
 		/// Commits a vote against a provided proposal.
@@ -562,23 +568,26 @@ pub mod pallet {
 		#[pallet::call_index(7)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
-			nonce: ProposalNonce,
-			src_chain_id: TypedChainId,
-			r_id: ResourceId,
 			prop: ProposalOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
-			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
-			ensure!(Self::chain_whitelisted(src_chain_id), Error::<T>::ChainNotWhitelisted);
-			ensure!(Self::resource_exists(r_id), Error::<T>::ResourceDoesNotExist);
-			match decode_proposal_identifier(&prop) {
-				Ok(ident) => {
-					ensure!(ident.typed_chain_id == src_chain_id, Error::<T>::InvalidProposal);
-				},
-				Err(_) => return Err(Error::<T>::InvalidProposal.into()),
-			};
 
-			Self::vote_against(who, nonce, src_chain_id, &prop)
+			let proposal_ident =
+				decode_proposal_identifier(&prop).map_err(|_| Error::<T>::InvalidProposal)?;
+			let proposal_header =
+				decode_proposal_header(prop.data()).map_err(|_| Error::<T>::InvalidProposal)?;
+
+			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
+			ensure!(
+				Self::chain_whitelisted(proposal_ident.typed_chain_id),
+				Error::<T>::ChainNotWhitelisted
+			);
+			ensure!(
+				Self::resource_exists(proposal_header.resource_id),
+				Error::<T>::ResourceDoesNotExist
+			);
+
+			Self::vote_against(who, proposal_header.nonce, proposal_ident.typed_chain_id, &prop)
 		}
 
 		/// Evaluate the state of a proposal given the current vote threshold.
