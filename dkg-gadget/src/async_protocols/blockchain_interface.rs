@@ -259,7 +259,7 @@ where
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
 		gossip_public_key::<B, C, BE, GE>(
 			&self.keystore,

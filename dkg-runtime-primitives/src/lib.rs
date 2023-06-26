@@ -362,6 +362,8 @@ sp_api::decl_runtime_apis! {
 		/// Returns (true, false) if we should execute a new keygen.
 		/// Returns (true, true) if we should execute a forced new keygen.
 		fn should_execute_new_keygen() -> (bool, bool);
+		/// Whether to submit proposer vote
+		fn should_submit_proposer_vote() -> bool;
 	}
 }
 

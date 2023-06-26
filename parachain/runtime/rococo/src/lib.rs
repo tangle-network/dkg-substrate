@@ -983,7 +983,7 @@ impl_runtime_apis! {
 			DKG::should_execute_new_keygen()
 		}
 		
-		fn should_submit_proposer_set_vote() -> bool {
+		fn should_submit_proposer_vote() -> bool {
 			DKG::should_submit_proposer_vote()
 		}
 	}

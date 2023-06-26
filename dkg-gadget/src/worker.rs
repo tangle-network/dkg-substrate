@@ -52,8 +52,9 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	gossip_messages::{MisbehaviourMessage, ProposerVoteMessage},
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength, GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
+	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthoritySet,
+	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MaxVoteLength,
+	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
 };
 
 use crate::{
@@ -133,7 +134,7 @@ where
 	/// Queued validator set
 	pub queued_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Tracking for the broadcasted public keys and signatures
-	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
+	pub aggregated_public_keys: Shared<AggregatedPublicKeysAndSigs>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
 	/// Tracking for the broadcasting proposer votes in the event of emergency fallback
@@ -207,6 +208,8 @@ where
 		}
 	}
 }
+
+pub type AggregatedPublicKeysAndSigs = HashMap<SessionId, AggregatedPublicKeys>;
 
 pub type AggregatedMisbehaviourReportStore = HashMap<
 	(MisbehaviourType, SessionId, AuthorityId),
@@ -1301,7 +1304,7 @@ where
 		metric_inc!(self, dkg_inbound_messages);
 		let rounds = self.rounds.read().clone();
 		let next_rounds = self.next_rounds.read().clone();
-		let is_keygen_type = matches!(dkg_msg.msg.payload, DKGMsgPayload::Keygen { .. });
+		let is_keygen_type = matches!(dkg_msg.msg.payload, NetworkMsgPayload::Keygen { .. });
 		self.logger.info(format!(
 			"Processing incoming DKG message: {:?} | {:?}",
 			dkg_msg.msg.session_id,
@@ -1322,11 +1325,13 @@ where
 
 		let is_delivery_type = matches!(
 			dkg_msg.msg.payload,
-			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..)
+			NetworkMsgPayload::Keygen(..) |
+				NetworkMsgPayload::Offline(..) |
+				NetworkMsgPayload::Vote(..)
 		);
 
 		let res = match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(_) => {
+			NetworkMsgPayload::Keygen(_) => {
 				if let Some(rounds) = &rounds {
 					if rounds.session_id == dkg_msg.msg.session_id {
 						if let Err(err) = rounds.deliver_message(dkg_msg) {
@@ -1357,11 +1362,11 @@ where
 
 				Ok(())
 			},
-			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
+			NetworkMsgPayload::Offline(..) | NetworkMsgPayload::Vote(..) => {
 				self.signing_manager.deliver_message(dkg_msg);
 				return Ok(())
 			},
-			DKGMsgPayload::PublicKeyBroadcast(_) => {
+			NetworkMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
 					Ok(dkg_msg) => {
 						match handle_public_key_broadcast(self, dkg_msg).await {
@@ -1378,7 +1383,7 @@ where
 				}
 				Ok(())
 			},
-			DKGMsgPayload::MisbehaviourBroadcast(_) => {
+			NetworkMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
 					Ok(dkg_msg) => {
 						match handle_misbehaviour_report(self, dkg_msg).await {
@@ -1397,9 +1402,9 @@ where
 				Ok(())
 			},
 			NetworkMsgPayload::ProposerVote(_) => {
-				match self.verify_signature_against_authorities(dkg_msg) {
+				match self.verify_signature_against_authorities(dkg_msg).await {
 					Ok(dkg_msg) => {
-						match handle_proposer_vote(self, dkg_msg) {
+						match handle_proposer_vote(self, dkg_msg).await {
 							Ok(()) => (),
 							Err(err) => self.logger.error(format!(
 								"🕸️  Error while handling proposer vote message {err:?}"
@@ -1442,7 +1447,7 @@ where
 		};
 
 		let misbehaviour_msg =
-			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
+			MisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
 		let gossip = gossip_misbehaviour_report(self, misbehaviour_msg).await;
 		if gossip.is_err() {
 			self.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
@@ -1557,10 +1562,7 @@ where
 	fn should_submit_proposer_vote(&self, header: &B::Header) -> bool {
 		// query runtime api to check if we should execute new keygen.
 		let at = header.hash();
-		self.client
-			.runtime_api()
-			.should_submit_proposer_set_vote(at)
-			.unwrap_or_default()
+		self.client.runtime_api().should_submit_proposer_vote(at).unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block

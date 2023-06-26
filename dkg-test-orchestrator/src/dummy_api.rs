@@ -1,6 +1,8 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
-use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -684,7 +686,7 @@ impl
 		Ok((true, true))
 	}
 
-	fn should_submit_proposer_set_vote(&self, _: H256) -> ApiResult<bool> {
+	fn should_submit_proposer_vote(&self, _: H256) -> ApiResult<bool> {
 		Ok(true)
 	}
 }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
-use dkg_runtime_primitives::UnsignedProposal;
+use dkg_runtime_primitives::{gossip_messages::DKGVoteMessage, UnsignedProposal};
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
@@ -254,7 +254,7 @@ where
 			while let Some(msg) = incoming_wrapper.next().await {
 				let payload = msg.body.payload.payload().clone();
 				params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received");
-				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
+				if let NetworkMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
 						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-2");

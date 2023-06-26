@@ -96,7 +96,8 @@ mod tests;
 pub mod types;
 pub mod utils;
 use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal_identifier, traits::OnAuthoritySetChangeHandler,
+	handlers::decode_proposals::decode_proposal_identifier,
+	traits::{GetProposerSet, OnAuthoritySetChangeHandler},
 	ProposalHandlerTrait, ProposalNonce, ResourceId, TypedChainId,
 };
 use frame_support::{

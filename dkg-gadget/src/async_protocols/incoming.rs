@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, SessionId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{associated_block_id_acceptable, crypto::Public, MaxAuthorities};
 use futures::Stream;
 use round_based::Msg;
@@ -111,9 +111,9 @@ impl TransformIncoming for SignedDKGMessage<Public> {
 	{
 		logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2-incoming");
 		match (stream_type, &self.msg.payload) {
-			(ProtocolType::Keygen { .. }, DKGMsgPayload::Keygen(..)) |
-			(ProtocolType::Offline { .. }, DKGMsgPayload::Offline(..)) |
-			(ProtocolType::Voting { .. }, DKGMsgPayload::Vote(..)) => {
+			(ProtocolType::Keygen { .. }, NetworkMsgPayload::Keygen(..)) |
+			(ProtocolType::Offline { .. }, NetworkMsgPayload::Offline(..)) |
+			(ProtocolType::Voting { .. }, NetworkMsgPayload::Vote(..)) => {
 				logger.checkpoint_message_raw(self.msg.payload.payload(), "CP-2.1-incoming");
 				// only clone if the downstream receiver expects this type
 				let associated_block_id = stream_type.get_associated_block_id();

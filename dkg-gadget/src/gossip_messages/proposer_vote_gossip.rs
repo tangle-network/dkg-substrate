@@ -28,7 +28,7 @@ use dkg_runtime_primitives::{
 	ethereum_abi::IntoAbiToken,
 	gossip_messages::{ProposerVoteMessage, PublicKeyMessage},
 	AggregatedProposerVotes, DKGApi, MaxAuthorities, MaxProposalLength, MaxSignatureLength,
-	MaxVoteLength, MaxVotes,
+	MaxVoteLength, MaxVotes, SessionId,
 };
 use sc_client_api::Backend;
 use sp_runtime::{
@@ -36,21 +36,23 @@ use sp_runtime::{
 	BoundedVec,
 };
 
-pub(crate) fn handle_proposer_vote<B, BE, C, GE>(
+pub(crate) async fn handle_proposer_vote<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	dkg_msg: DKGMessage<Public>,
 ) -> Result<(), DKGError>
 where
 	B: Block,
-	BE: Backend<B> + 'static,
+	BE: Backend<B> + Unpin + 'static,
 	GE: GossipEngineIface + 'static,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	// Get authority accounts
 	let header = &dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?;
-	let current_block_number = *header.number();
-	let authorities = dkg_worker.validator_set(header).map(|a| (a.0.authorities, a.1.authorities));
+	let authorities = dkg_worker
+		.validator_set(header)
+		.await
+		.map(|a| (a.0.authorities, a.1.authorities));
 	if authorities.is_none() {
 		return Err(DKGError::NoAuthorityAccounts)
 	}
@@ -69,23 +71,46 @@ where
 		};
 
 		// Create encoded message
-		let mut encoded_vote_msg =
+		let encoded_vote_msg: BoundedVec<u8, MaxVoteLength> =
 			msg.encode_abi().try_into().map_err(|_| DKGError::InputOutOfBounds)?;
 
-		let session_id = msg.session_id;
-		let mut lock = dkg_worker.aggregated_proposer_votes.write();
-		let votes = lock.entry((msg.session_id, msg.new_governor)).or_insert_with(|| {
-			AggregatedProposerVotes {
-				session_id: msg.session_id,
-				encoded_vote: encoded_vote_msg,
-				voters: Default::default(),
-				signatures: Default::default(),
+		// Get the voter for the signed payload
+		let voter = dkg_worker.authenticate_msg_origin(
+			is_main_round,
+			(
+				authorities.clone().expect("Authorities not found!").0.into(),
+				authorities.expect("Authorities not found!").1.into(),
+			),
+			&encoded_vote_msg,
+			&msg.signature,
+		)?;
+
+		let votes = {
+			let mut lock = dkg_worker.aggregated_proposer_votes.write();
+			let votes = lock.entry((msg.session_id, msg.new_governor)).or_insert_with(|| {
+				AggregatedProposerVotes {
+					session_id: msg.session_id,
+					encoded_vote: encoded_vote_msg,
+					voters: Default::default(),
+					signatures: Default::default(),
+				}
+			});
+			dkg_worker.logger.debug(format!("Votes: {votes:?}"));
+			// Check if we have already received this vote
+			if votes.voters.contains(&voter) {
+				dkg_worker.logger.debug(format!(
+					"SESSION {} | Already received vote from authority {}",
+					msg.session_id, voter,
+				));
+				return Ok(())
 			}
-		});
+			votes.clone()
+		};
+
 		// Fetch the current threshold for the DKG. We will use the
 		// current threshold to determine if we have enough signatures
 		// to submit the next DKG public key.
-		let threshold = dkg_worker.get_next_signature_threshold(header) as usize;
+		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
 		dkg_worker.logger.debug(format!(
 			"SESSION {} | Threshold {} | Aggregated proposer votes {}",
 			msg.session_id,
@@ -94,7 +119,7 @@ where
 		));
 
 		if votes.voters.len() > threshold {
-			store_aggregated_proposer_votes(&dkg_worker, votes)?;
+			store_aggregated_proposer_votes(&dkg_worker, &votes)?;
 		} else {
 			dkg_worker.logger.debug(format!(
 				"SESSION {} | Need more signatures to submit next DKG public key, needs {} more",
@@ -140,9 +165,8 @@ where
 		let status =
 			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
+			associated_block_id: 0,
 			sender_id: public.clone(),
-			// we need to gossip the final public key to all parties, so no specific recipient in
-			// this case.
 			recipient_id: None,
 			status,
 			session_id: msg.session_id,

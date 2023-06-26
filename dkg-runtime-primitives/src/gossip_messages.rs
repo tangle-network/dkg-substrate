@@ -20,8 +20,8 @@ pub struct DKGOfflineMessage {
 	pub signer_set_id: SignerSetId,
 	/// Serialized offline stage msg
 	pub offline_msg: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
+	// the unsigned proposal this message is associated with
+	pub unsigned_proposal_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
@@ -33,8 +33,8 @@ pub struct DKGVoteMessage {
 	pub round_key: Vec<u8>,
 	/// Serialized partial signature
 	pub partial_signature: Vec<u8>,
-	/// Index in async protocols
-	pub async_index: u8,
+	// the unsigned proposal this message is associated with
+	pub unsigned_proposal_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
