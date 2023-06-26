@@ -209,11 +209,15 @@ impl<B: BlockT> WorkManager<B> {
 							hex::encode(job.task_hash)
 						));
 						while let Some(message) = enqueued_messages.pop_front() {
-							if let Err(err) = job.handle.deliver_message(message) {
-								self.logger.error_signing(format!(
-									"Unable to deliver message for job {:?}: {err:?}",
-									hex::encode(job.task_hash)
-								));
+							if should_deliver(&job, &message, job.task_hash) {
+								if let Err(err) = job.handle.deliver_message(message) {
+									self.logger.error_signing(format!(
+										"Unable to deliver message for job {:?}: {err:?}",
+										hex::encode(job.task_hash)
+									));
+								}
+							} else {
+								self.logger.warn("Will not deliver enqueued message to async protocol since the message is no longer acceptable")
 							}
 						}
 					}
@@ -248,12 +252,7 @@ impl<B: BlockT> WorkManager<B> {
 
 		// check the enqueued
 		for task in lock.enqueued_tasks.iter() {
-			if task.handle.session_id == msg.msg.session_id &&
-				task.task_hash == message_task_hash &&
-				associated_block_id_acceptable(
-					task.handle.associated_block_id,
-					msg.msg.associated_block_id,
-				) {
+			if should_deliver(task, &msg, message_task_hash) {
 				self.logger.debug(format!(
 					"Message is for this ENQUEUED signing execution in session: {}",
 					task.handle.session_id
@@ -268,12 +267,7 @@ impl<B: BlockT> WorkManager<B> {
 
 		// check the currently signing
 		for task in lock.active_tasks.iter() {
-			if task.handle.session_id == msg.msg.session_id &&
-				task.task_hash == message_task_hash &&
-				associated_block_id_acceptable(
-					task.handle.associated_block_id,
-					msg.msg.associated_block_id,
-				) {
+			if should_deliver(task, &msg, message_task_hash) {
 				self.logger.debug(format!(
 					"Message is for this signing CURRENT execution in session: {}",
 					task.handle.session_id
@@ -348,4 +342,17 @@ impl<B: BlockT> Drop for Job<B> {
 		));
 		let _ = self.handle.shutdown(ShutdownReason::DropCode);
 	}
+}
+
+fn should_deliver<B: BlockT>(
+	task: &Job<B>,
+	msg: &SignedDKGMessage<Public>,
+	message_task_hash: [u8; 32],
+) -> bool {
+	task.handle.session_id == msg.msg.session_id &&
+		task.task_hash == message_task_hash &&
+		associated_block_id_acceptable(
+			task.handle.associated_block_id,
+			msg.msg.associated_block_id,
+		)
 }

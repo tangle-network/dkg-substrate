@@ -20,7 +20,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
 
-use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface,
@@ -232,6 +232,7 @@ where
 				unsigned_proposal_hash,
 			});
 
+			// TODO: Get latest pub key
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
@@ -243,13 +244,7 @@ where
 				session_id: params.session_id,
 			};
 
-			// we have no synchronization mechanism post-offline stage. Sometimes, messages
-			// don't get delivered. Thus, we sent multiple messages, and, wait for a while to let
-			// other nodes "show up"
-			for _ in 0..3 {
-				params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
-				tokio::time::sleep(Duration::from_millis(100)).await;
-			}
+			params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
 
 			// we only need a threshold count of sigs
 			let number_of_partial_sigs = threshold as usize;

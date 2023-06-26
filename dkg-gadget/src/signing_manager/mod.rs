@@ -241,6 +241,7 @@ where
 		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
+		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal: {unsigned_proposal:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
 		let async_proto_params = dkg_worker.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
