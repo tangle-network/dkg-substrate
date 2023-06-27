@@ -87,7 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		keygen_n,
 		signing_t,
 		signing_n,
-		n_blocks,
 		dummy_api_logger.clone(),
 	);
 

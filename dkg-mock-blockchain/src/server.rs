@@ -293,6 +293,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 
 							// regardless of success, increment completed count for the current
 							// round
+							if let TestResult::Keygen { pub_key, .. } = result {
+								self.blockchain.set_pub_key(
+									intra_test_phase.round_number() + 1,
+									pub_key.clone(),
+								);
+							}
+
 							if matches!(result, TestResult::Keygen { .. }) &&
 								matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
 							{

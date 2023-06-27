@@ -53,16 +53,11 @@ impl DummyApi {
 		keygen_n: u16,
 		signing_t: u16,
 		signing_n: u16,
-		n_sessions: usize,
 		logger: DebugLogger,
 	) -> Self {
 		let mut dkg_keys = HashMap::new();
 		// add a empty-key for the genesis block to drive the DKG forward
 		dkg_keys.insert(0 as _, vec![]);
-		for x in 1..=(n_sessions + 1) {
-			// add dummy keys for all other sessions
-			dkg_keys.insert(x as _, vec![0, 1, 2, 3, 4, 5]);
-		}
 
 		Self {
 			inner: Arc::new(RwLock::new(DummyApiInner {
@@ -599,9 +594,14 @@ impl
 		&self,
 		id: H256,
 	) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
-		let header =
-			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
-		self.dkg_pub_key(header.hash()).map(Some)
+		let number = self.block_id_to_u64(&id) + 1;
+		self.logger.info(format!("Getting next authority set for block {number}"));
+		if let Some(pub_key) = self.inner.read().dkg_keys.get(&number).cloned() {
+			let authority_set_id = number;
+			Ok(Some((authority_set_id, pub_key)))
+		} else {
+			Ok(None)
+		}
 	}
 
 	fn next_pub_key_sig(&self, _: H256) -> ApiResult<Option<Vec<u8>>> {
