@@ -14,7 +14,7 @@ jobs:
   # dkg-substrate integration tests
   harness:
     name: harness stress tests
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.9.1
@@ -54,7 +54,7 @@ jobs:
         run: dvc pull
 
       - name: Install Protobuf
-        run: brew install protobuf
+        run: sudo apt-get install protobuf-compiler
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1

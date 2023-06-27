@@ -103,140 +103,156 @@ where
 
 	/// This function is called each time a new block is finalized.
 	/// It will then start a signing process for each of the proposals.
-	pub async fn on_block_finalized(
+	#[allow(clippy::let_underscore_future)]
+	pub fn on_block_finalized(
 		&self,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) -> Result<(), DKGError> {
-		// obtain a lock to ensure we don't start any tasks simultaneous to a keygen execution
-		let _lock = self.lock.lock().await;
-		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
-		let session_id = on_chain_dkg.0;
-		let dkg_pub_key = on_chain_dkg.1;
-		let at = header.hash();
-		// Check whether the worker is in the best set or return
-		let party_i = match dkg_worker.get_party_index(header).await {
-			Some(party_index) => {
-				dkg_worker.logger.info(format!("🕸️  SIGNING PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
-				KeygenPartyId::try_from(party_index)?
-			},
-			None => {
-				dkg_worker
-					.logger
-					.info(format!("🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {session_id}"));
+		let this = self.clone();
+		let header = header.clone();
+		let dkg_worker = dkg_worker.clone();
+
+		let task = async move {
+			let header = &header;
+			let dkg_worker = &dkg_worker;
+			// obtain a lock to ensure we don't start any tasks simultaneous to a keygen execution
+			let _lock = this.lock.lock().await;
+			let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
+			let session_id = on_chain_dkg.0;
+			let dkg_pub_key = on_chain_dkg.1;
+			let at = header.hash();
+			// Check whether the worker is in the best set or return
+			let party_i = match dkg_worker.get_party_index(header).await {
+				Some(party_index) => {
+					dkg_worker.logger.info(format!("🕸️  SIGNING PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
+					KeygenPartyId::try_from(party_index)?
+				},
+				None => {
+					dkg_worker.logger.info(format!(
+						"🕸️  NOT IN THE SET OF BEST AUTHORITIES: session {session_id}"
+					));
+					return Ok(())
+				},
+			};
+
+			dkg_worker.logger.info_signing("About to get unsigned proposals ...");
+
+			let unsigned_proposals = match dkg_worker
+				.exec_client_function(move |client| client.runtime_api().get_unsigned_proposals(at))
+				.await
+			{
+				Ok(mut res) => {
+					// sort proposals by timestamp, we want to pick the oldest proposal to sign
+					res.sort_by(|a, b| a.1.cmp(&b.1));
+					let mut filtered_unsigned_proposals = Vec::new();
+					for proposal in res {
+						if let Some(hash) = proposal.0.hash() {
+							// only submit the job if it isn't already running
+							if !this.work_manager.job_exists(&hash) {
+								// update unsigned proposal counter
+								metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
+								filtered_unsigned_proposals.push(proposal);
+							}
+						}
+					}
+					filtered_unsigned_proposals
+				},
+				Err(e) => {
+					dkg_worker.logger.error(format!(
+						"🕸️  PARTY {party_i} | Failed to get unsigned proposals: {e:?}"
+					));
+					return Err(DKGError::GenericError {
+						reason: format!("Failed to get unsigned proposals: {e:?}"),
+					})
+				},
+			};
+			if unsigned_proposals.is_empty() {
 				return Ok(())
-			},
-		};
+			} else {
+				dkg_worker.logger.debug(format!(
+					"🕸️  PARTY {party_i} | Got unsigned proposals count {}",
+					unsigned_proposals.len()
+				));
+			}
 
-		dkg_worker.logger.info_signing("About to get unsigned proposals ...");
+			let best_authorities: Vec<_> = dkg_worker
+				.get_best_authorities(header)
+				.await
+				.into_iter()
+				.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
+				.collect();
+			let threshold = dkg_worker.get_signature_threshold(header).await;
+			let authority_public_key = dkg_worker.get_authority_public_key();
 
-		let unsigned_proposals = match dkg_worker
-			.exec_client_function(move |client| client.runtime_api().get_unsigned_proposals(at))
-			.await
-		{
-			Ok(mut res) => {
-				// sort proposals by timestamp, we want to pick the oldest proposal to sign
-				res.sort_by(|a, b| a.1.cmp(&b.1));
-				let mut filtered_unsigned_proposals = Vec::new();
-				for proposal in res {
-					if let Some(hash) = proposal.0.hash() {
-						// only submit the job if it isn't already running
-						if !self.work_manager.job_exists(&hash) {
-							// update unsigned proposal counter
-							metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
-							filtered_unsigned_proposals.push(proposal);
+			for unsigned_proposal in unsigned_proposals {
+				/*
+				   create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
+				   you take this seed and use it as a seed to random number generator.
+				   generate a t+1 signing set from this RNG
+				   if we are in this set, we send it to the signing manager, and continue.
+				   if we are not, we continue the loop.
+				*/
+				let unsigned_proposal_bytes = unsigned_proposal.encode();
+				let concat_data = dkg_pub_key
+					.clone()
+					.into_iter()
+					.chain(at.encode())
+					.chain(unsigned_proposal_bytes)
+					.collect::<Vec<u8>>();
+				let seed = sp_core::keccak_256(&concat_data);
+				let unsigned_proposal_hash =
+					unsigned_proposal.0.hash().expect("unable to hash proposal");
+
+				let maybe_set = this
+					.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
+					.ok();
+				if let Some(signing_set) = maybe_set {
+					// if we are in the set, send to work manager
+					if signing_set.contains(&party_i) {
+						dkg_worker.logger.info(format!(
+							"🕸️  Session Id {:?} | {}-out-of-{} signers: ({:?})",
+							session_id,
+							threshold,
+							best_authorities.len(),
+							signing_set,
+						));
+						match this.create_signing_protocol(
+							dkg_worker,
+							best_authorities.clone(),
+							authority_public_key.clone(),
+							party_i,
+							session_id,
+							threshold,
+							ProtoStageType::Signing { unsigned_proposal_hash },
+							unsigned_proposal.0,
+							signing_set,
+							*header.number(),
+						) {
+							Ok((handle, task)) => {
+								// send task to the work manager
+								this.work_manager.push_task(
+									unsigned_proposal_hash,
+									handle,
+									task,
+								)?;
+							},
+							Err(err) => {
+								dkg_worker
+									.logger
+									.error(format!("Error creating signing protocol: {:?}", &err));
+								dkg_worker.handle_dkg_error(err.clone()).await;
+								return Err(err)
+							},
 						}
 					}
 				}
-				filtered_unsigned_proposals
-			},
-			Err(e) => {
-				dkg_worker
-					.logger
-					.error(format!("🕸️  PARTY {party_i} | Failed to get unsigned proposals: {e:?}"));
-				return Err(DKGError::GenericError {
-					reason: format!("Failed to get unsigned proposals: {e:?}"),
-				})
-			},
-		};
-		if unsigned_proposals.is_empty() {
-			return Ok(())
-		} else {
-			dkg_worker.logger.debug(format!(
-				"🕸️  PARTY {party_i} | Got unsigned proposals count {}",
-				unsigned_proposals.len()
-			));
-		}
-
-		let best_authorities: Vec<_> = dkg_worker
-			.get_best_authorities(header)
-			.await
-			.into_iter()
-			.flat_map(|(i, p)| KeygenPartyId::try_from(i).map(|i| (i, p)))
-			.collect();
-		let threshold = dkg_worker.get_signature_threshold(header).await;
-		let authority_public_key = dkg_worker.get_authority_public_key();
-
-		for unsigned_proposal in unsigned_proposals {
-			/*
-			   create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
-			   you take this seed and use it as a seed to random number generator.
-			   generate a t+1 signing set from this RNG
-			   if we are in this set, we send it to the signing manager, and continue.
-			   if we are not, we continue the loop.
-			*/
-			let unsigned_proposal_bytes = unsigned_proposal.encode();
-			let concat_data = dkg_pub_key
-				.clone()
-				.into_iter()
-				.chain(at.encode())
-				.chain(unsigned_proposal_bytes)
-				.collect::<Vec<u8>>();
-			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash =
-				unsigned_proposal.0.hash().expect("unable to hash proposal");
-
-			let maybe_set = self
-				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
-				.ok();
-			if let Some(signing_set) = maybe_set {
-				// if we are in the set, send to work manager
-				if signing_set.contains(&party_i) {
-					dkg_worker.logger.info(format!(
-						"🕸️  Session Id {:?} | {}-out-of-{} signers: ({:?})",
-						session_id,
-						threshold,
-						best_authorities.len(),
-						signing_set,
-					));
-					match self.create_signing_protocol(
-						dkg_worker,
-						best_authorities.clone(),
-						authority_public_key.clone(),
-						party_i,
-						session_id,
-						threshold,
-						ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal.0,
-						signing_set,
-						*header.number(),
-					) {
-						Ok((handle, task)) => {
-							// send task to the work manager
-							self.work_manager.push_task(unsigned_proposal_hash, handle, task)?;
-						},
-						Err(err) => {
-							dkg_worker
-								.logger
-								.error(format!("Error creating signing protocol: {:?}", &err));
-							dkg_worker.handle_dkg_error(err.clone()).await;
-							return Err(err)
-						},
-					}
-				}
 			}
-		}
 
+			Ok(())
+		};
+
+		let _ = tokio::task::spawn(task);
 		Ok(())
 	}
 

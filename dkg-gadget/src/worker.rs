@@ -706,7 +706,7 @@ where
 			// maybe update the internal state of the worker
 			self.maybe_update_worker_state(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
-			if let Err(e) = self.handle_unsigned_proposals(header).await {
+			if let Err(e) = self.handle_unsigned_proposals(header) {
 				self.logger.error(format!("🕸️  Error running handle_unsigned_proposals: {e:?}"));
 			}
 		}
@@ -1034,8 +1034,8 @@ where
 		Ok(Public::from(signer))
 	}
 
-	async fn handle_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
-		self.signing_manager.on_block_finalized(header, self).await
+	fn handle_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
+		self.signing_manager.on_block_finalized(header, self)
 	}
 
 	fn get_jailed_signers_inner(
