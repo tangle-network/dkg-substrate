@@ -54,7 +54,7 @@ jobs:
         run: dvc pull
 
       - name: Install Protobuf
-        run: sudo apt-get install protobuf-compiler
+        run: brew install protobuf
 
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
