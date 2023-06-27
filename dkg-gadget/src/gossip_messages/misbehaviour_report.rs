@@ -236,24 +236,29 @@ where
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
-	// Fetch the current threshold for the DKG. We will use the
-	// current threshold to determine if we have enough signatures
-	// to submit the next DKG public key.
-	let threshold = dkg_worker.get_signature_threshold(header).await as usize;
-	dkg_worker.logger.debug(format!(
-		"DKG threshold: {}, reports: {}",
-		threshold,
-		reports.reporters.len()
-	));
 	match &reports.misbehaviour_type {
-		MisbehaviourType::Keygen =>
+		MisbehaviourType::Keygen => {
+			let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
+			dkg_worker.logger.debug(format!(
+				"DKG threshold: {}, reports: {}",
+				threshold,
+				reports.reporters.len()
+			));
 			if reports.reporters.len() > threshold {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
-			},
-		MisbehaviourType::Sign =>
+			}
+		},
+		MisbehaviourType::Sign => {
+			let threshold = dkg_worker.get_signature_threshold(header).await as usize;
+			dkg_worker.logger.debug(format!(
+				"DKG threshold: {}, reports: {}",
+				threshold,
+				reports.reporters.len()
+			));
 			if reports.reporters.len() >= threshold {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
-			},
+			}
+		},
 	};
 
 	Ok(())
