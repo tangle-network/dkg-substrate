@@ -108,7 +108,7 @@ where
 			reports.clone()
 		};
 
-		try_store_offchain(dkg_worker, &reports).await?;
+		let _ = try_store_offchain(dkg_worker, &reports).await?;
 	}
 
 	Ok(())
@@ -206,7 +206,7 @@ where
 		};
 
 		// Try to store reports offchain
-		if try_store_offchain(dkg_worker, &reports).await.is_ok() {
+		if try_store_offchain(dkg_worker, &reports).await? {
 			// remove the report from the queue
 			dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
 				report.misbehaviour_type,
@@ -224,7 +224,7 @@ where
 pub(crate) async fn try_store_offchain<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
-) -> Result<(), DKGError>
+) -> Result<bool, DKGError>
 where
 	B: Block,
 	BE: Backend<B> + Unpin + 'static,
@@ -242,16 +242,18 @@ where
 		threshold,
 		reports.reporters.len()
 	));
+
+	let perform_store = reports.reporters.len() > threshold;
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
-			if reports.reporters.len() > threshold {
+			if perform_store {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 		MisbehaviourType::Sign =>
-			if reports.reporters.len() >= threshold {
+			if perform_store {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
-	};
+	}
 
-	Ok(())
+	Ok(perform_store)
 }

@@ -20,6 +20,7 @@ use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::pin::Pin;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -40,12 +41,19 @@ pub mod work_manager;
 pub struct SigningManager<B: Block, BE, C, GE> {
 	// governs the workload for each node
 	work_manager: WorkManager<B>,
+	lock: Arc<Mutex<()>>,
+	owned_lock: Arc<Mutex<Option<OwnedMutexGuard<()>>>>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
-		Self { work_manager: self.work_manager.clone(), _pd: self._pd }
+		Self {
+			work_manager: self.work_manager.clone(),
+			_pd: self._pd,
+			lock: self.lock.clone(),
+			owned_lock: self.owned_lock.clone(),
+		}
 	}
 }
 
@@ -70,6 +78,8 @@ where
 				MAX_RUNNING_TASKS,
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
+			lock: Arc::new(Mutex::new(())),
+			owned_lock: Arc::new(Mutex::new(None)),
 			_pd: Default::default(),
 		}
 	}
@@ -80,6 +90,17 @@ where
 		self.work_manager.deliver_message(message, message_task_hash)
 	}
 
+	// prevents on_block_finalized from executing
+	pub async fn keygen_lock(&self) {
+		let lock = self.lock.clone().lock_owned().await;
+		*self.owned_lock.lock().await = Some(lock);
+	}
+
+	// allows the on_block_finalized task to be executed
+	pub async fn keygen_unlock(&self) {
+		let _ = self.owned_lock.lock().await.take();
+	}
+
 	/// This function is called each time a new block is finalized.
 	/// It will then start a signing process for each of the proposals.
 	pub async fn on_block_finalized(
@@ -87,6 +108,8 @@ where
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) -> Result<(), DKGError> {
+		// obtain a lock to ensure we don't start any tasks simultaneous to a keygen execution
+		let _lock = self.lock.lock().await;
 		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;

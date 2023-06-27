@@ -36,7 +36,7 @@ use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
 	pin::Pin,
-	sync::Arc,
+	sync::{atomic::Ordering, Arc},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -426,13 +426,18 @@ where
 				) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
+						let signing_manager = self.signing_manager.clone();
+						signing_manager.keygen_lock().await;
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
 									keygen_manager.set_state(KeygenState::KeygenCompleted {
 										session_completed: session_id,
 									});
-
+									let _ = keygen_manager
+										.finished_count
+										.fetch_add(1, Ordering::SeqCst);
+									signing_manager.keygen_unlock().await;
 									logger.info(
 										"The keygen meta handler has executed successfully"
 											.to_string(),
@@ -445,6 +450,7 @@ where
 									logger
 										.error(format!("Error executing meta handler {:?}", &err));
 									keygen_manager.set_state(KeygenState::Failed { session_id });
+									signing_manager.keygen_unlock().await;
 									let _ = err_handler_tx.send(err.clone());
 									Err(err)
 								},
@@ -699,7 +705,6 @@ where
 		} else {
 			// maybe update the internal state of the worker
 			self.maybe_update_worker_state(header).await;
-			// call the keygen manager
 			self.keygen_manager.on_block_finalized(header, self).await;
 			if let Err(e) = self.handle_unsigned_proposals(header).await {
 				self.logger.error(format!("🕸️  Error running handle_unsigned_proposals: {e:?}"));
@@ -756,7 +761,7 @@ where
 			}
 		} else {
 			self.logger.info(
-				"🕸️  No update to local session found, not rotation local session".to_string(),
+				"🕸️  No update to local session found, not rotating local sessions".to_string(),
 			);
 		}
 	}
