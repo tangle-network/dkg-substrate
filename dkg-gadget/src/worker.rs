@@ -544,6 +544,10 @@ where
 		.await
 	}
 
+	pub async fn dkg_pub_key_is_unset(&self, header: &B::Header) -> bool {
+		self.get_dkg_pub_key(header).await.1.is_empty()
+	}
+
 	/// Get the next DKG public key
 	pub async fn get_next_dkg_pub_key(
 		&self,
@@ -697,7 +701,7 @@ where
 		// 2. if yes, we start enacting authorities on genesis flow.
 		// 3. if no, we start enacting authorities on queued flow and submit any unsigned
 		//          proposals.
-		if self.get_dkg_pub_key(header).await.1.is_empty() {
+		if self.dkg_pub_key_is_unset(header).await {
 			self.logger
 				.debug("🕸️  Maybe enacting genesis authorities since dkg pub key is empty");
 			self.maybe_enact_genesis_authorities(header).await;

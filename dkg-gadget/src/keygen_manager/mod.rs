@@ -1,9 +1,13 @@
+#![allow(clippy::needless_return)]
+
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound},
 	gossip_engine::GossipEngineIface,
 	signing_manager::work_manager::{JobMetadata, PollMethod, WorkManager},
 	utils::SendFuture,
-	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
+	worker::{
+		AnticipatedKeygenExecutionStatus, DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType,
+	},
 	Client,
 };
 use atomic::Atomic;
@@ -25,6 +29,9 @@ use std::{
 	},
 };
 
+/// The KeygenManager is an abstraction that manages the lifecycle for executing and maintaining
+/// keygen protocols. Code for this use to previously live in the DKGWorker, but has now been moved
+/// here for readability and maintainability.
 pub struct KeygenManager<B: Block, BE, C, GE> {
 	// governs the workload for each node
 	work_manager: WorkManager<B>,
@@ -49,6 +56,7 @@ impl<B: Block, BE, C, GE> Clone for KeygenManager<B, BE, C, GE> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// State of the KeygenManager
 pub enum KeygenState {
 	Uninitialized,
 	RunningKeygen,
@@ -59,7 +67,7 @@ pub enum KeygenState {
 	Failed { session_id: u64 },
 }
 
-// only 1 task at a time may run for keygen
+/// only 1 task at a time may run for keygen
 const MAX_RUNNING_TASKS: usize = 1;
 
 impl<B, BE, C, GE> KeygenManager<B, BE, C, GE>
@@ -93,7 +101,7 @@ where
 	}
 
 	pub fn session_id_of_active_keygen(&self, now: NumberFor<B>) -> Option<JobMetadata> {
-		self.work_manager.get_active_session_ids(now).pop()
+		self.work_manager.get_active_sessions_metadata(now).pop()
 	}
 
 	pub fn get_latest_executed_session_id(&self) -> Option<SessionId> {
@@ -108,6 +116,13 @@ where
 		self.keygen_state.store(state, Ordering::SeqCst);
 	}
 
+	/// GENERAL WORKFLOW for Keygen
+	///
+	/// Session 0 (beginning): immediately run genesis
+	/// Session 0 (ending): run keygen for session 1
+	/// Session 1 (ending): run keygen for session 2
+	/// Session 2 (ending): run keygen for session 3
+	/// Session 3 (ending): run keygen for session 4
 	#[allow(clippy::needless_return)]
 	pub async fn on_block_finalized(
 		&self,
@@ -123,38 +138,49 @@ where
 			let session_id = active.id;
 			let current_protocol = self.session_id_of_active_keygen(now_n);
 			let state = self.state();
-			let should_execute_new_keygen = dkg_worker.should_execute_new_keygen(header).await;
+			let anticipated_execution_status = dkg_worker.should_execute_new_keygen(header).await;
 			let executed_count = self.finished_count.load(Ordering::SeqCst);
+
 			dkg_worker.logger.debug(format!(
 				"*** KeygenManager on_block_finalized: session={session_id},block={block_id}, state={state:?}, current_protocol={current_protocol:?} | total executed: {executed_count}",
 			));
 			dkg_worker
 				.logger
-				.debug(format!("*** Should execute new keygen? {should_execute_new_keygen:?}"));
+				.debug(format!("*** Should execute new keygen? {anticipated_execution_status:?}"));
 
-			/*
-				   GENERAL WORKFLOW:
-				   Session 0 (beginning): immediately run genesis
-				   Session 0 (ending): run keygen for session 1
-				   Session 1 (ending): run keygen for session 2
-				   Session 2 (ending): run keygen for session 3
-				   Session 3 (ending): run keygen for session 4
-			*/
-
-			if self.pre_checks(session_id, state, header, dkg_worker, &current_protocol).await {
+			// Always perform pre-checks
+			if self
+				.pre_checks(
+					session_id,
+					state,
+					header,
+					dkg_worker,
+					&current_protocol,
+					&anticipated_execution_status,
+				)
+				.await
+			{
 				return
 			}
 
-			if self.genesis_checks(session_id, state, header, dkg_worker).await {
-				return
-			}
-
-			if self.next_checks(session_id, state, header, dkg_worker).await {
-				return
+			if session_id == GENESIS_AUTHORITY_SET_ID {
+				self.genesis_checks(state, header, dkg_worker, &anticipated_execution_status)
+					.await;
+			} else {
+				self.next_checks(
+					session_id,
+					state,
+					header,
+					dkg_worker,
+					&anticipated_execution_status,
+				)
+				.await;
 			}
 		}
 	}
 
+	/// Check to see if a genesis keygen failed, or, if we are already running a non-stalled
+	/// protocol
 	async fn pre_checks(
 		&self,
 		session_id: u64,
@@ -162,17 +188,36 @@ where
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 		current_protocol: &Option<JobMetadata>,
+		anticipated_execution: &AnticipatedKeygenExecutionStatus,
 	) -> bool {
-		// it's possible genesis failed and we need to retry
+		if anticipated_execution.force_execute {
+			// unconditionally execute another keygen, overwriting the previous one if necessary
+			let stage = if session_id == GENESIS_AUTHORITY_SET_ID {
+				KeygenRound::Genesis
+			} else {
+				KeygenRound::Next
+			};
+
+			self.maybe_start_keygen_for_stage(stage, header, dkg_worker, anticipated_execution)
+				.await;
+
+			return true
+		}
+		// It's possible genesis failed and we need to retry
 		if session_id == GENESIS_AUTHORITY_SET_ID &&
 			matches!(state, KeygenState::Failed { session_id: 0 }) &&
-			dkg_worker.get_dkg_pub_key(header).await.1.is_empty()
+			dkg_worker.dkg_pub_key_is_unset(header).await
 		{
 			dkg_worker
 				.logger
 				.warn("We will trigger another genesis keygen because the previous one failed");
-			self.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
-				.await;
+			self.maybe_start_keygen_for_stage(
+				KeygenRound::Genesis,
+				header,
+				dkg_worker,
+				anticipated_execution,
+			)
+			.await;
 			return true
 		}
 
@@ -186,79 +231,97 @@ where
 		false
 	}
 
+	/// Check to see if we need to run a genesis keygen (session = 0), or, a keygen for session 1
 	async fn genesis_checks(
 		&self,
-		session_id: u64,
 		state: KeygenState,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
-	) -> bool {
-		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+		anticipated_execution: &AnticipatedKeygenExecutionStatus,
+	) {
+		if state == KeygenState::Uninitialized {
 			// if we are at genesis, and there is no active keygen, create and immediately
 			// start() one
-			self.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
-				.await;
-			return true
+			return self
+				.maybe_start_keygen_for_stage(
+					KeygenRound::Genesis,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await
 		}
 
-		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
+		if state == KeygenState::RunningGenesisKeygen {
 			// if we are at genesis, and genesis keygen is running, do nothing
-			return true
+			return
 		}
 
-		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+		if state == KeygenState::RunningKeygen {
 			// if we are at genesis, and there is an active keygen, do nothing
-			return true
+			return
 		}
 
-		if session_id == GENESIS_AUTHORITY_SET_ID &&
-			matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
-		{
+		if matches!(state, KeygenState::KeygenCompleted { session_completed: 0 }) {
 			// if we are at genesis, and we have completed keygen, we may need to begin a keygen
 			// for session 1
-			self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
-			return true
+			return self
+				.maybe_start_keygen_for_stage(
+					KeygenRound::Next,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await
 		}
-
-		false
 	}
 
+	/// Check to see if we need to run a keygen for session 2, 3, 4, .., etc.
 	async fn next_checks(
 		&self,
 		session_id: u64,
 		state: KeygenState,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
-	) -> bool {
+		anticipated_execution: &AnticipatedKeygenExecutionStatus,
+	) {
 		// check bad states. These should never happen in a well-behaved program
-		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
+		if state == KeygenState::RunningGenesisKeygen {
 			dkg_worker.logger.error(format!("Invalid keygen manager state: {session_id} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
-			return true
+			return
 		}
 
-		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+		if state == KeygenState::Uninitialized {
 			// we joined the network after genesis. We need to start a keygen for session `now`,
 			// so long as the next pub key isn't already on chain
 			if dkg_worker.get_next_dkg_pub_key(header).await.is_none() {
-				self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
-				return true
+				self.maybe_start_keygen_for_stage(
+					KeygenRound::Next,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await;
+				return
 			}
 		}
 
-		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+		if state == KeygenState::RunningKeygen {
 			// we are in the middle of a keygen. Do nothing
-			return true
+			return
 		}
 
-		if session_id > GENESIS_AUTHORITY_SET_ID &&
-			matches!(state, KeygenState::KeygenCompleted { .. })
-		{
+		if matches!(state, KeygenState::KeygenCompleted { .. }) {
 			// we maybe need to start a keygen for session `session_id`:
-			self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
-			return true
+			return self
+				.maybe_start_keygen_for_stage(
+					KeygenRound::Next,
+					header,
+					dkg_worker,
+					anticipated_execution,
+				)
+				.await
 		}
-
-		false
 	}
 
 	async fn maybe_start_keygen_for_stage(
@@ -266,6 +329,7 @@ where
 		stage: KeygenRound,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
+		anticipated_execution_status: &AnticipatedKeygenExecutionStatus,
 	) {
 		let authority_set = if let Some((active, queued)) = dkg_worker.validator_set(header).await {
 			match stage {
@@ -283,14 +347,15 @@ where
 
 		if stage != KeygenRound::Genesis {
 			// we need to ensure session progress is close enough to the end to begin execution
-			let anticipated_execution_status = dkg_worker.should_execute_new_keygen(header).await;
 			if !anticipated_execution_status.execute && !anticipated_execution_status.force_execute
 			{
 				dkg_worker.logger.debug("🕸️  Not executing new keygen protocol");
 				return
 			}
 
-			if dkg_worker.get_next_dkg_pub_key(header).await.is_some() {
+			if dkg_worker.get_next_dkg_pub_key(header).await.is_some() &&
+				!anticipated_execution_status.force_execute
+			{
 				dkg_worker.logger.debug("🕸Not executing new keygen protocol because we already have a next DKG public key");
 				return
 			}

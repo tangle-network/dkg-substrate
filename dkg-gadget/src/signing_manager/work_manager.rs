@@ -141,7 +141,7 @@ impl<B: BlockT> WorkManager<B> {
 	}
 
 	// only relevant for keygen
-	pub fn get_active_session_ids(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
+	pub fn get_active_sessions_metadata(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
 		self.inner.read().active_tasks.iter().map(|r| r.metadata(now)).collect()
 	}
 
@@ -170,11 +170,6 @@ impl<B: BlockT> WorkManager<B> {
 			}
 
 			let is_done = job.handle.is_done();
-			/*self.logger.info_signing(format!(
-				"[worker] Job {:?} is done: {}",
-				hex::encode(job.task_hash),
-				is_done
-			));*/
 
 			!is_done
 		});
