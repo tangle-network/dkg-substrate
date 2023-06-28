@@ -133,109 +133,132 @@ where
 				.debug(format!("*** Should execute new keygen? {should_execute_new_keygen:?}"));
 
 			/*
-			   Session 0 (beginning): immediately run genesis
-			   Session 0 (ending): run keygen for session 1
-			   Session 1 (ending): run keygen for session 2
-			   Session 2 (ending): run keygen for session 3
-			   Session 3 (ending): run keygen for session 4
+				   GENERAL WORKFLOW:
+				   Session 0 (beginning): immediately run genesis
+				   Session 0 (ending): run keygen for session 1
+				   Session 1 (ending): run keygen for session 2
+				   Session 2 (ending): run keygen for session 3
+				   Session 3 (ending): run keygen for session 4
 			*/
 
-			/*
-			   Pre checks
-			*/
-
-			// it's possible genesis failed and we need to retry
-			if session_id == GENESIS_AUTHORITY_SET_ID &&
-				matches!(state, KeygenState::Failed { session_id: 0 })
-			{
-				if dkg_worker.get_dkg_pub_key(header).await.1.is_empty() {
-					dkg_worker.logger.warn(
-						"We will trigger another genesis keygen because the previous one failed",
-					);
-					return self
-						.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
-						.await
-				}
-				// if we are at genesis, and genesis keygen is running, do nothing
+			if self.pre_checks(session_id, state, header, dkg_worker, &current_protocol).await {
 				return
 			}
 
-			if let Some(current_protocol) = current_protocol.as_ref() {
-				if current_protocol.is_active && !current_protocol.is_stalled {
-					dkg_worker
-						.logger
-						.info("Will not trigger a keygen since one is already running");
-					return
-				}
-			}
-
-			/*
-			   Genesis logic
-			*/
-
-			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
-				// if we are at genesis, and there is no active keygen, create and immediately
-				// start() one
-				return self
-					.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
-					.await
-			}
-
-			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen
-			{
-				// if we are at genesis, and genesis keygen is running, do nothing
+			if self.genesis_checks(session_id, state, header, dkg_worker).await {
 				return
 			}
 
-			if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
-				// if we are at genesis, and there is an active keygen, do nothing
+			if self.next_checks(session_id, state, header, dkg_worker).await {
 				return
-			}
-
-			if session_id == GENESIS_AUTHORITY_SET_ID &&
-				matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
-			{
-				// if we are at genesis, and we have completed keygen, we may need to begin a keygen
-				// for session 1
-				return self
-					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
-					.await
-			}
-
-			/*
-			   Non-Genesis logic
-			*/
-
-			// check bad states. These should never happen in a well-behaved program
-			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
-				dkg_worker.logger.error(format!("Invalid keygen manager state: {session_id} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
-				return
-			}
-
-			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
-				// we joined the network after genesis. We need to start a keygen for session `now`,
-				// so long as the next pub key isn't already on chain
-				if dkg_worker.get_next_dkg_pub_key(header).await.is_none() {
-					return self
-						.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
-						.await
-				}
-			}
-
-			if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
-				// we are in the middle of a keygen. Do nothing
-				return
-			}
-
-			if session_id > GENESIS_AUTHORITY_SET_ID &&
-				matches!(state, KeygenState::KeygenCompleted { .. })
-			{
-				// we maybe need to start a keygen for session `session_id`:
-				return self
-					.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker)
-					.await
 			}
 		}
+	}
+
+	async fn pre_checks(
+		&self,
+		session_id: u64,
+		state: KeygenState,
+		header: &B::Header,
+		dkg_worker: &DKGWorker<B, BE, C, GE>,
+		current_protocol: &Option<JobMetadata>,
+	) -> bool {
+		// it's possible genesis failed and we need to retry
+		if session_id == GENESIS_AUTHORITY_SET_ID &&
+			matches!(state, KeygenState::Failed { session_id: 0 }) &&
+			dkg_worker.get_dkg_pub_key(header).await.1.is_empty()
+		{
+			dkg_worker
+				.logger
+				.warn("We will trigger another genesis keygen because the previous one failed");
+			self.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
+				.await;
+			return true
+		}
+
+		if let Some(current_protocol) = current_protocol.as_ref() {
+			if current_protocol.is_active && !current_protocol.is_stalled {
+				dkg_worker.logger.info("Will not trigger a keygen since one is already running");
+				return true
+			}
+		}
+
+		false
+	}
+
+	async fn genesis_checks(
+		&self,
+		session_id: u64,
+		state: KeygenState,
+		header: &B::Header,
+		dkg_worker: &DKGWorker<B, BE, C, GE>,
+	) -> bool {
+		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+			// if we are at genesis, and there is no active keygen, create and immediately
+			// start() one
+			self.maybe_start_keygen_for_stage(KeygenRound::Genesis, header, dkg_worker)
+				.await;
+			return true
+		}
+
+		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
+			// if we are at genesis, and genesis keygen is running, do nothing
+			return true
+		}
+
+		if session_id == GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+			// if we are at genesis, and there is an active keygen, do nothing
+			return true
+		}
+
+		if session_id == GENESIS_AUTHORITY_SET_ID &&
+			matches!(state, KeygenState::KeygenCompleted { session_completed: 0 })
+		{
+			// if we are at genesis, and we have completed keygen, we may need to begin a keygen
+			// for session 1
+			self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
+			return true
+		}
+
+		false
+	}
+
+	async fn next_checks(
+		&self,
+		session_id: u64,
+		state: KeygenState,
+		header: &B::Header,
+		dkg_worker: &DKGWorker<B, BE, C, GE>,
+	) -> bool {
+		// check bad states. These should never happen in a well-behaved program
+		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningGenesisKeygen {
+			dkg_worker.logger.error(format!("Invalid keygen manager state: {session_id} > GENESIS_AUTHORITY_SET_ID && {state:?} == KeygenState::GenesisKeygenCompleted || {state:?} == KeygenState::RunningGenesisKeygen"));
+			return true
+		}
+
+		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::Uninitialized {
+			// we joined the network after genesis. We need to start a keygen for session `now`,
+			// so long as the next pub key isn't already on chain
+			if dkg_worker.get_next_dkg_pub_key(header).await.is_none() {
+				self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
+				return true
+			}
+		}
+
+		if session_id > GENESIS_AUTHORITY_SET_ID && state == KeygenState::RunningKeygen {
+			// we are in the middle of a keygen. Do nothing
+			return true
+		}
+
+		if session_id > GENESIS_AUTHORITY_SET_ID &&
+			matches!(state, KeygenState::KeygenCompleted { .. })
+		{
+			// we maybe need to start a keygen for session `session_id`:
+			self.maybe_start_keygen_for_stage(KeygenRound::Next, header, dkg_worker).await;
+			return true
+		}
+
+		false
 	}
 
 	async fn maybe_start_keygen_for_stage(
