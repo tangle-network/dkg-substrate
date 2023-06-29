@@ -14,9 +14,7 @@
 //
 use codec::{Decode, Encode};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
-use dkg_runtime_primitives::{
-	crypto::AuthorityId, gossip_messages::*, MisbehaviourType, SignerSetId,
-};
+use dkg_runtime_primitives::{gossip_messages::*, SignerSetId};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 use sp_runtime::traits::{Block, Hash, Header};
 use std::fmt;
@@ -80,7 +78,6 @@ impl<AuthorityId> SignedDKGMessage<AuthorityId> {
 			NetworkMsgPayload::Vote(ref m) => m.encode(),
 			NetworkMsgPayload::PublicKeyBroadcast(ref m) => m.encode(),
 			NetworkMsgPayload::MisbehaviourBroadcast(ref m) => m.encode(),
-			NetworkMsgPayload::ProposerVote(ref m) => m.encode(),
 		};
 		<<B::Header as Header>::Hashing as Hash>::hash_of(&bytes_to_hash)
 	}
@@ -94,7 +91,6 @@ impl<ID> fmt::Display for DKGMessage<ID> {
 			NetworkMsgPayload::Vote(_) => "Vote",
 			NetworkMsgPayload::PublicKeyBroadcast(_) => "PublicKeyBroadcast",
 			NetworkMsgPayload::MisbehaviourBroadcast(_) => "MisbehaviourBroadcast",
-			NetworkMsgPayload::ProposerVote(_) => "ProposerVote",
 		};
 		write!(f, "DKGMessage of type {label}")
 	}
@@ -108,7 +104,6 @@ pub enum NetworkMsgPayload {
 	Vote(DKGVoteMessage),
 	PublicKeyBroadcast(PublicKeyMessage),
 	MisbehaviourBroadcast(MisbehaviourMessage),
-	ProposerVote(ProposerVoteMessage),
 }
 
 impl NetworkMsgPayload {
@@ -119,7 +114,6 @@ impl NetworkMsgPayload {
 			NetworkMsgPayload::Keygen(msg) => &msg.keygen_msg,
 			NetworkMsgPayload::PublicKeyBroadcast(msg) => &msg.pub_key,
 			NetworkMsgPayload::MisbehaviourBroadcast(msg) => &msg.signature,
-			NetworkMsgPayload::ProposerVote(msg) => &msg.signature,
 		}
 	}
 	pub fn unsigned_proposal_hash(&self) -> Option<&[u8; 32]> {
@@ -147,7 +141,6 @@ impl NetworkMsgPayload {
 			NetworkMsgPayload::Vote(_) => "vote",
 			NetworkMsgPayload::PublicKeyBroadcast(_) => "pub_key_broadcast",
 			NetworkMsgPayload::MisbehaviourBroadcast(_) => "misbehaviour",
-			NetworkMsgPayload::ProposerVote(_) => "proposer_vote",
 		}
 	}
 }

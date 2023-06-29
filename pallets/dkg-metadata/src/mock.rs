@@ -155,7 +155,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
 	type VoteLength = VoteLength;
-	type ProposerSetView = ();
 	type WeightInfo = ();
 }
 

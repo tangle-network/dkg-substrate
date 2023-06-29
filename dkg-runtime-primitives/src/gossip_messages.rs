@@ -72,20 +72,3 @@ pub struct MisbehaviourMessage {
 	/// Authority's signature for this report
 	pub signature: Vec<u8>,
 }
-
-/// A vote message for voting on a new governor for cross-chain applications leveraging the DKG.
-/// https://github.com/webb-tools/protocol-solidity/blob/main/packages/contracts/contracts/utils/Governable.sol#L46-L53C3
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
-pub struct ProposerVoteMessage {
-	/// Round ID of DKG protocol
-	pub session_id: SessionId,
-	/// The leaf index of the proposer
-	pub proposer_leaf_index: u32,
-	/// The proposed governor
-	pub new_governor: Vec<u8>,
-	/// The merkle path sibling nodes for the proposer in the proposer set merkle tree
-	pub proposer_merkle_path: Vec<[u8; 32]>,
-	/// Authority's signature for this vote
-	pub signature: Vec<u8>,
-}

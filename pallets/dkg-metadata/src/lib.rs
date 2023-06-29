@@ -102,11 +102,11 @@ use dkg_runtime_primitives::{
 		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_PUBLIC_KEY_SIG_LOCK, SUBMIT_GENESIS_KEYS_AT,
 		SUBMIT_KEYS_AT,
 	},
-	traits::{GetDKGPublicKey, GetProposerSet, OnAuthoritySetChangeHandler},
+	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
-	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthorityIndex,
-	AuthoritySet, ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal,
-	RefreshProposalSigned, DKG_ENGINE_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
+	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal, RefreshProposalSigned,
+	DKG_ENGINE_ID,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -219,9 +219,6 @@ pub mod pallet {
 
 		/// Proposer handler trait
 		type ProposalHandler: ProposalHandlerTrait;
-
-		/// Trait for fetching proposer set data
-		type ProposerSetView: GetProposerSet<Self::AccountId, Self::MaxKeyLength>;
 
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
@@ -1260,37 +1257,6 @@ pub mod pallet {
 			Err(Error::<T>::InvalidMisbehaviourReports.into())
 		}
 
-		/// Submits an aggregated proposer vote signature to the chain.
-		/// This can be submitted by anyone. The signatures must be valid against
-		/// the current set of proposers.
-		///
-		/// The purpose of this extrinsic is to jumpstart the automation of the
-		/// proposer set update process on any cross-chain application leveraging the
-		/// DKG. When the DKG fails to rotate, the proposer set will eventually have the
-		/// opportunity to reset the state of any application that relies on the DKG for
-		/// governance.
-		#[pallet::weight(0)]
-		#[pallet::call_index(7)]
-		pub fn submit_proposer_set_votes(
-			origin: OriginFor<T>,
-			votes: AggregatedProposerVotes<
-				T::DKGId,
-				T::MaxSignatureLength,
-				T::MaxReporters,
-				T::VoteLength,
-			>,
-		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
-			let _valid_voters = Self::process_proposer_votes(votes);
-			// Self::deposit_event(Event::ProposerSetVotesSubmitted {
-			// 	signatures: votes.signatures,
-			// 	voters: valid_voters,
-			// 	vote: votes.vote,
-			// });
-
-			Ok(().into())
-		}
-
 		/// Attempts to remove an authority from all possible jails (keygen & signing).
 		/// This can only be called by the controller of the authority in jail. The
 		/// origin must map directly to the authority in jail.
@@ -1300,7 +1266,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		#[pallet::weight(<T as Config>::WeightInfo::unjail())]
-		#[pallet::call_index(8)]
+		#[pallet::call_index(7)]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 			let authority =
@@ -1328,7 +1294,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the keygen jail.
 		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
-		#[pallet::call_index(9)]
+		#[pallet::call_index(8)]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1346,7 +1312,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the signing jail.
 		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_signing())]
-		#[pallet::call_index(10)]
+		#[pallet::call_index(9)]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1363,7 +1329,7 @@ pub mod pallet {
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
 		#[pallet::weight(0)]
-		#[pallet::call_index(11)]
+		#[pallet::call_index(10)]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			let next_authorities = NextAuthorities::<T>::get();
@@ -1410,17 +1376,17 @@ pub mod pallet {
 		///
 		/// Note that, this will clear the next public key and its signature, if any.
 		#[pallet::weight(0)]
-		#[pallet::call_index(12)]
+		#[pallet::call_index(11)]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			// Clear the next public key, if any, to ensure that the keygen protocol runs and we
 			// do not have any invalid state.
 			NextDKGPublicKey::<T>::kill();
-			// also, we clear the next public key signature, if any.
+			// Clear the next public key signature, if any.
 			NextPublicKeySignature::<T>::kill();
-			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
+			// Emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
-			// trigger the keygen protocol, activate force_keygen rotation
+			// Trigger the keygen protocol, activate force_keygen rotation
 			<ShouldExecuteNewKeygen<T>>::put((true, true));
 			Ok(().into())
 		}
@@ -1649,40 +1615,6 @@ impl<T: Config> Pallet<T> {
 		}
 
 		valid_reporters
-	}
-
-	pub fn process_proposer_votes(
-		votes: AggregatedProposerVotes<
-			T::DKGId,
-			T::MaxSignatureLength,
-			T::MaxReporters,
-			T::VoteLength,
-		>,
-	) -> Vec<T::DKGId> {
-		let mut valid_voters = Vec::new();
-		for (inx, signature) in votes.signatures.iter().enumerate() {
-			let mut signed_payload = Vec::new();
-			signed_payload.extend_from_slice(votes.encoded_vote.as_ref());
-			let previous_proposer_set: Vec<ecdsa::Public> =
-				T::ProposerSetView::get_previous_external_proposer_accounts()
-					.iter()
-					.map(|x: &(T::AccountId, BoundedVec<u8, T::MaxKeyLength>)| {
-						match to_slice_33(x.1.encode().as_ref()) {
-							Some(x) => ecdsa::Public(x),
-							None => ecdsa::Public([0u8; 33]),
-						}
-					})
-					.filter(|x| x.0 != [0u8; 33])
-					.collect();
-			let (_, success) =
-				verify_signer_from_set_ecdsa(previous_proposer_set, &signed_payload, signature);
-
-			if success && !valid_voters.contains(&votes.voters[inx]) {
-				valid_voters.push(votes.voters[inx].clone());
-			}
-		}
-
-		valid_voters
 	}
 
 	pub fn store_consensus_log(

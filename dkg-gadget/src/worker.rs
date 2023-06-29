@@ -17,7 +17,6 @@
 use crate::{
 	async_protocols::{blockchain_interface::DKGProtocolEngine, KeygenPartyId},
 	debug_logger::DebugLogger,
-	gossip_messages::proposer_vote_gossip::{self, gossip_proposer_vote, handle_proposer_vote},
 	utils::convert_u16_vec_to_usize_vec,
 };
 use codec::{Codec, Encode};
@@ -50,7 +49,7 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	gossip_messages::{MisbehaviourMessage, ProposerVoteMessage},
+	gossip_messages::MisbehaviourMessage,
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthoritySet,
 	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MaxVoteLength,
@@ -914,25 +913,6 @@ where
 				self.logger.error(format!("🕸️  Error running handle_unsigned_proposals: {e:?}"));
 			}
 		}
-
-		// Attempt to run the proposer set vote protocol in an emergency fallback case
-		// for any application leveraging the DKG. This process effectively falls back
-		// to a multi-sig vote if the DKG has a critical issue, requiring the chain
-		// to `force_change_authorities`.
-		if self.should_submit_proposer_vote(header) {
-			self.submit_proposer_vote(header);
-		}
-	}
-
-	fn submit_proposer_vote(&self, header: &B::Header) {
-		let proposer_vote_msg = ProposerVoteMessage {
-			session_id: todo!(),
-			proposer_leaf_index: todo!(),
-			new_governor: todo!(),
-			proposer_merkle_path: todo!(),
-			signature: todo!(),
-		};
-		gossip_proposer_vote(self, proposer_vote_msg);
 	}
 
 	async fn maybe_enact_genesis_authorities(&self, header: &B::Header) {
@@ -1401,24 +1381,6 @@ where
 
 				Ok(())
 			},
-			NetworkMsgPayload::ProposerVote(_) => {
-				match self.verify_signature_against_authorities(dkg_msg).await {
-					Ok(dkg_msg) => {
-						match handle_proposer_vote(self, dkg_msg).await {
-							Ok(()) => (),
-							Err(err) => self.logger.error(format!(
-								"🕸️  Error while handling proposer vote message {err:?}"
-							)),
-						};
-					},
-
-					Err(err) => self.logger.error(format!(
-						"Error while verifying signature against authorities: {err:?}"
-					)),
-				}
-
-				Ok(())
-			},
 		};
 
 		if is_delivery_type {
@@ -1557,12 +1519,6 @@ where
 	{
 		let client = &self.client;
 		exec_client_function(client, function).await
-	}
-
-	fn should_submit_proposer_vote(&self, header: &B::Header) -> bool {
-		// query runtime api to check if we should execute new keygen.
-		let at = header.hash();
-		self.client.runtime_api().should_submit_proposer_vote(at).unwrap_or_default()
 	}
 
 	/// Wait for initial finalized block

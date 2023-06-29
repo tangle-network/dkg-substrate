@@ -631,7 +631,6 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
 	type VoteLength = VoteLength;
-	type ProposerSetView = DKGProposals;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 

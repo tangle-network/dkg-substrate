@@ -96,8 +96,7 @@ mod tests;
 pub mod types;
 pub mod utils;
 use dkg_runtime_primitives::{
-	handlers::decode_proposals::decode_proposal_identifier,
-	traits::{GetProposerSet, OnAuthoritySetChangeHandler},
+	handlers::decode_proposals::decode_proposal_identifier, traits::OnAuthoritySetChangeHandler,
 	ProposalHandlerTrait, ProposalNonce, ResourceId, TypedChainId,
 };
 use frame_support::{
@@ -237,26 +236,6 @@ pub mod pallet {
 	pub type ProposerThreshold<T: Config> =
 		StorageValue<_, u32, ValueQuery, DefaultForProposerThreshold>;
 
-	/// Proposer Set Update Proposal Nonce
-	#[pallet::storage]
-	#[pallet::getter(fn proposer_set_update_proposal_nonce)]
-	pub type ProposerSetUpdateProposalNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
-
-	/// Tracks current proposer set
-	#[pallet::storage]
-	#[pallet::getter(fn previous_proposers)]
-	pub type PreviousProposers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, T::MaxProposers>, ValueQuery>;
-
-	/// Tracks previous proposer set external accounts
-	#[pallet::storage]
-	#[pallet::getter(fn previous_external_proposer_accounts)]
-	pub type PreviousExternalProposerAccounts<T: Config> = StorageValue<
-		_,
-		BoundedVec<(T::AccountId, BoundedVec<u8, T::ExternalProposerAccountSize>), T::MaxProposers>,
-		ValueQuery,
-	>;
-
 	/// Tracks current proposer set
 	#[pallet::storage]
 	#[pallet::getter(fn proposers)]
@@ -297,16 +276,6 @@ pub mod pallet {
 	#[pallet::getter(fn resources)]
 	pub type Resources<T: Config> =
 		StorageMap<_, Blake2_256, ResourceId, BoundedVec<u8, T::MaxResources>>;
-
-	/// Previous proposer set merkle root
-	#[pallet::storage]
-	#[pallet::getter(fn previous_proposer_set_root)]
-	pub type PreviousProposerSetMerkleRoot<T: Config> = StorageValue<_, [u8; 32], ValueQuery>;
-
-	/// Next proposer set merkle root
-	#[pallet::storage]
-	#[pallet::getter(fn next_proposer_set_root)]
-	pub type ActiveProposerSetMerkleRoot<T: Config> = StorageValue<_, [u8; 32], ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub fn deposit_event)]
@@ -814,15 +783,8 @@ impl<T: Config> Pallet<T> {
 	/// to be fixed or changed.
 	#[allow(dead_code)]
 	fn create_proposer_set_update() {
-		// Store the current proposer set root in the previous slot while we update it.
-		PreviousProposerSetMerkleRoot::<T>::put(Self::next_proposer_set_root());
 		// Merkleize the new proposer set
 		let proposer_set_merkle_root = Self::get_proposer_set_tree_root();
-		ActiveProposerSetMerkleRoot::<T>::put(proposer_set_merkle_root);
-		// Increment the nonce, we increment first because the nonce starts at 0
-		let curr_proposal_nonce = Self::proposer_set_update_proposal_nonce();
-		let new_proposal_nonce = curr_proposal_nonce.saturating_add(1u32);
-		ProposerSetUpdateProposalNonce::<T>::put(new_proposal_nonce);
 		// Get average session length
 		let average_session_length_in_blocks: u64 =
 			T::NextSessionRotation::average_session_length().try_into().unwrap_or_default();
@@ -843,20 +805,6 @@ impl<T: Config> Pallet<T> {
 		proposer_set_update_proposal
 			.extend_from_slice(&average_session_length_in_millisecs.to_be_bytes());
 		proposer_set_update_proposal.extend_from_slice(&num_of_proposers.to_be_bytes());
-		proposer_set_update_proposal.extend_from_slice(&new_proposal_nonce.to_be_bytes());
-
-		match T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(
-			proposer_set_update_proposal,
-			dkg_runtime_primitives::ProposalAction::Sign(0),
-		) {
-			Ok(()) => {},
-			Err(e) => {
-				log::error!(
-					target: "runtime::dkg_proposals",
-					"Error creating proposer set update: {:?}", e
-				);
-			},
-		}
 	}
 
 	/// Returns the leaves of the proposer set merkle tree.
@@ -928,21 +876,8 @@ impl<T: Config>
 	/// Called when the authority set has changed.
 	///
 	/// On new authority sets, we need to:
-	/// - Store the current proposers and their ECDSA keys in the previous proposer set collections
-	///   for the emergency fallback mechanism to function.
-	/// - Remove the old authorities from the current proposer set and their ECDSA keys from the
-	///   external proposer accounts
-	/// - Add the new authorities to the proposer set and their ECDSA keys to the external proposer
-	///   accounts
-	/// - Apply all queued proposer actions which were queued during the previous epoch. These
-	///   actions contain additions and substracTtions from the proposer set (basically
-	///   non-authority proposers).
-	/// - Create a new proposer set update proposal by merkleizing the new proposer set
-	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
+	/// -
 	fn on_authority_set_changed(authorities: &[T::AccountId], authority_ids: &[T::DKGId]) {
-		// Set previous values to be current before any changes
-		PreviousProposers::<T>::put(Proposers::<T>::get());
-		PreviousExternalProposerAccounts::<T>::put(ExternalProposerAccounts::<T>::get());
 		// Get the new external accounts for the new authorities by converting
 		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids
@@ -954,29 +889,22 @@ impl<T: Config>
 				bounded_external_account
 			})
 			.collect::<Vec<_>>();
-		// Set all new values
 		ProposerCount::<T>::put(authorities.len() as u32);
 		let bounded_proposers: BoundedVec<T::AccountId, T::MaxProposers> =
 			authorities.to_vec().try_into().expect("Too many authorities!");
 		Proposers::<T>::put(bounded_proposers);
-		let external_accounts_tuple: Vec<(
-			T::AccountId,
-			BoundedVec<u8, T::ExternalProposerAccountSize>,
-		)> = authorities
-			.to_vec()
-			.into_iter()
-			.zip(new_external_accounts.into_iter())
-			.collect::<Vec<_>>();
 		let bounded_external_accounts: BoundedVec<
 			(T::AccountId, BoundedVec<u8, T::ExternalProposerAccountSize>),
 			T::MaxProposers,
-		> = external_accounts_tuple
+		> = authorities
+			.iter()
+			.cloned()
+			.zip(new_external_accounts.into_iter())
+			.collect::<Vec<_>>()
 			.try_into()
 			.expect("Too many external proposer accounts!");
 		ExternalProposerAccounts::<T>::put(bounded_external_accounts);
 		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities.to_vec() });
-		// Create the new proposer set merkle tree and update proposal
-		Self::create_proposer_set_update();
 	}
 }
 
@@ -997,16 +925,5 @@ impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaT
 				log::error!(target: "runtime::dkg_proposals", "Invalid DKG PublicKey format!");
 			})
 			.unwrap_or_default()
-	}
-}
-
-impl<T: Config> GetProposerSet<T::AccountId, T::ExternalProposerAccountSize> for Pallet<T> {
-	fn get_previous_proposer_set() -> Vec<T::AccountId> {
-		PreviousProposers::<T>::get().into_iter().collect()
-	}
-
-	fn get_previous_external_proposer_accounts(
-	) -> Vec<(T::AccountId, BoundedVec<u8, T::ExternalProposerAccountSize>)> {
-		PreviousExternalProposerAccounts::<T>::get().into_iter().collect()
 	}
 }

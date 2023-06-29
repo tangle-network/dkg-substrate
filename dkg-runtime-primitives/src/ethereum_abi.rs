@@ -1,8 +1,6 @@
-use codec::Encode;
+use codec::{Decode, Encode};
 use ethabi::{encode, Token};
 use sp_std::{vec, vec::Vec};
-
-use crate::gossip_messages::ProposerVoteMessage;
 
 #[allow(clippy::wrong_self_convention)]
 pub trait IntoAbiToken {
@@ -18,6 +16,18 @@ impl IntoAbiToken for [u8; 32] {
 	fn into_abi(&self) -> Token {
 		Token::Bytes(self.to_vec())
 	}
+}
+
+/// A vote message for voting on a new governor for cross-chain applications leveraging the DKG.
+// https://github.com/webb-tools/protocol-solidity/blob/main/packages/contracts/contracts/utils/Governable.sol#L10-L17
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct ProposerVoteMessage {
+	pub proposer_leaf_index: u32,
+	/// The proposed governor
+	pub new_governor: Vec<u8>,
+	/// The merkle path sibling nodes for the proposer in the proposer set merkle tree
+	pub proposer_merkle_path: Vec<[u8; 32]>,
 }
 
 impl IntoAbiToken for ProposerVoteMessage {

@@ -186,7 +186,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
 	type VoteLength = VoteLength;
-	type ProposerSetView = DKGProposals;
 	type WeightInfo = ();
 }
 
@@ -444,7 +443,7 @@ pub fn new_test_ext_initialized(
 			MaxProposers,
 		> = proposers
 			.iter()
-			.map(|x| (x.0.clone(), x.1.clone().try_into().expect("Key size too large")))
+			.map(|x| (x.0, x.1.clone().try_into().expect("Key size too large")))
 			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
 			.try_into()
 			.expect("Too many proposers");

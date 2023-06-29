@@ -176,7 +176,7 @@ fn set_get_threshold() {
 			MaxProposers,
 		> = proposers
 			.iter()
-			.map(|x| (x.0.clone(), x.1.clone().try_into().expect("Key size too large")))
+			.map(|x| (x.0, x.1.clone().try_into().expect("Key size too large")))
 			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
 			.try_into()
 			.expect("Too many proposers");

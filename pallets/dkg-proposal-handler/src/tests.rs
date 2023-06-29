@@ -178,23 +178,6 @@ fn handle_anchor_update_proposal_success() {
 }
 
 #[test]
-fn should_handle_proposer_set_update_proposal_success() {
-	execute_test_with(|| {
-		let proposal_raw: [u8; 48] = [
-			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8,
-			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 0, 0, 0, 1,
-		];
-
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
-			proposal_raw.to_vec(),
-			ProposalAction::Sign(0)
-		));
-
-		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
-	})
-}
-
-#[test]
 fn store_signed_proposal_offchain() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));

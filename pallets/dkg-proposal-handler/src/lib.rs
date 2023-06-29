@@ -607,34 +607,6 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		}
 	}
 
-	fn handle_unsigned_proposer_set_update_proposal(
-		proposal: Vec<u8>,
-		_action: ProposalAction,
-	) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let unsigned_proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::ProposerSetUpdate };
-		match decode_proposal_identifier(&unsigned_proposal) {
-			Ok(v) => {
-				Self::deposit_event(Event::<T>::ProposalAdded {
-					key: v.key,
-					target_chain: v.typed_chain_id,
-					data: unsigned_proposal.data().clone(),
-				});
-
-				UnsignedProposalQueue::<T>::insert(
-					v.typed_chain_id,
-					v.key,
-					Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
-				);
-
-				Ok(())
-			},
-			Err(e) => Err(Self::handle_validation_error(e).into()),
-		}
-	}
-
 	fn handle_unsigned_refresh_proposal(
 		proposal: dkg_runtime_primitives::RefreshProposal,
 	) -> DispatchResult {

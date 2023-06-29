@@ -155,13 +155,6 @@ pub trait ProposalHandlerTrait {
 		Ok(())
 	}
 
-	fn handle_unsigned_proposer_set_update_proposal(
-		_proposal: Vec<u8>,
-		_action: ProposalAction,
-	) -> frame_support::pallet_prelude::DispatchResult {
-		Ok(())
-	}
-
 	fn handle_signed_proposal(
 		_prop: Proposal<Self::MaxProposalLength>,
 	) -> frame_support::pallet_prelude::DispatchResult {
