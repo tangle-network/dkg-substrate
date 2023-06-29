@@ -197,7 +197,7 @@ where
 				let concat_data = dkg_pub_key
 					.clone()
 					.into_iter()
-					.chain(at.encode())
+					//.chain(at.encode())
 					.chain(unsigned_proposal_bytes)
 					.collect::<Vec<u8>>();
 				let seed = sp_core::keccak_256(&concat_data);

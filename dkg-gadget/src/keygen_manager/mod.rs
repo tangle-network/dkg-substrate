@@ -434,6 +434,15 @@ where
 			)
 			.await
 		{
+			// Before sending the task, force clear all previous tasks to allow the new one
+			// the immediately run
+			if anticipated_execution_status.force_execute {
+				dkg_worker.logger.debug(
+					"🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | FORCE EXECUTE",
+				);
+				self.work_manager.force_shutdown_all();
+			}
+
 			if let Err(err) = self.push_task(handle, task) {
 				dkg_worker.logger.error(format!(
 					"🕸️  PARTY {party_i} | SPAWNING KEYGEN SESSION {session_id} | ERROR: {err}"

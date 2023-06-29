@@ -140,9 +140,17 @@ impl<B: BlockT> WorkManager<B> {
 		}
 	}
 
-	// only relevant for keygen
+	// Only relevant for keygen
 	pub fn get_active_sessions_metadata(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
 		self.inner.read().active_tasks.iter().map(|r| r.metadata(now)).collect()
+	}
+
+	// This will shutdown and drop all tasks and enqueued messages
+	pub fn force_shutdown_all(&self) {
+		let mut lock = self.inner.write();
+		lock.active_tasks.clear();
+		lock.enqueued_tasks.clear();
+		lock.enqueued_messages.clear();
 	}
 
 	pub fn poll(&self) {

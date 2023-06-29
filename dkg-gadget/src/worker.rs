@@ -710,8 +710,9 @@ where
 			// maybe update the internal state of the worker
 			self.maybe_update_worker_state(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
-			if let Err(e) = self.handle_unsigned_proposals(header) {
-				self.logger.error(format!("🕸️  Error running handle_unsigned_proposals: {e:?}"));
+			if let Err(e) = self.signing_manager.on_block_finalized(header, self) {
+				self.logger
+					.error(format!("🕸️  Error running signing_manager.on_block_finalized: {e:?}"));
 			}
 		}
 	}
@@ -914,19 +915,14 @@ where
 		self.logger
 			.info(format!("Processing incoming DKG message: {:?}", dkg_msg.msg.session_id,));
 
-		let is_delivery_type = matches!(
-			dkg_msg.msg.payload,
-			DKGMsgPayload::Keygen(..) | DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..)
-		);
-
-		let res = match &dkg_msg.msg.payload {
+		match &dkg_msg.msg.payload {
 			DKGMsgPayload::Keygen(_) => {
 				self.keygen_manager.deliver_message(dkg_msg);
-				return Ok(())
+				Ok(())
 			},
 			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
 				self.signing_manager.deliver_message(dkg_msg);
-				return Ok(())
+				Ok(())
 			},
 			DKGMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
@@ -963,13 +959,7 @@ where
 
 				Ok(())
 			},
-		};
-
-		if is_delivery_type {
-			self.logger.warn(format!("Did not deliver message! res: {res:?}"));
 		}
-
-		res
 	}
 
 	async fn handle_dkg_report(&self, dkg_report: DKGReport) {
@@ -1036,10 +1026,6 @@ where
 		})?;
 
 		Ok(Public::from(signer))
-	}
-
-	fn handle_unsigned_proposals(&self, header: &B::Header) -> Result<(), DKGError> {
-		self.signing_manager.on_block_finalized(header, self)
 	}
 
 	fn get_jailed_signers_inner(
