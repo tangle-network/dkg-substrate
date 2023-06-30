@@ -544,8 +544,6 @@ pub mod pallet {
 			let proposal_header =
 				decode_proposal_header(prop.data()).map_err(|_| Error::<T>::InvalidProposal)?;
 
-			println!("typed chain id: {:?}", proposal_ident.typed_chain_id);
-
 			ensure!(Self::is_proposer(&who), Error::<T>::MustBeProposer);
 			ensure!(
 				Self::chain_whitelisted(proposal_ident.typed_chain_id),

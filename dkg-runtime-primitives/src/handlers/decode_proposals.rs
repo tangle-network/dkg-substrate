@@ -69,9 +69,6 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 		typed_chain_id: header.resource_id().typed_chain_id(),
 	};
 
-	println!("Hererereree");
-	println!("hehher typed_chain_id: {:?}", identifier.typed_chain_id);
-
 	// we then create a lazy identifier.
 	let maybe_anchor_create = substrate::anchor_create::create(proposal.data())
 		.map(|p| {
