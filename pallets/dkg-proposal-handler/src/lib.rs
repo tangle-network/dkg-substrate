@@ -518,29 +518,6 @@ pub mod pallet {
 				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
 		}
-
-		/// Force remove an unsigned proposal from the queue
-		#[pallet::weight(<T as Config>::WeightInfo::force_remove_unsigned_proposal())]
-		#[pallet::call_index(2)]
-		pub fn force_remove_unsigned_proposal(
-			origin: OriginFor<T>,
-			typed_chain_id: TypedChainId,
-			key: DKGPayloadKey,
-		) -> DispatchResultWithPostInfo {
-			// Call must come from root (likely from a democracy proposal passing)
-			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
-			ensure!(
-				UnsignedProposalQueue::<T>::contains_key(typed_chain_id, key),
-				Error::<T>::ProposalDoesNotExists
-			);
-			UnsignedProposalQueue::<T>::remove(typed_chain_id, key);
-			Self::deposit_event(Event::<T>::ProposalRemoved {
-				target_chain: typed_chain_id,
-				key,
-				expired: false,
-			});
-			Ok(().into())
-		}
 	}
 
 	#[pallet::validate_unsigned]
