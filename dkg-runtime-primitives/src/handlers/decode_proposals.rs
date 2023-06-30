@@ -46,7 +46,7 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 		return evm::evm_tx::create(proposal.data()).map(|p| ProposalIdentifier {
 			key: DKGPayloadKey::EVMProposal(p.nonce),
 			typed_chain_id: webb_proposals::TypedChainId::Evm(p.chain_id),
-		});
+		})
 	}
 
 	// Otherwise, begin parsing DKG proposal header

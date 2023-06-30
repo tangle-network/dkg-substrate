@@ -296,9 +296,9 @@ fn test_invalid_proposal_is_rejected() {
 #[test]
 fn create_successful_proposal() {
 	let typed_chain_id = TypedChainId::Evm(1);
-	println!("RED underlying chain id {:?}",typed_chain_id.underlying_chain_id());
+	println!("RED underlying chain id {:?}", typed_chain_id.underlying_chain_id());
 	let r_id = derive_resource_id(typed_chain_id.underlying_chain_id(), 1, b"System.remark");
-	println!("RED Typed chain id {:?}",r_id.typed_chain_id());
+	println!("RED Typed chain id {:?}", r_id.typed_chain_id());
 
 	new_test_ext_initialized(typed_chain_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		let prop_id = ProposalNonce::from(1u32);
