@@ -170,6 +170,12 @@ pub mod pallet {
 		<T as pallet_dkg_metadata::Config>::MaxSignatureLength,
 	>;
 
+	#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	pub struct SignedProposalEventData {
+		pub kind: ProposalKind,
+		pub data: Vec<u8>,
+	}
+
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config:
@@ -305,10 +311,10 @@ pub mod pallet {
 		ProposalBatchSigned {
 			/// The Target Chain.
 			target_chain: TypedChainId,
+			/// The batch ID of the proposal
+			batch_id: T::BatchId,
 			// The list of proposals signed
-			proposals: SignedProposalBatchOf<T>,
-			/// The Proposal Data.
-			data: Vec<u8>,
+			proposals: Vec<SignedProposalEventData>,
 			/// Signature of the hash of the proposal data.
 			signature: Vec<u8>,
 		},

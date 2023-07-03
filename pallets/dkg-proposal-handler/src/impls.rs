@@ -142,10 +142,18 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 					};
 
 					// emit an event for the signed refresh proposal
+					let signed_proposal_events = signed_batch
+						.proposals
+						.iter()
+						.map(|proposal| SignedProposalEventData {
+							kind: proposal.kind(),
+							data: proposal.data().clone(),
+						})
+						.collect::<Vec<_>>();
 					Self::deposit_event(Event::<T>::ProposalBatchSigned {
 						target_chain: TypedChainId::None,
-						proposals: signed_batch.clone(),
-						data: signed_batch.data(),
+						batch_id: signed_batch.batch_id,
+						proposals: signed_proposal_events,
 						signature: signature.clone(),
 					});
 				}
@@ -213,10 +221,18 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		UnsignedProposalQueue::<T>::remove(id.typed_chain_id, prop.batch_id);
 
 		// Emit RuntimeEvent so frontend can react to it.
+		let signed_proposal_events = prop
+			.proposals
+			.iter()
+			.map(|proposal| SignedProposalEventData {
+				kind: proposal.kind(),
+				data: proposal.data().clone(),
+			})
+			.collect::<Vec<_>>();
 		Self::deposit_event(Event::<T>::ProposalBatchSigned {
-			proposals: prop.clone(),
+			proposals: signed_proposal_events,
 			target_chain: id.typed_chain_id,
-			data: prop.data().to_vec(),
+			batch_id: prop.batch_id,
 			signature: prop.signature.to_vec(),
 		});
 
