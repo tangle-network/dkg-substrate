@@ -645,15 +645,6 @@ impl
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 
-	fn get_max_extrinsic_delay(
-		&self,
-		_: H256,
-		_block_number: BlockNumber,
-	) -> ApiResult<BlockNumber> {
-		self.logger.error("unimplemented get_max_extrinsic_delay".to_string());
-		todo!()
-	}
-
 	fn get_authority_accounts(&self, _: H256) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
 		self.logger.error("unimplemented get_authority_accounts".to_string());
 		todo!()

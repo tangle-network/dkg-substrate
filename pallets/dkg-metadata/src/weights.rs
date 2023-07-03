@@ -33,10 +33,8 @@ use core::marker::PhantomData;
 pub trait WeightInfo {
 	fn set_signature_threshold() -> Weight;
 	fn set_keygen_threshold() -> Weight;
-	fn set_refresh_delay(n: u32, ) -> Weight;
 	fn submit_public_key(n: u32, ) -> Weight;
 	fn submit_next_public_key(n: u32, ) -> Weight;
-	fn submit_public_key_signature() -> Weight;
 	fn submit_misbehaviour_reports(n: u32, ) -> Weight;
 	fn unjail() -> Weight;
 	fn force_unjail_signing() -> Weight;
@@ -72,17 +70,6 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 		// Minimum execution time: 20_000_000 picoseconds.
 		Weight::from_parts(20_000_000, 4791)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
-			.saturating_add(T::DbWeight::get().writes(1_u64))
-	}
-	/// Storage: DKG RefreshDelay (r:0 w:1)
-	/// Proof: DKG RefreshDelay (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// The range of component `n` is `[1, 100]`.
-	fn set_refresh_delay(_n: u32, ) -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `0`
-		//  Estimated: `0`
-		// Minimum execution time: 3_000_000 picoseconds.
-		Weight::from_parts(3_673_622, 0)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	/// Storage: DKG DKGPublicKey (r:1 w:1)
@@ -134,29 +121,6 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 			// Standard Error: 69_119_069
 			.saturating_add(Weight::from_parts(1_088_964_397, 0).saturating_mul(n.into()))
 			.saturating_add(T::DbWeight::get().reads(4_u64))
-			.saturating_add(T::DbWeight::get().writes(3_u64))
-	}
-	/// Storage: DKG NextDKGPublicKey (r:1 w:0)
-	/// Proof: DKG NextDKGPublicKey (max_values: Some(1), max_size: Some(522), added: 1017, mode: MaxEncodedLen)
-	/// Storage: DKG NextPublicKeySignature (r:1 w:1)
-	/// Proof: DKG NextPublicKeySignature (max_values: Some(1), max_size: Some(514), added: 1009, mode: MaxEncodedLen)
-	/// Storage: DKG UsedSignatures (r:1 w:0)
-	/// Proof: DKG UsedSignatures (max_values: Some(1), max_size: Some(263170), added: 263665, mode: MaxEncodedLen)
-	/// Storage: DKG RefreshNonce (r:1 w:0)
-	/// Proof: DKG RefreshNonce (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKG DKGPublicKey (r:1 w:0)
-	/// Proof: DKG DKGPublicKey (max_values: Some(1), max_size: Some(522), added: 1017, mode: MaxEncodedLen)
-	/// Storage: DKGProposalHandler UnsignedProposalQueue (r:2 w:1)
-	/// Proof: DKGProposalHandler UnsignedProposalQueue (max_values: None, max_size: Some(20052), added: 22527, mode: MaxEncodedLen)
-	/// Storage: DKG NextUnsignedAt (r:0 w:1)
-	/// Proof: DKG NextUnsignedAt (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	fn submit_public_key_signature() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `729`
-		//  Estimated: `312261`
-		// Minimum execution time: 90_000_000 picoseconds.
-		Weight::from_parts(90_000_000, 312261)
-			.saturating_add(T::DbWeight::get().reads(7_u64))
 			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
 	/// Storage: DKG NextAuthorities (r:1 w:0)
@@ -252,17 +216,6 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
-	/// Storage: DKG RefreshDelay (r:0 w:1)
-	/// Proof: DKG RefreshDelay (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// The range of component `n` is `[1, 100]`.
-	fn set_refresh_delay(_n: u32, ) -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `0`
-		//  Estimated: `0`
-		// Minimum execution time: 3_000_000 picoseconds.
-		Weight::from_parts(3_673_622, 0)
-			.saturating_add(RocksDbWeight::get().writes(1_u64))
-	}
 	/// Storage: DKG DKGPublicKey (r:1 w:1)
 	/// Proof: DKG DKGPublicKey (max_values: Some(1), max_size: Some(522), added: 1017, mode: MaxEncodedLen)
 	/// Storage: DKG BestAuthorities (r:1 w:0)
@@ -312,29 +265,6 @@ impl WeightInfo for () {
 			// Standard Error: 69_119_069
 			.saturating_add(Weight::from_parts(1_088_964_397, 0).saturating_mul(n.into()))
 			.saturating_add(RocksDbWeight::get().reads(4_u64))
-			.saturating_add(RocksDbWeight::get().writes(3_u64))
-	}
-	/// Storage: DKG NextDKGPublicKey (r:1 w:0)
-	/// Proof: DKG NextDKGPublicKey (max_values: Some(1), max_size: Some(522), added: 1017, mode: MaxEncodedLen)
-	/// Storage: DKG NextPublicKeySignature (r:1 w:1)
-	/// Proof: DKG NextPublicKeySignature (max_values: Some(1), max_size: Some(514), added: 1009, mode: MaxEncodedLen)
-	/// Storage: DKG UsedSignatures (r:1 w:0)
-	/// Proof: DKG UsedSignatures (max_values: Some(1), max_size: Some(263170), added: 263665, mode: MaxEncodedLen)
-	/// Storage: DKG RefreshNonce (r:1 w:0)
-	/// Proof: DKG RefreshNonce (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKG DKGPublicKey (r:1 w:0)
-	/// Proof: DKG DKGPublicKey (max_values: Some(1), max_size: Some(522), added: 1017, mode: MaxEncodedLen)
-	/// Storage: DKGProposalHandler UnsignedProposalQueue (r:2 w:1)
-	/// Proof: DKGProposalHandler UnsignedProposalQueue (max_values: None, max_size: Some(20052), added: 22527, mode: MaxEncodedLen)
-	/// Storage: DKG NextUnsignedAt (r:0 w:1)
-	/// Proof: DKG NextUnsignedAt (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	fn submit_public_key_signature() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `729`
-		//  Estimated: `312261`
-		// Minimum execution time: 90_000_000 picoseconds.
-		Weight::from_parts(90_000_000, 312261)
-			.saturating_add(RocksDbWeight::get().reads(7_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 	/// Storage: DKG NextAuthorities (r:1 w:0)

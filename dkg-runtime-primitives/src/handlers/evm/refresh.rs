@@ -11,16 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// Bridge Proposals
 
-// Anchor proposals
-pub mod anchor_create;
-pub mod anchor_update;
+use crate::{handlers::validate_proposals::ValidationError, RefreshProposal};
+use sp_std::borrow::ToOwned;
 
-// Token update proposals
-pub mod add_token_to_pool_share;
-pub mod fee_update;
-pub mod remove_token_from_pool_share;
-
-pub mod resource_id_update;
+pub fn create(data: &[u8]) -> Result<RefreshProposal, ValidationError> {
+	let bytes: [u8; RefreshProposal::LENGTH] =
+		data.try_into().map_err(|_| ValidationError::InvalidProposalBytesLength)?;
+	match RefreshProposal::from(&bytes) {
+		Ok(proposal) => Ok(proposal),
+		Err(e) => Err(ValidationError::InvalidDecoding(e.to_owned())),
+	}
+}

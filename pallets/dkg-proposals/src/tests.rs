@@ -23,9 +23,8 @@ use super::{
 	*,
 };
 use crate::mock::{
-	assert_has_event, manually_set_proposer_count, mock_ecdsa_address, mock_pub_key,
-	new_test_ext_initialized, roll_to, CollatorSelection, DKGProposalHandler, ExtBuilder,
-	MaxProposers,
+	assert_has_event, mock_ecdsa_address, mock_pub_key, new_test_ext_initialized, roll_to,
+	CollatorSelection, DKGProposalHandler, ExtBuilder, MaxProposers,
 };
 use codec::Encode;
 use core::panic;
@@ -180,7 +179,7 @@ fn set_get_threshold() {
 			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
 			.try_into()
 			.expect("Too many proposers");
-		ExternalProposerAccounts::<Test>::put(bounded_external_accounts);
+		VotingKeys::<Test>::put(bounded_external_accounts);
 
 		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(ProposerThreshold::<Test>::get(), TEST_THRESHOLD);
@@ -200,8 +199,8 @@ fn set_get_threshold() {
 }
 
 pub fn make_proposal<const N: usize>(
-	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
-) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
+	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
+) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
 	// Create the proposal Header
 	let r_id = ResourceId::from([
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
@@ -217,7 +216,7 @@ pub fn make_proposal<const N: usize>(
 
 	match prop {
 		Proposal::Unsigned { kind: ProposalKind::AnchorUpdate, .. } =>
-			Proposal::<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>::Unsigned {
+			Proposal::<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>::Unsigned {
 				kind: ProposalKind::AnchorUpdate,
 				data: buf.try_into().unwrap(),
 			},
@@ -800,25 +799,6 @@ fn session_change_should_create_proposer_set_update_proposal() {
 }
 
 #[test]
-fn proposers_tree_height_should_compute_correctly() {
-	manually_set_proposer_count(18).execute_with(|| {
-		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 5);
-	});
-	manually_set_proposer_count(16).execute_with(|| {
-		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 4);
-	});
-	manually_set_proposer_count(1).execute_with(|| {
-		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
-	});
-	manually_set_proposer_count(2).execute_with(|| {
-		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 1);
-	});
-	manually_set_proposer_count(100).execute_with(|| {
-		assert_eq!(DKGProposals::get_proposer_set_tree_height(), 7);
-	});
-}
-
-#[test]
 fn proposers_iter_keys_should_only_contain_active_proposers() {
 	let src_id = TypedChainId::Evm(1);
 	let r_id = derive_resource_id(src_id.underlying_chain_id(), 0x0100, b"remark");
@@ -826,59 +806,4 @@ fn proposers_iter_keys_should_only_contain_active_proposers() {
 	new_test_ext_initialized(src_id, r_id, b"System.remark".to_vec()).execute_with(|| {
 		assert_eq!(Proposers::<Test>::get().len(), 3);
 	});
-}
-
-use sp_io::hashing::keccak_256;
-//Tests whether proposer root is correct
-#[test]
-fn should_calculate_correct_proposer_set_root() {
-	ExtBuilder::with_genesis_collators().execute_with(|| {
-		// Initial proposer set is invulnerables even when another collator exists
-		assert_eq!(DKGProposals::proposer_count(), 3);
-		// Get the three invulnerable proposers' ECDSA keys
-		let proposer_a_address = mock_ecdsa_address(1);
-		let proposer_b_address = mock_ecdsa_address(2);
-		let proposer_c_address = mock_ecdsa_address(3);
-
-		let leaf0 = keccak_256(&proposer_a_address[..]);
-		let leaf1 = keccak_256(&proposer_b_address[..]);
-		let leaf2 = keccak_256(&proposer_c_address[..]);
-		let leaf3 = keccak_256(&[0u8]);
-
-		let mut node01_vec = leaf0.to_vec();
-		node01_vec.extend_from_slice(&leaf1);
-		let node01 = keccak_256(&node01_vec[..]);
-
-		let mut node23_vec = leaf2.to_vec();
-		node23_vec.extend_from_slice(&leaf3);
-		let node23 = keccak_256(&node23_vec[..]);
-
-		let mut root = node01.to_vec();
-		root.extend_from_slice(&node23);
-		assert_eq!(DKGProposals::get_proposer_set_tree_root(), keccak_256(&root));
-		// Advance a two sessions
-		roll_to(20);
-		// The fourth collator is now in the proposer set as well
-		assert_eq!(DKGProposals::proposer_count(), 4);
-		let proposer_a_address = mock_ecdsa_address(1);
-		let proposer_b_address = mock_ecdsa_address(2);
-		let proposer_c_address = mock_ecdsa_address(3);
-		let proposer_d_address = mock_ecdsa_address(4);
-		let leaf0 = keccak_256(&proposer_a_address[..]);
-		let leaf1 = keccak_256(&proposer_b_address[..]);
-		let leaf2 = keccak_256(&proposer_c_address[..]);
-		let leaf3 = keccak_256(&proposer_d_address[..]);
-
-		let mut node01_vec = leaf0.to_vec();
-		node01_vec.extend_from_slice(&leaf1);
-		let node01 = keccak_256(&node01_vec[..]);
-
-		let mut node23_vec = leaf2.to_vec();
-		node23_vec.extend_from_slice(&leaf3);
-		let node23 = keccak_256(&node23_vec[..]);
-
-		let mut root = node01.to_vec();
-		root.extend_from_slice(&node23);
-		assert_eq!(DKGProposals::get_proposer_set_tree_root(), keccak_256(&root));
-	})
 }

@@ -114,7 +114,7 @@ it.skip('proposer set update test', async () => {
 	// // Now the proposer set root on the contract has been updated
 
 	let proposerAccounts =
-		await polkadotApi.query.dkgProposals.externalProposerAccounts.entries();
+		await polkadotApi.query.dkgProposals.VotingKeys.entries();
 	let accounts = new Array();
 	for (let i = 0; i < proposerAccounts.length; i++) {
 		let account = proposerAccounts[i][1];

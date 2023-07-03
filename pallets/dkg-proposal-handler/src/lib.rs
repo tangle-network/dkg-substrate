@@ -108,8 +108,7 @@
 use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
-	DKGPayloadKey, OffchainSignedProposals, ProposalAction, ProposalHandlerTrait, ProposalNonce,
-	StoredUnsignedProposal, TypedChainId,
+	OffchainSignedProposals, ProposalHandlerTrait, StoredUnsignedProposal, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
@@ -119,7 +118,7 @@ use sp_runtime::{
 		storage::StorageValueRef,
 		storage_lock::{StorageLock, Time},
 	},
-	traits::{Saturating, Zero},
+	traits::Zero,
 };
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
@@ -138,7 +137,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
 	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
-	use frame_support::dispatch::{fmt::Debug, DispatchError, DispatchResultWithPostInfo};
+	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use log;
 	use sp_runtime::traits::{CheckedSub, One, Zero};
@@ -149,7 +148,7 @@ pub mod pallet {
 	/// Unsigned proposal for this pallet
 	pub type StoredUnsignedProposalOf<T> = StoredUnsignedProposal<
 		<T as frame_system::Config>::BlockNumber,
-		<T as Config>::MaxProposalLength,
+		<T as pallet_dkg_metadata::Config>::MaxProposalLength,
 	>;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -170,16 +169,6 @@ pub mod pallet {
 		/// Max blocks to store an unsigned proposal
 		#[pallet::constant]
 		type UnsignedProposalExpiry: Get<Self::BlockNumber>;
-		/// Max length of a proposal
-		#[pallet::constant]
-		type MaxProposalLength: Get<u32>
-			+ Debug
-			+ Clone
-			+ Eq
-			+ PartialEq
-			+ PartialOrd
-			+ Ord
-			+ TypeInfo;
 
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
@@ -584,7 +573,7 @@ pub mod pallet {
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	type MaxProposalLength = T::MaxProposalLength;
 
-	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
+	fn handle_unsigned_proposal(proposal: Vec<u8>) -> DispatchResult {
 		let bounded_proposal: BoundedVec<_, _> =
 			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
 		let proposal =
@@ -605,74 +594,6 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 			},
 			Err(e) => Err(Self::handle_validation_error(e).into()),
 		}
-	}
-
-	fn handle_unsigned_refresh_proposal(
-		proposal: dkg_runtime_primitives::RefreshProposal,
-	) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.encode().try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let unsigned_proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::Refresh };
-
-		Self::deposit_event(Event::<T>::ProposalAdded {
-			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: TypedChainId::None,
-			data: unsigned_proposal.data().clone(),
-		});
-
-		// Add new refresh proposal to the queue
-		UnsignedProposalQueue::<T>::insert(
-			TypedChainId::None,
-			DKGPayloadKey::RefreshVote(proposal.nonce),
-			Self::stored_unsigned_proposal_from_unsigned_proposal(unsigned_proposal),
-		);
-
-		Ok(())
-	}
-
-	fn handle_signed_refresh_proposal(
-		proposal: dkg_runtime_primitives::RefreshProposal,
-		signature: Vec<u8>,
-	) -> DispatchResult {
-		// Attempt to remove all previous unsigned refresh proposals too
-		// This may also remove ProposerSetUpdate proposals that haven't been signed
-		// yet, but given that this action is only to clean storage when a refresh
-		// fails, we can assume that the previous proposer set update will nonetheless
-		// need to be used to update the governors on the respective webb Apps anyway.
-		let remaining_untyped_proposals: usize =
-			UnsignedProposalQueue::<T>::iter_key_prefix(TypedChainId::None).count();
-
-		// emit an event for the signed refresh proposal
-		Self::deposit_event(Event::<T>::ProposalSigned {
-			key: DKGPayloadKey::RefreshVote(proposal.nonce),
-			target_chain: TypedChainId::None,
-			data: proposal.pub_key,
-			signature,
-		});
-
-		for i in 0..remaining_untyped_proposals {
-			let index = i as u32;
-			// Ensure we break when we reach the bottom
-			if proposal.nonce.saturating_sub(ProposalNonce(index)) == ProposalNonce(0u32) {
-				break
-			}
-			// Otherwise continue removing old refresh votes
-			UnsignedProposalQueue::<T>::remove(
-				TypedChainId::None,
-				DKGPayloadKey::RefreshVote(proposal.nonce.saturating_sub(ProposalNonce(index))),
-			);
-
-			Self::deposit_event(Event::<T>::ProposalRemoved {
-				key: DKGPayloadKey::RefreshVote(
-					proposal.nonce.saturating_sub(ProposalNonce(index)),
-				),
-				target_chain: TypedChainId::None,
-				expired: false,
-			});
-		}
-
-		Ok(())
 	}
 
 	fn handle_signed_proposal(prop: Proposal<T::MaxProposalLength>) -> DispatchResult {
@@ -971,6 +892,7 @@ impl<T: Config> Pallet<T> {
 			ValidationError::InvalidParameter(_) => Error::<T>::ProposalFormatInvalid,
 			ValidationError::UnimplementedProposalKind => Error::<T>::ProposalFormatInvalid,
 			ValidationError::InvalidProposalBytesLength => Error::<T>::InvalidProposalBytesLength,
+			ValidationError::InvalidDecoding(_) => Error::<T>::ProposalFormatInvalid,
 		}
 	}
 

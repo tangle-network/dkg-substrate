@@ -38,7 +38,7 @@ use sp_runtime::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Percent, Permill,
+	Percent,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -170,7 +170,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type SigningJailSentence = Period;
@@ -186,6 +185,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
 	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -194,8 +194,6 @@ pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
 parameter_types! {
 	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
-	pub const RefreshDelay: Permill = Permill::from_percent(90);
-	pub const TimeToRestart: u64 = 3;
 }
 
 impl pallet_timestamp::Config for Test {
@@ -261,7 +259,6 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
-	type MaxProposalLength = MaxProposalLength;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }
@@ -280,7 +277,7 @@ impl pallet_dkg_proposals::Config for Test {
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
 	type MaxProposers = MaxProposers;
-	type ExternalProposerAccountSize = MaxKeyLength;
+	type VotingKeySize = MaxKeyLength;
 	type WeightInfo = ();
 }
 
@@ -447,7 +444,7 @@ pub fn new_test_ext_initialized(
 			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
 			.try_into()
 			.expect("Too many proposers");
-		ExternalProposerAccounts::<Test>::put(bounded_external_accounts);
+		VotingKeys::<Test>::put(bounded_external_accounts);
 		ProposerCount::<Test>::put(3);
 
 		// Set and check threshold

@@ -219,12 +219,7 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Ok(Some(proposal)) = get_signed_proposal::<B, C, BE, MaxProposalLength, MaxAuthorities>(
-			&self.backend,
-			finished_round,
-			payload_key,
-			&self.logger,
-		) {
+		if let Ok(Some(proposal)) = get_signed_proposal(finished_round, payload_key) {
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {

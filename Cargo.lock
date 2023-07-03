@@ -5257,6 +5257,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "pallet-session",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -5266,6 +5267,7 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+ "webb-proposals",
 ]
 
 [[package]]

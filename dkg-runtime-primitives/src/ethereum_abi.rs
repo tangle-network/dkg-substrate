@@ -25,7 +25,7 @@ impl IntoAbiToken for [u8; 32] {
 pub struct ProposerVoteMessage {
 	pub proposer_leaf_index: u32,
 	/// The proposed governor
-	pub new_governor: Vec<u8>,
+	pub proposed_governor: Vec<u8>,
 	/// The merkle path sibling nodes for the proposer in the proposer set merkle tree
 	pub proposer_merkle_path: Vec<[u8; 32]>,
 }
@@ -34,7 +34,7 @@ impl IntoAbiToken for ProposerVoteMessage {
 	fn into_abi(&self) -> Token {
 		let tokens = vec![
 			Token::Bytes(self.proposer_leaf_index.encode()),
-			Token::Bytes(self.new_governor.encode()),
+			Token::Bytes(self.proposed_governor.encode()),
 		];
 		let merkle_path_tokens =
 			self.proposer_merkle_path.iter().map(|x| x.into_abi()).collect::<Vec<Token>>();

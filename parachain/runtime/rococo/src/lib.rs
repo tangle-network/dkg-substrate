@@ -500,7 +500,6 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type RefreshDelay = RefreshDelay;
 	type UnsignedPriority = UnsignedPriority;
 	type UnsignedInterval = UnsignedInterval;
 	type KeygenJailSentence = Period;
@@ -516,6 +515,7 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
 	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -534,7 +534,6 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = ();
-	type MaxProposalLength = MaxProposalLength;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
@@ -562,7 +561,7 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
 	type MaxProposers = MaxProposers;
-	type ExternalProposerAccountSize = MaxKeyLength;
+	type VotingKeySize = MaxKeyLength;
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
@@ -952,10 +951,6 @@ impl_runtime_apis! {
 
 		fn get_unsigned_proposals() -> Vec<UnsignedProposal<MaxProposalLength>> {
 			DKGProposalHandler::get_unsigned_proposals()
-		}
-
-		fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
-			DKG::max_extrinsic_delay(block_number)
 		}
 
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {

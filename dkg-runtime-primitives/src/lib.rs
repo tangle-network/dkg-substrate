@@ -63,7 +63,7 @@ impl<const T: u32> Get<u32> for CustomU32Getter<T> {
 	}
 }
 
-/// Utility fn to calculate keccak 256 has
+/// Utility fn to calculate keccak 256
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	let mut keccak = Keccak::v256();
 	keccak.update(data);
@@ -345,8 +345,6 @@ sp_api::decl_runtime_apis! {
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
-		/// Get maximum delay before which an offchain extrinsic should be submitted
-		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
