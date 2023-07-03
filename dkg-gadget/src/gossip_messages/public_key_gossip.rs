@@ -59,11 +59,11 @@ where
 			.logger
 			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
 
-		let is_main_round = {
+		let (is_main_round, is_genesis) = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == rounds.session_id
+				(msg.session_id == rounds.session_id, rounds.session_id == 0)
 			} else {
-				false
+				(false, false)
 			}
 		};
 
@@ -93,8 +93,9 @@ where
 		}
 
 		dkg_worker.logger.debug(format!(
-			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
+			"SESSION {} | isGenesis? {} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id,
+			is_genesis,
 			threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		));
@@ -103,7 +104,7 @@ where
 			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
 				&dkg_worker.backend,
 				&mut lock,
-				is_main_round,
+				is_genesis,
 				session_id,
 				current_block_number,
 				&dkg_worker.logger,
@@ -159,6 +160,7 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			recipient_id: None,
 			status,
 			session_id: msg.session_id,
+			retry_id: 0,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();

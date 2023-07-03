@@ -231,6 +231,7 @@ where
 				status: DKGMsgStatus::ACTIVE,
 				payload,
 				session_id: params.session_id,
+				retry_id: 0,
 			};
 
 			// we have no synchronization mechanism post-offline stage. Sometimes, messages

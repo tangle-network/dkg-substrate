@@ -76,6 +76,7 @@ pub struct AsyncProtocolParameters<
 	pub authority_public_key: Arc<Public>,
 	pub party_i: KeygenPartyId,
 	pub associated_block_id: u64,
+	pub retry_id: u16,
 	pub batch_id_gen: Arc<AtomicU64>,
 	pub handle: AsyncProtocolRemote<BI::Clock>,
 	pub session_id: SessionId,
@@ -144,6 +145,7 @@ impl<
 			handle: self.handle.clone(),
 			local_key: self.local_key.clone(),
 			db: self.db.clone(),
+			retry_id: self.retry_id,
 			logger: self.logger.clone(),
 		}
 	}
@@ -623,6 +625,7 @@ where
 				status,
 				payload,
 				session_id: params.session_id,
+				retry_id: params.retry_id,
 			};
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				params

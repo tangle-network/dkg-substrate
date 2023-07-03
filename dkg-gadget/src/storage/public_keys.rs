@@ -81,8 +81,9 @@ where
 			SUBMIT_KEYS_AT,
 			logger,
 		);
-		let _ = aggregated_public_keys.remove(&session_id);
 	}
+
+	let _ = aggregated_public_keys.remove(&session_id);
 
 	Ok(())
 }
