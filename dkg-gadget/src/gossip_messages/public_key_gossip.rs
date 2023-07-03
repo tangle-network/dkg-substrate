@@ -93,9 +93,8 @@ where
 		}
 
 		dkg_worker.logger.debug(format!(
-			"SESSION {} | isGenesis? {} | Threshold {} | Aggregated pubkeys {}",
+			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
 			msg.session_id,
-			is_genesis,
 			threshold,
 			aggregated_public_keys.keys_and_signatures.len()
 		));
