@@ -108,6 +108,9 @@ where
 		// if a keygen is running, don't start any new signing tasks
 		// until later
 		if self.lock.load(Ordering::SeqCst) {
+			dkg_worker
+				.logger
+				.debug("Will skip handling block finalized event because keygen is running");
 			return Ok(())
 		}
 
