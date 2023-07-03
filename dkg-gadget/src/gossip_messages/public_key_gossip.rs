@@ -59,11 +59,11 @@ where
 			.logger
 			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
 
-		let (is_main_round, is_genesis) = {
+		let is_main_round = {
 			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
-				(msg.session_id == rounds.session_id, rounds.session_id == 0)
+				msg.session_id == rounds.session_id
 			} else {
-				(false, false)
+				false
 			}
 		};
 
@@ -104,7 +104,7 @@ where
 			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
 				&dkg_worker.backend,
 				&mut lock,
-				is_genesis,
+				is_main_round,
 				session_id,
 				current_block_number,
 				&dkg_worker.logger,
