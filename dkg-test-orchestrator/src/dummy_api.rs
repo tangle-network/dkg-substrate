@@ -1,6 +1,6 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
-use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal, MaxProposalLength};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -31,7 +31,7 @@ pub struct DummyApiInner {
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
 	pub unsigned_proposals:
-		Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
+		Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
 	pub should_execute_keygen: bool,
 	pub blocks_per_session: u64,
 }
@@ -39,7 +39,7 @@ pub struct DummyApiInner {
 impl MutableBlockchain for DummyApi {
 	fn set_unsigned_proposals(
 		&self,
-		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
+		propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
 	) {
 		self.inner.write().unsigned_proposals = propos;
 	}
@@ -544,7 +544,7 @@ impl
 		TestBlock,
 		AuthorityId,
 		sp_api::NumberFor<TestBlock>,
-		dkg_runtime_primitives::CustomU32Getter<10000>,
+		MaxProposalLength,
 		dkg_runtime_primitives::CustomU32Getter<100>,
 	> for DummyApi
 {
@@ -681,7 +681,7 @@ impl
 	fn get_unsigned_proposals(
 		&self,
 		_hash: H256,
-	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {
+	) -> ApiResult<Vec<(UnsignedProposal<MaxProposalLength>, u64)>> {
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 

@@ -276,7 +276,6 @@ impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 }
 
 sp_api::decl_runtime_apis! {
-
 	pub trait DKGApi<AuthorityId, N, MaxProposalLength, MaxAuthorities> where
 		AuthorityId: Codec + PartialEq,
 		MaxProposalLength: Get<u32> + Clone,
