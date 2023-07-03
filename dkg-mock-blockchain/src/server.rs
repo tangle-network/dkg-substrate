@@ -4,7 +4,7 @@ use crate::{
 };
 use atomic::Atomic;
 use dkg_logging::debug_logger::DebugLogger;
-use dkg_runtime_primitives::{UnsignedProposal, MaxProposalLength};
+use dkg_runtime_primitives::{MaxProposalLength, UnsignedProposal};
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
 use sp_runtime::app_crypto::sp_core::hashing::sha2_256;
@@ -577,10 +577,7 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 }
 
 pub trait MutableBlockchain: Clone + Send + 'static {
-	fn set_unsigned_proposals(
-		&self,
-		propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
-	);
+	fn set_unsigned_proposals(&self, propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>);
 	fn set_pub_key(&self, block_id: u64, key: Vec<u8>);
 	fn set_should_execute_keygen(&self, should_execute: bool);
 }
@@ -588,15 +585,13 @@ pub trait MutableBlockchain: Clone + Send + 'static {
 enum IntraTestPhase {
 	Keygen {
 		trace_id: Uuid,
-		queued_unsigned_proposals:
-			Option<Vec<UnsignedProposal<MaxProposalLength>>>,
+		queued_unsigned_proposals: Option<Vec<UnsignedProposal<MaxProposalLength>>>,
 		round_number: u64,
 		test_case: Option<TestCase>,
 	},
 	Signing {
 		trace_id: Uuid,
-		queued_unsigned_proposals:
-			Option<Vec<(UnsignedProposal<MaxProposalLength>, u64)>>,
+		queued_unsigned_proposals: Option<Vec<(UnsignedProposal<MaxProposalLength>, u64)>>,
 		round_number: u64,
 		test_case: TestCase,
 	},
@@ -639,9 +634,7 @@ impl IntraTestPhase {
 
 	fn session_init(
 		&mut self,
-		unsigned_proposals: Option<
-			Vec<UnsignedProposal<MaxProposalLength>>,
-		>,
+		unsigned_proposals: Option<Vec<UnsignedProposal<MaxProposalLength>>>,
 		test_case: TestCase,
 	) {
 		// rotate signing into keygen, or keygen into keygen if there are no signing tests.

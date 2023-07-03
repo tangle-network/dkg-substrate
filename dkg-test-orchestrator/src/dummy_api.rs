@@ -1,6 +1,6 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
-use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal, MaxProposalLength};
+use dkg_runtime_primitives::{crypto::AuthorityId, MaxProposalLength, UnsignedProposal};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -30,17 +30,13 @@ pub struct DummyApiInner {
 	pub authority_sets:
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
-	pub unsigned_proposals:
-		Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
+	pub unsigned_proposals: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
 	pub should_execute_keygen: bool,
 	pub blocks_per_session: u64,
 }
 
 impl MutableBlockchain for DummyApi {
-	fn set_unsigned_proposals(
-		&self,
-		propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
-	) {
+	fn set_unsigned_proposals(&self, propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>) {
 		self.inner.write().unsigned_proposals = propos;
 	}
 

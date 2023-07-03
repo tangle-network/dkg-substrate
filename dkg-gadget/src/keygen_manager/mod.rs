@@ -367,6 +367,14 @@ where
 			if self.finished_count.load(Ordering::SeqCst) != session_id as usize {
 				dkg_worker.logger.warn("We have already run this protocol, is this a re-try?");
 			}
+		} else {
+			// if we are in genesis, make sure that the current public key isn't already on-chain
+			if !dkg_worker.dkg_pub_key_is_unset(header).await {
+				dkg_worker.logger.debug(
+					"🕸️  Not executing new keygen protocol because we already have a DKG public key",
+				);
+				return
+			}
 		}
 
 		let party_idx = match stage {
