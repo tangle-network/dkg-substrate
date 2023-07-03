@@ -427,7 +427,7 @@ where
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
 						let signing_manager = self.signing_manager.clone();
-						signing_manager.keygen_lock().await;
+						signing_manager.keygen_lock();
 						let task = async move {
 							match meta_handler.await {
 								Ok(_) => {
@@ -437,7 +437,7 @@ where
 									let _ = keygen_manager
 										.finished_count
 										.fetch_add(1, Ordering::SeqCst);
-									signing_manager.keygen_unlock().await;
+									signing_manager.keygen_unlock();
 									logger.info(
 										"The keygen meta handler has executed successfully"
 											.to_string(),
@@ -450,7 +450,7 @@ where
 									logger
 										.error(format!("Error executing meta handler {:?}", &err));
 									keygen_manager.set_state(KeygenState::Failed { session_id });
-									signing_manager.keygen_unlock().await;
+									signing_manager.keygen_unlock();
 									let _ = err_handler_tx.send(err.clone());
 									Err(err)
 								},
@@ -710,7 +710,7 @@ where
 			// maybe update the internal state of the worker
 			self.maybe_update_worker_state(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
-			if let Err(e) = self.signing_manager.on_block_finalized(header, self) {
+			if let Err(e) = self.signing_manager.on_block_finalized(header, self).await {
 				self.logger
 					.error(format!("🕸️  Error running signing_manager.on_block_finalized: {e:?}"));
 			}
