@@ -202,7 +202,7 @@ pub mod pallet {
 		/// - `info`: The identity information.
 		///
 		/// Emits `ResourceSet` if successful.
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config<I>>::WeightInfo::set_metadata())]
 		#[pallet::call_index(0)]
 		pub fn set_metadata(
 			origin: OriginFor<T>,
@@ -226,7 +226,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::weight(1)]
+		#[pallet::weight(<T as Config<I>>::WeightInfo::force_reset_indices())]
 		#[pallet::call_index(1)]
 		pub fn force_reset_indices(
 			origin: OriginFor<T>,
