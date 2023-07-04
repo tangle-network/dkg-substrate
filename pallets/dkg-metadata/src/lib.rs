@@ -219,7 +219,7 @@ pub mod pallet {
 		>;
 
 		/// Proposer handler trait
-		type ProposalHandler: ProposalHandlerTrait;
+		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
 
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
@@ -1251,12 +1251,12 @@ pub mod pallet {
 			// If there's a next key we immediately create a refresh proposal
 			// to sign our own key as a means of jumpstarting the mechanism.
 			if let Some(pub_key) = next_pub_key {
-				RefreshInProgress::<T>::put(true);
 				ShouldSubmitProposerVote::<T>::put(true);
 				let next_nonce = Self::refresh_nonce() + 1u32;
 				let data = Self::create_refresh_proposal(pub_key.1.into(), next_nonce);
-				match T::ProposalHandler::handle_unsigned_proposal(data.encode()) {
+				match T::ProposalHandler::handle_unsigned_proposal(data) {
 					Ok(()) => {
+						RefreshInProgress::<T>::put(true);
 						RefreshNonce::<T>::put(next_nonce);
 						log::debug!("Handled refresh proposal");
 					},
@@ -1269,7 +1269,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Triggers an Emergency Keygen Porotocol.
+		/// Triggers an Emergency Keygen Protocol.
 		///
 		/// The keygen protocol will then be executed and the result will be stored in the off chain
 		/// storage, which will be picked up by the on chain worker and stored on chain.
@@ -1429,7 +1429,7 @@ impl<T: Config> Pallet<T> {
 	pub fn do_refresh(pub_key: Vec<u8>) {
 		let next_nonce = Self::refresh_nonce() + 1u32;
 		let data = Self::create_refresh_proposal(pub_key, next_nonce);
-		match T::ProposalHandler::handle_unsigned_proposal(data.encode()) {
+		match T::ProposalHandler::handle_unsigned_proposal(data) {
 			Ok(()) => {
 				RefreshInProgress::<T>::put(true);
 				log::debug!("Handled refresh proposal");
@@ -1440,7 +1440,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn create_refresh_proposal(pub_key: Vec<u8>, nonce: u32) -> RefreshProposal {
+	pub fn create_refresh_proposal(pub_key: Vec<u8>, nonce: u32) -> Proposal<T::MaxProposalLength> {
 		let uncompressed_pub_key = Self::decompress_public_key(pub_key).unwrap_or_default();
 		let (voter_merkle_root, session_length, voter_count) = Self::create_voter_set_data();
 		let proposal = RefreshProposal {
@@ -1455,7 +1455,10 @@ impl<T: Config> Pallet<T> {
 		// This is to ensure that we can force rotate and re-sign successfully.
 		CurrentRefreshProposal::<T>::put(proposal.clone());
 
-		proposal
+		// Encode the proposal and return the unsigned proposal.
+		let bounded_proposal_data: BoundedVec<u8, T::MaxProposalLength> =
+			proposal.encode().try_into().unwrap_or_default();
+		Proposal::Unsigned { kind: ProposalKind::Refresh, data: bounded_proposal_data }
 	}
 
 	/// Creates the voter set merkle tree and auxiliary data for the `RefreshProposal`.

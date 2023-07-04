@@ -21,7 +21,7 @@ use frame_support::{
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 };
-use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
+use sp_runtime::{offchain::storage::{StorageRetrievalError, StorageValueRef}, BoundedVec};
 use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;
@@ -110,10 +110,11 @@ pub fn run_n_blocks(n: u64) -> u64 {
 #[test]
 fn handle_empty_proposal() {
 	execute_test_with(|| {
-		let prop: Vec<u8> = Vec::new();
-
 		assert_err!(
-			DKGProposalHandler::handle_unsigned_proposal(prop),
+			DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
+				kind: ProposalKind::AnchorUpdate,
+				data: BoundedVec::default(),
+			}),
 			crate::Error::<Test>::InvalidProposalBytesLength
 		);
 
@@ -160,7 +161,10 @@ fn handle_anchor_update_proposal_success() {
 			238, 94,
 		];
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(proposal_raw.to_vec(),));
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
+			kind: ProposalKind::AnchorUpdate,
+			data: proposal_raw.to_vec().try_into().unwrap()
+		}));
 
 		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
 	})

@@ -164,7 +164,7 @@ pub mod pallet {
 		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
 
 		/// The handler for proposals
-		type ProposalHandler: ProposalHandlerTrait;
+		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
 
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a
@@ -726,7 +726,7 @@ impl<T: Config> Pallet<T> {
 			proposal_nonce: nonce,
 			kind: prop.kind(),
 		});
-		T::ProposalHandler::handle_unsigned_proposal(prop.data().clone())?;
+		T::ProposalHandler::handle_unsigned_proposal(prop.clone())?;
 		Self::deposit_event(Event::ProposalSucceeded {
 			src_chain_id,
 			proposal_nonce: nonce,

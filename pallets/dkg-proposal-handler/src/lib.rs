@@ -121,7 +121,7 @@ use sp_runtime::{
 	traits::Zero,
 };
 use sp_std::{convert::TryInto, vec::Vec};
-use webb_proposals::{OnSignedProposal, Proposal, ProposalKind};
+use webb_proposals::{OnSignedProposal, Proposal};
 pub use weights::WeightInfo;
 
 #[cfg(test)]
@@ -378,8 +378,7 @@ pub mod pallet {
 							// Do nothing, it is all good.
 						},
 						Err(e) => {
-							// this is a bad signature.
-							// we emit it as an RuntimeEvent.
+							// This is a bad signature, we emit it as an RuntimeEvent.
 							Self::deposit_event(Event::InvalidProposalSignature {
 								kind: *kind,
 								data: data.clone().into(),
@@ -395,12 +394,11 @@ pub mod pallet {
 								signature,
 								e.ty()
 							);
-							// skip it.
 							continue
 						},
 					}
 
-					// now we need to log the data and signature
+					// Log the data and signature
 					log::debug!(
 						target: "runtime::dkg_proposal_handler",
 						"submit_signed_proposal: data: {:?}, signature: {:?}",
@@ -570,25 +568,21 @@ pub mod pallet {
 	}
 }
 
-impl<T: Config> ProposalHandlerTrait for Pallet<T> {
-	type MaxProposalLength = T::MaxProposalLength;
-
-	fn handle_unsigned_proposal(proposal: Vec<u8>) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::AnchorUpdate };
-		match decode_proposal_identifier(&proposal) {
+impl<T: Config> ProposalHandlerTrait<T::MaxProposalLength> for Pallet<T> {
+	fn handle_unsigned_proposal(
+		prop: Proposal<<T as pallet_dkg_metadata::Config>::MaxProposalLength>,
+	) -> DispatchResult {
+		match decode_proposal_identifier(&prop) {
 			Ok(v) => {
 				Self::deposit_event(Event::<T>::ProposalAdded {
 					key: v.key,
 					target_chain: v.typed_chain_id,
-					data: proposal.data().clone(),
+					data: prop.data().clone(),
 				});
 				UnsignedProposalQueue::<T>::insert(
 					v.typed_chain_id,
 					v.key,
-					Self::stored_unsigned_proposal_from_unsigned_proposal(proposal),
+					Self::stored_unsigned_proposal_from_unsigned_proposal(prop),
 				);
 				Ok(())
 			},
@@ -596,7 +590,9 @@ impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 		}
 	}
 
-	fn handle_signed_proposal(prop: Proposal<T::MaxProposalLength>) -> DispatchResult {
+	fn handle_signed_proposal(
+		prop: Proposal<<T as pallet_dkg_metadata::Config>::MaxProposalLength>,
+	) -> DispatchResult {
 		let id = match decode_proposal_identifier(&prop) {
 			Ok(v) => v,
 			Err(e) => return Err(Self::handle_validation_error(e).into()),
@@ -889,10 +885,24 @@ impl<T: Config> Pallet<T> {
 
 	fn handle_validation_error(error: ValidationError) -> Error<T> {
 		match error {
-			ValidationError::InvalidParameter(_) => Error::<T>::ProposalFormatInvalid,
+			ValidationError::InvalidParameter(e) => {
+				log::error!(
+					target: "runtime::dkg_proposal_handler",
+					"Invalid parameter: {:?}",
+					e
+				);
+				Error::<T>::ProposalFormatInvalid
+			},
+			ValidationError::InvalidDecoding(e) => {
+				log::error!(
+					target: "runtime::dkg_proposal_handler",
+					"Invalid decoding: {:?}",
+					e
+				);
+				Error::<T>::ProposalFormatInvalid
+			},
 			ValidationError::UnimplementedProposalKind => Error::<T>::ProposalFormatInvalid,
 			ValidationError::InvalidProposalBytesLength => Error::<T>::InvalidProposalBytesLength,
-			ValidationError::InvalidDecoding(_) => Error::<T>::ProposalFormatInvalid,
 		}
 	}
 
