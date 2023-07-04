@@ -21,7 +21,10 @@ use frame_support::{
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 };
-use sp_runtime::{offchain::storage::{StorageRetrievalError, StorageValueRef}, BoundedVec};
+use sp_runtime::{
+	offchain::storage::{StorageRetrievalError, StorageValueRef},
+	BoundedVec,
+};
 use sp_std::vec::Vec;
 
 use super::mock::DKGProposalHandler;

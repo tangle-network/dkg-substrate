@@ -5210,6 +5210,7 @@ dependencies = [
 name = "pallet-bridge-registry"
 version = "1.0.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

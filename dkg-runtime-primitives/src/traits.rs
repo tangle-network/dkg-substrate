@@ -78,18 +78,18 @@ impl<AuthoritySetId: Copy> OnDKGPublicKeyChangeHandler<AuthoritySetId> for Tuple
 
 /// Trait to be used for handling signed proposals
 pub trait OnSignedProposal<MaxProposalLength: Get<u32>> {
-    /// On a signed proposal, this method is called.
-    /// It returns a result `()` and otherwise an error of type `E`.
-    ///
-    /// ## Errors
-    ///
-    /// 1. If the proposal is not signed.
-    /// 2. If the proposal is not valid.
-    fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError>;
+	/// On a signed proposal, this method is called.
+	/// It returns a result `()` and otherwise an error of type `E`.
+	///
+	/// ## Errors
+	///
+	/// 1. If the proposal is not signed.
+	/// 2. If the proposal is not valid.
+	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError>;
 }
 
 #[impl_trait_for_tuples::impl_for_tuples(5)]
-impl<MaxProposalLength: Get<u32>> OnSignedProposal<MaxProposalLength> for Tuple5 {
+impl<MaxProposalLength: Get<u32> + Clone> OnSignedProposal<MaxProposalLength> for Tuple5 {
 	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError> {
 		for_tuples!( #( Tuple5::on_signed_proposal(proposal.clone())?; )* );
 		Ok(().into())

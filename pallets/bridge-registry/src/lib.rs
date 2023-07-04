@@ -58,9 +58,7 @@ use sp_std::{convert::TryInto, prelude::*, vec};
 
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
-use webb_proposals::{
-	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
-};
+use webb_proposals::{evm::AnchorUpdateProposal, Proposal, ProposalKind, ResourceId};
 
 pub use pallet::*;
 
@@ -250,7 +248,8 @@ pub mod pallet {
 ///
 /// Note: There MUST only be a single connected component unless the end-user/developer wants
 /// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
-impl<T: Config> OnSignedProposal<DispatchError, T::MaxProposalLength> for Pallet<T> {
+use dkg_runtime_primitives::traits::OnSignedProposal;
+impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
 		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
 

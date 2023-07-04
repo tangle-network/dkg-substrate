@@ -108,9 +108,9 @@
 use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
+	traits::OnSignedProposal,
 	OffchainSignedProposals, ProposalHandlerTrait, StoredUnsignedProposal, TypedChainId,
 };
-use dkg_runtime_primitives::traits::OnSignedProposal;
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
 pub use pallet::*;
@@ -138,7 +138,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
 	use dkg_runtime_primitives::{utils::ensure_signed_by_dkg, DKGPayloadKey};
-	use frame_support::dispatch::{DispatchError, DispatchResultWithPostInfo};
+	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use log;
 	use sp_runtime::traits::{CheckedSub, One, Zero};

@@ -23,7 +23,7 @@ ethereum = { version = "0.14.0", default-features = false, features = [
 	"with-codec",
 ] }
 ethereum-types = { version = "0.14.1", default-features = false }
-webb-proposals = { workspace = true, default-features = false }
+webb-proposals = { workspace = true, default-features = false, features = ["substrate"] }
 
 sp-api = { workspace = true }
 sp-io = { workspace = true }
