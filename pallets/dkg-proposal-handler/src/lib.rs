@@ -110,6 +110,7 @@ use dkg_runtime_primitives::{
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	OffchainSignedProposals, ProposalHandlerTrait, StoredUnsignedProposal, TypedChainId,
 };
+use dkg_runtime_primitives::traits::OnSignedProposal;
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
 pub use pallet::*;
@@ -121,7 +122,7 @@ use sp_runtime::{
 	traits::Zero,
 };
 use sp_std::{convert::TryInto, vec::Vec};
-use webb_proposals::{OnSignedProposal, Proposal};
+use webb_proposals::Proposal;
 pub use weights::WeightInfo;
 
 #[cfg(test)]
@@ -162,7 +163,7 @@ pub mod pallet {
 		/// The identifier type for an offchain worker.
 		type OffChainAuthId: AppCrypto<Self::Public, Self::Signature>;
 		/// The signed proposal handler trait
-		type SignedProposalHandler: OnSignedProposal<DispatchError, Self::MaxProposalLength>;
+		type SignedProposalHandler: OnSignedProposal<Self::MaxProposalLength>;
 		/// Max number of signed proposal submissions per batch;
 		#[pallet::constant]
 		type MaxSubmissionsPerBatch: Get<u16>;

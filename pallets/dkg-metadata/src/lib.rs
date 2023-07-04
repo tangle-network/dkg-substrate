@@ -2322,9 +2322,9 @@ impl<
 ///
 /// Note: There MUST only be a single connected component unless the end-user/developer wants
 /// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
-use webb_proposals::OnSignedProposal;
+use dkg_runtime_primitives::traits::OnSignedProposal;
 use webb_proposals::ProposalKind;
-impl<T: Config> OnSignedProposal<DispatchError, T::MaxProposalLength> for Pallet<T> {
+impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
 		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
 

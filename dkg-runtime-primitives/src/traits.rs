@@ -13,8 +13,10 @@
 // limitations under the License.
 //
 use frame_support::dispatch::DispatchResultWithPostInfo;
-use sp_runtime::BoundedVec;
+use sp_core::Get;
+use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::vec::Vec;
+use webb_proposals::Proposal;
 
 pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
 	fn on_authority_set_changed(authority_accounts: &[AccountId], authority_ids: &[AuthorityId]);
@@ -70,6 +72,26 @@ impl<AuthoritySetId: Copy> OnDKGPublicKeyChangeHandler<AuthoritySetId> for Tuple
 		dkg_public_key: Vec<u8>,
 	) -> DispatchResultWithPostInfo {
 		for_tuples!( #( Tuple5::on_dkg_public_key_changed(authority_id, dkg_public_key.clone())?; )* );
+		Ok(().into())
+	}
+}
+
+/// Trait to be used for handling signed proposals
+pub trait OnSignedProposal<MaxProposalLength: Get<u32>> {
+    /// On a signed proposal, this method is called.
+    /// It returns a result `()` and otherwise an error of type `E`.
+    ///
+    /// ## Errors
+    ///
+    /// 1. If the proposal is not signed.
+    /// 2. If the proposal is not valid.
+    fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError>;
+}
+
+#[impl_trait_for_tuples::impl_for_tuples(5)]
+impl<MaxProposalLength: Get<u32>> OnSignedProposal<MaxProposalLength> for Tuple5 {
+	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError> {
+		for_tuples!( #( Tuple5::on_signed_proposal(proposal.clone())?; )* );
 		Ok(().into())
 	}
 }
