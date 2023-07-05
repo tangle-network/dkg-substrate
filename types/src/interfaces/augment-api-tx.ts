@@ -301,6 +301,10 @@ declare module '@polkadot/api-base/types/submittable' {
     };
     dkgProposalHandler: {
       /**
+       * Force remove an unsigned proposal from the queue
+       **/
+      forceRemoveUnsignedProposal: AugmentedSubmittable<(typedChainId: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, key: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshVote: any } | { ProposerSetUpdateProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
+      /**
        * Force submit an unsigned proposal to the DKG
        * 
        * There are certain proposals we'd like to be proposable only

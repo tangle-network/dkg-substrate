@@ -249,7 +249,7 @@ declare module '@polkadot/api-base/types/storage' {
       /**
        * Should we start a new Keygen
        **/
-      shouldExecuteNewKeygen: AugmentedQuery<ApiType, () => Observable<bool>, []> & QueryableStorageEntry<ApiType, []>;
+      shouldExecuteNewKeygen: AugmentedQuery<ApiType, () => Observable<ITuple<[bool, bool]>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * The current signature threshold (i.e. the `t` in t-of-n)
        **/

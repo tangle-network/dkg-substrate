@@ -178,19 +178,19 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * Voting successful for a proposal
        **/
-      ProposalApproved: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
+      ProposalApproved: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
       /**
        * Execution of call failed
        **/
-      ProposalFailed: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
+      ProposalFailed: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
       /**
        * Voting rejected a proposal
        **/
-      ProposalRejected: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
+      ProposalRejected: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
       /**
        * Execution of call succeeded
        **/
-      ProposalSucceeded: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
+      ProposalSucceeded: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
       /**
        * Proposer added to set
        **/
@@ -206,11 +206,11 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * Vot submitted against proposal
        **/
-      VoteAgainst: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32 }>;
+      VoteAgainst: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32 }>;
       /**
        * Vote submitted in favour of proposal
        **/
-      VoteFor: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32], { kind: WebbProposalsProposalProposalKind, chainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32 }>;
+      VoteFor: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32, who: AccountId32 }>;
       /**
        * Generic event
        **/
