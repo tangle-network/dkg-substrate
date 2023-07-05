@@ -3692,10 +3692,8 @@
     "@webb-tools/contracts" "^0.5.40"
     ethers "5.7.0"
 
-"@webb-tools/dkg-substrate-types@0.0.5", "@webb-tools/dkg-substrate-types@^0.0.5":
-  version "0.0.5"
-  resolved "https://registry.yarnpkg.com/@webb-tools/dkg-substrate-types/-/dkg-substrate-types-0.0.5.tgz#d6178d5d9feca39a1f0b56f42295bcd88d343088"
-  integrity sha512-WMVqLZ7OPkpoel7jSqBXFdijl15+D3tSs+OG98a5jf5DrvgwEFaC3QrWmD7OWfdfaRR3gpoy6WmEesBpozprsQ==
+"@webb-tools/dkg-substrate-types@0.0.5", "@webb-tools/dkg-substrate-types@file:../types":
+  version "0.0.6"
   dependencies:
     "@babel/cli" "^7.20.7"
     "@babel/core" "^7.20.12"
@@ -13391,10 +13389,17 @@ rustbn.js@~0.2.0:
   resolved "https://registry.yarnpkg.com/rustbn.js/-/rustbn.js-0.2.0.tgz#8082cb886e707155fd1cb6f23bd591ab8d55d0ca"
   integrity sha512-4VlvkRUuCJvr2J6Y0ImW7NvTCriMi7ErOAqWk1y69vAdoNIzCF3yPmgeNzx+RQTLEDFq5sHfscn1MwHxP9hNfA==
 
-rxjs@^7.5.5, rxjs@^7.5.6, rxjs@^7.8.0:
+rxjs@^7.5.5, rxjs@^7.8.0:
   version "7.8.0"
   resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-7.8.0.tgz#90a938862a82888ff4c7359811a595e14e1e09a4"
   integrity sha512-F2+gxDshqmIub1KdvZkaEfGDwLNpPvk9Fs6LD/MyQxNgMds/WH9OdDDXOmxUZpME+iSK3rQCctkL0DYyytUqMg==
+  dependencies:
+    tslib "^2.1.0"
+
+rxjs@^7.5.6:
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-7.8.1.tgz#6f6f3d99ea8044291efd92e7c7fcf562c4057543"
+  integrity sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==
   dependencies:
     tslib "^2.1.0"
 

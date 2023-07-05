@@ -39,7 +39,7 @@ export const hexToBytes = function (hex: any) {
 
 export const listenOneBlock = async function (api: ApiPromise) {
 	const unsubscribe = await api.rpc.chain.subscribeNewHeads((header) => {
-		console.log(`Chain is at block: #${header.hash}`);
+		console.log(`Chain is at block: #${header}`);
 		unsubscribe();
 	});
 };
@@ -92,7 +92,7 @@ export async function fastForwardTo(
 	}
 ): Promise<void> {
 	const currentBlockNumber = await api.rpc.chain.getHeader();
-	const diff = blockNumber - currentBlockNumber.number.toNumber();
+	const diff = blockNumber - currentBlockNumber;
 	if (diff > 0) {
 		await fastForward(api, diff, { delayBetweenBlocks });
 	}
@@ -277,27 +277,30 @@ export async function waitForEvent(
 			const events = await api.query.system.events();
 			const eventsJson = events.toJSON();
 			const eventsValue = api.registry.createType("Vec<EventRecord>", events.toU8a());
+			console.log(eventsValue);
 			// Loop through the Vec<EventRecord>
 			for (var event of eventsValue) {
-				const section = event.event.section;
-				const method = event.event.method;
-				const data = event.event.data;
-				if (section === pallet && method === eventVariant) {
-					if (dataQuery) {
-						for (const value of data) {
-							const jsonData = value.toJSON();
-							if (jsonData instanceof Object) {
-								Object.keys(jsonData).map((key) => {
-									if (key === dataQuery.key) {
-										return resolve(void 0);
-									}
-								});
-							}
-						}
-					} else {
-						return resolve(void 0);
-					}
-				}
+				console.log(event);
+				// const eventJson = event.toJSON();
+				// const section = eventJson.event.section;
+				// const method = eventJson.event.method;
+				// const data = eventJson.event.data;
+				// if (section === pallet && method === eventVariant) {
+				// 	if (dataQuery) {
+				// 		for (const value of data) {
+				// 			const jsonData = value.toJSON();
+				// 			if (jsonData instanceof Object) {
+				// 				Object.keys(jsonData).map((key) => {
+				// 					if (key === dataQuery.key) {
+				// 						return resolve(void 0);
+				// 					}
+				// 				});
+				// 			}
+				// 		}
+				// 	} else {
+				// 		return resolve(void 0);
+				// 	}
+				// }
 			}
 
 			await sleep(2000);

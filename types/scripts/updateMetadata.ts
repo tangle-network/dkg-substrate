@@ -7,32 +7,29 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const pkg = require('websocket');
-
+// Import the API
 const fs = require('fs');
+import { ApiPromise, WsProvider } from '@polkadot/api';
 
-const { w3cwebsocket: WS } = pkg;
+async function main () {
+  // Create connection to websocket
+  const wsProvider = new WsProvider('ws://127.0.0.1:9944');
+  // Create a new instance of the api
+  const api = await ApiPromise.create({ provider: wsProvider });
+  // get the chain information
+  const metadata = (await api.rpc.state.getMetadata()).toHex();
 
-const main = (): void => {
-  const endpoint = 'ws://localhost:9944';
-
-  console.log('Connecting to ', endpoint);
-  const ws = new WS(endpoint);
-
-  ws.onopen = (): void => {
-    ws.send('{"id":"1","jsonrpc":"2.0","method":"state_getMetadata","params":[]}');
+  let fullData = {
+    "jsonrpc": "2.0",
+    "result": metadata
   };
-
-  ws.onmessage = (msg: any): void => {
-    const fullData = JSON.parse(msg.data);
-    const metadata = fullData.result;
-
-    fs.writeFileSync('./src/metadata/static-latest.ts', `export default '${metadata}'`);
-    fs.writeFileSync('./src/metadata/metadata.json', JSON.stringify(fullData, null, 2));
+  
+  fs.writeFileSync('./src/metadata/static-latest.ts', `export default '${metadata}'`);
+  fs.writeFileSync('./src/metadata/metadata.json', JSON.stringify(fullData, null, 2));
 
     console.log('Done');
     process.exit(0);
-  };
-};
 
-main();
+}
+
+main().catch(console.error).finally(() => process.exit());
