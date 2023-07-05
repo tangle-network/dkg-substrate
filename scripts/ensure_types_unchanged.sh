@@ -1,4 +1,4 @@
-#!/bin.sh
+#!/bin/bash
 set -e
 cd $(git rev-parse --show-toplevel)/types
 if [[ $(git status --porcelain | grep -v "yarn.lock\|package.json" | grep "M") ]]; then

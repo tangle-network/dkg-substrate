@@ -1,0 +1,67 @@
+name: Type Change Checks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
+
+jobs:
+  # dkg-substrate integration tests
+  e2e:
+    name: Type Change Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - name: Install Nodejs
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: "./dkg-test-suite/.nvmrc"
+          cache: "yarn"
+          cache-dependency-path: "./dkg-test-suite/yarn.lock"
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate fixtures
+        run: dvc pull
+
+      - name: Install Protobuf
+        run: sudo apt-get install protobuf-compiler
+
+      - name: Install Packages
+        run: cd dkg-test-suite && yarn install --frozen-lockfile
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Populate Fixtures
+        run: dvc pull
+
+      - name: Ensure Types Unchanged
+        run: ./scripts/ensure_types_unchanged.sh
+
+      - name: Save Cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            target/release
+            target/debug
+          key: ${{ runner.os }}-cargo-index-${{ github.ref_name }}-e2e
