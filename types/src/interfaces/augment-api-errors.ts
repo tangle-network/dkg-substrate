@@ -69,6 +69,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       BridgeNotFound: AugmentedError<ApiType>;
       /**
+       * Input out of bounds
+       **/
+      OutOfBounds: AugmentedError<ApiType>;
+      /**
        * Parameters haven't been initialized
        **/
       ParametersNotInitialized: AugmentedError<ApiType>;
@@ -95,6 +99,10 @@ declare module '@polkadot/api-base/types/errors' {
     };
     dkg: {
       /**
+       * Authority is already jailed
+       **/
+      AlreadyJailed: AugmentedError<ApiType>;
+      /**
        * Already submitted a public key
        **/
       AlreadySubmittedPublicKey: AugmentedError<ApiType>;
@@ -102,6 +110,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Already submitted a public key signature
        **/
       AlreadySubmittedSignature: AugmentedError<ApiType>;
+      /**
+       * Cannot retreive signer from ecdsa signature
+       **/
+      CannotRetreiveSigner: AugmentedError<ApiType>;
       /**
        * Must be calling from the controller account
        **/
@@ -147,6 +159,14 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       NoNextPublicKey: AugmentedError<ApiType>;
       /**
+       * We do not have authorities to jail
+       **/
+      NotEnoughAuthoritiesToJail: AugmentedError<ApiType>;
+      /**
+       * Reported misbehaviour against a non authority
+       **/
+      OffenderNotAuthority: AugmentedError<ApiType>;
+      /**
        * Input is out of bounds
        **/
       OutOfBounds: AugmentedError<ApiType>;
@@ -164,6 +184,10 @@ declare module '@polkadot/api-base/types/errors' {
       [key: string]: AugmentedError<ApiType>;
     };
     dkgProposalHandler: {
+      /**
+       * Duplicate signed proposal
+       **/
+      CannotOverwriteSignedProposal: AugmentedError<ApiType>;
       /**
        * Chain id is invalid
        **/
@@ -230,6 +254,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Account does not have correct permissions
        **/
       InvalidPermissions: AugmentedError<ApiType>;
+      /**
+       * Invalid proposal
+       **/
+      InvalidProposal: AugmentedError<ApiType>;
       /**
        * Proposer threshold cannot be 0
        **/
