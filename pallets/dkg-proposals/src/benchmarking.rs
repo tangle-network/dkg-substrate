@@ -91,7 +91,6 @@ benchmarks! {
 	whitelist_chain {
 		let admin = RawOrigin::Root;
 		let chain_id: TypedChainId = TypedChainId::Evm(CHAIN_IDENTIFIER);
-		// let chain_id = ChainIdType::Substrate(CHAIN_IDENTIFIER);
 	}: _(admin, chain_id)
 	verify {
 		assert_last_event::<T>(Event::ChainWhitelisted{ chain_id}.into());

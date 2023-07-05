@@ -24,7 +24,7 @@ use super::{
 };
 use crate::mock::{
 	assert_has_event, mock_ecdsa_address, mock_pub_key, new_test_ext_initialized, roll_to,
-	CollatorSelection, DKGProposalHandler, ExtBuilder, MaxProposers,
+	CollatorSelection, ExtBuilder, MaxProposers,
 };
 use codec::Encode;
 use core::panic;

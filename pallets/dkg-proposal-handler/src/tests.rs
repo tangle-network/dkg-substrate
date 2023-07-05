@@ -787,11 +787,11 @@ fn expired_unsigned_proposals_are_removed() {
 		run_n_blocks(10);
 		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 2);
 
-		// lets time travel to a block after expiry period of first unsigned
+		// time travel to a block after expiry period of first unsigned
 		run_n_blocks(11);
 		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 1);
 
-		// lets time travel to a block after expiry period of second unsigned
+		// time travel to a block after expiry period of second unsigned
 		run_n_blocks(16);
 		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 0);
 	})

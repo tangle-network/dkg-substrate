@@ -2365,15 +2365,11 @@ impl<
 	}
 }
 
-/// A signed proposal handler implementation based on building bridge metadata.
+/// A signed proposal handler implementation for handling DKG `RefreshProposal`s
 ///
-/// This handler assumes that the bridge is being built incrementally as a single
-/// connected component. If the bridge is built over a set of anchors and at any point
-/// in the construction there are MORE than one connected component, this will throw
-/// an error and the extrinsic will be rejected.
-///
-/// Note: There MUST only be a single connected component unless the end-user/developer wants
-/// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
+/// On a signed `RefreshProposal` we must update the pallet's storage with the
+/// signature of the new public key. This then enables us to rotate the authority
+/// set on the next session change.
 use dkg_runtime_primitives::traits::OnSignedProposal;
 use webb_proposals::ProposalKind;
 impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
@@ -2383,6 +2379,8 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 		if proposal.kind() == ProposalKind::Refresh {
 			let (_, next_pub_key) =
 				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
+			// Check if a signature is already submitted. This should also prevent
+			// against manipulating the ECDSA signature to replay the submission.
 			ensure!(
 				Self::next_public_key_signature().is_none(),
 				Error::<T>::AlreadySubmittedSignature
@@ -2407,6 +2405,10 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 			NextPublicKeySignature::<T>::put(bounded_signature);
 			let uncompressed_pub_key =
 				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
+
+			// Clear the `CurrentRefreshProposal` storage now that
+			// we've processed the signature over it.
+			CurrentRefreshProposal::<T>::kill();
 
 			// Emit the event
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {

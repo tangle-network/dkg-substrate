@@ -26,8 +26,6 @@ pub(crate) fn get_signed_proposal(
 	match payload_key {
 		DKGPayloadKey::RefreshProposal(_nonce) =>
 			make_signed_proposal(ProposalKind::Refresh, finished_round),
-		DKGPayloadKey::ProposerSetUpdateProposal(_) =>
-			make_signed_proposal(ProposalKind::ProposerSetUpdate, finished_round),
 		DKGPayloadKey::EVMProposal(_) => make_signed_proposal(ProposalKind::EVM, finished_round),
 		DKGPayloadKey::AnchorCreateProposal(_) =>
 			make_signed_proposal(ProposalKind::AnchorCreate, finished_round),

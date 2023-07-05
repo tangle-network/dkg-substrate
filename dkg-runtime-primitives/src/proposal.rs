@@ -135,7 +135,6 @@ impl EncodeLike for RefreshProposal {}
 pub enum DKGPayloadKey {
 	EVMProposal(ProposalNonce),
 	RefreshProposal(ProposalNonce),
-	ProposerSetUpdateProposal(ProposalNonce),
 	AnchorCreateProposal(ProposalNonce),
 	AnchorUpdateProposal(ProposalNonce),
 	TokenAddProposal(ProposalNonce),
@@ -155,7 +154,6 @@ impl PartialEq for DKGPayloadKey {
 		match (self, other) {
 			(Self::EVMProposal(l0), Self::EVMProposal(r0)) => l0 == r0,
 			(Self::RefreshProposal(l0), Self::RefreshProposal(r0)) => l0 == r0,
-			(Self::ProposerSetUpdateProposal(l0), Self::ProposerSetUpdateProposal(r0)) => l0 == r0,
 			(Self::AnchorCreateProposal(l0), Self::AnchorCreateProposal(r0)) => l0 == r0,
 			(Self::AnchorUpdateProposal(l0), Self::AnchorUpdateProposal(r0)) => l0 == r0,
 			(Self::TokenAddProposal(l0), Self::TokenAddProposal(r0)) => l0 == r0,
