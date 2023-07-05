@@ -90,8 +90,9 @@ pub trait OnSignedProposal<MaxProposalLength: Get<u32>> {
 
 #[impl_trait_for_tuples::impl_for_tuples(5)]
 impl<MaxProposalLength: Get<u32> + Clone> OnSignedProposal<MaxProposalLength> for Tuple5 {
+	#[allow(clippy::redundant_clone)]
 	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError> {
 		for_tuples!( #( Tuple5::on_signed_proposal(proposal.clone())?; )* );
-		Ok(().into())
+		Ok(())
 	}
 }

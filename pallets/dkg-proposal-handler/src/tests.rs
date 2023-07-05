@@ -440,15 +440,6 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 			[0x26, 0x57, 0x88, 0x01].into(),
 			1.into(),
 		),
-		TypedChainId::Substrate(_) => ProposalHeader::new(
-			[
-				1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0,
-				0, 0, 0, 1,
-			]
-			.into(),
-			[0x0, 0x0, 0x0, 0x0].into(),
-			1.into(),
-		),
 		_ => {
 			// Dummy Header
 			ProposalHeader::new(
@@ -761,122 +752,6 @@ fn force_submit_should_work_with_valid_proposals() {
 			"{}",
 			true
 		);
-
-		// Substrate Tests
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::TokenAdd,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::TokenAddProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::TokenRemove,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::TokenRemoveProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<1>(
-				Proposal::Unsigned {
-					kind: ProposalKind::WrappingFeeUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::WrappingFeeUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::AnchorCreate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::AnchorCreateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::AnchorUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::AnchorUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<72>(
-				Proposal::Unsigned {
-					kind: ProposalKind::ResourceIdUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Substrate(1),
-				DKGPayloadKey::ResourceIdUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 	});
 }
 
@@ -904,7 +779,7 @@ fn expired_unsigned_proposals_are_removed() {
 					kind: ProposalKind::WrappingFeeUpdate,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Substrate(0)
+				TypedChainId::Evm(0)
 			)
 		));
 

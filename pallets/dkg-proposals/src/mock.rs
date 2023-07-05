@@ -435,10 +435,7 @@ pub fn new_test_ext_initialized(
 			.try_into()
 			.expect("Too many proposers");
 		Proposers::<Test>::put(bounded_proposers);
-		let bounded_external_accounts: BoundedVec<
-			(AccountId, BoundedVec<u8, MaxKeyLength>),
-			MaxProposers,
-		> = proposers
+		let bounded_external_accounts: VoterList<Test> = proposers
 			.iter()
 			.map(|x| (x.0, x.1.clone().try_into().expect("Key size too large")))
 			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()

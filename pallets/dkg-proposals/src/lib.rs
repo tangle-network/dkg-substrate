@@ -232,13 +232,13 @@ pub mod pallet {
 		StorageValue<_, BoundedVec<T::AccountId, T::MaxProposers>, ValueQuery>;
 
 	/// Tracks current ECDSA voting keys for each validator
+	pub type VotingKey<T> = BoundedVec<u8, <T as Config>::VotingKeySize>;
+	pub type VotingKeyTuple<T> = (<T as frame_system::Config>::AccountId, VotingKey<T>);
+	pub type VoterList<T> = BoundedVec<VotingKeyTuple<T>, <T as Config>::MaxProposers>;
 	#[pallet::storage]
 	#[pallet::getter(fn external_proposer_accounts)]
-	pub type VotingKeys<T: Config> = StorageValue<
-		_,
-		BoundedVec<(T::AccountId, BoundedVec<u8, T::VotingKeySize>), T::MaxProposers>,
-		ValueQuery,
-	>;
+	pub type VotingKeys<T: Config> =
+		StorageValue<_, BoundedVec<(T::AccountId, VotingKey<T>), T::MaxProposers>, ValueQuery>;
 
 	/// Number of proposers in set
 	#[pallet::storage]
@@ -765,7 +765,7 @@ impl<T: Config>
 			.iter()
 			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
 			.map(|id| {
-				let bounded_external_account: BoundedVec<u8, T::VotingKeySize> =
+				let bounded_external_account: VotingKey<T> =
 					id.try_into().expect("External account outside limits!");
 				bounded_external_account
 			})
@@ -774,10 +774,7 @@ impl<T: Config>
 		let bounded_proposers: BoundedVec<T::AccountId, T::MaxProposers> =
 			authorities.to_vec().try_into().expect("Too many authorities!");
 		Proposers::<T>::put(bounded_proposers);
-		let bounded_external_accounts: BoundedVec<
-			(T::AccountId, BoundedVec<u8, T::VotingKeySize>),
-			T::MaxProposers,
-		> = authorities
+		let bounded_external_accounts: VoterList<T> = authorities
 			.iter()
 			.cloned()
 			.zip(new_external_accounts.into_iter())
