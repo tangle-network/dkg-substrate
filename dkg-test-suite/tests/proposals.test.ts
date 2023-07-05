@@ -15,7 +15,7 @@
  *
  */
 // just a blueprint test using jest
-
+import '@polkadot/api-augment'
 import { BLOCK_TIME } from './utils/constants';
 import { executeAfter, executeBefore } from './utils/util';
 
