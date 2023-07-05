@@ -4,7 +4,6 @@
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
 import '@polkadot/api-base/types/submittable';
-import '@polkadot/types/types/registry';
 
 import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableExtrinsicFunction } from '@polkadot/api-base/types';
 import type { Data } from '@polkadot/types';
