@@ -4,7 +4,7 @@ set -e
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 #define default ports
-ports=(30304 30305 30308)
+ports=(30333 30305 30308)
 
 #check to see process is not orphaned or already running
 for port in ${ports[@]}; do
@@ -45,14 +45,14 @@ cd "$PROJECT_ROOT"
 echo "*** Start Webb DKG Node ***"
 # Alice
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
-  --rpc-cors all --ws-external \
+  --rpc-cors all --ws-external --rpc-methods=unsafe \
   --port ${ports[0]} \
-  --ws-port 9944 &
+  --ws-port 9944 --node-key 0000000000000000000000000000000000000000000000000000000000000001 &
 # Bob
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
-  --rpc-cors all --ws-external \
+  --rpc-cors all --ws-external --rpc-methods=unsafe \
   --port ${ports[1]} \
-  --ws-port 9945 &
+  --ws-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Charlie
 ./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
     --rpc-cors all --ws-external \
@@ -63,6 +63,6 @@ echo "*** Start Webb DKG Node ***"
     -lruntime::dkg_metadata=debug \
     -ldkg_metadata=debug \
     -lruntime::dkg_proposal_handler=debug \
-    -lruntime::offchain=debug \
+    -lruntime::offchain=debug --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp \
     -ldkg_proposal_handler=debug --unsafe-rpc-external --rpc-methods=unsafe
 popd

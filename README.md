@@ -199,49 +199,20 @@ Currently the easiest way to run the DKG is to use a 3-node local testnet using 
 account and so on. Each of the three accounts has been configured as an initial authority at genesis. So, we are using three validators
 for our testnet.
 
-`Alice` is our bootnode and is started like so:
+First ensure, you have the binary installed
 
-```
-$ RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --alice
-```
-
-`Bob` is started like so:
-
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --bob
+```bash
+cargo build --release dkg-standalone-node --features integration-tests
 ```
 
-`Charlie` is started like so:
+To run a local testnet with three validators, use
 
-```
-RUST_LOG=dkg=trace ./target/release/dkg-standalone-node --tmp --charlie
-```
-
-Note that the examples above use an ephemeral DB due to the `--tmp` CLI option. If you want a persistent DB, use `--/tmp/[node-name]`
-instead. Replace `node-name` with the actual node name (e.g. `alice`) in order to assure separate directories for the DB.
-
-<h3 id="para"> Run local testnet with <a href="https://github.com/open-web3-stack/parachain-launch">parachain-launch </a>🐳 </h3>
-
-This section describes how to build and run a RelayChain and Parachain local testnet to develop using Docker.
-
-```
-cd launch
-
-# install dependencies
-yarn
-
-# generate docker-compose.yml and genesis
-# e.g.: docker pull webb-tools/dkg-node:3:0:0
-yarn run start generate --config=config.yml
-
-# start relaychain and parachain
-cd output
-
-# NOTE: If regenerate the output directory, need to rebuild the images.
-docker-compose up -d --build
+```bash
+./scripts/run-local-testnet.sh --clean
 ```
 
-**Note:** Due to usage of offchain workers you will need to add the sr25519 account keys to the node's local keystore by using the `author_insertKey` RPC on the Polkadot UI. If you do not add a sr25519 account key to each of the parachain nodes keystore the node will fail.
+This should start the local testnet, you can view the logs in `/tmp` directory for all the authorities and use [polkadotJS](https://polkadot.js.org/apps/?rpc=ws%3A%2F%2F127.0.0.1%3A9944#/explorer) to view the running testnet.
+
 
 <h2 id="test"> Testing 🧪 </h2>
 

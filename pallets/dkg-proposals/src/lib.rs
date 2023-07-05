@@ -438,7 +438,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_threshold())]
 		#[pallet::call_index(0)]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
@@ -450,7 +450,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) write
 		/// # </weight>
-		#[pallet::weight(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_resource())]
 		#[pallet::call_index(1)]
 		pub fn set_resource(
 			origin: OriginFor<T>,
@@ -469,7 +469,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) removal
 		/// # </weight>
-		#[pallet::weight(2)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_resource())]
 		#[pallet::call_index(2)]
 		pub fn remove_resource(origin: OriginFor<T>, id: ResourceId) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
@@ -481,7 +481,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(3)]
+		#[pallet::weight(<T as Config>::WeightInfo::whitelist_chain())]
 		#[pallet::call_index(3)]
 		pub fn whitelist_chain(
 			origin: OriginFor<T>,
@@ -496,7 +496,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
 		#[pallet::call_index(4)]
 		pub fn add_proposer(
 			origin: OriginFor<T>,
@@ -512,7 +512,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and removal
 		/// # </weight>
-		#[pallet::weight(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_proposer())]
 		#[pallet::call_index(5)]
 		pub fn remove_proposer(
 			origin: OriginFor<T>,
@@ -531,7 +531,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal())]
 		#[pallet::call_index(6)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
@@ -562,7 +562,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal())]
 		#[pallet::call_index(7)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
@@ -596,7 +596,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.data().len() as u32))]
 		#[pallet::call_index(8)]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
