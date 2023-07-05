@@ -27,17 +27,17 @@ use sp_consensus::SyncOracle;
 use crate::signing_manager::SigningManager;
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::ecdsa;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{
-	collections::{BTreeSet, HashMap, HashSet},
+	collections::{BTreeSet, HashMap, HashSet, VecDeque},
 	marker::PhantomData,
 	sync::{
-		atomic::{AtomicUsize, Ordering},
+		atomic::{AtomicU16, Ordering},
 		Arc,
 	},
 };
@@ -148,15 +148,19 @@ where
 	/// For transmitting errors from parallel threads to the DKGWorker
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Keep track of the number of how many times we have tried the keygen protocol.
-	pub keygen_retry_count: Arc<AtomicUsize>,
+	pub keygen_retry_count: Arc<AtomicU16>,
 	/// Used to keep track of network status
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
 	pub signing_manager: SigningManager<B, BE, C, GE>,
+	pub keygen_enqueued_messages: KeygenEnqueuedMessages,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
+
+type KeygenEnqueuedMessages =
+	Arc<Mutex<HashMap<u64, HashMap<u16, VecDeque<SignedDKGMessage<Public>>>>>>;
 
 /// Used only for tests
 #[derive(Clone)]
@@ -203,6 +207,7 @@ where
 			network: self.network.clone(),
 			logger: self.logger.clone(),
 			signing_manager: self.signing_manager.clone(),
+			keygen_enqueued_messages: self.keygen_enqueued_messages.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -274,9 +279,10 @@ where
 			aggregated_proposer_votes: Arc::new(RwLock::new(HashMap::new())),
 			currently_signing_proposals: Arc::new(RwLock::new(HashSet::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
+			keygen_enqueued_messages: Arc::new(Mutex::new(Default::default())),
 			test_bundle,
 			error_handler,
-			keygen_retry_count: Arc::new(AtomicUsize::new(0)),
+			keygen_retry_count: Arc::new(AtomicU16::new(0)),
 			logger,
 			network,
 			signing_manager,
@@ -325,19 +331,26 @@ where
 
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
-		let mut status_handle =
-			AsyncProtocolRemote::new(now, session_id, self.logger.clone(), associated_block_id);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
-		let active_local_key = match stage {
-			ProtoStageType::Genesis => None,
-			ProtoStageType::Queued => None,
+		let keygen_retry_id = self.keygen_retry_count.load(Ordering::Relaxed);
+		let (active_local_key, retry_id) = match stage {
+			ProtoStageType::Genesis => (None, keygen_retry_id),
+			ProtoStageType::Queued => (None, keygen_retry_id),
 			ProtoStageType::Signing { .. } => {
 				let optional_session_id = Some(session_id);
 				let (active_local_key, _) = self.fetch_local_keys(optional_session_id);
-				active_local_key
+				(active_local_key, 0)
 			},
 		};
+		let mut status_handle = AsyncProtocolRemote::new(
+			now,
+			session_id,
+			self.logger.clone(),
+			associated_block_id,
+			retry_id,
+		);
+
 		self.logger.debug(format!(
 			"Active local key enabled for stage {:?}? {}",
 			stage,
@@ -376,6 +389,7 @@ where
 			logger: self.logger.clone(),
 			local_key: active_local_key,
 			associated_block_id,
+			retry_id,
 		};
 
 		if let ProtoStageType::Signing { unsigned_proposal_hash } = &stage {
@@ -469,6 +483,16 @@ where
 					DKGMsgStatus::QUEUED
 				};
 				let start_handle = async_proto_params.handle.clone();
+				let retry_id = start_handle.retry_id;
+
+				let mut enqueued_messages = self
+					.keygen_enqueued_messages
+					.lock()
+					.entry(session_id)
+					.or_default()
+					.remove(&retry_id)
+					.unwrap_or_default();
+
 				match GenericAsyncHandler::setup_keygen(async_proto_params, threshold, status) {
 					Ok(meta_handler) => {
 						let logger = self.logger.clone();
@@ -478,6 +502,20 @@ where
 									"Error starting keygen protocol: {err:?}"
 								));
 								return
+							}
+
+							// deliver any enqueued messages
+							while let Some(msg) = enqueued_messages.pop_front() {
+								logger.debug_keygen(format!(
+									"Delivering enqueued message: session={}, retry_id={}",
+									msg.msg.session_id, msg.msg.retry_id
+								));
+
+								if let Err(err) = start_handle.deliver_message(msg) {
+									logger.error_keygen(format!(
+										"Error delivering enqueued message: {err:?}"
+									));
+								}
 							}
 
 							match meta_handler.await {
@@ -1055,7 +1093,7 @@ where
 					// For example, if we are running a 3 node network, with 1-of-2 DKG, it will not
 					// be possible to successfully report the DKG Misbehavior on chain.
 					let max_retries = if t + 1 == n { 0 } else { MAX_KEYGEN_RETRIES };
-					let v = self.keygen_retry_count.load(Ordering::SeqCst);
+					let v = self.keygen_retry_count.load(Ordering::SeqCst) as usize;
 					let should_retry = v < max_retries || max_retries == 0;
 					if keygen_stalled {
 						self.logger.debug(format!(
@@ -1313,7 +1351,9 @@ where
 		let res = match &dkg_msg.msg.payload {
 			NetworkMsgPayload::Keygen(_) => {
 				if let Some(rounds) = &rounds {
-					if rounds.session_id == dkg_msg.msg.session_id {
+					if rounds.session_id == dkg_msg.msg.session_id &&
+						rounds.retry_id == dkg_msg.msg.retry_id
+					{
 						if let Err(err) = rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1325,7 +1365,9 @@ where
 				}
 
 				if let Some(next_rounds) = next_rounds {
-					if next_rounds.session_id == dkg_msg.msg.session_id {
+					if next_rounds.session_id == dkg_msg.msg.session_id &&
+						next_rounds.retry_id == dkg_msg.msg.retry_id
+					{
 						if let Err(err) = next_rounds.deliver_message(dkg_msg) {
 							self.handle_dkg_error(DKGError::CriticalError {
 								reason: err.to_string(),
@@ -1336,9 +1378,17 @@ where
 					}
 				}
 
-				// TODO: if the message belongs to neither, investigate if we maybe need to enqueue
-				// the message (did someone else's protocol start before ours, and neither of our
-				// rounds are set-up?)
+				// Message belongs to neither. Enqueue it
+				self.logger.debug(format!(
+					"Enqueueing keygen message for later processing: session={}, retry_id={}",
+					dkg_msg.msg.session_id, dkg_msg.msg.retry_id
+				));
+				let mut lock = self.keygen_enqueued_messages.lock();
+				lock.entry(dkg_msg.msg.session_id)
+					.or_default()
+					.entry(dkg_msg.msg.retry_id)
+					.or_default()
+					.push_back(dkg_msg);
 
 				Ok(())
 			},

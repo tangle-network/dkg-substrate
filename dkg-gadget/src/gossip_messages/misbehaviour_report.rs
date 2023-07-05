@@ -154,6 +154,7 @@ where
 			recipient_id: None,
 			status,
 			session_id: report.session_id,
+			retry_id: 0,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();

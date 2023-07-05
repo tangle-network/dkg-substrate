@@ -249,6 +249,8 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 
 	let mut ext = sp_io::TestExternalities::new(t);
 	let keystore = KeyStore::new();
+	// set to block 1 to test events
+	ext.execute_with(|| System::set_block_number(1));
 	ext.register_extension(KeystoreExt(Arc::new(keystore)));
 	ext
 }

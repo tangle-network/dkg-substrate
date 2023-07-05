@@ -31,12 +31,12 @@ use core::marker::PhantomData;
 
 /// Weight functions needed for pallet_dkg_proposals.
 pub trait WeightInfo {
-	fn set_threshold(c: u32, ) -> Weight;
-	fn set_resource(c: u32, ) -> Weight;
+	fn set_threshold() -> Weight;
+	fn set_resource() -> Weight;
 	fn remove_resource() -> Weight;
 	fn whitelist_chain() -> Weight;
-	fn acknowledge_proposal(c: u32, ) -> Weight;
-	fn reject_proposal(c: u32, ) -> Weight;
+	fn acknowledge_proposal() -> Weight;
+	fn reject_proposal() -> Weight;
 	fn eval_vote_state(c: u32, ) -> Weight;
 }
 
@@ -46,7 +46,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	/// Storage: DKGProposals ProposerThreshold (r:0 w:1)
 	/// Proof: DKGProposals ProposerThreshold (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn set_threshold(_c: u32, ) -> Weight {
+	fn set_threshold() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
@@ -57,7 +57,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	/// Storage: DKGProposals Resources (r:0 w:1)
 	/// Proof: DKGProposals Resources (max_values: None, max_size: Some(1034), added: 3509, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn set_resource(_c: u32, ) -> Weight {
+	fn set_resource() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
@@ -99,7 +99,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	/// Storage: DKGProposals ProposerCount (r:1 w:0)
 	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn acknowledge_proposal(_c: u32, ) -> Weight {
+	fn acknowledge_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1162`
 		//  Estimated: `18490`
@@ -121,7 +121,7 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 	/// Storage: DKGProposals ProposerCount (r:1 w:0)
 	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn reject_proposal(_c: u32, ) -> Weight {
+	fn reject_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1162`
 		//  Estimated: `18490`
@@ -155,7 +155,7 @@ impl WeightInfo for () {
 	/// Storage: DKGProposals ProposerThreshold (r:0 w:1)
 	/// Proof: DKGProposals ProposerThreshold (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn set_threshold(_c: u32, ) -> Weight {
+	fn set_threshold() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
@@ -166,7 +166,7 @@ impl WeightInfo for () {
 	/// Storage: DKGProposals Resources (r:0 w:1)
 	/// Proof: DKGProposals Resources (max_values: None, max_size: Some(1034), added: 3509, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn set_resource(_c: u32, ) -> Weight {
+	fn set_resource() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
@@ -208,7 +208,7 @@ impl WeightInfo for () {
 	/// Storage: DKGProposals ProposerCount (r:1 w:0)
 	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn acknowledge_proposal(_c: u32, ) -> Weight {
+	fn acknowledge_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1162`
 		//  Estimated: `18490`
@@ -230,7 +230,7 @@ impl WeightInfo for () {
 	/// Storage: DKGProposals ProposerCount (r:1 w:0)
 	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// The range of component `c` is `[1, 500]`.
-	fn reject_proposal(_c: u32, ) -> Weight {
+	fn reject_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1162`
 		//  Estimated: `18490`

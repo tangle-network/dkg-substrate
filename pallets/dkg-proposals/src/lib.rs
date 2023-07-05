@@ -420,7 +420,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) lookup and insert
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::set_threshold(0))]
+		#[pallet::weight(<T as Config>::WeightInfo::set_threshold())]
 		#[pallet::call_index(0)]
 		pub fn set_threshold(origin: OriginFor<T>, threshold: u32) -> DispatchResultWithPostInfo {
 			Self::ensure_admin(origin)?;
@@ -432,7 +432,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - O(1) write
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::set_resource(0))]
+		#[pallet::weight(<T as Config>::WeightInfo::set_resource())]
 		#[pallet::call_index(1)]
 		pub fn set_resource(
 			origin: OriginFor<T>,
@@ -482,7 +482,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal(0))]
+		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal())]
 		#[pallet::call_index(4)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
@@ -510,7 +510,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal(0))]
+		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal())]
 		#[pallet::call_index(5)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
@@ -541,7 +541,7 @@ pub mod pallet {
 		/// # <weight>
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(0))]
+		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.data().len() as u32))]
 		#[pallet::call_index(6)]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,

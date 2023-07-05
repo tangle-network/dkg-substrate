@@ -678,6 +678,12 @@ pub mod pallet {
 		CannotRetreiveSigner,
 		/// Proposal is not signed and should not be processed
 		ProposalNotSigned,
+		/// Reported misbehaviour against a non authority
+		OffenderNotAuthority,
+		/// Authority is already jailed
+		AlreadyJailed,
+		/// We do not have authorities to jail
+		NotEnoughAuthoritiesToJail,
 	}
 
 	// Pallets use events to inform users when important changes are made.
@@ -995,6 +1001,16 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 			let offender = reports.offender.clone();
+
+			ensure!(
+				!JailedKeygenAuthorities::<T>::contains_key(&offender),
+				Error::<T>::AlreadyJailed
+			);
+			ensure!(
+				!JailedSigningAuthorities::<T>::contains_key(&offender),
+				Error::<T>::AlreadyJailed
+			);
+
 			let misbehaviour_type = reports.misbehaviour_type;
 			let authorities = match misbehaviour_type {
 				// We assume genesis ran successfully. Therefore, keygen misbehaviours are from next
@@ -1003,6 +1019,10 @@ pub mod pallet {
 				// Signing misbehaviours are from current authorities
 				MisbehaviourType::Sign => Self::authorities(),
 			};
+
+			// sanity check, is the offender an authority?
+			ensure!(authorities.contains(&offender), Error::<T>::OffenderNotAuthority);
+
 			let valid_reporters = Self::process_misbehaviour_reports(reports, authorities.into());
 			// Get the threshold for the misbehaviour type
 			let signature_threshold = match misbehaviour_type {
@@ -1084,7 +1104,20 @@ pub mod pallet {
 									.try_into()
 									.map_err(|_| Error::<T>::OutOfBounds)?;
 
+								// final sanity check, we need atleast two authorities
+								ensure!(
+									next_best_authorities.len() >= 2,
+									Error::<T>::NotEnoughAuthoritiesToJail
+								);
+
 								NextBestAuthorities::<T>::put(next_best_authorities);
+
+								// emit event
+								Self::deposit_event(Event::MisbehaviourReportsSubmitted {
+									misbehaviour_type,
+									reporters: valid_reporters,
+									offender,
+								});
 
 								return Ok(().into())
 							}
@@ -1097,7 +1130,20 @@ pub mod pallet {
 									let new_val = u16::try_from(unjailed_authorities.len() - 1)
 										.unwrap_or_default();
 									Self::update_next_keygen_threshold(new_val);
-									PendingKeygenThreshold::<T>::put(new_val);
+									NextKeygenThreshold::<T>::put(new_val);
+
+									if NextSignatureThreshold::<T>::get() >=
+										NextKeygenThreshold::<T>::get()
+									{
+										// drop signature threshold
+										let next_signature_threshold =
+											NextSignatureThreshold::<T>::get();
+										if next_signature_threshold != 1 {
+											NextSignatureThreshold::<T>::put(
+												next_signature_threshold - 1,
+											);
+										}
+									}
 								}
 							}
 						}
@@ -1111,6 +1157,12 @@ pub mod pallet {
 						)
 						.try_into()
 						.map_err(|_| Error::<T>::OutOfBounds)?;
+
+						// final sanity check, we need atleast two authorities
+						ensure!(
+							next_best_authorities.len() >= 2,
+							Error::<T>::NotEnoughAuthoritiesToJail
+						);
 
 						NextBestAuthorities::<T>::put(next_best_authorities);
 					},

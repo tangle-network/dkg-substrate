@@ -37,6 +37,7 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
 	pub(crate) associated_block_id: u64,
+	pub(crate) retry_id: u16,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
@@ -64,6 +65,7 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
+			retry_id: self.retry_id,
 		}
 	}
 }
@@ -85,6 +87,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		session_id: SessionId,
 		logger: DebugLogger,
 		associated_block_id: u64,
+		retry_id: u16,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
@@ -140,6 +143,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			session_id,
 			associated_block_id,
+			retry_id,
 		}
 	}
 

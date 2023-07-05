@@ -50,6 +50,8 @@ pub struct DKGMessage<AuthorityId> {
 	pub payload: NetworkMsgPayload,
 	/// Indentifier for the message
 	pub session_id: SessionId,
+	/// For identifying the retry count associated with the protocol
+	pub retry_id: u16,
 	/// enum for active or queued
 	pub status: DKGMsgStatus,
 	/// The round ID
