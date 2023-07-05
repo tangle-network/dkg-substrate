@@ -774,9 +774,9 @@ fn expired_unsigned_proposals_are_removed() {
 		run_n_blocks(5);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			make_proposal::<1>(
+			make_proposal::<20>(
 				Proposal::Unsigned {
-					kind: ProposalKind::WrappingFeeUpdate,
+					kind: ProposalKind::TokenAdd,
 					data: vec![].try_into().unwrap()
 				},
 				TypedChainId::Evm(0)

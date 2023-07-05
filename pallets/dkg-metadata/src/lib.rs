@@ -2397,7 +2397,7 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 			// Check if the signature is already used
 			let bounded_signature: BoundedVec<_, _> = proposal
 				.signature()
-				.unwrap()
+				.unwrap_or_default()
 				.try_into()
 				.map_err(|_| Error::<T>::InvalidSignature)?;
 			ensure!(
@@ -2412,7 +2412,7 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
 				uncompressed_pub_key,
 				compressed_pub_key: next_pub_key.into(),
-				pub_key_sig: proposal.signature().unwrap(),
+				pub_key_sig: proposal.signature().unwrap_or_default(),
 				nonce: u32::from(curr.nonce),
 			});
 		};
