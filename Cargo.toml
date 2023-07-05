@@ -10,8 +10,6 @@ edition = "2021"
 [workspace]
 members = [
 	'pallets/*',
-	# 'parachain/node',
-	# 'parachain/runtime/rococo',
 	'standalone/*',
 	'dkg-primitives',
 	'dkg-runtime-primitives',
