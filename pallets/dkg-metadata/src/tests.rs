@@ -46,7 +46,7 @@ fn mock_misbehaviour_report<T: Config>(
 		MisbehaviourType::Sign => [0x02],
 	});
 	payload.extend_from_slice(session_id.to_be_bytes().as_ref());
-	payload.extend_from_slice(offender.clone().as_ref());
+	payload.extend_from_slice(offender.as_ref());
 	let hash = keccak_256(&payload);
 	let signature = ecdsa_sign_prehashed(KEY_TYPE, &pub_key, &hash).unwrap();
 
@@ -215,7 +215,7 @@ fn misbehaviour_reports_submission_rejects_if_offender_not_authority() {
 		> = AggregatedMisbehaviourReports {
 			misbehaviour_type,
 			session_id,
-			offender: offender.clone(),
+			offender,
 			reporters: reporters.clone().try_into().unwrap(),
 			signatures: signatures.try_into().unwrap(),
 		};
@@ -256,14 +256,14 @@ fn keygen_misbehaviour_reports_work() {
 
 		// everyone except 1 reports the misbehaviour
 		for authority_id in next_authorities_raw.iter() {
-			let dkg_id = DKGId::from(authority_id.clone());
+			let dkg_id = DKGId::from(*authority_id);
 
 			if dkg_id == offender {
 				continue
 			}
 
 			let sig = mock_misbehaviour_report::<Test>(
-				authority_id.clone(),
+				*authority_id,
 				offender.clone(),
 				misbehaviour_type,
 			);
@@ -394,14 +394,14 @@ fn keygen_misbehaviour_reports_reduce_signature_threshold_if_needed() {
 
 			// everyone except 1 reports the misbehaviour
 			for authority_id in next_authorities_raw.iter() {
-				let dkg_id = DKGId::from(authority_id.clone());
+				let dkg_id = DKGId::from(*authority_id);
 
 				if dkg_id == offender {
 					continue
 				}
 
 				let sig = mock_misbehaviour_report::<Test>(
-					authority_id.clone(),
+					*authority_id,
 					offender.clone(),
 					misbehaviour_type,
 				);
@@ -505,14 +505,14 @@ fn keygen_misbehaviour_reports_fail_if_not_threshold_plus_1() {
 		// we ideally require threshold + 1 signatures for misbehaviour to be accepted
 		// lets sign with exactly threshold
 		for authority_id in next_authorities_raw.iter() {
-			let dkg_id = DKGId::from(authority_id.clone());
+			let dkg_id = DKGId::from(*authority_id);
 
 			if dkg_id == offender {
 				continue
 			}
 
 			let sig = mock_misbehaviour_report::<Test>(
-				authority_id.clone(),
+				*authority_id,
 				offender.clone(),
 				misbehaviour_type,
 			);
@@ -531,7 +531,7 @@ fn keygen_misbehaviour_reports_fail_if_not_threshold_plus_1() {
 		> = AggregatedMisbehaviourReports {
 			misbehaviour_type,
 			session_id,
-			offender: offender.clone(),
+			offender,
 			reporters: reporters.clone().try_into().unwrap(),
 			signatures: signatures.try_into().unwrap(),
 		};
@@ -540,7 +540,7 @@ fn keygen_misbehaviour_reports_fail_if_not_threshold_plus_1() {
 		assert_noop!(
 			DKGMetadata::submit_misbehaviour_reports(
 				RuntimeOrigin::none(),
-				aggregated_misbehaviour_reports.clone()
+				aggregated_misbehaviour_reports
 			),
 			Error::<Test>::InvalidMisbehaviourReports
 		);
@@ -588,14 +588,14 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_if_authorities_available(
 		let misbehaviour_type = MisbehaviourType::Keygen;
 
 		for authority_id in next_authorities_raw.iter() {
-			let dkg_id = DKGId::from(authority_id.clone());
+			let dkg_id = DKGId::from(*authority_id);
 
 			if dkg_id == offender {
 				continue
 			}
 
 			let sig = mock_misbehaviour_report::<Test>(
-				authority_id.clone(),
+				*authority_id,
 				offender.clone(),
 				misbehaviour_type,
 			);
@@ -692,14 +692,14 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 
 			// everyone except 1 reports the misbehaviour
 			for authority_id in next_authorities_raw.iter() {
-				let dkg_id = DKGId::from(authority_id.clone());
+				let dkg_id = DKGId::from(*authority_id);
 
 				if dkg_id == offender {
 					continue
 				}
 
 				let sig = mock_misbehaviour_report::<Test>(
-					authority_id.clone(),
+					*authority_id,
 					offender.clone(),
 					misbehaviour_type,
 				);
@@ -769,14 +769,14 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 
 		// everyone except offender reports the misbehaviour
 		for authority_id in next_authorities_raw.iter() {
-			let dkg_id = DKGId::from(authority_id.clone());
+			let dkg_id = DKGId::from(*authority_id);
 
 			if dkg_id == offender {
 				continue
 			}
 
 			let sig = mock_misbehaviour_report::<Test>(
-				authority_id.clone(),
+				*authority_id,
 				offender.clone(),
 				misbehaviour_type,
 			);
@@ -791,7 +791,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 		> = AggregatedMisbehaviourReports {
 			misbehaviour_type,
 			session_id,
-			offender: offender.clone(),
+			offender,
 			reporters: reporters.clone().try_into().unwrap(),
 			signatures: signatures.try_into().unwrap(),
 		};
