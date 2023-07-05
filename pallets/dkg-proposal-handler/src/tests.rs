@@ -776,7 +776,7 @@ fn expired_unsigned_proposals_are_removed() {
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
 				Proposal::Unsigned {
-					kind: ProposalKind::TokenAdd,
+					kind: ProposalKind::TokenRemove,
 					data: vec![].try_into().unwrap()
 				},
 				TypedChainId::Evm(0)

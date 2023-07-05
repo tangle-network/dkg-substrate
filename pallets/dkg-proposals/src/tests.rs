@@ -205,8 +205,8 @@ pub fn make_proposal_header(
 
 pub fn make_proposal<const N: usize>(
 	header: ProposalHeader,
-	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
-) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
+	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
+) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
 	let mut buf = vec![];
 	header.encode_to(&mut buf);
 	// N bytes parameter
