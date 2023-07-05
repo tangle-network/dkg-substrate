@@ -5,7 +5,7 @@ name: Publish Types
 on:
   push:
     branches:
-      - fix-acknowledge-proposal
+      - master
     paths:
       - "types/package.json"
 
