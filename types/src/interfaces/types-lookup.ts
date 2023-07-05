@@ -1412,16 +1412,10 @@ declare module '@polkadot/types/lookup' {
     } & Struct;
     readonly isAcknowledgeProposal: boolean;
     readonly asAcknowledgeProposal: {
-      readonly nonce: u32;
-      readonly srcChainId: WebbProposalsHeaderTypedChainId;
-      readonly rId: WebbProposalsHeaderResourceId;
       readonly prop: WebbProposalsProposal;
     } & Struct;
     readonly isRejectProposal: boolean;
     readonly asRejectProposal: {
-      readonly nonce: u32;
-      readonly srcChainId: WebbProposalsHeaderTypedChainId;
-      readonly rId: WebbProposalsHeaderResourceId;
       readonly prop: WebbProposalsProposal;
     } & Struct;
     readonly isEvalVoteState: boolean;

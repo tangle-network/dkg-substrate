@@ -1276,15 +1276,9 @@ export default {
         v: 'AccountId32',
       },
       acknowledge_proposal: {
-        nonce: 'u32',
-        srcChainId: 'WebbProposalsHeaderTypedChainId',
-        rId: 'WebbProposalsHeaderResourceId',
         prop: 'WebbProposalsProposal',
       },
       reject_proposal: {
-        nonce: 'u32',
-        srcChainId: 'WebbProposalsHeaderTypedChainId',
-        rId: 'WebbProposalsHeaderResourceId',
         prop: 'WebbProposalsProposal',
       },
       eval_vote_state: {

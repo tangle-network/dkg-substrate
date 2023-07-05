@@ -1,6 +1,6 @@
 {
   "name": "@webb-tools/dkg-substrate-types",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Polkadot.js type definitions required for interacting with Webb's DKG protocol",
   "main": "./build/index.js",
   "author": "Webb Developers <drew@webb.tools>",
