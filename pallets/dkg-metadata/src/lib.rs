@@ -2391,7 +2391,7 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 			// Check the current refresh proposal against the proposal data.
 			let maybe_prop = Self::current_refresh_proposal();
 			ensure!(maybe_prop.is_some(), Error::<T>::NoRefreshProposal);
-			let curr = maybe_prop.unwrap();
+			let curr = maybe_prop.unwrap_or_default();
 			ensure!(curr.encode() == proposal.data().clone(), Error::<T>::InvalidRefreshProposal);
 
 			// Check if the signature is already used
