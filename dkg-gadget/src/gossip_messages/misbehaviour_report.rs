@@ -56,8 +56,8 @@ where
 		dkg_worker.logger.debug("Received misbehaviour report".to_string());
 
 		let is_main_round = {
-			if let Some(round) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == round.session_id
+			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
+				msg.session_id == session_id
 			} else {
 				false
 			}
@@ -108,7 +108,7 @@ where
 			reports.clone()
 		};
 
-		try_store_offchain(dkg_worker, &reports).await?;
+		let _ = try_store_offchain(dkg_worker, &reports).await?;
 	}
 
 	Ok(())
@@ -145,16 +145,12 @@ where
 			..report.clone()
 		});
 
-		let status =
-			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			associated_block_id: 0,
 			sender_id: public.clone(),
 			// We need to gossip this misbehaviour, so no specific recipient.
 			recipient_id: None,
-			status,
 			session_id: report.session_id,
-			retry_id: 0,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();
@@ -210,7 +206,7 @@ where
 		};
 
 		// Try to store reports offchain
-		if try_store_offchain(dkg_worker, &reports).await.is_ok() {
+		if try_store_offchain(dkg_worker, &reports).await? {
 			// remove the report from the queue
 			dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
 				report.misbehaviour_type,
@@ -228,7 +224,7 @@ where
 pub(crate) async fn try_store_offchain<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
-) -> Result<(), DKGError>
+) -> Result<bool, DKGError>
 where
 	B: Block,
 	BE: Backend<B> + Unpin + 'static,
@@ -237,30 +233,27 @@ where
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 {
 	let header = &(dkg_worker.latest_header.read().clone().ok_or(DKGError::NoHeader)?);
-	match &reports.misbehaviour_type {
-		MisbehaviourType::Keygen => {
-			let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
-			dkg_worker.logger.debug(format!(
-				"DKG threshold: {}, reports: {}",
-				threshold,
-				reports.reporters.len()
-			));
-			if reports.reporters.len() > threshold {
-				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
-			}
-		},
-		MisbehaviourType::Sign => {
-			let threshold = dkg_worker.get_signature_threshold(header).await as usize;
-			dkg_worker.logger.debug(format!(
-				"DKG threshold: {}, reports: {}",
-				threshold,
-				reports.reporters.len()
-			));
-			if reports.reporters.len() >= threshold {
-				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
-			}
-		},
-	};
+	// Fetch the current threshold for the DKG. We will use the
+	// current threshold to determine if we have enough signatures
+	// to submit the next DKG public key.
+	let threshold = dkg_worker.get_signature_threshold(header).await as usize;
+	dkg_worker.logger.debug(format!(
+		"DKG threshold: {}, reports: {}",
+		threshold,
+		reports.reporters.len()
+	));
 
-	Ok(())
+	let perform_store = reports.reporters.len() > threshold;
+	match &reports.misbehaviour_type {
+		MisbehaviourType::Keygen =>
+			if perform_store {
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
+			},
+		MisbehaviourType::Sign =>
+			if perform_store {
+				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
+			},
+	}
+
+	Ok(perform_store)
 }

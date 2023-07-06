@@ -16,13 +16,9 @@ use crate::types::{FE, GE};
 use curv::{arithmetic::Converter, BigInt};
 use hex::{self};
 use libsecp256k1::curve::{Affine, Field};
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::SignatureRecid;
 use sha3::{Digest, Keccak256};
 use std::convert::TryInto;
-
-pub use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
-	party_i::*,
-	state_machine::{keygen::*, sign::*},
-};
 
 pub fn recover_pub_key(sig: &SignatureRecid, message: &BigInt) -> Result<GE, String> {
 	recover_pub_key_raw(message, sig.recid, sig.r.clone(), sig.s.clone())

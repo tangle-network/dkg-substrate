@@ -29,15 +29,14 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) rx_voting: MessageReceiverHandle,
 	start_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 	pub(crate) start_rx: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
-	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<()>>>>,
-	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>>,
+	stop_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<ShutdownReason>>>>,
+	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ShutdownReason>>>>,
 	pub(crate) started_at: C,
 	pub(crate) is_primary_remote: bool,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
 	pub(crate) associated_block_id: u64,
-	pub(crate) retry_id: u16,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
 }
@@ -65,7 +64,6 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
-			retry_id: self.retry_id,
 		}
 	}
 }
@@ -80,6 +78,12 @@ pub enum MetaHandlerStatus {
 	Terminated,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ShutdownReason {
+	Stalled,
+	DropCode,
+}
+
 impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 	/// Create at the beginning of each meta handler instantiation
 	pub fn new(
@@ -87,7 +91,6 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		session_id: SessionId,
 		logger: DebugLogger,
 		associated_block_id: u64,
-		retry_id: u16,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
@@ -143,7 +146,6 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			session_id,
 			associated_block_id,
-			retry_id,
 		}
 	}
 
@@ -228,11 +230,10 @@ impl<C> AsyncProtocolRemote<C> {
 				self.tx_keygen_signing.send(msg)
 			}
 		} else {
-			// do not forward the message (TODO: Consider enqueuing messages for rounds not yet
-			// active other nodes may be active, but this node is still in the process of "waking
-			// up"). Thus, by not delivering a message here, we may be preventing this node from
-			// joining.
-			self.logger.warn(format!("Did not deliver message {:?}", msg.msg.payload));
+			self.logger.warn(format!(
+				"Did not deliver message due to state {status:?} {:?}",
+				msg.msg.payload
+			));
 			Ok(())
 		}
 	}
@@ -248,7 +249,7 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	/// Stops the execution of the meta handler, including all internal asynchronous subroutines
-	pub fn shutdown<R: AsRef<str>>(&self, reason: R) -> Result<(), DKGError> {
+	pub fn shutdown(&self, reason: ShutdownReason) -> Result<(), DKGError> {
 		// check the state if it is active so that we can send a shutdown signal.
 		let tx = match self.stop_tx.lock().take() {
 			Some(tx) => tx,
@@ -260,14 +261,18 @@ impl<C> AsyncProtocolRemote<C> {
 				return Ok(())
 			},
 		};
-		self.logger.warn(format!("Shutting down meta handler: {}", reason.as_ref()));
-		tx.send(()).map_err(|_| DKGError::GenericError {
+		self.logger.warn(format!("Shutting down meta handler: {reason:?}"));
+		tx.send(reason).map_err(|_| DKGError::GenericError {
 			reason: "Unable to send shutdown signal (already shut down?)".to_string(),
 		})
 	}
 
 	pub fn is_keygen_finished(&self) -> bool {
 		self.is_completed()
+	}
+
+	pub fn has_started(&self) -> bool {
+		self.get_status() != MetaHandlerStatus::Beginning
 	}
 
 	pub fn is_signing_finished(&self) -> bool {
@@ -309,7 +314,7 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 				}
 			}
 
-			let _ = self.shutdown("drop code");
+			let _ = self.shutdown(ShutdownReason::DropCode);
 		}
 	}
 }

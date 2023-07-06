@@ -55,13 +55,17 @@ where
 	}
 
 	if let NetworkMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
+		let is_genesis_round = msg.session_id == 0;
+
+		let tag = if is_genesis_round { "CURRENT" } else { "NEXT" };
+
 		dkg_worker
 			.logger
-			.debug(format!("SESSION {} | Received public key broadcast", msg.session_id));
+			.debug(format!("SESSION {}={tag} | Received public key broadcast", msg.session_id));
 
 		let is_main_round = {
-			if let Some(rounds) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == rounds.session_id
+			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
+				msg.session_id == session_id
 			} else {
 				false
 			}
@@ -80,9 +84,8 @@ where
 		let key_and_sig = (msg.pub_key, msg.signature);
 		let session_id = msg.session_id;
 
-		// Fetch the current threshold for the DKG. We will use the
-		// current threshold to determine if we have enough signatures
-		// to submit the next DKG public key.
+		// Whether this generated key was for genesis or next, we always use the next since
+		// the threshold is the same for both.
 		let threshold = dkg_worker.get_next_signature_threshold(header).await as usize;
 
 		let mut lock = dkg_worker.aggregated_public_keys.write();
@@ -93,24 +96,25 @@ where
 		}
 
 		dkg_worker.logger.debug(format!(
-			"SESSION {} | Threshold {} | Aggregated pubkeys {}",
+			"SESSION {}={tag} | Threshold {} | Aggregated pubkeys {} | is_main_round {}",
 			msg.session_id,
 			threshold,
-			aggregated_public_keys.keys_and_signatures.len()
+			aggregated_public_keys.keys_and_signatures.len(),
+			is_main_round
 		));
 
 		if aggregated_public_keys.keys_and_signatures.len() > threshold {
-			store_aggregated_public_keys::<B, C, BE, MaxProposalLength>(
+			store_aggregated_public_keys::<B, BE>(
 				&dkg_worker.backend,
 				&mut lock,
-				is_main_round,
+				is_genesis_round,
 				session_id,
 				current_block_number,
 				&dkg_worker.logger,
 			)?;
 		} else {
 			dkg_worker.logger.debug(format!(
-				"SESSION {} | Need more signatures to submit next DKG public key, needs {} more",
+				"SESSION {}={tag} | Need more signatures to submit next DKG public key, needs {} more",
 				msg.session_id,
 				(threshold + 1) - aggregated_public_keys.keys_and_signatures.len()
 			));
@@ -120,25 +124,15 @@ where
 	Ok(())
 }
 
-pub(crate) fn gossip_public_key<B, C, BE, GE>(
+pub(crate) fn gossip_public_key<GE>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
 	msg: PublicKeyMessage,
 ) where
-	B: Block,
-	BE: Backend<B>,
 	GE: GossipEngineIface,
-	C: Client<B, BE>,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<
-		B,
-		AuthorityId,
-		<<B as Block>::Header as Header>::Number,
-		MaxProposalLength,
-		MaxAuthorities,
-	>,
 {
 	let public = key_store.get_authority_public_key();
 
@@ -149,17 +143,13 @@ pub(crate) fn gossip_public_key<B, C, BE, GE>(
 			..msg.clone()
 		});
 
-		let status =
-			if msg.session_id == 0u64 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			associated_block_id: 0, // we don't need to associate this message with a block
 			sender_id: public.clone(),
 			// we need to gossip the final public key to all parties, so no specific recipient in
 			// this case.
 			recipient_id: None,
-			status,
 			session_id: msg.session_id,
-			retry_id: 0,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();

@@ -231,7 +231,7 @@ where
 					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 				}
 
-				save_signed_proposals_in_storage::<B, C, BE, MaxProposalLength, MaxAuthorities>(
+				save_signed_proposals_in_storage::<B, BE, MaxProposalLength, MaxAuthorities>(
 					&self.get_authority_public_key(),
 					&self.current_validator_set,
 					&self.latest_header,
@@ -256,7 +256,7 @@ where
 
 	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
-		gossip_public_key::<B, C, BE, GE>(
+		gossip_public_key::<GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
 			&mut self.aggregated_public_keys.write(),

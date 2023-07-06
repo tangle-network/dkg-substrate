@@ -1,12 +1,15 @@
 use crate::{
-	async_protocols::remote::AsyncProtocolRemote, debug_logger::DebugLogger, utils::SendFuture,
-	worker::HasLatestHeader, NumberFor,
+	async_protocols::remote::{AsyncProtocolRemote, ShutdownReason},
+	debug_logger::DebugLogger,
+	utils::SendFuture,
+	worker::HasLatestHeader,
+	NumberFor,
 };
 use dkg_primitives::{
 	crypto::Public,
 	types::{DKGError, SignedDKGMessage},
 };
-use dkg_runtime_primitives::associated_block_id_acceptable;
+use dkg_runtime_primitives::{associated_block_id_acceptable, SessionId};
 use parking_lot::RwLock;
 use sp_api::BlockT;
 use std::{
@@ -17,8 +20,11 @@ use std::{
 };
 use sync_wrapper::SyncWrapper;
 
-// How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum PollMethod {
+	Interval { millis: u64 },
+	Manual,
+}
 
 #[derive(Clone)]
 pub struct WorkManager<B: BlockT> {
@@ -27,6 +33,7 @@ pub struct WorkManager<B: BlockT> {
 	// for now, use a hard-coded value for the number of tasks
 	max_tasks: usize,
 	logger: DebugLogger,
+	poll_method: Arc<PollMethod>,
 	to_handler: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 }
 
@@ -36,8 +43,22 @@ pub struct WorkManagerInner<B: BlockT> {
 	pub enqueued_messages: HashMap<[u8; 32], VecDeque<SignedDKGMessage<Public>>>,
 }
 
+#[derive(Debug)]
+pub struct JobMetadata {
+	pub session_id: SessionId,
+	pub is_stalled: bool,
+	pub is_finished: bool,
+	pub has_started: bool,
+	pub is_active: bool,
+}
+
 impl<B: BlockT> WorkManager<B> {
-	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>, max_tasks: usize) -> Self {
+	pub fn new(
+		logger: DebugLogger,
+		clock: impl HasLatestHeader<B>,
+		max_tasks: usize,
+		poll_method: PollMethod,
+	) -> Self {
 		let (to_handler, mut rx) = tokio::sync::mpsc::unbounded_channel();
 		let this = Self {
 			inner: Arc::new(RwLock::new(WorkManagerInner {
@@ -49,43 +70,45 @@ impl<B: BlockT> WorkManager<B> {
 			max_tasks,
 			logger,
 			to_handler,
+			poll_method: Arc::new(poll_method),
 		};
 
-		let this_worker = this.clone();
-		let handler = async move {
-			let job_receiver_worker = this_worker.clone();
-			let logger = job_receiver_worker.logger.clone();
+		if let PollMethod::Interval { millis } = poll_method {
+			let this_worker = this.clone();
+			let handler = async move {
+				let job_receiver_worker = this_worker.clone();
+				let logger = job_receiver_worker.logger.clone();
 
-			let job_receiver = async move {
-				while let Some(task_hash) = rx.recv().await {
-					job_receiver_worker
-						.logger
-						.info_signing(format!("[worker] Received job {task_hash:?}",));
-					job_receiver_worker.poll();
+				let job_receiver = async move {
+					while let Some(task_hash) = rx.recv().await {
+						job_receiver_worker
+							.logger
+							.info_signing(format!("[worker] Received job {task_hash:?}",));
+						job_receiver_worker.poll();
+					}
+				};
+
+				let periodic_poller = async move {
+					let mut interval =
+						tokio::time::interval(std::time::Duration::from_millis(millis));
+					loop {
+						interval.tick().await;
+						this_worker.poll();
+					}
+				};
+
+				tokio::select! {
+					_ = job_receiver => {
+						logger.error_signing("[worker] job_receiver exited");
+					},
+					_ = periodic_poller => {
+						logger.error_signing("[worker] periodic_poller exited");
+					}
 				}
 			};
 
-			let periodic_poller = async move {
-				let mut interval = tokio::time::interval(std::time::Duration::from_millis(
-					JOB_POLL_INTERVAL_IN_MILLISECONDS,
-				));
-				loop {
-					interval.tick().await;
-					this_worker.poll();
-				}
-			};
-
-			tokio::select! {
-				_ = job_receiver => {
-					logger.error_signing("[worker] job_receiver exited");
-				},
-				_ = periodic_poller => {
-					logger.error_signing("[worker] periodic_poller exited");
-				}
-			}
-		};
-
-		tokio::task::spawn(handler);
+			tokio::task::spawn(handler);
+		}
 
 		this
 	}
@@ -108,12 +131,29 @@ impl<B: BlockT> WorkManager<B> {
 		};
 		lock.enqueued_tasks.push_back(job);
 
-		self.to_handler.send(task_hash).map_err(|_| DKGError::GenericError {
-			reason: "Failed to send job to worker".to_string(),
-		})
+		if *self.poll_method != PollMethod::Manual {
+			self.to_handler.send(task_hash).map_err(|_| DKGError::GenericError {
+				reason: "Failed to send job to worker".to_string(),
+			})
+		} else {
+			Ok(())
+		}
 	}
 
-	fn poll(&self) {
+	// Only relevant for keygen
+	pub fn get_active_sessions_metadata(&self, now: NumberFor<B>) -> Vec<JobMetadata> {
+		self.inner.read().active_tasks.iter().map(|r| r.metadata(now)).collect()
+	}
+
+	// This will shutdown and drop all tasks and enqueued messages
+	pub fn force_shutdown_all(&self) {
+		let mut lock = self.inner.write();
+		lock.active_tasks.clear();
+		lock.enqueued_tasks.clear();
+		lock.enqueued_messages.clear();
+	}
+
+	pub fn poll(&self) {
 		// go through each task and see if it's done
 		// finally, see if we can start a new task
 		let now = self.clock.get_latest_block_number();
@@ -131,18 +171,13 @@ impl<B: BlockT> WorkManager<B> {
 				));
 
 				// the task is stalled, lets be pedantic and shutdown
-				let _ = job.handle.shutdown("Stalled!");
+				let _ = job.handle.shutdown(ShutdownReason::Stalled);
 				// return false so that the proposals are released from the currently signing
 				// proposals
 				return false
 			}
 
 			let is_done = job.handle.is_done();
-			/*self.logger.info_signing(format!(
-				"[worker] Job {:?} is done: {}",
-				hex::encode(job.task_hash),
-				is_done
-			));*/
 
 			!is_done
 		});
@@ -177,11 +212,15 @@ impl<B: BlockT> WorkManager<B> {
 							hex::encode(job.task_hash)
 						));
 						while let Some(message) = enqueued_messages.pop_front() {
-							if let Err(err) = job.handle.deliver_message(message) {
-								self.logger.error_signing(format!(
-									"Unable to deliver message for job {:?}: {err:?}",
-									hex::encode(job.task_hash)
-								));
+							if should_deliver(&job, &message, job.task_hash) {
+								if let Err(err) = job.handle.deliver_message(message) {
+									self.logger.error_signing(format!(
+										"Unable to deliver message for job {:?}: {err:?}",
+										hex::encode(job.task_hash)
+									));
+								}
+							} else {
+								self.logger.warn("Will not deliver enqueued message to async protocol since the message is no longer acceptable")
 							}
 						}
 					}
@@ -207,24 +246,16 @@ impl<B: BlockT> WorkManager<B> {
 		lock.active_tasks.contains(job) || lock.enqueued_tasks.iter().any(|j| &j.task_hash == job)
 	}
 
-	pub fn deliver_message(&self, msg: SignedDKGMessage<Public>) {
+	pub fn deliver_message(&self, msg: SignedDKGMessage<Public>, message_task_hash: [u8; 32]) {
 		self.logger.debug_signing(format!(
 			"Delivered message is intended for session_id = {}",
 			msg.msg.session_id
 		));
 		let mut lock = self.inner.write();
 
-		let msg_unsigned_proposal_hash =
-			msg.msg.payload.unsigned_proposal_hash().expect("Bad message type");
-
 		// check the enqueued
 		for task in lock.enqueued_tasks.iter() {
-			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash &&
-				associated_block_id_acceptable(
-					task.handle.associated_block_id,
-					msg.msg.associated_block_id,
-				) {
+			if should_deliver(task, &msg, message_task_hash) {
 				self.logger.debug(format!(
 					"Message is for this ENQUEUED signing execution in session: {}",
 					task.handle.session_id
@@ -239,12 +270,7 @@ impl<B: BlockT> WorkManager<B> {
 
 		// check the currently signing
 		for task in lock.active_tasks.iter() {
-			if task.handle.session_id == msg.msg.session_id &&
-				&task.task_hash == msg_unsigned_proposal_hash &&
-				associated_block_id_acceptable(
-					task.handle.associated_block_id,
-					msg.msg.associated_block_id,
-				) {
+			if should_deliver(task, &msg, message_task_hash) {
 				self.logger.debug(format!(
 					"Message is for this signing CURRENT execution in session: {}",
 					task.handle.session_id
@@ -259,14 +285,13 @@ impl<B: BlockT> WorkManager<B> {
 
 		// if the protocol is neither started nor enqueued, then, this message may be for a future
 		// async protocol. Store the message
-		self.logger.info_signing(format!(
-			"Enqueuing message for {:?}",
-			hex::encode(msg_unsigned_proposal_hash)
-		));
-		lock.enqueued_messages
-			.entry(*msg_unsigned_proposal_hash)
-			.or_default()
-			.push_back(msg)
+		let current_running_session_ids: Vec<SessionId> =
+			lock.active_tasks.iter().map(|job| job.handle.session_id).collect();
+		let enqueued_session_ids: Vec<SessionId> =
+			lock.enqueued_tasks.iter().map(|job| job.handle.session_id).collect();
+		self.logger
+			.info_signing(format!("Enqueuing message for {:?} | current_running_session_ids: {current_running_session_ids:?} | enqueued_session_ids: {enqueued_session_ids:?}", hex::encode(message_task_hash)));
+		lock.enqueued_messages.entry(message_task_hash).or_default().push_back(msg)
 	}
 }
 
@@ -276,6 +301,18 @@ pub struct Job<B: BlockT> {
 	logger: DebugLogger,
 	handle: AsyncProtocolRemote<NumberFor<B>>,
 	task: Arc<RwLock<Option<SyncFuture<()>>>>,
+}
+
+impl<B: BlockT> Job<B> {
+	fn metadata(&self, now: NumberFor<B>) -> JobMetadata {
+		JobMetadata {
+			session_id: self.handle.session_id,
+			is_stalled: self.handle.keygen_has_stalled(now),
+			is_finished: self.handle.is_keygen_finished(),
+			has_started: self.handle.has_started(),
+			is_active: self.handle.is_active(),
+		}
+	}
 }
 
 pub type SyncFuture<T> = SyncWrapper<Pin<Box<dyn SendFuture<'static, T>>>>;
@@ -306,6 +343,19 @@ impl<B: BlockT> Drop for Job<B> {
 			"Will remove job {:?} from currently_signing_proposals",
 			hex::encode(self.task_hash)
 		));
-		let _ = self.handle.shutdown("shutdown from Job::drop");
+		let _ = self.handle.shutdown(ShutdownReason::DropCode);
 	}
+}
+
+fn should_deliver<B: BlockT>(
+	task: &Job<B>,
+	msg: &SignedDKGMessage<Public>,
+	message_task_hash: [u8; 32],
+) -> bool {
+	task.handle.session_id == msg.msg.session_id &&
+		task.task_hash == message_task_hash &&
+		associated_block_id_acceptable(
+			task.handle.associated_block_id,
+			msg.msg.associated_block_id,
+		)
 }
