@@ -70,7 +70,7 @@ impl MaxEncodedLen for RefreshProposal {
 impl Decode for RefreshProposal {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
 		const NONCE_LEN: usize = ProposalNonce::LENGTH;
-		let mut data = [0u8; 32 + 8 + 4 + NONCE_LEN + 64];
+		let mut data = [0u8; Self::LENGTH];
 		input.read(&mut data).map_err(|_| {
 			codec::Error::from("input bytes are less than the expected size (68 bytes)")
 		})?;
