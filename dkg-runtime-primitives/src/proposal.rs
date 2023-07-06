@@ -114,7 +114,7 @@ impl Encode for RefreshProposal {
 
 	fn encoded_size(&self) -> usize {
 		const NONCE_LEN: usize = ProposalNonce::LENGTH;
-		32 + 8 + 4 + NONCE_LEN + 64
+		Self::LENGTH
 	}
 }
 
