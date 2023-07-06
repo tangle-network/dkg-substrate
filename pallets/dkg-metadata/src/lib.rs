@@ -172,6 +172,12 @@ pub mod pallet {
 		}
 	}
 
+	pub struct VoterSetData {
+		pub voter_set_merkle_root: [u8; 32],
+		pub average_session_length_in_millisecs: u64,
+		pub voter_count: u32,
+	}
+
 	#[pallet::config]
 	pub trait Config:
 		frame_system::Config + pallet_timestamp::Config + CreateSignedTransaction<Call<Self>>
@@ -1305,7 +1311,7 @@ pub mod pallet {
 			if let Some(pub_key) = next_pub_key {
 				ShouldSubmitProposerVote::<T>::put(true);
 				let next_nonce = Self::refresh_nonce() + 1u32;
-				let data = Self::create_refresh_proposal(pub_key.1.into(), next_nonce);
+				let data = Self::create_refresh_proposal(pub_key.1.into(), next_nonce)?;
 				match T::ProposalHandler::handle_unsigned_proposal(data) {
 					Ok(()) => {
 						RefreshInProgress::<T>::put(true);
@@ -1480,7 +1486,14 @@ impl<T: Config> Pallet<T> {
 
 	pub fn do_refresh(pub_key: Vec<u8>) {
 		let next_nonce = Self::refresh_nonce() + 1u32;
-		let data = Self::create_refresh_proposal(pub_key, next_nonce);
+		let data = match Self::create_refresh_proposal(pub_key, next_nonce) {
+			Ok(data) => data,
+			Err(e) => {
+				log::warn!("Failed to create refresh proposal: {:?}", e);
+				return
+			},
+		};
+
 		match T::ProposalHandler::handle_unsigned_proposal(data) {
 			Ok(()) => {
 				RefreshInProgress::<T>::put(true);
@@ -1492,12 +1505,19 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn create_refresh_proposal(pub_key: Vec<u8>, nonce: u32) -> Proposal<T::MaxProposalLength> {
-		let uncompressed_pub_key = Self::decompress_public_key(pub_key).unwrap_or_default();
-		let (voter_merkle_root, session_length, voter_count) = Self::create_voter_set_data();
+	pub fn create_refresh_proposal(
+		pub_key: Vec<u8>,
+		nonce: u32,
+	) -> Result<Proposal<T::MaxProposalLength>, DispatchError> {
+		let uncompressed_pub_key = Self::decompress_public_key(pub_key)?;
+		let VoterSetData {
+			voter_set_merkle_root,
+			average_session_length_in_millisecs,
+			voter_count,
+		} = Self::create_voter_set_data();
 		let proposal = RefreshProposal {
-			voter_merkle_root,
-			session_length,
+			voter_merkle_root: voter_set_merkle_root,
+			session_length: average_session_length_in_millisecs,
 			voter_count,
 			nonce: nonce.into(),
 			pub_key: uncompressed_pub_key,
@@ -1510,7 +1530,7 @@ impl<T: Config> Pallet<T> {
 		// Encode the proposal and return the unsigned proposal.
 		let bounded_proposal_data: BoundedVec<u8, T::MaxProposalLength> =
 			proposal.encode().try_into().unwrap_or_default();
-		Proposal::Unsigned { kind: ProposalKind::Refresh, data: bounded_proposal_data }
+		Ok(Proposal::Unsigned { kind: ProposalKind::Refresh, data: bounded_proposal_data })
 	}
 
 	/// Creates the voter set merkle tree and auxiliary data for the `RefreshProposal`.
@@ -1530,7 +1550,7 @@ impl<T: Config> Pallet<T> {
 	/// This data is intended to be used to update the voter set on other blockchains
 	/// that need a fallback mechanism when the DKG is not available or needs to be fixed or
 	/// changed.
-	fn create_voter_set_data() -> ([u8; 32], u64, u32) {
+	fn create_voter_set_data() -> VoterSetData {
 		let voters = Self::next_authorities();
 		// Merkleize the new voter set
 		let voter_set_merkle_root = Self::get_voter_set_tree_root(&voters);
@@ -1547,7 +1567,11 @@ impl<T: Config> Pallet<T> {
 		let average_session_length_in_millisecs =
 			average_session_length_in_blocks.saturating_mul(average_millisecs_per_block);
 
-		(voter_set_merkle_root, average_session_length_in_millisecs, voters.len() as u32)
+		VoterSetData {
+			voter_set_merkle_root,
+			average_session_length_in_millisecs,
+			voter_count: voters.len() as u32,
+		}
 	}
 
 	/// Returns the leaves of the voter set merkle tree.

@@ -69,23 +69,20 @@ impl MaxEncodedLen for RefreshProposal {
 
 impl Decode for RefreshProposal {
 	fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
-		const NONCE_LEN: usize = ProposalNonce::LENGTH;
 		let mut data = [0u8; Self::LENGTH];
 		input.read(&mut data).map_err(|_| {
-			codec::Error::from("input bytes are less than the expected size (68 bytes)")
+			codec::Error::from("input bytes are less than the expected size (112 bytes)")
 		})?;
-		// _NOTE_: rustc won't generate bounds check for the following slice
-		// since we know the length of the slice is at least 68 bytes already.
 		let mut voter_merkle_root_bytes = [0u8; 32];
 		let mut session_length_bytes = [0u8; 8];
 		let mut voter_count_bytes = [0u8; 4];
-		let mut nonce_bytes = [0u8; NONCE_LEN];
+		let mut nonce_bytes = [0u8; ProposalNonce::LENGTH];
 		let mut pub_key_bytes = [0u8; 64];
 		voter_merkle_root_bytes.copy_from_slice(&data[0..32]);
 		session_length_bytes.copy_from_slice(&data[32..40]);
 		voter_count_bytes.copy_from_slice(&data[40..44]);
-		nonce_bytes.copy_from_slice(&data[44..(44 + NONCE_LEN)]);
-		pub_key_bytes.copy_from_slice(&data[(44 + NONCE_LEN)..]);
+		nonce_bytes.copy_from_slice(&data[44..(44 + ProposalNonce::LENGTH)]);
+		pub_key_bytes.copy_from_slice(&data[(44 + ProposalNonce::LENGTH)..]);
 		let voter_merkle_root = voter_merkle_root_bytes;
 		let session_length = u64::from_be_bytes(session_length_bytes);
 		let voter_count = u32::from_be_bytes(voter_count_bytes);
@@ -97,8 +94,7 @@ impl Decode for RefreshProposal {
 
 impl Encode for RefreshProposal {
 	fn encode(&self) -> Vec<u8> {
-		const NONCE_LEN: usize = ProposalNonce::LENGTH;
-		let mut ret = [0u8; Self::LENGTH];
+		let mut ret = vec![0u8; Self::LENGTH];
 		let voter_merkle_root = self.voter_merkle_root;
 		let session_length = self.session_length.to_be_bytes();
 		let voter_count = self.voter_count.to_be_bytes();
@@ -107,13 +103,12 @@ impl Encode for RefreshProposal {
 		ret[0..32].copy_from_slice(&voter_merkle_root);
 		ret[32..40].copy_from_slice(&session_length);
 		ret[40..44].copy_from_slice(&voter_count);
-		ret[44..(44 + NONCE_LEN)].copy_from_slice(&nonce);
-		ret[(44 + NONCE_LEN)..].copy_from_slice(pub_key);
-		ret.into()
+		ret[44..(44 + ProposalNonce::LENGTH)].copy_from_slice(&nonce);
+		ret[(44 + ProposalNonce::LENGTH)..].copy_from_slice(pub_key);
+		ret
 	}
 
 	fn encoded_size(&self) -> usize {
-		const NONCE_LEN: usize = ProposalNonce::LENGTH;
 		Self::LENGTH
 	}
 }
