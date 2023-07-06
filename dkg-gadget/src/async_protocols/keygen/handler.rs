@@ -24,7 +24,8 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 
 use std::fmt::Debug;
 
-use dkg_primitives::types::{DKGError, DKGMsgStatus};
+use crate::async_protocols::remote::ShutdownReason;
+use dkg_primitives::types::DKGError;
 use dkg_runtime_primitives::MaxAuthorities;
 use futures::FutureExt;
 
@@ -36,7 +37,8 @@ where
 	pub fn setup_keygen<BI: BlockchainInterface + 'static>(
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		threshold: u16,
-		status: DKGMsgStatus,
+		status: KeygenRound,
+		keygen_protocol_hash: [u8; 32],
 	) -> Result<GenericAsyncHandler<'static, ()>, DKGError> {
 		let status_handle = params.handle.clone();
 		let mut stop_rx =
@@ -65,7 +67,8 @@ where
 			// Set status of the handle
 			params.handle.set_status(MetaHandlerStatus::Keygen);
 			// Execute the keygen
-			GenericAsyncHandler::new_keygen(params.clone(), t, n, status)?.await?;
+			GenericAsyncHandler::new_keygen(params.clone(), t, n, status, keygen_protocol_hash)?
+				.await?;
 			params.logger.debug_keygen("Keygen stage complete!");
 
 			Ok(())
@@ -78,7 +81,7 @@ where
 					logger0.info_keygen("🕸️  Keygen GenericAsyncHandler completed".to_string());
 				},
 				Err(ref err) => {
-					// Do not update the status here, evetually the Keygen will fail and timeout.
+					// Do not update the status here, eventually the Keygen will fail and timeout.
 					logger0.error_keygen(format!("Keygen failed with error: {err:?}"));
 				},
 			};
@@ -90,7 +93,15 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					logger1.info_keygen(format!("Stopper has been called {res1:?}"));
-					Ok(())
+					if let Some(res1) = res1 {
+						if res1 == ShutdownReason::DropCode {
+							Ok(())
+						} else {
+							Err(DKGError::GenericError { reason: "Keygen has stalled".into() })
+						}
+					} else {
+						Ok(())
+					}
 				}
 			}
 		});
@@ -102,13 +113,10 @@ where
 		params: AsyncProtocolParameters<BI, MaxAuthorities>,
 		t: u16,
 		n: u16,
-		status: DKGMsgStatus,
+		ty: KeygenRound,
+		keygen_protocol_hash: [u8; 32],
 	) -> Result<GenericAsyncHandler<'static, <Keygen as StateMachineHandler<BI>>::Return>, DKGError>
 	{
-		let ty = match status {
-			DKGMsgStatus::ACTIVE => KeygenRound::ACTIVE,
-			DKGMsgStatus::QUEUED => KeygenRound::QUEUED,
-		};
 		let i = params.party_i;
 		let associated_round_id = params.associated_block_id;
 		let channel_type: ProtocolType<
@@ -123,7 +131,6 @@ where
 				.map_err(|err| Self::map_keygen_error_to_dkg_error_keygen(err))?,
 			params,
 			channel_type,
-			status,
 		)
 	}
 

@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  */
+import '@polkadot/api-augment';
 import '@webb-tools/dkg-substrate-types';
 import { sudoTx, waitForEvent } from './utils/setup';
 import { hexToNumber, u8aToHex, hexToU8a } from '@polkadot/util';

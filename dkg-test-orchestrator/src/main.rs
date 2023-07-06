@@ -76,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let keygen_n = n_clients as u16;
 	let signing_t = t as u16;
 	let signing_n = n_clients as u16;
+	let blocks_per_session = 2; // do NOT change this value (for now)
 
 	// logging for the dummy api only
 	let output = args.tmp_path.join("dummy_api.log");
@@ -87,14 +88,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		keygen_n,
 		signing_t,
 		signing_n,
-		n_blocks,
 		dummy_api_logger.clone(),
+		blocks_per_session,
 	);
 
 	// first, spawn the orchestrator/mock-blockchain
-	let orchestrator_task = MockBlockchain::new(config, api.clone(), dummy_api_logger.clone())
-		.await?
-		.execute();
+	let orchestrator_task =
+		MockBlockchain::new(config, api.clone(), dummy_api_logger.clone(), blocks_per_session)
+			.await?
+			.execute();
 	let orchestrator_handle = tokio::task::spawn(orchestrator_task);
 	// give time for the orchestrator to bind
 	tokio::time::sleep(std::time::Duration::from_millis(1000)).await;

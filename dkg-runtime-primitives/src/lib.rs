@@ -29,14 +29,12 @@ pub use ethereum_types::*;
 use frame_support::{pallet_prelude::Get, BoundedVec, RuntimeDebug};
 pub use proposal::*;
 use scale_info::TypeInfo;
-use sp_core::H256;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	MultiSignature,
 };
 use sp_std::{fmt::Debug, prelude::*, vec::Vec};
 use tiny_keccak::{Hasher, Keccak};
-use webb_proposals::Proposal;
 
 /// A custom get Struct to allow to import runtime values into the dkg gadget
 #[derive(
@@ -273,7 +271,6 @@ impl<MaxProposalLength: Get<u32> + Clone> UnsignedProposal<MaxProposalLength> {
 }
 
 sp_api::decl_runtime_apis! {
-
 	pub trait DKGApi<AuthorityId, N, MaxProposalLength, MaxAuthorities> where
 		AuthorityId: Codec + PartialEq,
 		MaxProposalLength: Get<u32> + Clone,

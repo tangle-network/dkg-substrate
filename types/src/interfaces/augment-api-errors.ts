@@ -99,6 +99,10 @@ declare module '@polkadot/api-base/types/errors' {
     };
     dkg: {
       /**
+       * Authority is already jailed
+       **/
+      AlreadyJailed: AugmentedError<ApiType>;
+      /**
        * Already submitted a public key
        **/
       AlreadySubmittedPublicKey: AugmentedError<ApiType>;
@@ -155,6 +159,14 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       NoNextPublicKey: AugmentedError<ApiType>;
       /**
+       * We do not have authorities to jail
+       **/
+      NotEnoughAuthoritiesToJail: AugmentedError<ApiType>;
+      /**
+       * Reported misbehaviour against a non authority
+       **/
+      OffenderNotAuthority: AugmentedError<ApiType>;
+      /**
        * Input is out of bounds
        **/
       OutOfBounds: AugmentedError<ApiType>;
@@ -172,10 +184,6 @@ declare module '@polkadot/api-base/types/errors' {
       [key: string]: AugmentedError<ApiType>;
     };
     dkgProposalHandler: {
-      /**
-       * Math overflow
-       **/
-      ArithmeticOverflow: AugmentedError<ApiType>;
       /**
        * Duplicate signed proposal
        **/
@@ -250,6 +258,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Account does not have correct permissions
        **/
       InvalidPermissions: AugmentedError<ApiType>;
+      /**
+       * Invalid proposal
+       **/
+      InvalidProposal: AugmentedError<ApiType>;
       /**
        * Proposer threshold cannot be 0
        **/

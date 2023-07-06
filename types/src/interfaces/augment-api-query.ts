@@ -11,6 +11,8 @@ import type { Bytes, Option, Vec, WrapperOpaque, bool, u128, u16, u32, u64 } fro
 import type { AnyNumber, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill, Percent, Permill } from '@polkadot/types/interfaces/runtime';
 import type { Observable } from '@polkadot/types/types';
+import type {DkgRuntimePrimitivesProposalStoredUnsignedProposal,PalletBridgeRegistryBridgeMetadata,PalletBalancesBalanceLock,PalletElectionProviderMultiPhaseSignedSignedSubmission, PalletNominationPoolsSubPools,PalletIdentityRegistrarInfo,PalletImOnlineBoundedOpaqueNetworkState,PalletDkgMetadataRoundMetadata,PalletBagsListListBag,FrameSupportDispatchDispatchInfo,PalletBagsListListNode, PalletBalancesReserveData,PalletBalancesAccountData, DkgRuntimePrimitivesMisbehaviourType, PalletDkgProposalsProposalVotes, PalletElectionProviderMultiPhasePhase, PalletElectionProviderMultiPhaseReadySolution, PalletGrandpaStoredState, PalletIdentityRegistration, PalletGrandpaStoredPendingChange, PalletElectionProviderMultiPhaseRoundSnapshot, PalletImOnlineSr25519AppSr25519Public, PalletNominationPoolsPoolMember, PalletNominationPoolsBondedPoolInner, PalletNominationPoolsRewardPool, SpCoreCryptoKeyTypeId, PalletStakingActiveEraInfo, PalletStakingEraRewardPoints, PalletStakingExposure, PalletStakingForcing, PalletStakingStakingLedger, PalletStakingNominations, PalletStakingSlashingSlashingSpans, FrameSystemAccountInfo, FrameSystemPhase, PalletTransactionPaymentReleases,PalletStakingSlashingSpanRecord, SpConsensusAuraSr25519AppSr25519Public, FrameSystemLastRuntimeUpgradeInfo,PalletStakingUnappliedSlash,  FrameSystemEventRecord, SpRuntimeDigest, FrameSupportDispatchPerDispatchClassWeight, DkgRuntimePrimitivesCryptoPublic,DkgRuntimePrimitivesAggregatedMisbehaviourReports,DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal,WebbProposalsHeaderResourceId, WebbProposalsHeaderTypedChainId,SpNposElectionsSupport,SpNposElectionsElectionScore,PalletElectionProviderMultiPhaseRawSolution,SpWeightsWeightV2Weight,PalletNominationPoolsBondExtra,PalletIdentityJudgement,SpCoreVoid,SpFinalityGrandpaEquivocationProof,PalletElectionProviderMultiPhaseSolutionOrSnapshotSize,PalletImOnlineHeartbeat,PalletIdentityIdentityInfo,PalletIdentityBitFlags,PalletImOnlineSr25519AppSr25519Signature, PalletStakingValidatorPrefs,PalletNominationPoolsClaimPermission,PalletNominationPoolsConfigOpAccountId32,PalletNominationPoolsPoolState, PalletStakingPalletConfigOpPerbill,PalletStakingRewardDestination, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpPercent, PalletNominationPoolsConfigOpU32, PalletNominationPoolsConfigOpU128} from "./types-lookup";
+
 
 export type __AugmentedQuery<ApiType extends ApiTypes> = AugmentedQuery<ApiType, () => unknown>;
 export type __QueryableStorageEntry<ApiType extends ApiTypes> = QueryableStorageEntry<ApiType>;
@@ -249,7 +251,7 @@ declare module '@polkadot/api-base/types/storage' {
       /**
        * Should we start a new Keygen
        **/
-      shouldExecuteNewKeygen: AugmentedQuery<ApiType, () => Observable<bool>, []> & QueryableStorageEntry<ApiType, []>;
+      shouldExecuteNewKeygen: AugmentedQuery<ApiType, () => Observable<ITuple<[bool, bool]>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * The current signature threshold (i.e. the `t` in t-of-n)
        **/

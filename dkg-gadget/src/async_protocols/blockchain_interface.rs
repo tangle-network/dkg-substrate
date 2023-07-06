@@ -397,7 +397,7 @@ impl<B, BE, C, GE> BlockchainInterface
 
 	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
-		gossip_public_key::<B, C, BE, GE>(
+		gossip_public_key::<GE>(
 			&self.keystore,
 			self.gossip_engine.clone(),
 			&mut self.aggregated_public_keys.write(),

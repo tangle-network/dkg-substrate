@@ -10,6 +10,7 @@ use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, GenericAsyncHandler, KeygenPartyId},
 	gossip_engine::GossipEngineIface,
 	metric_inc,
+	signing_manager::work_manager::PollMethod,
 	utils::SendFuture,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
@@ -18,7 +19,10 @@ use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
-use std::pin::Pin;
+use std::{
+	pin::Pin,
+	sync::atomic::{AtomicBool, Ordering},
+};
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -39,17 +43,20 @@ pub mod work_manager;
 pub struct SigningManager<B: Block, BE, C, GE> {
 	// governs the workload for each node
 	work_manager: WorkManager<B>,
+	lock: Arc<AtomicBool>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
-		Self { work_manager: self.work_manager.clone(), _pd: self._pd }
+		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
 	}
 }
 
 // the maximum number of tasks that the work manager tries to assign
 const MAX_RUNNING_TASKS: usize = 4;
+// How often to poll the jobs to check completion status
+const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -61,22 +68,52 @@ where
 {
 	pub fn new(logger: DebugLogger, clock: impl HasLatestHeader<B>) -> Self {
 		Self {
-			work_manager: WorkManager::<B>::new(logger, clock, MAX_RUNNING_TASKS),
+			work_manager: WorkManager::<B>::new(
+				logger,
+				clock,
+				MAX_RUNNING_TASKS,
+				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
+			),
+			lock: Arc::new(AtomicBool::new(false)),
 			_pd: Default::default(),
 		}
 	}
 
 	pub fn deliver_message(&self, message: SignedDKGMessage<Public>) {
-		self.work_manager.deliver_message(message)
+		let message_task_hash =
+			*message.msg.payload.unsigned_proposal_hash().expect("Bad message type");
+		self.work_manager.deliver_message(message, message_task_hash)
+	}
+
+	// prevents on_block_finalized from executing
+	pub fn keygen_lock(&self) {
+		self.lock.store(true, Ordering::SeqCst);
+	}
+
+	// allows the on_block_finalized task to be executed
+	pub fn keygen_unlock(&self) {
+		self.lock.store(false, Ordering::SeqCst);
 	}
 
 	/// This function is called each time a new block is finalized.
 	/// It will then start a signing process for each of the proposals.
+	#[allow(clippy::let_underscore_future)]
 	pub async fn on_block_finalized(
 		&self,
 		header: &B::Header,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 	) -> Result<(), DKGError> {
+		let header = &header;
+		let dkg_worker = &dkg_worker;
+		// if a keygen is running, don't start any new signing tasks
+		// until later
+		if self.lock.load(Ordering::SeqCst) {
+			dkg_worker
+				.logger
+				.debug("Will skip handling block finalized event because keygen is running");
+			return Ok(())
+		}
+
 		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
@@ -84,7 +121,7 @@ where
 		// Check whether the worker is in the best set or return
 		let party_i = match dkg_worker.get_party_index(header).await {
 			Some(party_index) => {
-				dkg_worker.logger.info(format!("🕸️  PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
+				dkg_worker.logger.info(format!("🕸️  SIGNING PARTY {party_index} | SESSION {session_id} | IN THE SET OF BEST AUTHORITIES"));
 				KeygenPartyId::try_from(party_index)?
 			},
 			None => {
@@ -158,7 +195,7 @@ where
 			let concat_data = dkg_pub_key
 				.clone()
 				.into_iter()
-				.chain(at.encode())
+				//.chain(at.encode())
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
@@ -237,6 +274,7 @@ where
 		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
+		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal: {unsigned_proposal:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
 		let async_proto_params = dkg_worker.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,

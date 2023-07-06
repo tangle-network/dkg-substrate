@@ -53,10 +53,8 @@ pub struct DKGMessage<AuthorityId> {
 	pub recipient_id: Option<AuthorityId>,
 	/// DKG message contents
 	pub payload: DKGMsgPayload,
-	/// Indentifier for the message
+	/// Identifier for the message
 	pub session_id: SessionId,
-	/// enum for active or queued
-	pub status: DKGMsgStatus,
 	/// The round ID
 	pub associated_block_id: u64,
 }
@@ -128,6 +126,14 @@ impl DKGMsgPayload {
 			_ => None,
 		}
 	}
+
+	pub fn keygen_protocol_hash(&self) -> Option<&[u8; 32]> {
+		if let DKGMsgPayload::Keygen(msg) = self {
+			Some(&msg.keygen_protocol_hash)
+		} else {
+			None
+		}
+	}
 	/// NOTE: this is hacky
 	/// TODO: Change enums for keygen, offline, vote
 	pub fn async_proto_only_get_sender_id(&self) -> Option<u16> {
@@ -157,6 +163,8 @@ pub struct DKGKeygenMessage {
 	pub sender_id: u16,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
+	/// Unique identification for this keygen protocol (hash of session id + retry count)
+	pub keygen_protocol_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

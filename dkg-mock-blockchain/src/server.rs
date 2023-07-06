@@ -4,7 +4,7 @@ use crate::{
 };
 use atomic::Atomic;
 use dkg_logging::debug_logger::DebugLogger;
-use dkg_runtime_primitives::UnsignedProposal;
+use dkg_runtime_primitives::{MaxProposalLength, UnsignedProposal};
 use futures::{SinkExt, StreamExt};
 use sc_client_api::FinalizeSummary;
 use sp_runtime::app_crypto::sp_core::hashing::sha2_256;
@@ -32,6 +32,7 @@ pub struct MockBlockchain<T: Clone> {
 	// the orchestrator receives updates from its client sub-tasks from this receiver
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
+	blocks_per_session: Arc<u64>,
 	blockchain: T,
 	logger: DebugLogger,
 }
@@ -85,6 +86,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		config: MockBlockchainConfig,
 		blockchain: T,
 		logger: DebugLogger,
+		blocks_per_session: u64,
 	) -> std::io::Result<Self> {
 		let listener = TcpListener::bind(&config.bind).await?;
 		let clients = Arc::new(RwLock::new(HashMap::new()));
@@ -100,6 +102,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			orchestrator_rx: Arc::new(Mutex::new(Some(orchestrator_rx))),
 			blockchain,
 			logger,
+			blocks_per_session: Arc::new(blocks_per_session),
 		})
 	}
 
@@ -123,6 +126,10 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 		let orchestrator_task = this_orchestrator.orchestrate();
 
 		tokio::try_join!(listener_task, orchestrator_task).map(|_| ())
+	}
+
+	fn block_id_to_session_id(&self, block_id: u64) -> u64 {
+		(block_id as f64 / *self.blocks_per_session as f64).floor() as u64
 	}
 
 	/// For debugging purposes, everything will get unwrapped here
@@ -276,7 +283,6 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 								TestResult::Keygen { result, pub_key } => {
 									// set the public key that way other nodes can verify that
 									// the public key was submitted
-									// TODO: Make sure that we set_next_public key based on input
 									self.blockchain.set_pub_key(
 										intra_test_phase.round_number(),
 										pub_key.clone(),
@@ -293,6 +299,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 
 							// regardless of success, increment completed count for the current
 							// round
+							if let TestResult::Keygen { pub_key, .. } = result {
+								self.blockchain.set_pub_key(
+									intra_test_phase.round_number() + 1,
+									pub_key.clone(),
+								);
+							}
+
 							if matches!(result, TestResult::Keygen { .. }) &&
 								matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
 							{
@@ -336,6 +349,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 					// at the end, check if the round is complete
 					let keygen_complete =
 						current_round_completed_count_keygen == self.config.n_clients;
+
 					if keygen_complete && matches!(intra_test_phase, IntraTestPhase::Keygen { .. })
 					{
 						// keygen is complete, and, we are ready to rotate into either the next
@@ -488,8 +502,9 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 			IntraTestPhase::Signing { .. } => "SIGNING",
 		};
 
+		let session_id = self.block_id_to_session_id(test_round);
 		for x in (1..=3).rev() {
-			log::info!(target: "dkg", "[Orchestrator] Beginning next {test_phase} test for session {test_round} in {x}");
+			log::info!(target: "dkg", "[Orchestrator] Beginning next {test_phase} test for session {session_id} in {x}");
 			tokio::time::sleep(Duration::from_millis(1000)).await
 		}
 	}
@@ -511,6 +526,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 				IntraTestPhase::Keygen { trace_id, .. } => {
 					client.outstanding_tasks_keygen.insert(*trace_id, next_case.clone());
 					// always set the unsigned props to empty to ensure no signing protocol executes
+					self.blockchain.set_should_execute_keygen(true);
 					self.blockchain.set_unsigned_proposals(vec![]);
 				},
 				IntraTestPhase::Signing { trace_id, queued_unsigned_proposals, .. } => {
@@ -522,6 +538,7 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 								.or_default()
 								.push(next_case.clone());
 						}
+						self.blockchain.set_should_execute_keygen(false);
 						self.blockchain.set_unsigned_proposals(unsigned_propos);
 					}
 				},
@@ -565,25 +582,21 @@ fn create_mocked_finality_blockchain_event(block_number: u64) -> MockBlockchainE
 }
 
 pub trait MutableBlockchain: Clone + Send + 'static {
-	fn set_unsigned_proposals(
-		&self,
-		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
-	);
-	fn set_pub_key(&self, session: u64, key: Vec<u8>);
+	fn set_unsigned_proposals(&self, propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>);
+	fn set_pub_key(&self, block_id: u64, key: Vec<u8>);
+	fn set_should_execute_keygen(&self, should_execute: bool);
 }
 
 enum IntraTestPhase {
 	Keygen {
 		trace_id: Uuid,
-		queued_unsigned_proposals:
-			Option<Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>>,
+		queued_unsigned_proposals: Option<Vec<UnsignedProposal<MaxProposalLength>>>,
 		round_number: u64,
 		test_case: Option<TestCase>,
 	},
 	Signing {
 		trace_id: Uuid,
-		queued_unsigned_proposals:
-			Option<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>>,
+		queued_unsigned_proposals: Option<Vec<(UnsignedProposal<MaxProposalLength>, u64)>>,
 		round_number: u64,
 		test_case: TestCase,
 	},
@@ -604,7 +617,7 @@ impl IntraTestPhase {
 		{
 			let queued_unsigned_proposals = queued_unsigned_proposals.take();
 			let mut queued_unsigned_proposals_with_expiry: Vec<(
-				UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>,
+				UnsignedProposal<MaxProposalLength>,
 				u64,
 			)> = Default::default();
 			for prop in queued_unsigned_proposals.iter() {
@@ -626,9 +639,7 @@ impl IntraTestPhase {
 
 	fn session_init(
 		&mut self,
-		unsigned_proposals: Option<
-			Vec<UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>>,
-		>,
+		unsigned_proposals: Option<Vec<UnsignedProposal<MaxProposalLength>>>,
 		test_case: TestCase,
 	) {
 		// rotate signing into keygen, or keygen into keygen if there are no signing tests.

@@ -22,13 +22,17 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use crate::async_protocols::{
-	blockchain_interface::BlockchainInterface, incoming::IncomingAsyncProtocolWrapper, new_inner,
-	remote::MetaHandlerStatus, state_machine::StateMachineHandler, AsyncProtocolParameters,
-	BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId, ProtocolType, Threshold,
+	blockchain_interface::BlockchainInterface,
+	incoming::IncomingAsyncProtocolWrapper,
+	new_inner,
+	remote::{MetaHandlerStatus, ShutdownReason},
+	state_machine::StateMachineHandler,
+	AsyncProtocolParameters, BatchKey, GenericAsyncHandler, KeygenPartyId, OfflinePartyId,
+	ProtocolType, Threshold,
 };
 use dkg_logging::debug_logger::RoundsEventType;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGMsgStatus, DKGVoteMessage, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::FutureExt;
@@ -127,7 +131,15 @@ where
 				res0 = protocol => res0,
 				res1 = stop_rx.recv() => {
 					logger2.info_signing(format!("Stopper has been called {res1:?}"));
-					Ok(())
+					if let Some(res1) = res1 {
+						if res1 == ShutdownReason::DropCode {
+							Ok(())
+						} else {
+							Err(DKGError::GenericError { reason: "Signing has stalled".into() })
+						}
+					} else {
+						Ok(())
+					}
 				}
 			}
 		});
@@ -167,7 +179,6 @@ where
 				.map_err(|err| DKGError::CriticalError { reason: err.to_string() })?,
 			params,
 			channel_type,
-			DKGMsgStatus::ACTIVE,
 		)
 	}
 
@@ -236,6 +247,7 @@ where
 				unsigned_proposal_hash,
 			});
 
+			// TODO: Get latest pub key
 			let id = params.authority_public_key.as_ref().clone();
 			// now, broadcast the data
 			let unsigned_dkg_message = DKGMessage {
@@ -243,18 +255,11 @@ where
 				sender_id: id,
 				// No recipient for this message, it is broadcasted
 				recipient_id: None,
-				status: DKGMsgStatus::ACTIVE,
 				payload,
 				session_id: params.session_id,
 			};
 
-			// we have no synchronization mechanism post-offline stage. Sometimes, messages
-			// don't get delivered. Thus, we sent multiple messages, and, wait for a while to let
-			// other nodes "show up"
-			for _ in 0..3 {
-				params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
-				tokio::time::sleep(Duration::from_millis(100)).await;
-			}
+			params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;
 
 			// we only need a threshold count of sigs
 			let number_of_partial_sigs = threshold as usize;

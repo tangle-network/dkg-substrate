@@ -531,8 +531,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// Check behavior of the peer.
 		let now = self.get_latest_block_number();
 		self.logger.debug(format!(
-			"{:?} session {:?} | Received a signed DKG messages from {} @ block {:?}, ",
-			message.msg.status, message.msg.session_id, who, now
+			"session {:?} | Received a signed DKG messages from {} @ block {:?}, ",
+			message.msg.session_id, who, now
 		));
 
 		if let Some(metrics) = self.metrics.as_ref() {

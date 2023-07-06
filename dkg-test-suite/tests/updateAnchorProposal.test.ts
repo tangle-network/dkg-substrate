@@ -107,11 +107,6 @@ it('should be able to sign anchor update proposal', async () => {
 	const prop = anchorProposal;
 
 	const proposalCall = polkadotApi.tx.dkgProposals.acknowledgeProposal(
-		anchorProposal.header.nonce,
-		{
-			Evm: localChain2.evmId,
-		},
-		resourceId.toU8a(),
 		{
 			Unsigned: {
 				kind: 'AnchorUpdate',
