@@ -48,7 +48,7 @@ pub struct DKGMessage<AuthorityId> {
 	pub recipient_id: Option<AuthorityId>,
 	/// DKG message contents
 	pub payload: NetworkMsgPayload,
-	/// Indentifier for the message
+	/// Identifier for the message
 	pub session_id: SessionId,
 	/// The round ID
 	pub associated_block_id: u64,
