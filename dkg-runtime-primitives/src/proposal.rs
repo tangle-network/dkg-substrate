@@ -98,7 +98,7 @@ impl Decode for RefreshProposal {
 impl Encode for RefreshProposal {
 	fn encode(&self) -> Vec<u8> {
 		const NONCE_LEN: usize = ProposalNonce::LENGTH;
-		let mut ret = [0u8; 32 + 8 + 4 + NONCE_LEN + 64];
+		let mut ret = [0u8; Self::LENGTH];
 		let voter_merkle_root = self.voter_merkle_root;
 		let session_length = self.session_length.to_be_bytes();
 		let voter_count = self.voter_count.to_be_bytes();

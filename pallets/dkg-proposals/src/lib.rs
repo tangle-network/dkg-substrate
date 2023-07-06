@@ -273,14 +273,6 @@ pub mod pallet {
 		ProposerThresholdChanged { new_threshold: u32 },
 		/// Chain now available for transfers (chain_id)
 		ChainWhitelisted { chain_id: TypedChainId },
-		/// Proposer added to set
-		ProposerAdded { proposer_id: T::AccountId },
-		/// Queued proposer added to set
-		QueuedProposerAdded { proposer_id: T::AccountId },
-		/// Proposer removed from set
-		ProposerRemoved { proposer_id: T::AccountId },
-		/// Queued proposer removed from set
-		QueuedProposerRemoved { proposer_id: T::AccountId },
 		/// Vote submitted in favour of proposal
 		VoteFor {
 			kind: ProposalKind,
