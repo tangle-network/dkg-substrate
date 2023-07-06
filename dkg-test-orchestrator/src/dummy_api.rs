@@ -1,6 +1,6 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
-use dkg_runtime_primitives::{crypto::AuthorityId, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::AuthorityId, MaxProposalLength, UnsignedProposal};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -30,20 +30,25 @@ pub struct DummyApiInner {
 	pub authority_sets:
 		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
-	pub unsigned_proposals:
-		Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
+	pub unsigned_proposals: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
+	pub should_execute_keygen: bool,
+	pub blocks_per_session: u64,
 }
 
 impl MutableBlockchain for DummyApi {
-	fn set_unsigned_proposals(
-		&self,
-		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
-	) {
+	fn set_unsigned_proposals(&self, propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>) {
 		self.inner.write().unsigned_proposals = propos;
 	}
 
-	fn set_pub_key(&self, session: u64, key: Vec<u8>) {
-		self.inner.write().dkg_keys.insert(session, key);
+	fn set_pub_key(&self, block_id: u64, key: Vec<u8>) {
+		let header = sp_runtime::generic::Header::<u64, _>::new_from_number(block_id);
+		let hash = header.hash();
+		let session_id = self.block_id_to_session_id(&hash);
+		self.inner.write().dkg_keys.insert(session_id, key);
+	}
+
+	fn set_should_execute_keygen(&self, should_execute: bool) {
+		self.inner.write().should_execute_keygen = should_execute;
 	}
 }
 
@@ -53,16 +58,12 @@ impl DummyApi {
 		keygen_n: u16,
 		signing_t: u16,
 		signing_n: u16,
-		n_sessions: usize,
 		logger: DebugLogger,
+		blocks_per_session: u64,
 	) -> Self {
 		let mut dkg_keys = HashMap::new();
 		// add a empty-key for the genesis block to drive the DKG forward
 		dkg_keys.insert(0 as _, vec![]);
-		for x in 1..=(n_sessions + 1) {
-			// add dummy keys for all other sessions
-			dkg_keys.insert(x as _, vec![0, 1, 2, 3, 4, 5]);
-		}
 
 		Self {
 			inner: Arc::new(RwLock::new(DummyApiInner {
@@ -73,18 +74,28 @@ impl DummyApi {
 				authority_sets: HashMap::new(),
 				dkg_keys,
 				unsigned_proposals: vec![],
+				should_execute_keygen: false,
+				blocks_per_session,
 			})),
 			logger,
 		}
 	}
 
-	fn block_id_to_u64(&self, input: &H256) -> u64 {
+	fn block_id_to_session_id(&self, input: &H256) -> u64 {
 		// this is hacky, but, it should suffice for now
 		for x in 0..=u64::MAX {
 			let header = sp_runtime::generic::Header::<u64, _>::new_from_number(x);
 			let hash = header.hash();
 			if &hash == input {
-				return x
+				// take x and divide by blocks_per_session
+				let blocks_per_session = self.inner.read().blocks_per_session as f64;
+				// if bps = 2
+				// x = 0 => 0
+				// x = 1 => 0
+				// x = 2 => 1
+				// x = 3 => 1
+				// thus: floor(x / bps)
+				return (x as f64 / blocks_per_session).floor() as u64
 			}
 		}
 
@@ -529,7 +540,7 @@ impl
 		TestBlock,
 		AuthorityId,
 		sp_api::NumberFor<TestBlock>,
-		dkg_runtime_primitives::CustomU32Getter<10000>,
+		MaxProposalLength,
 		dkg_runtime_primitives::CustomU32Getter<100>,
 	> for DummyApi
 {
@@ -553,8 +564,8 @@ impl
 			dkg_runtime_primitives::CustomU32Getter<100>,
 		>,
 	> {
-		let number = self.block_id_to_u64(&block);
-		self.logger.info(format!("Getting authority set for block {number}"));
+		let number = self.block_id_to_session_id(&block);
+		self.logger.info(format!("Getting authority set for session_id = {number}"));
 		let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
 		let authority_set_id = number;
 
@@ -570,9 +581,13 @@ impl
 			dkg_runtime_primitives::CustomU32Getter<100>,
 		>,
 	> {
-		let header =
-			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
-		self.authority_set(header.hash())
+		let next_session_id = self.block_id_to_session_id(&id) + 1;
+		self.logger
+			.info(format!("Getting queued authority set for session_id = {next_session_id}"));
+		let authorities = self.inner.read().authority_sets.get(&next_session_id).unwrap().clone();
+		let authority_set_id = next_session_id;
+
+		Ok(dkg_runtime_primitives::AuthoritySet { authorities, id: authority_set_id })
 	}
 
 	fn signature_threshold(&self, _: H256) -> ApiResult<u16> {
@@ -599,9 +614,14 @@ impl
 		&self,
 		id: H256,
 	) -> ApiResult<Option<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)>> {
-		let header =
-			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
-		self.dkg_pub_key(header.hash()).map(Some)
+		let number = self.block_id_to_session_id(&id) + 1;
+		self.logger.info(format!("Getting next authority set for block {number}"));
+		if let Some(pub_key) = self.inner.read().dkg_keys.get(&number).cloned() {
+			let authority_set_id = number;
+			Ok(Some((authority_set_id, pub_key)))
+		} else {
+			Ok(None)
+		}
 	}
 
 	fn next_pub_key_sig(&self, _: H256) -> ApiResult<Option<Vec<u8>>> {
@@ -613,16 +633,16 @@ impl
 		&self,
 		block: H256,
 	) -> ApiResult<(dkg_runtime_primitives::AuthoritySetId, Vec<u8>)> {
-		let number = self.block_id_to_u64(&block);
-		self.logger.info(format!("Getting authority set for block {number}"));
+		let number = self.block_id_to_session_id(&block);
+		self.logger.info(format!("Getting pub key for session_id = {number}"));
 		let pub_key = self.inner.read().dkg_keys.get(&number).unwrap().clone();
 		let authority_set_id = number;
 		Ok((authority_set_id, pub_key))
 	}
 
 	fn get_best_authorities(&self, id: H256) -> ApiResult<Vec<(u16, AuthorityId)>> {
+		let id = self.block_id_to_session_id(&id);
 		let read = self.inner.read();
-		let id = self.block_id_to_u64(&id);
 		Ok(read
 			.authority_sets
 			.get(&id)
@@ -634,9 +654,16 @@ impl
 	}
 
 	fn get_next_best_authorities(&self, id: H256) -> ApiResult<Vec<(u16, AuthorityId)>> {
-		let header =
-			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
-		self.get_best_authorities(header.hash())
+		let next_session_id = self.block_id_to_session_id(&id) + 1;
+		let read = self.inner.read();
+		Ok(read
+			.authority_sets
+			.get(&next_session_id)
+			.unwrap()
+			.iter()
+			.enumerate()
+			.map(|(idx, auth)| (idx as u16 + 1, auth.clone()))
+			.collect())
 	}
 
 	fn get_current_session_progress(
@@ -650,7 +677,7 @@ impl
 	fn get_unsigned_proposals(
 		&self,
 		_hash: H256,
-	) -> ApiResult<Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>> {
+	) -> ApiResult<Vec<(UnsignedProposal<MaxProposalLength>, u64)>> {
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 
@@ -692,6 +719,6 @@ impl
 	}
 
 	fn should_execute_new_keygen(&self, _: H256) -> ApiResult<(bool, bool)> {
-		Ok((true, true))
+		Ok((self.inner.read().should_execute_keygen, false))
 	}
 }

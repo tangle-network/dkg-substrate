@@ -23,6 +23,7 @@ use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
 	KEY_TYPE,
 };
+use itertools::Itertools;
 use sc_keystore::LocalKeystore;
 use std::sync::Arc;
 
@@ -57,10 +58,11 @@ impl DKGKeystore {
 		let store = self.0.clone()?;
 
 		// we do check for multiple private keys as a key store sanity check.
-		let public: Vec<Public> = keys
+		let mut public: Vec<Public> = keys
 			.iter()
 			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.to_raw_vec(), KEY_TYPE)]))
 			.cloned()
+			.unique()
 			.collect();
 
 		if public.len() > 1 {
@@ -71,7 +73,7 @@ impl DKGKeystore {
 			));
 		}
 
-		public.get(0).cloned()
+		public.pop()
 	}
 
 	/// Check if the keystore contains a private key for one of the sr25519 public keys

@@ -91,14 +91,6 @@ pub(crate) fn inspect_outbound(ty: &'static str, serialized_len: usize) {
 #[cfg(not(feature = "outbound-inspection"))]
 pub(crate) fn inspect_outbound(_ty: &str, _serialized_len: usize) {}
 
-pub fn convert_u16_vec_to_usize_vec(input: Vec<u16>) -> Vec<usize> {
-	let mut usize_vec: Vec<usize> = vec![];
-	for item in input {
-		usize_vec.push(usize::try_from(item).unwrap_or_default());
-	}
-	usize_vec
-}
-
 use futures::task::Context;
 use tokio::{
 	macros::support::{Pin, Poll},

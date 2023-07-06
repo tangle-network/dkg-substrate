@@ -15,13 +15,12 @@ use crate::{
 	debug_logger::DebugLogger,
 	utils::find_index,
 	worker::{MAX_SUBMISSION_DELAY, STORAGE_SET_RETRY_NUM},
-	Client,
 };
 use codec::{Decode, Encode};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS,
-	AuthoritySet, DKGApi, OffchainSignedProposals,
+	AuthoritySet, OffchainSignedProposals,
 };
 use parking_lot::RwLock;
 use rand::Rng;
@@ -32,7 +31,7 @@ use std::sync::Arc;
 use webb_proposals::Proposal;
 
 /// processes signed proposals and puts them in storage
-pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxAuthorities>(
+pub(crate) fn save_signed_proposals_in_storage<B, BE, MaxProposalLength, MaxAuthorities>(
 	authority_public_key: &Public,
 	current_validator_set: &Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	latest_header: &Arc<RwLock<Option<B::Header>>>,
@@ -42,17 +41,8 @@ pub(crate) fn save_signed_proposals_in_storage<B, C, BE, MaxProposalLength, MaxA
 ) where
 	B: Block,
 	BE: Backend<B>,
-	C: Client<B, BE>,
-	MaxProposalLength:
-		Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug + std::cmp::PartialEq,
-	MaxAuthorities: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
-	C::Api: DKGApi<
-		B,
-		AuthorityId,
-		<<B as Block>::Header as Header>::Number,
-		MaxProposalLength,
-		MaxAuthorities,
-	>,
+	MaxAuthorities: Get<u32>,
+	MaxProposalLength: Get<u32> + Clone,
 {
 	if signed_proposals.is_empty() {
 		return

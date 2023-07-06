@@ -20,7 +20,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, DKGMsgStatus, SignedDKGMessage,
+	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
 };
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MaxAuthorities, MaxProposalLength,
@@ -56,8 +56,8 @@ where
 		dkg_worker.logger.debug("Received misbehaviour report".to_string());
 
 		let is_main_round = {
-			if let Some(round) = dkg_worker.rounds.read().as_ref() {
-				msg.session_id == round.session_id
+			if let Some(session_id) = dkg_worker.keygen_manager.get_latest_executed_session_id() {
+				msg.session_id == session_id
 			} else {
 				false
 			}
@@ -108,7 +108,7 @@ where
 			reports.clone()
 		};
 
-		try_store_offchain(dkg_worker, &reports).await?;
+		let _ = try_store_offchain(dkg_worker, &reports).await?;
 	}
 
 	Ok(())
@@ -145,16 +145,12 @@ where
 			..report.clone()
 		});
 
-		let status =
-			if report.session_id == 0 { DKGMsgStatus::ACTIVE } else { DKGMsgStatus::QUEUED };
 		let message = DKGMessage::<AuthorityId> {
 			associated_block_id: 0,
 			sender_id: public.clone(),
 			// We need to gossip this misbehaviour, so no specific recipient.
 			recipient_id: None,
-			status,
 			session_id: report.session_id,
-			retry_id: 0,
 			payload,
 		};
 		let encoded_dkg_message = message.encode();
@@ -210,7 +206,7 @@ where
 		};
 
 		// Try to store reports offchain
-		if try_store_offchain(dkg_worker, &reports).await.is_ok() {
+		if try_store_offchain(dkg_worker, &reports).await? {
 			// remove the report from the queue
 			dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
 				report.misbehaviour_type,
@@ -228,7 +224,7 @@ where
 pub(crate) async fn try_store_offchain<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
 	reports: &AggregatedMisbehaviourReports<AuthorityId, MaxSignatureLength, MaxReporters>,
-) -> Result<(), DKGError>
+) -> Result<bool, DKGError>
 where
 	B: Block,
 	BE: Backend<B> + Unpin + 'static,
@@ -246,16 +242,18 @@ where
 		threshold,
 		reports.reporters.len()
 	));
+
+	let perform_store = reports.reporters.len() > threshold;
 	match &reports.misbehaviour_type {
 		MisbehaviourType::Keygen =>
-			if reports.reporters.len() > threshold {
+			if perform_store {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
 		MisbehaviourType::Sign =>
-			if reports.reporters.len() >= threshold {
+			if perform_store {
 				store_aggregated_misbehaviour_reports(dkg_worker, reports)?;
 			},
-	};
+	}
 
-	Ok(())
+	Ok(perform_store)
 }

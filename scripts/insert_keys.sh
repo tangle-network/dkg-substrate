@@ -123,6 +123,7 @@ echo "\n ****************** NODE-3 KEY INSERTION ******************"
 --suri "gown surprise mirror hotel cash alarm raccoon you frog rose midnight enter//webb//2//dkg" \
 --key-type wdkg
 
+echo "node-3 keys inserted into path: ./tmp/standalone3 \n"
 
 echo "\n ****************** NODE-4 KEY INSERTION ******************"
 
@@ -162,6 +163,8 @@ echo "\n ****************** NODE-4 KEY INSERTION ******************"
 --suri "gown surprise mirror hotel cash alarm raccoon you frog rose midnight enter//webb//3//dkg" \
 --key-type wdkg
 
+echo "node-4 keys inserted into path: ./tmp/standalone4 \n"
+
 echo "\n ****************** NODE-5 KEY INSERTION ******************"
 
 ./target/release/dkg-standalone-node key insert --base-path ./tmp/standalone5 \
@@ -199,3 +202,5 @@ echo "\n ****************** NODE-5 KEY INSERTION ******************"
 --scheme Ecdsa \
 --suri "gown surprise mirror hotel cash alarm raccoon you frog rose midnight enter//webb//4//dkg" \
 --key-type wdkg
+
+echo "node-5 keys inserted into path: ./tmp/standalone5 \n"
