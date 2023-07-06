@@ -20,9 +20,7 @@ use crate::{
 	Client, DKGKeystore,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	gossip_messages::PublicKeyMessage,

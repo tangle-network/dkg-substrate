@@ -2288,7 +2288,7 @@ checksum = "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
 dependencies = [
  "ethereum-types",
  "hex",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]

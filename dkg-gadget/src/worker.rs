@@ -41,16 +41,15 @@ use std::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use dkg_primitives::{
-	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId, SignedDKGMessage},
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage},
 	AuthoritySetId, DKGReport, MisbehaviourType,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	gossip_messages::MisbehaviourMessage,
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedProposerVotes, AggregatedPublicKeys, AuthoritySet,
-	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MaxVoteLength,
-	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
+	MaxProposalLength, MaxReporters, MaxSignatureLength, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -180,7 +179,6 @@ where
 			queued_validator_set: self.queued_validator_set.clone(),
 			aggregated_public_keys: self.aggregated_public_keys.clone(),
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
-			aggregated_proposer_votes: self.aggregated_proposer_votes.clone(),
 			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			local_keystore: self.local_keystore.clone(),
 			error_handler: self.error_handler.clone(),
@@ -919,7 +917,7 @@ where
 			.info(format!("Processing incoming DKG message: {:?}", dkg_msg.msg.session_id,));
 
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(_) => {
+			NetworkMsgPayload::Keygen(_) => {
 				self.keygen_manager.deliver_message(dkg_msg);
 				Ok(())
 			},

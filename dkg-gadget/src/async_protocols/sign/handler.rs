@@ -32,9 +32,7 @@ use crate::async_protocols::{
 	ProtocolType, Threshold,
 };
 use dkg_logging::debug_logger::RoundsEventType;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{

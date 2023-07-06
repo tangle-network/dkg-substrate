@@ -19,9 +19,7 @@ use crate::{
 	Client,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{
 	crypto::AuthorityId, gossip_messages::MisbehaviourMessage, AggregatedMisbehaviourReports,
 	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MisbehaviourType,

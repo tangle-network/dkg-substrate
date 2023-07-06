@@ -9,6 +9,8 @@ pub struct DKGKeygenMessage {
 	pub sender_id: u16,
 	/// Serialized keygen msg
 	pub keygen_msg: Vec<u8>,
+	/// Unique identification for this keygen protocol (hash of session id + retry count)
+	pub keygen_protocol_hash: [u8; 32],
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

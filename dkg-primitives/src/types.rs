@@ -123,7 +123,7 @@ impl NetworkMsgPayload {
 	}
 
 	pub fn keygen_protocol_hash(&self) -> Option<&[u8; 32]> {
-		if let DKGMsgPayload::Keygen(msg) = self {
+		if let NetworkMsgPayload::Keygen(msg) = self {
 			Some(&msg.keygen_protocol_hash)
 		} else {
 			None

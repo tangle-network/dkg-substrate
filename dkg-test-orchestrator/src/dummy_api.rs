@@ -560,8 +560,8 @@ impl
 		&self,
 		block: H256,
 	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
-		let number = self.block_id_to_u64(&block);
-		self.logger.info(format!("Getting authority set for block {number}"));
+		let number = self.block_id_to_session_id(&block);
+		self.logger.info(format!("Getting authority set for session_id = {number}"));
 		let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
 		let authority_set_id = number;
 
@@ -572,9 +572,13 @@ impl
 		&self,
 		id: H256,
 	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
-		let header =
-			sp_runtime::generic::Header::<u64, _>::new_from_number(self.block_id_to_u64(&id) + 1);
-		self.authority_set(header.hash())
+		let next_session_id = self.block_id_to_session_id(&id) + 1;
+		self.logger
+			.info(format!("Getting queued authority set for session_id = {next_session_id}"));
+		let authorities = self.inner.read().authority_sets.get(&next_session_id).unwrap().clone();
+		let authority_set_id = next_session_id;
+
+		Ok(dkg_runtime_primitives::AuthoritySet { authorities, id: authority_set_id })
 	}
 
 	fn signature_threshold(&self, _: H256) -> ApiResult<u16> {

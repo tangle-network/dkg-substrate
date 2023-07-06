@@ -26,7 +26,7 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId},
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId},
 	AuthoritySet,
 };
 use dkg_runtime_primitives::{
