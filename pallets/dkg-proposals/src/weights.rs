@@ -35,8 +35,6 @@ pub trait WeightInfo {
 	fn set_resource() -> Weight;
 	fn remove_resource() -> Weight;
 	fn whitelist_chain() -> Weight;
-	fn add_proposer() -> Weight;
-	fn remove_proposer() -> Weight;
 	fn acknowledge_proposal() -> Weight;
 	fn reject_proposal() -> Weight;
 	fn eval_vote_state(c: u32, ) -> Weight;
@@ -87,36 +85,6 @@ impl<T: frame_system::Config> WeightInfo for WebbWeight<T> {
 		Weight::from_parts(15_000_000, 2511)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
-	}
-	/// Storage: DKGProposals Proposers (r:1 w:1)
-	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ProposerCount (r:1 w:1)
-	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ExternalProposerAccounts (r:0 w:1)
-	/// Proof: DKGProposals ExternalProposerAccounts (max_values: None, max_size: Some(1050), added: 3525, mode: MaxEncodedLen)
-	fn add_proposer() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `375`
-		//  Estimated: `3023`
-		// Minimum execution time: 17_000_000 picoseconds.
-		Weight::from_parts(17_000_000, 3023)
-			.saturating_add(T::DbWeight::get().reads(2_u64))
-			.saturating_add(T::DbWeight::get().writes(3_u64))
-	}
-	/// Storage: DKGProposals Proposers (r:1 w:1)
-	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ProposerCount (r:1 w:1)
-	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ExternalProposerAccounts (r:0 w:1)
-	/// Proof: DKGProposals ExternalProposerAccounts (max_values: None, max_size: Some(1050), added: 3525, mode: MaxEncodedLen)
-	fn remove_proposer() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `429`
-		//  Estimated: `3023`
-		// Minimum execution time: 22_000_000 picoseconds.
-		Weight::from_parts(22_000_000, 3023)
-			.saturating_add(T::DbWeight::get().reads(2_u64))
-			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
 	/// Storage: DKGProposals Proposers (r:1 w:0)
 	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)
@@ -226,36 +194,6 @@ impl WeightInfo for () {
 		Weight::from_parts(15_000_000, 2511)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
-	}
-	/// Storage: DKGProposals Proposers (r:1 w:1)
-	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ProposerCount (r:1 w:1)
-	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ExternalProposerAccounts (r:0 w:1)
-	/// Proof: DKGProposals ExternalProposerAccounts (max_values: None, max_size: Some(1050), added: 3525, mode: MaxEncodedLen)
-	fn add_proposer() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `375`
-		//  Estimated: `3023`
-		// Minimum execution time: 17_000_000 picoseconds.
-		Weight::from_parts(17_000_000, 3023)
-			.saturating_add(RocksDbWeight::get().reads(2_u64))
-			.saturating_add(RocksDbWeight::get().writes(3_u64))
-	}
-	/// Storage: DKGProposals Proposers (r:1 w:1)
-	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ProposerCount (r:1 w:1)
-	/// Proof: DKGProposals ProposerCount (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
-	/// Storage: DKGProposals ExternalProposerAccounts (r:0 w:1)
-	/// Proof: DKGProposals ExternalProposerAccounts (max_values: None, max_size: Some(1050), added: 3525, mode: MaxEncodedLen)
-	fn remove_proposer() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `429`
-		//  Estimated: `3023`
-		// Minimum execution time: 22_000_000 picoseconds.
-		Weight::from_parts(22_000_000, 3023)
-			.saturating_add(RocksDbWeight::get().reads(2_u64))
-			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 	/// Storage: DKGProposals Proposers (r:1 w:0)
 	/// Proof: DKGProposals Proposers (max_values: None, max_size: Some(49), added: 2524, mode: MaxEncodedLen)

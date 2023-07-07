@@ -58,9 +58,7 @@ use sp_std::{convert::TryInto, prelude::*, vec};
 
 use frame_support::pallet_prelude::{ensure, DispatchError};
 use sp_runtime::traits::{AtLeast32Bit, One, Zero};
-use webb_proposals::{
-	evm::AnchorUpdateProposal, OnSignedProposal, Proposal, ProposalKind, ResourceId,
-};
+use webb_proposals::{evm::AnchorUpdateProposal, Proposal, ProposalKind, ResourceId};
 
 pub use pallet::*;
 
@@ -73,14 +71,13 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
-	pub struct Pallet<T, I = ()>(_);
+	pub struct Pallet<T>(_);
 
 	#[pallet::config]
 	/// The module configuration trait.
-	pub trait Config<I: 'static = ()>: frame_system::Config {
+	pub trait Config: frame_system::Config {
 		/// The overarching RuntimeEvent type.
-		type RuntimeEvent: From<Event<Self, I>>
-			+ IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
@@ -115,28 +112,28 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
-		pub phantom: (PhantomData<T>, PhantomData<I>),
+	pub struct GenesisConfig<T: Config> {
+		pub phantom: PhantomData<T>,
 		pub bridges: Vec<BridgeMetadata<T::MaxResources, T::MaxAdditionalFields>>,
 	}
 
 	#[cfg(feature = "std")]
-	impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
+	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
 			Self { phantom: Default::default(), bridges: Default::default() }
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			NextBridgeIndex::<T, I>::put(T::BridgeIndex::one());
+			NextBridgeIndex::<T>::put(T::BridgeIndex::one());
 			for bridge in &self.bridges {
-				let idx: T::BridgeIndex = NextBridgeIndex::<T, I>::get();
-				Bridges::<T, I>::insert(idx, bridge);
-				NextBridgeIndex::<T, I>::put(idx + T::BridgeIndex::one());
+				let idx: T::BridgeIndex = NextBridgeIndex::<T>::get();
+				Bridges::<T>::insert(idx, bridge);
+				NextBridgeIndex::<T>::put(idx + T::BridgeIndex::one());
 				for rid in &bridge.resource_ids {
-					ResourceToBridgeIndex::<T, I>::set(rid, Some(idx));
+					ResourceToBridgeIndex::<T>::set(rid, Some(idx));
 				}
 			}
 		}
@@ -145,13 +142,12 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn next_bridge_index)]
 	/// Storage for next bridge index
-	pub(super) type NextBridgeIndex<T: Config<I>, I: 'static = ()> =
-		StorageValue<_, T::BridgeIndex, ValueQuery>;
+	pub(super) type NextBridgeIndex<T: Config> = StorageValue<_, T::BridgeIndex, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bridges)]
 	/// Storage for map of all bridges
-	pub(super) type Bridges<T: Config<I>, I: 'static = ()> = StorageMap<
+	pub(super) type Bridges<T: Config> = StorageMap<
 		_,
 		Blake2_256,
 		T::BridgeIndex,
@@ -161,14 +157,14 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn resource_to_bridge_index)]
 	/// Mapping of resource to bridge index
-	pub(super) type ResourceToBridgeIndex<T: Config<I>, I: 'static = ()> =
+	pub(super) type ResourceToBridgeIndex<T: Config> =
 		StorageMap<_, Blake2_256, ResourceId, T::BridgeIndex>;
 
 	#[pallet::event]
-	pub enum Event<T: Config<I>, I: 'static = ()> {}
+	pub enum Event<T: Config> {}
 
 	#[pallet::error]
-	pub enum Error<T, I = ()> {
+	pub enum Error<T> {
 		/// Parameters haven't been initialized
 		ParametersNotInitialized,
 		/// Error during verification
@@ -188,10 +184,10 @@ pub mod pallet {
 	}
 
 	#[pallet::hooks]
-	impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
-	impl<T: Config<I>, I: 'static> Pallet<T, I> {
+	impl<T: Config> Pallet<T> {
 		/// Set an account's identity information and reserve the appropriate deposit.
 		///
 		/// If the account already has identity information, the deposit is taken as part payment
@@ -202,7 +198,7 @@ pub mod pallet {
 		/// - `info`: The identity information.
 		///
 		/// Emits `ResourceSet` if successful.
-		#[pallet::weight(<T as Config<I>>::WeightInfo::set_metadata())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_metadata())]
 		#[pallet::call_index(0)]
 		pub fn set_metadata(
 			origin: OriginFor<T>,
@@ -211,9 +207,9 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			let extra_fields = info.additional.len() as u32;
-			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T, I>::TooManyFields);
+			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T>::TooManyFields);
 
-			let metadata = match <Bridges<T, I>>::get(bridge_index) {
+			let metadata = match <Bridges<T>>::get(bridge_index) {
 				Some(mut id) => {
 					id.info = info;
 					id
@@ -221,12 +217,12 @@ pub mod pallet {
 				None => BridgeMetadata { info, resource_ids: BoundedVec::default() },
 			};
 
-			<Bridges<T, I>>::insert(bridge_index, metadata);
+			<Bridges<T>>::insert(bridge_index, metadata);
 
 			Ok(().into())
 		}
 
-		#[pallet::weight(<T as Config<I>>::WeightInfo::force_reset_indices())]
+		#[pallet::weight(<T as Config>::WeightInfo::force_reset_indices())]
 		#[pallet::call_index(1)]
 		pub fn force_reset_indices(
 			origin: OriginFor<T>,
@@ -235,7 +231,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			for resource_id in resource_ids {
-				ResourceToBridgeIndex::<T, I>::insert(resource_id, bridge_index);
+				ResourceToBridgeIndex::<T>::insert(resource_id, bridge_index);
 			}
 
 			Ok(().into())
@@ -252,11 +248,10 @@ pub mod pallet {
 ///
 /// Note: There MUST only be a single connected component unless the end-user/developer wants
 /// to utilize governance to fix the issue. This can be done using `force_reset_indices`.
-impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLength>
-	for Pallet<T, I>
-{
+use dkg_runtime_primitives::traits::OnSignedProposal;
+impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
-		ensure!(proposal.is_signed(), Error::<T, I>::ProposalNotSigned);
+		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
 
 		if proposal.kind() == ProposalKind::AnchorUpdate {
 			// Decode the anchor update
@@ -269,9 +264,9 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLen
 			let dest_resource_id = anchor_update_proposal.header().resource_id();
 			// Get the respective bridge indices
 			let src_bridge_index =
-				ResourceToBridgeIndex::<T, I>::get(src_resource_id).unwrap_or_default();
+				ResourceToBridgeIndex::<T>::get(src_resource_id).unwrap_or_default();
 			let dest_bridge_index =
-				ResourceToBridgeIndex::<T, I>::get(dest_resource_id).unwrap_or_default();
+				ResourceToBridgeIndex::<T>::get(dest_resource_id).unwrap_or_default();
 			// Ensure constraints on the bridge indices. If we are linking two anchors then:
 			// 1. If we haven't assigned these resources, at least one of them must be zero.
 			// 2. If we have assigned both resources, they must be the same.
@@ -284,21 +279,21 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLen
 					dest_bridge_index == T::BridgeIndex::zero()
 				{
 					// Get the next bridge index
-					let next_bridge_index = NextBridgeIndex::<T, I>::get();
+					let next_bridge_index = NextBridgeIndex::<T>::get();
 					// Assign the bridge index to the source resource
-					ResourceToBridgeIndex::<T, I>::insert(src_resource_id, next_bridge_index);
+					ResourceToBridgeIndex::<T>::insert(src_resource_id, next_bridge_index);
 					// Assign the bridge index to the destination resource
-					ResourceToBridgeIndex::<T, I>::insert(dest_resource_id, next_bridge_index);
+					ResourceToBridgeIndex::<T>::insert(dest_resource_id, next_bridge_index);
 					// Create the bridge record
 					let bridge_metadata = BridgeMetadata {
 						info: Default::default(),
 						resource_ids: vec![src_resource_id, dest_resource_id]
 							.try_into()
-							.map_err(|_| Error::<T, I>::OutOfBounds)?,
+							.map_err(|_| Error::<T>::OutOfBounds)?,
 					};
-					Bridges::<T, I>::insert(next_bridge_index, bridge_metadata);
+					Bridges::<T>::insert(next_bridge_index, bridge_metadata);
 					// Increment the next bridge index
-					NextBridgeIndex::<T, I>::mutate(|next_bridge_index| {
+					NextBridgeIndex::<T>::mutate(|next_bridge_index| {
 						*next_bridge_index += T::BridgeIndex::one();
 					});
 				} else {
@@ -308,17 +303,17 @@ impl<T: Config<I>, I: 'static> OnSignedProposal<DispatchError, T::MaxProposalLen
 					} else {
 						(dest_resource_id, src_bridge_index)
 					};
-					ResourceToBridgeIndex::<T, I>::insert(r_id, bridge_index);
+					ResourceToBridgeIndex::<T>::insert(r_id, bridge_index);
 					let mut metadata =
-						Bridges::<T, I>::get(bridge_index).ok_or(Error::<T, I>::BridgeNotFound)?;
+						Bridges::<T>::get(bridge_index).ok_or(Error::<T>::BridgeNotFound)?;
 					metadata
 						.resource_ids
 						.try_push(r_id)
-						.map_err(|_| Error::<T, I>::TooManyResources)?;
-					Bridges::<T, I>::insert(bridge_index, metadata);
+						.map_err(|_| Error::<T>::TooManyResources)?;
+					Bridges::<T>::insert(bridge_index, metadata);
 				}
 			} else {
-				ensure!(src_bridge_index == dest_bridge_index, Error::<T, I>::BridgeIndexError);
+				ensure!(src_bridge_index == dest_bridge_index, Error::<T>::BridgeIndexError);
 			}
 		};
 

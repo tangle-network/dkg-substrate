@@ -10,6 +10,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+ethabi = { workspace = true }
 impl-trait-for-tuples = { version = "0.2.2", default-features = false }
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = [
 	"derive",
@@ -22,7 +23,7 @@ ethereum = { version = "0.14.0", default-features = false, features = [
 	"with-codec",
 ] }
 ethereum-types = { version = "0.14.1", default-features = false }
-webb-proposals = { workspace = true, default-features = false }
+webb-proposals = { workspace = true, default-features = false, features = ["substrate"] }
 
 sp-api = { workspace = true }
 sp-io = { workspace = true }

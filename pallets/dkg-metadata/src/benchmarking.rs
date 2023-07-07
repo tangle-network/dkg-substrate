@@ -22,7 +22,7 @@ use dkg_runtime_primitives::{
 	keccak_256,
 	utils::{ecdsa, sr25519},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, MisbehaviourType, ProposalNonce,
-	RefreshProposal, RefreshProposalSigned, KEY_TYPE,
+	RefreshProposal, KEY_TYPE,
 };
 
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
@@ -120,14 +120,6 @@ benchmarks! {
 		assert!(Pallet::<T>::pending_keygen_threshold() == threshold as u16 );
 	}
 
-	set_refresh_delay {
-		// new refresh delay should be <= 100
-		let n in 1..MAX_BLOCKNUMBER;
-	}: _(RawOrigin::Root, n as u8)
-	verify {
-		assert!(Pallet::<T>::refresh_delay() == Permill::from_percent(n as u32));
-	}
-
 	submit_public_key {
 		let n in 4..MAX_AUTHORITIES;
 		let dkg_key = ecdsa_generate(KEY_TYPE, None);
@@ -183,38 +175,6 @@ benchmarks! {
 		assert_last_event::<T>(Event::NextPublicKeySubmitted{
 			compressed_pub_key: next_dkg_key.clone().into(),
 			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone().into()).unwrap_or_default(),
-			}.into());
-	}
-
-	submit_public_key_signature {
-		let current_dkg = ecdsa_generate(KEY_TYPE, None);
-		let next_dkg =  ecdsa_generate(KEY_TYPE, None);
-		let bounded_current_dkg : BoundedVec<u8, T::MaxKeyLength> = current_dkg.encode().try_into().unwrap();
-		let bounded_next_dkg : BoundedVec<u8, T::MaxKeyLength> = next_dkg.encode().try_into().unwrap();
-		DKGPublicKey::<T>::put((0, bounded_current_dkg));
-		NextDKGPublicKey::<T>::put((1, bounded_next_dkg));
-		let uncompressed_pub_key = Pallet::<T>::decompress_public_key(next_dkg.encode()).unwrap();
-		let refresh_nounce = Pallet::<T>::refresh_nonce();
-		let refresh_proposal = RefreshProposal {
-								nonce: ProposalNonce::from(1),
-								pub_key: uncompressed_pub_key,
-								};
-		let hash = keccak_256(&refresh_proposal.encode());
-		let signature = ecdsa_sign_prehashed(KEY_TYPE, &current_dkg, &hash).expect("Expected a valid signature");
-		let signed_proposal = RefreshProposalSigned {
-								nonce: ProposalNonce::from(1),
-								signature: signature.encode()
-							};
-		let all_accounts = Pallet::<T>::current_authorities_accounts();
-		let caller:T::AccountId = all_accounts[0].clone();
-	}: _(RawOrigin::None, signed_proposal)
-	verify {
-		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
-		assert_has_event::<T>(Event::NextPublicKeySignatureSubmitted{
-			compressed_pub_key: next_dkg_key.clone().into(),
-			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone().into()).unwrap_or_default(),
-			pub_key_sig: signature.encode(),
-			nonce : 1,
 			}.into());
 	}
 

@@ -14,6 +14,7 @@
 
 // construct_runtime requires this
 #![allow(clippy::from_over_into, clippy::unwrap_used)]
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	construct_runtime, parameter_types, sp_io::TestExternalities, traits::GenesisBuild,
 	BasicExternalities,
@@ -38,8 +39,8 @@ use std::{sync::Arc, vec};
 
 use crate as pallet_dkg_metadata;
 pub use dkg_runtime_primitives::{
-	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
-	MaxSignatureLength, DKG_ENGINE_ID,
+	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxProposalLength,
+	MaxReporters, MaxSignatureLength, DKG_ENGINE_ID,
 };
 
 impl_opaque_keys! {
@@ -58,6 +59,7 @@ construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		DKGMetadata: pallet_dkg_metadata::{Pallet, Call, Config<T>, Event<T>, Storage},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 	}
@@ -126,6 +128,25 @@ where
 	}
 }
 
+pub const MILLISECS_PER_BLOCK: u64 = 10000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+parameter_types! {
+	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
+}
+
+impl pallet_timestamp::Config for Test {
+	type MinimumPeriod = MinimumPeriod;
+	type Moment = u64;
+	type OnTimestampSet = ();
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -133,7 +154,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type RefreshDelay = RefreshDelay;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
@@ -148,6 +168,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 

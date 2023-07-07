@@ -441,7 +441,7 @@ export default {
   DkgRuntimePrimitivesProposalDkgPayloadKey: {
     _enum: {
       EVMProposal: 'u32',
-      RefreshVote: 'u32',
+      RefreshProposal: 'u32',
       ProposerSetUpdateProposal: 'u32',
       AnchorCreateProposal: 'u32',
       AnchorUpdateProposal: 'u32',
@@ -1174,9 +1174,6 @@ export default {
       },
       submit_next_public_key: {
         keysAndSignatures: 'DkgRuntimePrimitivesAggregatedPublicKeys',
-      },
-      submit_public_key_signature: {
-        signatureProposal: 'DkgRuntimePrimitivesProposalRefreshProposalSigned',
       },
       submit_misbehaviour_reports: {
         reports: 'DkgRuntimePrimitivesAggregatedMisbehaviourReports',

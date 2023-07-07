@@ -1916,6 +1916,7 @@ dependencies = [
 name = "dkg-runtime-primitives"
 version = "0.0.1"
 dependencies = [
+ "ethabi",
  "ethereum",
  "ethereum-types",
  "frame-support",
@@ -2277,6 +2278,17 @@ checksum = "aa68f1b12764fab894d2755d2518754e71b4fd80ecfb822714a1206c2aab39bf"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "ethabi"
+version = "18.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
+dependencies = [
+ "ethereum-types",
+ "hex",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -5210,6 +5222,7 @@ dependencies = [
 name = "pallet-bridge-registry"
 version = "1.0.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -5257,6 +5270,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "pallet-session",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -5266,6 +5280,7 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+ "webb-proposals",
 ]
 
 [[package]]

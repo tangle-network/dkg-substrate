@@ -25,13 +25,12 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	gossip_messages::{DKGSignedPayload, PublicKeyMessage},
 	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
@@ -67,7 +66,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 		batch_key: BatchKey,
 		message: BigInt,
 	) -> Result<(), DKGError>;
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError>;
 	fn store_public_key(
 		&self,
 		key: LocalKey<Secp256k1>,
@@ -220,12 +219,7 @@ where
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Ok(Some(proposal)) = get_signed_proposal::<B, BE, MaxProposalLength>(
-			&self.backend,
-			finished_round,
-			payload_key,
-			&self.logger,
-		) {
+		if let Ok(Some(proposal)) = get_signed_proposal(finished_round, payload_key) {
 			proposals_for_this_batch.push(proposal);
 
 			if proposals_for_this_batch.len() == batch_key.len {
@@ -260,7 +254,7 @@ where
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
 		gossip_public_key::<GE>(
 			&self.keystore,

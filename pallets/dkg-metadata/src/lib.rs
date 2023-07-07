@@ -69,8 +69,6 @@
 //!   the DKG protocol.
 //! - `submit_next_public_key`: Allows submitting of the next public key by the next authorities of
 //!   the DKG protocol.
-//! - `submit_public_key_signature`: Allows submitting of the signature of the next public key by
-//!   the active DKG key for eventual rotation.
 //!
 //! The refresh process is initiated `T::RefreshDelay` into each session. A RefreshProposal is
 //! created and sent directly to the `pallet-dkg-proposal-handler` for inclusion into the unsigned
@@ -99,23 +97,24 @@ use dkg_runtime_primitives::{
 		AGGREGATED_MISBEHAVIOUR_REPORTS, AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK,
 		AGGREGATED_PUBLIC_KEYS, AGGREGATED_PUBLIC_KEYS_AT_GENESIS,
 		AGGREGATED_PUBLIC_KEYS_AT_GENESIS_LOCK, AGGREGATED_PUBLIC_KEYS_LOCK,
-		OFFCHAIN_PUBLIC_KEY_SIG, OFFCHAIN_PUBLIC_KEY_SIG_LOCK, SUBMIT_GENESIS_KEYS_AT,
-		SUBMIT_KEYS_AT,
+		SUBMIT_GENESIS_KEYS_AT, SUBMIT_KEYS_AT,
 	},
+	proposal::Proposal,
 	traits::{GetDKGPublicKey, OnAuthoritySetChangeHandler},
 	utils::{ecdsa, to_slice_33, verify_signer_from_set_ecdsa},
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthorityIndex, AuthoritySet,
-	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal, RefreshProposalSigned,
-	DKG_ENGINE_ID,
+	ConsensusLog, MisbehaviourType, ProposalHandlerTrait, RefreshProposal, DKG_ENGINE_ID,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
+	ensure,
 	pallet_prelude::{Get, Weight},
 	traits::{EstimateNextSessionRotation, OneSessionHandler},
 	BoundedVec,
 };
 use frame_system::offchain::{Signer, SubmitTransaction};
 pub use pallet::*;
+use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	generic::DigestItem,
 	offchain::{
@@ -152,14 +151,14 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
 	use dkg_runtime_primitives::{traits::OnDKGPublicKeyChangeHandler, ProposalHandlerTrait};
-	use frame_support::{ensure, pallet_prelude::*};
+	use frame_support::pallet_prelude::*;
 	use frame_system::{
 		ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction},
 		pallet_prelude::*,
 	};
 	use log;
-	use sp_runtime::{Percent, Permill};
+	use sp_runtime::Percent;
 
 	use super::*;
 
@@ -173,8 +172,16 @@ pub mod pallet {
 		}
 	}
 
+	pub struct VoterSetData {
+		pub voter_set_merkle_root: [u8; 32],
+		pub average_session_length_in_millisecs: u64,
+		pub voter_count: u32,
+	}
+
 	#[pallet::config]
-	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	pub trait Config:
+		frame_system::Config + pallet_timestamp::Config + CreateSignedTransaction<Call<Self>>
+	{
 		/// The overarching RuntimeEvent type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Authority identifier type
@@ -212,18 +219,16 @@ pub mod pallet {
 			Self::DKGId,
 		>;
 
+		/// Utility trait for handling DKG public key changes
 		type OnDKGPublicKeyChangeHandler: OnDKGPublicKeyChangeHandler<
 			dkg_runtime_primitives::AuthoritySetId,
 		>;
 
-		type ProposalHandler: ProposalHandlerTrait;
+		/// Proposer handler trait
+		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
 
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;
-
-		/// Percentage session should have progressed for refresh to begin
-		#[pallet::constant]
-		type RefreshDelay: Get<Permill>;
 
 		/// Number of blocks of cooldown after unsigned transaction is included.
 		///
@@ -294,9 +299,33 @@ pub mod pallet {
 			+ PartialOrd
 			+ Ord;
 
+		/// Length of encoded proposer vote
+		#[pallet::constant]
+		type VoteLength: Get<u32>
+			+ Default
+			+ TypeInfo
+			+ MaxEncodedLen
+			+ Debug
+			+ Clone
+			+ Eq
+			+ PartialEq
+			+ PartialOrd
+			+ Ord;
+
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+		/// Max length of a proposal
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>
+			+ Debug
+			+ Clone
+			+ Eq
+			+ PartialEq
+			+ PartialOrd
+			+ Ord
+			+ TypeInfo;
 
 		type WeightInfo: WeightInfo;
 	}
@@ -318,12 +347,6 @@ pub mod pallet {
 			log::debug!(
 				target: "runtime::dkg_metadata",
 				"submit_next_public_key_onchain : {:?}",
-				res,
-			);
-			let res = Self::submit_public_key_signature_onchain(block_number);
-			log::debug!(
-				target: "runtime::dkg_metadata",
-				"submit_public_key_signature_onchain : {:?}",
 				res,
 			);
 			let res = Self::submit_misbehaviour_reports_onchain(block_number);
@@ -385,7 +408,7 @@ pub mod pallet {
 			// Check if we shall refresh the DKG.
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
-					Self::do_refresh((pub_key.0, pub_key.1.into()));
+					Self::do_refresh(pub_key.1.into());
 					return Weight::from_ref_time(1_u64)
 				}
 			}
@@ -408,10 +431,6 @@ pub mod pallet {
 	#[pallet::getter(fn refresh_nonce)]
 	pub type RefreshNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
 
-	/// Session progress required to kickstart refresh process
-	#[pallet::storage]
-	#[pallet::getter(fn refresh_delay)]
-	pub type RefreshDelay<T: Config> = StorageValue<_, Permill, ValueQuery>;
 	/// Defines the block when next unsigned transaction will be accepted.
 	///
 	/// To prevent spam of unsigned (and unpayed!) transactions on the network,
@@ -430,6 +449,11 @@ pub mod pallet {
 	#[pallet::getter(fn should_execute_new_keygen)]
 	// Should execute new keygen -> (should_execute, force_new_keygen)
 	pub type ShouldExecuteNewKeygen<T: Config> = StorageValue<_, (bool, bool), ValueQuery>;
+
+	/// Should we submit a vote for the new DKG governor if we are a proposer
+	#[pallet::storage]
+	#[pallet::getter(fn should_submit_proposer_vote)]
+	pub type ShouldSubmitProposerVote<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	/// Holds public key for next session
 	#[pallet::storage]
@@ -470,7 +494,7 @@ pub mod pallet {
 		ValueQuery,
 	>;
 
-	/// Tracks current proposer set
+	/// Tracks current voter set
 	#[pallet::storage]
 	#[pallet::getter(fn historical_rounds)]
 	pub type HistoricalRounds<T: Config> = StorageMap<
@@ -606,6 +630,12 @@ pub mod pallet {
 	pub(super) type LastSessionRotationBlock<T: Config> =
 		StorageValue<_, T::BlockNumber, ValueQuery>;
 
+	/// The current refresh proposal waiting for signature
+	#[pallet::storage]
+	#[pallet::getter(fn current_refresh_proposal)]
+	pub(super) type CurrentRefreshProposal<T: Config> =
+		StorageValue<_, RefreshProposal, OptionQuery>;
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorities: Vec<T::DKGId>,
@@ -624,8 +654,6 @@ pub mod pallet {
 		MustBeAQueuedAuthority,
 		/// Must be an an authority
 		MustBeAnActiveAuthority,
-		/// Refresh delay should be in the range of 0% - 100%
-		InvalidRefreshDelay,
 		/// Invalid public key submission
 		InvalidPublicKeys,
 		/// Already submitted a public key
@@ -642,6 +670,10 @@ pub mod pallet {
 		InvalidMisbehaviourReports,
 		/// DKG Refresh is already in progress.
 		RefreshInProgress,
+		/// No current refresh active
+		NoRefreshProposal,
+		/// Invalid refresh proposal data
+		InvalidRefreshProposal,
 		/// No NextPublicKey stored on-chain.
 		NoNextPublicKey,
 		/// Must be calling from the controller account
@@ -650,6 +682,8 @@ pub mod pallet {
 		OutOfBounds,
 		/// Cannot retreive signer from ecdsa signature
 		CannotRetreiveSigner,
+		/// Proposal is not signed and should not be processed
+		ProposalNotSigned,
 		/// Reported misbehaviour against a non authority
 		OffenderNotAuthority,
 		/// Authority is already jailed
@@ -688,6 +722,8 @@ pub mod pallet {
 			reporters: Vec<T::DKGId>,
 			offender: T::DKGId,
 		},
+		/// Proposer votes submitted
+		ProposerSetVotesSubmitted { voters: Vec<T::DKGId>, signatures: Vec<Vec<u8>>, vote: Vec<u8> },
 		/// Refresh DKG Keys Finished (forcefully).
 		RefreshKeysFinished { next_authority_set_id: dkg_runtime_primitives::AuthoritySetId },
 		/// NextKeygenThreshold updated
@@ -737,8 +773,6 @@ pub mod pallet {
 			NextKeygenThreshold::<T>::put(self.keygen_threshold);
 			PendingSignatureThreshold::<T>::put(self.signature_threshold);
 			PendingKeygenThreshold::<T>::put(self.keygen_threshold);
-			// Set refresh parameters
-			RefreshDelay::<T>::put(T::RefreshDelay::get());
 			RefreshNonce::<T>::put(0);
 		}
 	}
@@ -813,28 +847,6 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
-		/// proposal queue.
-		///
-		/// * `origin` - The account origin.
-		/// * `new_delay` - The percentage of elapsed session duration to wait before adding an
-		///   unsigned refresh proposal to the unsigned proposal queue.
-		#[pallet::weight(<T as Config>::WeightInfo::set_refresh_delay(*new_delay as u32))]
-		#[pallet::call_index(2)]
-		pub fn set_refresh_delay(
-			origin: OriginFor<T>,
-			new_delay: u8,
-		) -> DispatchResultWithPostInfo {
-			T::ForceOrigin::ensure_origin(origin)?;
-
-			ensure!(new_delay <= 100, Error::<T>::InvalidRefreshDelay);
-
-			// set the new delay
-			RefreshDelay::<T>::put(Permill::from_percent(new_delay as u32));
-
-			Ok(().into())
-		}
-
 		/// Submits and stores the active public key for the genesis session into the on-chain
 		/// storage. This is primarily used to separate the genesis public key submission from
 		/// non-genesis rounds.
@@ -848,7 +860,7 @@ pub mod pallet {
 		///   DKG public keys.
 
 		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
-		#[pallet::call_index(3)]
+		#[pallet::call_index(2)]
 		pub fn submit_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -909,7 +921,7 @@ pub mod pallet {
 		///   DKG public keys.
 
 		#[pallet::weight(<T as Config>::WeightInfo::submit_next_public_key(keys_and_signatures.keys_and_signatures.len() as u32))]
-		#[pallet::call_index(4)]
+		#[pallet::call_index(3)]
 		pub fn submit_next_public_key(
 			origin: OriginFor<T>,
 			keys_and_signatures: AggregatedPublicKeys,
@@ -964,85 +976,6 @@ pub mod pallet {
 			}
 		}
 
-		/// Submits the public key signature for the key refresh/rotation process.
-		///
-		/// The signature is the signature of the next public key `RefreshProposal`, signed by the
-		/// current DKG. It is stored on-chain only if it verifies successfully against the current
-		/// DKG's public key. Successful storage of this public key signature also removes
-		/// the unsigned `RefreshProposal` from the unsigned queue.
-		///
-		/// For manual refreshes, after the signature is submitted and stored on-chain,
-		/// the keys are immediately refreshed and the authority set is immediately rotated
-		/// and incremented.
-		///
-		/// * `origin` - The account origin.
-		/// * `signature_proposal` - The signed refresh proposal containing the public key signature
-		///   and nonce.
-
-		#[pallet::weight(<T as Config>::WeightInfo::submit_public_key_signature())]
-		#[pallet::call_index(5)]
-		pub fn submit_public_key_signature(
-			origin: OriginFor<T>,
-			signature_proposal: RefreshProposalSigned,
-		) -> DispatchResult {
-			ensure_none(origin)?;
-			let (_, next_pub_key) =
-				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
-			ensure!(
-				Self::next_public_key_signature().is_none(),
-				Error::<T>::AlreadySubmittedSignature
-			);
-			let used_signatures = Self::used_signatures();
-			let last_used_nonce = Self::refresh_nonce();
-			let next_nonce = last_used_nonce.saturating_add(1);
-			// Deconstruct the signature and nonce for easier access
-			let (nonce, signature) = (signature_proposal.nonce, signature_proposal.signature);
-			ensure!(u32::from(nonce) == next_nonce, Error::<T>::InvalidNonce);
-			ensure!(!signature.is_empty(), Error::<T>::InvalidSignature);
-			let bounded_signature: BoundedVec<_, _> =
-				signature.clone().try_into().map_err(|_| Error::<T>::InvalidSignature)?;
-			ensure!(!used_signatures.contains(&bounded_signature), Error::<T>::UsedSignature);
-			let uncompressed_pub_key =
-				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
-			let data = RefreshProposal {
-				// We ensure that the nonce is valid above, so this is safe.
-				nonce,
-				pub_key: uncompressed_pub_key.clone(),
-			};
-			// Verify signature against the `RefreshProposal`
-			dkg_runtime_primitives::utils::ensure_signed_by_dkg::<Self>(&signature, &data.encode())
-				.map_err(|_| {
-					log::error!(
-						target: "runtime::dkg_metadata",
-						"Invalid signature for RefreshProposal
-						**********************************************************
-						signature: {:?}
-						nonce: {}
-						**********************************************************",
-						hex::encode(signature.clone()),
-						u32::from(nonce),
-					);
-					Error::<T>::InvalidSignature
-				})?;
-			// Remove unsigned refresh proposal from queue
-			T::ProposalHandler::handle_signed_refresh_proposal(data, signature.clone())?;
-			let bounded_signature: BoundedVec<_, _> =
-				signature.clone().try_into().map_err(|_| Error::<T>::OutOfBounds)?;
-			NextPublicKeySignature::<T>::put(bounded_signature);
-			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-				uncompressed_pub_key,
-				compressed_pub_key: next_pub_key.into(),
-				pub_key_sig: signature,
-				nonce: u32::from(nonce),
-			});
-
-			// now increment the block number at which we expect next unsigned transaction.
-			let current_block = <frame_system::Pallet<T>>::block_number();
-			<NextUnsignedAt<T>>::put(current_block + T::UnsignedInterval::get());
-
-			Ok(())
-		}
-
 		/// Submits misbehaviour reports on chain. Signatures of the offending authority are
 		/// verified against the current or next authorities depending on the type of misbehaviour.
 		/// - Keygen: Verifies against the next authorities, since they are doing keygen.
@@ -1063,7 +996,7 @@ pub mod pallet {
 		///   authority
 
 		#[pallet::weight(<T as Config>::WeightInfo::submit_misbehaviour_reports(reports.reporters.len() as u32))]
-		#[pallet::call_index(6)]
+		#[pallet::call_index(5)]
 		pub fn submit_misbehaviour_reports(
 			origin: OriginFor<T>,
 			reports: AggregatedMisbehaviourReports<
@@ -1296,7 +1229,7 @@ pub mod pallet {
 		///
 		/// * `origin` - The account origin.
 		#[pallet::weight(<T as Config>::WeightInfo::unjail())]
-		#[pallet::call_index(7)]
+		#[pallet::call_index(6)]
 		pub fn unjail(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let origin = ensure_signed(origin)?;
 			let authority =
@@ -1324,7 +1257,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the keygen jail.
 		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_keygen())]
-		#[pallet::call_index(8)]
+		#[pallet::call_index(7)]
 		pub fn force_unjail_keygen(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1342,7 +1275,7 @@ pub mod pallet {
 		/// * `origin` - The account origin.
 		/// * `authority` - The authority to be removed from the signing jail.
 		#[pallet::weight(<T as Config>::WeightInfo::force_unjail_signing())]
-		#[pallet::call_index(9)]
+		#[pallet::call_index(8)]
 		pub fn force_unjail_signing(
 			origin: OriginFor<T>,
 			authority: T::DKGId,
@@ -1359,7 +1292,7 @@ pub mod pallet {
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
 		#[pallet::weight(0)]
-		#[pallet::call_index(10)]
+		#[pallet::call_index(9)]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			let next_authorities = NextAuthorities::<T>::get();
@@ -1376,16 +1309,12 @@ pub mod pallet {
 			// If there's a next key we immediately create a refresh proposal
 			// to sign our own key as a means of jumpstarting the mechanism.
 			if let Some(pub_key) = next_pub_key {
-				RefreshInProgress::<T>::put(true);
-				let uncompressed_pub_key =
-					Self::decompress_public_key(pub_key.1.into()).unwrap_or_default();
+				ShouldSubmitProposerVote::<T>::put(true);
 				let next_nonce = Self::refresh_nonce() + 1u32;
-				let data = dkg_runtime_primitives::RefreshProposal {
-					nonce: next_nonce.into(),
-					pub_key: uncompressed_pub_key,
-				};
-				match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+				let data = Self::create_refresh_proposal(pub_key.1.into(), next_nonce)?;
+				match T::ProposalHandler::handle_unsigned_proposal(data) {
 					Ok(()) => {
+						RefreshInProgress::<T>::put(true);
 						RefreshNonce::<T>::put(next_nonce);
 						log::debug!("Handled refresh proposal");
 					},
@@ -1398,24 +1327,24 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Triggers an Emergency Keygen Porotocol.
+		/// Triggers an Emergency Keygen Protocol.
 		///
 		/// The keygen protocol will then be executed and the result will be stored in the off chain
 		/// storage, which will be picked up by the on chain worker and stored on chain.
 		///
 		/// Note that, this will clear the next public key and its signature, if any.
 		#[pallet::weight(0)]
-		#[pallet::call_index(11)]
+		#[pallet::call_index(10)]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
 			// Clear the next public key, if any, to ensure that the keygen protocol runs and we
 			// do not have any invalid state.
 			NextDKGPublicKey::<T>::kill();
-			// also, we clear the next public key signature, if any.
+			// Clear the next public key signature, if any.
 			NextPublicKeySignature::<T>::kill();
-			// emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
+			// Emit `EmergencyKeygenTriggered` RuntimeEvent so that we can see it on monitoring.
 			Self::deposit_event(Event::EmergencyKeygenTriggered);
-			// trigger the keygen protocol, activate force_keygen rotation
+			// Trigger the keygen protocol, activate force_keygen rotation
 			<ShouldExecuteNewKeygen<T>>::put((true, true));
 			Ok(().into())
 		}
@@ -1455,14 +1384,12 @@ pub mod pallet {
 			// we should handle the following calls:
 			// 1. `submit_public_key`
 			// 2. `submit_next_public_key`
-			// 3. `submit_public_key_signature`
-			// 4. `submit_misbehaviour_reports`.
+			// 3. `submit_misbehaviour_reports`.
 			// other than that we should return `InvalidTransaction::Call.into()`.
 			let is_valid_call = matches! {
 				call,
 				Call::submit_public_key { .. } |
 					Call::submit_next_public_key { .. } |
-					Call::submit_public_key_signature { .. } |
 					Call::submit_misbehaviour_reports { .. }
 			};
 			if !is_valid_call {
@@ -1557,13 +1484,17 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn do_refresh(pub_key: (u64, Vec<u8>)) {
-		let uncompressed_pub_key = Self::decompress_public_key(pub_key.1).unwrap_or_default();
-		let data = dkg_runtime_primitives::RefreshProposal {
-			nonce: Self::refresh_nonce().saturating_add(1).into(),
-			pub_key: uncompressed_pub_key,
+	pub fn do_refresh(pub_key: Vec<u8>) {
+		let next_nonce = Self::refresh_nonce() + 1u32;
+		let data = match Self::create_refresh_proposal(pub_key, next_nonce) {
+			Ok(data) => data,
+			Err(e) => {
+				log::warn!("Failed to create refresh proposal: {:?}", e);
+				return
+			},
 		};
-		match T::ProposalHandler::handle_unsigned_refresh_proposal(data) {
+
+		match T::ProposalHandler::handle_unsigned_proposal(data) {
 			Ok(()) => {
 				RefreshInProgress::<T>::put(true);
 				log::debug!("Handled refresh proposal");
@@ -1572,6 +1503,137 @@ impl<T: Config> Pallet<T> {
 				log::warn!("Failed to handle refresh proposal: {:?}", e);
 			},
 		}
+	}
+
+	pub fn create_refresh_proposal(
+		pub_key: Vec<u8>,
+		nonce: u32,
+	) -> Result<Proposal<T::MaxProposalLength>, DispatchError> {
+		let uncompressed_pub_key = Self::decompress_public_key(pub_key)?;
+		let VoterSetData {
+			voter_set_merkle_root,
+			average_session_length_in_millisecs,
+			voter_count,
+		} = Self::create_voter_set_data();
+		let proposal = RefreshProposal {
+			voter_merkle_root: voter_set_merkle_root,
+			session_length: average_session_length_in_millisecs,
+			voter_count,
+			nonce: nonce.into(),
+			pub_key: uncompressed_pub_key,
+		};
+
+		// Store the proposal in storage. We overwrite the storage always.
+		// This is to ensure that we can force rotate and re-sign successfully.
+		CurrentRefreshProposal::<T>::put(proposal.clone());
+
+		// Encode the proposal and return the unsigned proposal.
+		let bounded_proposal_data: BoundedVec<u8, T::MaxProposalLength> =
+			proposal.encode().try_into().unwrap_or_default();
+		Ok(Proposal::Unsigned { kind: ProposalKind::Refresh, data: bounded_proposal_data })
+	}
+
+	/// Creates the voter set merkle tree and auxiliary data for the `RefreshProposal`.
+	///
+	/// The validators's DKG Id (ECDSA keys) are used to create the voter set. We
+	/// hash the public keys into Ethereum compatible 20-byte addresses using the `keccak256` hash
+	/// and insert these addresses into a minimally-sized merkle tree. This allows us to use the
+	/// Ethereum origins (`msg.sender`) on EVMs to prove membership in the voter set.
+	///
+	/// The `RefreshProposal` proposal is a message containing:
+	/// - The merkle root of the ordered voter set's Ethereum addresses.
+	/// - The session length in milliseconds
+	/// - The # of proposers accumulated in the merkle root
+	/// - The nonce of the refresh proposal
+	/// - The public key of the next DKG's shared public key.
+	///
+	/// This data is intended to be used to update the voter set on other blockchains
+	/// that need a fallback mechanism when the DKG is not available or needs to be fixed or
+	/// changed.
+	fn create_voter_set_data() -> VoterSetData {
+		let voters = Self::next_authorities();
+		// Merkleize the new voter set
+		let voter_set_merkle_root = Self::get_voter_set_tree_root(&voters);
+		// Get average session length
+		let average_session_length_in_blocks: u64 =
+			T::NextSessionRotation::average_session_length().try_into().unwrap_or_default();
+
+		let average_millisecs_per_block: u64 =
+			<T as pallet_timestamp::Config>::MinimumPeriod::get()
+				.saturating_mul(2u32.into())
+				.try_into()
+				.unwrap_or_default();
+
+		let average_session_length_in_millisecs =
+			average_session_length_in_blocks.saturating_mul(average_millisecs_per_block);
+
+		VoterSetData {
+			voter_set_merkle_root,
+			average_session_length_in_millisecs,
+			voter_count: voters.len() as u32,
+		}
+	}
+
+	/// Returns the leaves of the voter set merkle tree.
+	///
+	/// It is expected that the size of the returned vector is a power of 2.
+	pub fn pre_process_for_merkleize(voters: &[T::DKGId]) -> Vec<[u8; 32]> {
+		let height = Self::get_voter_set_tree_height(voters.len());
+		// Hash the external accounts into 32 byte chunks to form the base layer of the merkle tree
+		let mut base_layer: Vec<[u8; 32]> = voters
+			.iter()
+			.map(|account| account.to_raw_vec())
+			.map(|account| keccak_256(&account))
+			.collect();
+		// Pad base_layer to have length 2^height
+		let two = 2;
+		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
+			base_layer.push(keccak_256(&[0u8]));
+		}
+		base_layer
+	}
+
+	/// Computes the next layer of the merkle tree by hashing the previous layer.
+	pub fn next_layer(curr_layer: Vec<[u8; 32]>) -> Vec<[u8; 32]> {
+		let mut layer_above: Vec<[u8; 32]> = Vec::new();
+		let mut index = 0;
+		while index < curr_layer.len() {
+			let mut input_to_hash_as_vec: Vec<u8> = curr_layer[index].to_vec();
+			input_to_hash_as_vec.extend_from_slice(&curr_layer[index + 1][..]);
+			let input_to_hash_as_slice = &input_to_hash_as_vec[..];
+			layer_above.push(keccak_256(input_to_hash_as_slice));
+			index += 2;
+		}
+		layer_above
+	}
+
+	// Returns the minimal height of the voter set Merkle tree
+	// Right now this takes O(log(size of voter set)) time but can likely be reduced
+	pub fn get_voter_set_tree_height(voter_count: usize) -> u32 {
+		if voter_count == 1 {
+			1
+		} else {
+			let two: u32 = 2;
+			let mut h = 0;
+			while two.saturating_pow(h) < voter_count as u32 {
+				h += 1;
+			}
+			h
+		}
+	}
+
+	/// Computes the merkle root of the voter set tree
+	pub fn get_voter_set_tree_root(voters: &[T::DKGId]) -> [u8; 32] {
+		let mut curr_layer = Self::pre_process_for_merkleize(voters);
+		let mut height = Self::get_voter_set_tree_height(voters.len());
+		while height > 0 {
+			curr_layer = Self::next_layer(curr_layer);
+			height -= 1;
+		}
+
+		let mut root = [0u8; 32];
+		root.copy_from_slice(&curr_layer[0][..]);
+		root
 	}
 
 	pub fn process_public_key_submissions(
@@ -1627,10 +1689,13 @@ impl<T: Config> Pallet<T> {
 			signed_payload.extend_from_slice(reports.session_id.to_be_bytes().as_ref());
 			signed_payload.extend_from_slice(reports.offender.as_ref());
 
-			// TODO: Verify signer from set over the best authorities set (compute it on chain)
 			let verifying_set: Vec<ecdsa::Public> = verifying_set
 				.iter()
-				.map(|x| ecdsa::Public(to_slice_33(&x.encode()).unwrap_or([0u8; 33])))
+				.map(|x| match to_slice_33(x.encode().as_ref()) {
+					Some(x) => ecdsa::Public(x),
+					None => ecdsa::Public([0u8; 33]),
+				})
+				.filter(|x| x.0 != [0u8; 33])
 				.collect();
 			let (_, success) =
 				verify_signer_from_set_ecdsa(verifying_set, &signed_payload, signature);
@@ -1682,7 +1747,7 @@ impl<T: Config> Pallet<T> {
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(new_authorities_accounts.clone(), new_authority_ids.clone());
+		>>::on_authority_set_changed(&new_authorities_accounts, &new_authority_ids);
 		// Set refresh in progress to false
 		RefreshInProgress::<T>::put(false);
 		// Update the next thresholds for the next session
@@ -1855,7 +1920,7 @@ impl<T: Config> Pallet<T> {
 			T::AccountId,
 			dkg_runtime_primitives::AuthoritySetId,
 			T::DKGId,
-		>>::on_authority_set_changed(authority_account_ids.to_vec(), authorities.to_vec());
+		>>::on_authority_set_changed(authority_account_ids, authorities);
 	}
 
 	/// An offchain function that collects the genesis DKG public key
@@ -1984,50 +2049,6 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// An offchain function that collects the next DKG public key
-	/// signature and submits it to the chain.
-	fn submit_public_key_signature_onchain(
-		block_number: T::BlockNumber,
-	) -> Result<(), &'static str> {
-		let next_unsigned_at = <NextUnsignedAt<T>>::get();
-		if next_unsigned_at > block_number {
-			return Err("Too early to send unsigned transaction")
-		}
-		let mut lock = StorageLock::<Time>::new(OFFCHAIN_PUBLIC_KEY_SIG_LOCK);
-		{
-			let _guard = lock.lock();
-
-			let mut pub_key_sig_ref = StorageValueRef::persistent(OFFCHAIN_PUBLIC_KEY_SIG);
-
-			if Self::next_public_key_signature().is_some() {
-				pub_key_sig_ref.clear();
-				return Ok(())
-			}
-
-			let refresh_proposal = pub_key_sig_ref.get::<RefreshProposalSigned>();
-
-			if let Ok(Some(refresh_proposal)) = refresh_proposal {
-				let res = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
-					Call::submit_public_key_signature { signature_proposal: refresh_proposal }
-						.into(),
-				)
-				.map_err(|_| "Failed to submit transaction");
-
-				match res {
-					Ok(_) => {
-						pub_key_sig_ref.clear();
-					},
-					Err(e) => {
-						log::error!(target: "runtime::dkg_metadata", "Error: {:?}", e);
-						return Err("Failed to submit the public key sig, will retry later")
-					},
-				};
-			}
-
-			Ok(())
-		}
-	}
-
 	/// An offchain function that collects the misbehaviour reports in
 	/// the offchain storage and submits them to the chain.
 	fn submit_misbehaviour_reports_onchain(
@@ -2132,15 +2153,6 @@ impl<T: Config> Pallet<T> {
 				refresh_signature: next_pub_key_signature,
 			},
 		);
-	}
-
-	pub fn max_extrinsic_delay(_block_number: T::BlockNumber) -> T::BlockNumber {
-		let refresh_delay = Self::refresh_delay();
-		let session_length = <T::NextSessionRotation as EstimateNextSessionRotation<
-			T::BlockNumber,
-		>>::average_session_length();
-
-		Permill::from_percent(50) * (refresh_delay * session_length)
 	}
 
 	pub fn get_best_authorities_by_reputation(
@@ -2374,5 +2386,63 @@ impl<
 		// zero for now. However, this value of zero was not properly calculated, and so it would be
 		// reasonable to come back here and properly calculate the weight of this function.
 		(Some(next_session), Zero::zero())
+	}
+}
+
+/// A signed proposal handler implementation for handling DKG `RefreshProposal`s
+///
+/// On a signed `RefreshProposal` we must update the pallet's storage with the
+/// signature of the new public key. This then enables us to rotate the authority
+/// set on the next session change.
+use dkg_runtime_primitives::traits::OnSignedProposal;
+use webb_proposals::ProposalKind;
+impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
+	fn on_signed_proposal(proposal: Proposal<T::MaxProposalLength>) -> Result<(), DispatchError> {
+		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
+
+		if proposal.kind() == ProposalKind::Refresh {
+			let (_, next_pub_key) =
+				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
+			// Check if a signature is already submitted. This should also prevent
+			// against manipulating the ECDSA signature to replay the submission.
+			ensure!(
+				Self::next_public_key_signature().is_none(),
+				Error::<T>::AlreadySubmittedSignature
+			);
+
+			// Check the current refresh proposal against the proposal data.
+			let maybe_prop = Self::current_refresh_proposal();
+			ensure!(maybe_prop.is_some(), Error::<T>::NoRefreshProposal);
+			let curr = maybe_prop.unwrap_or_default();
+			ensure!(curr.encode() == proposal.data().clone(), Error::<T>::InvalidRefreshProposal);
+
+			// Check if the signature is already used
+			let bounded_signature: BoundedVec<_, _> = proposal
+				.signature()
+				.unwrap_or_default()
+				.try_into()
+				.map_err(|_| Error::<T>::InvalidSignature)?;
+			ensure!(
+				!Self::used_signatures().contains(&bounded_signature),
+				Error::<T>::UsedSignature
+			);
+			NextPublicKeySignature::<T>::put(bounded_signature);
+			let uncompressed_pub_key =
+				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
+
+			// Clear the `CurrentRefreshProposal` storage now that
+			// we've processed the signature over it.
+			CurrentRefreshProposal::<T>::kill();
+
+			// Emit the event
+			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
+				uncompressed_pub_key,
+				compressed_pub_key: next_pub_key.into(),
+				pub_key_sig: proposal.signature().unwrap_or_default(),
+				nonce: u32::from(curr.nonce),
+			});
+		};
+
+		Ok(())
 	}
 }

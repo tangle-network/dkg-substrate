@@ -46,6 +46,12 @@ pub const AGGREGATED_MISBEHAVIOUR_REPORTS: &[u8] = b"dkg-metadata::misbehaviour"
 // Lock Key for offchain storage of aggregated derived public keys
 pub const AGGREGATED_MISBEHAVIOUR_REPORTS_LOCK: &[u8] = b"dkg-metadata::misbehaviour::lock";
 
+// Key for offchain storage of aggregated proposer votes
+pub const AGGREGATED_PROPOSER_VOTES: &[u8] = b"dkg-metadata::proposer_votes";
+
+// Lock Key for offchain storage of aggregated proposer votes
+pub const AGGREGATED_PROPOSER_VOTES_LOCK: &[u8] = b"dkg-metadata::proposer_votes::lock";
+
 // Lock Key for submitting signed proposal on chain
 pub const SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK: &[u8] =
 	b"dkg-proposal-handler::submit_signed_proposal_on_chain::lock";

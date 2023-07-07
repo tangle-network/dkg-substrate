@@ -6,12 +6,14 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGPublicKeyMessage, DKGSignedPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
-use dkg_runtime_primitives::{crypto::Public, MaxProposalLength, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::Public,
+	gossip_messages::{DKGSignedPayload, PublicKeyMessage},
+	MaxProposalLength, UnsignedProposal,
+};
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
@@ -88,7 +90,7 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, _key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, _key: PublicKeyMessage) -> Result<(), DKGError> {
 		// we do not gossip the public key in the test interface
 		Ok(())
 	}

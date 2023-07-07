@@ -16,11 +16,14 @@
 // NOTE: needed to silence warnings about generated code in `decl_runtime_apis`
 #![allow(clippy::too_many_arguments, clippy::unnecessary_mut_passed)]
 
+pub mod ethereum_abi;
+pub mod gossip_messages;
 pub mod handlers;
 pub mod offchain;
 pub mod proposal;
 pub mod traits;
 pub mod utils;
+
 pub use crate::proposal::DKGPayloadKey;
 use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use crypto::AuthorityId;
@@ -58,7 +61,7 @@ impl<const T: u32> Get<u32> for CustomU32Getter<T> {
 	}
 }
 
-/// Utility fn to calculate keccak 256 has
+/// Utility fn to calculate keccak 256
 pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 	let mut keccak = Keccak::v256();
 	keccak.update(data);
@@ -69,6 +72,10 @@ pub fn keccak_256(data: &[u8]) -> [u8; 32] {
 
 /// A typedef for keygen set / session id
 pub type SessionId = u64;
+
+/// Signer set ID
+pub type SignerSetId = u64;
+
 /// The type used to represent an MMR root hash.
 pub type MmrRootHash = H256;
 
@@ -96,25 +103,25 @@ pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> boo
 	is_acceptable_above || is_acceptable_below || is_equal
 }
 
-// Engine ID for DKG
+/// Engine ID for DKG
 pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 
-// Key type for DKG keys
+/// Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
-// Max length for proposals
+/// Max length for proposals
 pub type MaxProposalLength = CustomU32Getter<10_000>;
 
-// Max authorities
-pub type MaxAuthorities = CustomU32Getter<100>;
+/// Max authorities
+pub type MaxAuthorities = CustomU32Getter<1024>;
 
-// Max reporters
-pub type MaxReporters = CustomU32Getter<100>;
+/// Max reporters
+pub type MaxReporters = CustomU32Getter<128>;
 
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<512>;
 
-/// Max size for signatures
+/// Max size for keys
 pub type MaxKeyLength = CustomU32Getter<512>;
 
 /// Max votes to store onchain
@@ -122,6 +129,16 @@ pub type MaxVotes = CustomU32Getter<100>;
 
 /// Max resources to store onchain
 pub type MaxResources = CustomU32Getter<32>;
+
+/// Max size for vote proposal
+/// A vote consists of a new address, a leaf index, and a merkle proof
+/// [20 bytes, 4 bytes, 32 * HEIGHT bytes]
+/// If we want to support up to 1000 validators than the max vote length
+/// is 20 + 4 + 32 * 10 = 364 bytes or in bits 2912
+pub type MaxVoteLength = CustomU32Getter<2912>;
+
+/// Proposer vote type
+pub type ProposerVote<V> = BoundedVec<u8, V>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
@@ -162,6 +179,23 @@ pub struct AggregatedMisbehaviourReports<
 	pub reporters: BoundedVec<DKGId, MaxReporters>,
 	/// A list of signed reports
 	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxReporters>,
+}
+
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Debug, TypeInfo, codec::MaxEncodedLen)]
+pub struct AggregatedProposerVotes<
+	DKGId: AsRef<[u8]>,
+	MaxSignatureLength: Get<u32> + Debug + Clone + TypeInfo,
+	MaxVoters: Get<u32> + Debug + Clone + TypeInfo,
+	VoteLength: Get<u32> + Debug + Clone + TypeInfo,
+> {
+	/// The round id the proposer vote is valid for.
+	pub session_id: u64,
+	/// The encoded vote according to the Solidity ABI
+	pub encoded_vote: ProposerVote<VoteLength>,
+	/// A list of voters
+	pub voters: BoundedVec<DKGId, MaxVoters>,
+	/// A list of signed encoded votes
+	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxVoters>,
 }
 
 impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
@@ -308,8 +342,6 @@ sp_api::decl_runtime_apis! {
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
-		/// Get maximum delay before which an offchain extrinsic should be submitted
-		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
@@ -325,6 +357,8 @@ sp_api::decl_runtime_apis! {
 		/// Returns (true, false) if we should execute a new keygen.
 		/// Returns (true, true) if we should execute a forced new keygen.
 		fn should_execute_new_keygen() -> (bool, bool);
+		/// Whether to submit proposer vote
+		fn should_submit_proposer_vote() -> bool;
 	}
 }
 

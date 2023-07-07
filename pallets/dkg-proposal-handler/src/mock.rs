@@ -14,7 +14,7 @@
 //
 #![allow(clippy::unwrap_used)]
 use crate as pallet_dkg_proposal_handler;
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxReporters,
 	MaxSignatureLength, DKG_ENGINE_ID,
@@ -22,7 +22,7 @@ pub use dkg_runtime_primitives::{
 use frame_support::{parameter_types, traits::Everything, BoundedVec, PalletId};
 use frame_system as system;
 use frame_system::EnsureRoot;
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
+use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
 	impl_opaque_keys,
@@ -166,9 +166,7 @@ where
 
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 100;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 100;
+	pub const MaxProposers : u32 = 100;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
@@ -178,13 +176,12 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
-	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type MaxProposalLength = MaxProposalLength;
@@ -195,8 +192,8 @@ impl pallet_dkg_proposals::Config for Test {
 	type Period = Period;
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
-	type MaxAuthorityProposers = MaxAuthorityProposers;
-	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
+	type MaxProposers = MaxProposers;
+	type VotingKeySize = MaxKeyLength;
 	type WeightInfo = ();
 }
 
@@ -243,6 +240,11 @@ impl pallet_session::Config for Test {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -250,7 +252,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type SigningJailSentence = Period;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
@@ -265,6 +266,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -355,7 +358,7 @@ pub fn mock_sign_msg(
 
 pub fn mock_signed_proposal(
 	eth_tx: TransactionV2,
-) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
+) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);

@@ -20,7 +20,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use dkg_runtime_primitives::{
 	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength,
 	TypedChainId, UnsignedProposal,
@@ -36,7 +36,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
+use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -601,9 +601,11 @@ impl pallet_sudo::Config for Runtime {
 }
 
 parameter_types! {
-  pub const DecayPercentage: Percent = Percent::from_percent(50);
-  pub const UnsignedPriority: u64 = 1 << 20;
-  pub const UnsignedInterval: BlockNumber = 3;
+	pub const DecayPercentage: Percent = Percent::from_percent(50);
+	pub const UnsignedPriority: u64 = 1 << 20;
+	pub const UnsignedInterval: BlockNumber = 3;
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
 }
 
 impl pallet_dkg_metadata::Config for Runtime {
@@ -613,7 +615,6 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime>;
-	type RefreshDelay = RefreshDelay;
 	type UnsignedPriority = UnsignedPriority;
 	type UnsignedInterval = UnsignedInterval;
 	type KeygenJailSentence = Period;
@@ -628,6 +629,8 @@ impl pallet_dkg_metadata::Config for Runtime {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = pallet_dkg_metadata::weights::WebbWeight<Runtime>;
 }
 
@@ -645,9 +648,8 @@ impl pallet_dkg_proposal_handler::Config for Runtime {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
-	type SignedProposalHandler = BridgeRegistry;
+	type SignedProposalHandler = (BridgeRegistry, DKG);
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
-	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = pallet_dkg_proposal_handler::weights::WebbWeight<Runtime>;
 }
 
@@ -657,14 +659,12 @@ parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 1000;
+	pub const MaxProposers : u32 = 1000;
 }
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
@@ -675,8 +675,8 @@ impl pallet_dkg_proposals::Config for Runtime {
 	type Period = Period;
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
-	type MaxAuthorityProposers = MaxAuthorityProposers;
-	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
+	type MaxProposers = MaxProposers;
+	type VotingKeySize = MaxKeyLength;
 	type WeightInfo = pallet_dkg_proposals::WebbWeight<Runtime>;
 }
 
@@ -736,8 +736,7 @@ where
 	type Extrinsic = UncheckedExtrinsic;
 }
 
-type BridgeRegistryInstance = pallet_bridge_registry::Instance1;
-impl pallet_bridge_registry::Config<BridgeRegistryInstance> for Runtime {
+impl pallet_bridge_registry::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type BridgeIndex = u32;
 	type MaxAdditionalFields = MaxAdditionalFields;
@@ -792,7 +791,7 @@ construct_runtime!(
 	Staking: pallet_staking,
 	Session: pallet_session,
 	Historical: pallet_session_historical,
-	BridgeRegistry: pallet_bridge_registry::<Instance1>,
+	BridgeRegistry: pallet_bridge_registry,
 	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 	ImOnline: pallet_im_online,
   }
@@ -1007,10 +1006,6 @@ impl_runtime_apis! {
 	  DKGProposalHandler::get_unsigned_proposals()
 	}
 
-	fn get_max_extrinsic_delay(block_number: BlockNumber) -> BlockNumber {
-	  DKG::max_extrinsic_delay(block_number)
-	}
-
 	fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {
 	  (DKG::current_authorities_accounts().into(), DKG::next_authorities_accounts().into())
 	}
@@ -1033,6 +1028,10 @@ impl_runtime_apis! {
 
 	fn should_execute_new_keygen() -> (bool, bool) {
 		DKG::should_execute_new_keygen()
+	}
+
+	fn should_submit_proposer_vote() -> bool {
+		DKG::should_submit_proposer_vote()
 	}
   }
 

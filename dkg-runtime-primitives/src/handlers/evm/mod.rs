@@ -11,32 +11,30 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// Bridge proposals
+
+/// Bridge proposals
+pub mod refresh;
 pub mod resource_id_update;
 
-// Anchor proposals
+/// Anchor proposals
 pub mod anchor_update;
 pub mod set_verifier;
 
-// Token update proposals
+/// Token update proposals
 pub mod add_token_to_set;
 pub mod fee_update;
 pub mod remove_token_from_set;
 
-// Treasury Proposals
+/// Treasury Proposals
 pub mod fee_recipient_update;
 pub mod set_treasury_handler;
 
-// Rescue tokens
+/// Rescue tokens
 pub mod rescue_tokens;
 
-// fees & limits
+/// fees & limits
 pub mod max_deposit_limit_update;
 pub mod min_withdrawal_limit_update;
 
-// Generic proposals
-pub mod bytes32_update;
-
-// EVM tx
+/// EVM tx
 pub mod evm_tx;

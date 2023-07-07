@@ -13,28 +13,41 @@
 // limitations under the License.
 //
 use frame_support::dispatch::DispatchResultWithPostInfo;
+use sp_core::Get;
+use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::vec::Vec;
+use webb_proposals::Proposal;
 
 pub trait OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> {
-	fn on_authority_set_changed(
-		authority_accounts: Vec<AccountId>,
-		authority_ids: Vec<AuthorityId>,
-	);
+	fn on_authority_set_changed(authority_accounts: &[AccountId], authority_ids: &[AuthorityId]);
 }
 
 impl<AccountId, AuthoritySetId, AuthorityId>
 	OnAuthoritySetChangeHandler<AccountId, AuthoritySetId, AuthorityId> for ()
 {
-	fn on_authority_set_changed(
-		_authority_accounts: Vec<AccountId>,
-		_authority_ids: Vec<AuthorityId>,
-	) {
+	fn on_authority_set_changed(_authority_accounts: &[AccountId], _authority_ids: &[AuthorityId]) {
 	}
 }
 
+/// A trait for fetching the current and pravious DKG Public Key.
 pub trait GetDKGPublicKey {
 	fn dkg_key() -> Vec<u8>;
 	fn previous_dkg_key() -> Vec<u8>;
+}
+
+/// A trait for fetching the current proposer set.
+pub trait GetProposerSet<AccountId, Bound> {
+	fn get_previous_proposer_set() -> Vec<AccountId>;
+	fn get_previous_external_proposer_accounts() -> Vec<(AccountId, BoundedVec<u8, Bound>)>;
+}
+
+impl<A, B> GetProposerSet<A, B> for () {
+	fn get_previous_proposer_set() -> Vec<A> {
+		Vec::new()
+	}
+	fn get_previous_external_proposer_accounts() -> Vec<(A, BoundedVec<u8, B>)> {
+		Vec::new()
+	}
 }
 
 /// A trait for when the DKG Public Key get changed.
@@ -60,5 +73,26 @@ impl<AuthoritySetId: Copy> OnDKGPublicKeyChangeHandler<AuthoritySetId> for Tuple
 	) -> DispatchResultWithPostInfo {
 		for_tuples!( #( Tuple5::on_dkg_public_key_changed(authority_id, dkg_public_key.clone())?; )* );
 		Ok(().into())
+	}
+}
+
+/// Trait to be used for handling signed proposals
+pub trait OnSignedProposal<MaxProposalLength: Get<u32>> {
+	/// On a signed proposal, this method is called.
+	/// It returns a result `()` and otherwise an error of type `E`.
+	///
+	/// ## Errors
+	///
+	/// 1. If the proposal is not signed.
+	/// 2. If the proposal is not valid.
+	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError>;
+}
+
+#[impl_trait_for_tuples::impl_for_tuples(5)]
+impl<MaxProposalLength: Get<u32> + Clone> OnSignedProposal<MaxProposalLength> for Tuple5 {
+	#[allow(clippy::redundant_clone)]
+	fn on_signed_proposal(proposal: Proposal<MaxProposalLength>) -> Result<(), DispatchError> {
+		for_tuples!( #( Tuple5::on_signed_proposal(proposal.clone())?; )* );
+		Ok(())
 	}
 }
