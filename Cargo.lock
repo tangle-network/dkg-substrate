@@ -2284,11 +2284,12 @@ dependencies = [
 [[package]]
 name = "ethabi"
 version = "18.0.0"
-source = "git+https://github.com/rust-ethereum/ethabi#a148a4ae0625208946477522bac69eee51602208"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
 dependencies = [
  "ethereum-types",
  "hex",
- "sha3 0.10.7",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -10252,7 +10253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
- "digest 0.10.6",
+ "digest 0.10.7",
  "rand 0.4.6",
  "static_assertions",
 ]
