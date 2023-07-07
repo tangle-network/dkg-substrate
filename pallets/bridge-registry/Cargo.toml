@@ -22,6 +22,7 @@ sp-std = { workspace = true }
 serde = { workspace = true }
 hex = { workspace = true }
 
+dkg-runtime-primitives = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-identity = { workspace = true }
 webb-proposals = { workspace = true, default-features = false }

@@ -38,10 +38,6 @@ describe('E2E Test Runner', function () {
 
 	describe('Test Suite: ', () => {
 		importTest(
-			'Proposer Set Update Proposal',
-			'./proposerSetUpdateProposal.test'
-		);
-		importTest(
 			'Maximum Deposit Limit Update Proposal',
 			'./maxDepositLimitProposal.test'
 		);

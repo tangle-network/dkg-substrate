@@ -52,7 +52,6 @@ where
 		reason: format!("Aggregated public key for session {session_id} does not exist in map"),
 	})?;
 	if is_genesis_round {
-		//dkg_worker.dkg_state.listening_for_active_pub_key = false;
 		perform_storing_of_aggregated_public_keys::<B, BE>(
 			offchain,
 			keys,
@@ -62,7 +61,6 @@ where
 			logger,
 		);
 	} else {
-		//dkg_worker.dkg_state.listening_for_pub_key = false;
 		perform_storing_of_aggregated_public_keys::<B, BE>(
 			offchain,
 			keys,

@@ -106,11 +106,7 @@ use frame_support::{
 	BoundedVec,
 };
 
-use sp_io::hashing::keccak_256;
-use sp_runtime::{
-	traits::{Convert, Saturating},
-	RuntimeAppPublic,
-};
+use sp_runtime::{traits::Convert, RuntimeAppPublic};
 use sp_std::prelude::*;
 use types::{ProposalStatus, ProposalVotes};
 
@@ -128,6 +124,7 @@ pub mod pallet {
 		types::{ProposalVotes, DKG_DEFAULT_PROPOSER_THRESHOLD},
 		weights::WeightInfo,
 	};
+
 	use dkg_runtime_primitives::{
 		proposal::{Proposal, ProposalKind},
 		ProposalNonce,
@@ -146,7 +143,7 @@ pub mod pallet {
 
 	#[pallet::config]
 	/// The module configuration trait.
-	pub trait Config: frame_system::Config + pallet_timestamp::Config {
+	pub trait Config: frame_system::Config {
 		/// The overarching RuntimeEvent type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -158,6 +155,7 @@ pub mod pallet {
 
 		/// Authority identifier type
 		type DKGId: Member + Parameter + RuntimeAppPublic + MaybeSerializeDeserialize;
+
 		/// Convert DKG AuthorityId to a form that would end up in the Merkle Tree.
 		///
 		/// For instance for ECDSA (secp256k1) we want to store uncompressed public keys (65 bytes)
@@ -165,6 +163,9 @@ pub mod pallet {
 		/// but the rest of the Substrate codebase is storing them compressed (33 bytes) for
 		/// efficiency reasons.
 		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
+
+		/// The handler for proposals
+		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
 
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a
@@ -187,15 +188,13 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxResources: Get<u32> + TypeInfo;
 
-		/// The max authority proposers that can be stored in storage
+		/// The max proposers that can be stored in storage
 		#[pallet::constant]
-		type MaxAuthorityProposers: Get<u32> + TypeInfo;
+		type MaxProposers: Get<u32> + TypeInfo;
 
-		/// The max external proposer accounts that can be stored in storage
+		/// The size of an external proposer account (i.e. 64-byte Ethereum public key)
 		#[pallet::constant]
-		type MaxExternalProposerAccounts: Get<u32> + TypeInfo;
-
-		type ProposalHandler: ProposalHandlerTrait;
+		type VotingKeySize: Get<u32> + Debug + Clone + Eq + PartialEq + PartialOrd + Ord + TypeInfo;
 
 		/// Max length of a proposal
 		#[pallet::constant]
@@ -227,43 +226,20 @@ pub mod pallet {
 	pub type ProposerThreshold<T: Config> =
 		StorageValue<_, u32, ValueQuery, DefaultForProposerThreshold>;
 
-	/// Proposer Set Update Proposal Nonce
-	#[pallet::storage]
-	#[pallet::getter(fn proposer_set_update_proposal_nonce)]
-	pub type ProposerSetUpdateProposalNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
-
 	/// Tracks current proposer set
 	#[pallet::storage]
 	#[pallet::getter(fn proposers)]
-	pub type Proposers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool, ValueQuery>;
+	pub type Proposers<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, T::MaxProposers>, ValueQuery>;
 
-	/// Tracks current proposer set external accounts
-	/// Currently meant to store Ethereum compatible 64-bytes ECDSA public keys
+	/// Tracks current ECDSA voting keys for each validator
+	pub type VotingKey<T> = BoundedVec<u8, <T as Config>::VotingKeySize>;
+	pub type VotingKeyTuple<T> = (<T as frame_system::Config>::AccountId, VotingKey<T>);
+	pub type VoterList<T> = BoundedVec<VotingKeyTuple<T>, <T as Config>::MaxProposers>;
 	#[pallet::storage]
 	#[pallet::getter(fn external_proposer_accounts)]
-	pub type ExternalProposerAccounts<T: Config> = StorageMap<
-		_,
-		Blake2_128Concat,
-		T::AccountId,
-		BoundedVec<u8, T::MaxExternalProposerAccounts>,
-		ValueQuery,
-	>;
-
-	/// Tracks the authorities that are proposers so we can properly update the proposer set
-	/// across sessions and authority changes.
-	#[pallet::storage]
-	#[pallet::getter(fn authority_proposers)]
-	pub type AuthorityProposers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, T::MaxAuthorityProposers>, ValueQuery>;
-
-	/// Tracks current proposer set external accounts
-	#[pallet::storage]
-	#[pallet::getter(fn external_authority_proposer_accounts)]
-	pub type ExternalAuthorityProposerAccounts<T: Config> = StorageValue<
-		_,
-		BoundedVec<BoundedVec<u8, T::MaxExternalProposerAccounts>, T::MaxAuthorityProposers>,
-		ValueQuery,
-	>;
+	pub type VotingKeys<T: Config> =
+		StorageValue<_, BoundedVec<(T::AccountId, VotingKey<T>), T::MaxProposers>, ValueQuery>;
 
 	/// Number of proposers in set
 	#[pallet::storage]
@@ -297,10 +273,6 @@ pub mod pallet {
 		ProposerThresholdChanged { new_threshold: u32 },
 		/// Chain now available for transfers (chain_id)
 		ChainWhitelisted { chain_id: TypedChainId },
-		/// Proposer added to set
-		ProposerAdded { proposer_id: T::AccountId },
-		/// Proposer removed from set
-		ProposerRemoved { proposer_id: T::AccountId },
 		/// Vote submitted in favour of proposal
 		VoteFor {
 			kind: ProposalKind,
@@ -340,7 +312,7 @@ pub mod pallet {
 			proposal_nonce: ProposalNonce,
 		},
 		/// Proposers have been reset
-		AuthorityProposersReset { proposers: Vec<T::AccountId> },
+		ProposersReset { proposers: Vec<T::AccountId> },
 	}
 
 	// Errors inform users that something went wrong.
@@ -422,9 +394,12 @@ pub mod pallet {
 				Resources::<T>::insert(*r_id, bounded_input);
 			}
 
-			for proposer in self.initial_proposers.iter() {
-				Proposers::<T>::insert(proposer, true);
-			}
+			let bounded_proposers: BoundedVec<T::AccountId, T::MaxProposers> = self
+				.initial_proposers
+				.clone()
+				.try_into()
+				.expect("Genesis proposers is too large");
+			Proposers::<T>::put(bounded_proposers);
 		}
 	}
 
@@ -491,37 +466,6 @@ pub mod pallet {
 			Self::whitelist(chain_id)
 		}
 
-		/// Adds a new proposer to the proposer set.
-		///
-		/// # <weight>
-		/// - O(1) lookup and insert
-		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::add_proposer())]
-		#[pallet::call_index(4)]
-		pub fn add_proposer(
-			origin: OriginFor<T>,
-			native_account: T::AccountId,
-			external_account: Vec<u8>,
-		) -> DispatchResultWithPostInfo {
-			Self::ensure_admin(origin)?;
-			Self::register_proposer(native_account, external_account)
-		}
-
-		/// Removes an existing proposer from the set.
-		///
-		/// # <weight>
-		/// - O(1) lookup and removal
-		/// # </weight>
-		#[pallet::weight(<T as Config>::WeightInfo::remove_proposer())]
-		#[pallet::call_index(5)]
-		pub fn remove_proposer(
-			origin: OriginFor<T>,
-			v: T::AccountId,
-		) -> DispatchResultWithPostInfo {
-			Self::ensure_admin(origin)?;
-			Self::unregister_proposer(v)
-		}
-
 		/// Commits a vote in favour of the provided proposal.
 		///
 		/// If a proposal with the given nonce and source chain ID does not
@@ -532,7 +476,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
 		#[pallet::weight(<T as Config>::WeightInfo::acknowledge_proposal())]
-		#[pallet::call_index(6)]
+		#[pallet::call_index(4)]
 		pub fn acknowledge_proposal(
 			origin: OriginFor<T>,
 			prop: ProposalOf<T>,
@@ -563,7 +507,7 @@ pub mod pallet {
 		/// - Fixed, since execution of proposal should not be included
 		/// # </weight>
 		#[pallet::weight(<T as Config>::WeightInfo::reject_proposal())]
-		#[pallet::call_index(7)]
+		#[pallet::call_index(5)]
 		pub fn reject_proposal(
 			origin: OriginFor<T>,
 			prop: ProposalOf<T>,
@@ -597,7 +541,7 @@ pub mod pallet {
 		/// - weight of proposed call, regardless of whether execution is performed
 		/// # </weight>
 		#[pallet::weight(<T as Config>::WeightInfo::eval_vote_state(prop.data().len() as u32))]
-		#[pallet::call_index(8)]
+		#[pallet::call_index(6)]
 		pub fn eval_vote_state(
 			origin: OriginFor<T>,
 			nonce: ProposalNonce,
@@ -621,7 +565,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Checks if who is a proposer
 	pub fn is_proposer(who: &T::AccountId) -> bool {
-		Self::proposers(who)
+		Self::proposers().contains(who)
 	}
 
 	/// Asserts if a resource is registered
@@ -639,6 +583,7 @@ impl<T: Config> Pallet<T> {
 	/// Set a new voting threshold
 	pub fn set_proposer_threshold(threshold: u32) -> DispatchResultWithPostInfo {
 		ensure!(threshold > 0, Error::<T>::InvalidThreshold);
+		ensure!(threshold <= Proposers::<T>::get().len() as u32, Error::<T>::InvalidThreshold);
 		ProposerThreshold::<T>::put(threshold);
 		Self::deposit_event(Event::ProposerThresholdChanged { new_threshold: threshold });
 		Ok(().into())
@@ -666,37 +611,6 @@ impl<T: Config> Pallet<T> {
 		ensure!(!Self::chain_whitelisted(chain_id), Error::<T>::ChainAlreadyWhitelisted);
 		ChainNonces::<T>::insert(chain_id, ProposalNonce::from(0));
 		Self::deposit_event(Event::ChainWhitelisted { chain_id });
-		Ok(().into())
-	}
-
-	/// Adds a new proposer to the set. Requires both an account ID and an ECDSA public key.
-	pub fn register_proposer(
-		proposer: T::AccountId,
-		external_account: Vec<u8>,
-	) -> DispatchResultWithPostInfo {
-		ensure!(!Self::is_proposer(&proposer), Error::<T>::ProposerAlreadyExists);
-		// Add the proposer to the set
-		Proposers::<T>::insert(&proposer, true);
-		// Add the proposer's public key to the set
-		let bounded_external_account: BoundedVec<_, _> =
-			external_account.try_into().map_err(|_| Error::<T>::OutOfBounds)?;
-		ExternalProposerAccounts::<T>::insert(&proposer, bounded_external_account);
-		ProposerCount::<T>::mutate(|i| *i += 1);
-
-		Self::deposit_event(Event::ProposerAdded { proposer_id: proposer });
-		Ok(().into())
-	}
-
-	/// Removes a proposer from the set
-	pub fn unregister_proposer(proposer: T::AccountId) -> DispatchResultWithPostInfo {
-		ensure!(Self::is_proposer(&proposer), Error::<T>::ProposerInvalid);
-		// Remove the proposer
-		Proposers::<T>::remove(&proposer);
-		// Remove the proposer's external account
-		ExternalProposerAccounts::<T>::remove(&proposer);
-		// Decrement the proposer count
-		ProposerCount::<T>::mutate(|i| *i -= 1);
-		Self::deposit_event(Event::ProposerRemoved { proposer_id: proposer });
 		Ok(().into())
 	}
 
@@ -762,7 +676,6 @@ impl<T: Config> Pallet<T> {
 			let now = <frame_system::Pallet<T>>::block_number();
 			ensure!(!votes.is_complete(), Error::<T>::ProposalAlreadyComplete);
 			ensure!(!votes.is_expired(now), Error::<T>::ProposalExpired);
-
 			let status =
 				votes.try_to_complete(ProposerThreshold::<T>::get(), ProposerCount::<T>::get());
 			Votes::<T>::insert(src_chain_id, (nonce, prop.clone()), votes.clone());
@@ -812,10 +725,7 @@ impl<T: Config> Pallet<T> {
 			proposal_nonce: nonce,
 			kind: prop.kind(),
 		});
-		T::ProposalHandler::handle_unsigned_proposal(
-			prop.data().clone(),
-			dkg_runtime_primitives::ProposalAction::Sign(0),
-		)?;
+		T::ProposalHandler::handle_unsigned_proposal(prop.clone())?;
 		Self::deposit_event(Event::ProposalSucceeded {
 			src_chain_id,
 			proposal_nonce: nonce,
@@ -837,124 +747,6 @@ impl<T: Config> Pallet<T> {
 		});
 		Ok(().into())
 	}
-
-	/// Creates the proposer set merkle tree and update proposal and submits the proposer for
-	/// handling.
-	///
-	/// The proposer's external accounts (ECDSA keys) are used to create the proposer set. We
-	/// hash the public keys into Ethereum compatible 20-byte addresses using the `keccak256` hash
-	/// and insert these addresses into a minimally-sized merkle tree. This allows us to use the
-	/// Ethereum origins (`msg.sender`) on EVMs to prove membership in the proposer set.
-	///
-	/// The proposal set update proposal is a message containing:
-	/// - The merkle root of the ordered proposer set's Ethereum addresses.
-	/// - The session length in milliseconds
-	/// - The # of proposers accumulated in the merkle root
-	/// - The nonce of the update proposal
-	///
-	/// The signed proposer set update is intended to be used to update the proposer set on
-	/// other blockchains that need a fallback mechanism when the DKG is not available or needs
-	/// to be fixed or changed.
-	#[allow(dead_code)]
-	fn create_proposer_set_update() {
-		// Merkleize the new proposer set
-		let mut proposer_set_merkle_root = Self::get_proposer_set_tree_root();
-		// Increment the nonce, we increment first because the nonce starts at 0
-		let curr_proposal_nonce = Self::proposer_set_update_proposal_nonce();
-		let new_proposal_nonce = curr_proposal_nonce.saturating_add(1u32);
-		ProposerSetUpdateProposalNonce::<T>::put(new_proposal_nonce);
-		// Get average session length
-		let average_session_length_in_blocks: u64 =
-			T::NextSessionRotation::average_session_length().try_into().unwrap_or_default();
-
-		let average_millisecs_per_block: u64 =
-			<T as pallet_timestamp::Config>::MinimumPeriod::get()
-				.saturating_mul(2u32.into())
-				.try_into()
-				.unwrap_or_default();
-
-		let average_session_length_in_millisecs =
-			average_session_length_in_blocks.saturating_mul(average_millisecs_per_block);
-
-		let num_of_proposers = Self::proposer_count();
-
-		proposer_set_merkle_root
-			.extend_from_slice(&average_session_length_in_millisecs.to_be_bytes());
-		proposer_set_merkle_root.extend_from_slice(&num_of_proposers.to_be_bytes());
-		proposer_set_merkle_root.extend_from_slice(&new_proposal_nonce.to_be_bytes());
-
-		match T::ProposalHandler::handle_unsigned_proposer_set_update_proposal(
-			proposer_set_merkle_root,
-			dkg_runtime_primitives::ProposalAction::Sign(0),
-		) {
-			Ok(()) => {},
-			Err(e) => {
-				log::error!(
-					target: "runtime::dkg_proposals",
-					"Error creating proposer set update: {:?}", e
-				);
-			},
-		}
-	}
-
-	/// Returns the leaves of the proposer set merkle tree.
-	///
-	/// It is expected that the size of the returned vector is a power of 2.
-	pub fn pre_process_for_merkleize() -> Vec<Vec<u8>> {
-		let height = Self::get_proposer_set_tree_height();
-		let proposer_keys = ExternalProposerAccounts::<T>::iter_keys();
-		// Check for each key that the proposer is valid (should return true)
-		let mut base_layer: Vec<Vec<u8>> = proposer_keys
-			.filter(|v| ExternalProposerAccounts::<T>::contains_key(v))
-			.map(|x| keccak_256(&ExternalProposerAccounts::<T>::get(x)[..]).to_vec())
-			.collect();
-		// Pad base_layer to have length 2^height
-		let two = 2;
-		while base_layer.len() != two.saturating_pow(height.try_into().unwrap_or_default()) {
-			base_layer.push(keccak_256(&[0u8]).to_vec());
-		}
-		base_layer
-	}
-
-	/// Computes the next layer of the merkle tree by hashing the previous layer.
-	pub fn next_layer(curr_layer: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-		let mut layer_above: Vec<Vec<u8>> = Vec::new();
-		let mut index = 0;
-		while index < curr_layer.len() {
-			let mut input_to_hash_as_vec: Vec<u8> = curr_layer[index].clone();
-			input_to_hash_as_vec.extend_from_slice(&curr_layer[index + 1][..]);
-			let input_to_hash_as_slice = &input_to_hash_as_vec[..];
-			layer_above.push(keccak_256(input_to_hash_as_slice).to_vec());
-			index += 2;
-		}
-		layer_above
-	}
-
-	// Returns the minimal height of the proposer set Merkle tree
-	// Right now this takes O(log(size of proposer set)) time but can likely be reduced
-	pub fn get_proposer_set_tree_height() -> u32 {
-		if Self::proposer_count() == 1 {
-			1
-		} else {
-			let two: u32 = 2;
-			let mut h = 0;
-			while two.saturating_pow(h) < Self::proposer_count() {
-				h += 1;
-			}
-			h
-		}
-	}
-
-	/// Computes the merkle root of the proposer set tree
-	pub fn get_proposer_set_tree_root() -> Vec<u8> {
-		let mut curr_layer = Self::pre_process_for_merkleize();
-		let mut height = Self::get_proposer_set_tree_height();
-		while height > 0 {
-			curr_layer = Self::next_layer(curr_layer);
-			height -= 1;
-		}
-		curr_layer[0].clone()
-	}
 }
 
 impl<T: Config>
@@ -964,63 +756,38 @@ impl<T: Config>
 	/// Called when the authority set has changed.
 	///
 	/// On new authority sets, we need to:
-	/// - Remove the old authorities from the proposer set and their ECDSA keys from the external
-	///   proposer accounts
-	/// - Add the new authorities to the proposer set and their ECDSA keys to the external proposer
-	///   accounts
-	/// - Create a new proposer set update proposal by merkleizing the new proposer set
-	/// - Submit the new proposet set update to the `pallet-dkg-proposal-handler`
-	fn on_authority_set_changed(authorities: Vec<T::AccountId>, authority_ids: Vec<T::DKGId>) {
+	/// -
+	fn on_authority_set_changed(authorities: &[T::AccountId], authority_ids: &[T::DKGId]) {
 		// Get the new external accounts for the new authorities by converting
 		// their DKGIds to data meant for merkle tree insertion (i.e. Ethereum addresses)
 		let new_external_accounts = authority_ids
 			.iter()
 			.map(|id| T::DKGAuthorityToMerkleLeaf::convert(id.clone()))
+			.map(|id| {
+				let bounded_external_account: VotingKey<T> =
+					id.try_into().expect("External account outside limits!");
+				bounded_external_account
+			})
 			.collect::<Vec<_>>();
-		// Remove old authorities and their external accounts from the list
-		let old_authority_proposers = Self::authority_proposers();
-		for old_authority_account in old_authority_proposers {
-			ProposerCount::<T>::put(Self::proposer_count().saturating_sub(1));
-			Proposers::<T>::remove(&old_authority_account);
-			ExternalProposerAccounts::<T>::remove(&old_authority_account);
-		}
-		// Add new authorities and their external accounts to the list
-		for (authority_account, external_account) in
-			authorities.iter().zip(new_external_accounts.iter())
-		{
-			ProposerCount::<T>::put(Self::proposer_count().saturating_add(1));
-			Proposers::<T>::insert(authority_account, true);
-
-			let bounded_external_account: BoundedVec<_, _> =
-				external_account.clone().try_into().expect("External account outside limits!");
-			ExternalProposerAccounts::<T>::insert(authority_account, bounded_external_account);
-		}
-		// Update the new authorities that are also proposers
-		let bounded_authorities: BoundedVec<_, _> = authorities
+		ProposerCount::<T>::put(authorities.len() as u32);
+		let bounded_proposers: BoundedVec<T::AccountId, T::MaxProposers> =
+			authorities.to_vec().try_into().expect("Too many authorities!");
+		Proposers::<T>::put(bounded_proposers);
+		let bounded_external_accounts: VoterList<T> = authorities
+			.iter()
+			.cloned()
+			.zip(new_external_accounts.into_iter())
+			.collect::<Vec<_>>()
 			.try_into()
-			.expect("This should never happen, bounded authorities outside limits!");
-		AuthorityProposers::<T>::put(bounded_authorities.clone());
-		// Update the external accounts of the new authorities
-		let mut bounded_new_external_accounts: BoundedVec<_, _> = Default::default();
-		for item in new_external_accounts {
-			let bounded_item: BoundedVec<_, _> =
-				item.try_into().expect("New External account outside limits!");
-			bounded_new_external_accounts
-				.try_push(bounded_item)
-				.expect("New External account count outside limits!");
-		}
-		ExternalAuthorityProposerAccounts::<T>::put(bounded_new_external_accounts);
-		Self::deposit_event(Event::<T>::AuthorityProposersReset {
-			proposers: bounded_authorities.into(),
-		});
-		// Create the new proposer set merkle tree and update proposal
-		Self::create_proposer_set_update();
+			.expect("Too many external proposer accounts!");
+		VotingKeys::<T>::put(bounded_external_accounts);
+		Self::deposit_event(Event::<T>::ProposersReset { proposers: authorities.to_vec() });
 	}
 }
 
 /// Convert DKG secp256k1 public keys into Ethereum addresses
-pub struct DKGEcdsaToEthereum;
-impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereum {
+pub struct DKGEcdsaToEthereumAddress;
+impl Convert<dkg_runtime_primitives::crypto::AuthorityId, Vec<u8>> for DKGEcdsaToEthereumAddress {
 	fn convert(a: dkg_runtime_primitives::crypto::AuthorityId) -> Vec<u8> {
 		use k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint};
 		let _x = VerifyingKey::from_sec1_bytes(sp_core::crypto::ByteArray::as_slice(&a));

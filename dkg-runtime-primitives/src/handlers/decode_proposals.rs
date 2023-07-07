@@ -11,8 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-use super::substrate;
+
 use crate::{
 	handlers::{evm, validate_proposals::ValidationError},
 	DKGPayloadKey,
@@ -70,85 +69,49 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 	};
 
 	// we then create a lazy identifier.
-	let maybe_anchor_create = substrate::anchor_create::create(proposal.data())
+	let maybe_refresh_vote = evm::refresh::create(proposal.data())
 		.map(|p| {
-			identifier.key = DKGPayloadKey::AnchorCreateProposal(p.header.nonce());
+			identifier.key = DKGPayloadKey::RefreshProposal(p.nonce);
 			identifier
 		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::AnchorCreate));
+		.and_then(matches_kind(proposal.kind(), ProposalKind::Refresh));
 
-	let maybe_substrate_anchor_update = substrate::anchor_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::AnchorUpdateProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::AnchorUpdate));
-
-	let maybe_evm_anchor_update = evm::anchor_update::create(proposal.data())
+	let maybe_anchor_update = evm::anchor_update::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::AnchorUpdateProposal(p.header().nonce());
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::AnchorUpdate));
 
-	let maybe_evm_token_add = evm::add_token_to_set::create(proposal.data())
+	let maybe_token_add = evm::add_token_to_set::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::TokenAddProposal(p.header().nonce());
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::TokenAdd));
 
-	let maybe_substrate_token_add = substrate::add_token_to_pool_share::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::TokenAddProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::TokenAdd));
-
-	let maybe_evm_token_remove = evm::remove_token_from_set::create(proposal.data())
+	let maybe_token_remove = evm::remove_token_from_set::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::TokenRemoveProposal(p.header().nonce());
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::TokenRemove));
 
-	let maybe_substrate_token_remove =
-		substrate::remove_token_from_pool_share::create(proposal.data())
-			.map(|p| {
-				identifier.key = DKGPayloadKey::TokenRemoveProposal(p.header.nonce());
-				identifier
-			})
-			.and_then(matches_kind(proposal.kind(), ProposalKind::TokenRemove));
-
-	let maybe_evm_fee_update = evm::fee_update::create(proposal.data())
+	let maybe_fee_update = evm::fee_update::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::WrappingFeeUpdateProposal(p.header().nonce());
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::WrappingFeeUpdate));
 
-	let maybe_substrate_fee_update = substrate::fee_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::WrappingFeeUpdateProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::WrappingFeeUpdate));
-
-	let maybe_evm_resoruce_id_update = evm::resource_id_update::create(proposal.data())
+	let maybe_resoruce_id_update = evm::resource_id_update::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::ResourceIdUpdateProposal(p.header().nonce());
 			identifier
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::ResourceIdUpdate));
 
-	let maybe_substrate_resource_id_update = substrate::resource_id_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::ResourceIdUpdateProposal(p.header.nonce());
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::ResourceIdUpdate));
-
-	let maybe_evm_rescue_tokens = evm::rescue_tokens::create(proposal.data())
+	let maybe_rescue_tokens = evm::rescue_tokens::create(proposal.data())
 		.map(|p| {
 			identifier.key = DKGPayloadKey::RescueTokensProposal(p.header().nonce());
 			identifier
@@ -192,32 +155,18 @@ pub fn decode_proposal_identifier<MaxLength: Get<u32>>(
 		})
 		.and_then(matches_kind(proposal.kind(), ProposalKind::FeeRecipientUpdate));
 
-	let maybe_proposer_set_update = super::proposer_set_update::create(proposal.data())
-		.map(|p| {
-			identifier.key = DKGPayloadKey::ProposerSetUpdateProposal(p.nonce);
-			identifier.typed_chain_id = webb_proposals::TypedChainId::None;
-			identifier
-		})
-		.and_then(matches_kind(proposal.kind(), ProposalKind::ProposerSetUpdate));
-
 	// Switch on all cases
-	maybe_evm_anchor_update
-		.or(maybe_substrate_anchor_update)
-		.or(maybe_evm_token_add)
-		.or(maybe_substrate_token_add)
-		.or(maybe_evm_token_remove)
-		.or(maybe_substrate_token_remove)
-		.or(maybe_evm_fee_update)
-		.or(maybe_substrate_fee_update)
-		.or(maybe_evm_resoruce_id_update)
-		.or(maybe_substrate_resource_id_update)
-		.or(maybe_evm_rescue_tokens)
+	maybe_refresh_vote
+		.or(maybe_anchor_update)
+		.or(maybe_token_add)
+		.or(maybe_token_remove)
+		.or(maybe_fee_update)
+		.or(maybe_resoruce_id_update)
+		.or(maybe_rescue_tokens)
 		.or(maybe_max_deposit_limit_update)
 		.or(maybe_min_withdrawal_limit_update)
 		.or(maybe_set_treasury_handler)
 		.or(maybe_set_verifier)
 		.or(maybe_fee_recipient_update)
-		.or(maybe_anchor_create)
-		.or(maybe_proposer_set_update)
 		.map_err(|_| ValidationError::UnimplementedProposalKind)
 }

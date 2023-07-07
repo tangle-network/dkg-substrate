@@ -20,8 +20,8 @@ use crate::{
 	debug_logger::DebugLogger,
 };
 use async_trait::async_trait;
-use dkg_primitives::types::{DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage};
-use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload};
+use dkg_runtime_primitives::{crypto::Public, gossip_messages::PublicKeyMessage, MaxAuthorities};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::{
 	Keygen, ProtocolMessage,
@@ -47,7 +47,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		let DKGMessage { payload, session_id, .. } = msg.body;
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
-			DKGMsgPayload::Keygen(msg) => {
+			NetworkMsgPayload::Keygen(msg) => {
 				logger.info_keygen(format!(
 					"Handling Keygen inbound message from id={}, session={}",
 					msg.sender_id, session_id
@@ -91,7 +91,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for Keygen {
 		// public_key_gossip.rs:gossip_public_key [2] store public key locally (public_keys.rs:
 		// store_aggregated_public_keys)
 		let session_id = params.session_id;
-		let pub_key_msg = DKGPublicKeyMessage {
+		let pub_key_msg = PublicKeyMessage {
 			session_id,
 			pub_key: local_key.public_key().to_bytes(true).to_vec(),
 			signature: vec![],

@@ -78,7 +78,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 		batch_key: BatchKey,
 		message: BigInt,
 	) -> Result<(), DKGError>;
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError>;
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError>;
 	fn store_public_key(
 		&self,
 		key: LocalKey<Secp256k1>,
@@ -395,7 +395,7 @@ impl<B, BE, C, GE> BlockchainInterface
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, key: PublicKeyMessage) -> Result<(), DKGError> {
 		let public_key = key.pub_key.clone();
 		gossip_public_key::<GE>(
 			&self.keystore,

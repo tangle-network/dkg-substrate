@@ -28,6 +28,8 @@ sp-std = { workspace = true }
 sp-runtime = { workspace = true }
 sp-io = { workspace = true }
 pallet-session = { workspace = true }
+pallet-timestamp = { workspace = true }
+webb-proposals = { workspace = true, default-features = false }
 
 [dev-dependencies]
 serde = { workspace = true }

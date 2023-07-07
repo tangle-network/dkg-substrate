@@ -125,7 +125,7 @@ impl BlockchainInterface for TestDummyIface {
 		Ok(())
 	}
 
-	fn gossip_public_key(&self, _key: DKGPublicKeyMessage) -> Result<(), DKGError> {
+	fn gossip_public_key(&self, _key: PublicKeyMessage) -> Result<(), DKGError> {
 		// we do not gossip the public key in the test interface
 		Ok(())
 	}

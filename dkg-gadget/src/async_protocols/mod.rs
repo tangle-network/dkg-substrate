@@ -26,10 +26,13 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, DKGKeygenMessage, DKGMessage, DKGMsgPayload, DKGOfflineMessage, SessionId},
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId},
 	AuthoritySet,
 };
-use dkg_runtime_primitives::{MaxAuthorities, StoredUnsignedProposalBatch};
+use dkg_runtime_primitives::{
+	gossip_messages::{DKGKeygenMessage, DKGOfflineMessage},
+	MaxAuthorities, UnsignedProposal,
+};
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
 	Future, StreamExt,
@@ -649,7 +652,7 @@ where
 				None => None,
 			};
 			let payload = match &proto_ty {
-				ProtocolType::Keygen { .. } => DKGMsgPayload::Keygen(DKGKeygenMessage {
+				ProtocolType::Keygen { .. } => NetworkMsgPayload::Keygen(DKGKeygenMessage {
 					sender_id: party_id,
 					keygen_msg: serialized_body,
 					keygen_protocol_hash: keygen_protocol_hash.expect("This value should be set"),

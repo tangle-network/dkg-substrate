@@ -20,11 +20,10 @@ use crate::{
 	Client, DKGKeystore,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGPublicKeyMessage, SessionId, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	gossip_messages::PublicKeyMessage,
 	AggregatedPublicKeys, DKGApi, MaxAuthorities, MaxProposalLength,
 };
 use sc_client_api::Backend;
@@ -53,7 +52,7 @@ where
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
-	if let DKGMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
+	if let NetworkMsgPayload::PublicKeyBroadcast(msg) = dkg_msg.payload {
 		let is_genesis_round = msg.session_id == 0;
 
 		let tag = if is_genesis_round { "CURRENT" } else { "NEXT" };
@@ -127,7 +126,7 @@ pub(crate) fn gossip_public_key<GE>(
 	key_store: &DKGKeystore,
 	gossip_engine: Arc<GE>,
 	aggregated_public_keys: &mut HashMap<SessionId, AggregatedPublicKeys>,
-	msg: DKGPublicKeyMessage,
+	msg: PublicKeyMessage,
 ) where
 	GE: GossipEngineIface,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -137,7 +136,7 @@ pub(crate) fn gossip_public_key<GE>(
 
 	if let Ok(signature) = key_store.sign(&public, &msg.pub_key) {
 		let encoded_signature = signature.encode();
-		let payload = DKGMsgPayload::PublicKeyBroadcast(DKGPublicKeyMessage {
+		let payload = NetworkMsgPayload::PublicKeyBroadcast(PublicKeyMessage {
 			signature: encoded_signature.clone(),
 			..msg.clone()
 		});

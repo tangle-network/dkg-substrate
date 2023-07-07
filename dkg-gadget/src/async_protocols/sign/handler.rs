@@ -31,9 +31,7 @@ use crate::async_protocols::{
 	ProtocolType, Threshold,
 };
 use dkg_logging::debug_logger::RoundsEventType;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMsgPayload, DKGVoteMessage, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, MaxAuthorities};
 use futures::FutureExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
@@ -236,7 +234,7 @@ where
 				DKGError::GenericError { reason: "Partial signature is invalid".to_string() }
 			})?;
 
-			let payload = DKGMsgPayload::Vote(DKGVoteMessage {
+			let payload = NetworkMsgPayload::Vote(DKGVoteMessage {
 				party_ind: *offline_i.as_ref(),
 				// use the hash of proposal as "round key" ONLY for purposes of ensuring
 				// uniqueness We only want voting to happen amongst voters under the SAME
@@ -274,7 +272,7 @@ where
 			while let Some(msg) = incoming_wrapper.next().await {
 				let payload = msg.body.payload.payload().clone();
 				params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received");
-				if let DKGMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
+				if let NetworkMsgPayload::Vote(dkg_vote_msg) = msg.body.payload {
 					// only process messages which are from the respective proposal
 					if dkg_vote_msg.round_key.as_slice() == hash_of_proposal {
 						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-2");

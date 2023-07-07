@@ -5222,6 +5222,7 @@ dependencies = [
 name = "pallet-bridge-registry"
 version = "1.0.0"
 dependencies = [
+ "dkg-runtime-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -5269,6 +5270,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "pallet-session",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -5278,6 +5280,7 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+ "webb-proposals",
 ]
 
 [[package]]

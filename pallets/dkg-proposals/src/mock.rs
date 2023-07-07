@@ -17,7 +17,7 @@
 
 use super::*;
 use crate as pallet_dkg_proposals;
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 pub use dkg_runtime_primitives::{
 	crypto::AuthorityId as DKGId, ConsensusLog, MaxAuthorities, MaxKeyLength, MaxProposalLength,
 	MaxReporters, MaxSignatureLength, DKG_ENGINE_ID,
@@ -38,7 +38,7 @@ use sp_runtime::{
 		AccountIdConversion, BlakeTwo256, ConvertInto, Extrinsic as ExtrinsicT, IdentifyAccount,
 		IdentityLookup, OpaqueKeys, Verify,
 	},
-	Percent, Permill,
+	Percent,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -158,6 +158,11 @@ where
 	}
 }
 
+parameter_types! {
+	#[derive(Default, Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd, MaxEncodedLen)]
+	pub const VoteLength: u32 = 64;
+}
+
 impl pallet_dkg_metadata::Config for Test {
 	type DKGId = DKGId;
 	type RuntimeEvent = RuntimeEvent;
@@ -165,7 +170,6 @@ impl pallet_dkg_metadata::Config for Test {
 	type OnDKGPublicKeyChangeHandler = ();
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-	type RefreshDelay = RefreshDelay;
 	type KeygenJailSentence = Period;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type SigningJailSentence = Period;
@@ -180,6 +184,8 @@ impl pallet_dkg_metadata::Config for Test {
 	type MaxSignatureLength = MaxSignatureLength;
 	type MaxReporters = MaxReporters;
 	type MaxAuthorities = MaxAuthorities;
+	type VoteLength = VoteLength;
+	type MaxProposalLength = MaxProposalLength;
 	type WeightInfo = ();
 }
 
@@ -188,8 +194,6 @@ pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
 parameter_types! {
 	pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
-	pub const RefreshDelay: Permill = Permill::from_percent(90);
-	pub const TimeToRestart: u64 = 3;
 }
 
 impl pallet_timestamp::Config for Test {
@@ -246,11 +250,7 @@ parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxResources : u32 = 1000;
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxAuthorityProposers : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxExternalProposerAccounts : u32 = 1000;
-	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
-	pub const MaxProposalsPerBatch : u32 = 5;
+	pub const MaxProposers : u32 = 1000;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
@@ -259,15 +259,13 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type BatchId = u32;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
-	type MaxProposalLength = MaxProposalLength;
-	type MaxProposalsPerBatch = MaxProposalsPerBatch;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }
 
 impl pallet_dkg_proposals::Config for Test {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereum;
+	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
@@ -278,8 +276,8 @@ impl pallet_dkg_proposals::Config for Test {
 	type Period = Period;
 	type MaxVotes = MaxVotes;
 	type MaxResources = MaxResources;
-	type MaxAuthorityProposers = MaxAuthorityProposers;
-	type MaxExternalProposerAccounts = MaxExternalProposerAccounts;
+	type MaxProposers = MaxProposers;
+	type VotingKeySize = MaxKeyLength;
 	type WeightInfo = ();
 }
 
@@ -303,8 +301,8 @@ pub fn mock_pub_key(id: u8) -> AccountId {
 	sr25519::Public::from_raw([id; 32])
 }
 
-pub fn mock_ecdsa_key(id: u8) -> Vec<u8> {
-	DKGEcdsaToEthereum::convert(mock_dkg_id(id))
+pub fn mock_ecdsa_address(id: u8) -> Vec<u8> {
+	DKGEcdsaToEthereumAddress::convert(mock_dkg_id(id))
 }
 
 pub(crate) fn roll_to(n: u64) {
@@ -422,27 +420,34 @@ pub fn new_test_ext_initialized(
 ) -> sp_io::TestExternalities {
 	let mut t = ExtBuilder::build();
 	t.execute_with(|| {
+		// Whitelist chain
+		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), src_chain_id));
+
+		let proposers = vec![
+			(mock_pub_key(PROPOSER_A), mock_ecdsa_address(PROPOSER_A)),
+			(mock_pub_key(PROPOSER_B), mock_ecdsa_address(PROPOSER_B)),
+			(mock_pub_key(PROPOSER_C), mock_ecdsa_address(PROPOSER_C)),
+		];
+		let bounded_proposers: BoundedVec<AccountId, MaxProposers> = proposers
+			.iter()
+			.map(|x| x.0)
+			.collect::<Vec<AccountId>>()
+			.try_into()
+			.expect("Too many proposers");
+		Proposers::<Test>::put(bounded_proposers);
+		let bounded_external_accounts: VoterList<Test> = proposers
+			.iter()
+			.map(|x| (x.0, x.1.clone().try_into().expect("Key size too large")))
+			.collect::<Vec<(AccountId, BoundedVec<u8, MaxKeyLength>)>>()
+			.try_into()
+			.expect("Too many proposers");
+		VotingKeys::<Test>::put(bounded_external_accounts);
+		ProposerCount::<Test>::put(3);
+
 		// Set and check threshold
 		assert_ok!(DKGProposals::set_threshold(RuntimeOrigin::root(), TEST_THRESHOLD));
 		assert_eq!(DKGProposals::proposer_threshold(), TEST_THRESHOLD);
-		// Add proposers
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_A),
-			mock_ecdsa_key(PROPOSER_A)
-		));
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_B),
-			mock_ecdsa_key(PROPOSER_B)
-		));
-		assert_ok!(DKGProposals::add_proposer(
-			RuntimeOrigin::root(),
-			mock_pub_key(PROPOSER_C),
-			mock_ecdsa_key(PROPOSER_C)
-		));
-		// Whitelist chain
-		assert_ok!(DKGProposals::whitelist_chain(RuntimeOrigin::root(), src_chain_id));
+
 		// Set and check resource ID mapped to some junk data
 		assert_ok!(DKGProposals::set_resource(RuntimeOrigin::root(), r_id, resource));
 		assert!(DKGProposals::resource_exists(r_id), "{}", true);

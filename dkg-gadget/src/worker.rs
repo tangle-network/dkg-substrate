@@ -41,13 +41,12 @@ use std::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use dkg_primitives::{
-	types::{
-		DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SessionId, SignedDKGMessage,
-	},
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage},
 	AuthoritySetId, DKGReport, MisbehaviourType,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
+	gossip_messages::MisbehaviourMessage,
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
 	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
@@ -130,10 +129,10 @@ where
 	/// Queued validator set
 	pub queued_validator_set: Shared<AuthoritySet<Public, MaxAuthorities>>,
 	/// Tracking for the broadcasted public keys and signatures
-	pub aggregated_public_keys: Shared<HashMap<SessionId, AggregatedPublicKeys>>,
+	pub aggregated_public_keys: Shared<AggregatedPublicKeysAndSigs>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
-	pub misbehaviour_tx: Option<UnboundedSender<DKGMisbehaviourMessage>>,
+	pub misbehaviour_tx: Option<UnboundedSender<MisbehaviourMessage>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
 	/// For transmitting errors from parallel threads to the DKGWorker
@@ -193,6 +192,8 @@ where
 		}
 	}
 }
+
+pub type AggregatedPublicKeysAndSigs = HashMap<SessionId, AggregatedPublicKeys>;
 
 pub type AggregatedMisbehaviourReportStore = HashMap<
 	(MisbehaviourType, SessionId, AuthorityId),
@@ -927,15 +928,15 @@ where
 			.info(format!("Processing incoming DKG message: {:?}", dkg_msg.msg.session_id,));
 
 		match &dkg_msg.msg.payload {
-			DKGMsgPayload::Keygen(_) => {
+			NetworkMsgPayload::Keygen(_) => {
 				self.keygen_manager.deliver_message(dkg_msg);
 				Ok(())
 			},
-			DKGMsgPayload::Offline(..) | DKGMsgPayload::Vote(..) => {
+			NetworkMsgPayload::Offline(..) | NetworkMsgPayload::Vote(..) => {
 				self.signing_manager.deliver_message(dkg_msg);
 				Ok(())
 			},
-			DKGMsgPayload::PublicKeyBroadcast(_) => {
+			NetworkMsgPayload::PublicKeyBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
 					Ok(dkg_msg) => {
 						match handle_public_key_broadcast(self, dkg_msg).await {
@@ -952,14 +953,14 @@ where
 				}
 				Ok(())
 			},
-			DKGMsgPayload::MisbehaviourBroadcast(_) => {
+			NetworkMsgPayload::MisbehaviourBroadcast(_) => {
 				match self.verify_signature_against_authorities(dkg_msg).await {
 					Ok(dkg_msg) => {
 						match handle_misbehaviour_report(self, dkg_msg).await {
 							Ok(()) => (),
-							Err(err) => self
-								.logger
-								.error(format!("🕸️  Error while handling DKG message {err:?}")),
+							Err(err) => self.logger.error(format!(
+								"🕸️  Error while handling misbehaviour message {err:?}"
+							)),
 						};
 					},
 
@@ -992,7 +993,7 @@ where
 		};
 
 		let misbehaviour_msg =
-			DKGMisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
+			MisbehaviourMessage { misbehaviour_type, session_id, offender, signature: vec![] };
 		let gossip = gossip_misbehaviour_report(self, misbehaviour_msg).await;
 		if gossip.is_err() {
 			self.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
@@ -1206,7 +1207,7 @@ where
 
 	fn spawn_misbehaviour_report_task(
 		&self,
-		mut misbehaviour_rx: UnboundedReceiver<DKGMisbehaviourMessage>,
+		mut misbehaviour_rx: UnboundedReceiver<MisbehaviourMessage>,
 	) -> tokio::task::JoinHandle<()> {
 		let self_ = self.clone();
 		tokio::spawn(async move {

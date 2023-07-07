@@ -526,8 +526,8 @@ declare module '@polkadot/types/lookup' {
   interface DkgRuntimePrimitivesProposalDkgPayloadKey extends Enum {
     readonly isEvmProposal: boolean;
     readonly asEvmProposal: u32;
-    readonly isRefreshVote: boolean;
-    readonly asRefreshVote: u32;
+    readonly isRefreshProposal: boolean;
+    readonly asRefreshProposal: u32;
     readonly isProposerSetUpdateProposal: boolean;
     readonly asProposerSetUpdateProposal: u32;
     readonly isAnchorCreateProposal: boolean;
@@ -554,7 +554,7 @@ declare module '@polkadot/types/lookup' {
     readonly asSetTreasuryHandlerProposal: u32;
     readonly isFeeRecipientUpdateProposal: boolean;
     readonly asFeeRecipientUpdateProposal: u32;
-    readonly type: 'EvmProposal' | 'RefreshVote' | 'ProposerSetUpdateProposal' | 'AnchorCreateProposal' | 'AnchorUpdateProposal' | 'TokenAddProposal' | 'TokenRemoveProposal' | 'WrappingFeeUpdateProposal' | 'ResourceIdUpdateProposal' | 'RescueTokensProposal' | 'MaxDepositLimitUpdateProposal' | 'MinWithdrawalLimitUpdateProposal' | 'SetVerifierProposal' | 'SetTreasuryHandlerProposal' | 'FeeRecipientUpdateProposal';
+    readonly type: 'EvmProposal' | 'RefreshProposal' | 'ProposerSetUpdateProposal' | 'AnchorCreateProposal' | 'AnchorUpdateProposal' | 'TokenAddProposal' | 'TokenRemoveProposal' | 'WrappingFeeUpdateProposal' | 'ResourceIdUpdateProposal' | 'RescueTokensProposal' | 'MaxDepositLimitUpdateProposal' | 'MinWithdrawalLimitUpdateProposal' | 'SetVerifierProposal' | 'SetTreasuryHandlerProposal' | 'FeeRecipientUpdateProposal';
   }
 
   /** @name PalletTransactionPaymentEvent (62) */

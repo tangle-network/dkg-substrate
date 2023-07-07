@@ -55,8 +55,6 @@
    the DKG protocol.
  - `submit_next_public_key`: Allows submitting of the next public key by the next authorities of
    the DKG protocol.
- - `submit_public_key_signature`: Allows submitting of the signature of the next public key by
-   the active DKG key for eventual rotation.
 
  The refresh process is initiated `T::RefreshDelay` into each session. A RefreshProposal is
  created and sent directly to the `pallet-dkg-proposal-handler` for inclusion into the unsigned

@@ -14,7 +14,7 @@
 
 use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
 use atomic::Atomic;
-use dkg_primitives::types::{DKGError, DKGMsgPayload, SessionId, SignedDKGMessage};
+use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -224,7 +224,7 @@ impl<C> AsyncProtocolRemote<C> {
 		let can_deliver =
 			status != MetaHandlerStatus::Complete && status != MetaHandlerStatus::Terminated;
 		if can_deliver {
-			if matches!(msg.msg.payload, DKGMsgPayload::Vote(..)) {
+			if matches!(msg.msg.payload, NetworkMsgPayload::Vote(..)) {
 				self.tx_voting.send(msg)
 			} else {
 				self.tx_keygen_signing.send(msg)

@@ -19,12 +19,10 @@ use crate::{
 	Client,
 };
 use codec::Encode;
-use dkg_primitives::types::{
-	DKGError, DKGMessage, DKGMisbehaviourMessage, DKGMsgPayload, SignedDKGMessage,
-};
+use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload, SignedDKGMessage};
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, AggregatedMisbehaviourReports, DKGApi, MaxAuthorities, MaxProposalLength,
-	MaxReporters, MaxSignatureLength, MisbehaviourType,
+	crypto::AuthorityId, gossip_messages::MisbehaviourMessage, AggregatedMisbehaviourReports,
+	DKGApi, MaxAuthorities, MaxProposalLength, MaxReporters, MaxSignatureLength, MisbehaviourType,
 };
 use sc_client_api::Backend;
 use sp_runtime::traits::{Block, Get, NumberFor};
@@ -52,7 +50,7 @@ where
 		return Err(DKGError::NoAuthorityAccounts)
 	}
 
-	if let DKGMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
+	if let NetworkMsgPayload::MisbehaviourBroadcast(msg) = dkg_msg.payload {
 		dkg_worker.logger.debug("Received misbehaviour report".to_string());
 
 		let is_main_round = {
@@ -116,7 +114,7 @@ where
 
 pub(crate) async fn gossip_misbehaviour_report<B, BE, C, GE>(
 	dkg_worker: &DKGWorker<B, BE, C, GE>,
-	report: DKGMisbehaviourMessage,
+	report: MisbehaviourMessage,
 ) -> Result<(), DKGError>
 where
 	B: Block,
@@ -140,7 +138,7 @@ where
 
 	if let Ok(signature) = dkg_worker.key_store.sign(&public.clone(), &payload) {
 		let encoded_signature = signature.encode();
-		let payload = DKGMsgPayload::MisbehaviourBroadcast(DKGMisbehaviourMessage {
+		let payload = NetworkMsgPayload::MisbehaviourBroadcast(MisbehaviourMessage {
 			signature: encoded_signature.clone(),
 			..report.clone()
 		});

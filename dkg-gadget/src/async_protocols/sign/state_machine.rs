@@ -60,7 +60,7 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 
 		// Send the payload to the appropriate AsyncProtocols
 		match payload {
-			DKGMsgPayload::Offline(msg) => {
+			NetworkMsgPayload::Offline(msg) => {
 				logger.checkpoint_message_raw(&payload_raw, "CP-2.7-incoming");
 				let message: Msg<OfflineProtocolMessage> =
 					match serde_json::from_slice(msg.offline_msg.as_slice()) {

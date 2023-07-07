@@ -1,6 +1,8 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
-use dkg_runtime_primitives::{crypto::AuthorityId, MaxProposalLength, UnsignedProposal};
+use dkg_runtime_primitives::{
+	crypto::AuthorityId, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+};
 use hash_db::HashDB;
 use parking_lot::RwLock;
 use sp_api::*;
@@ -27,8 +29,7 @@ pub struct DummyApiInner {
 	#[allow(dead_code)]
 	pub signing_n: u16,
 	// maps: block number => list of authorities for that block
-	pub authority_sets:
-		HashMap<u64, BoundedVec<AuthorityId, dkg_runtime_primitives::CustomU32Getter<100>>>,
+	pub authority_sets: HashMap<u64, BoundedVec<AuthorityId, MaxAuthorities>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
 	pub unsigned_proposals: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
 	pub should_execute_keygen: bool,
@@ -541,7 +542,7 @@ impl
 		AuthorityId,
 		sp_api::NumberFor<TestBlock>,
 		MaxProposalLength,
-		dkg_runtime_primitives::CustomU32Getter<100>,
+		MaxAuthorities,
 	> for DummyApi
 {
 	fn __runtime_api_internal_call_api_at(
@@ -558,12 +559,7 @@ impl
 	fn authority_set(
 		&self,
 		block: H256,
-	) -> ApiResult<
-		dkg_runtime_primitives::AuthoritySet<
-			AuthorityId,
-			dkg_runtime_primitives::CustomU32Getter<100>,
-		>,
-	> {
+	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
 		let number = self.block_id_to_session_id(&block);
 		self.logger.info(format!("Getting authority set for session_id = {number}"));
 		let authorities = self.inner.read().authority_sets.get(&number).unwrap().clone();
@@ -575,12 +571,7 @@ impl
 	fn queued_authority_set(
 		&self,
 		id: H256,
-	) -> ApiResult<
-		dkg_runtime_primitives::AuthoritySet<
-			AuthorityId,
-			dkg_runtime_primitives::CustomU32Getter<100>,
-		>,
-	> {
+	) -> ApiResult<dkg_runtime_primitives::AuthoritySet<AuthorityId, MaxAuthorities>> {
 		let next_session_id = self.block_id_to_session_id(&id) + 1;
 		self.logger
 			.info(format!("Getting queued authority set for session_id = {next_session_id}"));
@@ -681,15 +672,6 @@ impl
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 
-	fn get_max_extrinsic_delay(
-		&self,
-		_: H256,
-		_block_number: BlockNumber,
-	) -> ApiResult<BlockNumber> {
-		self.logger.error("unimplemented get_max_extrinsic_delay".to_string());
-		todo!()
-	}
-
 	fn get_authority_accounts(&self, _: H256) -> ApiResult<(Vec<AccountId>, Vec<AccountId>)> {
 		self.logger.error("unimplemented get_authority_accounts".to_string());
 		todo!()
@@ -720,5 +702,9 @@ impl
 
 	fn should_execute_new_keygen(&self, _: H256) -> ApiResult<(bool, bool)> {
 		Ok((self.inner.read().should_execute_keygen, false))
+	}
+
+	fn should_submit_proposer_vote(&self, _: H256) -> ApiResult<bool> {
+		Ok(true)
 	}
 }

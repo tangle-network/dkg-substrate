@@ -13,9 +13,8 @@
 // limitations under the License.
 //
 #![allow(clippy::unwrap_used)]
-use super::mock::DKGProposalHandler;
-use crate as pallet_dkg_proposal_handler;
-use crate::{mock::*, Error, ProposalOf, SignedProposalBatchOf, StoredUnsignedProposalBatchOf};
+
+use crate::{mock::*, Error, UnsignedProposalQueue};
 use codec::Encode;
 use dkg_runtime_primitives::{
 	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalAction, ProposalHandlerTrait,
@@ -27,41 +26,67 @@ use frame_support::{
 	weights::constants::RocksDbWeight,
 	BoundedVec,
 };
-use sp_core::sr25519;
-use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
+use sp_runtime::{
+	offchain::storage::{StorageRetrievalError, StorageValueRef},
+	BoundedVec,
+};
 use sp_std::vec::Vec;
 
-use dkg_runtime_primitives::ProposalHeader;
+use super::mock::DKGProposalHandler;
+use dkg_runtime_primitives::{
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, OffchainSignedProposals,
+	ProposalHandlerTrait, ProposalHeader, TransactionV2, TypedChainId,
+};
+use sp_core::sr25519;
 use sp_runtime::offchain::storage::MutateStorageError;
 use webb_proposals::{Proposal, ProposalKind};
 
 // *** Utility ***
 
-fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
+fn add_proposal_to_offchain_storage(
+	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
+) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<Vec<SignedProposalBatchOf<Test>>, MutateStorageError<_, ()>> =
-		proposals_ref.mutate(
-			|val: Result<Option<Vec<SignedProposalBatchOf<Test>>>, StorageRetrievalError>| match val
-			{
-				Ok(Some(mut ser_props)) => {
-					ser_props.push(prop);
-					Ok(ser_props)
-				},
-				_ => {
-					let prop_wrapper: Vec<SignedProposalBatchOf<Test>> = vec![prop];
-					Ok(prop_wrapper)
-				},
+	let update_res: Result<
+		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
+		MutateStorageError<_, ()>,
+	> = proposals_ref.mutate(
+		|val: Result<
+			Option<
+				OffchainSignedProposals<
+					u64,
+					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
+				>,
+			>,
+			StorageRetrievalError,
+		>| match val {
+			Ok(Some(mut ser_props)) => {
+				ser_props.proposals.push((vec![prop], 0));
+				Ok(ser_props)
 			},
-		);
+			_ => {
+				let mut prop_wrapper = OffchainSignedProposals::<
+					u64,
+					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
+				>::default();
+				prop_wrapper.proposals.push((vec![prop], 0));
+				Ok(prop_wrapper)
+			},
+		},
+	);
 
 	assert_ok!(update_res);
 }
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<Vec<SignedProposalBatchOf<Test>>> =
-		proposals_ref.get::<Vec<SignedProposalBatchOf<Test>>>().unwrap();
+	let stored_props: Option<
+		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
+	> = proposals_ref
+		.get::<OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>>(
+		)
+		.unwrap();
 	assert!(stored_props.is_some(), "{}", true);
 	assert_eq!(stored_props.unwrap().len(), num);
 }
@@ -92,10 +117,11 @@ pub fn run_n_blocks(n: u64) -> u64 {
 #[test]
 fn handle_empty_proposal() {
 	execute_test_with(|| {
-		let prop: Vec<u8> = Vec::new();
-
 		assert_err!(
-			DKGProposalHandler::handle_unsigned_proposal(prop, ProposalAction::Sign(0)),
+			DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
+				kind: ProposalKind::AnchorUpdate,
+				data: BoundedVec::default(),
+			}),
 			crate::Error::<Test>::InvalidProposalBytesLength
 		);
 
@@ -141,39 +167,10 @@ fn handle_anchor_update_proposal_success() {
 			238, 94,
 		];
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(
-			proposal_raw.to_vec(),
-			ProposalAction::Sign(0)
-		));
-
-		let unsigned_proposal = Proposal::Unsigned {
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: proposal_raw.encode().try_into().unwrap(),
-		};
-
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1337),)
-				.unwrap()
-				.first()
-				.unwrap()
-				.proposal,
-			unsigned_proposal
-		);
-	})
-}
-
-#[test]
-fn should_handle_proposer_set_update_proposal_success() {
-	execute_test_with(|| {
-		let proposal_raw: [u8; 48] = [
-			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8,
-			9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 0, 0, 0, 1,
-		];
-
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
-			proposal_raw.to_vec(),
-			ProposalAction::Sign(0)
-		));
+			data: proposal_raw.to_vec().try_into().unwrap()
+		}));
 
 		let unsigned_proposal = Proposal::Unsigned {
 			kind: ProposalKind::ProposerSetUpdate,
@@ -391,15 +388,6 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 			[0x26, 0x57, 0x88, 0x01].into(),
 			1.into(),
 		),
-		TypedChainId::Substrate(_) => ProposalHeader::new(
-			[
-				1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0,
-				0, 0, 0, 1,
-			]
-			.into(),
-			[0x0, 0x0, 0x0, 0x0].into(),
-			1.into(),
-		),
 		_ => {
 			// Dummy Header
 			ProposalHeader::new(
@@ -416,9 +404,9 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 }
 
 pub fn make_proposal<const N: usize>(
-	prop: Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength>,
+	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
 	chain: TypedChainId,
-) -> Proposal<<Test as pallet_dkg_proposal_handler::Config>::MaxProposalLength> {
+) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
 	// Create the proposal Header
 	let header = make_header(chain);
 	let mut buf = vec![];
@@ -627,8 +615,22 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
+		assert!(
+			DKGProposalHandler::unsigned_proposals(
+				TypedChainId::Evm(1),
+				DKGPayloadKey::FeeRecipientUpdateProposal(1.into())
+			)
+			.is_some(),
+			"{}",
+			true
+		);
+	});
+}
 
-		// Substrate Tests
+#[test]
+fn expired_unsigned_proposals_are_removed() {
+	execute_test_with(|| {
+		// Submit one unsigned proposal
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -636,15 +638,12 @@ fn force_submit_should_work_with_valid_proposals() {
 					kind: ProposalKind::TokenAdd,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Substrate(0)
+				TypedChainId::Evm(0)
 			)
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(TypedChainId::Substrate(1),)
-				.unwrap()
-				.len() == 1
-		);
+		// lets time travel to 5 blocks later and submit another proposal
+		run_n_blocks(5);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -652,52 +651,20 @@ fn force_submit_should_work_with_valid_proposals() {
 					kind: ProposalKind::TokenRemove,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Substrate(0)
+				TypedChainId::Evm(0)
 			)
 		));
 
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<1>(
-				Proposal::Unsigned {
-					kind: ProposalKind::WrappingFeeUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
+		// sanity check
+		run_n_blocks(10);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 2);
 
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::AnchorCreate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
+		// time travel to a block after expiry period of first unsigned
+		run_n_blocks(11);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 1);
 
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<20>(
-				Proposal::Unsigned {
-					kind: ProposalKind::AnchorUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			make_proposal::<72>(
-				Proposal::Unsigned {
-					kind: ProposalKind::ResourceIdUpdate,
-					data: vec![].try_into().unwrap()
-				},
-				TypedChainId::Substrate(0)
-			)
-		));
-	});
+		// time travel to a block after expiry period of second unsigned
+		run_n_blocks(16);
+		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 0);
+	})
 }
