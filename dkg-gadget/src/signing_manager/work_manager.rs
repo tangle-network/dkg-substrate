@@ -12,6 +12,7 @@ use dkg_primitives::{
 use dkg_runtime_primitives::{associated_block_id_acceptable, SessionId};
 use parking_lot::RwLock;
 use sp_api::BlockT;
+use sp_arithmetic::traits::SaturatedConversion;
 use std::{
 	collections::{HashMap, HashSet, VecDeque},
 	hash::{Hash, Hasher},
@@ -172,15 +173,14 @@ impl<B: BlockT> WorkManager<B> {
 	}
 
 	pub fn poll(&self) {
-		// go through each task and see if it's done
-		// finally, see if we can start a new task
+		// Go through each task and see if it's done
 		let now = self.clock.get_latest_block_number();
 		let mut lock = self.inner.write();
 		let cur_count = lock.active_tasks.len();
 		lock.active_tasks.retain(|job| {
 			let is_stalled = job.handle.signing_has_stalled(now);
 			if is_stalled {
-				// if stalled, lets log the start and now blocks for logging purposes
+				// If stalled, lets log the start and now blocks for logging purposes
 				self.logger.info(format!(
 					"[worker] Job {:?} | Started at {:?} | Now {:?} | is stalled, shutting down",
 					hex::encode(job.task_hash),
@@ -188,9 +188,9 @@ impl<B: BlockT> WorkManager<B> {
 					now
 				));
 
-				// the task is stalled, lets be pedantic and shutdown
+				// The task is stalled, lets be pedantic and shutdown
 				let _ = job.handle.shutdown(ShutdownReason::Stalled);
-				// return false so that the proposals are released from the currently signing
+				// Return false so that the proposals are released from the currently signing
 				// proposals
 				return false
 			}
@@ -205,7 +205,7 @@ impl<B: BlockT> WorkManager<B> {
 			self.logger.info(format!("[worker] {} jobs dropped", cur_count - new_count));
 		}
 
-		// now, check to see if there is room to start a new task
+		// Now, check to see if there is room to start a new task
 		let tasks_to_start = self.max_tasks.saturating_sub(lock.active_tasks.len());
 		for _ in 0..tasks_to_start {
 			if let Some(job) = lock.enqueued_tasks.pop_front() {
@@ -213,6 +213,34 @@ impl<B: BlockT> WorkManager<B> {
 			} else {
 				break
 			}
+		}
+
+		// Next, remove any outdated enqueued messages to prevent RAM bloat
+		let mut to_remove = vec![];
+		for (hash, queue) in lock.enqueued_messages.iter_mut() {
+			let before = queue.len();
+			// Only keep the messages that are not outdated
+			queue.retain(|msg| {
+				associated_block_id_acceptable(now.saturated_into(), msg.msg.associated_block_id)
+			});
+			let after = queue.len();
+
+			if before != after {
+				self.logger.info(format!(
+					"[worker] Removed {} outdated enqueued messages from the queue for {:?}",
+					before - after,
+					hex::encode(*hash)
+				));
+			}
+
+			if queue.is_empty() {
+				to_remove.push(*hash);
+			}
+		}
+
+		// Finally, to prevent the existence of piling-up empty queues, remove them
+		for hash in to_remove {
+			lock.enqueued_messages.remove(&hash);
 		}
 	}
 
