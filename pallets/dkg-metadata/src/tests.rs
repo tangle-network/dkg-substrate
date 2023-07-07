@@ -217,7 +217,7 @@ fn misbehaviour_reports_submission_rejects_if_offender_not_authority() {
 			session_id,
 			offender,
 			reporters: reporters.clone().try_into().unwrap(),
-			signatures: signatures.try_into().unwrap(),
+			signatures,
 		};
 
 		assert_noop!(
@@ -294,7 +294,7 @@ fn keygen_misbehaviour_reports_work() {
 			session_id,
 			offender: offender.clone(),
 			reporters: reporters.clone().try_into().unwrap(),
-			signatures: signatures.try_into().unwrap(),
+			signatures,
 		};
 
 		assert_ok!(DKGMetadata::submit_misbehaviour_reports(
@@ -306,7 +306,7 @@ fn keygen_misbehaviour_reports_work() {
 		assert_last_event::<Test>(
 			Event::MisbehaviourReportsSubmitted {
 				misbehaviour_type,
-				reporters: reporters.clone().try_into().unwrap(),
+				reporters: reporters.clone(),
 				offender: offender.clone(),
 			}
 			.into(),
@@ -418,7 +418,7 @@ fn keygen_misbehaviour_reports_reduce_signature_threshold_if_needed() {
 				session_id,
 				offender: offender.clone(),
 				reporters: reporters.clone().try_into().unwrap(),
-				signatures: signatures.try_into().unwrap(),
+				signatures,
 			};
 
 			assert_ok!(DKGMetadata::submit_misbehaviour_reports(
@@ -430,7 +430,7 @@ fn keygen_misbehaviour_reports_reduce_signature_threshold_if_needed() {
 			assert_last_event::<Test>(
 				Event::MisbehaviourReportsSubmitted {
 					misbehaviour_type,
-					reporters: reporters.clone().try_into().unwrap(),
+					reporters: reporters.clone(),
 					offender: offender.clone(),
 				}
 				.into(),
@@ -533,7 +533,7 @@ fn keygen_misbehaviour_reports_fail_if_not_threshold_plus_1() {
 			session_id,
 			offender,
 			reporters: reporters.clone().try_into().unwrap(),
-			signatures: signatures.try_into().unwrap(),
+			signatures,
 		};
 
 		// should not be accepted since we did not have t+1 signers
@@ -612,7 +612,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_if_authorities_available(
 			session_id,
 			offender: offender.clone(),
 			reporters: reporters.clone().try_into().unwrap(),
-			signatures: signatures.try_into().unwrap(),
+			signatures,
 		};
 
 		assert_ok!(DKGMetadata::submit_misbehaviour_reports(
@@ -624,7 +624,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_if_authorities_available(
 		assert_last_event::<Test>(
 			Event::MisbehaviourReportsSubmitted {
 				misbehaviour_type,
-				reporters: reporters.clone().try_into().unwrap(),
+				reporters: reporters.clone(),
 				offender: offender.clone(),
 			}
 			.into(),
@@ -716,7 +716,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 				session_id,
 				offender: offender.clone(),
 				reporters: reporters.clone().try_into().unwrap(),
-				signatures: signatures.try_into().unwrap(),
+				signatures,
 			};
 
 			assert_ok!(DKGMetadata::submit_misbehaviour_reports(
@@ -728,7 +728,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 			assert_last_event::<Test>(
 				Event::MisbehaviourReportsSubmitted {
 					misbehaviour_type,
-					reporters: reporters.clone().try_into().unwrap(),
+					reporters: reporters.clone(),
 					offender: offender.clone(),
 				}
 				.into(),
@@ -793,7 +793,7 @@ fn keygen_misbehaviour_reports_does_not_drop_threshold_below_2() {
 			session_id,
 			offender,
 			reporters: reporters.clone().try_into().unwrap(),
-			signatures: signatures.try_into().unwrap(),
+			signatures,
 		};
 
 		assert_noop!(
