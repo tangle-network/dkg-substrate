@@ -1792,7 +1792,6 @@ impl<T: Config> Pallet<T> {
 		let v = if forced {
 			// If forced we supply an empty signature.
 			next_pub_key.zip(Some(Default::default()))
-
 		} else {
 			next_pub_key.zip(next_pub_key_signature)
 		};
