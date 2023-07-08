@@ -1290,6 +1290,9 @@ pub mod pallet {
 			let next_authorities = NextAuthorities::<T>::get();
 			let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
 			let next_pub_key = Self::next_dkg_public_key();
+			// Clear the `PendingRefreshProposal` and `CurrentRefreshProposal` items.
+			PendingRefreshProposal::<T>::kill();
+			CurrentRefreshProposal::<T>::kill();
 			// Force rotate the next authorities into the active and next set.
 			Self::change_authorities(
 				next_authorities.clone().into(),
@@ -1787,8 +1790,9 @@ impl<T: Config> Pallet<T> {
 		NextBestAuthorities::<T>::put(bounded_authorities);
 		// Switch on forced for forceful rotations
 		let v = if forced {
-			// If forced we supply an empty signature
+			// If forced we supply an empty signature.
 			next_pub_key.zip(Some(Default::default()))
+
 		} else {
 			next_pub_key.zip(next_pub_key_signature)
 		};
@@ -1843,11 +1847,10 @@ impl<T: Config> Pallet<T> {
 			// Emit events so other front-end know that.
 			let compressed_pub_key = next_pub_key.1;
 			Self::deposit_event(Event::PublicKeyChanged {
-				compressed_pub_key: compressed_pub_key.clone().into(),
+				compressed_pub_key: compressed_pub_key.into(),
 			});
 
-			// At this point the refresh proposal should exist unless
-			// we are in a forced rotation.
+			// At this point the refresh proposal should ALWAYS exist
 			if let Some(curr_prop) = CurrentRefreshProposal::<T>::get() {
 				Self::deposit_event(Event::PublicKeySignatureChanged {
 					signature: next_pub_key_signature.into(),
