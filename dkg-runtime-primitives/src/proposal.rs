@@ -25,7 +25,7 @@ pub use webb_proposals::{
 	TypedChainId,
 };
 
-#[derive(Clone, RuntimeDebug, scale_info::TypeInfo)]
+#[derive(Clone, RuntimeDebug, PartialEq, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
 pub struct RefreshProposal {
 	/// The merkle root of the voters (validators)
 	pub voter_merkle_root: [u8; 32],
