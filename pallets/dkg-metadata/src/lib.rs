@@ -1846,7 +1846,8 @@ impl<T: Config> Pallet<T> {
 				compressed_pub_key: compressed_pub_key.clone().into(),
 			});
 
-			// At this point the refresh proposal should ALWAYS exist.
+			// At this point the refresh proposal should exist unless
+			// we are in a forced rotation.
 			if let Some(curr_prop) = CurrentRefreshProposal::<T>::get() {
 				Self::deposit_event(Event::PublicKeySignatureChanged {
 					signature: next_pub_key_signature.into(),
