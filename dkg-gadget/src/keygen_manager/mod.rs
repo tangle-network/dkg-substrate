@@ -69,6 +69,8 @@ pub enum KeygenState {
 
 /// only 1 task at a time may run for keygen
 const MAX_RUNNING_TASKS: usize = 1;
+/// There should never be any job enqueueing for keygen
+const MAX_ENQUEUED_TASKS: usize = 0;
 
 impl<B, BE, C, GE> KeygenManager<B, BE, C, GE>
 where
@@ -84,6 +86,7 @@ where
 				logger,
 				clock,
 				MAX_RUNNING_TASKS,
+				MAX_ENQUEUED_TASKS,
 				PollMethod::Manual,
 			),
 			active_keygen_retry_id: Arc::new(AtomicUsize::new(0)),
@@ -479,7 +482,7 @@ where
 			handle.session_id,
 			self.active_keygen_retry_id.load(Ordering::Relaxed),
 		);
-		self.work_manager.push_task(task_hash, handle, task)?;
+		self.work_manager.push_task(task_hash, false, handle, task)?;
 		// poll to start the task
 		self.work_manager.poll();
 		Ok(())
