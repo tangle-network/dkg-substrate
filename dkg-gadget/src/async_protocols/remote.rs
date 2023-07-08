@@ -46,6 +46,16 @@ type MessageReceiverHandle =
 
 impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 	fn clone(&self) -> Self {
+		let strong_count_next = Arc::strong_count(&self.status) + 1;
+		let status = self.get_status();
+		debug_log_cloning_and_dropping(
+			&self.logger,
+			"CLONE",
+			strong_count_next,
+			self.session_id,
+			status,
+		);
+
 		Self {
 			status: self.status.clone(),
 			tx_keygen_signing: self.tx_keygen_signing.clone(),
@@ -300,6 +310,16 @@ impl<C> AsyncProtocolRemote<C> {
 
 impl<C> Drop for AsyncProtocolRemote<C> {
 	fn drop(&mut self) {
+		let strong_count_next = Arc::strong_count(&self.status).saturating_sub(1);
+		let status = self.get_status();
+		debug_log_cloning_and_dropping(
+			&self.logger,
+			"DROP",
+			strong_count_next,
+			self.session_id,
+			status,
+		);
+
 		if Arc::strong_count(&self.status) == 1 || self.is_primary_remote {
 			if self.get_status() != MetaHandlerStatus::Complete {
 				self.logger.info(format!(
@@ -317,4 +337,16 @@ impl<C> Drop for AsyncProtocolRemote<C> {
 			let _ = self.shutdown(ShutdownReason::DropCode);
 		}
 	}
+}
+
+fn debug_log_cloning_and_dropping(
+	logger: &DebugLogger,
+	prepend_tag: &str,
+	next_arc_strong_count: usize,
+	session_id: SessionId,
+	status: MetaHandlerStatus,
+) {
+	logger.debug(format!(
+		"{prepend_tag}: next_arc_strong_count: {next_arc_strong_count}, session_id: {session_id} | status: {status:?}",
+	));
 }

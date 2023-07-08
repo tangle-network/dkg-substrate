@@ -23,6 +23,7 @@ use std::{
 	pin::Pin,
 	sync::atomic::{AtomicBool, Ordering},
 };
+use webb_proposals::TypedChainId;
 
 /// For balancing the amount of work done by each node
 pub mod work_manager;
@@ -55,6 +56,7 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 
 // the maximum number of tasks that the work manager tries to assign
 const MAX_RUNNING_TASKS: usize = 4;
+const MAX_ENQUEUED_TASKS: usize = 20;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
 
@@ -72,6 +74,7 @@ where
 				logger,
 				clock,
 				MAX_RUNNING_TASKS,
+				MAX_ENQUEUED_TASKS,
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
 			lock: Arc::new(AtomicBool::new(false)),
@@ -182,6 +185,14 @@ where
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
 		for unsigned_proposal in unsigned_proposals {
+			let typed_chain_id = unsigned_proposal.0.typed_chain_id;
+			if !self.work_manager.can_submit_more_tasks() {
+				dkg_worker.logger.info(
+					"Will not submit more unsigned proposals because the work manager is full",
+				);
+				break
+			}
+
 			/*
 			   create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
 			   you take this seed and use it as a seed to random number generator.
@@ -226,8 +237,16 @@ where
 						*header.number(),
 					) {
 						Ok((handle, task)) => {
-							// send task to the work manager
-							self.work_manager.push_task(unsigned_proposal_hash, handle, task)?;
+							// Send task to the work manager. Force start if the type chain ID is
+							// None, implying this is a proposal needed for rotating sessions and
+							// thus a priority
+							let force_start = typed_chain_id == TypedChainId::None;
+							self.work_manager.push_task(
+								unsigned_proposal_hash,
+								force_start,
+								handle,
+								task,
+							)?;
 						},
 						Err(err) => {
 							dkg_worker

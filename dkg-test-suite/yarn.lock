@@ -3692,8 +3692,10 @@
     "@webb-tools/contracts" "^0.5.40"
     ethers "5.7.0"
 
-"@webb-tools/dkg-substrate-types@0.0.5", "@webb-tools/dkg-substrate-types@file:../types":
-  version "0.0.6"
+"@webb-tools/dkg-substrate-types@0.0.5", "@webb-tools/dkg-substrate-types@^0.0.6":
+  version "0.0.5"
+  resolved "https://registry.yarnpkg.com/@webb-tools/dkg-substrate-types/-/dkg-substrate-types-0.0.5.tgz#d6178d5d9feca39a1f0b56f42295bcd88d343088"
+  integrity sha512-WMVqLZ7OPkpoel7jSqBXFdijl15+D3tSs+OG98a5jf5DrvgwEFaC3QrWmD7OWfdfaRR3gpoy6WmEesBpozprsQ==
   dependencies:
     "@babel/cli" "^7.20.7"
     "@babel/core" "^7.20.12"
