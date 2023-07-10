@@ -9,10 +9,9 @@ import type { ApiTypes, AugmentedQuery, QueryableStorageEntry } from '@polkadot/
 import type { Data } from '@polkadot/types';
 import type { Bytes, Option, Vec, WrapperOpaque, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, ITuple } from '@polkadot/types-codec/types';
-import type { AccountId32, H256, Perbill, Percent, Permill } from '@polkadot/types/interfaces/runtime';
+import type { AccountId32, H256, Perbill, Percent } from '@polkadot/types/interfaces/runtime';
 import type { Observable } from '@polkadot/types/types';
-import type {DkgRuntimePrimitivesProposalStoredUnsignedProposal,PalletBridgeRegistryBridgeMetadata,PalletBalancesBalanceLock,PalletElectionProviderMultiPhaseSignedSignedSubmission, PalletNominationPoolsSubPools,PalletIdentityRegistrarInfo,PalletImOnlineBoundedOpaqueNetworkState,PalletDkgMetadataRoundMetadata,PalletBagsListListBag,FrameSupportDispatchDispatchInfo,PalletBagsListListNode, PalletBalancesReserveData,PalletBalancesAccountData, DkgRuntimePrimitivesMisbehaviourType, PalletDkgProposalsProposalVotes, PalletElectionProviderMultiPhasePhase, PalletElectionProviderMultiPhaseReadySolution, PalletGrandpaStoredState, PalletIdentityRegistration, PalletGrandpaStoredPendingChange, PalletElectionProviderMultiPhaseRoundSnapshot, PalletImOnlineSr25519AppSr25519Public, PalletNominationPoolsPoolMember, PalletNominationPoolsBondedPoolInner, PalletNominationPoolsRewardPool, SpCoreCryptoKeyTypeId, PalletStakingActiveEraInfo, PalletStakingEraRewardPoints, PalletStakingExposure, PalletStakingForcing, PalletStakingStakingLedger, PalletStakingNominations, PalletStakingSlashingSlashingSpans, FrameSystemAccountInfo, FrameSystemPhase, PalletTransactionPaymentReleases,PalletStakingSlashingSpanRecord, SpConsensusAuraSr25519AppSr25519Public, FrameSystemLastRuntimeUpgradeInfo,PalletStakingUnappliedSlash,  FrameSystemEventRecord, SpRuntimeDigest, FrameSupportDispatchPerDispatchClassWeight, DkgRuntimePrimitivesCryptoPublic,DkgRuntimePrimitivesAggregatedMisbehaviourReports,DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal,WebbProposalsHeaderResourceId, WebbProposalsHeaderTypedChainId,SpNposElectionsSupport,SpNposElectionsElectionScore,PalletElectionProviderMultiPhaseRawSolution,SpWeightsWeightV2Weight,PalletNominationPoolsBondExtra,PalletIdentityJudgement,SpCoreVoid,SpFinalityGrandpaEquivocationProof,PalletElectionProviderMultiPhaseSolutionOrSnapshotSize,PalletImOnlineHeartbeat,PalletIdentityIdentityInfo,PalletIdentityBitFlags,PalletImOnlineSr25519AppSr25519Signature, PalletStakingValidatorPrefs,PalletNominationPoolsClaimPermission,PalletNominationPoolsConfigOpAccountId32,PalletNominationPoolsPoolState, PalletStakingPalletConfigOpPerbill,PalletStakingRewardDestination, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpPercent, PalletNominationPoolsConfigOpU32, PalletNominationPoolsConfigOpU128} from "./types-lookup";
-
+import { SpConsensusAuraSr25519AppSr25519Public, PalletBagsListListBag, PalletBagsListListNode, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesReserveData, PalletBridgeRegistryBridgeMetadata, WebbProposalsHeaderResourceId, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesProposalRefreshProposal, PalletDkgMetadataRoundMetadata, DkgRuntimePrimitivesMisbehaviourType, DkgRuntimePrimitivesAggregatedMisbehaviourReports, WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal, DkgRuntimePrimitivesProposalStoredUnsignedProposal, PalletDkgProposalsProposalVotes, PalletElectionProviderMultiPhasePhase, SpNposElectionsElectionScore, PalletElectionProviderMultiPhaseReadySolution, PalletElectionProviderMultiPhaseSignedSignedSubmission, PalletElectionProviderMultiPhaseRoundSnapshot, PalletElectionProviderMultiPhaseSolutionOrSnapshotSize, PalletGrandpaStoredPendingChange, PalletGrandpaStoredState, PalletIdentityRegistration, PalletIdentityRegistrarInfo, PalletImOnlineSr25519AppSr25519Public, PalletImOnlineBoundedOpaqueNetworkState, PalletNominationPoolsBondedPoolInner, PalletNominationPoolsClaimPermission, PalletNominationPoolsPoolMember, PalletNominationPoolsRewardPool, PalletNominationPoolsSubPools, SpCoreCryptoKeyTypeId, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingActiveEraInfo, PalletStakingEraRewardPoints, PalletStakingExposure, PalletStakingValidatorPrefs, PalletStakingForcing, PalletStakingStakingLedger, PalletStakingNominations, PalletStakingRewardDestination, PalletStakingSlashingSlashingSpans, PalletStakingSlashingSpanRecord, PalletStakingUnappliedSlash, FrameSystemAccountInfo, FrameSupportDispatchPerDispatchClassWeight, SpRuntimeDigest, FrameSystemEventRecord, FrameSystemPhase, FrameSystemLastRuntimeUpgradeInfo, PalletTransactionPaymentReleases } from '@polkadot/types/lookup';
 
 export type __AugmentedQuery<ApiType extends ApiTypes> = AugmentedQuery<ApiType, () => unknown>;
 export type __QueryableStorageEntry<ApiType extends ApiTypes> = QueryableStorageEntry<ApiType>;
@@ -151,6 +150,10 @@ declare module '@polkadot/api-base/types/storage' {
        **/
       currentAuthoritiesAccounts: AugmentedQuery<ApiType, () => Observable<Vec<AccountId32>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
+       * The current refresh proposal signed and ready to process
+       **/
+      currentRefreshProposal: AugmentedQuery<ApiType, () => Observable<Option<DkgRuntimePrimitivesProposalRefreshProposal>>, []> & QueryableStorageEntry<ApiType, []>;
+      /**
        * Holds active public key for ongoing session
        **/
       dkgPublicKey: AugmentedQuery<ApiType, () => Observable<ITuple<[u64, Bytes]>>, []> & QueryableStorageEntry<ApiType, []>;
@@ -159,7 +162,7 @@ declare module '@polkadot/api-base/types/storage' {
        **/
       dkgPublicKeySignature: AugmentedQuery<ApiType, () => Observable<Bytes>, []> & QueryableStorageEntry<ApiType, []>;
       /**
-       * Tracks current proposer set
+       * Tracks current voter set
        **/
       historicalRounds: AugmentedQuery<ApiType, (arg: u64 | AnyNumber | Uint8Array) => Observable<PalletDkgMetadataRoundMetadata>, [u64]> & QueryableStorageEntry<ApiType, [u64]>;
       /**
@@ -229,6 +232,10 @@ declare module '@polkadot/api-base/types/storage' {
        **/
       pendingKeygenThreshold: AugmentedQuery<ApiType, () => Observable<u16>, []> & QueryableStorageEntry<ApiType, []>;
       /**
+       * The pending refresh proposal waiting for signature
+       **/
+      pendingRefreshProposal: AugmentedQuery<ApiType, () => Observable<Option<DkgRuntimePrimitivesProposalRefreshProposal>>, []> & QueryableStorageEntry<ApiType, []>;
+      /**
        * The pending signature threshold (i.e. the `t` in t-of-n)
        **/
       pendingSignatureThreshold: AugmentedQuery<ApiType, () => Observable<u16>, []> & QueryableStorageEntry<ApiType, []>;
@@ -236,10 +243,6 @@ declare module '@polkadot/api-base/types/storage' {
        * Holds public key for immediate past session
        **/
       previousPublicKey: AugmentedQuery<ApiType, () => Observable<ITuple<[u64, Bytes]>>, []> & QueryableStorageEntry<ApiType, []>;
-      /**
-       * Session progress required to kickstart refresh process
-       **/
-      refreshDelay: AugmentedQuery<ApiType, () => Observable<Permill>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * Check if there is a refresh in progress.
        **/
@@ -252,6 +255,10 @@ declare module '@polkadot/api-base/types/storage' {
        * Should we start a new Keygen
        **/
       shouldExecuteNewKeygen: AugmentedQuery<ApiType, () => Observable<ITuple<[bool, bool]>>, []> & QueryableStorageEntry<ApiType, []>;
+      /**
+       * Should we submit a vote for the new DKG governor if we are a proposer
+       **/
+      shouldSubmitProposerVote: AugmentedQuery<ApiType, () => Observable<bool>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * The current signature threshold (i.e. the `t` in t-of-n)
        **/
@@ -273,11 +280,11 @@ declare module '@polkadot/api-base/types/storage' {
       /**
        * All signed proposals.
        **/
-      signedProposals: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshProposal: any } | { ProposerSetUpdateProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => Observable<Option<WebbProposalsProposal>>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
+      signedProposals: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => Observable<Option<WebbProposalsProposal>>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
       /**
        * All unsigned proposals.
        **/
-      unsignedProposalQueue: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshProposal: any } | { ProposerSetUpdateProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => Observable<Option<DkgRuntimePrimitivesProposalStoredUnsignedProposal>>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
+      unsignedProposalQueue: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => Observable<Option<DkgRuntimePrimitivesProposalStoredUnsignedProposal>>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
       /**
        * Generic query
        **/
@@ -285,23 +292,9 @@ declare module '@polkadot/api-base/types/storage' {
     };
     dkgProposals: {
       /**
-       * Tracks the authorities that are proposers so we can properly update the proposer set
-       * across sessions and authority changes.
-       **/
-      authorityProposers: AugmentedQuery<ApiType, () => Observable<Vec<AccountId32>>, []> & QueryableStorageEntry<ApiType, []>;
-      /**
        * All whitelisted chains and their respective transaction counts
        **/
       chainNonces: AugmentedQuery<ApiType, (arg: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array) => Observable<Option<u32>>, [WebbProposalsHeaderTypedChainId]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId]>;
-      /**
-       * Tracks current proposer set external accounts
-       **/
-      externalAuthorityProposerAccounts: AugmentedQuery<ApiType, () => Observable<Vec<Bytes>>, []> & QueryableStorageEntry<ApiType, []>;
-      /**
-       * Tracks current proposer set external accounts
-       * Currently meant to store Ethereum compatible 64-bytes ECDSA public keys
-       **/
-      VotingKeys: AugmentedQuery<ApiType, (arg: AccountId32 | string | Uint8Array) => Observable<Bytes>, [AccountId32]> & QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
        * Number of proposers in set
        **/
@@ -309,11 +302,7 @@ declare module '@polkadot/api-base/types/storage' {
       /**
        * Tracks current proposer set
        **/
-      proposers: AugmentedQuery<ApiType, (arg: AccountId32 | string | Uint8Array) => Observable<bool>, [AccountId32]> & QueryableStorageEntry<ApiType, [AccountId32]>;
-      /**
-       * Proposer Set Update Proposal Nonce
-       **/
-      proposerSetUpdateProposalNonce: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+      proposers: AugmentedQuery<ApiType, () => Observable<Vec<AccountId32>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * Number of votes required for a proposal to execute
        **/
@@ -328,6 +317,7 @@ declare module '@polkadot/api-base/types/storage' {
        * unique.
        **/
       votes: AugmentedQuery<ApiType, (arg1: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, arg2: ITuple<[u32, WebbProposalsProposal]> | [u32 | AnyNumber | Uint8Array, WebbProposalsProposal | { Signed: any } | { Unsigned: any } | string | Uint8Array]) => Observable<Option<PalletDkgProposalsProposalVotes>>, [WebbProposalsHeaderTypedChainId, ITuple<[u32, WebbProposalsProposal]>]> & QueryableStorageEntry<ApiType, [WebbProposalsHeaderTypedChainId, ITuple<[u32, WebbProposalsProposal]>]>;
+      votingKeys: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[AccountId32, Bytes]>>>, []> & QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/

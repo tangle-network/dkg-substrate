@@ -168,10 +168,10 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
 	// This maybe weird at first, but now we can control how many authorities we want to have in the
 	// local testnet. during the build process, using the environment variable below.
-	// it defaults to 3 if not set.
+	// it defaults to 5 if not set.
 	let initial_authorities_count = option_env!("INITIAL_AUTHORITIES_COUNT")
 		.and_then(|v| v.parse::<usize>().ok())
-		.unwrap_or(3);
+		.unwrap_or(5);
 	const ALL_DEV_AUTHORITIES: [&str; 6] = ["Alice", "Bob", "Charlie", "Dave", "Eve", "Ferdie"];
 	let initial_authorities_count =
 		core::cmp::min(initial_authorities_count, ALL_DEV_AUTHORITIES.len());

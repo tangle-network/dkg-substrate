@@ -9,8 +9,7 @@ import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, Vec, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
-import type {FrameSupportTokensMiscBalanceStatus,SpVersionRuntimeVersion,SpWeightsRuntimeDbWeight,FrameSystemLimitsBlockWeights,FrameSystemLimitsBlockLength, SpRuntimeDispatchError,SpFinalityGrandpaAppPublic,PalletElectionProviderMultiPhaseElectionCompute,WebbProposalsProposalProposalKind,FrameSupportDispatchDispatchInfo,PalletBagsListListNode, PalletBalancesReserveData,PalletBalancesAccountData, DkgRuntimePrimitivesMisbehaviourType, PalletDkgProposalsProposalVotes, PalletElectionProviderMultiPhasePhase, PalletElectionProviderMultiPhaseReadySolution, PalletGrandpaStoredState, PalletIdentityRegistration, PalletGrandpaStoredPendingChange, PalletElectionProviderMultiPhaseRoundSnapshot, PalletImOnlineSr25519AppSr25519Public, PalletNominationPoolsPoolMember, PalletNominationPoolsBondedPoolInner, PalletNominationPoolsRewardPool, SpCoreCryptoKeyTypeId, PalletStakingActiveEraInfo, PalletStakingEraRewardPoints, PalletStakingExposure, PalletStakingForcing, PalletStakingStakingLedger, PalletStakingNominations, PalletStakingSlashingSlashingSpans, FrameSystemAccountInfo, FrameSystemPhase, PalletTransactionPaymentReleases,PalletStakingSlashingSpanRecord, SpConsensusAuraSr25519AppSr25519Public, FrameSystemLastRuntimeUpgradeInfo,PalletStakingUnappliedSlash,  FrameSystemEventRecord, SpRuntimeDigest, FrameSupportDispatchPerDispatchClassWeight, DkgRuntimePrimitivesCryptoPublic,DkgRuntimePrimitivesAggregatedMisbehaviourReports,DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal,WebbProposalsHeaderResourceId, WebbProposalsHeaderTypedChainId,SpNposElectionsSupport,SpNposElectionsElectionScore,PalletElectionProviderMultiPhaseRawSolution,SpWeightsWeightV2Weight,PalletNominationPoolsBondExtra,PalletIdentityJudgement,SpCoreVoid,SpFinalityGrandpaEquivocationProof,PalletElectionProviderMultiPhaseSolutionOrSnapshotSize,PalletImOnlineHeartbeat,PalletIdentityIdentityInfo,PalletIdentityBitFlags,PalletImOnlineSr25519AppSr25519Signature, PalletStakingValidatorPrefs,PalletNominationPoolsClaimPermission,PalletNominationPoolsConfigOpAccountId32,PalletNominationPoolsPoolState, PalletStakingPalletConfigOpPerbill,PalletStakingRewardDestination, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpPercent, PalletNominationPoolsConfigOpU32, PalletNominationPoolsConfigOpU128} from "./types-lookup";
-
+import { FrameSupportTokensMiscBalanceStatus, DkgRuntimePrimitivesMisbehaviourType, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesProposalRefreshProposal, WebbProposalsProposalProposalKind, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsHeaderTypedChainId, PalletElectionProviderMultiPhaseElectionCompute, SpNposElectionsElectionScore, PalletElectionProviderMultiPhasePhase, SpFinalityGrandpaAppPublic, PalletImOnlineSr25519AppSr25519Public, PalletStakingExposure, PalletNominationPoolsPoolState, PalletStakingForcing, PalletStakingValidatorPrefs, SpRuntimeDispatchError, FrameSupportDispatchDispatchInfo } from '@polkadot/types/lookup';
 
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 
@@ -108,11 +107,11 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * Next public key signature submitted
        **/
-      NextPublicKeySignatureSubmitted: AugmentedEvent<ApiType, [pubKeySig: Bytes, compressedPubKey: Bytes, uncompressedPubKey: Bytes, nonce: u32], { pubKeySig: Bytes, compressedPubKey: Bytes, uncompressedPubKey: Bytes, nonce: u32 }>;
+      NextPublicKeySignatureSubmitted: AugmentedEvent<ApiType, [signature: Bytes, refreshProposal: DkgRuntimePrimitivesProposalRefreshProposal], { signature: Bytes, refreshProposal: DkgRuntimePrimitivesProposalRefreshProposal }>;
       /**
        * Next public key submitted
        **/
-      NextPublicKeySubmitted: AugmentedEvent<ApiType, [compressedPubKey: Bytes, uncompressedPubKey: Bytes], { compressedPubKey: Bytes, uncompressedPubKey: Bytes }>;
+      NextPublicKeySubmitted: AugmentedEvent<ApiType, [compressedPubKey: Bytes], { compressedPubKey: Bytes }>;
       /**
        * NextSignatureThreshold updated
        **/
@@ -126,17 +125,21 @@ declare module '@polkadot/api-base/types/events' {
        **/
       PendingSignatureThresholdUpdated: AugmentedEvent<ApiType, [pendingSignatureThreshold: u16], { pendingSignatureThreshold: u16 }>;
       /**
+       * Proposer votes submitted
+       **/
+      ProposerSetVotesSubmitted: AugmentedEvent<ApiType, [voters: Vec<DkgRuntimePrimitivesCryptoPublic>, signatures: Vec<Bytes>, vote: Bytes], { voters: Vec<DkgRuntimePrimitivesCryptoPublic>, signatures: Vec<Bytes>, vote: Bytes }>;
+      /**
        * Current Public Key Changed.
        **/
-      PublicKeyChanged: AugmentedEvent<ApiType, [compressedPubKey: Bytes, uncompressedPubKey: Bytes], { compressedPubKey: Bytes, uncompressedPubKey: Bytes }>;
+      PublicKeyChanged: AugmentedEvent<ApiType, [compressedPubKey: Bytes], { compressedPubKey: Bytes }>;
       /**
        * Current Public Key Signature Changed.
        **/
-      PublicKeySignatureChanged: AugmentedEvent<ApiType, [pubKeySig: Bytes, compressedPubKey: Bytes, uncompressedPubKey: Bytes, nonce: u32], { pubKeySig: Bytes, compressedPubKey: Bytes, uncompressedPubKey: Bytes, nonce: u32 }>;
+      PublicKeySignatureChanged: AugmentedEvent<ApiType, [signature: Bytes, refreshProposal: DkgRuntimePrimitivesProposalRefreshProposal], { signature: Bytes, refreshProposal: DkgRuntimePrimitivesProposalRefreshProposal }>;
       /**
        * Current public key submitted
        **/
-      PublicKeySubmitted: AugmentedEvent<ApiType, [compressedPubKey: Bytes, uncompressedPubKey: Bytes], { compressedPubKey: Bytes, uncompressedPubKey: Bytes }>;
+      PublicKeySubmitted: AugmentedEvent<ApiType, [compressedPubKey: Bytes], { compressedPubKey: Bytes }>;
       /**
        * Refresh DKG Keys Finished (forcefully).
        **/
@@ -170,10 +173,6 @@ declare module '@polkadot/api-base/types/events' {
     };
     dkgProposals: {
       /**
-       * Proposers have been reset
-       **/
-      AuthorityProposersReset: AugmentedEvent<ApiType, [proposers: Vec<AccountId32>], { proposers: Vec<AccountId32> }>;
-      /**
        * Chain now available for transfers (chain_id)
        **/
       ChainWhitelisted: AugmentedEvent<ApiType, [chainId: WebbProposalsHeaderTypedChainId], { chainId: WebbProposalsHeaderTypedChainId }>;
@@ -194,13 +193,9 @@ declare module '@polkadot/api-base/types/events' {
        **/
       ProposalSucceeded: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32], { kind: WebbProposalsProposalProposalKind, srcChainId: WebbProposalsHeaderTypedChainId, proposalNonce: u32 }>;
       /**
-       * Proposer added to set
+       * Proposers have been reset
        **/
-      ProposerAdded: AugmentedEvent<ApiType, [proposerId: AccountId32], { proposerId: AccountId32 }>;
-      /**
-       * Proposer removed from set
-       **/
-      ProposerRemoved: AugmentedEvent<ApiType, [proposerId: AccountId32], { proposerId: AccountId32 }>;
+      ProposersReset: AugmentedEvent<ApiType, [proposers: Vec<AccountId32>], { proposers: Vec<AccountId32> }>;
       /**
        * Vote threshold has changed (new_threshold)
        **/

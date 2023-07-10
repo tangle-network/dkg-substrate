@@ -263,32 +263,30 @@ export default {
     _enum: {
       PublicKeySubmitted: {
         compressedPubKey: 'Bytes',
-        uncompressedPubKey: 'Bytes',
       },
       NextPublicKeySubmitted: {
         compressedPubKey: 'Bytes',
-        uncompressedPubKey: 'Bytes',
       },
       NextPublicKeySignatureSubmitted: {
-        pubKeySig: 'Bytes',
-        compressedPubKey: 'Bytes',
-        uncompressedPubKey: 'Bytes',
-        nonce: 'u32',
+        signature: 'Bytes',
+        refreshProposal: 'DkgRuntimePrimitivesProposalRefreshProposal',
       },
       PublicKeyChanged: {
         compressedPubKey: 'Bytes',
-        uncompressedPubKey: 'Bytes',
       },
       PublicKeySignatureChanged: {
-        pubKeySig: 'Bytes',
-        compressedPubKey: 'Bytes',
-        uncompressedPubKey: 'Bytes',
-        nonce: 'u32',
+        signature: 'Bytes',
+        refreshProposal: 'DkgRuntimePrimitivesProposalRefreshProposal',
       },
       MisbehaviourReportsSubmitted: {
         misbehaviourType: 'DkgRuntimePrimitivesMisbehaviourType',
         reporters: 'Vec<DkgRuntimePrimitivesCryptoPublic>',
         offender: 'DkgRuntimePrimitivesCryptoPublic',
+      },
+      ProposerSetVotesSubmitted: {
+        voters: 'Vec<DkgRuntimePrimitivesCryptoPublic>',
+        signatures: 'Vec<Bytes>',
+        vote: 'Bytes',
       },
       RefreshKeysFinished: {
         nextAuthoritySetId: 'u64',
@@ -316,21 +314,31 @@ export default {
     }
   },
   /**
-   * Lookup38: dkg_runtime_primitives::MisbehaviourType
+   * Lookup38: dkg_runtime_primitives::proposal::RefreshProposal
+   **/
+  DkgRuntimePrimitivesProposalRefreshProposal: {
+    voterMerkleRoot: '[u8;32]',
+    sessionLength: 'u64',
+    voterCount: 'u32',
+    nonce: 'u32',
+    pubKey: 'Bytes'
+  },
+  /**
+   * Lookup40: dkg_runtime_primitives::MisbehaviourType
    **/
   DkgRuntimePrimitivesMisbehaviourType: {
     _enum: ['Keygen', 'Sign']
   },
   /**
-   * Lookup40: dkg_runtime_primitives::crypto::Public
+   * Lookup42: dkg_runtime_primitives::crypto::Public
    **/
   DkgRuntimePrimitivesCryptoPublic: 'SpCoreEcdsaPublic',
   /**
-   * Lookup41: sp_core::ecdsa::Public
+   * Lookup43: sp_core::ecdsa::Public
    **/
   SpCoreEcdsaPublic: '[u8;33]',
   /**
-   * Lookup44: pallet_dkg_proposals::pallet::Event<T>
+   * Lookup47: pallet_dkg_proposals::pallet::Event<T>
    **/
   PalletDkgProposalsEvent: {
     _enum: {
@@ -339,12 +347,6 @@ export default {
       },
       ChainWhitelisted: {
         chainId: 'WebbProposalsHeaderTypedChainId',
-      },
-      ProposerAdded: {
-        proposerId: 'AccountId32',
-      },
-      ProposerRemoved: {
-        proposerId: 'AccountId32',
       },
       VoteFor: {
         kind: 'WebbProposalsProposalProposalKind',
@@ -378,13 +380,13 @@ export default {
         srcChainId: 'WebbProposalsHeaderTypedChainId',
         proposalNonce: 'u32',
       },
-      AuthorityProposersReset: {
+      ProposersReset: {
         proposers: 'Vec<AccountId32>'
       }
     }
   },
   /**
-   * Lookup45: webb_proposals::header::TypedChainId
+   * Lookup48: webb_proposals::header::TypedChainId
    **/
   WebbProposalsHeaderTypedChainId: {
     _enum: {
@@ -400,13 +402,13 @@ export default {
     }
   },
   /**
-   * Lookup46: webb_proposals::proposal::ProposalKind
+   * Lookup49: webb_proposals::proposal::ProposalKind
    **/
   WebbProposalsProposalProposalKind: {
     _enum: ['Refresh', 'ProposerSetUpdate', 'EVM', 'AnchorCreate', 'AnchorUpdate', 'TokenAdd', 'TokenRemove', 'WrappingFeeUpdate', 'ResourceIdUpdate', 'RescueTokens', 'MaxDepositLimitUpdate', 'MinWithdrawalLimitUpdate', 'SetVerifier', 'SetTreasuryHandler', 'FeeRecipientUpdate']
   },
   /**
-   * Lookup49: pallet_dkg_proposal_handler::pallet::Event<T>
+   * Lookup51: pallet_dkg_proposal_handler::pallet::Event<T>
    **/
   PalletDkgProposalHandlerEvent: {
     _enum: {
@@ -470,7 +472,6 @@ export default {
     _enum: {
       EVMProposal: 'u32',
       RefreshProposal: 'u32',
-      ProposerSetUpdateProposal: 'u32',
       AnchorCreateProposal: 'u32',
       AnchorUpdateProposal: 'u32',
       TokenAddProposal: 'u32',
@@ -1204,7 +1205,7 @@ export default {
     signatures: 'Vec<Bytes>'
   },
   /**
-   * Lookup162: pallet_dkg_metadata::pallet::Call<T>
+   * Lookup163: pallet_dkg_metadata::pallet::Call<T>
    **/
   PalletDkgMetadataCall: {
     _enum: {
@@ -1214,15 +1215,13 @@ export default {
       set_keygen_threshold: {
         newThreshold: 'u16',
       },
-      set_refresh_delay: {
-        newDelay: 'u8',
-      },
       submit_public_key: {
         keysAndSignatures: 'DkgRuntimePrimitivesAggregatedPublicKeys',
       },
       submit_next_public_key: {
         keysAndSignatures: 'DkgRuntimePrimitivesAggregatedPublicKeys',
       },
+      __Unused4: 'Null',
       submit_misbehaviour_reports: {
         reports: 'DkgRuntimePrimitivesAggregatedMisbehaviourReports',
       },
@@ -1238,23 +1237,16 @@ export default {
     }
   },
   /**
-   * Lookup163: dkg_runtime_primitives::AggregatedPublicKeys
+   * Lookup164: dkg_runtime_primitives::AggregatedPublicKeys
    **/
   DkgRuntimePrimitivesAggregatedPublicKeys: {
     keysAndSignatures: 'Vec<(Bytes,Bytes)>'
   },
   /**
-   * Lookup164: dkg_runtime_primitives::proposal::RefreshProposalSigned
-   **/
-  DkgRuntimePrimitivesProposalRefreshProposalSigned: {
-    nonce: 'u32',
-    signature: 'Bytes'
-  },
-  /**
    * Lookup165: pallet_dkg_metadata::pallet::Error<T>
    **/
   PalletDkgMetadataError: {
-    _enum: ['NoMappedAccount', 'InvalidThreshold', 'MustBeAQueuedAuthority', 'MustBeAnActiveAuthority', 'InvalidRefreshDelay', 'InvalidPublicKeys', 'AlreadySubmittedPublicKey', 'AlreadySubmittedSignature', 'UsedSignature', 'InvalidSignature', 'InvalidNonce', 'InvalidMisbehaviourReports', 'RefreshInProgress', 'NoNextPublicKey', 'InvalidControllerAccount', 'OutOfBounds', 'CannotRetreiveSigner', 'OffenderNotAuthority', 'AlreadyJailed', 'NotEnoughAuthoritiesToJail']
+    _enum: ['NoMappedAccount', 'InvalidThreshold', 'MustBeAQueuedAuthority', 'MustBeAnActiveAuthority', 'InvalidPublicKeys', 'AlreadySubmittedPublicKey', 'AlreadySubmittedSignature', 'UsedSignature', 'InvalidSignature', 'InvalidNonce', 'InvalidMisbehaviourReports', 'RefreshInProgress', 'NoRefreshProposal', 'InvalidRefreshProposal', 'NoNextPublicKey', 'InvalidControllerAccount', 'OutOfBounds', 'CannotRetreiveSigner', 'ProposalNotSigned', 'OffenderNotAuthority', 'AlreadyJailed', 'NotEnoughAuthoritiesToJail']
   },
   /**
    * Lookup172: webb_proposals::proposal::Proposal<dkg_runtime_primitives::CustomU32Getter>
@@ -1312,13 +1304,6 @@ export default {
       },
       whitelist_chain: {
         chainId: 'WebbProposalsHeaderTypedChainId',
-      },
-      add_proposer: {
-        nativeAccount: 'AccountId32',
-        externalAccount: 'Bytes',
-      },
-      remove_proposer: {
-        v: 'AccountId32',
       },
       acknowledge_proposal: {
         prop: 'WebbProposalsProposal',
@@ -1774,7 +1759,7 @@ export default {
     dkg: 'DkgRuntimePrimitivesCryptoPublic'
   },
   /**
-   * Lookup270: pallet_bridge_registry::pallet::Call<T, I>
+   * Lookup270: pallet_bridge_registry::pallet::Call<T>
    **/
   PalletBridgeRegistryCall: {
     _enum: {
@@ -2185,7 +2170,7 @@ export default {
     info: 'PalletBridgeRegistryBridgeInfo'
   },
   /**
-   * Lookup390: pallet_bridge_registry::pallet::Error<T, I>
+   * Lookup390: pallet_bridge_registry::pallet::Error<T>
    **/
   PalletBridgeRegistryError: {
     _enum: ['ParametersNotInitialized', 'VerifyError', 'ProposalNotSigned', 'BridgeIndexError', 'TooManyFields', 'BridgeNotFound', 'TooManyResources', 'OutOfBounds']

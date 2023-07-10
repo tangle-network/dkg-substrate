@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # The following line ensure we run from the project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel)

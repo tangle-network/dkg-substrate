@@ -131,9 +131,9 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       InvalidPublicKeys: AugmentedError<ApiType>;
       /**
-       * Refresh delay should be in the range of 0% - 100%
+       * Invalid refresh proposal data
        **/
-      InvalidRefreshDelay: AugmentedError<ApiType>;
+      InvalidRefreshProposal: AugmentedError<ApiType>;
       /**
        * Invalid public key signature submission
        **/
@@ -159,6 +159,10 @@ declare module '@polkadot/api-base/types/errors' {
        **/
       NoNextPublicKey: AugmentedError<ApiType>;
       /**
+       * No current refresh active
+       **/
+      NoRefreshProposal: AugmentedError<ApiType>;
+      /**
        * We do not have authorities to jail
        **/
       NotEnoughAuthoritiesToJail: AugmentedError<ApiType>;
@@ -170,6 +174,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Input is out of bounds
        **/
       OutOfBounds: AugmentedError<ApiType>;
+      /**
+       * Proposal is not signed and should not be processed
+       **/
+      ProposalNotSigned: AugmentedError<ApiType>;
       /**
        * DKG Refresh is already in progress.
        **/

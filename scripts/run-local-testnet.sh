@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 # ensure we kill all child processes when we exit
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT

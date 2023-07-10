@@ -7,10 +7,10 @@ import '@polkadot/api-base/types/submittable';
 
 import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableExtrinsicFunction } from '@polkadot/api-base/types';
 import type { Data } from '@polkadot/types';
-import type { Bytes, Compact, Option, Vec, bool, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
+import type { Bytes, Compact, Option, Vec, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, Call, H256, MultiAddress, Perbill, Percent } from '@polkadot/types/interfaces/runtime';
-import type {DkgRuntimePrimitivesProposalRefreshProposalSigned,DkgRuntimePrimitivesAggregatedPublicKeys,PalletBridgeRegistryBridgeInfo,DkgRuntimePrimitivesCryptoPublic,DkgRuntimePrimitivesAggregatedMisbehaviourReports,DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal,WebbProposalsHeaderResourceId, WebbProposalsHeaderTypedChainId,SpNposElectionsSupport,SpNposElectionsElectionScore,PalletElectionProviderMultiPhaseRawSolution,SpWeightsWeightV2Weight,PalletNominationPoolsBondExtra,PalletIdentityJudgement,SpCoreVoid,SpFinalityGrandpaEquivocationProof,PalletElectionProviderMultiPhaseSolutionOrSnapshotSize,PalletImOnlineHeartbeat,PalletIdentityIdentityInfo,PalletIdentityBitFlags,PalletImOnlineSr25519AppSr25519Signature, PalletStakingValidatorPrefs,PalletNominationPoolsClaimPermission,PalletNominationPoolsConfigOpAccountId32,PalletNominationPoolsPoolState, PalletStakingPalletConfigOpPerbill,PalletStakingRewardDestination, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpPercent, PalletNominationPoolsConfigOpU32, PalletNominationPoolsConfigOpU128} from "./types-lookup";
+import { WebbProposalsHeaderResourceId, PalletBridgeRegistryBridgeInfo, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesAggregatedMisbehaviourReports, DkgRuntimePrimitivesAggregatedPublicKeys, WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal, SpNposElectionsSupport, SpNposElectionsElectionScore, PalletElectionProviderMultiPhaseRawSolution, PalletElectionProviderMultiPhaseSolutionOrSnapshotSize, SpFinalityGrandpaEquivocationProof, SpCoreVoid, PalletIdentityJudgement, PalletIdentityBitFlags, PalletIdentityIdentityInfo, PalletImOnlineHeartbeat, PalletImOnlineSr25519AppSr25519Signature, PalletNominationPoolsBondExtra, PalletNominationPoolsClaimPermission, PalletNominationPoolsConfigOpU128, PalletNominationPoolsConfigOpU32, PalletNominationPoolsPoolState, PalletNominationPoolsConfigOpAccountId32, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingRewardDestination, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpPercent, PalletStakingPalletConfigOpPerbill, PalletStakingValidatorPrefs, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
@@ -191,15 +191,6 @@ declare module '@polkadot/api-base/types/submittable' {
        **/
       setKeygenThreshold: AugmentedSubmittable<(newThreshold: u16 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u16]>;
       /**
-       * Sets the delay when a unsigned `RefreshProposal` will be added to the unsigned
-       * proposal queue.
-       * 
-       * * `origin` - The account origin.
-       * * `new_delay` - The percentage of elapsed session duration to wait before adding an
-       * unsigned refresh proposal to the unsigned proposal queue.
-       **/
-      setRefreshDelay: AugmentedSubmittable<(newDelay: u8 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u8]>;
-      /**
        * Set the pending signature threshold for the session following the next session.
        * 
        * We cannot assume that the next DKG has not already completed keygen.
@@ -259,24 +250,7 @@ declare module '@polkadot/api-base/types/submittable' {
        **/
       submitPublicKey: AugmentedSubmittable<(keysAndSignatures: DkgRuntimePrimitivesAggregatedPublicKeys | { keysAndSignatures?: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [DkgRuntimePrimitivesAggregatedPublicKeys]>;
       /**
-       * Submits the public key signature for the key refresh/rotation process.
-       * 
-       * The signature is the signature of the next public key `RefreshProposal`, signed by the
-       * current DKG. It is stored on-chain only if it verifies successfully against the current
-       * DKG's public key. Successful storage of this public key signature also removes
-       * the unsigned `RefreshProposal` from the unsigned queue.
-       * 
-       * For manual refreshes, after the signature is submitted and stored on-chain,
-       * the keys are immediately refreshed and the authority set is immediately rotated
-       * and incremented.
-       * 
-       * * `origin` - The account origin.
-       * * `signature_proposal` - The signed refresh proposal containing the public key signature
-       * and nonce.
-       **/
-      submitPublicKeySignature: AugmentedSubmittable<(signatureProposal: DkgRuntimePrimitivesProposalRefreshProposalSigned | { nonce?: any; signature?: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [DkgRuntimePrimitivesProposalRefreshProposalSigned]>;
-      /**
-       * Triggers an Emergency Keygen Porotocol.
+       * Triggers an Emergency Keygen Protocol.
        * 
        * The keygen protocol will then be executed and the result will be stored in the off chain
        * storage, which will be picked up by the on chain worker and stored on chain.
@@ -304,7 +278,7 @@ declare module '@polkadot/api-base/types/submittable' {
       /**
        * Force remove an unsigned proposal from the queue
        **/
-      forceRemoveUnsignedProposal: AugmentedSubmittable<(typedChainId: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, key: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshVote: any } | { ProposerSetUpdateProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
+      forceRemoveUnsignedProposal: AugmentedSubmittable<(typedChainId: WebbProposalsHeaderTypedChainId | { None: any } | { Evm: any } | { Substrate: any } | { PolkadotParachain: any } | { KusamaParachain: any } | { RococoParachain: any } | { Cosmos: any } | { Solana: any } | { Ink: any } | string | Uint8Array, key: DkgRuntimePrimitivesProposalDkgPayloadKey | { EVMProposal: any } | { RefreshProposal: any } | { AnchorCreateProposal: any } | { AnchorUpdateProposal: any } | { TokenAddProposal: any } | { TokenRemoveProposal: any } | { WrappingFeeUpdateProposal: any } | { ResourceIdUpdateProposal: any } | { RescueTokensProposal: any } | { MaxDepositLimitUpdateProposal: any } | { MinWithdrawalLimitUpdateProposal: any } | { SetVerifierProposal: any } | { SetTreasuryHandlerProposal: any } | { FeeRecipientUpdateProposal: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [WebbProposalsHeaderTypedChainId, DkgRuntimePrimitivesProposalDkgPayloadKey]>;
       /**
        * Force submit an unsigned proposal to the DKG
        * 
@@ -333,14 +307,6 @@ declare module '@polkadot/api-base/types/submittable' {
        **/
       acknowledgeProposal: AugmentedSubmittable<(prop: WebbProposalsProposal | { Signed: any } | { Unsigned: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [WebbProposalsProposal]>;
       /**
-       * Adds a new proposer to the proposer set.
-       * 
-       * # <weight>
-       * - O(1) lookup and insert
-       * # </weight>
-       **/
-      addProposer: AugmentedSubmittable<(nativeAccount: AccountId32 | string | Uint8Array, externalAccount: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32, Bytes]>;
-      /**
        * Evaluate the state of a proposal given the current vote threshold.
        * 
        * A proposal with enough votes will be either executed or cancelled,
@@ -359,14 +325,6 @@ declare module '@polkadot/api-base/types/submittable' {
        * # </weight>
        **/
       rejectProposal: AugmentedSubmittable<(prop: WebbProposalsProposal | { Signed: any } | { Unsigned: any } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [WebbProposalsProposal]>;
-      /**
-       * Removes an existing proposer from the set.
-       * 
-       * # <weight>
-       * - O(1) lookup and removal
-       * # </weight>
-       **/
-      removeProposer: AugmentedSubmittable<(v: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32]>;
       /**
        * Removes a resource ID from the resource mapping.
        * 

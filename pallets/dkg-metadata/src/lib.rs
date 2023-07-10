@@ -630,7 +630,13 @@ pub mod pallet {
 	pub(super) type LastSessionRotationBlock<T: Config> =
 		StorageValue<_, T::BlockNumber, ValueQuery>;
 
-	/// The current refresh proposal waiting for signature
+	/// The pending refresh proposal waiting for signature
+	#[pallet::storage]
+	#[pallet::getter(fn pending_refresh_proposal)]
+	pub(super) type PendingRefreshProposal<T: Config> =
+		StorageValue<_, RefreshProposal, OptionQuery>;
+
+	/// The current refresh proposal signed and ready to process
 	#[pallet::storage]
 	#[pallet::getter(fn current_refresh_proposal)]
 	pub(super) type CurrentRefreshProposal<T: Config> =
@@ -697,25 +703,15 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Current public key submitted
-		PublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		PublicKeySubmitted { compressed_pub_key: Vec<u8> },
 		/// Next public key submitted
-		NextPublicKeySubmitted { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		NextPublicKeySubmitted { compressed_pub_key: Vec<u8> },
 		/// Next public key signature submitted
-		NextPublicKeySignatureSubmitted {
-			pub_key_sig: Vec<u8>,
-			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
-			nonce: u32,
-		},
+		NextPublicKeySignatureSubmitted { signature: Vec<u8>, refresh_proposal: RefreshProposal },
 		/// Current Public Key Changed.
-		PublicKeyChanged { compressed_pub_key: Vec<u8>, uncompressed_pub_key: Vec<u8> },
+		PublicKeyChanged { compressed_pub_key: Vec<u8> },
 		/// Current Public Key Signature Changed.
-		PublicKeySignatureChanged {
-			pub_key_sig: Vec<u8>,
-			compressed_pub_key: Vec<u8>,
-			uncompressed_pub_key: Vec<u8>,
-			nonce: u32,
-		},
+		PublicKeySignatureChanged { signature: Vec<u8>, refresh_proposal: RefreshProposal },
 		/// Misbehaviour reports submitted
 		MisbehaviourReportsSubmitted {
 			misbehaviour_type: MisbehaviourType,
@@ -882,8 +878,6 @@ pub mod pallet {
 					DKGPublicKey::<T>::put((Self::authority_set_id(), bounded_key));
 					Self::deposit_event(Event::PublicKeySubmitted {
 						compressed_pub_key: key.clone(),
-						uncompressed_pub_key: Self::decompress_public_key(key.clone())
-							.unwrap_or_default(),
 					});
 					accepted = true;
 
@@ -947,8 +941,6 @@ pub mod pallet {
 						NextDKGPublicKey::<T>::put((Self::next_authority_set_id(), bounded_key));
 						Self::deposit_event(Event::NextPublicKeySubmitted {
 							compressed_pub_key: key.clone(),
-							uncompressed_pub_key: Self::decompress_public_key(key.clone())
-								.unwrap_or_default(),
 						});
 						break Some((Self::next_authority_set_id(), key.clone()))
 					}
@@ -1298,6 +1290,9 @@ pub mod pallet {
 			let next_authorities = NextAuthorities::<T>::get();
 			let next_authority_accounts = NextAuthoritiesAccounts::<T>::get();
 			let next_pub_key = Self::next_dkg_public_key();
+			// Clear the `PendingRefreshProposal` and `CurrentRefreshProposal` items.
+			PendingRefreshProposal::<T>::kill();
+			CurrentRefreshProposal::<T>::kill();
 			// Force rotate the next authorities into the active and next set.
 			Self::change_authorities(
 				next_authorities.clone().into(),
@@ -1522,7 +1517,7 @@ impl<T: Config> Pallet<T> {
 
 		// Store the proposal in storage. We overwrite the storage always.
 		// This is to ensure that we can force rotate and re-sign successfully.
-		CurrentRefreshProposal::<T>::put(proposal.clone());
+		PendingRefreshProposal::<T>::put(proposal.clone());
 
 		// Encode the proposal and return the unsigned proposal.
 		let bounded_proposal_data: BoundedVec<u8, T::MaxProposalLength> =
@@ -1792,7 +1787,7 @@ impl<T: Config> Pallet<T> {
 		NextBestAuthorities::<T>::put(bounded_authorities);
 		// Switch on forced for forceful rotations
 		let v = if forced {
-			// If forced we supply an empty signature
+			// If forced we supply an empty signature.
 			next_pub_key.zip(Some(Default::default()))
 		} else {
 			next_pub_key.zip(next_pub_key_signature)
@@ -1844,21 +1839,22 @@ impl<T: Config> Pallet<T> {
 			let current_nonce = Self::refresh_nonce();
 			let next_nonce = current_nonce.saturating_add(1);
 			RefreshNonce::<T>::put(next_nonce);
-			let uncompressed_pub_key =
-				Self::decompress_public_key(next_pub_key.1.clone().into()).unwrap_or_default();
-			let compressed_pub_key = next_pub_key.1;
 
 			// Emit events so other front-end know that.
+			let compressed_pub_key = next_pub_key.1;
 			Self::deposit_event(Event::PublicKeyChanged {
-				uncompressed_pub_key: uncompressed_pub_key.clone(),
-				compressed_pub_key: compressed_pub_key.clone().into(),
-			});
-			Self::deposit_event(Event::PublicKeySignatureChanged {
-				uncompressed_pub_key,
 				compressed_pub_key: compressed_pub_key.into(),
-				pub_key_sig: next_pub_key_signature.into(),
-				nonce: next_nonce,
 			});
+
+			// At this point the refresh proposal should ALWAYS exist
+			if let Some(curr_prop) = CurrentRefreshProposal::<T>::get() {
+				Self::deposit_event(Event::PublicKeySignatureChanged {
+					signature: next_pub_key_signature.into(),
+					refresh_proposal: curr_prop,
+				});
+
+				CurrentRefreshProposal::<T>::kill();
+			}
 		}
 	}
 
@@ -2398,8 +2394,6 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 		ensure!(proposal.is_signed(), Error::<T>::ProposalNotSigned);
 
 		if proposal.kind() == ProposalKind::Refresh {
-			let (_, next_pub_key) =
-				Self::next_dkg_public_key().ok_or(Error::<T>::NoNextPublicKey)?;
 			// Check if a signature is already submitted. This should also prevent
 			// against manipulating the ECDSA signature to replay the submission.
 			ensure!(
@@ -2407,8 +2401,8 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 				Error::<T>::AlreadySubmittedSignature
 			);
 
-			// Check the current refresh proposal against the proposal data.
-			let maybe_prop = Self::current_refresh_proposal();
+			// Check the pending refresh proposal against the proposal data.
+			let maybe_prop = Self::pending_refresh_proposal();
 			ensure!(maybe_prop.is_some(), Error::<T>::NoRefreshProposal);
 			let curr = maybe_prop.unwrap_or_default();
 			ensure!(curr.encode() == proposal.data().clone(), Error::<T>::InvalidRefreshProposal);
@@ -2424,19 +2418,17 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 				Error::<T>::UsedSignature
 			);
 			NextPublicKeySignature::<T>::put(bounded_signature);
-			let uncompressed_pub_key =
-				Self::decompress_public_key(next_pub_key.clone().into()).unwrap_or_default();
 
-			// Clear the `CurrentRefreshProposal` storage now that
+			// Set the `CurrentRefreshProposal` for processing on the next session change.
+			CurrentRefreshProposal::<T>::put(curr.clone());
+			// Clear the `PendingRefreshProposal` storage now that
 			// we've processed the signature over it.
-			CurrentRefreshProposal::<T>::kill();
+			PendingRefreshProposal::<T>::kill();
 
 			// Emit the event
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-				uncompressed_pub_key,
-				compressed_pub_key: next_pub_key.into(),
-				pub_key_sig: proposal.signature().unwrap_or_default(),
-				nonce: u32::from(curr.nonce),
+				refresh_proposal: curr,
+				signature: proposal.signature().unwrap_or_default(),
 			});
 		};
 
