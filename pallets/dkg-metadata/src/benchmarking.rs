@@ -145,8 +145,7 @@ benchmarks! {
 		let (id, dkg_key) = Pallet::<T>::dkg_public_key();
 		assert_last_event::<T>(Event::PublicKeySubmitted{
 			compressed_pub_key: dkg_key.clone().into(),
-			uncompressed_pub_key: Pallet::<T>::decompress_public_key(dkg_key.clone().into()).unwrap_or_default(),
-			}.into());
+		}.into());
 	}
 
 	submit_next_public_key {
@@ -174,8 +173,7 @@ benchmarks! {
 		let (_ ,next_dkg_key) = Pallet::<T>::next_dkg_public_key().unwrap();
 		assert_last_event::<T>(Event::NextPublicKeySubmitted{
 			compressed_pub_key: next_dkg_key.clone().into(),
-			uncompressed_pub_key: Pallet::<T>::decompress_public_key(next_dkg_key.clone().into()).unwrap_or_default(),
-			}.into());
+		}.into());
 	}
 
 	submit_misbehaviour_reports {

@@ -8,9 +8,8 @@ import '@polkadot/api-base/types/consts';
 import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
 import type { Vec, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { Codec } from '@polkadot/types-codec/types';
-import type { Perbill, Permill } from '@polkadot/types/interfaces/runtime';
-import type {FrameSupportPalletId,FrameSupportTokensMiscBalanceStatus,SpVersionRuntimeVersion,SpWeightsRuntimeDbWeight,FrameSystemLimitsBlockWeights,FrameSystemLimitsBlockLength, SpRuntimeDispatchError,SpFinalityGrandpaAppPublic,PalletElectionProviderMultiPhaseElectionCompute,WebbProposalsProposalProposalKind,FrameSupportDispatchDispatchInfo,PalletBagsListListNode, PalletBalancesReserveData,PalletBalancesAccountData, DkgRuntimePrimitivesMisbehaviourType, PalletDkgProposalsProposalVotes, PalletElectionProviderMultiPhasePhase, PalletElectionProviderMultiPhaseReadySolution, PalletGrandpaStoredState, PalletIdentityRegistration, PalletGrandpaStoredPendingChange, PalletElectionProviderMultiPhaseRoundSnapshot, PalletImOnlineSr25519AppSr25519Public, PalletNominationPoolsPoolMember, PalletNominationPoolsBondedPoolInner, PalletNominationPoolsRewardPool, SpCoreCryptoKeyTypeId, PalletStakingActiveEraInfo, PalletStakingEraRewardPoints, PalletStakingExposure, PalletStakingForcing, PalletStakingStakingLedger, PalletStakingNominations, PalletStakingSlashingSlashingSpans, FrameSystemAccountInfo, FrameSystemPhase, PalletTransactionPaymentReleases,PalletStakingSlashingSpanRecord, SpConsensusAuraSr25519AppSr25519Public, FrameSystemLastRuntimeUpgradeInfo,PalletStakingUnappliedSlash,  FrameSystemEventRecord, SpRuntimeDigest, FrameSupportDispatchPerDispatchClassWeight, DkgRuntimePrimitivesCryptoPublic,DkgRuntimePrimitivesAggregatedMisbehaviourReports,DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsProposal,WebbProposalsHeaderResourceId, WebbProposalsHeaderTypedChainId,SpNposElectionsSupport,SpNposElectionsElectionScore,PalletElectionProviderMultiPhaseRawSolution,SpWeightsWeightV2Weight,PalletNominationPoolsBondExtra,PalletIdentityJudgement,SpCoreVoid,SpFinalityGrandpaEquivocationProof,PalletElectionProviderMultiPhaseSolutionOrSnapshotSize,PalletImOnlineHeartbeat,PalletIdentityIdentityInfo,PalletIdentityBitFlags,PalletImOnlineSr25519AppSr25519Signature, PalletStakingValidatorPrefs,PalletNominationPoolsClaimPermission,PalletNominationPoolsConfigOpAccountId32,PalletNominationPoolsPoolState, PalletStakingPalletConfigOpPerbill,PalletStakingRewardDestination, DkgStandaloneRuntimeOpaqueSessionKeys, PalletStakingPalletConfigOpU32, PalletStakingPalletConfigOpU128, PalletStakingPalletConfigOpPercent, PalletNominationPoolsConfigOpU32, PalletNominationPoolsConfigOpU128} from "./types-lookup";
-
+import type { Perbill } from '@polkadot/types/interfaces/runtime';
+import { WebbProposalsHeaderTypedChainId, SpWeightsWeightV2Weight, FrameSupportPalletId, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpWeightsRuntimeDbWeight, SpVersionRuntimeVersion } from '@polkadot/types/lookup';
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 
@@ -118,6 +117,10 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       maxKeyLength: u32 & AugmentedConst<ApiType>;
       /**
+       * Max length of a proposal
+       **/
+      maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
        * Max reporters to store
        **/
       maxReporters: u32 & AugmentedConst<ApiType>;
@@ -125,10 +128,6 @@ declare module '@polkadot/api-base/types/consts' {
        * MaxLength for signature
        **/
       maxSignatureLength: u32 & AugmentedConst<ApiType>;
-      /**
-       * Percentage session should have progressed for refresh to begin
-       **/
-      refreshDelay: Permill & AugmentedConst<ApiType>;
       /**
        * Session length helper allowing to query session length across runtime upgrades.
        **/
@@ -148,15 +147,15 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       unsignedPriority: u64 & AugmentedConst<ApiType>;
       /**
+       * Length of encoded proposer vote
+       **/
+      voteLength: u32 & AugmentedConst<ApiType>;
+      /**
        * Generic const
        **/
       [key: string]: Codec;
     };
     dkgProposalHandler: {
-      /**
-       * Max length of a proposal
-       **/
-      maxProposalLength: u32 & AugmentedConst<ApiType>;
       /**
        * Max number of signed proposal submissions per batch;
        **/
@@ -178,17 +177,13 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       chainIdentifier: WebbProposalsHeaderTypedChainId & AugmentedConst<ApiType>;
       /**
-       * The max authority proposers that can be stored in storage
-       **/
-      maxAuthorityProposers: u32 & AugmentedConst<ApiType>;
-      /**
-       * The max external proposer accounts that can be stored in storage
-       **/
-      maxVotingKeys: u32 & AugmentedConst<ApiType>;
-      /**
        * Max length of a proposal
        **/
       maxProposalLength: u32 & AugmentedConst<ApiType>;
+      /**
+       * The max proposers that can be stored in storage
+       **/
+      maxProposers: u32 & AugmentedConst<ApiType>;
       /**
        * The max resources that can be stored in storage
        **/
@@ -202,6 +197,10 @@ declare module '@polkadot/api-base/types/consts' {
        **/
       period: u32 & AugmentedConst<ApiType>;
       proposalLifetime: u32 & AugmentedConst<ApiType>;
+      /**
+       * The size of an external proposer account (i.e. 64-byte Ethereum public key)
+       **/
+      votingKeySize: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
