@@ -1,14 +1,16 @@
 use super::*;
-use dkg_runtime_primitives::{handlers::decode_proposals::ProposalIdentifier, ProposalKind};
+use dkg_runtime_primitives::{
+	handlers::decode_proposals::ProposalIdentifier, ProposalAction, ProposalKind,
+};
 use sp_std::vec;
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
-	fn handle_unsigned_proposal(proposal: Vec<u8>, _action: ProposalAction) -> DispatchResult {
-		let bounded_proposal: BoundedVec<_, _> =
-			proposal.try_into().map_err(|_| Error::<T>::ProposalOutOfBounds)?;
-		let proposal =
-			Proposal::Unsigned { data: bounded_proposal, kind: ProposalKind::AnchorUpdate };
+	type BatchId = T::BatchId;
+	type MaxProposalLength = T::MaxProposalLength;
+	type MaxProposals = T::MaxProposalsPerBatch;
+	type MaxSignatureLen = T::MaxSignatureLength;
 
+	fn handle_unsigned_proposal(proposal: Proposal<Self::MaxProposalLength>) -> DispatchResult {
 		match decode_proposal_identifier(&proposal) {
 			Ok(v) => {
 				Self::deposit_event(Event::<T>::ProposalAdded {

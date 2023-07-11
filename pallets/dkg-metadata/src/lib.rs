@@ -225,7 +225,7 @@ pub mod pallet {
 		>;
 
 		/// Proposer handler trait
-		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
+		type ProposalHandler: ProposalHandlerTrait<MaxProposalLength = Self::MaxProposalLength>;
 
 		/// A type that gives allows the pallet access to the session progress
 		type NextSessionRotation: EstimateNextSessionRotation<Self::BlockNumber>;

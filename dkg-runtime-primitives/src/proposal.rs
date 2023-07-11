@@ -185,21 +185,38 @@ pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
 }
-pub trait ProposalHandlerTrait<MaxProposalLength: Get<u32>> {
+pub trait ProposalHandlerTrait {
+	type BatchId;
+	type MaxProposalLength: Get<u32>;
+	type MaxProposals: Get<u32>;
+	type MaxSignatureLen: Get<u32>;
+
 	fn handle_unsigned_proposal(
-		_prop: Proposal<MaxProposalLength>,
+		_prop: Proposal<Self::MaxProposalLength>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(
-		_prop: Proposal<MaxProposalLength>,
+	fn handle_signed_proposal_batch(
+		_prop: SignedProposalBatch<
+		Self::BatchId,
+		Self::MaxProposalLength,
+		Self::MaxProposals,
+		Self::MaxSignatureLen,
+	>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 }
 
-impl<M: Get<u32>> ProposalHandlerTrait<M> for () {}
+impl ProposalHandlerTrait for () {
+		type BatchId = u32;
+		type MaxProposalLength = ConstU32<0>;
+		type MaxProposals = ConstU32<0>;
+		type MaxSignatureLen = ConstU32<0>;
+
+
+}
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
@@ -318,4 +335,22 @@ pub struct DKGSignedPayload<
 	pub payload: BoundedVec<Proposal<MaxLength>, MaxProposals>,
 	/// Runtime compatible signature for the payload
 	pub signature: BoundedVec<u8, MaxSignatureLen>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct OffchainSignedProposalBatches<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	pub batches: Vec<SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>>,
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>> Default
+	for OffchainSignedProposalBatches<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	fn default() -> Self {
+		Self { batches: Default::default() }
+	}
 }

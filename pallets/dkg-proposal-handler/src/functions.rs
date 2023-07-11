@@ -262,6 +262,7 @@ impl<T: Config> Pallet<T> {
 			ValidationError::InvalidParameter(_) => Error::<T>::ProposalFormatInvalid,
 			ValidationError::UnimplementedProposalKind => Error::<T>::ProposalFormatInvalid,
 			ValidationError::InvalidProposalBytesLength => Error::<T>::InvalidProposalBytesLength,
+			ValidationError::InvalidDecoding(_) => Error::<T>::ProposalFormatInvalid,
 		}
 	}
 
