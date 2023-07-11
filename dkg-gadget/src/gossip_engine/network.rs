@@ -679,13 +679,13 @@ impl<K: Hash + Eq, V> LruHashMap<K, V> {
 	/// Maintains the limit of the map by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, k: K, v: V) -> bool {
-		let existed = self.inner.insert(k, v).is_some();
+		let is_new = self.inner.insert(k, v).is_none();
 		if self.inner.len() >= usize::from(self.limit) {
 			// Remove oldest entry
 			self.inner.pop_front();
 		}
 
-		existed
+		is_new
 	}
 
 	/// Get an element from the map.
