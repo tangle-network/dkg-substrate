@@ -66,6 +66,7 @@ dkg-runtime-primitives = { workspace = true }
 dkg-primitives = { workspace = true }
 dkg-standalone-runtime = { workspace = true }
 dkg-logging = { workspace = true }
+webb-relayer-gadget = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 
 
@@ -74,9 +75,11 @@ substrate-build-script-utils = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = ["dkg-standalone-runtime/runtime-benchmarks",
-                      "frame-benchmarking/runtime-benchmarks",
-	                "frame-benchmarking-cli/runtime-benchmarks",]
+runtime-benchmarks = [
+	"dkg-standalone-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-benchmarking-cli/runtime-benchmarks",
+]
 integration-tests = ["dkg-standalone-runtime/integration-tests"]
 manual-seal = ["dkg-standalone-runtime/manual-seal"]
 tracing = ["dkg-gadget/debug-tracing"]

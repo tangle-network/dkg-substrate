@@ -286,6 +286,17 @@ pub fn new_full(
 			None,
 			dkg_gadget::start_dkg_gadget::<_, _, _>(dkg_params),
 		);
+
+		let relayer_params = webb_relayer_gadget::WebbRelayerParams {
+			key_store: Some(keystore_container.sync_keystore()),
+			local_keystore: keystore_container.local_keystore(),
+		};
+		// Start Webb Relayer Gadget
+		task_manager.spawn_essential_handle().spawn(
+			"relayer-gadget",
+			None,
+			webb_relayer_gadget::start_relayer_gadget(relayer_params),
+		);
 	}
 
 	let rpc_extensions_builder = {
