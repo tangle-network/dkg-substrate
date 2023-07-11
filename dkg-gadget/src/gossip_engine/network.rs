@@ -149,7 +149,7 @@ impl NetworkGossipEngineBuilder {
 }
 
 /// Maximum number of known messages hashes to keep for a peer.
-const MAX_KNOWN_MESSAGES: usize = 10240; // ~300kb per peer + overhead.
+const MAX_KNOWN_MESSAGES: usize = 4096;
 
 /// Maximum allowed size for a DKG Signed Message notification.
 const MAX_MESSAGE_SIZE: u64 = 16 * 1024 * 1024;
@@ -540,7 +540,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 		}
 
 		if let Some(ref mut peer) = self.peers.write().get_mut(&who) {
-			peer.known_messages.insert(message.message_hash::<B>());
+			let message_hash = message.message_hash::<B>();
+			peer.known_messages.insert(message_hash);
 			let mut pending_messages_peers = self.pending_messages_peers.write();
 			let send_the_message = |message: SignedDKGMessage<AuthorityId>| {
 				if let Err(e) = self.to_receiver.send(message) {
@@ -553,7 +554,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					);
 				}
 			};
-			match pending_messages_peers.entry(message.message_hash::<B>()) {
+			match pending_messages_peers.entry(message_hash) {
 				Entry::Vacant(entry) => {
 					self.logger.debug(format!("NEW DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
@@ -577,12 +578,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 					// peer.
 					if !inserted {
 						// we will increment the counter for this message.
-						let old = peer
-							.message_counter
-							.get(&message.message_hash::<B>())
-							.cloned()
-							.unwrap_or(0);
-						peer.message_counter.insert(message.message_hash::<B>(), old + 1);
+						let old = peer.message_counter.get(&message_hash).cloned().unwrap_or(0);
+						peer.message_counter.insert(message_hash, old + 1);
 						// and if we have received this message from the same peer more than
 						// `MAX_DUPLICATED_MESSAGES_PER_PEER` times, we should report this peer
 						// as malicious.
@@ -682,14 +679,13 @@ impl<K: Hash + Eq, V> LruHashMap<K, V> {
 	/// Maintains the limit of the map by removing the oldest entry if necessary.
 	/// Inserting the same element will update its LRU position.
 	pub fn insert(&mut self, k: K, v: V) -> bool {
-		if self.inner.insert(k, v).is_none() {
-			if self.inner.len() == usize::from(self.limit) {
-				// remove oldest entry
-				self.inner.pop_front();
-			}
-			return true
+		let is_new = self.inner.insert(k, v).is_none();
+		if self.inner.len() >= usize::from(self.limit) {
+			// Remove oldest entry
+			self.inner.pop_front();
 		}
-		false
+
+		is_new
 	}
 
 	/// Get an element from the map.
