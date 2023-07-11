@@ -168,6 +168,8 @@ where
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxProposers : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxProposalsPerBatch : u32 = 10;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
@@ -175,6 +177,8 @@ impl pallet_dkg_proposal_handler::Config for Test {
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type BatchId = u32;
+	type MaxProposalsPerBatch = MaxProposalsPerBatch;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }
@@ -259,7 +263,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type DecayPercentage = DecayPercentage;
 	type Reputation = u128;
 	type UnsignedInterval = frame_support::traits::ConstU64<0>;
-	type UnsignedPriority = frame_support::traits::ConstU64<{ 1000 }>;
+	type UnsignedPriority = frame_support::traits::ConstU64<1000>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type MaxKeyLength = MaxKeyLength;
@@ -356,9 +360,7 @@ pub fn mock_sign_msg(
 	keystore.ecdsa_sign_prehashed(dkg_runtime_primitives::crypto::Public::ID, &pub_key, msg)
 }
 
-pub fn mock_signed_proposal(
-	eth_tx: TransactionV2,
-) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
+pub fn mock_signed_proposal_batch(eth_tx: TransactionV2) -> SignedProposalBatchOf<Test> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);

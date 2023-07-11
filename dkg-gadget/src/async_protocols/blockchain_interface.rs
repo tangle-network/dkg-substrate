@@ -30,8 +30,6 @@ use dkg_primitives::{
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG,
-	proposal::DKGPayloadKey,
 	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
 	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
@@ -41,9 +39,8 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
-use sp_api::offchain::STORAGE_PREFIX;
+
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
-use sp_core::offchain::OffchainStorage;
 use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use webb_proposals::Proposal;
@@ -300,31 +297,6 @@ impl<B, BE, C, GE> BlockchainInterface
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
 		})?;
-
-		// // if the signed proposal is a refreshvote, we save it to a different storage and exit
-		// early // we know that refreshvote is going to be a batch of 1
-		// if unsigned_proposal_batch.proposals.len() == 1 {
-		// 	let batch_id = unsigned_proposal_batch.batch_id;
-		// 	let proposal = unsigned_proposal_batch.proposals.first().expect("checked above. qed");
-		// 	if let DKGPayloadKey::RefreshVote(nonce) = proposal.key {
-		// 		self.logger.info(format!("🕸️  Refresh vote with batch_id {batch_id:?} received"));
-		// 		let offchain = &mut self.backend.offchain_storage();
-
-		// 		if let Some(ref mut offchain) = offchain {
-		// 			let refresh_proposal =
-		// 				RefreshProposalSigned { nonce, signature: signature.encode() };
-		// 			let encoded_proposal = refresh_proposal.encode();
-		// 			offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
-
-		// 			self.logger.trace(format!(
-		// 				"Stored pub_key signature offchain {:?}",
-		// 				signature.encode()
-		// 			));
-		// 		}
-
-		// 		return Ok(())
-		// 	}
-		// }
 
 		let mut signed_proposals = vec![];
 

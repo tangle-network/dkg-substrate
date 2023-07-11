@@ -36,7 +36,6 @@ use frame_system::{
 	EnsureRoot,
 };
 use pallet_dkg_proposal_handler::StoredUnsignedProposalBatchOf;
-use pallet_dkg_proposals::DKGEcdsaToEthereum;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -665,7 +664,7 @@ parameter_types! {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;

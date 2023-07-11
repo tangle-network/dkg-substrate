@@ -124,7 +124,14 @@ where
 			<BI as BlockchainInterface>::MaxProposalLength,
 			<BI as BlockchainInterface>::MaxProposalsInBatch,
 			<BI as BlockchainInterface>::Clock,
-		> = ProtocolType::Keygen { ty, i, t, n, associated_block_id: associated_round_id };
+		> = ProtocolType::Keygen {
+			ty,
+			i,
+			t,
+			n,
+			associated_block_id: associated_round_id,
+			keygen_protocol_hash,
+		};
 		new_inner(
 			(),
 			Keygen::new(*i.as_ref(), t, n)

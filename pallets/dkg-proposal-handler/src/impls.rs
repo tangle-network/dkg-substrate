@@ -1,8 +1,4 @@
 use super::*;
-use dkg_runtime_primitives::{
-	handlers::decode_proposals::ProposalIdentifier, ProposalAction, ProposalKind,
-};
-use sp_std::vec;
 
 impl<T: Config> ProposalHandlerTrait for Pallet<T> {
 	type BatchId = T::BatchId;

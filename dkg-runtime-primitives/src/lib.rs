@@ -337,8 +337,6 @@ sp_api::decl_runtime_apis! {
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
 		fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, N>>;
-		/// Get maximum delay before which an offchain extrinsic should be submitted
-		fn get_max_extrinsic_delay(block_number: N) -> N;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
@@ -368,7 +366,6 @@ mod tests {
 
 	#[test]
 	fn assert_value() {
-		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
 		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
 	}
 

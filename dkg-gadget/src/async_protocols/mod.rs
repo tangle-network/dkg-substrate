@@ -26,12 +26,12 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId},
+	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId},
 	AuthoritySet,
 };
 use dkg_runtime_primitives::{
 	gossip_messages::{DKGKeygenMessage, DKGOfflineMessage},
-	MaxAuthorities, StoredUnsignedProposalBatch, UnsignedProposal,
+	MaxAuthorities, StoredUnsignedProposalBatch,
 };
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},
@@ -446,7 +446,6 @@ pub fn new_inner<SM: StateMachineHandler<BI> + 'static, BI: BlockchainInterface 
 		<BI as BlockchainInterface>::MaxProposalsInBatch,
 		<BI as BlockchainInterface>::Clock,
 	>,
-	status: DKGMsgStatus,
 ) -> Result<GenericAsyncHandler<'static, SM::Return>, DKGError>
 where
 	<SM as StateMachine>::Err: Send + Debug,
@@ -582,7 +581,6 @@ fn generate_outgoing_to_wire_fn<
 		<BI as BlockchainInterface>::MaxProposalsInBatch,
 		<BI as BlockchainInterface>::Clock,
 	>,
-	status: DKGMsgStatus,
 ) -> impl SendFuture<'static, ()>
 where
 	<SM as StateMachine>::MessageBody: Serialize + Send + MessageRoundID,
@@ -658,7 +656,7 @@ where
 					keygen_protocol_hash: keygen_protocol_hash.expect("This value should be set"),
 				}),
 				ProtocolType::Offline { unsigned_proposal_batch, .. } =>
-					DKGMsgPayload::Offline(DKGOfflineMessage {
+					NetworkMsgPayload::Offline(DKGOfflineMessage {
 						key: Vec::from(
 							&unsigned_proposal_batch.hash().expect("Cannot hash unsigned proposal!")
 								as &[u8],

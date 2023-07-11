@@ -199,23 +199,21 @@ pub trait ProposalHandlerTrait {
 
 	fn handle_signed_proposal_batch(
 		_prop: SignedProposalBatch<
-		Self::BatchId,
-		Self::MaxProposalLength,
-		Self::MaxProposals,
-		Self::MaxSignatureLen,
-	>,
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposals,
+			Self::MaxSignatureLen,
+		>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 }
 
 impl ProposalHandlerTrait for () {
-		type BatchId = u32;
-		type MaxProposalLength = ConstU32<0>;
-		type MaxProposals = ConstU32<0>;
-		type MaxSignatureLen = ConstU32<0>;
-
-
+	type BatchId = u32;
+	type MaxProposalLength = crate::MaxProposalLength;
+	type MaxProposals = ConstU32<0>;
+	type MaxSignatureLen = ConstU32<0>;
 }
 
 /// An unsigned proposal represented in pallet storage

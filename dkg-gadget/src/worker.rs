@@ -50,7 +50,7 @@ use dkg_runtime_primitives::{
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
 	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
-	GENESIS_AUTHORITY_SET_ID, KEYGEN_TIMEOUT,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{

@@ -13,80 +13,54 @@
 // limitations under the License.
 //
 #![allow(clippy::unwrap_used)]
+use super::mock::DKGProposalHandler;
 
-use crate::{mock::*, Error, UnsignedProposalQueue};
+use crate::{mock::*, Error, SignedProposalBatchOf};
 use codec::Encode;
 use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalAction, ProposalHandlerTrait,
-	TransactionV2, TypedChainId,
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalHandlerTrait, TransactionV2,
+	TypedChainId,
 };
 use frame_support::{
 	assert_err, assert_noop, assert_ok,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
-	BoundedVec,
-};
-use sp_runtime::{
-	offchain::storage::{StorageRetrievalError, StorageValueRef},
-	BoundedVec,
-};
-use sp_std::vec::Vec;
-
-use super::mock::DKGProposalHandler;
-use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, OffchainSignedProposals,
-	ProposalHandlerTrait, ProposalHeader, TransactionV2, TypedChainId,
 };
 use sp_core::sr25519;
+use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
+use sp_std::vec::Vec;
+
+use dkg_runtime_primitives::ProposalHeader;
 use sp_runtime::offchain::storage::MutateStorageError;
 use webb_proposals::{Proposal, ProposalKind};
 
 // *** Utility ***
 
-fn add_proposal_to_offchain_storage(
-	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-) {
+fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<
-		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-		MutateStorageError<_, ()>,
-	> = proposals_ref.mutate(
-		|val: Result<
-			Option<
-				OffchainSignedProposals<
-					u64,
-					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
-				>,
-			>,
-			StorageRetrievalError,
-		>| match val {
-			Ok(Some(mut ser_props)) => {
-				ser_props.proposals.push((vec![prop], 0));
-				Ok(ser_props)
+	let update_res: Result<Vec<SignedProposalBatchOf<Test>>, MutateStorageError<_, ()>> =
+		proposals_ref.mutate(
+			|val: Result<Option<Vec<SignedProposalBatchOf<Test>>>, StorageRetrievalError>| match val
+			{
+				Ok(Some(mut ser_props)) => {
+					ser_props.push(prop);
+					Ok(ser_props)
+				},
+				_ => {
+					let prop_wrapper: Vec<SignedProposalBatchOf<Test>> = vec![prop];
+					Ok(prop_wrapper)
+				},
 			},
-			_ => {
-				let mut prop_wrapper = OffchainSignedProposals::<
-					u64,
-					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
-				>::default();
-				prop_wrapper.proposals.push((vec![prop], 0));
-				Ok(prop_wrapper)
-			},
-		},
-	);
+		);
 
 	assert_ok!(update_res);
 }
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<
-		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-	> = proposals_ref
-		.get::<OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>>(
-		)
-		.unwrap();
+	let stored_props: Option<Vec<SignedProposalBatchOf<Test>>> =
+		proposals_ref.get::<Vec<SignedProposalBatchOf<Test>>>().unwrap();
 	assert!(stored_props.is_some(), "{}", true);
 	assert_eq!(stored_props.unwrap().len(), num);
 }
@@ -113,21 +87,6 @@ pub fn run_n_blocks(n: u64) -> u64 {
 }
 
 // *** Tests ***
-
-#[test]
-fn handle_empty_proposal() {
-	execute_test_with(|| {
-		assert_err!(
-			DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
-				kind: ProposalKind::AnchorUpdate,
-				data: BoundedVec::default(),
-			}),
-			crate::Error::<Test>::InvalidProposalBytesLength
-		);
-
-		assert_eq!(DKGProposalHandler::get_unsigned_proposal_batches().len(), 0);
-	});
-}
 
 #[test]
 fn handle_unsigned_eip2930_transaction_proposal_success() {
@@ -167,50 +126,16 @@ fn handle_anchor_update_proposal_success() {
 			238, 94,
 		];
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
+		let unsigned_proposal = Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: proposal_raw.to_vec().try_into().unwrap()
-		}));
-
-		let unsigned_proposal = Proposal::Unsigned {
-			kind: ProposalKind::ProposerSetUpdate,
 			data: proposal_raw.encode().try_into().unwrap(),
 		};
 
-		// the unsigned proposal queue should be empty, this is becuase
-		// the ProposerSetUpdate is always a Batch-of-1, so we skip the unsigned
-		// proposal queue and insert it directly to the unsigned proposal batch queue
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None).is_none());
-
-		// the unsigned proposal batch should have the proposal
-		assert_eq!(
-			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 0_u32)
-				.unwrap()
-				.proposals
-				.first()
-				.unwrap()
-				.proposal,
-			unsigned_proposal
-		);
-
-		// as a sanity test, add another ProposerSetUpdate proposal,
-		// this should be added as a new batch-of-1
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposer_set_update_proposal(
-			proposal_raw.to_vec(),
-			ProposalAction::Sign(0)
-		));
-
-		let unsigned_proposal = Proposal::Unsigned {
-			kind: ProposalKind::ProposerSetUpdate,
-			data: proposal_raw.encode().try_into().unwrap(),
-		};
-
-		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::None).is_none());
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(unsigned_proposal.clone()));
 
 		assert_eq!(
-			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::None, 1_u32)
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1337),)
 				.unwrap()
-				.proposals
 				.first()
 				.unwrap()
 				.proposal,
@@ -225,7 +150,7 @@ fn store_signed_proposal_offchain() {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
 		let unsigned_proposal = Proposal::Unsigned {
-			kind: ProposalKind::AnchorUpdate,
+			kind: ProposalKind::EVM,
 			data: tx_v_2.encode().try_into().unwrap(),
 		};
 
@@ -386,6 +311,15 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 			]
 			.into(),
 			[0x26, 0x57, 0x88, 0x01].into(),
+			1.into(),
+		),
+		TypedChainId::Substrate(_) => ProposalHeader::new(
+			[
+				1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0,
+				0, 0, 0, 1,
+			]
+			.into(),
+			[0x0, 0x0, 0x0, 0x0].into(),
 			1.into(),
 		),
 		_ => {
@@ -615,22 +549,8 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::FeeRecipientUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-	});
-}
 
-#[test]
-fn expired_unsigned_proposals_are_removed() {
-	execute_test_with(|| {
-		// Submit one unsigned proposal
+		// Substrate Tests
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -638,12 +558,15 @@ fn expired_unsigned_proposals_are_removed() {
 					kind: ProposalKind::TokenAdd,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Evm(0)
+				TypedChainId::Substrate(0)
 			)
 		));
 
-		// lets time travel to 5 blocks later and submit another proposal
-		run_n_blocks(5);
+		assert!(
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Substrate(1),)
+				.unwrap()
+				.len() == 1
+		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -651,20 +574,8 @@ fn expired_unsigned_proposals_are_removed() {
 					kind: ProposalKind::TokenRemove,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Evm(0)
+				TypedChainId::Substrate(0)
 			)
 		));
-
-		// sanity check
-		run_n_blocks(10);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 2);
-
-		// time travel to a block after expiry period of first unsigned
-		run_n_blocks(11);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 1);
-
-		// time travel to a block after expiry period of second unsigned
-		run_n_blocks(16);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 0);
-	})
+	});
 }

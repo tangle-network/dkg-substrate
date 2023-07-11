@@ -19,7 +19,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::{
 	keygen::LocalKey,
 	sign::{CompletedOfflineStage, OfflineStage, PartialSignature, SignManual},
 };
-use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
 use crate::async_protocols::{
 	blockchain_interface::BlockchainInterface,

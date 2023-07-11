@@ -7,8 +7,8 @@ use dkg_primitives::{
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
-	crypto::Public, BatchId, MaxProposalLength, MaxProposalsInBatch, MaxSignatureLength,
-	SignedProposalBatch, StoredUnsignedProposalBatch,
+	crypto::Public, gossip_messages::PublicKeyMessage, BatchId, MaxProposalLength,
+	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,

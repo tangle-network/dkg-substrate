@@ -186,8 +186,8 @@ where
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
-		for unsigned_proposal in unsigned_proposals {
-			let typed_chain_id = unsigned_proposal.0.typed_chain_id;
+		for batch in unsigned_proposals {
+			let typed_chain_id = batch.proposals.first().expect("Empty batch!").typed_chain_id;
 			if !self.work_manager.can_submit_more_tasks() {
 				dkg_worker.logger.info(
 					"Will not submit more unsigned proposals because the work manager is full",
@@ -202,7 +202,7 @@ where
 			   if we are in this set, we send it to the signing manager, and continue.
 			   if we are not, we continue the loop.
 			*/
-			let unsigned_proposal_bytes = unsigned_proposal.encode();
+			let unsigned_proposal_bytes = batch.encode();
 			let concat_data = dkg_pub_key
 				.clone()
 				.into_iter()
@@ -210,7 +210,7 @@ where
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash = unsigned_proposal.hash().expect("unable to hash proposal");
+			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -233,7 +233,7 @@ where
 						session_id,
 						threshold,
 						ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal,
+						batch,
 						signing_set,
 						*header.number(),
 					) {
