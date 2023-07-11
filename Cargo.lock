@@ -13705,11 +13705,11 @@ dependencies = [
 name = "webb-relayer-gadget"
 version = "0.0.1"
 dependencies = [
- "parity-scale-codec",
+ "dkg-runtime-primitives",
+ "ethereum-types",
  "sc-keystore",
  "sp-application-crypto 7.0.0",
  "sp-keystore 0.13.0",
- "tokio",
  "tracing",
  "webb-relayer",
  "webb-relayer-config",
@@ -13722,7 +13722,6 @@ name = "webb-relayer-gadget-cli"
 version = "0.0.1"
 dependencies = [
  "clap 4.3.10",
- "sc-cli",
 ]
 
 [[package]]

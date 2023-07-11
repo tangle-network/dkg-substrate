@@ -9,5 +9,3 @@ edition = { workspace = true }
 
 [dependencies]
 clap = { workspace = true }
-# Substrate
-sc-cli = { workspace = true }

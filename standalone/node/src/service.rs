@@ -181,7 +181,7 @@ pub struct RunFullParams {
 
 /// Builds a new service for a full client.
 pub fn new_full(
-	RunFullParams { mut config, debug_output, relayer_cmd }: RunFullParams
+	RunFullParams { mut config, debug_output, relayer_cmd }: RunFullParams,
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -293,10 +293,13 @@ pub fn new_full(
 		);
 
 		let relayer_params = webb_relayer_gadget::WebbRelayerParams {
-			key_store: Some(keystore_container.sync_keystore()),
 			local_keystore: keystore_container.local_keystore(),
 			config_dir: relayer_cmd.relayer_config_dir,
-			database_path: config.database.path().map(|path| path.to_path_buf()),
+			database_path: config
+				.database
+				.path()
+				.and_then(|path| path.parent())
+				.map(|p| p.to_path_buf()),
 		};
 		// Start Webb Relayer Gadget as non-essential task.
 		task_manager.spawn_handle().spawn(
