@@ -173,10 +173,15 @@ fn remote_keystore(_url: &str) -> Result<Arc<LocalKeystore>, &'static str> {
 	Err("Remote Keystore not supported.")
 }
 
+pub struct RunFullParams {
+	pub config: Configuration,
+	pub debug_output: Option<std::path::PathBuf>,
+	pub relayer_cmd: webb_relayer_gadget_cli::WebbRelayerCmd,
+}
+
 /// Builds a new service for a full client.
 pub fn new_full(
-	mut config: Configuration,
-	debug_output: Option<std::path::PathBuf>,
+	RunFullParams { mut config, debug_output, relayer_cmd }: RunFullParams
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -290,9 +295,11 @@ pub fn new_full(
 		let relayer_params = webb_relayer_gadget::WebbRelayerParams {
 			key_store: Some(keystore_container.sync_keystore()),
 			local_keystore: keystore_container.local_keystore(),
+			config_dir: relayer_cmd.relayer_config_dir,
+			database_path: config.database.path().map(|path| path.to_path_buf()),
 		};
-		// Start Webb Relayer Gadget
-		task_manager.spawn_essential_handle().spawn(
+		// Start Webb Relayer Gadget as non-essential task.
+		task_manager.spawn_handle().spawn(
 			"relayer-gadget",
 			None,
 			webb_relayer_gadget::start_relayer_gadget(relayer_params),

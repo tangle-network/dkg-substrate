@@ -17,29 +17,7 @@ sp-keystore = { workspace = true }
 sc-keystore = { workspace = true }
 
 # Relayer
-[dependencies.webb-relayer]
-git = "https://github.com/webb-tools/relayer"
-branch = "shady/downgrade-prometheus"
-version = "0.5.5-dev"
-default-features = false
-features = ["evm-runtime", "substrate-runtime"]
-
-[dependencies.webb-relayer-config]
-git = "https://github.com/webb-tools/relayer"
-branch = "shady/downgrade-prometheus"
-version = "0.5.5-dev"
-default-features = false
-features = ["evm-runtime", "substrate-runtime"]
-
-[dependencies.webb-relayer-context]
-git = "https://github.com/webb-tools/relayer"
-branch = "shady/downgrade-prometheus"
-version = "0.5.5-dev"
-default-features = false
-
-
-[dependencies.webb-relayer-store]
-git = "https://github.com/webb-tools/relayer"
-branch = "shady/downgrade-prometheus"
-version = "0.5.5-dev"
-default-features = false
+webb-relayer = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
+webb-relayer-context = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
+webb-relayer-config = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
+webb-relayer-store = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }

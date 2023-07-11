@@ -17,7 +17,8 @@ members = [
 	'dkg-logging',
 	'dkg-mock-blockchain',
 	'dkg-test-orchestrator',
-	'relayer-gadget'
+	'relayer-gadget',
+	'relayer-gadget/cli',
 ]
 resolver = "2"
 
@@ -36,6 +37,7 @@ dkg-rococo-runtime = { default-features = false, path = "parachain/runtime/rococ
 dkg-mock-blockchain = { path = "dkg-mock-blockchain", default-features = false }
 dkg-test-orchestrator = { path = "dkg-test-orchestrator", default-features = false }
 webb-relayer-gadget = { path = "relayer-gadget", default-features = false }
+webb-relayer-gadget-cli = { path = "relayer-gadget/cli", default-features = false }
 
 futures = "0.3.15"
 ethabi = { version = "18.0.0", default-features = false }
