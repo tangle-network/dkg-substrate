@@ -93,7 +93,7 @@ pub const SIGN_TIMEOUT: u32 = 10;
 pub const ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE: u64 = (SIGN_TIMEOUT - 2) as u64;
 
 pub const fn associated_block_id_acceptable(expected: u64, received: u64) -> bool {
-	// favor explicit logic for readability
+	// Favor explicit logic for readability
 	let is_acceptable_above = received >= expected &&
 		received <= expected.saturating_add(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE);
 	let is_acceptable_below = received < expected &&
