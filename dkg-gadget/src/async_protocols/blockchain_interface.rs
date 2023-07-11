@@ -24,7 +24,8 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
-	types::{DKGError, DKGMessage, DKGPublicKeyMessage, SessionId, SignedDKGMessage},
+	gossip_messages::PublicKeyMessage,
+	types::{DKGError, DKGMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
@@ -32,8 +33,7 @@ use dkg_runtime_primitives::{
 	offchain::storage_keys::OFFCHAIN_PUBLIC_KEY_SIG,
 	proposal::DKGPayloadKey,
 	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
-	MaxProposalsInBatch, MaxSignatureLength, RefreshProposalSigned, SignedProposalBatch,
-	StoredUnsignedProposalBatch,
+	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -301,30 +301,30 @@ impl<B, BE, C, GE> BlockchainInterface
 			reason: "Unable to serialize signature".to_string(),
 		})?;
 
-		// if the signed proposal is a refreshvote, we save it to a different storage and exit early
-		// we know that refreshvote is going to be a batch of 1
-		if unsigned_proposal_batch.proposals.len() == 1 {
-			let batch_id = unsigned_proposal_batch.batch_id;
-			let proposal = unsigned_proposal_batch.proposals.first().expect("checked above. qed");
-			if let DKGPayloadKey::RefreshVote(nonce) = proposal.key {
-				self.logger.info(format!("🕸️  Refresh vote with batch_id {batch_id:?} received"));
-				let offchain = &mut self.backend.offchain_storage();
+		// // if the signed proposal is a refreshvote, we save it to a different storage and exit
+		// early // we know that refreshvote is going to be a batch of 1
+		// if unsigned_proposal_batch.proposals.len() == 1 {
+		// 	let batch_id = unsigned_proposal_batch.batch_id;
+		// 	let proposal = unsigned_proposal_batch.proposals.first().expect("checked above. qed");
+		// 	if let DKGPayloadKey::RefreshVote(nonce) = proposal.key {
+		// 		self.logger.info(format!("🕸️  Refresh vote with batch_id {batch_id:?} received"));
+		// 		let offchain = &mut self.backend.offchain_storage();
 
-				if let Some(ref mut offchain) = offchain {
-					let refresh_proposal =
-						RefreshProposalSigned { nonce, signature: signature.encode() };
-					let encoded_proposal = refresh_proposal.encode();
-					offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
+		// 		if let Some(ref mut offchain) = offchain {
+		// 			let refresh_proposal =
+		// 				RefreshProposalSigned { nonce, signature: signature.encode() };
+		// 			let encoded_proposal = refresh_proposal.encode();
+		// 			offchain.set(STORAGE_PREFIX, OFFCHAIN_PUBLIC_KEY_SIG, &encoded_proposal);
 
-					self.logger.trace(format!(
-						"Stored pub_key signature offchain {:?}",
-						signature.encode()
-					));
-				}
+		// 			self.logger.trace(format!(
+		// 				"Stored pub_key signature offchain {:?}",
+		// 				signature.encode()
+		// 			));
+		// 		}
 
-				return Ok(())
-			}
-		}
+		// 		return Ok(())
+		// 	}
+		// }
 
 		let mut signed_proposals = vec![];
 

@@ -109,7 +109,7 @@ use dkg_runtime_primitives::{
 	handlers::{decode_proposals::decode_proposal_identifier, validate_proposals::ValidationError},
 	offchain::storage_keys::{OFFCHAIN_SIGNED_PROPOSALS, SUBMIT_SIGNED_PROPOSAL_ON_CHAIN_LOCK},
 	traits::OnSignedProposal,
-	OffchainSignedProposals, ProposalHandlerTrait, StoredUnsignedProposal, TypedChainId,
+	OffchainSignedProposals, ProposalHandlerTrait, SignedProposalBatch, TypedChainId,
 };
 use frame_support::pallet_prelude::*;
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
@@ -454,7 +454,7 @@ pub mod pallet {
 
 					let prop = prop.clone();
 
-					Self::handle_signed_proposal(prop)?;
+					Self::handle_signed_proposal_batch(prop)?;
 
 					continue
 				}

@@ -26,12 +26,12 @@ pub mod test_utils;
 use curv::elliptic::curves::Secp256k1;
 use dkg_primitives::{
 	crypto::Public,
-	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId},
+	types::{DKGError, DKGMessage, DKGMsgStatus, NetworkMsgPayload, SessionId},
 	AuthoritySet,
 };
 use dkg_runtime_primitives::{
 	gossip_messages::{DKGKeygenMessage, DKGOfflineMessage},
-	MaxAuthorities, UnsignedProposal,
+	MaxAuthorities, StoredUnsignedProposalBatch, UnsignedProposal,
 };
 use futures::{
 	channel::mpsc::{UnboundedReceiver, UnboundedSender},

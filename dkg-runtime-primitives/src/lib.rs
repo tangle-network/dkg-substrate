@@ -199,12 +199,6 @@ pub struct AggregatedProposerVotes<
 	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxVoters>,
 }
 
-impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
-	fn default() -> Self {
-		Self { proposals: Default::default() }
-	}
-}
-
 pub mod crypto {
 	use sp_application_crypto::{app_crypto, ecdsa};
 	app_crypto!(ecdsa, crate::KEY_TYPE);
