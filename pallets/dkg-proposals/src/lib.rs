@@ -138,7 +138,6 @@ pub mod pallet {
 	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]

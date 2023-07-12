@@ -331,7 +331,6 @@ pub mod pallet {
 	}
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::hooks]
@@ -1283,7 +1282,7 @@ pub mod pallet {
 		/// This forces the next authorities into the current authority spot and
 		/// automatically increments the authority ID. It uses `change_authorities`
 		/// to execute the rotation forcefully.
-		#[pallet::weight(0)]
+		#[pallet::weight({0})]
 		#[pallet::call_index(9)]
 		pub fn force_change_authorities(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;
@@ -1328,7 +1327,7 @@ pub mod pallet {
 		/// storage, which will be picked up by the on chain worker and stored on chain.
 		///
 		/// Note that, this will clear the next public key and its signature, if any.
-		#[pallet::weight(0)]
+		#[pallet::weight({0})]
 		#[pallet::call_index(10)]
 		pub fn trigger_emergency_keygen(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::ForceOrigin::ensure_origin(origin)?;

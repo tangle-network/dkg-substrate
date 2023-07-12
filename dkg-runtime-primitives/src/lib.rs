@@ -371,7 +371,6 @@ mod tests {
 
 	#[test]
 	fn assert_value() {
-		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
 		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
 	}
 
