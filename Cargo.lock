@@ -13449,8 +13449,8 @@ dependencies = [
 
 [[package]]
 name = "webb-bridge-registry-backends"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "async-trait",
  "ethereum-types",
@@ -13468,8 +13468,8 @@ dependencies = [
 
 [[package]]
 name = "webb-chains-info"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "anyhow",
  "prettyplease 0.2.10",
@@ -13483,8 +13483,8 @@ dependencies = [
 
 [[package]]
 name = "webb-event-watcher-traits"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "async-trait",
  "backoff",
@@ -13505,8 +13505,8 @@ dependencies = [
 
 [[package]]
 name = "webb-ew-dkg"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "async-trait",
  "ethereum-types",
@@ -13524,8 +13524,8 @@ dependencies = [
 
 [[package]]
 name = "webb-ew-evm"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -13555,8 +13555,8 @@ dependencies = [
 
 [[package]]
 name = "webb-price-oracle-backends"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -13572,8 +13572,8 @@ dependencies = [
 
 [[package]]
 name = "webb-proposal-signing-backends"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "async-trait",
  "ethereum-types",
@@ -13625,11 +13625,10 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "axum",
- "build-data",
  "config",
  "dotenv",
  "ethereum-types",
@@ -13658,8 +13657,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-config"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "anyhow",
  "config",
@@ -13683,8 +13682,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-context"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "http",
  "native-tls",
@@ -13727,8 +13726,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-handler-utils"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "native-tls",
  "serde",
@@ -13740,11 +13739,12 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-handlers"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "axum",
  "axum-client-ip",
+ "build-data",
  "ethereum-types",
  "futures",
  "native-tls",
@@ -13766,8 +13766,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-store"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "hex",
  "parking_lot 0.12.1",
@@ -13783,8 +13783,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-tx-queue"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "backoff",
  "ethereum-types",
@@ -13805,8 +13805,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-tx-relay"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "chrono",
  "ethereum-types",
@@ -13829,16 +13829,16 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-tx-relay-utils"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "webb-relayer-types"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "ethereum-types",
  "native-tls",
@@ -13852,8 +13852,8 @@ dependencies = [
 
 [[package]]
 name = "webb-relayer-utils"
-version = "0.5.5-dev"
-source = "git+https://github.com/webb-tools/relayer?branch=develop#e2d74da4b111d536e3ea85de82e1c92f485dd618"
+version = "0.5.6-dev"
+source = "git+https://github.com/webb-tools/relayer?tag=v0.5.6-dev#a439e421efe0c62399c0937d8ba6689c45a4daf2"
 dependencies = [
  "ark-std",
  "async-trait",
