@@ -6,7 +6,6 @@ use dkg_runtime_primitives::{
 };
 use hash_db::HashDB;
 use parking_lot::RwLock;
-use rand::Rng;
 use sp_api::{ApiExt, AsTrieBackend, BlockT, StateBackend, *};
 use sp_core::bounded_vec::BoundedVec;
 use sp_runtime::{testing::H256, traits::BlakeTwo256, Permill};
@@ -40,6 +39,7 @@ pub struct DummyApiInner {
 	>,
 	pub should_execute_keygen: bool,
 	pub blocks_per_session: u64,
+	pub incrementing_batch_id: u32,
 }
 
 impl MutableBlockchain for DummyApi {
@@ -47,17 +47,21 @@ impl MutableBlockchain for DummyApi {
 		&self,
 		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
 	) {
-		// use a random batch_id to avoid collision
-		let num = rand::thread_rng().gen_range(0..100);
+		// Use an incremented batch ID to avoid collision
+		let mut lock = self.inner.write();
+		let batch_id = lock.incrementing_batch_id;
+		lock.incrementing_batch_id += 1;
+
 		let batches = propos
 			.iter()
 			.map(|prop| StoredUnsignedProposalBatch {
 				proposals: vec![prop.clone().0].try_into().unwrap(),
-				batch_id: num,
+				batch_id,
 				timestamp: 0,
 			})
 			.collect::<Vec<_>>();
-		self.inner.write().unsigned_proposals = batches;
+
+		lock.unsigned_proposals = batches;
 	}
 
 	fn set_pub_key(&self, block_id: u64, key: Vec<u8>) {
@@ -96,6 +100,7 @@ impl DummyApi {
 				unsigned_proposals: vec![],
 				should_execute_keygen: false,
 				blocks_per_session,
+				incrementing_batch_id: 0,
 			})),
 			logger,
 		}
