@@ -54,7 +54,7 @@ use sc_network_common::{
 };
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
-	collections::{hash_map::Entry, HashMap, HashSet},
+	collections::{HashMap, HashSet},
 	hash::Hash,
 	iter,
 	marker::PhantomData,
@@ -123,7 +123,9 @@ impl NetworkGossipEngineBuilder {
 			protocol_name: self.protocol_name.clone(),
 			to_receiver: message_channel_tx,
 			incoming_messages_stream: Arc::new(Mutex::new(Some(handler_channel_rx))),
-			pending_messages_peers: Arc::new(RwLock::new(HashMap::new())),
+			pending_messages_peers: Arc::new(RwLock::new(LruHashMap::new(
+				NonZeroUsize::new(MAX_KNOWN_MESSAGES).expect("Constant is nonzero"),
+			))),
 			authority_id_to_peer_id: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
@@ -263,7 +265,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	/// these peers using the message hash while the message is
 	/// received. This prevents that we receive the same message
 	/// multiple times concurrently.
-	pending_messages_peers: Arc<RwLock<HashMap<B::Hash, HashSet<PeerId>>>>,
+	pending_messages_peers: Arc<RwLock<LruHashMap<B::Hash, HashSet<PeerId>>>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
 	// All connected peers
@@ -554,8 +556,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 					);
 				}
 			};
-			match pending_messages_peers.entry(message_hash) {
-				Entry::Vacant(entry) => {
+			match pending_messages_peers.inner.entry(message_hash) {
+				linked_hash_map::Entry::Vacant(entry) => {
 					self.logger.debug(format!("NEW DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_new_signed_messages.inc();
@@ -566,7 +568,7 @@ impl<B: Block + 'static> GossipHandler<B> {
 					// we should add some good reputation to them.
 					self.service.report_peer(who, rep::GOOD_MESSAGE);
 				},
-				Entry::Occupied(mut entry) => {
+				linked_hash_map::Entry::Occupied(mut entry) => {
 					self.logger.debug(format!("OLD DKG MESSAGE FROM {who}"));
 					if let Some(metrics) = self.metrics.as_ref() {
 						metrics.dkg_old_signed_messages.inc();
