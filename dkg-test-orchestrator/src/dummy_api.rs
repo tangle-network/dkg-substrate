@@ -189,44 +189,6 @@ impl StateBackend<BlakeTwo256> for DummyStateBackend {
 		todo!()
 	}
 
-	fn apply_to_key_values_while<F: FnMut(Vec<u8>, Vec<u8>) -> bool>(
-		&self,
-		_child_info: Option<&sc_client_api::ChildInfo>,
-		_prefix: Option<&[u8]>,
-		_start_at: Option<&[u8]>,
-		_f: F,
-		_allow_missing: bool,
-	) -> Result<bool, Self::Error> {
-		todo!()
-	}
-
-	fn apply_to_keys_while<F: FnMut(&[u8]) -> bool>(
-		&self,
-		_child_info: Option<&sc_client_api::ChildInfo>,
-		_prefix: Option<&[u8]>,
-		_start_at: Option<&[u8]>,
-		_f: F,
-	) -> Result<(), DummyError> {
-		todo!()
-	}
-
-	fn for_key_values_with_prefix<F: FnMut(&[u8], &[u8])>(
-		&self,
-		_prefix: &[u8],
-		_f: F,
-	) -> Result<(), DummyError> {
-		todo!()
-	}
-
-	fn for_child_keys_with_prefix<F: FnMut(&[u8])>(
-		&self,
-		_child_info: &sc_client_api::ChildInfo,
-		_prefix: &[u8],
-		_f: F,
-	) -> Result<(), DummyError> {
-		todo!()
-	}
-
 	fn storage_root<'a>(
 		&self,
 		_delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
@@ -426,13 +388,6 @@ impl sc_client_api::BlockImportOperation<TestBlock> for DummyStateBackend {
 		_justifications: Option<sp_runtime::Justifications>,
 		_state: sc_client_api::NewBlockState,
 	) -> sp_blockchain::Result<()> {
-		todo!()
-	}
-
-	fn update_cache(
-		&mut self,
-		_cache: std::collections::HashMap<sp_blockchain::well_known_cache_keys::Id, Vec<u8>>,
-	) {
 		todo!()
 	}
 

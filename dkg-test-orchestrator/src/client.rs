@@ -211,6 +211,10 @@ impl BlockchainEvents<TestBlock> for TestClient {
 	) -> sp_blockchain::Result<sc_client_api::StorageEventStream<<TestBlock as BlockT>::Hash>> {
 		todo!()
 	}
+
+	fn every_import_notification_stream(&self) -> sc_client_api::ImportNotifications<TestBlock> {
+		todo!()
+	}
 }
 
 impl sc_client_api::Backend<TestBlock> for TestClient {

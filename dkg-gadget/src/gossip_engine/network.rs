@@ -47,16 +47,14 @@ use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::StreamExt;
 use linked_hash_map::LinkedHashMap;
 use parking_lot::{Mutex, RwLock};
-use sc_network::{multiaddr, Event, NetworkService, NetworkStateInfo, PeerId, ProtocolName};
-use sc_network_common::{
-	config, error,
-	service::{NetworkEventStream, NetworkNotification, NetworkPeers},
+use sc_network::{
+	config, error, Event, NetworkEventStream, NetworkNotification, NetworkPeers, NetworkService,
+	NetworkStateInfo, PeerId, ProtocolName,
 };
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	collections::{hash_map::Entry, HashMap, HashSet},
 	hash::Hash,
-	iter,
 	marker::PhantomData,
 	num::NonZeroUsize,
 	sync::{
@@ -388,23 +386,6 @@ impl<B: Block + 'static> GossipHandler<B> {
 	async fn handle_network_event(&self, event: Event) {
 		match event {
 			Event::Dht(_) => {},
-			Event::SyncConnected { remote } => {
-				let addr = iter::once(multiaddr::Protocol::P2p(remote.into()))
-					.collect::<multiaddr::Multiaddr>();
-				let result = self
-					.service
-					.add_peers_to_reserved_set(self.protocol_name.clone(), HashSet::from([addr]));
-				if let Err(err) = result {
-					self.logger.error(format!("Add reserved peer failed: {err}"));
-				}
-			},
-			Event::SyncDisconnected { remote } => {
-				self.service.remove_peers_from_reserved_set(
-					self.protocol_name.clone(),
-					iter::once(remote).collect(),
-				);
-			},
-
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{

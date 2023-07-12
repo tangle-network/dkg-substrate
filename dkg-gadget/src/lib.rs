@@ -22,9 +22,10 @@ use sc_client_api::{Backend, BlockchainEvents};
 use sc_keystore::LocalKeystore;
 use sc_network::{NetworkService, ProtocolName};
 use sc_network_common::ExHashT;
+use sc_network_sync::SyncingService;
 use sp_api::{NumberFor, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 use sp_runtime::traits::Block;
 
 mod error;
@@ -58,7 +59,7 @@ pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/signing/1";
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
 pub fn dkg_peers_set_config(
 	protocol_name: ProtocolName,
-) -> sc_network_common::config::NonDefaultSetConfig {
+) -> sc_network::config::NonDefaultSetConfig {
 	NetworkGossipEngineBuilder::set_config(protocol_name)
 }
 
@@ -97,11 +98,13 @@ where
 	/// Client Backend
 	pub backend: Arc<BE>,
 	/// Synchronous key store pointer
-	pub key_store: Option<SyncCryptoStorePtr>,
+	pub key_store: Option<KeystorePtr>,
 	/// Concrete local key store
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	/// Gossip network
 	pub network: Arc<NetworkService<B, B::Hash>>,
+	/// Chain syncing service
+	pub sync_service: Arc<SyncingService<B>>,
 	/// Prometheus metric registry
 	pub prometheus_registry: Option<Registry>,
 	/// For logging
@@ -128,6 +131,7 @@ where
 		backend,
 		key_store,
 		network,
+		sync_service,
 		prometheus_registry,
 		local_keystore,
 		_block,
@@ -203,6 +207,7 @@ where
 		metrics,
 		local_keystore,
 		network: Some(network),
+		sync_service: Some(sync_service),
 		test_bundle: None,
 		_marker: PhantomData,
 	};

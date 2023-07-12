@@ -34,11 +34,9 @@ sp-consensus-aura = { workspace = true }
 sc-consensus-aura = { workspace = true }
 sc-consensus = { workspace = true }
 sp-inherents = { workspace = true }
-sc-finality-grandpa = { workspace = true }
-sp-finality-grandpa = { workspace = true }
 sc-client-api = { workspace = true }
 sp-runtime = { workspace = true }
-sc-network-common = { workspace = true }
+sc-network = { workspace = true }
 sp-timestamp = { workspace = true }
 pallet-im-online = { workspace = true }
 

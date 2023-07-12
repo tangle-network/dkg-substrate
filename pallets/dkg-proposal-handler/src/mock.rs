@@ -36,7 +36,7 @@ use sp_runtime::{
 
 use sp_core::offchain::{testing, OffchainDbExt, OffchainWorkerExt, TransactionPoolExt};
 
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
+use sp_keystore::{testing::MemoryKeystore, Keystore, KeystoreExt};
 
 use sp_runtime::RuntimeAppPublic;
 
@@ -132,6 +132,10 @@ impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
+	type HoldIdentifier = ();
+	type FreezeIdentifier = ();
+	type MaxHolds = ();
+	type MaxFreezes = ();
 	type WeightInfo = ();
 }
 
@@ -283,24 +287,24 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 pub fn new_test_ext_benchmarks() -> sp_io::TestExternalities {
 	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
 	let mut t_ext = sp_io::TestExternalities::from(t);
-	let keystore = KeyStore::new();
+	let keystore = MemoryKeystore::new();
 	t_ext.register_extension(KeystoreExt(Arc::new(keystore)));
 	t_ext
 }
 
 pub fn execute_test_with<R>(execute: impl FnOnce() -> R) -> R {
 	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
-	let keystore = KeyStore::new();
+	let keystore = MemoryKeystore::new();
 	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
-	let mock_dkg_pub_key = SyncCryptoStore::ecdsa_generate_new(
+	let mock_dkg_pub_key = Keystore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
 		Some(PHRASE),
 	)
 	.unwrap();
 
-	SyncCryptoStore::sr25519_generate_new(
+	Keystore::sr25519_generate_new(
 		&keystore,
 		dkg_runtime_primitives::offchain::crypto::Public::ID,
 		Some(PHRASE),
@@ -338,10 +342,10 @@ pub fn mock_eth_tx_eip2930(nonce: u8) -> EIP2930Transaction {
 pub fn mock_sign_msg(
 	msg: &[u8; 32],
 ) -> Result<std::option::Option<sp_core::ecdsa::Signature>, sp_keystore::Error> {
-	let keystore = KeyStore::new();
+	let keystore = MemoryKeystore::new();
 	let (_pool, _pool_state) = testing::TestTransactionPoolExt::new();
 
-	SyncCryptoStore::ecdsa_generate_new(
+	Keystore::ecdsa_generate_new(
 		&keystore,
 		dkg_runtime_primitives::crypto::Public::ID,
 		Some(PHRASE),
@@ -349,7 +353,7 @@ pub fn mock_sign_msg(
 	.unwrap();
 
 	let pub_key =
-		*SyncCryptoStore::ecdsa_public_keys(&keystore, dkg_runtime_primitives::crypto::Public::ID)
+		*Keystore::ecdsa_public_keys(&keystore, dkg_runtime_primitives::crypto::Public::ID)
 			.get(0)
 			.unwrap();
 
