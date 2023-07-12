@@ -27,7 +27,6 @@
         devShells.default = pkgs.mkShell {
           name = "dkg";
           nativeBuildInputs = [
-            pkgs.gmp
             pkgs.protobuf
             pkgs.pkg-config
             # Needed for rocksdb-sys
@@ -48,11 +47,10 @@
             toolchain
           ];
           packages = [ ];
-					
-					# Environment variables
+          # Environment variables
           RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
-					# Needed for running DKG Node.
-          LD_LIBRARY_PATH = "${pkgs.gmp}/lib";
+          # Needed for running DKG Node.
+          LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.gmp ];
         };
       });
 }
