@@ -69,8 +69,13 @@ where
 			SUBMIT_KEYS_AT,
 			logger,
 		);
-		let _ = aggregated_public_keys.remove(&session_id);
 	}
+
+	// Keep only the keys that are greater than the current session id
+	// (unlikely for any to exist, but, this helps prevent the build up
+	// of old keys in the case a keygen stalls, as well as removing the
+	// current session's keys)
+	aggregated_public_keys.retain(|key, _| key > &session_id);
 
 	Ok(())
 }
