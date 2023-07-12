@@ -45,6 +45,7 @@ pub mod async_protocols;
 pub use dkg_logging::debug_logger;
 pub mod gossip_messages;
 pub mod storage;
+pub mod wsts_proto;
 
 pub use debug_logger::RoundsEventType;
 use gossip_engine::NetworkGossipEngineBuilder;
