@@ -9,7 +9,6 @@ import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, Vec, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
-import { FrameSupportTokensMiscBalanceStatus, DkgRuntimePrimitivesMisbehaviourType, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesProposalRefreshProposal, WebbProposalsProposalProposalKind, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsHeaderTypedChainId, PalletElectionProviderMultiPhaseElectionCompute, SpNposElectionsElectionScore, PalletElectionProviderMultiPhasePhase, SpFinalityGrandpaAppPublic, PalletImOnlineSr25519AppSr25519Public, PalletStakingExposure, PalletNominationPoolsPoolState, PalletStakingForcing, PalletStakingValidatorPrefs, SpRuntimeDispatchError, FrameSupportDispatchDispatchInfo } from '@polkadot/types/lookup';
 
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 
@@ -153,19 +152,19 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * RuntimeEvent Emitted when we encounter a Proposal with invalid Signature.
        **/
-      InvalidProposalSignature: AugmentedEvent<ApiType, [kind: WebbProposalsProposalProposalKind, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes>], { kind: WebbProposalsProposalProposalKind, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes> }>;
+      InvalidProposalBatchSignature: AugmentedEvent<ApiType, [proposals: DkgRuntimePrimitivesProposalSignedProposalBatch, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes>], { proposals: DkgRuntimePrimitivesProposalSignedProposalBatch, data: Bytes, invalidSignature: Bytes, expectedPublicKey: Option<Bytes>, actualPublicKey: Option<Bytes> }>;
       /**
        * RuntimeEvent When a Proposal is added to UnsignedProposalQueue.
        **/
       ProposalAdded: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes }>;
       /**
+       * RuntimeEvent When a Proposal Gets Signed by DKG.
+       **/
+      ProposalBatchSigned: AugmentedEvent<ApiType, [targetChain: WebbProposalsHeaderTypedChainId, batchId: u32, proposals: Vec<PalletDkgProposalHandlerSignedProposalEventData>, signature: Bytes], { targetChain: WebbProposalsHeaderTypedChainId, batchId: u32, proposals: Vec<PalletDkgProposalHandlerSignedProposalEventData>, signature: Bytes }>;
+      /**
        * RuntimeEvent When a Proposal is removed from UnsignedProposalQueue.
        **/
       ProposalRemoved: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, expired: bool], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, expired: bool }>;
-      /**
-       * RuntimeEvent When a Proposal Gets Signed by DKG.
-       **/
-      ProposalSigned: AugmentedEvent<ApiType, [key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes, signature: Bytes], { key: DkgRuntimePrimitivesProposalDkgPayloadKey, targetChain: WebbProposalsHeaderTypedChainId, data: Bytes, signature: Bytes }>;
       /**
        * Generic event
        **/
@@ -558,6 +557,37 @@ declare module '@polkadot/api-base/types/events' {
        * has been paid by `who`.
        **/
       TransactionFeePaid: AugmentedEvent<ApiType, [who: AccountId32, actualFee: u128, tip: u128], { who: AccountId32, actualFee: u128, tip: u128 }>;
+      /**
+       * Generic event
+       **/
+      [key: string]: AugmentedEvent<ApiType>;
+    };
+    utility: {
+      /**
+       * Batch of dispatches completed fully with no error.
+       **/
+      BatchCompleted: AugmentedEvent<ApiType, []>;
+      /**
+       * Batch of dispatches completed but has errors.
+       **/
+      BatchCompletedWithErrors: AugmentedEvent<ApiType, []>;
+      /**
+       * Batch of dispatches did not complete fully. Index of first failing dispatch given, as
+       * well as the error.
+       **/
+      BatchInterrupted: AugmentedEvent<ApiType, [index: u32, error: SpRuntimeDispatchError], { index: u32, error: SpRuntimeDispatchError }>;
+      /**
+       * A call was dispatched.
+       **/
+      DispatchedAs: AugmentedEvent<ApiType, [result: Result<Null, SpRuntimeDispatchError>], { result: Result<Null, SpRuntimeDispatchError> }>;
+      /**
+       * A single item within a Batch of dispatches has completed with no error.
+       **/
+      ItemCompleted: AugmentedEvent<ApiType, []>;
+      /**
+       * A single item within a Batch of dispatches has completed with error.
+       **/
+      ItemFailed: AugmentedEvent<ApiType, [error: SpRuntimeDispatchError], { error: SpRuntimeDispatchError }>;
       /**
        * Generic event
        **/

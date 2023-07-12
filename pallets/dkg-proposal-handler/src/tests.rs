@@ -13,78 +13,56 @@
 // limitations under the License.
 //
 #![allow(clippy::unwrap_used)]
+use super::mock::DKGProposalHandler;
 
-use crate::{mock::*, Error, UnsignedProposalQueue};
+use crate::{mock::*, Error, SignedProposalBatchOf};
 use codec::Encode;
+use dkg_runtime_primitives::{
+	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, ProposalHandlerTrait, TransactionV2,
+	TypedChainId,
+};
 use frame_support::{
 	assert_err, assert_noop, assert_ok,
 	traits::{Hooks, OnFinalize},
 	weights::constants::RocksDbWeight,
 };
-use sp_runtime::{
-	offchain::storage::{StorageRetrievalError, StorageValueRef},
-	BoundedVec,
-};
+use sp_core::sr25519;
+use sp_runtime::offchain::storage::{StorageRetrievalError, StorageValueRef};
 use sp_std::vec::Vec;
 
-use super::mock::DKGProposalHandler;
-use dkg_runtime_primitives::{
-	offchain::storage_keys::OFFCHAIN_SIGNED_PROPOSALS, DKGPayloadKey, OffchainSignedProposals,
-	ProposalHandlerTrait, ProposalHeader, TransactionV2, TypedChainId,
-};
-use sp_core::sr25519;
+use dkg_runtime_primitives::ProposalHeader;
 use sp_runtime::offchain::storage::MutateStorageError;
 use webb_proposals::{Proposal, ProposalKind};
 
 // *** Utility ***
 
-fn add_proposal_to_offchain_storage(
-	prop: Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-) {
+fn add_proposal_to_offchain_storage(prop: SignedProposalBatchOf<Test>) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
 
-	let update_res: Result<
-		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-		MutateStorageError<_, ()>,
-	> = proposals_ref.mutate(
-		|val: Result<
-			Option<
-				OffchainSignedProposals<
-					u64,
-					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
-				>,
-			>,
-			StorageRetrievalError,
-		>| match val {
-			Ok(Some(mut ser_props)) => {
-				ser_props.proposals.push((vec![prop], 0));
-				Ok(ser_props)
+	let update_res: Result<Vec<SignedProposalBatchOf<Test>>, MutateStorageError<_, ()>> =
+		proposals_ref.mutate(
+			|val: Result<Option<Vec<SignedProposalBatchOf<Test>>>, StorageRetrievalError>| match val
+			{
+				Ok(Some(mut ser_props)) => {
+					ser_props.push(prop);
+					Ok(ser_props)
+				},
+				_ => {
+					let prop_wrapper: Vec<SignedProposalBatchOf<Test>> = vec![prop];
+					Ok(prop_wrapper)
+				},
 			},
-			_ => {
-				let mut prop_wrapper = OffchainSignedProposals::<
-					u64,
-					<Test as pallet_dkg_metadata::Config>::MaxProposalLength,
-				>::default();
-				prop_wrapper.proposals.push((vec![prop], 0));
-				Ok(prop_wrapper)
-			},
-		},
-	);
+		);
 
 	assert_ok!(update_res);
 }
 
 fn check_offchain_proposals_num_eq(num: usize) {
 	let proposals_ref = StorageValueRef::persistent(OFFCHAIN_SIGNED_PROPOSALS);
-	let stored_props: Option<
-		OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>,
-	> = proposals_ref
-		.get::<OffchainSignedProposals<u64, <Test as pallet_dkg_metadata::Config>::MaxProposalLength>>(
-		)
-		.unwrap();
+	let stored_props: Option<Vec<SignedProposalBatchOf<Test>>> =
+		proposals_ref.get::<Vec<SignedProposalBatchOf<Test>>>().unwrap();
 	assert!(stored_props.is_some(), "{}", true);
-
-	assert_eq!(stored_props.unwrap().proposals.len(), num);
+	assert_eq!(stored_props.unwrap().len(), num);
 }
 
 // helper function to skip blocks
@@ -111,43 +89,27 @@ pub fn run_n_blocks(n: u64) -> u64 {
 // *** Tests ***
 
 #[test]
-fn handle_empty_proposal() {
-	execute_test_with(|| {
-		assert_err!(
-			DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
-				kind: ProposalKind::AnchorUpdate,
-				data: BoundedVec::default(),
-			}),
-			crate::Error::<Test>::InvalidProposalBytesLength
-		);
-
-		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 0);
-	});
-}
-
-#[test]
 fn handle_unsigned_eip2930_transaction_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
+		let unsigned_proposal = Proposal::Unsigned {
+			kind: ProposalKind::EVM,
+			data: tx_v_2.encode().try_into().unwrap(),
+		};
+
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned {
-				kind: ProposalKind::EVM,
-				data: tx_v_2.encode().try_into().unwrap()
-			},
+			unsigned_proposal.clone(),
 		));
 
-		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
-
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(0),)
+				.unwrap()
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 	})
 }
@@ -164,12 +126,21 @@ fn handle_anchor_update_proposal_success() {
 			238, 94,
 		];
 
-		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(Proposal::Unsigned {
+		let unsigned_proposal = Proposal::Unsigned {
 			kind: ProposalKind::AnchorUpdate,
-			data: proposal_raw.to_vec().try_into().unwrap()
-		}));
+			data: proposal_raw.encode().try_into().unwrap(),
+		};
 
-		assert_eq!(DKGProposalHandler::get_unsigned_proposals().len(), 1);
+		assert_ok!(DKGProposalHandler::handle_unsigned_proposal(unsigned_proposal.clone()));
+
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1337),)
+				.unwrap()
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
+		);
 	})
 }
 
@@ -178,63 +149,24 @@ fn store_signed_proposal_offchain() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
+		let unsigned_proposal = Proposal::Unsigned {
+			kind: ProposalKind::EVM,
+			data: tx_v_2.encode().try_into().unwrap(),
+		};
+
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned {
-				kind: ProposalKind::EVM,
-				data: tx_v_2.encode().try_into().unwrap()
-			},
+			unsigned_proposal,
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		let signed_proposal_batch = mock_signed_proposal_batch(tx_v_2);
 
-		let signed_proposal = mock_signed_proposal(tx_v_2);
+		println!("{signed_proposal_batch:?}");
 
-		add_proposal_to_offchain_storage(signed_proposal);
+		add_proposal_to_offchain_storage(signed_proposal_batch);
 
 		check_offchain_proposals_num_eq(1);
 	})
-}
-
-#[test]
-fn submit_signed_proposal_onchain_success() {
-	execute_test_with(|| {
-		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
-
-		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
-			RuntimeOrigin::root(),
-			Proposal::Unsigned {
-				kind: ProposalKind::EVM,
-				data: tx_v_2.encode().try_into().unwrap()
-			},
-		));
-
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-
-		let signed_proposal = mock_signed_proposal(tx_v_2);
-
-		add_proposal_to_offchain_storage(signed_proposal);
-
-		assert_ok!(DKGProposalHandler::submit_signed_proposal_onchain(0));
-
-		check_offchain_proposals_num_eq(0);
-	});
 }
 
 #[test]
@@ -242,25 +174,36 @@ fn submit_signed_proposal_success() {
 	execute_test_with(|| {
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
 
+		let unsigned_proposal = Proposal::Unsigned {
+			kind: ProposalKind::EVM,
+			data: tx_v_2.encode().try_into().unwrap(),
+		};
+
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
-			Proposal::Unsigned {
-				kind: ProposalKind::EVM,
-				data: tx_v_2.encode().try_into().unwrap()
-			},
+			unsigned_proposal.clone(),
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
+
+		// the unsigned proposal queue should be empty, this is becuase
+		// the ProposerSetUpdate is always a Batch-of-1, so we skip the unsigned
+		// proposal queue and insert it directly to the unsigned proposal batch queue
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(0)).is_none());
+
+		// the unsigned proposal batch should have the proposal
+		assert_eq!(
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::Evm(0), 0_u32)
+				.unwrap()
+				.proposals
+				.first()
+				.unwrap()
+				.proposal,
+			unsigned_proposal
 		);
 
-		let signed_proposal = mock_signed_proposal(tx_v_2);
+		let signed_proposal = mock_signed_proposal_batch(tx_v_2);
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
@@ -268,21 +211,13 @@ fn submit_signed_proposal_success() {
 		));
 
 		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_none(),
+			DKGProposalHandler::unsigned_proposal_queue(TypedChainId::Evm(0), 0).is_none(),
 			"{}",
 			true
 		);
 
 		assert!(
-			DKGProposalHandler::signed_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
+			DKGProposalHandler::signed_proposals(TypedChainId::Evm(0), 0).is_some(),
 			"{}",
 			true
 		);
@@ -290,7 +225,7 @@ fn submit_signed_proposal_success() {
 }
 
 #[test]
-fn submit_signed_proposal_already_exists() {
+fn submit_signed_proposal_batch_already_exists() {
 	execute_test_with(|| {
 		// First submission
 		let tx_v_2 = TransactionV2::EIP2930(mock_eth_tx_eip2930(0));
@@ -303,42 +238,15 @@ fn submit_signed_proposal_already_exists() {
 			},
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		// lets time travel to 5 blocks later and ensure a batch is created
+		run_n_blocks(5);
 
-		let signed_proposal = mock_signed_proposal(tx_v_2.clone());
+		let signed_proposal = mock_signed_proposal_batch(tx_v_2.clone());
 
 		assert_ok!(DKGProposalHandler::submit_signed_proposals(
 			RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 			vec![signed_proposal.clone()]
 		));
-
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_none(),
-			"{}",
-			true
-		);
-
-		assert!(
-			DKGProposalHandler::signed_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 
 		// Second submission
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
@@ -349,22 +257,12 @@ fn submit_signed_proposal_already_exists() {
 			},
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-
 		assert_noop!(
 			DKGProposalHandler::submit_signed_proposals(
 				RuntimeOrigin::signed(sr25519::Public::from_raw([1; 32])),
 				vec![signed_proposal]
 			),
-			Error::<Test>::CannotOverwriteSignedProposal
+			Error::<Test>::ProposalDoesNotExists
 		);
 	});
 }
@@ -382,23 +280,11 @@ fn submit_signed_proposal_fail_invalid_sig() {
 			},
 		));
 
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-
 		let mut invalid_sig: Vec<u8> = Vec::new();
 		invalid_sig.extend_from_slice(&[0u8, 64]);
-		let signed_proposal = Proposal::Signed {
-			kind: ProposalKind::EVM,
-			data: tx_v_2.encode().try_into().unwrap(),
-			signature: invalid_sig.clone().try_into().unwrap(),
-		};
+
+		let mut signed_proposal = mock_signed_proposal_batch(tx_v_2);
+		signed_proposal.signature = invalid_sig.try_into().unwrap();
 
 		// it does not return an error, however the proposal is not added to the list.
 		// This is because the signature is invalid, and we are batch processing.
@@ -409,20 +295,7 @@ fn submit_signed_proposal_fail_invalid_sig() {
 		));
 
 		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-		assert!(
-			DKGProposalHandler::signed_proposals(
-				TypedChainId::Evm(0),
-				DKGPayloadKey::EVMProposal(0.into())
-			)
-			.is_none(),
+			DKGProposalHandler::signed_proposals(TypedChainId::Evm(0), 1).is_none(),
 			"{}",
 			true
 		);
@@ -438,6 +311,15 @@ pub fn make_header(chain: TypedChainId) -> ProposalHeader {
 			]
 			.into(),
 			[0x26, 0x57, 0x88, 0x01].into(),
+			1.into(),
+		),
+		TypedChainId::Substrate(_) => ProposalHeader::new(
+			[
+				1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0,
+				0, 0, 0, 1,
+			]
+			.into(),
+			[0x0, 0x0, 0x0, 0x0].into(),
 			1.into(),
 		),
 		_ => {
@@ -567,15 +449,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::TokenAddProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1),).unwrap().len() == 1);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -586,15 +460,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::TokenRemoveProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1),).unwrap().len() == 2);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<2>(
@@ -605,15 +471,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::WrappingFeeUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1),).unwrap().len() == 3);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<72>(
@@ -624,15 +482,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::RescueTokensProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1),).unwrap().len() == 4);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<52>(
@@ -643,15 +493,7 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::ResourceIdUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
+		assert!(DKGProposalHandler::unsigned_proposals(TypedChainId::Evm(1),).unwrap().len() == 5);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
@@ -663,15 +505,6 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::MaxDepositLimitUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
@@ -683,15 +516,6 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::MinWithdrawalLimitUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
@@ -703,15 +527,6 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::SetTreasuryHandlerProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
@@ -723,15 +538,6 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::SetVerifierProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
 
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
@@ -743,22 +549,8 @@ fn force_submit_should_work_with_valid_proposals() {
 				TypedChainId::Evm(0)
 			)
 		));
-		assert!(
-			DKGProposalHandler::unsigned_proposals(
-				TypedChainId::Evm(1),
-				DKGPayloadKey::FeeRecipientUpdateProposal(1.into())
-			)
-			.is_some(),
-			"{}",
-			true
-		);
-	});
-}
 
-#[test]
-fn expired_unsigned_proposals_are_removed() {
-	execute_test_with(|| {
-		// Submit one unsigned proposal
+		// Substrate Tests
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -766,12 +558,15 @@ fn expired_unsigned_proposals_are_removed() {
 					kind: ProposalKind::TokenAdd,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Evm(0)
+				TypedChainId::Substrate(0)
 			)
 		));
 
-		// lets time travel to 5 blocks later and submit another proposal
-		run_n_blocks(5);
+		assert!(
+			DKGProposalHandler::unsigned_proposals(TypedChainId::Substrate(1),)
+				.unwrap()
+				.len() == 1
+		);
 		assert_ok!(DKGProposalHandler::force_submit_unsigned_proposal(
 			RuntimeOrigin::root(),
 			make_proposal::<20>(
@@ -779,20 +574,8 @@ fn expired_unsigned_proposals_are_removed() {
 					kind: ProposalKind::TokenRemove,
 					data: vec![].try_into().unwrap()
 				},
-				TypedChainId::Evm(0)
+				TypedChainId::Substrate(0)
 			)
 		));
-
-		// sanity check
-		run_n_blocks(10);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 2);
-
-		// time travel to a block after expiry period of first unsigned
-		run_n_blocks(11);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 1);
-
-		// time travel to a block after expiry period of second unsigned
-		run_n_blocks(16);
-		assert_eq!(UnsignedProposalQueue::<Test>::iter().count(), 0);
-	})
+	});
 }

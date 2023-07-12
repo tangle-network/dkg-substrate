@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
-	MaxProposalLength, UnsignedProposal,
+	BatchId, MaxProposalLength, MaxProposalsInBatch,
 };
 
 use self::work_manager::WorkManager;
@@ -17,7 +17,7 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::{utils::select_random_set, SessionId};
-use dkg_runtime_primitives::crypto::Public;
+use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
 use std::{
 	pin::Pin,
@@ -138,15 +138,17 @@ where
 		dkg_worker.logger.info_signing("About to get unsigned proposals ...");
 
 		let unsigned_proposals = match dkg_worker
-			.exec_client_function(move |client| client.runtime_api().get_unsigned_proposals(at))
+			.exec_client_function(move |client| {
+				client.runtime_api().get_unsigned_proposal_batches(at)
+			})
 			.await
 		{
 			Ok(mut res) => {
 				// sort proposals by timestamp, we want to pick the oldest proposal to sign
-				res.sort_by(|a, b| a.1.cmp(&b.1));
+				res.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 				let mut filtered_unsigned_proposals = Vec::new();
 				for proposal in res {
-					if let Some(hash) = proposal.0.hash() {
+					if let Some(hash) = proposal.hash() {
 						// only submit the job if it isn't already running
 						if !self.work_manager.job_exists(&hash) {
 							// update unsigned proposal counter
@@ -184,8 +186,8 @@ where
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
-		for unsigned_proposal in unsigned_proposals {
-			let typed_chain_id = unsigned_proposal.0.typed_chain_id;
+		for batch in unsigned_proposals {
+			let typed_chain_id = batch.proposals.first().expect("Empty batch!").typed_chain_id;
 			if !self.work_manager.can_submit_more_tasks() {
 				dkg_worker.logger.info(
 					"Will not submit more unsigned proposals because the work manager is full",
@@ -200,7 +202,7 @@ where
 			   if we are in this set, we send it to the signing manager, and continue.
 			   if we are not, we continue the loop.
 			*/
-			let unsigned_proposal_bytes = unsigned_proposal.encode();
+			let unsigned_proposal_bytes = batch.encode();
 			let concat_data = dkg_pub_key
 				.clone()
 				.into_iter()
@@ -208,8 +210,7 @@ where
 				.chain(unsigned_proposal_bytes)
 				.collect::<Vec<u8>>();
 			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash =
-				unsigned_proposal.0.hash().expect("unable to hash proposal");
+			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
 			let maybe_set = self
 				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -232,7 +233,7 @@ where
 						session_id,
 						threshold,
 						ProtoStageType::Signing { unsigned_proposal_hash },
-						unsigned_proposal.0,
+						batch,
 						signing_set,
 						*header.number(),
 					) {
@@ -282,12 +283,17 @@ where
 		session_id: SessionId,
 		threshold: u16,
 		stage: ProtoStageType,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			BatchId,
+			MaxProposalLength,
+			MaxProposalsInBatch,
+			NumberFor<B>,
+		>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
-		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal: {unsigned_proposal:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
+		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
 		let async_proto_params = dkg_worker.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -304,7 +310,7 @@ where
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
-			unsigned_proposal,
+			unsigned_proposal_batch,
 			signing_set,
 		)?;
 		let logger = dkg_worker.logger.clone();

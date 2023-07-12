@@ -86,7 +86,7 @@ benchmarks! {
 		}
 	}: _(RawOrigin::Signed(caller), signed_proposals)
 	verify {
-		assert!(Pallet::<T>::get_unsigned_proposals().is_empty());
+		assert!(Pallet::<T>::get_unsigned_proposal_batches().is_empty());
 		assert!(Pallet::<T>::signed_proposals_len() == n as usize);
 	}
 
@@ -99,7 +99,7 @@ benchmarks! {
 		};
 	}: _(RawOrigin::Root, proposal)
 	verify {
-		assert!(Pallet::<T>::get_unsigned_proposals().len() == 1);
+		assert!(Pallet::<T>::get_unsigned_proposal_batches().len() == 1);
 	}
 
 	force_remove_unsigned_proposal {

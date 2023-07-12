@@ -1,16 +1,15 @@
 use dkg_gadget::debug_logger::DebugLogger;
 use dkg_mock_blockchain::{MutableBlockchain, TestBlock};
 use dkg_runtime_primitives::{
-	crypto::AuthorityId, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+	crypto::AuthorityId, MaxAuthorities, MaxProposalLength, StoredUnsignedProposalBatch,
+	UnsignedProposal,
 };
 use hash_db::HashDB;
 use parking_lot::RwLock;
-use sp_api::*;
-use sp_runtime::Permill;
-
-use sp_api::{ApiExt, AsTrieBackend, BlockT, StateBackend};
+use rand::Rng;
+use sp_api::{ApiExt, AsTrieBackend, BlockT, StateBackend, *};
 use sp_core::bounded_vec::BoundedVec;
-use sp_runtime::{testing::H256, traits::BlakeTwo256};
+use sp_runtime::{testing::H256, traits::BlakeTwo256, Permill};
 use sp_state_machine::{backend::Consolidate, *};
 use sp_trie::HashDBT;
 use std::{collections::HashMap, sync::Arc};
@@ -31,14 +30,34 @@ pub struct DummyApiInner {
 	// maps: block number => list of authorities for that block
 	pub authority_sets: HashMap<u64, BoundedVec<AuthorityId, MaxAuthorities>>,
 	pub dkg_keys: HashMap<dkg_runtime_primitives::AuthoritySetId, Vec<u8>>,
-	pub unsigned_proposals: Vec<(UnsignedProposal<MaxProposalLength>, u64)>,
+	pub unsigned_proposals: Vec<
+		dkg_runtime_primitives::StoredUnsignedProposalBatch<
+			dkg_runtime_primitives::BatchId,
+			dkg_runtime_primitives::MaxProposalLength,
+			dkg_runtime_primitives::MaxProposalsInBatch,
+			BlockNumber,
+		>,
+	>,
 	pub should_execute_keygen: bool,
 	pub blocks_per_session: u64,
 }
 
 impl MutableBlockchain for DummyApi {
-	fn set_unsigned_proposals(&self, propos: Vec<(UnsignedProposal<MaxProposalLength>, u64)>) {
-		self.inner.write().unsigned_proposals = propos;
+	fn set_unsigned_proposals(
+		&self,
+		propos: Vec<(UnsignedProposal<dkg_runtime_primitives::CustomU32Getter<10000>>, u64)>,
+	) {
+		// use a random batch_id to avoid collision
+		let num = rand::thread_rng().gen_range(0..100);
+		let batches = propos
+			.iter()
+			.map(|prop| StoredUnsignedProposalBatch {
+				proposals: vec![prop.clone().0].try_into().unwrap(),
+				batch_id: num,
+				timestamp: 0,
+			})
+			.collect::<Vec<_>>();
+		self.inner.write().unsigned_proposals = batches;
 	}
 
 	fn set_pub_key(&self, block_id: u64, key: Vec<u8>) {
@@ -665,10 +684,19 @@ impl
 		Ok(None)
 	}
 
-	fn get_unsigned_proposals(
+	fn get_unsigned_proposal_batches(
 		&self,
 		_hash: H256,
-	) -> ApiResult<Vec<(UnsignedProposal<MaxProposalLength>, u64)>> {
+	) -> ApiResult<
+		Vec<
+			dkg_runtime_primitives::StoredUnsignedProposalBatch<
+				dkg_runtime_primitives::BatchId,
+				dkg_runtime_primitives::MaxProposalLength,
+				dkg_runtime_primitives::MaxProposalsInBatch,
+				BlockNumber,
+			>,
+		>,
+	> {
 		Ok(self.inner.read().unsigned_proposals.clone())
 	}
 

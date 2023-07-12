@@ -193,6 +193,10 @@ declare module '@polkadot/api-base/types/errors' {
     };
     dkgProposalHandler: {
       /**
+       * Math overflow
+       **/
+      ArithmeticOverflow: AugmentedError<ApiType>;
+      /**
        * Duplicate signed proposal
        **/
       CannotOverwriteSignedProposal: AugmentedError<ApiType>;
@@ -200,6 +204,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Chain id is invalid
        **/
       ChainIdInvalid: AugmentedError<ApiType>;
+      /**
+       * Batch does not contain proposals
+       **/
+      EmptyBatch: AugmentedError<ApiType>;
       /**
        * Proposal bytes length is invalid
        **/
@@ -240,6 +248,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Errors should have helpful documentation associated with them.
        **/
       StorageOverflow: AugmentedError<ApiType>;
+      /**
+       * Unable to accept new unsigned proposal
+       **/
+      UnsignedProposalQueueOverflow: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -828,6 +840,16 @@ declare module '@polkadot/api-base/types/errors' {
        * and the new runtime.
        **/
       SpecVersionNeedsToIncrease: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    utility: {
+      /**
+       * Too many calls batched.
+       **/
+      TooManyCalls: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

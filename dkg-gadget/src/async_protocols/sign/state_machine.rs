@@ -21,7 +21,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use dkg_primitives::types::{DKGError, DKGMessage, NetworkMsgPayload};
-use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, UnsignedProposal};
+use dkg_runtime_primitives::{crypto::Public, MaxAuthorities, StoredUnsignedProposalBatch};
 use futures::channel::mpsc::UnboundedSender;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
 	OfflineProtocolMessage, OfflineStage,
@@ -31,7 +31,12 @@ use round_based::{Msg, StateMachine};
 #[async_trait]
 impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage {
 	type AdditionalReturnParam = (
-		UnsignedProposal<<BI as BlockchainInterface>::MaxProposalLength>,
+		StoredUnsignedProposalBatch<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		OfflinePartyId,
 		Threshold,
 		BatchKey,
@@ -41,7 +46,12 @@ impl<BI: BlockchainInterface + 'static> StateMachineHandler<BI> for OfflineStage
 	fn handle_unsigned_message(
 		to_async_proto: &UnboundedSender<Msg<OfflineProtocolMessage>>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		local_ty: &ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err> {
 		let payload_raw = msg.body.payload.payload().clone();

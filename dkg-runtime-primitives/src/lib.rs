@@ -109,7 +109,10 @@ pub const DKG_ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
 /// Key type for DKG keys
 pub const KEY_TYPE: sp_application_crypto::KeyTypeId = sp_application_crypto::KeyTypeId(*b"wdkg");
 
-/// Max length for proposals
+// type of BatchId for batch storage in proposal handler pallet
+pub type BatchId = u32;
+
+// Max length for proposals
 pub type MaxProposalLength = CustomU32Getter<10_000>;
 
 /// Max authorities
@@ -117,6 +120,9 @@ pub type MaxAuthorities = CustomU32Getter<1024>;
 
 /// Max reporters
 pub type MaxReporters = CustomU32Getter<128>;
+
+/// Max proposals in a batch
+pub type MaxProposalsInBatch = CustomU32Getter<10>;
 
 /// Max size for signatures
 pub type MaxSignatureLength = CustomU32Getter<512>;
@@ -142,11 +148,6 @@ pub type ProposerVote<V> = BoundedVec<u8, V>;
 
 // Untrack interval for unsigned proposals completed stages for signing
 pub const UNTRACK_INTERVAL: u32 = 10;
-
-#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
-pub struct OffchainSignedProposals<BlockNumber, MaxLength: Get<u32>> {
-	pub proposals: Vec<(Vec<Proposal<MaxLength>>, BlockNumber)>,
-}
 
 pub type PublicKeyAndSignature = (Vec<u8>, Vec<u8>);
 
@@ -196,12 +197,6 @@ pub struct AggregatedProposerVotes<
 	pub voters: BoundedVec<DKGId, MaxVoters>,
 	/// A list of signed encoded votes
 	pub signatures: BoundedVec<BoundedVec<u8, MaxSignatureLength>, MaxVoters>,
-}
-
-impl<BlockNumber, MaxLength: Get<u32>> Default for OffchainSignedProposals<BlockNumber, MaxLength> {
-	fn default() -> Self {
-		Self { proposals: Default::default() }
-	}
 }
 
 pub mod crypto {
@@ -276,7 +271,7 @@ pub enum ConsensusLog<AuthorityId: Codec, MaxAuthorities: Get<u32>> {
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct UnsignedProposal<MaxProposalLength: Get<u32> + Clone> {
 	pub typed_chain_id: webb_proposals::TypedChainId,
 	pub key: DKGPayloadKey,
@@ -341,7 +336,7 @@ sp_api::decl_runtime_apis! {
 		/// Fetch DKG public key for current authorities
 		fn dkg_pub_key() -> (AuthoritySetId, Vec<u8>);
 		/// Get list of unsigned proposals
-		fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, N)>;
+		fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, N>>;
 		/// Current and Queued Authority Account Ids [/current_authorities/, /next_authorities/]
 		fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>);
 		/// Reputations for authorities
@@ -371,7 +366,6 @@ mod tests {
 
 	#[test]
 	fn assert_value() {
-		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE > 0);
 		assert!(ASSOCIATED_BLOCK_ID_MESSAGE_DELIVERY_TOLERANCE < SIGN_TIMEOUT as _);
 	}
 

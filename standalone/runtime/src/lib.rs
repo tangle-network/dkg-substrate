@@ -22,8 +22,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use dkg_runtime_primitives::{
-	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength,
-	TypedChainId, UnsignedProposal,
+	MaxAuthorities, MaxKeyLength, MaxProposalLength, MaxReporters, MaxSignatureLength, TypedChainId,
 };
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
 use frame_support::{
@@ -36,7 +35,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
-use pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
+use pallet_dkg_proposal_handler::StoredUnsignedProposalBatchOf;
 use pallet_election_provider_multi_phase::SolutionAccuracyOf;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -646,7 +645,8 @@ parameter_types! {
 impl pallet_dkg_proposal_handler::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
+	type MaxProposalsPerBatch = dkg_runtime_primitives::MaxProposalsInBatch;
+	type BatchId = u32;
 	type UnsignedProposalExpiry = UnsignedProposalExpiry;
 	type SignedProposalHandler = (BridgeRegistry, DKG);
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
@@ -664,7 +664,7 @@ parameter_types! {
 
 impl pallet_dkg_proposals::Config for Runtime {
 	type AdminOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type DKGAuthorityToMerkleLeaf = DKGEcdsaToEthereumAddress;
+	type DKGAuthorityToMerkleLeaf = pallet_dkg_proposals::DKGEcdsaToEthereumAddress;
 	type DKGId = DKGId;
 	type ChainIdentifier = ChainIdentifier;
 	type RuntimeEvent = RuntimeEvent;
@@ -766,6 +766,13 @@ impl pallet_im_online::Config for Runtime {
 	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 }
 
+impl pallet_utility::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PalletsOrigin = OriginCaller;
+	type WeightInfo = ();
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
   pub enum Runtime where
@@ -794,6 +801,7 @@ construct_runtime!(
 	BridgeRegistry: pallet_bridge_registry,
 	Identity: pallet_identity::{Pallet, Call, Storage, Event<T>},
 	ImOnline: pallet_im_online,
+	Utility: pallet_utility
   }
 );
 
@@ -1002,8 +1010,8 @@ impl_runtime_apis! {
 		<pallet_dkg_metadata::DKGPeriodicSessions<Period, Offset, Runtime> as EstimateNextSessionRotation<BlockNumber>>::estimate_current_session_progress(block_number).0
 	}
 
-	fn get_unsigned_proposals() -> Vec<(UnsignedProposal<MaxProposalLength>, BlockNumber)> {
-	  DKGProposalHandler::get_unsigned_proposals()
+	fn get_unsigned_proposal_batches() -> Vec<StoredUnsignedProposalBatchOf<Runtime>> {
+	  DKGProposalHandler::get_unsigned_proposal_batches()
 	}
 
 	fn get_authority_accounts() -> (Vec<AccountId>, Vec<AccountId>) {

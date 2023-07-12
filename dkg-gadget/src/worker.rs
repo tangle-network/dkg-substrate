@@ -48,8 +48,9 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	gossip_messages::MisbehaviourMessage,
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength, GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
+	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -299,7 +300,17 @@ where
 		associated_block: NumberFor<B>,
 	) -> Result<
 		AsyncProtocolParameters<
-			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+			DKGProtocolEngine<
+				B,
+				BE,
+				C,
+				GE,
+				MaxProposalLength,
+				MaxAuthorities,
+				BatchId,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>,
 			MaxAuthorities,
 		>,
 		DKGError,
