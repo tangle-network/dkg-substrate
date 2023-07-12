@@ -30,6 +30,7 @@ name = "internal"
 chain-id = 0
 http-endpoint = "http://localhost:9933"
 ws-endpoint = "ws://localhost:9944"
+suri = "//Alice"
 enabled = true
 
 [[substrate.internal.pallets]]

@@ -13715,6 +13715,7 @@ dependencies = [
  "webb-relayer-config",
  "webb-relayer-context",
  "webb-relayer-store",
+ "webb-relayer-types",
 ]
 
 [[package]]

@@ -8,4 +8,3 @@ pub struct WebbRelayerCmd {
 	#[arg(long, value_name = "PATH")]
 	pub relayer_config_dir: Option<PathBuf>,
 }
-

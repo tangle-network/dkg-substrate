@@ -7,7 +7,7 @@ use ethereum_types::Secret;
 use sc_keystore::LocalKeystore;
 use sp_application_crypto::{ecdsa, ByteArray, CryptoTypePublicPair, Pair};
 use sp_keystore::SyncCryptoStore;
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use webb_relayer::service;
 use webb_relayer_context::RelayerContext;
 
@@ -19,11 +19,15 @@ pub struct WebbRelayerParams {
 	pub config_dir: Option<PathBuf>,
 	/// Database path
 	pub database_path: Option<PathBuf>,
+	/// RPC HTTP address, `None` if disabled.
+	pub rpc_http: Option<SocketAddr>,
+	/// RPC WebSocket address, `None` if disabled.
+	pub rpc_ws: Option<SocketAddr>,
 }
 
 pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
-	let mut config = match relayer_params.config_dir {
-		Some(p) => load_config(p),
+	let mut config = match relayer_params.config_dir.as_ref() {
+		Some(p) => load_config(p).expect("failed to load relayer config"),
 		None => {
 			tracing::error!(
 				target: "relayer-gadget",
@@ -33,9 +37,10 @@ pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
 		},
 	};
 
-	post_process_config(&mut config, relayer_params.local_keystore);
+	post_process_config(&mut config, &relayer_params)
+		.expect("failed to post process relayer config");
 
-	let store = create_store(relayer_params.database_path);
+	let store = create_store(relayer_params.database_path).expect("failed to create relayer store");
 	let ctx = RelayerContext::new(config, store.clone()).expect("failed to build relayer context");
 
 	// Start the web server:
@@ -48,42 +53,59 @@ pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
 }
 
 /// Loads the configuration from the given directory.
-pub fn load_config<P>(config_dir: P) -> webb_relayer_config::WebbRelayerConfig
-where
-	P: AsRef<std::path::Path>,
-{
-	if !config_dir.as_ref().is_dir() {
-		panic!("{} is not a directory", config_dir.as_ref().display());
+fn load_config(
+	config_dir: &PathBuf,
+) -> Result<webb_relayer_config::WebbRelayerConfig, Box<dyn std::error::Error>> {
+	if !config_dir.is_dir() {
+		return Err("Config path is not a directory".into())
 	}
-	webb_relayer_config::utils::load(config_dir).expect("failed to load relayer config")
+
+	Ok(webb_relayer_config::utils::load(config_dir)?)
 }
 
 /// Creates a database store for the relayer based on the configuration passed in.
-pub fn create_store(database_path: Option<PathBuf>) -> webb_relayer_store::SledStore {
+pub fn create_store(
+	database_path: Option<PathBuf>,
+) -> Result<webb_relayer_store::SledStore, Box<dyn std::error::Error>> {
 	let db_path = match database_path {
 		Some(p) => p.join("relayerdb"),
 		None => {
 			tracing::debug!("Using temp dir for store");
-			return webb_relayer_store::SledStore::temporary().expect("failed to create tmp store")
+			return webb_relayer_store::SledStore::temporary().map_err(Into::into)
 		},
 	};
 
-	webb_relayer_store::SledStore::open(db_path).expect("failed to open relayer store")
+	webb_relayer_store::SledStore::open(db_path).map_err(Into::into)
 }
 
 /// Post process the relayer configuration.
 ///
-/// Namely, if there is no signer for any EVM chain, set the signer to the ecdsa key from the
+/// - if there is no signer for any EVM chain, set the signer to the ecdsa key from the
 /// keystore.
-/// Ensures that governance relayer is always enabled.
+/// - Ensures that governance relayer is always enabled.
 fn post_process_config(
 	config: &mut webb_relayer_config::WebbRelayerConfig,
-	local_key_store: Option<Arc<LocalKeystore>>,
-) {
-	let local_key_store = local_key_store.expect("failed to get local keystore");
+	params: &WebbRelayerParams,
+) -> Result<(), Box<dyn std::error::Error>> {
+	// Make sure governance relayer is always enabled
+	config.features.governance_relay = true;
+	let ecdsa_pair = get_ecdsa_pair(params.local_keystore.clone())?.ok_or("no ecdsa key found")?;
+	let ecdsa_secret = ecdsa_pair.to_raw_vec();
+	// for each evm chain, if there is no signer, set the signer to the ecdsa key
+	for chain in config.evm.values_mut() {
+		if chain.private_key.is_none() {
+			chain.private_key = Some(Secret::from_slice(&ecdsa_secret).into())
+		}
+	}
+	Ok(())
+}
+
+fn get_ecdsa_pair(
+	local_keystore: Option<Arc<LocalKeystore>>,
+) -> Result<Option<crypto::Pair>, Box<dyn std::error::Error>> {
+	let local_key_store = local_keystore.expect("failed to get local keystore");
 	let ecdsa_public = local_key_store
-		.keys(dkg_runtime_primitives::KEY_TYPE)
-		.expect("failed to get keys")
+		.keys(dkg_runtime_primitives::KEY_TYPE)?
 		.into_iter()
 		.find_map(|CryptoTypePublicPair(id, public_key)| {
 			if id == ecdsa::CRYPTO_ID {
@@ -92,18 +114,6 @@ fn post_process_config(
 				None
 			}
 		})
-		.expect("failed to get ecdsa public key");
-	let ecdsa_pair = local_key_store
-		.key_pair::<crypto::Pair>(&ecdsa_public)
-		.expect("failed to get ecdsa pair")
-		.expect("failed to get ecdsa pair from local keystore");
-	let ecdsa_secret = ecdsa_pair.to_raw_vec();
-	// for each evm chain, if there is no signer, set the signer to the ecdsa key
-	for chain in config.evm.values_mut() {
-		if chain.private_key.is_none() {
-			chain.private_key = Some(Secret::from_slice(&ecdsa_secret).into())
-		}
-	}
-	// Make sure governance relayer is always enabled
-	config.features.governance_relay = true;
+		.ok_or("failed to get ecdsa public key")?;
+	local_key_store.key_pair::<crypto::Pair>(&ecdsa_public).map_err(Into::into)
 }

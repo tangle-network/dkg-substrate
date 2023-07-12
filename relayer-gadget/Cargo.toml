@@ -9,7 +9,9 @@ edition = { workspace = true }
 
 [dependencies]
 tracing = { workspace = true }
+ethereum-types = { workspace = true }
 
+# Substrate
 sp-application-crypto = { workspace = true }
 sp-keystore = { workspace = true }
 sc-keystore = { workspace = true }
@@ -19,6 +21,7 @@ webb-relayer = { version = "0.5.5-dev", git = "https://github.com/webb-tools/rel
 webb-relayer-context = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
 webb-relayer-config = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
 webb-relayer-store = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
-ethereum-types = { workspace = true }
+webb-relayer-types = { version = "0.5.5-dev", git = "https://github.com/webb-tools/relayer", branch = "develop" }
+
 # DKG
 dkg-runtime-primitives = { workspace = true }
