@@ -1,0 +1,27 @@
+[package]
+name = "webb-relayer-gadget"
+version = "0.0.1"
+authors = ["Webb Developers <dev@webb.tools>", "Shady Khalifa <dev+github@shadykhalifa.me>"]
+license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
+homepage = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+tracing = { workspace = true }
+ethereum-types = { workspace = true }
+
+# Substrate
+sp-application-crypto = { workspace = true }
+sp-keystore = { workspace = true }
+sc-keystore = { workspace = true }
+
+# Relayer
+webb-relayer = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.6-dev" }
+webb-relayer-context = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.6-dev" }
+webb-relayer-config = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.6-dev" }
+webb-relayer-store = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.6-dev" }
+webb-relayer-types = { git = "https://github.com/webb-tools/relayer", tag = "v0.5.6-dev" }
+
+# DKG
+dkg-runtime-primitives = { workspace = true }

@@ -27,15 +27,17 @@
         devShells.default = pkgs.mkShell {
           name = "dkg";
           nativeBuildInputs = [
-            pkgs.gmp
             pkgs.protobuf
             pkgs.pkg-config
             # Needed for rocksdb-sys
             pkgs.clang
             pkgs.libclang.lib
             pkgs.rustPlatform.bindgenHook
+            pkgs.gmp
             # Mold Linker for faster builds (only on Linux)
             (lib.optionals pkgs.stdenv.isLinux pkgs.mold)
+            (lib.optionals pkgs.stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.Security)
+            (lib.optionals pkgs.stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.SystemConfiguration)
           ];
           buildInputs = [
             # We want the unwrapped version, wrapped comes with nixpkgs' toolchain
@@ -48,11 +50,10 @@
             toolchain
           ];
           packages = [ ];
-					
-					# Environment variables
+          # Environment variables
           RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
-					# Needed for running DKG Node.
-          LD_LIBRARY_PATH = "${pkgs.gmp}/lib";
+          # Needed for running DKG Node.
+          LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.gmp ];
         };
       });
 }
