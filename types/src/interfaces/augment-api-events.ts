@@ -9,7 +9,6 @@ import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, Vec, bool, u128, u16, u32, u64 } from '@polkadot/types-codec';
 import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
-import { FrameSupportTokensMiscBalanceStatus, DkgRuntimePrimitivesMisbehaviourType, DkgRuntimePrimitivesCryptoPublic, DkgRuntimePrimitivesProposalRefreshProposal, WebbProposalsProposalProposalKind, DkgRuntimePrimitivesProposalDkgPayloadKey, WebbProposalsHeaderTypedChainId, PalletElectionProviderMultiPhaseElectionCompute, SpNposElectionsElectionScore, PalletElectionProviderMultiPhasePhase, SpFinalityGrandpaAppPublic, PalletImOnlineSr25519AppSr25519Public, PalletStakingExposure, PalletNominationPoolsPoolState, PalletStakingForcing, PalletStakingValidatorPrefs, SpRuntimeDispatchError, FrameSupportDispatchDispatchInfo } from '@polkadot/types/lookup';
 
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 
@@ -161,7 +160,7 @@ declare module '@polkadot/api-base/types/events' {
       /**
        * RuntimeEvent When a Proposal Gets Signed by DKG.
        **/
-      ProposalBatchSigned: AugmentedEvent<ApiType, [targetChain: WebbProposalsHeaderTypedChainId, proposals: DkgRuntimePrimitivesProposalSignedProposalBatch, data: Bytes, signature: Bytes], { targetChain: WebbProposalsHeaderTypedChainId, proposals: DkgRuntimePrimitivesProposalSignedProposalBatch, data: Bytes, signature: Bytes }>;
+      ProposalBatchSigned: AugmentedEvent<ApiType, [targetChain: WebbProposalsHeaderTypedChainId, batchId: u32, proposals: Vec<PalletDkgProposalHandlerSignedProposalEventData>, signature: Bytes], { targetChain: WebbProposalsHeaderTypedChainId, batchId: u32, proposals: Vec<PalletDkgProposalHandlerSignedProposalEventData>, signature: Bytes }>;
       /**
        * RuntimeEvent When a Proposal is removed from UnsignedProposalQueue.
        **/

@@ -193,6 +193,10 @@ declare module '@polkadot/api-base/types/errors' {
     };
     dkgProposalHandler: {
       /**
+       * Math overflow
+       **/
+      ArithmeticOverflow: AugmentedError<ApiType>;
+      /**
        * Duplicate signed proposal
        **/
       CannotOverwriteSignedProposal: AugmentedError<ApiType>;
@@ -200,6 +204,10 @@ declare module '@polkadot/api-base/types/errors' {
        * Chain id is invalid
        **/
       ChainIdInvalid: AugmentedError<ApiType>;
+      /**
+       * Batch does not contain proposals
+       **/
+      EmptyBatch: AugmentedError<ApiType>;
       /**
        * Proposal bytes length is invalid
        **/
