@@ -205,12 +205,12 @@ where
 
 		// Try to store reports offchain
 		if try_store_offchain(dkg_worker, &reports).await? {
+			let mut lock = dkg_worker.aggregated_misbehaviour_reports.write();
 			// remove the report from the queue
-			dkg_worker.aggregated_misbehaviour_reports.write().remove(&(
-				report.misbehaviour_type,
-				report.session_id,
-				report.offender,
-			));
+			lock.remove(&(report.misbehaviour_type, report.session_id, report.offender));
+
+			// Also, remove any misbehavior reports that are older than the session_id
+			lock.retain(|k, _| k.1 >= report.session_id);
 		}
 		Ok(())
 	} else {
