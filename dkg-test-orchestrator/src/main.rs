@@ -15,7 +15,7 @@ use dkg_mock_blockchain::*;
 use dkg_runtime_primitives::{crypto, KEY_TYPE};
 use futures::TryStreamExt;
 use parking_lot::RwLock;
-use sp_keystore::SyncCryptoStore;
+use sp_keystore::Keystore;
 use std::{path::PathBuf, sync::Arc};
 use structopt::StructOpt;
 
@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			dkg_gadget::keystore::DKGKeystore::new_default(logger.clone());
 		let keyring = dkg_gadget::keyring::Keyring::Custom(idx as _);
 
-		let public_key: crypto::Public = SyncCryptoStore::ecdsa_generate_new(
+		let public_key: crypto::Public = Keystore::ecdsa_generate_new(
 			key_store.as_dyn_crypto_store().unwrap(),
 			KEY_TYPE,
 			Some(&keyring.to_seed()),
@@ -166,6 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 			let dkg_worker_params = dkg_gadget::worker::WorkerParams {
 				network: None,
+				sync_service: None,
 				latest_header,
 				client,
 				backend,

@@ -56,7 +56,6 @@ std = [
 	"sp-core/std",
 	"frame-support/std",
 	"frame-system/std",
-	"frame-benchmarking/std",
 	"dkg-runtime-primitives/std",
 	"sp-consensus-aura/std",
 	"pallet-dkg-metadata/std",

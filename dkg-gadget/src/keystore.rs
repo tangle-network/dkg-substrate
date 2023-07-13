@@ -15,9 +15,9 @@
 use std::convert::{From, TryInto};
 
 use codec::{Decode, Encode};
-use sp_application_crypto::{key_types::ACCOUNT, sr25519, CryptoTypePublicPair, RuntimeAppPublic};
+use sp_application_crypto::{key_types::ACCOUNT, sr25519, RuntimeAppPublic};
 use sp_core::keccak_256;
-use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+use sp_keystore::{Keystore, KeystorePtr};
 
 use dkg_runtime_primitives::{
 	crypto::{Public, Signature},
@@ -30,18 +30,18 @@ use std::sync::Arc;
 use crate::{debug_logger::DebugLogger, error};
 
 /// A DKG specific keystore implemented as a `Newtype`. This is basically a
-/// wrapper around [`sp_keystore::SyncCryptoStore`] and allows to customize
+/// wrapper around [`sp_keystore::Keystore`] and allows to customize
 /// common cryptographic functionality.
 #[derive(Clone)]
-pub struct DKGKeystore(Option<SyncCryptoStorePtr>, DebugLogger);
+pub struct DKGKeystore(Option<KeystorePtr>, DebugLogger);
 
 impl DKGKeystore {
-	pub fn new(keystore: Option<Arc<dyn SyncCryptoStore>>, logger: DebugLogger) -> Self {
+	pub fn new(keystore: Option<Arc<dyn Keystore>>, logger: DebugLogger) -> Self {
 		Self(keystore, logger)
 	}
 
 	pub fn new_default(logger: DebugLogger) -> Self {
-		let keystore = Arc::new(LocalKeystore::in_memory()) as Arc<dyn SyncCryptoStore>;
+		let keystore = Arc::new(LocalKeystore::in_memory()) as Arc<dyn Keystore>;
 		Self::new(Some(keystore), logger)
 	}
 
@@ -60,7 +60,7 @@ impl DKGKeystore {
 		// we do check for multiple private keys as a key store sanity check.
 		let mut public: Vec<Public> = keys
 			.iter()
-			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.to_raw_vec(), KEY_TYPE)]))
+			.filter(|k| Keystore::has_keys(&*store, &[(k.to_raw_vec(), KEY_TYPE)]))
 			.cloned()
 			.unique()
 			.collect();
@@ -88,7 +88,7 @@ impl DKGKeystore {
 		// we do check for multiple private keys as a key store sanity check.
 		let public: Vec<sr25519::Public> = keys
 			.iter()
-			.filter(|k| SyncCryptoStore::has_keys(&*store, &[(k.encode(), ACCOUNT)]))
+			.filter(|k| Keystore::has_keys(&*store, &[(k.encode(), ACCOUNT)]))
 			.cloned()
 			.collect();
 
@@ -115,7 +115,7 @@ impl DKGKeystore {
 		let msg = keccak_256(message);
 		let public = public.as_ref();
 
-		let sig = SyncCryptoStore::ecdsa_sign_prehashed(&*store, KEY_TYPE, public, &msg)
+		let sig = Keystore::ecdsa_sign_prehashed(&*store, KEY_TYPE, public, &msg)
 			.map_err(|e| error::Error::Keystore(e.to_string()))?
 			.ok_or_else(|| error::Error::Signature("ecdsa_sign_prehashed() failed".to_string()))?;
 
@@ -132,7 +132,7 @@ impl DKGKeystore {
 	pub fn public_keys(&self) -> Result<Vec<Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let pk: Vec<Public> = SyncCryptoStore::ecdsa_public_keys(&*store, KEY_TYPE)
+		let pk: Vec<Public> = Keystore::ecdsa_public_keys(&*store, KEY_TYPE)
 			.iter()
 			.map(|k| Public::from(*k))
 			.collect();
@@ -145,7 +145,7 @@ impl DKGKeystore {
 	pub fn sr25519_public_keys(&self) -> Result<Vec<sr25519::Public>, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let pk: Vec<sr25519::Public> = SyncCryptoStore::sr25519_public_keys(&*store, ACCOUNT);
+		let pk: Vec<sr25519::Public> = Keystore::sr25519_public_keys(&*store, ACCOUNT);
 
 		Ok(pk)
 	}
@@ -163,9 +163,7 @@ impl DKGKeystore {
 	) -> Result<sr25519::Signature, error::Error> {
 		let store = self.0.clone().ok_or_else(|| error::Error::Keystore("no Keystore".into()))?;
 
-		let crypto_pair = CryptoTypePublicPair(sr25519::CRYPTO_ID, public.encode());
-
-		let sig = SyncCryptoStore::sign_with(&*store, ACCOUNT, &crypto_pair, message)
+		let sig = Keystore::sign_with(&*store, ACCOUNT, sr25519::CRYPTO_ID, public, message)
 			.map_err(|e| error::Error::Keystore(e.to_string()))?
 			.ok_or_else(|| error::Error::Signature("sr25519_sign() failed".to_string()))?;
 
@@ -189,13 +187,13 @@ impl DKGKeystore {
 		sp_core::ecdsa::Pair::verify_prehashed(sig, &msg, public)
 	}
 
-	pub fn as_dyn_crypto_store(&self) -> Option<&dyn SyncCryptoStore> {
+	pub fn as_dyn_crypto_store(&self) -> Option<&dyn Keystore> {
 		self.0.as_deref()
 	}
 }
 
-impl From<Option<SyncCryptoStorePtr>> for DKGKeystore {
-	fn from(store: Option<SyncCryptoStorePtr>) -> Self {
+impl From<Option<KeystorePtr>> for DKGKeystore {
+	fn from(store: Option<KeystorePtr>) -> Self {
 		Self(store, DebugLogger::new("DKGKeystore", None).expect("Should not fail"))
 	}
 }
@@ -206,7 +204,7 @@ mod tests {
 	use std::sync::Arc;
 
 	use sc_keystore::LocalKeystore;
-	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+	use sp_keystore::{Keystore, KeystorePtr};
 
 	use crate::keyring::Keyring;
 	use dkg_runtime_primitives::{crypto, KEY_TYPE};
@@ -214,7 +212,7 @@ mod tests {
 	use super::DKGKeystore;
 	use crate::error::Error;
 
-	fn keystore() -> SyncCryptoStorePtr {
+	fn keystore() -> KeystorePtr {
 		Arc::new(LocalKeystore::in_memory())
 	}
 
@@ -223,7 +221,7 @@ mod tests {
 		let store = keystore();
 
 		let alice: crypto::Public =
-			SyncCryptoStore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
+			Keystore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
 				.ok()
 				.unwrap()
 				.into();
@@ -249,7 +247,7 @@ mod tests {
 		let store = keystore();
 
 		let alice: crypto::Public =
-			SyncCryptoStore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
+			Keystore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
 				.ok()
 				.unwrap()
 				.into();
@@ -268,10 +266,9 @@ mod tests {
 	fn sign_error() {
 		let store = keystore();
 
-		let _ =
-			SyncCryptoStore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Bob.to_seed()))
-				.ok()
-				.unwrap();
+		let _ = Keystore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Bob.to_seed()))
+			.ok()
+			.unwrap();
 
 		let store: DKGKeystore = Some(store).into();
 
@@ -301,7 +298,7 @@ mod tests {
 		let store = keystore();
 
 		let alice: crypto::Public =
-			SyncCryptoStore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
+			Keystore::ecdsa_generate_new(&*store, KEY_TYPE, Some(&Keyring::Alice.to_seed()))
 				.ok()
 				.unwrap()
 				.into();
@@ -327,7 +324,7 @@ mod tests {
 		let store = keystore();
 
 		let add_key = |key_type, seed: Option<&str>| {
-			SyncCryptoStore::ecdsa_generate_new(&*store, key_type, seed).unwrap()
+			Keystore::ecdsa_generate_new(&*store, key_type, seed).unwrap()
 		};
 
 		// test keys

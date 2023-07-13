@@ -21,7 +21,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::party_i::Signature
 
 use sc_service::{ChainType, Configuration};
 use sp_core::{ecdsa, sr25519, ByteArray, Pair, Public};
-use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{key_types::ACCOUNT, KeyTypeId};
 
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
@@ -40,7 +40,7 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 /// i.e. for Alice, Bob, Charlie, etc.
 pub fn insert_controller_account_keys_into_keystore(
 	config: &Configuration,
-	key_store: Option<SyncCryptoStorePtr>,
+	key_store: Option<KeystorePtr>,
 ) {
 	insert_account_keys_into_keystore::<sr25519::Public>(config, ACCOUNT, key_store);
 }
@@ -52,7 +52,7 @@ pub fn insert_controller_account_keys_into_keystore(
 /// i.e. for Alice, Bob, Charlie, etc.
 pub fn insert_dkg_account_keys_into_keystore(
 	config: &Configuration,
-	key_store: Option<SyncCryptoStorePtr>,
+	key_store: Option<KeystorePtr>,
 ) {
 	insert_account_keys_into_keystore::<ecdsa::Public>(
 		config,
@@ -64,7 +64,7 @@ pub fn insert_dkg_account_keys_into_keystore(
 fn insert_account_keys_into_keystore<TPublic: Public>(
 	config: &Configuration,
 	key_type: KeyTypeId,
-	key_store: Option<SyncCryptoStorePtr>,
+	key_store: Option<KeystorePtr>,
 ) {
 	let chain_type = config.chain_spec.chain_type();
 	let seed = &config.network.node_name[..];
@@ -77,12 +77,7 @@ fn insert_account_keys_into_keystore<TPublic: Public>(
 			if chain_type == ChainType::Development || chain_type == ChainType::Local {
 				let pub_key = get_from_seed::<TPublic>(seed).to_raw_vec();
 				if let Some(keystore) = key_store {
-					let _ = SyncCryptoStore::insert_unknown(
-						&*keystore,
-						key_type,
-						&format!("//{seed}"),
-						&pub_key,
-					);
+					let _ = Keystore::insert(&*keystore, key_type, &format!("//{seed}"), &pub_key);
 				}
 			}
 		},

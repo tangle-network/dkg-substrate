@@ -47,11 +47,12 @@ use dkg_runtime_primitives::crypto::AuthorityId;
 use futures::StreamExt;
 use linked_hash_map::LinkedHashMap;
 use parking_lot::{Mutex, RwLock};
-use sc_network::{multiaddr, Event, NetworkService, NetworkStateInfo, PeerId, ProtocolName};
-use sc_network_common::{
-	config, error,
-	service::{NetworkEventStream, NetworkNotification, NetworkPeers},
+use sc_network::{
+	config, error, multiaddr, Event, NetworkEventStream, NetworkNotification, NetworkPeers,
+	NetworkService, NetworkStateInfo, PeerId, ProtocolName, SyncEventStream,
 };
+use sc_network_common::sync::SyncEvent;
+use sc_network_sync::SyncingService;
 use sp_runtime::traits::{Block, NumberFor};
 use std::{
 	collections::{HashMap, HashSet},
@@ -106,6 +107,7 @@ impl NetworkGossipEngineBuilder {
 	pub(crate) fn build<B: Block>(
 		self,
 		service: Arc<NetworkService<B, B::Hash>>,
+		sync_service: Arc<SyncingService<B>>,
 		metrics: Option<Metrics>,
 		latest_header: Arc<RwLock<Option<B::Header>>>,
 		logger: DebugLogger,
@@ -129,11 +131,11 @@ impl NetworkGossipEngineBuilder {
 			authority_id_to_peer_id: Arc::new(RwLock::new(HashMap::new())),
 			gossip_enabled: gossip_enabled.clone(),
 			service,
+			sync_service,
 			peers: Arc::new(RwLock::new(HashMap::new())),
 			logger: logger.clone(),
 			metrics: Arc::new(metrics),
 		};
-
 		let local_peer_id = handler.service.local_peer_id();
 
 		let controller = GossipHandlerController {
@@ -268,6 +270,7 @@ pub struct GossipHandler<B: Block + 'static> {
 	pending_messages_peers: Arc<RwLock<LruHashMap<B::Hash, HashSet<PeerId>>>>,
 	/// Network service to use to send messages and manage peers.
 	service: Arc<NetworkService<B, B::Hash>>,
+	sync_service: Arc<SyncingService<B>>,
 	// All connected peers
 	peers: Arc<RwLock<HashMap<PeerId, Peer<B>>>>,
 	/// A mapping from authority id to peer id.
@@ -291,6 +294,7 @@ impl<B: Block + 'static> Clone for GossipHandler<B> {
 			incoming_messages_stream: self.incoming_messages_stream.clone(),
 			pending_messages_peers: self.pending_messages_peers.clone(),
 			service: self.service.clone(),
+			sync_service: self.sync_service.clone(),
 			peers: self.peers.clone(),
 			authority_id_to_peer_id: self.authority_id_to_peer_id.clone(),
 			gossip_enabled: self.gossip_enabled.clone(),
@@ -338,6 +342,8 @@ impl<B: Block + 'static> GossipHandler<B> {
 			.take()
 			.expect("incoming message stream already taken");
 		let mut event_stream = self.service.event_stream("dkg-handler");
+		let mut sync_event_stream = self.sync_service.event_stream("dkg-handler");
+
 		self.logger.debug("Starting the DKG Gossip Handler");
 
 		// we have two streams, one from the network and one from the controller.
@@ -365,7 +371,13 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self2.handle_network_event(event).await;
 				}
 			}));
-
+		// third task, handles the incoming events from the sync stream.
+		let mut self3 = self.clone();
+		let sync_events_task = crate::utils::ExplicitPanicFuture::new(tokio::spawn(async move {
+			while let Some(event) = sync_event_stream.next().await {
+				self3.handle_sync_event(event).await;
+			}
+		}));
 		// wait for the first task to finish or error out.
 		//
 		// The reason why we wait for the first one to finish, is that it is a critical error
@@ -382,15 +394,18 @@ impl<B: Block + 'static> GossipHandler<B> {
 		// events   task should have finished as well.
 		// 3. The timer task, however, will never finish, unless the node is shutting down, in which
 		//  case the network events task should have finished as well.
-		let _result =
-			futures::future::select_all(vec![network_events_task, incoming_messages_task]).await;
+		let _result = futures::future::select_all(vec![
+			network_events_task,
+			incoming_messages_task,
+			sync_events_task,
+		])
+		.await;
 		self.logger.error("The DKG Gossip Handler has finished!!".to_string());
 	}
 
-	async fn handle_network_event(&self, event: Event) {
+	async fn handle_sync_event(&mut self, event: SyncEvent) {
 		match event {
-			Event::Dht(_) => {},
-			Event::SyncConnected { remote } => {
+			SyncEvent::PeerConnected(remote) => {
 				let addr = iter::once(multiaddr::Protocol::P2p(remote.into()))
 					.collect::<multiaddr::Multiaddr>();
 				let result = self
@@ -400,13 +415,18 @@ impl<B: Block + 'static> GossipHandler<B> {
 					self.logger.error(format!("Add reserved peer failed: {err}"));
 				}
 			},
-			Event::SyncDisconnected { remote } => {
+			SyncEvent::PeerDisconnected(remote) => {
 				self.service.remove_peers_from_reserved_set(
 					self.protocol_name.clone(),
 					iter::once(remote).collect(),
 				);
 			},
+		}
+	}
 
+	async fn handle_network_event(&self, event: Event) {
+		match event {
+			Event::Dht(_) => {},
 			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{

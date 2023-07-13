@@ -21,6 +21,7 @@ use crate::{
 use codec::{Codec, Encode};
 use curv::elliptic::curves::Secp256k1;
 use sc_network::NetworkService;
+use sc_network_sync::SyncingService;
 use sp_consensus::SyncOracle;
 
 use crate::signing_manager::SigningManager;
@@ -99,6 +100,7 @@ where
 	pub local_keystore: Option<Arc<LocalKeystore>>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
+	pub sync_service: Option<Arc<SyncingService<B>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub _marker: PhantomData<B>,
 }
@@ -139,6 +141,8 @@ where
 	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Used to keep track of network status
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
+	/// Used to keep track of sync status
+	pub sync_service: Option<Arc<SyncingService<B>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
 	pub signing_manager: SigningManager<B, BE, C, GE>,
@@ -185,6 +189,7 @@ where
 			error_handler: self.error_handler.clone(),
 			test_bundle: self.test_bundle.clone(),
 			network: self.network.clone(),
+			sync_service: self.sync_service.clone(),
 			logger: self.logger.clone(),
 			signing_manager: self.signing_manager.clone(),
 			keygen_manager: self.keygen_manager.clone(),
@@ -226,6 +231,7 @@ where
 			local_keystore,
 			latest_header,
 			network,
+			sync_service,
 			test_bundle,
 			..
 		} = worker_params;
@@ -258,6 +264,7 @@ where
 			error_handler,
 			logger,
 			network,
+			sync_service,
 			signing_manager,
 			_backend: PhantomData,
 		}
@@ -700,8 +707,9 @@ where
 		self.logger.debug(format!("🕸️  Latest header is now: {:?}", header.number()));
 
 		// if we are still syncing, return immediately
-		if let Some(network) = &self.network {
-			if network.is_major_syncing() {
+
+		if let Some(sync_service) = &self.sync_service {
+			if sync_service.is_major_syncing() {
 				self.logger.debug("🕸️  Chain not fully synced, skipping block processing!");
 				return
 			}
@@ -711,8 +719,7 @@ where
 		// The Steps for enacting new DKG authorities are:
 		// 1. Check if the DKG Public Key are not yet set on chain (or not yet generated)
 		// 2. if yes, we start enacting authorities on genesis flow.
-		// 3. if no, we start enacting authorities on queued flow and submit any unsigned
-		//          proposals.
+		// 3. if no, we start enacting authorities on queued flow and submit any unsigned proposals.
 		if self.dkg_pub_key_is_unset(header).await {
 			self.logger
 				.debug("🕸️  Maybe enacting genesis authorities since dkg pub key is empty");
@@ -1297,6 +1304,15 @@ where
 {
 	fn get_latest_header(&self) -> &Arc<RwLock<Option<B::Header>>> {
 		&self.latest_header
+	}
+
+	#[doc = " Gets latest block number from latest block header"]
+	fn get_latest_block_number(&self) -> NumberFor<B> {
+		if let Some(latest_header) = self.get_latest_header().read().clone() {
+			*latest_header.number()
+		} else {
+			NumberFor::<B>::from(0u32)
+		}
 	}
 }
 

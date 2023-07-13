@@ -5,8 +5,8 @@
 use dkg_runtime_primitives::crypto;
 use ethereum_types::Secret;
 use sc_keystore::LocalKeystore;
-use sp_application_crypto::{ecdsa, ByteArray, CryptoTypePublicPair, Pair};
-use sp_keystore::SyncCryptoStore;
+use sp_application_crypto::{ByteArray, Pair};
+use sp_keystore::Keystore;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use webb_relayer::service;
 use webb_relayer_context::RelayerContext;
@@ -14,15 +14,13 @@ use webb_relayer_context::RelayerContext;
 /// Webb Relayer gadget initialization parameters.
 pub struct WebbRelayerParams {
 	/// Concrete local key store
-	pub local_keystore: Option<Arc<LocalKeystore>>,
+	pub local_keystore: Arc<LocalKeystore>,
 	/// Configuration directory
 	pub config_dir: Option<PathBuf>,
 	/// Database path
 	pub database_path: Option<PathBuf>,
-	/// RPC HTTP address, `None` if disabled.
-	pub rpc_http: Option<SocketAddr>,
-	/// RPC WebSocket address, `None` if disabled.
-	pub rpc_ws: Option<SocketAddr>,
+	/// RPC address, `None` if disabled.
+	pub rpc_addr: Option<SocketAddr>,
 }
 
 pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
@@ -101,19 +99,13 @@ fn post_process_config(
 }
 
 fn get_ecdsa_pair(
-	local_keystore: Option<Arc<LocalKeystore>>,
+	local_keystore: Arc<LocalKeystore>,
 ) -> Result<Option<crypto::Pair>, Box<dyn std::error::Error>> {
-	let local_key_store = local_keystore.expect("failed to get local keystore");
-	let ecdsa_public = local_key_store
-		.keys(dkg_runtime_primitives::KEY_TYPE)?
+	let ecdsa_public = local_keystore
+		.ecdsa_public_keys(dkg_runtime_primitives::KEY_TYPE)
 		.into_iter()
-		.find_map(|CryptoTypePublicPair(id, public_key)| {
-			if id == ecdsa::CRYPTO_ID {
-				crypto::Public::from_slice(&public_key).ok()
-			} else {
-				None
-			}
-		})
+		.find_map(|public_key| crypto::Public::from_slice(&public_key.0).ok())
 		.ok_or("failed to get ecdsa public key")?;
-	local_key_store.key_pair::<crypto::Pair>(&ecdsa_public).map_err(Into::into)
+
+	local_keystore.key_pair::<crypto::Pair>(&ecdsa_public).map_err(Into::into)
 }

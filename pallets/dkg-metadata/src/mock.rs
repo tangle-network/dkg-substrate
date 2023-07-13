@@ -24,7 +24,7 @@ use sp_core::{
 	sr25519::{self, Signature},
 	H256,
 };
-use sp_keystore::{testing::KeyStore, KeystoreExt};
+use sp_keystore::{testing::MemoryKeystore, KeystoreExt, KeystorePtr};
 use sp_runtime::{
 	app_crypto::ecdsa::Public,
 	impl_opaque_keys,
@@ -248,9 +248,8 @@ pub fn new_test_ext_raw_authorities(authorities: Vec<(AccountId, DKGId)>) -> Tes
 		.unwrap();
 
 	let mut ext = sp_io::TestExternalities::new(t);
-	let keystore = KeyStore::new();
 	// set to block 1 to test events
 	ext.execute_with(|| System::set_block_number(1));
-	ext.register_extension(KeystoreExt(Arc::new(keystore)));
+	ext.register_extension(KeystoreExt(Arc::new(MemoryKeystore::new()) as KeystorePtr));
 	ext
 }

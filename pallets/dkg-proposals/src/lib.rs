@@ -138,7 +138,6 @@ pub mod pallet {
 	pub type ProposalOf<T> = Proposal<<T as Config>::MaxProposalLength>;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -776,7 +775,7 @@ impl<T: Config>
 		let bounded_external_accounts: VoterList<T> = authorities
 			.iter()
 			.cloned()
-			.zip(new_external_accounts.into_iter())
+			.zip(new_external_accounts)
 			.collect::<Vec<_>>()
 			.try_into()
 			.expect("Too many external proposer accounts!");

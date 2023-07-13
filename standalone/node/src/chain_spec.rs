@@ -22,10 +22,10 @@ use dkg_standalone_runtime::{
 use hex_literal::hex;
 use pallet_bridge_registry::types::{BridgeInfo, BridgeMetadata, SerdeData};
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
+use sc_consensus_grandpa::AuthorityId as GrandpaId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{bounded_vec, sr25519, Pair, Public};
-use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::str::FromStr;
 

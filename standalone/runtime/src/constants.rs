@@ -50,7 +50,7 @@ pub mod time {
 
 	/// We allow for 0.5 seconds of compute with a 6 second average block time.
 	pub const MAXIMUM_BLOCK_WEIGHT: Weight =
-		Weight::from_ref_time(WEIGHT_REF_TIME_PER_SECOND.saturating_div(2));
+		Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND.saturating_div(2), u64::MAX);
 
 	/// Since BABE is probabilistic this is the average expected block time that
 	/// we are targeting. Blocks will be produced at a minimum duration defined
