@@ -19,10 +19,8 @@ pub struct WebbRelayerParams {
 	pub config_dir: Option<PathBuf>,
 	/// Database path
 	pub database_path: Option<PathBuf>,
-	/// RPC HTTP address, `None` if disabled.
-	pub rpc_http: Option<SocketAddr>,
-	/// RPC WebSocket address, `None` if disabled.
-	pub rpc_ws: Option<SocketAddr>,
+	/// RPC address, `None` if disabled.
+	pub rpc_addr: Option<SocketAddr>,
 }
 
 pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {

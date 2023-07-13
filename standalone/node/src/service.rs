@@ -275,8 +275,7 @@ pub fn new_full(
 				.path()
 				.and_then(|path| path.parent())
 				.map(|p| p.to_path_buf()),
-			rpc_http: config.rpc_http,
-			rpc_ws: config.rpc_ws,
+			rpc_addr: config.rpc_addr,
 		};
 		// Start Webb Relayer Gadget as non-essential task.
 		task_manager.spawn_handle().spawn(
