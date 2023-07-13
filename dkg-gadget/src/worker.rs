@@ -49,8 +49,9 @@ use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
 	gossip_messages::MisbehaviourMessage,
 	utils::to_slice_33,
-	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, DKGApi, MaxAuthorities,
-	MaxProposalLength, MaxReporters, MaxSignatureLength, GENESIS_AUTHORITY_SET_ID,
+	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
+	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
+	GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
@@ -306,7 +307,17 @@ where
 		associated_block: NumberFor<B>,
 	) -> Result<
 		AsyncProtocolParameters<
-			DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>,
+			DKGProtocolEngine<
+				B,
+				BE,
+				C,
+				GE,
+				MaxProposalLength,
+				MaxAuthorities,
+				BatchId,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>,
 			MaxAuthorities,
 		>,
 		DKGError,
@@ -708,8 +719,7 @@ where
 		// The Steps for enacting new DKG authorities are:
 		// 1. Check if the DKG Public Key are not yet set on chain (or not yet generated)
 		// 2. if yes, we start enacting authorities on genesis flow.
-		// 3. if no, we start enacting authorities on queued flow and submit any unsigned
-		//          proposals.
+		// 3. if no, we start enacting authorities on queued flow and submit any unsigned proposals.
 		if self.dkg_pub_key_is_unset(header).await {
 			self.logger
 				.debug("🕸️  Maybe enacting genesis authorities since dkg pub key is empty");

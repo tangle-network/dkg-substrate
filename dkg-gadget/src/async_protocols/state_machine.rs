@@ -46,7 +46,12 @@ where
 			Msg<<Self as StateMachine>::MessageBody>,
 		>,
 		msg: Msg<DKGMessage<Public>>,
-		local_ty: &ProtocolType<<BI as BlockchainInterface>::MaxProposalLength>,
+		local_ty: &ProtocolType<
+			<BI as BlockchainInterface>::BatchId,
+			<BI as BlockchainInterface>::MaxProposalLength,
+			<BI as BlockchainInterface>::MaxProposalsInBatch,
+			<BI as BlockchainInterface>::Clock,
+		>,
 		logger: &DebugLogger,
 	) -> Result<(), <Self as StateMachine>::Err>;
 

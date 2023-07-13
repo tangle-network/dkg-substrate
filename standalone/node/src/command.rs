@@ -41,6 +41,7 @@ impl SubstrateCli for Cli {
 			"" | "dev" => Box::new(chain_spec::development_config()?),
 			"local" => Box::new(chain_spec::local_testnet_config()?),
 			"arana" => Box::new(chain_spec::arana_testnet_config()?),
+			"arana-local" => Box::new(chain_spec::arana_local_config()?),
 			"testnet-conf" => Box::new(chain_spec::arana_testnet_config()?),
 			path =>
 				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
@@ -209,7 +210,12 @@ pub fn run() -> sc_cli::Result<()> {
 			}
 
 			runner.run_node_until_exit(|config| async move {
-				service::new_full(config, cli.output_path).map_err(sc_cli::Error::Service)
+				service::new_full(service::RunFullParams {
+					config,
+					debug_output: cli.output_path,
+					relayer_cmd: cli.relayer_cmd,
+				})
+				.map_err(sc_cli::Error::Service)
 			})
 		},
 	}

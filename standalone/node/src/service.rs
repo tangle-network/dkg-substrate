@@ -19,8 +19,8 @@ use dkg_gadget::debug_logger::DebugLogger;
 use dkg_standalone_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::BlockBackend;
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
-pub use sc_executor::NativeElseWasmExecutor;
 use sc_consensus_grandpa::SharedVoterState;
+pub use sc_executor::NativeElseWasmExecutor;
 use sc_network::NetworkStateInfo;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
@@ -85,7 +85,7 @@ pub fn new_partial(
 			Ok((worker, telemetry))
 		})
 		.transpose()?;
-	
+
 	let executor = sc_service::new_native_or_wasm_executor(config);
 
 	let (client, backend, keystore_container, task_manager) =
@@ -156,10 +156,15 @@ pub fn new_partial(
 	})
 }
 
+pub struct RunFullParams {
+	pub config: Configuration,
+	pub debug_output: Option<std::path::PathBuf>,
+	pub relayer_cmd: webb_relayer_gadget_cli::WebbRelayerCmd,
+}
+
 /// Builds a new service for a full client.
 pub fn new_full(
-	config: Configuration,
-	debug_output: Option<std::path::PathBuf>,
+	RunFullParams { config, debug_output, relayer_cmd }: RunFullParams,
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -180,18 +185,18 @@ pub fn new_full(
 	);
 
 	net_config.add_notification_protocol(sc_consensus_grandpa::grandpa_peers_set_config(
-        grandpa_protocol_name.clone(),
-    ));
+		grandpa_protocol_name.clone(),
+	));
 
 	let keygen_network_protocol_name = dkg_gadget::DKG_KEYGEN_PROTOCOL_NAME;
 	let signing_network_protocol_name = dkg_gadget::DKG_SIGNING_PROTOCOL_NAME;
 
-	net_config.add_notification_protocol(
-		dkg_gadget::dkg_peers_set_config(keygen_network_protocol_name.into()
+	net_config.add_notification_protocol(dkg_gadget::dkg_peers_set_config(
+		keygen_network_protocol_name.into(),
 	));
 
-	net_config.add_notification_protocol(
-		dkg_gadget::dkg_peers_set_config(signing_network_protocol_name.into()
+	net_config.add_notification_protocol(dkg_gadget::dkg_peers_set_config(
+		signing_network_protocol_name.into(),
 	));
 
 	let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
@@ -200,7 +205,6 @@ pub fn new_full(
 		Vec::default(),
 	));
 
-	
 	let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
@@ -261,6 +265,24 @@ pub fn new_full(
 			"dkg-gadget",
 			None,
 			dkg_gadget::start_dkg_gadget::<_, _, _>(dkg_params),
+		);
+
+		let relayer_params = webb_relayer_gadget::WebbRelayerParams {
+			local_keystore: Some(keystore_container.local_keystore()),
+			config_dir: relayer_cmd.relayer_config_dir,
+			database_path: config
+				.database
+				.path()
+				.and_then(|path| path.parent())
+				.map(|p| p.to_path_buf()),
+			rpc_http: config.rpc_http,
+			rpc_ws: config.rpc_ws,
+		};
+		// Start Webb Relayer Gadget as non-essential task.
+		task_manager.spawn_handle().spawn(
+			"relayer-gadget",
+			None,
+			webb_relayer_gadget::start_relayer_gadget(relayer_params),
 		);
 	}
 
@@ -340,8 +362,7 @@ pub fn new_full(
 
 	// if the node isn't actively participating in consensus then it doesn't
 	// need a keystore, regardless of which protocol we use below.
-	let keystore =
-		if role.is_authority() { Some(keystore_container.keystore()) } else { None };
+	let keystore = if role.is_authority() { Some(keystore_container.keystore()) } else { None };
 
 	let grandpa_config = sc_consensus_grandpa::Config {
 		// FIXME #1578 make this available through chainspec

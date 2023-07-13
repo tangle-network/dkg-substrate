@@ -110,11 +110,7 @@ impl HandshakeMessage {
 	pub fn try_new(keystore: &DKGKeystore, peer_id: PeerId) -> Result<Self, DKGError> {
 		let peer_id = peer_id.to_bytes();
 		let authority_id = keystore.get_authority_public_key();
-		let msg = peer_id
-			.clone()
-			.into_iter()
-			.chain(authority_id.to_raw_vec())
-			.collect::<Vec<_>>();
+		let msg = peer_id.clone().into_iter().chain(authority_id.to_raw_vec()).collect::<Vec<_>>();
 		let signature = keystore.sign(&authority_id, &msg).map_err(|e| {
 			DKGError::CriticalError { reason: format!("Failed to sign handshake message: {e}") }
 		})?;

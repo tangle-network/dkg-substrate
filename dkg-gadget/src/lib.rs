@@ -39,7 +39,6 @@ mod signing_manager;
 // mod meta_async_rounds;
 pub mod db;
 mod metrics;
-mod proposal;
 mod utils;
 pub mod worker;
 

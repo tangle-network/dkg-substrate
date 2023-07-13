@@ -1,8 +1,5 @@
 #![allow(clippy::unwrap_used)] // allow unwraps in tests
-use crate::{
-	async_protocols::{blockchain_interface::BlockchainInterface, BatchKey},
-	proposal::make_signed_proposal,
-};
+use crate::async_protocols::{blockchain_interface::BlockchainInterface, BatchKey};
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
@@ -10,21 +7,33 @@ use dkg_primitives::{
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
-	crypto::Public,
-	gossip_messages::{DKGSignedPayload, PublicKeyMessage},
-	MaxProposalLength, UnsignedProposal,
+	crypto::Public, gossip_messages::PublicKeyMessage, BatchId, MaxProposalLength,
+	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
 };
 use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
-use webb_proposals::{Proposal, ProposalKind};
+use webb_proposals::Proposal;
 
 use super::KeygenPartyId;
 
-pub(crate) type VoteResults =
-	Arc<Mutex<HashMap<BatchKey, Vec<(Proposal<MaxProposalLength>, SignatureRecid, BigInt)>>>>;
+pub(crate) type VoteResults = Arc<
+	Mutex<
+		HashMap<
+			BatchKey,
+			Vec<
+				SignedProposalBatch<
+					BatchId,
+					MaxProposalLength,
+					MaxProposalsInBatch,
+					MaxSignatureLength,
+				>,
+			>,
+		>,
+	>,
+>;
 
 #[derive(Clone)]
 pub struct TestDummyIface {
@@ -41,6 +50,9 @@ impl BlockchainInterface for TestDummyIface {
 	type Clock = u32;
 	type GossipEngine = ();
 	type MaxProposalLength = MaxProposalLength;
+	type BatchId = BatchId;
+	type MaxProposalsInBatch = MaxProposalsInBatch;
+	type MaxSignatureLength = MaxSignatureLength;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -66,26 +78,49 @@ impl BlockchainInterface for TestDummyIface {
 
 	fn process_vote_result(
 		&self,
-		signature_rec: SignatureRecid,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
-		session_id: SessionId,
+		signature: SignatureRecid,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposalsInBatch,
+			Self::Clock,
+		>,
+		_session_id: SessionId,
 		batch_key: BatchKey,
-		message: BigInt,
+		_message: BigInt,
 	) -> Result<(), DKGError> {
 		let mut lock = self.vote_results.lock();
-		let _payload_key = unsigned_proposal.key;
-		let signature = convert_signature(&signature_rec).ok_or_else(|| {
-			DKGError::CriticalError { reason: "Unable to serialize signature".to_string() }
+
+		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
+			reason: "Unable to serialize signature".to_string(),
 		})?;
 
-		let finished_round = DKGSignedPayload {
-			key: session_id.encode(),
-			payload: "Webb".encode(),
-			signature: signature.encode(),
+		let mut signed_proposals = vec![];
+
+		// convert all unsigned proposals to signed
+		for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
+			signed_proposals.push(Proposal::Signed {
+				kind: unsigned_proposal.proposal.kind(),
+				data: unsigned_proposal
+					.data()
+					.clone()
+					.try_into()
+					.expect("should not happen since its a valid proposal"),
+				signature: signature
+					.encode()
+					.try_into()
+					.expect("Signature exceeds runtime bounds!"),
+			});
+		}
+
+		let signed_proposal_batch = SignedProposalBatch {
+			batch_id: unsigned_proposal_batch.batch_id,
+			proposals: signed_proposals.try_into().expect("Proposals exceeds runtime bounds!"),
+			signature: signature.encode().try_into().expect("Signature exceeds runtime bounds!"),
 		};
 
-		let prop = make_signed_proposal(ProposalKind::EVM, finished_round).unwrap();
-		lock.entry(batch_key).or_default().push((prop.unwrap(), signature_rec, message));
+		let proposals_for_this_batch = lock.entry(batch_key).or_default();
+		proposals_for_this_batch.push(signed_proposal_batch);
 
 		Ok(())
 	}

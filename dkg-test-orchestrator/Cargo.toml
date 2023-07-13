@@ -34,3 +34,4 @@ sp-core = { workspace = true }
 sp-keystore = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 frame-support = { workspace = true }
+rand = "0.8.5"

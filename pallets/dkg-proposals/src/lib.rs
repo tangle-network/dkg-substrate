@@ -164,7 +164,7 @@ pub mod pallet {
 		type DKGAuthorityToMerkleLeaf: Convert<Self::DKGId, Vec<u8>>;
 
 		/// The handler for proposals
-		type ProposalHandler: ProposalHandlerTrait<Self::MaxProposalLength>;
+		type ProposalHandler: ProposalHandlerTrait<MaxProposalLength = Self::MaxProposalLength>;
 
 		/// The identifier for this chain.
 		/// This must be unique and must not collide with existing IDs within a

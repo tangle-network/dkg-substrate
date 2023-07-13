@@ -17,7 +17,6 @@ use crate::{
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{dkg_message::sign_and_send_messages, public_key_gossip::gossip_public_key},
 	metrics::Metrics,
-	proposal::get_signed_proposal,
 	storage::proposals::save_signed_proposals_in_storage,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, TestBundle},
 	Client, DKGApi, DKGKeystore,
@@ -25,13 +24,14 @@ use crate::{
 use codec::Encode;
 use curv::{elliptic::curves::Secp256k1, BigInt};
 use dkg_primitives::{
+	gossip_messages::PublicKeyMessage,
 	types::{DKGError, DKGMessage, SessionId, SignedDKGMessage},
 	utils::convert_signature,
 };
 use dkg_runtime_primitives::{
 	crypto::{AuthorityId, Public},
-	gossip_messages::{DKGSignedPayload, PublicKeyMessage},
-	AggregatedPublicKeys, AuthoritySet, MaxAuthorities, MaxProposalLength, UnsignedProposal,
+	AggregatedPublicKeys, AuthoritySet, BatchId, MaxAuthorities, MaxProposalLength,
+	MaxProposalsInBatch, MaxSignatureLength, SignedProposalBatch, StoredUnsignedProposalBatch,
 };
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 	party_i::SignatureRecid, state_machine::keygen::LocalKey,
@@ -39,6 +39,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::{
 use parking_lot::RwLock;
 use sc_client_api::Backend;
 use sc_keystore::LocalKeystore;
+
 use sp_arithmetic::traits::AtLeast32BitUnsigned;
 use sp_runtime::traits::{Block, Get, NumberFor};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
@@ -52,6 +53,9 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	type Clock: Debug + AtLeast32BitUnsigned + Copy + Send + Sync;
 	type GossipEngine: GossipEngineIface;
 	type MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
+	type MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -61,7 +65,12 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal<Self::MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposalsInBatch,
+			Self::Clock,
+		>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		message: BigInt,
@@ -78,6 +87,7 @@ pub trait BlockchainInterface: Send + Sync + Unpin {
 	fn now(&self) -> Self::Clock;
 }
 
+#[allow(clippy::type_complexity)]
 pub struct DKGProtocolEngine<
 	B: Block,
 	BE,
@@ -85,6 +95,9 @@ pub struct DKGProtocolEngine<
 	GE,
 	MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 	MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 > {
 	pub backend: Arc<BE>,
 	pub latest_header: Arc<RwLock<Option<B::Header>>>,
@@ -95,14 +108,28 @@ pub struct DKGProtocolEngine<
 	pub aggregated_public_keys: Arc<RwLock<HashMap<SessionId, AggregatedPublicKeys>>>,
 	pub best_authorities: Arc<Vec<(KeygenPartyId, Public)>>,
 	pub authority_public_key: Arc<Public>,
-	pub vote_results: Arc<RwLock<HashMap<BatchKey, Vec<Proposal<MaxProposalLength>>>>>,
+	pub vote_results: Arc<
+		RwLock<
+			HashMap<
+				BatchKey,
+				Vec<
+					SignedProposalBatch<
+						BatchId,
+						MaxProposalLength,
+						MaxProposalsInBatch,
+						MaxSignatureLength,
+					>,
+				>,
+			>,
+		>,
+	>,
 	pub is_genesis: bool,
 	pub current_validator_set: Arc<RwLock<AuthoritySet<Public, MaxAuthorities>>>,
 	pub local_keystore: Arc<RwLock<Option<Arc<LocalKeystore>>>>,
 	pub metrics: Arc<Option<Metrics>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
-	pub _pd: PhantomData<BE>,
+	pub _pd: PhantomData<(BE, BatchId, MaxProposalsInBatch, MaxSignatureLength)>,
 }
 
 impl<
@@ -112,7 +139,21 @@ impl<
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
 		MaxAuthorities: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	>
+	DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	>
 {
 	fn send_result_to_test_client(&self, result: Result<(), String>, pub_key: Option<Vec<u8>>) {
 		if let Some(bundle) = self.test_bundle.as_ref() {
@@ -132,7 +173,21 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> KeystoreExt for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> KeystoreExt
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	>
 {
 	fn get_keystore(&self) -> &DKGKeystore {
 		&self.keystore
@@ -145,8 +200,21 @@ impl<
 		C,
 		GE,
 		MaxProposalLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static,
-	> HasLatestHeader<B> for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
-where
+		BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+		MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	> HasLatestHeader<B>
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	> where
 	B: Block,
 	BE: Backend<B> + 'static,
 	GE: GossipEngineIface,
@@ -159,18 +227,33 @@ where
 
 #[async_trait::async_trait]
 impl<B, BE, C, GE> BlockchainInterface
-	for DKGProtocolEngine<B, BE, C, GE, MaxProposalLength, MaxAuthorities>
-where
+	for DKGProtocolEngine<
+		B,
+		BE,
+		C,
+		GE,
+		MaxProposalLength,
+		MaxAuthorities,
+		BatchId,
+		MaxProposalsInBatch,
+		MaxSignatureLength,
+	> where
 	B: Block,
 	C: Client<B, BE> + 'static,
 	C::Api: DKGApi<B, AuthorityId, NumberFor<B>, MaxProposalLength, MaxAuthorities>,
 	BE: Backend<B> + Unpin + 'static,
-	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug,
+	MaxProposalLength: Get<u32> + Send + Sync + Clone + 'static + std::fmt::Debug + Unpin,
+	BatchId: Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxProposalsInBatch: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
+	MaxSignatureLength: Get<u32> + Clone + Send + Sync + std::fmt::Debug + 'static + Unpin,
 	GE: GossipEngineIface + 'static,
 {
 	type Clock = NumberFor<B>;
 	type GossipEngine = Arc<GE>;
 	type MaxProposalLength = MaxProposalLength;
+	type BatchId = BatchId;
+	type MaxProposalsInBatch = MaxProposalsInBatch;
+	type MaxSignatureLength = MaxSignatureLength;
 
 	async fn verify_signature_against_authorities(
 		&self,
@@ -195,7 +278,12 @@ where
 	fn process_vote_result(
 		&self,
 		signature: SignatureRecid,
-		unsigned_proposal: UnsignedProposal<MaxProposalLength>,
+		unsigned_proposal_batch: StoredUnsignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposalsInBatch,
+			Self::Clock,
+		>,
 		session_id: SessionId,
 		batch_key: BatchKey,
 		_message: BigInt,
@@ -205,50 +293,75 @@ where
 		self.logger.info(format!(
 			"PROCESS VOTE RESULT : session_id {session_id:?}, signature : {signature:?}"
 		));
-		let payload_key = unsigned_proposal.key;
+
 		let signature = convert_signature(&signature).ok_or_else(|| DKGError::CriticalError {
 			reason: "Unable to serialize signature".to_string(),
 		})?;
 
-		let finished_round = DKGSignedPayload {
-			key: session_id.encode(),
-			payload: unsigned_proposal.data().clone(),
-			signature: signature.encode(),
+		let mut signed_proposals = vec![];
+
+		// convert all unsigned proposals to signed
+		for unsigned_proposal in unsigned_proposal_batch.proposals.iter() {
+			signed_proposals.push(Proposal::Signed {
+				kind: unsigned_proposal.proposal.kind(),
+				data: unsigned_proposal
+					.data()
+					.clone()
+					.try_into()
+					.expect("should not happen since its a valid proposal"),
+				signature: signature
+					.encode()
+					.try_into()
+					.expect("Signature exceeds runtime bounds!"),
+			});
+		}
+
+		let signed_proposal_batch = SignedProposalBatch {
+			batch_id: unsigned_proposal_batch.batch_id,
+			proposals: signed_proposals.try_into().expect("Proposals exceeds runtime bounds!"),
+			signature: signature.encode().try_into().expect("Signature exceeds runtime bounds!"),
 		};
 
 		let mut lock = self.vote_results.write();
 		let proposals_for_this_batch = lock.entry(batch_key).or_default();
 
-		if let Ok(Some(proposal)) = get_signed_proposal(finished_round, payload_key) {
-			proposals_for_this_batch.push(proposal);
+		proposals_for_this_batch.push(signed_proposal_batch);
 
-			if proposals_for_this_batch.len() == batch_key.len {
-				self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
-				let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
-				std::mem::drop(lock);
+		if proposals_for_this_batch.len() == batch_key.len {
+			self.logger.info(format!("All proposals have resolved for batch {batch_key:?}"));
+			let proposals = lock.remove(&batch_key).expect("Cannot get lock on vote_results"); // safe unwrap since lock is held
+			std::mem::drop(lock);
 
-				if let Some(metrics) = self.metrics.as_ref() {
-					metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
-				}
-
-				save_signed_proposals_in_storage::<B, BE, MaxProposalLength, MaxAuthorities>(
-					&self.get_authority_public_key(),
-					&self.current_validator_set,
-					&self.latest_header,
-					&self.backend,
-					proposals,
-					&self.logger,
-				);
-				// send None to signify this was a signing result
-				self.send_result_to_test_client(Ok(()), None);
-			} else {
-				self.logger.info(format!(
-					"{}/{} proposals have resolved for batch {:?}",
-					proposals_for_this_batch.len(),
-					batch_key.len,
-					batch_key,
-				));
+			if let Some(metrics) = self.metrics.as_ref() {
+				metrics.dkg_signed_proposal_counter.inc_by(proposals.len() as u64);
 			}
+
+			save_signed_proposals_in_storage::<
+				B,
+				C,
+				BE,
+				MaxProposalLength,
+				MaxAuthorities,
+				BatchId,
+				MaxProposalsInBatch,
+				MaxSignatureLength,
+			>(
+				&self.get_authority_public_key(),
+				&self.current_validator_set,
+				&self.latest_header,
+				&self.backend,
+				proposals,
+				&self.logger,
+			);
+			// send None to signify this was a signing result
+			self.send_result_to_test_client(Ok(()), None);
+		} else {
+			self.logger.info(format!(
+				"{}/{} proposals have resolved for batch {:?}",
+				proposals_for_this_batch.len(),
+				batch_key.len,
+				batch_key,
+			));
 		}
 
 		Ok(())

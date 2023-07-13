@@ -44,6 +44,7 @@ use dkg_runtime_primitives::{
 	keccak_256, MaxProposalLength, MaxResources, MaxVotes, TransactionV2, TypedChainId,
 };
 
+use crate::SignedProposalBatchOf;
 use dkg_runtime_primitives::{EIP2930Transaction, TransactionAction, U256};
 use std::sync::Arc;
 use webb_proposals::{Proposal, ProposalKind};
@@ -171,14 +172,17 @@ where
 parameter_types! {
 	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
 	pub const MaxProposers : u32 = 100;
+	#[derive(Clone, Encode, Decode, Debug, Eq, PartialEq, scale_info::TypeInfo, Ord, PartialOrd)]
+	pub const MaxProposalsPerBatch : u32 = 10;
 }
 
 impl pallet_dkg_proposal_handler::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OffChainAuthId = dkg_runtime_primitives::offchain::crypto::OffchainAuthId;
-	type MaxSubmissionsPerBatch = frame_support::traits::ConstU16<100>;
 	type UnsignedProposalExpiry = frame_support::traits::ConstU64<10>;
 	type SignedProposalHandler = ();
+	type BatchId = u32;
+	type MaxProposalsPerBatch = MaxProposalsPerBatch;
 	type ForceOrigin = EnsureRoot<Self::AccountId>;
 	type WeightInfo = ();
 }
@@ -263,7 +267,7 @@ impl pallet_dkg_metadata::Config for Test {
 	type DecayPercentage = DecayPercentage;
 	type Reputation = u128;
 	type UnsignedInterval = frame_support::traits::ConstU64<0>;
-	type UnsignedPriority = frame_support::traits::ConstU64<{ 1 << 20 }>;
+	type UnsignedPriority = frame_support::traits::ConstU64<1000>;
 	type AuthorityIdOf = pallet_dkg_metadata::AuthorityIdOf<Self>;
 	type ProposalHandler = ();
 	type MaxKeyLength = MaxKeyLength;
@@ -360,9 +364,7 @@ pub fn mock_sign_msg(
 	keystore.ecdsa_sign_prehashed(dkg_runtime_primitives::crypto::Public::ID, &pub_key, msg)
 }
 
-pub fn mock_signed_proposal(
-	eth_tx: TransactionV2,
-) -> Proposal<<Test as pallet_dkg_metadata::Config>::MaxProposalLength> {
+pub fn mock_signed_proposal_batch(eth_tx: TransactionV2) -> SignedProposalBatchOf<Test> {
 	let eth_tx_ser = eth_tx.encode();
 
 	let hash = keccak_256(&eth_tx_ser);
@@ -371,9 +373,12 @@ pub fn mock_signed_proposal(
 	let mut sig_vec: Vec<u8> = Vec::new();
 	sig_vec.extend_from_slice(&sig.0);
 
-	Proposal::Signed {
-		kind: ProposalKind::EVM,
-		data: eth_tx_ser.try_into().unwrap(),
+	let unsigned_proposal =
+		Proposal::Unsigned { kind: ProposalKind::EVM, data: eth_tx.encode().try_into().unwrap() };
+
+	SignedProposalBatchOf::<Test> {
+		proposals: vec![unsigned_proposal].try_into().unwrap(),
+		batch_id: 0_u32,
 		signature: sig_vec.try_into().unwrap(),
 	}
 }

@@ -16,6 +16,6 @@
 
 sp_api::decl_runtime_apis! {
 	pub trait DKGProposalHandlerApi<Proposal> {
-		fn get_unsigned_proposals() -> Vec<Proposal>;
+		fn get_unsigned_proposal_batches() -> Vec<Proposal>;
 	}
 }

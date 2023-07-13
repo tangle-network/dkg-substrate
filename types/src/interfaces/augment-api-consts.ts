@@ -9,7 +9,6 @@ import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
 import type { Vec, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { Codec } from '@polkadot/types-codec/types';
 import type { Perbill } from '@polkadot/types/interfaces/runtime';
-import { WebbProposalsHeaderTypedChainId, SpWeightsWeightV2Weight, FrameSupportPalletId, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpWeightsRuntimeDbWeight, SpVersionRuntimeVersion } from '@polkadot/types/lookup';
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 
@@ -159,7 +158,7 @@ declare module '@polkadot/api-base/types/consts' {
       /**
        * Max number of signed proposal submissions per batch;
        **/
-      maxSubmissionsPerBatch: u16 & AugmentedConst<ApiType>;
+      maxProposalsPerBatch: u32 & AugmentedConst<ApiType>;
       /**
        * Max blocks to store an unsigned proposal
        **/
@@ -540,6 +539,16 @@ declare module '@polkadot/api-base/types/consts' {
        * transactions.
        **/
       operationalFeeMultiplier: u8 & AugmentedConst<ApiType>;
+      /**
+       * Generic const
+       **/
+      [key: string]: Codec;
+    };
+    utility: {
+      /**
+       * The limit on the number of batched calls.
+       **/
+      batchedCallsLimit: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

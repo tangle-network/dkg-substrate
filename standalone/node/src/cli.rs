@@ -23,6 +23,8 @@ pub struct Cli {
 	pub run: RunCmd,
 	#[arg(long, short = 'o')]
 	pub output_path: Option<std::path::PathBuf>,
+	#[clap(flatten)]
+	pub relayer_cmd: webb_relayer_gadget_cli::WebbRelayerCmd,
 }
 
 #[derive(Debug, clap::Subcommand)]

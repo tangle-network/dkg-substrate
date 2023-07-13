@@ -22,10 +22,10 @@ use dkg_standalone_runtime::{
 use hex_literal::hex;
 use pallet_bridge_registry::types::{BridgeInfo, BridgeMetadata, SerdeData};
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
+use sc_consensus_grandpa::AuthorityId as GrandpaId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{bounded_vec, sr25519, Pair, Public};
-use sc_consensus_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use std::str::FromStr;
 
@@ -214,6 +214,60 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Dave"),
 					get_account_id_from_seed::<sr25519::Public>("Eve"),
 				],
+				true,
+			)
+		},
+		// Bootnodes
+		vec![],
+		// Telemetry
+		None,
+		// Protocol ID
+		None,
+		// Fork id
+		None,
+		// Properties
+		None,
+		// Extensions
+		None,
+	))
+}
+
+// same as arana_testnet, but without bootnodes for local testnet
+pub fn arana_local_config() -> Result<ChainSpec, String> {
+	let wasm_binary = WASM_BINARY.ok_or_else(|| "Arana wasm not available".to_string())?;
+
+	Ok(ChainSpec::from_genesis(
+		"Arana",
+		"arana",
+		ChainType::Development,
+		move || {
+			testnet_genesis(
+				wasm_binary,
+				// Initial PoA authorities
+				crate::testnet_fixtures::get_arana_initial_authorities(),
+				vec![],
+				// Sudo account
+				crate::testnet_fixtures::get_testnet_root_key(),
+				// Pre-funded accounts
+				vec![
+					crate::testnet_fixtures::get_testnet_root_key(),
+					hex!["4e85271af1330e5e9384bd3ac5bdc04c0f8ef5a8cc29c1a8ae483d674164745c"].into(),
+					hex!["804808fb75d16340dc250871138a1a6f1dfa3cab9cc1fbd6f42960f1c39a950d"].into(),
+					hex!["587c2ef00ec0a1b98af4c655763acd76ece690fccbb255f01663660bc274960d"].into(),
+					hex!["cc195602a63bbdcf2ef4773c86fdbfefe042cb9aa8e3059d02e59a062d9c3138"].into(),
+					hex!["a24f729f085de51eebaeaeca97d6d499761b8f6daeca9b99d754a06ef8bcec3f"].into(),
+					hex!["368ea402dbd9c9888ae999d6a799cf36e08673ee53c001dfb4529c149fc2c13b"].into(),
+					hex!["2c7f3cc085da9175414d1a9d40aa3aa161c8584a9ca62a938684dfbe90ae9d74"].into(),
+					hex!["0a55e5245382700f35d16a5ea6d60a56c36c435bef7204353b8c36871f347857"].into(),
+					hex!["e0948453e7acbc6ac937e124eb01580191e99f4262d588d4524994deb6134349"].into(),
+					hex!["6c73e5ee9f8614e7c9f23fd8f7257d12e061e75fcbeb3b50ed70eb87ba91f500"].into(),
+				],
+				vec![],
+				vec![],
+				crate::testnet_fixtures::get_arana_initial_authorities()
+					.iter()
+					.map(|a| a.0.clone())
+					.collect(),
 				true,
 			)
 		},

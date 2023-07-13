@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-use frame_support::{pallet_prelude::Get, RuntimeDebug};
+use frame_support::{
+	pallet_prelude::{ConstU32, Get},
+	BoundedVec, RuntimeDebug,
+};
 use sp_std::hash::{Hash, Hasher};
 
 use codec::{Decode, Encode, EncodeLike, MaxEncodedLen};
@@ -177,34 +180,175 @@ impl Hash for DKGPayloadKey {
 		self.encode().hash(state)
 	}
 }
+
 pub enum ProposalAction {
 	// sign the proposal with some priority
 	Sign(u8),
 }
-pub trait ProposalHandlerTrait<MaxProposalLength: Get<u32>> {
+pub trait ProposalHandlerTrait {
+	type BatchId;
+	type MaxProposalLength: Get<u32>;
+	type MaxProposals: Get<u32>;
+	type MaxSignatureLen: Get<u32>;
+
 	fn handle_unsigned_proposal(
-		_prop: Proposal<MaxProposalLength>,
+		_prop: Proposal<Self::MaxProposalLength>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 
-	fn handle_signed_proposal(
-		_prop: Proposal<MaxProposalLength>,
+	fn handle_signed_proposal_batch(
+		_prop: SignedProposalBatch<
+			Self::BatchId,
+			Self::MaxProposalLength,
+			Self::MaxProposals,
+			Self::MaxSignatureLen,
+		>,
 	) -> frame_support::pallet_prelude::DispatchResult {
 		Ok(())
 	}
 }
 
-impl<M: Get<u32>> ProposalHandlerTrait<M> for () {}
+impl ProposalHandlerTrait for () {
+	type BatchId = u32;
+	type MaxProposalLength = crate::MaxProposalLength;
+	type MaxProposals = ConstU32<0>;
+	type MaxSignatureLen = ConstU32<0>;
+}
 
 /// An unsigned proposal represented in pallet storage
 /// We store the creation timestamp to purge expired proposals
 #[derive(
 	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
 )]
-pub struct StoredUnsignedProposal<Timestamp, MaxLength: Get<u32>> {
-	/// Proposal data
-	pub proposal: Proposal<MaxLength>,
+pub struct StoredUnsignedProposalBatch<
+	BatchId,
+	MaxLength: Get<u32> + Clone,
+	MaxProposals: Get<u32>,
+	Timestamp,
+> {
+	/// the batch id for this batch of proposals
+	pub batch_id: BatchId,
+	/// Proposals data
+	pub proposals: BoundedVec<crate::UnsignedProposal<MaxLength>, MaxProposals>,
 	/// Creation timestamp
 	pub timestamp: Timestamp,
+}
+
+impl<BatchId, MaxLength: Get<u32> + Clone, MaxProposals: Get<u32>, Timestamp>
+	StoredUnsignedProposalBatch<BatchId, MaxLength, MaxProposals, Timestamp>
+{
+	// We generate the data to sign for a proposal batch by doing ethabi::encode
+	// on the data of all proposals in the batch
+	pub fn data(&self) -> Vec<u8> {
+		use ethabi::token::Token;
+
+		// if the proposal batch has just one proposal, the data is the encoded data of
+		// the proposal, this allows us to quickly verify batches with just one proposal
+		if self.proposals.len() == 1 {
+			return self.proposals.first().expect("checked above that len = 1").data().clone()
+		}
+
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
+		for proposal in self.proposals.iter() {
+			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
+			vec_proposal_data.push(data_as_token);
+		}
+
+		ethabi::encode(&[Token::Array(vec_proposal_data)])
+	}
+
+	pub fn hash(&self) -> Option<[u8; 32]> {
+		Some(crate::keccak_256(&self.data()))
+	}
+}
+
+/// An unsigned proposal represented in pallet storage
+/// We store the creation timestamp to purge expired proposals
+#[derive(
+	Debug, Encode, Decode, Clone, Eq, PartialEq, scale_info::TypeInfo, codec::MaxEncodedLen,
+)]
+pub struct SignedProposalBatch<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	/// the batch id for this batch of proposals
+	pub batch_id: BatchId,
+	/// Proposals data
+	pub proposals: BoundedVec<Proposal<MaxLength>, MaxProposals>,
+	/// Signature for proposals
+	pub signature: BoundedVec<u8, MaxSignatureLen>,
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>>
+	From<DKGSignedPayload<BatchId, MaxLength, MaxProposals, MaxSignatureLen>>
+	for SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	fn from(payload: DKGSignedPayload<BatchId, MaxLength, MaxProposals, MaxSignatureLen>) -> Self {
+		SignedProposalBatch {
+			batch_id: payload.batch_id,
+			proposals: payload.payload,
+			signature: payload.signature,
+		}
+	}
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>>
+	SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	// We generate the data to sign for a proposal batch by doing ethabi::encode
+	// on the data of all proposals in the batch
+	pub fn data(&self) -> Vec<u8> {
+		use ethabi::token::Token;
+
+		// if the proposal batch has just one proposal, the data is the encoded data of
+		// the proposal, this allows us to quickly verify batches with just one proposal
+		if self.proposals.len() == 1 {
+			return self.proposals.first().expect("checked above that len = 1").data().clone()
+		}
+
+		let mut vec_proposal_data: Vec<Token> = Vec::new();
+		for proposal in self.proposals.iter() {
+			let data_as_token = Token::FixedBytes(proposal.data().to_vec());
+			vec_proposal_data.push(data_as_token);
+		}
+
+		ethabi::encode(&[Token::Array(vec_proposal_data)])
+	}
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+#[cfg_attr(feature = "scale-info", derive(scale_info::TypeInfo))]
+pub struct DKGSignedPayload<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	/// Payload key
+	pub batch_id: BatchId,
+	/// The payload signatures are collected for.
+	pub payload: BoundedVec<Proposal<MaxLength>, MaxProposals>,
+	/// Runtime compatible signature for the payload
+	pub signature: BoundedVec<u8, MaxSignatureLen>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, codec::Encode, codec::Decode)]
+pub struct OffchainSignedProposalBatches<
+	BatchId,
+	MaxLength: Get<u32>,
+	MaxProposals: Get<u32>,
+	MaxSignatureLen: Get<u32>,
+> {
+	pub batches: Vec<SignedProposalBatch<BatchId, MaxLength, MaxProposals, MaxSignatureLen>>,
+}
+
+impl<BatchId, MaxLength: Get<u32>, MaxProposals: Get<u32>, MaxSignatureLen: Get<u32>> Default
+	for OffchainSignedProposalBatches<BatchId, MaxLength, MaxProposals, MaxSignatureLen>
+{
+	fn default() -> Self {
+		Self { batches: Default::default() }
+	}
 }
