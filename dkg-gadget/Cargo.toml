@@ -41,7 +41,6 @@ bincode2 = { workspace = true }
 sc-client-api = { workspace = true }
 sc-keystore = { workspace = true }
 sc-network = { workspace = true }
-sc-network-common = { workspace = true }
 sc-network-sync = { workspace = true }
 sc-peerset = { workspace = true }
 
