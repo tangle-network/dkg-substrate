@@ -7,7 +7,8 @@ use dkg_primitives::{
 
 use self::work_manager::WorkManager;
 use crate::{
-	async_protocols::{dkg::SigningProtocolSetupParameters, KeygenPartyId},
+	async_protocols::KeygenPartyId,
+	dkg_modules::SigningProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	metric_inc,
 	signing_manager::work_manager::PollMethod,

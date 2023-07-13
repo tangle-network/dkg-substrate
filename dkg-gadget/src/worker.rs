@@ -54,7 +54,8 @@ use dkg_runtime_primitives::{
 };
 
 use crate::{
-	async_protocols::{dkg::DKGModules, remote::AsyncProtocolRemote, AsyncProtocolParameters},
+	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters},
+	dkg_modules::DKGModules,
 	error,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{

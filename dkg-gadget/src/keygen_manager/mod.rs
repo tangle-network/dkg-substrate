@@ -1,9 +1,8 @@
 #![allow(clippy::needless_return)]
 
 use crate::{
-	async_protocols::{
-		dkg::DKGProtocolSetupParameters, remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound,
-	},
+	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound},
+	dkg_modules::KeygenProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	signing_manager::work_manager::{JobMetadata, PollMethod, WorkManager},
 	utils::SendFuture,
@@ -435,7 +434,7 @@ where
 		);
 
 		// For now, always use the MpEcdsa variant
-		let params = DKGProtocolSetupParameters::MpEcdsa {
+		let params = KeygenProtocolSetupParameters::MpEcdsa {
 			best_authorities,
 			authority_public_key,
 			party_i,
