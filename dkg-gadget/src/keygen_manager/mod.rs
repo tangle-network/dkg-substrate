@@ -1,7 +1,9 @@
 #![allow(clippy::needless_return)]
 
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound},
+	async_protocols::{
+		dkg::DKGProtocolSetupParameters, remote::AsyncProtocolRemote, KeygenPartyId, KeygenRound,
+	},
 	gossip_engine::GossipEngineIface,
 	signing_manager::work_manager::{JobMetadata, PollMethod, WorkManager},
 	utils::SendFuture,
@@ -432,19 +434,24 @@ where
 			self.active_keygen_retry_id.load(Ordering::SeqCst),
 		);
 
-		if let Some((handle, task)) = dkg_worker
-			.initialize_keygen_protocol(
-				best_authorities,
-				authority_public_key,
-				party_i,
-				session_id,
-				*header.number(),
-				threshold,
-				proto_stage_ty,
-				keygen_protocol_hash,
-			)
-			.await
-		{
+		// For now, always use the MpEcdsa variant
+		let params = DKGProtocolSetupParameters::MpEcdsa {
+			best_authorities,
+			authority_public_key,
+			party_i,
+			session_id,
+			associated_block: *header.number(),
+			threshold,
+			stage: proto_stage_ty,
+			keygen_protocol_hash,
+		};
+
+		let dkg = dkg_worker
+			.dkg_modules
+			.get_keygen_protocol(&params)
+			.expect("Default should be present");
+
+		if let Some((handle, task)) = dkg.initialize_keygen_protocol(params).await {
 			// Before sending the task, force clear all previous tasks to allow the new one
 			// the immediately run
 			if anticipated_execution_status.force_execute {

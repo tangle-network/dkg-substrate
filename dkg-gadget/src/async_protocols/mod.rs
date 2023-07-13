@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod blockchain_interface;
+pub mod dkg;
 pub mod incoming;
 pub mod keygen;
 pub mod remote;

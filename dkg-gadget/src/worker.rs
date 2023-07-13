@@ -36,8 +36,7 @@ use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::{
 	collections::{BTreeSet, HashMap},
 	marker::PhantomData,
-	pin::Pin,
-	sync::{atomic::Ordering, Arc},
+	sync::Arc,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -55,20 +54,18 @@ use dkg_runtime_primitives::{
 };
 
 use crate::{
-	async_protocols::{
-		remote::AsyncProtocolRemote, AsyncProtocolParameters, GenericAsyncHandler, KeygenRound,
-	},
+	async_protocols::{dkg::DKGModules, remote::AsyncProtocolRemote, AsyncProtocolParameters},
 	error,
 	gossip_engine::GossipEngineIface,
 	gossip_messages::{
 		misbehaviour_report::{gossip_misbehaviour_report, handle_misbehaviour_report},
 		public_key_gossip::handle_public_key_broadcast,
 	},
-	keygen_manager::{KeygenManager, KeygenState},
+	keygen_manager::KeygenManager,
 	keystore::DKGKeystore,
 	metric_inc, metric_set,
 	metrics::Metrics,
-	utils::{find_authorities_change, SendFuture},
+	utils::find_authorities_change,
 	Client,
 };
 
@@ -145,6 +142,7 @@ where
 	pub sync_service: Option<Arc<SyncingService<B>>>,
 	pub test_bundle: Option<TestBundle>,
 	pub logger: DebugLogger,
+	pub dkg_modules: DKGModules<B, BE, C, GE>,
 	pub signing_manager: SigningManager<B, BE, C, GE>,
 	pub keygen_manager: KeygenManager<B, BE, C, GE>,
 	// keep rustc happy
@@ -164,8 +162,8 @@ pub type TestClientPayload = (uuid::Uuid, Result<(), String>, Option<Vec<u8>>);
 impl<B, BE, C, GE> Clone for DKGWorker<B, BE, C, GE>
 where
 	B: Block,
-	BE: Backend<B>,
-	C: Client<B, BE>,
+	BE: Backend<B> + 'static,
+	C: Client<B, BE> + 'static,
 	GE: GossipEngineIface,
 {
 	fn clone(&self) -> Self {
@@ -191,6 +189,7 @@ where
 			network: self.network.clone(),
 			sync_service: self.sync_service.clone(),
 			logger: self.logger.clone(),
+			dkg_modules: self.dkg_modules.clone(),
 			signing_manager: self.signing_manager.clone(),
 			keygen_manager: self.keygen_manager.clone(),
 			_backend: PhantomData,
@@ -241,8 +240,8 @@ where
 		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock.clone());
 		// 2 tasks max: 1 for current, 1 for queued
 		let keygen_manager = KeygenManager::new(logger.clone(), clock);
-
-		DKGWorker {
+		let dkg_modules = DKGModules::default();
+		let this = DKGWorker {
 			client,
 			misbehaviour_tx: None,
 			backend,
@@ -266,8 +265,13 @@ where
 			network,
 			sync_service,
 			signing_manager,
+			dkg_modules,
 			_backend: PhantomData,
-		}
+		};
+
+		// Load the DKG modules
+		this.dkg_modules.initialize(this.clone());
+		this
 	}
 }
 
@@ -401,98 +405,6 @@ where
 			crate::DKG_SIGNING_PROTOCOL_NAME => self.signing_gossip_engine.clone(),
 			_ => panic!("Protocol name not found!"),
 		}
-	}
-
-	#[allow(clippy::too_many_arguments)]
-	pub(crate) async fn initialize_keygen_protocol(
-		&self,
-		best_authorities: Vec<(KeygenPartyId, Public)>,
-		authority_public_key: Public,
-		party_i: KeygenPartyId,
-		session_id: SessionId,
-		associated_block: NumberFor<B>,
-		threshold: u16,
-		stage: ProtoStageType,
-		keygen_protocol_hash: [u8; 32],
-	) -> Option<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>)> {
-		match self.generate_async_proto_params(
-			best_authorities,
-			authority_public_key,
-			party_i,
-			session_id,
-			stage,
-			crate::DKG_KEYGEN_PROTOCOL_NAME,
-			associated_block,
-		) {
-			Ok(async_proto_params) => {
-				let err_handler_tx = self.error_handler.clone();
-
-				let remote = async_proto_params.handle.clone();
-				let keygen_manager = self.keygen_manager.clone();
-				let status = match stage {
-					ProtoStageType::KeygenGenesis => KeygenRound::Genesis,
-					ProtoStageType::KeygenStandard => KeygenRound::Next,
-					ProtoStageType::Signing { .. } => {
-						unreachable!("Should not happen here")
-					},
-				};
-
-				match GenericAsyncHandler::setup_keygen(
-					async_proto_params,
-					threshold,
-					status,
-					keygen_protocol_hash,
-				) {
-					Ok(meta_handler) => {
-						let logger = self.logger.clone();
-						let signing_manager = self.signing_manager.clone();
-						signing_manager.keygen_lock();
-						let task = async move {
-							match meta_handler.await {
-								Ok(_) => {
-									keygen_manager.set_state(KeygenState::KeygenCompleted {
-										session_completed: session_id,
-									});
-									let _ = keygen_manager
-										.finished_count
-										.fetch_add(1, Ordering::SeqCst);
-									signing_manager.keygen_unlock();
-									logger.info(
-										"The keygen meta handler has executed successfully"
-											.to_string(),
-									);
-
-									Ok(())
-								},
-
-								Err(err) => {
-									logger
-										.error(format!("Error executing meta handler {:?}", &err));
-									keygen_manager.set_state(KeygenState::Failed { session_id });
-									signing_manager.keygen_unlock();
-									let _ = err_handler_tx.send(err.clone());
-									Err(err)
-								},
-							}
-						};
-
-						self.logger.debug(format!("Created Keygen Protocol task for session {session_id} with status {status:?}"));
-						return Some((remote, Box::pin(task)))
-					},
-
-					Err(err) => {
-						self.logger.error(format!("Error starting meta handler {:?}", &err));
-						self.handle_dkg_error(err).await;
-					},
-				}
-			},
-
-			Err(err) => {
-				self.handle_dkg_error(err).await;
-			},
-		}
-
-		None
 	}
 
 	/// Fetch the stored local keys if they exist.
