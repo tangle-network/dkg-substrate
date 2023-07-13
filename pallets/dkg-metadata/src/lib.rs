@@ -408,7 +408,7 @@ pub mod pallet {
 			if Self::should_refresh(n) && !Self::refresh_in_progress() {
 				if let Some(pub_key) = Self::next_dkg_public_key() {
 					Self::do_refresh(pub_key.1.into());
-					return Weight::from_parts(1024, 1_u64)
+					return Weight::from_parts(1_u64, 1024)
 				}
 			}
 
