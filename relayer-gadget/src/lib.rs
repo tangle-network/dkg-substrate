@@ -103,9 +103,10 @@ fn get_ecdsa_pair(
 ) -> Result<Option<crypto::Pair>, Box<dyn std::error::Error>> {
 	let local_key_store = local_keystore.expect("failed to get local keystore");
 	let ecdsa_public = local_key_store
-		.keys(dkg_runtime_primitives::KEY_TYPE)?
+		.ecdsa_public_keys(dkg_runtime_primitives::KEY_TYPE)
 		.into_iter()
-		.find_map(|public_key| crypto::Public::from_slice(&public_key).ok())
+		.find_map(|public_key| crypto::Public::from_slice(&public_key.0).ok())
 		.ok_or("failed to get ecdsa public key")?;
+
 	local_key_store.key_pair::<crypto::Pair>(&ecdsa_public).map_err(Into::into)
 }

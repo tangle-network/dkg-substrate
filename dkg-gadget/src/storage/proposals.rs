@@ -26,7 +26,6 @@ use sp_runtime::traits::{Block, Get, Header, NumberFor};
 use std::sync::Arc;
 
 /// processes signed proposals and puts them in storage
-#[allow(clippy::extra_unused_type_parameters)]
 pub(crate) fn save_signed_proposals_in_storage<
 	B,
 	C,
