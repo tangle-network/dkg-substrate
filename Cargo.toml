@@ -150,6 +150,7 @@ sc-network-sync = { default-features = false, git = "https://github.com/parityte
 sc-rpc-api = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 sc-basic-authorship = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 sc-network = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
+sc-network-common = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 sc-peerset = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 sc-network-test = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 sc-chain-spec = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }

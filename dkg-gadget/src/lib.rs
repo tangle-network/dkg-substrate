@@ -166,11 +166,23 @@ where
 	let latest_header = Arc::new(RwLock::new(None));
 
 	let (keygen_gossip_handler, keygen_gossip_engine) = keygen_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
+		.build(
+			network.clone(),
+			sync_service.clone(),
+			metrics.clone(),
+			latest_header.clone(),
+			debug_logger.clone(),
+		)
 		.expect("Keygen : Failed to build gossip engine");
 
 	let (signing_gossip_handler, signing_gossip_engine) = signing_gossip_protocol
-		.build(network.clone(), metrics.clone(), latest_header.clone(), debug_logger.clone())
+		.build(
+			network.clone(),
+			sync_service.clone(),
+			metrics.clone(),
+			latest_header.clone(),
+			debug_logger.clone(),
+		)
 		.expect("Signing : Failed to build gossip engine");
 
 	// enable the gossip
