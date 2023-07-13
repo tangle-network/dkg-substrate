@@ -268,7 +268,7 @@ pub fn new_full(
 		);
 
 		let relayer_params = webb_relayer_gadget::WebbRelayerParams {
-			local_keystore: Some(keystore_container.local_keystore()),
+			local_keystore: keystore_container.local_keystore(),
 			config_dir: relayer_cmd.relayer_config_dir,
 			database_path: config
 				.database
