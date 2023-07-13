@@ -270,18 +270,8 @@ impl pallet_grandpa::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MaxAuthorities = MaxAuthorities;
 	type MaxSetIdSessionEntries = frame_support::traits::ConstU64<0>;
-	type KeyOwnerProofSystem = ();
-
-	type KeyOwnerProof =
-		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
-
-	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
-		KeyTypeId,
-		GrandpaId,
-	)>>::IdentificationTuple;
-
-	type HandleEquivocation = ();
-
+	type EquivocationReportSystem = ();
+	type KeyOwnerProof = sp_core::Void;
 	type WeightInfo = ();
 }
 
@@ -470,10 +460,11 @@ impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type MaxWeight = MinerMaxWeight;
 	type MaxVotesPerVoter = MaxNominations;
 	type Solution = NposSolution16;
+	type MaxWinners = <Runtime as pallet_election_provider_multi_phase::Config>::MaxWinners;
 
 	#[allow(unused)]
 	fn solution_weight(v: u32, t: u32, a: u32, d: u32) -> Weight {
-		Weight::from_ref_time(0)
+		Weight::from_parts(0,0)
 	}
 }
 
@@ -568,6 +559,10 @@ impl pallet_balances::Config for Runtime {
 	type DustRemoval = ();
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
+	type HoldIdentifier = ();
+	type MaxHolds = ();
+	type FreezeIdentifier = ();
+	type MaxFreezes = ();
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 }
 
@@ -598,6 +593,7 @@ impl pallet_transaction_payment::Config for Runtime {
 impl pallet_sudo::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeCall = RuntimeCall;
+	type WeightInfo = ();
 }
 
 parameter_types! {
@@ -844,6 +840,12 @@ impl_runtime_apis! {
   impl sp_api::Metadata<Block> for Runtime {
 	fn metadata() -> OpaqueMetadata {
 	  OpaqueMetadata::new(Runtime::metadata().into())
+	}
+	fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
+		Runtime::metadata_at_version(version)
+	}
+	fn metadata_versions() -> sp_std::vec::Vec<u32> {
+		Runtime::metadata_versions()
 	}
   }
 

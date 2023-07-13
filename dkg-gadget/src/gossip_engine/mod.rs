@@ -113,7 +113,7 @@ impl HandshakeMessage {
 		let msg = peer_id
 			.clone()
 			.into_iter()
-			.chain(authority_id.to_raw_vec().into_iter())
+			.chain(authority_id.to_raw_vec())
 			.collect::<Vec<_>>();
 		let signature = keystore.sign(&authority_id, &msg).map_err(|e| {
 			DKGError::CriticalError { reason: format!("Failed to sign handshake message: {e}") }
@@ -140,7 +140,7 @@ impl HandshakeMessage {
 			.peer_id
 			.clone()
 			.into_iter()
-			.chain(self.authority_id.to_raw_vec().into_iter())
+			.chain(self.authority_id.to_raw_vec())
 			.collect::<Vec<_>>();
 
 		// Verify the signature.

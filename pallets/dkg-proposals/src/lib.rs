@@ -775,7 +775,7 @@ impl<T: Config>
 		let bounded_external_accounts: VoterList<T> = authorities
 			.iter()
 			.cloned()
-			.zip(new_external_accounts.into_iter())
+			.zip(new_external_accounts)
 			.collect::<Vec<_>>()
 			.try_into()
 			.expect("Too many external proposer accounts!");

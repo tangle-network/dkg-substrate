@@ -51,7 +51,6 @@ std = [
 	"dkg-runtime-primitives/std",
 	"frame-support/std",
 	"frame-system/std",
-	"frame-benchmarking/std",
 	"libsecp256k1/std",
 	"pallet-session/std"
 ]
