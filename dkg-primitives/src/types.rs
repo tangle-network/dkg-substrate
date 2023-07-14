@@ -52,6 +52,8 @@ pub struct DKGMessage<AuthorityId> {
 	pub session_id: SessionId,
 	/// The round ID
 	pub associated_block_id: u64,
+	/// The signing set ID
+	pub ssid: u8,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

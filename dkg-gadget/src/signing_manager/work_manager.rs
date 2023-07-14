@@ -399,6 +399,7 @@ fn should_deliver<B: BlockT>(
 ) -> bool {
 	task.handle.session_id == msg.msg.session_id &&
 		task.task_hash == message_task_hash &&
+		task.handle.ssid == msg.msg.ssid &&
 		associated_block_id_acceptable(
 			task.handle.associated_block_id,
 			msg.msg.associated_block_id,

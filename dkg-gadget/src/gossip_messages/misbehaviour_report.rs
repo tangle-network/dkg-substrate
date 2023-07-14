@@ -150,6 +150,7 @@ where
 			recipient_id: None,
 			session_id: report.session_id,
 			payload,
+			ssid: 0,
 		};
 		let encoded_dkg_message = message.encode();
 

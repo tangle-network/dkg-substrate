@@ -680,6 +680,7 @@ where
 				recipient_id: maybe_recipient_id,
 				payload,
 				session_id: params.session_id,
+				ssid: params.handle.ssid,
 			};
 			if let Err(err) = params.engine.sign_and_send_msg(unsigned_dkg_message) {
 				params

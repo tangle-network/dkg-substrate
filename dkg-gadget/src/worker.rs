@@ -27,7 +27,7 @@ use sp_consensus::SyncOracle;
 use crate::signing_manager::SigningManager;
 use futures::StreamExt;
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
 use sp_arithmetic::traits::SaturatedConversion;
@@ -39,7 +39,7 @@ use std::{
 	pin::Pin,
 	sync::{atomic::Ordering, Arc},
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
 use dkg_primitives::{
 	types::{DKGError, DKGMessage, NetworkMsgPayload, SessionId, SignedDKGMessage},
@@ -134,11 +134,8 @@ where
 	pub aggregated_public_keys: Shared<AggregatedPublicKeysAndSigs>,
 	/// Tracking for the misbehaviour reports
 	pub aggregated_misbehaviour_reports: Shared<AggregatedMisbehaviourReportStore>,
-	pub misbehaviour_tx: Option<UnboundedSender<MisbehaviourMessage>>,
 	/// Concrete type that points to the actual local keystore if it exists
 	pub local_keystore: Shared<Option<Arc<LocalKeystore>>>,
-	/// For transmitting errors from parallel threads to the DKGWorker
-	pub error_handler: tokio::sync::broadcast::Sender<DKGError>,
 	/// Used to keep track of network status
 	pub network: Option<Arc<NetworkService<B, B::Hash>>>,
 	/// Used to keep track of sync status
@@ -147,8 +144,15 @@ where
 	pub logger: DebugLogger,
 	pub signing_manager: SigningManager<B, BE, C, GE>,
 	pub keygen_manager: KeygenManager<B, BE, C, GE>,
+	pub(crate) error_handler_channel: ErrorHandlerChannel,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ErrorHandlerChannel {
+	pub tx: tokio::sync::mpsc::UnboundedSender<DKGError>,
+	rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<DKGError>>>>,
 }
 
 /// Used only for tests
@@ -184,15 +188,14 @@ where
 			queued_validator_set: self.queued_validator_set.clone(),
 			aggregated_public_keys: self.aggregated_public_keys.clone(),
 			aggregated_misbehaviour_reports: self.aggregated_misbehaviour_reports.clone(),
-			misbehaviour_tx: self.misbehaviour_tx.clone(),
 			local_keystore: self.local_keystore.clone(),
-			error_handler: self.error_handler.clone(),
 			test_bundle: self.test_bundle.clone(),
 			network: self.network.clone(),
 			sync_service: self.sync_service.clone(),
 			logger: self.logger.clone(),
 			signing_manager: self.signing_manager.clone(),
 			keygen_manager: self.keygen_manager.clone(),
+			error_handler_channel: self.error_handler_channel.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -236,15 +239,16 @@ where
 			..
 		} = worker_params;
 
-		let (error_handler, _) = tokio::sync::broadcast::channel(1024);
 		let clock = Clock { latest_header: latest_header.clone() };
 		let signing_manager = SigningManager::<B, BE, C, GE>::new(logger.clone(), clock.clone());
 		// 2 tasks max: 1 for current, 1 for queued
 		let keygen_manager = KeygenManager::new(logger.clone(), clock);
 
+		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+		let error_handler_channel = ErrorHandlerChannel { tx, rx: Arc::new(Mutex::new(Some(rx))) };
+
 		DKGWorker {
 			client,
-			misbehaviour_tx: None,
 			backend,
 			key_store,
 			db: db_backend,
@@ -261,7 +265,7 @@ where
 			aggregated_misbehaviour_reports: Arc::new(RwLock::new(HashMap::new())),
 			local_keystore: Arc::new(RwLock::new(local_keystore)),
 			test_bundle,
-			error_handler,
+			error_handler_channel,
 			logger,
 			network,
 			sync_service,
@@ -305,6 +309,7 @@ where
 		stage: ProtoStageType,
 		protocol_name: &str,
 		associated_block: NumberFor<B>,
+		ssid: u8,
 	) -> Result<
 		AsyncProtocolParameters<
 			DKGProtocolEngine<
@@ -327,8 +332,13 @@ where
 
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
-		let status_handle =
-			AsyncProtocolRemote::new(now, session_id, self.logger.clone(), associated_block_id);
+		let status_handle = AsyncProtocolRemote::new(
+			now,
+			session_id,
+			self.logger.clone(),
+			associated_block_id,
+			ssid,
+		);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
 		let active_local_key = match stage {
@@ -415,6 +425,9 @@ where
 		stage: ProtoStageType,
 		keygen_protocol_hash: [u8; 32],
 	) -> Option<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>)> {
+		// There is only ever 1 signing set, implicitly, for keygen (i.e., the list of best
+		// authorities)
+		const KEYGEN_SSID: u8 = 0;
 		match self.generate_async_proto_params(
 			best_authorities,
 			authority_public_key,
@@ -423,9 +436,10 @@ where
 			stage,
 			crate::DKG_KEYGEN_PROTOCOL_NAME,
 			associated_block,
+			KEYGEN_SSID,
 		) {
 			Ok(async_proto_params) => {
-				let err_handler_tx = self.error_handler.clone();
+				let err_handler_tx = self.error_handler_channel.tx.clone();
 
 				let remote = async_proto_params.handle.clone();
 				let keygen_manager = self.keygen_manager.clone();
@@ -1135,9 +1149,8 @@ where
 	// *** Main run loop ***
 	pub async fn run(mut self) {
 		crate::deadlock_detection::deadlock_detect();
-		let (misbehaviour_tx, misbehaviour_rx) = tokio::sync::mpsc::unbounded_channel();
-		self.misbehaviour_tx = Some(misbehaviour_tx);
 		self.initialization().await;
+
 		self.logger.debug("Starting DKG Iteration loop");
 		// We run all these tasks in parallel and wait for any of them to complete.
 		// If any of them completes, we stop all the other tasks since this means a fatal error has
@@ -1147,7 +1160,6 @@ where
 			self.spawn_keygen_messages_stream_task(),
 			self.spawn_signing_messages_stream_task(),
 			self.spawn_error_handling_task(),
-			self.spawn_misbehaviour_report_task(misbehaviour_rx),
 		])
 		.await;
 		self.logger
@@ -1212,28 +1224,17 @@ where
 		})
 	}
 
-	fn spawn_misbehaviour_report_task(
-		&self,
-		mut misbehaviour_rx: UnboundedReceiver<MisbehaviourMessage>,
-	) -> tokio::task::JoinHandle<()> {
-		let self_ = self.clone();
-		tokio::spawn(async move {
-			while let Some(misbehaviour) = misbehaviour_rx.recv().await {
-				self_.logger.debug("Going to handle Misbehaviour");
-				let gossip = gossip_misbehaviour_report(&self_, misbehaviour).await;
-				if gossip.is_err() {
-					self_.logger.info("🕸️  DKG gossip_misbehaviour_report failed!");
-				}
-			}
-		})
-	}
-
 	fn spawn_error_handling_task(&self) -> tokio::task::JoinHandle<()> {
 		let self_ = self.clone();
-		let mut error_handler_rx = self.error_handler.subscribe();
+		let mut error_handler_rx = self
+			.error_handler_channel
+			.rx
+			.lock()
+			.take()
+			.expect("Error handler tx already taken");
 		let logger = self.logger.clone();
 		tokio::spawn(async move {
-			while let Ok(error) = error_handler_rx.recv().await {
+			while let Some(error) = error_handler_rx.recv().await {
 				logger.debug("Going to handle Error");
 				self_.handle_dkg_error(error).await;
 			}

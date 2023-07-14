@@ -255,6 +255,7 @@ where
 				recipient_id: None,
 				payload,
 				session_id: params.session_id,
+				ssid: params.handle.ssid,
 			};
 
 			params.engine.sign_and_send_msg(unsigned_dkg_message.clone())?;

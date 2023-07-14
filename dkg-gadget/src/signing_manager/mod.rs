@@ -59,6 +59,7 @@ const MAX_RUNNING_TASKS: usize = 4;
 const MAX_ENQUEUED_TASKS: usize = 20;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
+pub const MAX_SIGNING_SETS_PER_PROPOSAL: u8 = 2;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -73,8 +74,8 @@ where
 			work_manager: WorkManager::<B>::new(
 				logger,
 				clock,
-				MAX_RUNNING_TASKS,
-				MAX_ENQUEUED_TASKS,
+				MAX_RUNNING_TASKS * MAX_SIGNING_SETS_PER_PROPOSAL as usize,
+				MAX_ENQUEUED_TASKS * MAX_SIGNING_SETS_PER_PROPOSAL as usize,
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
 			lock: Arc::new(AtomicBool::new(false)),
@@ -203,59 +204,64 @@ where
 			   if we are not, we continue the loop.
 			*/
 			let unsigned_proposal_bytes = batch.encode();
-			let concat_data = dkg_pub_key
-				.clone()
-				.into_iter()
-				//.chain(at.encode())
-				.chain(unsigned_proposal_bytes)
-				.collect::<Vec<u8>>();
-			let seed = sp_core::keccak_256(&concat_data);
-			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
-			let maybe_set = self
-				.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
-				.ok();
-			if let Some(signing_set) = maybe_set {
-				// if we are in the set, send to work manager
-				if signing_set.contains(&party_i) {
-					dkg_worker.logger.info(format!(
-						"🕸️  Session Id {:?} | {}-out-of-{} signers: ({:?})",
-						session_id,
-						threshold,
-						best_authorities.len(),
-						signing_set,
-					));
-					match self.create_signing_protocol(
-						dkg_worker,
-						best_authorities.clone(),
-						authority_public_key.clone(),
-						party_i,
-						session_id,
-						threshold,
-						ProtoStageType::Signing { unsigned_proposal_hash },
-						batch,
-						signing_set,
-						*header.number(),
-					) {
-						Ok((handle, task)) => {
-							// Send task to the work manager. Force start if the type chain ID is
-							// None, implying this is a proposal needed for rotating sessions and
-							// thus a priority
-							let force_start = typed_chain_id == TypedChainId::None;
-							self.work_manager.push_task(
-								unsigned_proposal_hash,
-								force_start,
-								handle,
-								task,
-							)?;
-						},
-						Err(err) => {
-							dkg_worker
-								.logger
-								.error(format!("Error creating signing protocol: {:?}", &err));
-							dkg_worker.handle_dkg_error(err.clone()).await;
-							return Err(err)
-						},
+			for ssid in 0..MAX_SIGNING_SETS_PER_PROPOSAL {
+				let concat_data = dkg_pub_key
+					.clone()
+					.into_iter()
+					.chain(unsigned_proposal_bytes.clone())
+					.chain(ssid.encode())
+					.collect::<Vec<u8>>();
+				let seed = sp_core::keccak_256(&concat_data);
+				let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
+
+				let maybe_set = self
+					.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
+					.ok();
+				if let Some(signing_set) = maybe_set {
+					// if we are in the set, send to work manager
+					if signing_set.contains(&party_i) {
+						dkg_worker.logger.info(format!(
+							"🕸️  Session Id {:?} | SSID {} | {}-out-of-{} signers: ({:?})",
+							session_id,
+							ssid,
+							threshold,
+							best_authorities.len(),
+							signing_set,
+						));
+						match self.create_signing_protocol(
+							dkg_worker,
+							best_authorities.clone(),
+							authority_public_key.clone(),
+							party_i,
+							session_id,
+							threshold,
+							ProtoStageType::Signing { unsigned_proposal_hash },
+							batch.clone(),
+							signing_set,
+							*header.number(),
+							ssid,
+						) {
+							Ok((handle, task)) => {
+								// Send task to the work manager. Force start if the type chain ID
+								// is None, implying this is a proposal needed for rotating sessions
+								// and thus a priority
+								let force_start = typed_chain_id == TypedChainId::None;
+								self.work_manager.push_task(
+									unsigned_proposal_hash,
+									force_start,
+									handle,
+									task,
+								)?;
+							},
+							Err(err) => {
+								dkg_worker
+									.logger
+									.error(format!("Error creating signing protocol: {:?}", &err));
+								dkg_worker.handle_dkg_error(err.clone()).await;
+								return Err(err)
+							},
+						}
 					}
 				}
 			}
@@ -291,6 +297,7 @@ where
 		>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
+		ssid: u8,
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
 		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
@@ -302,11 +309,12 @@ where
 			stage,
 			crate::DKG_SIGNING_PROTOCOL_NAME,
 			associated_block_id,
+			ssid,
 		)?;
 
 		let handle = async_proto_params.handle.clone();
 
-		let err_handler_tx = dkg_worker.error_handler.clone();
+		let err_handler_tx = dkg_worker.error_handler_channel.tx.clone();
 		let meta_handler = GenericAsyncHandler::setup_signing(
 			async_proto_params,
 			threshold,
