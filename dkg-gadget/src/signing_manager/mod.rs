@@ -2,26 +2,25 @@ use std::marker::PhantomData;
 
 use dkg_primitives::{
 	types::{DKGError, SignedDKGMessage},
-	BatchId, MaxProposalLength, MaxProposalsInBatch,
+	MaxProposalLength,
 };
 
 use self::work_manager::WorkManager;
 use crate::{
-	async_protocols::{remote::AsyncProtocolRemote, GenericAsyncHandler, KeygenPartyId},
+	async_protocols::KeygenPartyId,
+	dkg_modules::SigningProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	metric_inc,
 	signing_manager::work_manager::PollMethod,
-	utils::SendFuture,
 	worker::{DKGWorker, HasLatestHeader, KeystoreExt, ProtoStageType},
 	*,
 };
 use codec::Encode;
-use dkg_primitives::{utils::select_random_set, SessionId};
-use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
+use dkg_primitives::utils::select_random_set;
+use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::{
 	collections::HashMap,
-	pin::Pin,
 	sync::atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::Mutex;
@@ -53,7 +52,7 @@ pub struct SigningManager<B: Block, BE, C, GE> {
 	// signing set, we can choose the next signing set to sign. By doing this
 	// we prevent using the same signing set twice for the same unsigned proposal
 	// which historically failed.
-	ssid_history: Arc<Mutex<HashMap<[u8; 32], isize>>>,
+	pub(crate) ssid_history: Arc<Mutex<HashMap<[u8; 32], isize>>>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
@@ -254,20 +253,26 @@ where
 							best_authorities.len(),
 							signing_set,
 						));
-						match self.create_signing_protocol(
-							dkg_worker,
-							best_authorities.clone(),
-							authority_public_key.clone(),
+
+						let params = SigningProtocolSetupParameters::MpEcdsa {
+							best_authorities: best_authorities.clone(),
+							authority_public_key: authority_public_key.clone(),
 							party_i,
 							session_id,
 							threshold,
-							ProtoStageType::Signing { unsigned_proposal_hash },
-							batch.clone(),
+							stage: ProtoStageType::Signing { unsigned_proposal_hash },
+							unsigned_proposal_batch: batch.clone(),
 							signing_set,
-							*header.number(),
+							associated_block_id: *header.number(),
 							ssid,
 							unsigned_proposal_hash,
-						) {
+						};
+
+						let signing_protocol = dkg_worker
+							.dkg_modules
+							.get_signing_protocol(&params)
+							.expect("Standard signing protocol should exist");
+						match signing_protocol.initialize_signing_protocol(params).await {
 							Ok((handle, task)) => {
 								// Send task to the work manager. Force start if the type chain ID
 								// is None, implying this is a proposal needed for rotating sessions
@@ -294,80 +299,6 @@ where
 		}
 
 		Ok(())
-	}
-
-	#[allow(clippy::too_many_arguments, clippy::type_complexity)]
-	#[cfg_attr(
-		feature = "debug-tracing",
-		dkg_logging::instrument(
-			target = "dkg",
-			skip_all,
-			err,
-			fields(session_id, threshold, stage, party_i)
-		)
-	)]
-	fn create_signing_protocol(
-		&self,
-		dkg_worker: &DKGWorker<B, BE, C, GE>,
-		best_authorities: Vec<(KeygenPartyId, Public)>,
-		authority_public_key: Public,
-		party_i: KeygenPartyId,
-		session_id: SessionId,
-		threshold: u16,
-		stage: ProtoStageType,
-		unsigned_proposal_batch: StoredUnsignedProposalBatch<
-			BatchId,
-			MaxProposalLength,
-			MaxProposalsInBatch,
-			NumberFor<B>,
-		>,
-		signing_set: Vec<KeygenPartyId>,
-		associated_block_id: NumberFor<B>,
-		ssid: u8,
-		unsigned_proposal_hash: [u8; 32],
-	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
-	{
-		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
-		let async_proto_params = dkg_worker.generate_async_proto_params(
-			best_authorities,
-			authority_public_key,
-			party_i,
-			session_id,
-			stage,
-			crate::DKG_SIGNING_PROTOCOL_NAME,
-			associated_block_id,
-			ssid,
-		)?;
-
-		let handle = async_proto_params.handle.clone();
-
-		let err_handler_tx = dkg_worker.error_handler_channel.tx.clone();
-		let meta_handler = GenericAsyncHandler::setup_signing(
-			async_proto_params,
-			threshold,
-			unsigned_proposal_batch,
-			signing_set,
-		)?;
-		let logger = dkg_worker.logger.clone();
-		let ssid_history = self.ssid_history.clone();
-		let task = async move {
-			match meta_handler.await {
-				Ok(_) => {
-					logger.info("The meta handler has executed successfully".to_string());
-					// This signing set was a success; remove it from the list
-					let _ = ssid_history.lock().await.remove(&unsigned_proposal_hash);
-					Ok(())
-				},
-
-				Err(err) => {
-					logger.error(format!("Error executing meta handler {:?}", &err));
-					let _ = err_handler_tx.send(err.clone());
-					Err(err)
-				},
-			}
-		};
-
-		Ok((handle, Box::pin(task)))
 	}
 
 	/// After keygen, this should be called to generate a random set of signers
