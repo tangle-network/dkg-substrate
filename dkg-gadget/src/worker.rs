@@ -797,6 +797,8 @@ where
 			if let Some(metrics) = self.metrics.as_ref() {
 				metrics.reset_session_metrics();
 			}
+			// Delete logs from old sessions to preserve disk space
+			self.logger.clear_local_logs();
 		} else {
 			self.logger.info(
 				"🕸️  No update to local session found, not rotating local sessions".to_string(),

@@ -92,7 +92,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		blocks_per_session,
 	);
 
-	let max_signing_sets_per_proposal = dkg_gadget::signing_manager::MAX_SIGNING_SETS_PER_PROPOSAL;
+	let max_signing_sets_per_proposal =
+		dkg_gadget::signing_manager::MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL;
 
 	// first, spawn the orchestrator/mock-blockchain
 	let orchestrator_task = MockBlockchain::new(

@@ -33,6 +33,7 @@ pub struct MockBlockchain<T: Clone> {
 	orchestrator_rx: Arc<Mutex<Option<mpsc::UnboundedReceiver<ClientToOrchestratorEvent>>>>,
 	orchestrator_state: Arc<Atomic<OrchestratorState>>,
 	blocks_per_session: Arc<u64>,
+	#[allow(dead_code)]
 	max_signing_sets_per_proposal: Arc<usize>,
 	blockchain: T,
 	logger: DebugLogger,
@@ -535,13 +536,13 @@ impl<T: MutableBlockchain> MockBlockchain<T> {
 				IntraTestPhase::Signing { trace_id, queued_unsigned_proposals, .. } => {
 					if let Some(unsigned_propos) = queued_unsigned_proposals.clone() {
 						for _ in 0..unsigned_propos.len() {
-							for _ in 0..*self.max_signing_sets_per_proposal {
-								client
-									.outstanding_tasks_signing
-									.entry(*trace_id)
-									.or_default()
-									.push(next_case.clone());
-							}
+							//for _ in 0..*self.max_signing_sets_per_proposal {
+							client
+								.outstanding_tasks_signing
+								.entry(*trace_id)
+								.or_default()
+								.push(next_case.clone());
+							//}
 						}
 						self.blockchain.set_should_execute_keygen(false);
 						self.blockchain.set_unsigned_proposals(unsigned_propos);

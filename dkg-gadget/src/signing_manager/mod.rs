@@ -20,9 +20,11 @@ use dkg_primitives::{utils::select_random_set, SessionId};
 use dkg_runtime_primitives::{crypto::Public, StoredUnsignedProposalBatch};
 use sp_api::HeaderT;
 use std::{
+	collections::HashMap,
 	pin::Pin,
 	sync::atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::Mutex;
 use webb_proposals::TypedChainId;
 
 /// For balancing the amount of work done by each node
@@ -45,12 +47,24 @@ pub struct SigningManager<B: Block, BE, C, GE> {
 	// governs the workload for each node
 	work_manager: WorkManager<B>,
 	lock: Arc<AtomicBool>,
+	// Whenever a task for a specific signing set starts, we add to the map:
+	// (K, V) = (signing_set, ssid). That way, the next time we get a task
+	// for the same unsigned proposal, and, notice a failure in the previous
+	// signing set, we can choose the next signing set to sign. By doing this
+	// we prevent using the same signing set twice for the same unsigned proposal
+	// which historically failed.
+	ssid_history: Arc<Mutex<HashMap<[u8; 32], isize>>>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
-		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
+		Self {
+			work_manager: self.work_manager.clone(),
+			_pd: self._pd,
+			lock: self.lock.clone(),
+			ssid_history: self.ssid_history.clone(),
+		}
 	}
 }
 
@@ -59,7 +73,9 @@ const MAX_RUNNING_TASKS: usize = 4;
 const MAX_ENQUEUED_TASKS: usize = 20;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
-pub const MAX_SIGNING_SETS_PER_PROPOSAL: u8 = 2;
+// The value below determines how many re-tries we will attempt
+// using different signing sets each time for the same unsigned proposal.
+pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 10;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -74,11 +90,12 @@ where
 			work_manager: WorkManager::<B>::new(
 				logger,
 				clock,
-				MAX_RUNNING_TASKS * MAX_SIGNING_SETS_PER_PROPOSAL as usize,
-				MAX_ENQUEUED_TASKS * MAX_SIGNING_SETS_PER_PROPOSAL as usize,
+				MAX_RUNNING_TASKS,
+				MAX_ENQUEUED_TASKS,
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
 			lock: Arc::new(AtomicBool::new(false)),
+			ssid_history: Arc::new(Mutex::new(HashMap::new())),
 			_pd: Default::default(),
 		}
 	}
@@ -187,6 +204,7 @@ where
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
+		let mut ssid_history = self.ssid_history.lock().await;
 		for batch in unsigned_proposals {
 			let typed_chain_id = batch.proposals.first().expect("Empty batch!").typed_chain_id;
 			if !self.work_manager.can_submit_more_tasks() {
@@ -204,8 +222,16 @@ where
 			   if we are not, we continue the loop.
 			*/
 			let unsigned_proposal_bytes = batch.encode();
+			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
-			for ssid in 0..MAX_SIGNING_SETS_PER_PROPOSAL {
+			'inner: for ssid in 0..MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
+				if *ssid_history.entry(unsigned_proposal_hash).or_insert(-1) >= (ssid as isize) {
+					dkg_worker.logger.debug(format!(
+						"🕸️  Session Id {session_id:?} | SSID {ssid} | Already tried this ssid, skipping",
+					));
+					continue 'inner
+				}
+
 				let concat_data = dkg_pub_key
 					.clone()
 					.into_iter()
@@ -213,7 +239,6 @@ where
 					.chain(ssid.encode())
 					.collect::<Vec<u8>>();
 				let seed = sp_core::keccak_256(&concat_data);
-				let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
 				let maybe_set = self
 					.generate_signers(&seed, threshold, best_authorities.clone(), dkg_worker)
@@ -241,6 +266,7 @@ where
 							signing_set,
 							*header.number(),
 							ssid,
+							unsigned_proposal_hash,
 						) {
 							Ok((handle, task)) => {
 								// Send task to the work manager. Force start if the type chain ID
@@ -298,6 +324,7 @@ where
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 		ssid: u8,
+		unsigned_proposal_hash: [u8; 32],
 	) -> Result<(AsyncProtocolRemote<NumberFor<B>>, Pin<Box<dyn SendFuture<'static, ()>>>), DKGError>
 	{
 		dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
@@ -322,10 +349,13 @@ where
 			signing_set,
 		)?;
 		let logger = dkg_worker.logger.clone();
+		let ssid_history = self.ssid_history.clone();
 		let task = async move {
 			match meta_handler.await {
 				Ok(_) => {
 					logger.info("The meta handler has executed successfully".to_string());
+					// This signing set was a success; remove it from the list
+					let _ = ssid_history.lock().await.remove(&unsigned_proposal_hash);
 					Ok(())
 				},
 
