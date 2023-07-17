@@ -19,11 +19,7 @@ use codec::Encode;
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
-use std::{
-	collections::HashMap,
-	sync::atomic::{AtomicBool, Ordering},
-};
-use tokio::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
 
 /// For balancing the amount of work done by each node
@@ -46,24 +42,12 @@ pub struct SigningManager<B: Block, BE, C, GE> {
 	// governs the workload for each node
 	work_manager: WorkManager<B>,
 	lock: Arc<AtomicBool>,
-	// Whenever a task for a specific signing set starts, we add to the map:
-	// (K, V) = (signing_set, ssid). That way, the next time we get a task
-	// for the same unsigned proposal, and, notice a failure in the previous
-	// signing set, we can choose the next signing set to sign. By doing this
-	// we prevent using the same signing set twice for the same unsigned proposal
-	// which historically failed.
-	pub(crate) ssid_history: Arc<Mutex<HashMap<[u8; 32], isize>>>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
-		Self {
-			work_manager: self.work_manager.clone(),
-			_pd: self._pd,
-			lock: self.lock.clone(),
-			ssid_history: self.ssid_history.clone(),
-		}
+		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
 	}
 }
 
@@ -72,9 +56,7 @@ const MAX_RUNNING_TASKS: usize = 4;
 const MAX_ENQUEUED_TASKS: usize = 20;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
-// The value below determines how many re-tries we will attempt
-// using different signing sets each time for the same unsigned proposal.
-pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 10;
+pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 2;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -94,7 +76,6 @@ where
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
 			lock: Arc::new(AtomicBool::new(false)),
-			ssid_history: Arc::new(Mutex::new(HashMap::new())),
 			_pd: Default::default(),
 		}
 	}
@@ -203,7 +184,6 @@ where
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
-		let mut ssid_history = self.ssid_history.lock().await;
 		for batch in unsigned_proposals {
 			let typed_chain_id = batch.proposals.first().expect("Empty batch!").typed_chain_id;
 			if !self.work_manager.can_submit_more_tasks() {
@@ -223,14 +203,7 @@ where
 			let unsigned_proposal_bytes = batch.encode();
 			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
-			'inner: for ssid in 0..MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
-				if *ssid_history.entry(unsigned_proposal_hash).or_insert(-1) >= (ssid as isize) {
-					dkg_worker.logger.debug(format!(
-						"🕸️  Session Id {session_id:?} | SSID {ssid} | Already tried this ssid, skipping",
-					));
-					continue 'inner
-				}
-
+			for ssid in 0..MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
 				let concat_data = dkg_pub_key
 					.clone()
 					.into_iter()
@@ -265,7 +238,6 @@ where
 							signing_set,
 							associated_block_id: *header.number(),
 							ssid,
-							unsigned_proposal_hash,
 						};
 
 						let signing_protocol = dkg_worker

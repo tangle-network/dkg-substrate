@@ -154,11 +154,9 @@ where
 			unsigned_proposal_batch,
 			signing_set,
 			associated_block_id,
-			unsigned_proposal_hash,
 			ssid,
 		} = params
 		{
-			let signing_manager_ssids = self.dkg_worker.signing_manager.ssid_history.clone();
 			self.dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
 			let async_proto_params = self.dkg_worker.generate_async_proto_params(
 				best_authorities,
@@ -185,8 +183,6 @@ where
 				match meta_handler.await {
 					Ok(_) => {
 						logger.info("The meta handler has executed successfully".to_string());
-						// Since the protocol finished successfully, remove the ssid from the list
-						let _ = signing_manager_ssids.lock().await.remove(&unsigned_proposal_hash);
 						Ok(())
 					},
 
