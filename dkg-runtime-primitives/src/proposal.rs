@@ -18,7 +18,7 @@ use frame_support::{
 };
 use sp_std::hash::{Hash, Hasher};
 
-use codec::{Decode, Encode, EncodeLike};
+use codec::{Decode, Encode, EncodeLike, MaxEncodedLen};
 use sp_std::{vec, vec::Vec};
 
 pub const PROPOSAL_SIGNATURE_LENGTH: usize = 65;
@@ -28,11 +28,7 @@ pub use webb_proposals::{
 	TypedChainId,
 };
 
-use crate::MaxDkgPublicKeyLength;
-
-#[derive(
-	Clone, RuntimeDebug, PartialEq, Eq, PartialOrd, Ord, scale_info::TypeInfo, codec::MaxEncodedLen,
-)]
+#[derive(Clone, RuntimeDebug, PartialEq, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
 pub struct RefreshProposal {
 	/// The merkle root of the voters (validators)
 	pub voter_merkle_root: [u8; 32],
@@ -43,7 +39,7 @@ pub struct RefreshProposal {
 	/// The refresh nonce for the rotation
 	pub nonce: ProposalNonce,
 	/// The public key of the governor
-	pub pub_key: BoundedVec<u8, MaxDkgPublicKeyLength>,
+	pub pub_key: Vec<u8>,
 }
 
 impl RefreshProposal {
@@ -63,8 +59,14 @@ impl Default for RefreshProposal {
 			session_length: 0,
 			voter_count: 0,
 			nonce: ProposalNonce(0u32),
-			pub_key: Default::default(),
+			pub_key: vec![],
 		}
+	}
+}
+
+impl MaxEncodedLen for RefreshProposal {
+	fn max_encoded_len() -> usize {
+		Self::LENGTH
 	}
 }
 
@@ -88,10 +90,7 @@ impl Decode for RefreshProposal {
 		let session_length = u64::from_be_bytes(session_length_bytes);
 		let voter_count = u32::from_be_bytes(voter_count_bytes);
 		let nonce = ProposalNonce::from(nonce_bytes);
-		let pub_key = pub_key_bytes.to_vec().try_into().map_err(|_| {
-			codec::Error::from("can not fit public key bytes into 64 bytes")
-		})?;
-
+		let pub_key = pub_key_bytes.to_vec();
 		Ok(Self { voter_merkle_root, session_length, voter_count, nonce, pub_key })
 	}
 }
