@@ -143,6 +143,9 @@ pub type MaxResources = CustomU32Getter<32>;
 /// is 20 + 4 + 32 * 10 = 364 bytes or in bits 2912
 pub type MaxVoteLength = CustomU32Getter<2912>;
 
+/// Max Size for the ECDSA DKG public key
+pub type MaxDkgPublicKeyLength = CustomU32Getter<64>;
+
 /// Proposer vote type
 pub type ProposerVote<V> = BoundedVec<u8, V>;
 

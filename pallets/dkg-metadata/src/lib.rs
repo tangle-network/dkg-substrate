@@ -1511,7 +1511,7 @@ impl<T: Config> Pallet<T> {
 			session_length: average_session_length_in_millisecs,
 			voter_count,
 			nonce: nonce.into(),
-			pub_key: uncompressed_pub_key,
+			pub_key: uncompressed_pub_key.try_into().map_err(|_| Error::<T>::InvalidPublicKeys)?,
 		};
 
 		// Store the proposal in storage. We overwrite the storage always.
@@ -2426,9 +2426,14 @@ impl<T: Config> OnSignedProposal<T::MaxProposalLength> for Pallet<T> {
 
 			// Emit the event
 			Self::deposit_event(Event::NextPublicKeySignatureSubmitted {
-				refresh_proposal: curr,
+				refresh_proposal: curr.clone(),
 				signature: proposal.signature().unwrap_or_default(),
 			});
+			log::warn!(
+				target: "runtime::dkg_metadata",
+				"Next public key signature submitted with refresh proposal: {:?}",
+				curr
+			);
 		};
 
 		Ok(())
