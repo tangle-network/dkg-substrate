@@ -45,18 +45,18 @@ cd "$PROJECT_ROOT"
 echo "*** Start Webb DKG Node ***"
 # Alice
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --alice --output-path=./tmp/alice/output.log \
-  --rpc-cors all --ws-external --rpc-methods=unsafe \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
   --port ${ports[0]} \
-  --ws-port 9944 --node-key 0000000000000000000000000000000000000000000000000000000000000001 &
+  --rpc-port 9944 --node-key 0000000000000000000000000000000000000000000000000000000000000001 &
 # Bob
 ./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --bob --output-path=./tmp/bob/output.log \
-  --rpc-cors all --ws-external --rpc-methods=unsafe \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
   --port ${ports[1]} \
-  --ws-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
+  --rpc-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Charlie
 ./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
-    --rpc-cors all --ws-external \
-    --ws-port 9948 \
+    --rpc-cors all --rpc-external \
+    --rpc-port 9948 \
     --port ${ports[2]} \
     -ldkg=debug \
     -ldkg_gadget::worker=debug \
