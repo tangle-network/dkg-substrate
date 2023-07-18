@@ -50,6 +50,7 @@ where
 			keygen_protocol_hash,
 		} = params
 		{
+			const KEYGEN_SSID: u8 = 0;
 			match self.dkg_worker.generate_async_proto_params(
 				best_authorities,
 				authority_public_key,
@@ -58,9 +59,10 @@ where
 				stage,
 				crate::DKG_KEYGEN_PROTOCOL_NAME,
 				associated_block,
+				KEYGEN_SSID,
 			) {
 				Ok(async_proto_params) => {
-					let err_handler_tx = self.dkg_worker.error_handler.clone();
+					let err_handler_tx = self.dkg_worker.error_handler_channel.tx.clone();
 
 					let remote = async_proto_params.handle.clone();
 					let keygen_manager = self.dkg_worker.keygen_manager.clone();
@@ -152,6 +154,7 @@ where
 			unsigned_proposal_batch,
 			signing_set,
 			associated_block_id,
+			ssid,
 		} = params
 		{
 			self.dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
@@ -163,11 +166,12 @@ where
 				stage,
 				crate::DKG_SIGNING_PROTOCOL_NAME,
 				associated_block_id,
+				ssid,
 			)?;
 
 			let handle = async_proto_params.handle.clone();
 
-			let err_handler_tx = self.dkg_worker.error_handler.clone();
+			let err_handler_tx = self.dkg_worker.error_handler_channel.tx.clone();
 			let meta_handler = GenericAsyncHandler::setup_signing(
 				async_proto_params,
 				threshold,

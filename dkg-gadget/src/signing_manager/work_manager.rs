@@ -42,7 +42,8 @@ pub struct WorkManager<B: BlockT> {
 pub struct WorkManagerInner<B: BlockT> {
 	pub active_tasks: HashSet<Job<B>>,
 	pub enqueued_tasks: VecDeque<Job<B>>,
-	pub enqueued_messages: HashMap<[u8; 32], VecDeque<SignedDKGMessage<Public>>>,
+	// task hash => SSID => enqueued messages
+	pub enqueued_messages: HashMap<[u8; 32], HashMap<u8, VecDeque<SignedDKGMessage<Public>>>>,
 }
 
 #[derive(Debug)]
@@ -218,30 +219,41 @@ impl<B: BlockT> WorkManager<B> {
 		// Next, remove any outdated enqueued messages to prevent RAM bloat
 		let mut to_remove = vec![];
 		for (hash, queue) in lock.enqueued_messages.iter_mut() {
-			let before = queue.len();
-			// Only keep the messages that are not outdated
-			queue.retain(|msg| {
-				associated_block_id_acceptable(now.saturated_into(), msg.msg.associated_block_id)
-			});
-			let after = queue.len();
+			for (ssid, queue) in queue.iter_mut() {
+				let before = queue.len();
+				// Only keep the messages that are not outdated
+				queue.retain(|msg| {
+					associated_block_id_acceptable(
+						now.saturated_into(),
+						msg.msg.associated_block_id,
+					)
+				});
+				let after = queue.len();
 
-			if before != after {
-				self.logger.info(format!(
-					"[worker] Removed {} outdated enqueued messages from the queue for {:?}",
-					before - after,
-					hex::encode(*hash)
-				));
-			}
+				if before != after {
+					self.logger.info(format!(
+						"[worker] Removed {} outdated enqueued messages from the queue for {:?}",
+						before - after,
+						hex::encode(*hash)
+					));
+				}
 
-			if queue.is_empty() {
-				to_remove.push(*hash);
+				if queue.is_empty() {
+					to_remove.push((*hash, *ssid));
+				}
 			}
 		}
 
-		// Finally, to prevent the existence of piling-up empty queues, remove them
-		for hash in to_remove {
-			lock.enqueued_messages.remove(&hash);
+		// Next, to prevent the existence of piling-up empty *inner* queues, remove them
+		for (hash, ssid) in to_remove {
+			lock.enqueued_messages
+				.get_mut(&hash)
+				.expect("Should be available")
+				.remove(&ssid);
 		}
+
+		// Finally, remove any empty outer maps
+		lock.enqueued_messages.retain(|_, v| !v.is_empty());
 	}
 
 	fn start_job_unconditional(&self, job: Job<B>, lock: &mut WorkManagerInner<B>) {
@@ -252,23 +264,32 @@ impl<B: BlockT> WorkManager<B> {
 				.error(format!("Failed to start job {:?}: {err:?}", hex::encode(job.task_hash)));
 		} else {
 			// deliver all the enqueued messages to the protocol now
-			if let Some(mut enqueued_messages) = lock.enqueued_messages.remove(&job.task_hash) {
-				self.logger.info(format!(
-					"Will now deliver {} enqueued message(s) to the async protocol for {:?}",
-					enqueued_messages.len(),
-					hex::encode(job.task_hash)
-				));
-				while let Some(message) = enqueued_messages.pop_front() {
-					if should_deliver(&job, &message, job.task_hash) {
-						if let Err(err) = job.handle.deliver_message(message) {
-							self.logger.error(format!(
-								"Unable to deliver message for job {:?}: {err:?}",
-								hex::encode(job.task_hash)
-							));
+			if let Some(mut enqueued_messages_map) = lock.enqueued_messages.remove(&job.task_hash) {
+				let job_ssid = job.handle.ssid;
+				if let Some(mut enqueued_messages) = enqueued_messages_map.remove(&job_ssid) {
+					self.logger.info(format!(
+						"Will now deliver {} enqueued message(s) to the async protocol for {:?}",
+						enqueued_messages.len(),
+						hex::encode(job.task_hash)
+					));
+
+					while let Some(message) = enqueued_messages.pop_front() {
+						if should_deliver(&job, &message, job.task_hash) {
+							if let Err(err) = job.handle.deliver_message(message) {
+								self.logger.error(format!(
+									"Unable to deliver message for job {:?}: {err:?}",
+									hex::encode(job.task_hash)
+								));
+							}
+						} else {
+							self.logger.warn("Will not deliver enqueued message to async protocol since the message is no longer acceptable")
 						}
-					} else {
-						self.logger.warn("Will not deliver enqueued message to async protocol since the message is no longer acceptable")
 					}
+				}
+
+				// If there are any other messages for other SSIDs, put them back in the map
+				if !enqueued_messages_map.is_empty() {
+					lock.enqueued_messages.insert(job.task_hash, enqueued_messages_map);
 				}
 			}
 		}
@@ -336,7 +357,12 @@ impl<B: BlockT> WorkManager<B> {
 			lock.enqueued_tasks.iter().map(|job| job.handle.session_id).collect();
 		self.logger
 			.info(format!("Enqueuing message for {:?} | current_running_session_ids: {current_running_session_ids:?} | enqueued_session_ids: {enqueued_session_ids:?}", hex::encode(message_task_hash)));
-		lock.enqueued_messages.entry(message_task_hash).or_default().push_back(msg)
+		lock.enqueued_messages
+			.entry(message_task_hash)
+			.or_default()
+			.entry(msg.msg.ssid)
+			.or_default()
+			.push_back(msg)
 	}
 }
 
@@ -399,6 +425,7 @@ fn should_deliver<B: BlockT>(
 ) -> bool {
 	task.handle.session_id == msg.msg.session_id &&
 		task.task_hash == message_task_hash &&
+		task.handle.ssid == msg.msg.ssid &&
 		associated_block_id_acceptable(
 			task.handle.associated_block_id,
 			msg.msg.associated_block_id,

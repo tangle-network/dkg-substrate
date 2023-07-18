@@ -54,6 +54,7 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		>,
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
+		ssid: u8,
 	},
 	WTFrost {},
 }
