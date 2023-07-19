@@ -89,6 +89,11 @@ impl BlameManager {
 		}
 	}
 
+	pub fn signing_session_has_blame(&self, session_id: SessionId) -> bool {
+		let mut lock = self.inner.lock();
+		!lock.signing_blame.entry(session_id).or_default().is_empty()
+	}
+
 	#[cfg(test)]
 	fn clear_blame(&self) {
 		let mut lock = self.inner.lock();

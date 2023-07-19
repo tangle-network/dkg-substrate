@@ -231,25 +231,29 @@ where
 				// successfully to completion is if the same node(s) is blamed on all nodes
 				// participating in the signing protocol.
 				if ssid == MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL - 1 {
-					// Add the wildcard signing sets
-					// E.g., prev ssid = 2
-					// Then next ssid = 3
-					// We thus go from (ssid+1)..(ssid+1 + MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
-					for ssid_wildcard in
-						(ssid + 1)..(ssid + 1 + MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
-					{
-						self.maybe_add_signing_set(
-							dkg_worker,
-							&dkg_pub_key,
-							&unsigned_proposal_bytes,
-							ssid_wildcard,
-							threshold,
-							session_id,
-							party_i,
-							&best_authorities,
-							&mut signing_sets,
-							true,
-						)
+					// Only add a wildcard set if we detect nodes that are blamed
+					if dkg_worker.local_blame.signing_session_has_blame(session_id) {
+						// Add the wildcard signing sets
+						// E.g., prev ssid = 2
+						// Then next ssid = 3
+						// We thus go from (ssid+1)..(ssid+1 +
+						// MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
+						for ssid_wildcard in
+							(ssid + 1)..(ssid + 1 + MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
+						{
+							self.maybe_add_signing_set(
+								dkg_worker,
+								&dkg_pub_key,
+								&unsigned_proposal_bytes,
+								ssid_wildcard,
+								threshold,
+								session_id,
+								party_i,
+								&best_authorities,
+								&mut signing_sets,
+								true,
+							)
+						}
 					}
 				}
 			}
