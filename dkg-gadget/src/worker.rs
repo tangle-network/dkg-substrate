@@ -30,6 +30,7 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::key
 use parking_lot::{Mutex, RwLock};
 use sc_client_api::{Backend, FinalityNotification};
 use sc_keystore::LocalKeystore;
+use sp_api::ApiError;
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::ecdsa;
 use sp_runtime::traits::{Block, Get, Header, NumberFor};
@@ -50,11 +51,12 @@ use dkg_runtime_primitives::{
 	utils::to_slice_33,
 	AggregatedMisbehaviourReports, AggregatedPublicKeys, AuthoritySet, BatchId, DKGApi,
 	MaxAuthorities, MaxProposalLength, MaxProposalsInBatch, MaxReporters, MaxSignatureLength,
-	GENESIS_AUTHORITY_SET_ID,
+	StoredUnsignedProposalBatch, GENESIS_AUTHORITY_SET_ID,
 };
 
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters},
+	blame_manager::BlameManager,
 	dkg_modules::DKGModules,
 	error,
 	gossip_engine::GossipEngineIface,
@@ -144,13 +146,18 @@ where
 	pub signing_manager: SigningManager<B, BE, C, GE>,
 	pub keygen_manager: KeygenManager<B, BE, C, GE>,
 	pub(crate) error_handler_channel: ErrorHandlerChannel,
+	// Keeps a list of peers that have been blamed for misbehaviour for a
+	// particular session. Peers that have been blamed are used locally to construct
+	// "wildcard" signing sets. The values here are cleared during rotation of each session.
+	// Peers can be cleared intrasession if they successfully complete a DKG round.
+	pub(crate) local_blame: BlameManager,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
 
 #[derive(Clone)]
 pub(crate) struct ErrorHandlerChannel {
-	pub tx: tokio::sync::mpsc::UnboundedSender<DKGError>,
+	pub tx: UnboundedSender<DKGError>,
 	rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<DKGError>>>>,
 }
 
@@ -196,6 +203,7 @@ where
 			signing_manager: self.signing_manager.clone(),
 			keygen_manager: self.keygen_manager.clone(),
 			error_handler_channel: self.error_handler_channel.clone(),
+			local_blame: self.local_blame.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -249,6 +257,7 @@ where
 		let error_handler_channel = ErrorHandlerChannel { tx, rx: Arc::new(Mutex::new(Some(rx))) };
 
 		let this = DKGWorker {
+			local_blame: BlameManager::new(logger.clone()),
 			client,
 			backend,
 			key_store,
@@ -338,12 +347,16 @@ where
 
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
+		let local_blame_store = self.local_blame.clone();
+
 		let status_handle = AsyncProtocolRemote::new(
 			now,
 			session_id,
 			self.logger.clone(),
 			associated_block_id,
 			ssid,
+			local_blame_store,
+			stage,
 		);
 		// Fetch the active key. This requires rotating the key to have happened with
 		// full certainty in order to ensure the right key is being used to make signatures.
@@ -651,7 +664,7 @@ where
 			self.keygen_manager.on_block_finalized(header, self).await;
 		} else {
 			// maybe update the internal state of the worker
-			self.maybe_update_worker_state(header).await;
+			self.maybe_rotate_local_session(header).await;
 			self.keygen_manager.on_block_finalized(header, self).await;
 			if let Err(e) = self.signing_manager.on_block_finalized(header, self).await {
 				self.logger
@@ -681,7 +694,7 @@ where
 		}
 	}
 
-	async fn maybe_update_worker_state(&self, header: &B::Header) {
+	async fn maybe_rotate_local_session(&self, header: &B::Header) {
 		if let Some((active, queued)) = self.validator_set(header).await {
 			self.logger.debug(format!("🕸️  ACTIVE SESSION ID {:?}", active.id));
 			metric_set!(self, dkg_validator_set_id, active.id);
@@ -697,6 +710,7 @@ where
 				self.logger.debug(format!("🕸️  Queued authority set id {queued_authority_set_id} is not the same as the on chain authority set id {set_id}, will not rotate the local sessions."));
 				return
 			}
+			let new_session_id = active.id;
 			// Update the validator sets
 			*self.current_validator_set.write() = active;
 			*self.queued_validator_set.write() = queued;
@@ -709,6 +723,8 @@ where
 			}
 			// Delete logs from old sessions to preserve disk space
 			self.logger.clear_local_logs();
+			// Delete any blame information locally
+			self.local_blame.on_session_rotated(new_session_id);
 		} else {
 			self.logger.info(
 				"🕸️  No update to local session found, not rotating local sessions".to_string(),
@@ -1027,6 +1043,27 @@ where
 			.await;
 
 		AnticipatedKeygenExecutionStatus { execute, force_execute }
+	}
+
+	pub async fn get_unsigned_proposal_batches(
+		&self,
+		header: &B::Header,
+	) -> Result<
+		Vec<
+			StoredUnsignedProposalBatch<
+				BatchId,
+				MaxProposalLength,
+				MaxProposalsInBatch,
+				<<B as Block>::Header as Header>::Number,
+			>,
+		>,
+		ApiError,
+	> {
+		let at = header.hash();
+		self.exec_client_function(move |client| {
+			client.runtime_api().get_unsigned_proposal_batches(at)
+		})
+		.await
 	}
 
 	/// Wraps the call in a SpawnBlocking task

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{async_protocols::CurrentRoundBlame, debug_logger::DebugLogger};
+use crate::{
+	async_protocols::CurrentRoundBlame, blame_manager::BlameManager, debug_logger::DebugLogger,
+	worker::ProtoStageType,
+};
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage};
 use dkg_runtime_primitives::{crypto::Public, KEYGEN_TIMEOUT, SIGN_TIMEOUT};
@@ -33,6 +36,7 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ShutdownReason>>>>,
 	pub(crate) started_at: C,
 	pub(crate) is_primary_remote: bool,
+	pub(crate) local_blame: BlameManager,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
@@ -41,6 +45,7 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) ssid: u8,
 	pub(crate) logger: DebugLogger,
 	status_history: Arc<Mutex<Vec<MetaHandlerStatus>>>,
+	pub(crate) proto_stage_type: ProtoStageType,
 }
 
 type MessageReceiverHandle =
@@ -76,7 +81,9 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
+			local_blame: self.local_blame.clone(),
 			ssid: self.ssid,
+			proto_stage_type: self.proto_stage_type,
 		}
 	}
 }
@@ -105,6 +112,8 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		logger: DebugLogger,
 		associated_block_id: u64,
 		ssid: u8,
+		local_blame: BlameManager,
+		proto_stage_type: ProtoStageType,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
 		let (tx_keygen_signing, rx_keygen_signing) = tokio::sync::mpsc::unbounded_channel();
@@ -121,6 +130,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			status,
 			tx_keygen_signing,
 			tx_voting,
+			proto_stage_type,
 			rx_keygen_signing: Arc::new(Mutex::new(Some(rx_keygen_signing))),
 			rx_voting: Arc::new(Mutex::new(Some(rx_voting))),
 			status_history,
@@ -135,6 +145,7 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			session_id,
 			associated_block_id,
+			local_blame,
 			ssid,
 		}
 	}
@@ -284,7 +295,14 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	pub fn current_round_blame(&self) -> CurrentRoundBlame {
-		self.current_round_blame.borrow().clone()
+		let blame = self.current_round_blame.borrow().clone();
+		// Store any blame inside the local blame store to ensure the program
+		// can keep track of the blame for the current session
+		let current_session = self.session_id;
+		let is_signing = matches!(self.proto_stage_type, ProtoStageType::Signing { .. });
+		self.local_blame
+			.update_blame(current_session, &blame.blamed_parties, !is_signing);
+		blame
 	}
 }
 

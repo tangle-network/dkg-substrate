@@ -43,6 +43,7 @@ pub mod worker;
 
 pub mod async_protocols;
 pub use dkg_logging::debug_logger;
+mod blame_manager;
 pub mod dkg_modules;
 pub mod gossip_messages;
 pub mod storage;
