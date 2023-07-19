@@ -452,6 +452,12 @@ impl onchain::Config for OnChainSeqPhragmen {
 	type TargetsBound = MaxOnChainElectableTargets;
 }
 
+impl pallet_offences::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+	type OnOffenceHandler = Staking;
+}
+
 pub struct WebbMinerConfig;
 impl pallet_election_provider_multi_phase::MinerConfig for WebbMinerConfig {
 	type AccountId = AccountId;

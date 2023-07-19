@@ -112,7 +112,11 @@ use dkg_runtime_primitives::{
 	OffchainSignedProposalBatches, ProposalHandlerTrait, ProposalKind, SignedProposalBatch,
 	TypedChainId,
 };
-use frame_support::{dispatch::fmt::Debug, pallet_prelude::*};
+use frame_support::{
+	dispatch::fmt::Debug,
+	pallet_prelude::*,
+	traits::{ValidatorSet, ValidatorSetWithIdentification},
+};
 use frame_system::offchain::{AppCrypto, SendSignedTransaction, SignMessage, Signer};
 pub use pallet::*;
 use sp_runtime::{
@@ -122,12 +126,18 @@ use sp_runtime::{
 	},
 	traits::{AtLeast32BitUnsigned, Zero},
 };
+use sp_staking::{
+	offence::{DisableStrategy, Kind, Offence, ReportOffence},
+	SessionIndex,
+};
 use sp_std::{convert::TryInto, vec::Vec};
 use webb_proposals::Proposal;
 pub use weights::WeightInfo;
 
 mod impls;
+mod offences;
 pub use impls::*;
+pub use offences::*;
 
 mod functions;
 pub use functions::*;
@@ -174,6 +184,20 @@ pub mod pallet {
 		<T as Config>::MaxProposalsPerBatch,
 		<T as pallet_dkg_metadata::Config>::MaxSignatureLength,
 	>;
+
+	/// A type for representing the validator id in a session.
+	pub type ValidatorId<T> = <<T as Config>::ValidatorSet as ValidatorSet<
+		<T as frame_system::Config>::AccountId,
+	>>::ValidatorId;
+
+	/// A tuple of (ValidatorId, Identification) where `Identification` is the full identification
+	/// of `ValidatorId`.
+	pub type IdentificationTuple<T> = (
+		ValidatorId<T>,
+		<<T as Config>::ValidatorSet as ValidatorSetWithIdentification<
+			<T as frame_system::Config>::AccountId,
+		>>::Identification,
+	);
 
 	#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 	pub struct SignedProposalEventData {
@@ -222,6 +246,16 @@ pub mod pallet {
 		/// The origin which may forcibly reset parameters or otherwise alter
 		/// privileged attributes.
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+		/// A type for retrieving the validators supposed to be online in a session.
+		type ValidatorSet: ValidatorSetWithIdentification<Self::AccountId>;
+
+		/// A type that gives us the ability to submit offence reports for DKG misbehaviours
+		type ReportOffences: ReportOffence<
+			Self::AccountId,
+			IdentificationTuple<Self>,
+			DKGMisbehaviourOffence<IdentificationTuple<Self>>,
+		>;
 
 		/// Pallet weight information
 		type WeightInfo: WeightInfo;

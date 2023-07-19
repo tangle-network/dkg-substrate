@@ -24,6 +24,7 @@ frame-system = { workspace = true }
 sp-io = { workspace = true }
 sp-std = { workspace = true }
 sp-runtime = { workspace = true }
+sp-staking = { workspace = true }
 sp-core = { workspace = true }
 pallet-dkg-metadata = { workspace = true }
 webb-proposals = { workspace = true, default-features = false }
@@ -53,6 +54,7 @@ std = [
 	"sp-std/std",
 	"sp-io/std",
 	"sp-runtime/std",
+	"sp-staking/std",
 	"sp-core/std",
 	"frame-support/std",
 	"frame-system/std",
