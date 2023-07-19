@@ -287,6 +287,7 @@ where
 					signing_set,
 					associated_block_id: *header.number(),
 					ssid,
+					blame_manager: dkg_worker.local_blame.clone(),
 				};
 
 				let signing_protocol = dkg_worker

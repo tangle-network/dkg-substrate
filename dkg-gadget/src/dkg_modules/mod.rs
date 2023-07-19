@@ -1,5 +1,6 @@
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, KeygenPartyId},
+	blame_manager::BlameManager,
 	gossip_engine::GossipEngineIface,
 	utils::SendFuture,
 	worker::{DKGWorker, ProtoStageType},
@@ -55,6 +56,7 @@ pub enum SigningProtocolSetupParameters<B: Block> {
 		signing_set: Vec<KeygenPartyId>,
 		associated_block_id: NumberFor<B>,
 		ssid: u8,
+		blame_manager: BlameManager,
 	},
 	WTFrost {},
 }

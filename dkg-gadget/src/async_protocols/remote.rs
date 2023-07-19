@@ -295,14 +295,7 @@ impl<C> AsyncProtocolRemote<C> {
 	}
 
 	pub fn current_round_blame(&self) -> CurrentRoundBlame {
-		let blame = self.current_round_blame.borrow().clone();
-		// Store any blame inside the local blame store to ensure the program
-		// can keep track of the blame for the current session
-		let current_session = self.session_id;
-		let is_signing = matches!(self.proto_stage_type, ProtoStageType::Signing { .. });
-		self.local_blame
-			.update_blame(current_session, &blame.blamed_parties, !is_signing);
-		blame
+		self.current_round_blame.borrow().clone()
 	}
 }
 

@@ -1,9 +1,11 @@
+use crate::async_protocols::KeygenPartyId;
 use dkg_logging::debug_logger::DebugLogger;
 use dkg_runtime_primitives::SessionId;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use std::{
 	collections::{HashMap, HashSet},
+	fmt::{Debug, Formatter},
 	sync::Arc,
 };
 
@@ -12,11 +14,26 @@ pub struct BlameManager {
 	inner: Arc<Mutex<BlameManagerInner>>,
 }
 
-#[derive(Debug)]
 struct BlameManagerInner {
 	keygen_blame: HashMap<SessionId, HashSet<u16>>,
 	signing_blame: HashMap<SessionId, HashSet<u16>>,
 	debug_logger: DebugLogger,
+}
+
+impl Debug for BlameManagerInner {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		// Print each keygen and signing hashmap, with the session IDs and blamed nodes
+		writeln!(f, "Keygen blames")?;
+		for (session_id, blamed_nodes) in &self.keygen_blame {
+			writeln!(f, "Session ID {session_id}: {blamed_nodes:?}, ")?;
+		}
+		writeln!(f, "Signing blames")?;
+		for (session_id, blamed_nodes) in &self.signing_blame {
+			writeln!(f, "Session ID {session_id}: {blamed_nodes:?}, ")?;
+		}
+
+		Ok(())
+	}
 }
 
 impl BlameManager {
@@ -80,13 +97,29 @@ impl BlameManager {
 		lock.signing_blame.retain(|session_id, _| *session_id >= new_session);
 	}
 
-	pub fn update_blame(&self, session_id: SessionId, blame: &[u16], keygen: bool) {
+	pub fn update_blame<T: U16Mappable>(&self, session_id: SessionId, blame: &[T], keygen: bool) {
 		let mut lock = self.inner.lock();
+		let blame = blame.iter().map(|r| r.to_u16()).collect::<Vec<_>>();
 		if keygen {
 			lock.keygen_blame.entry(session_id).or_default().extend(blame);
 		} else {
 			lock.signing_blame.entry(session_id).or_default().extend(blame);
 		}
+		// Print the current blames
+		lock.debug_logger.debug(format!("[BlameManager] Current blames: {lock:#?}",));
+	}
+
+	pub fn remove_blame<T: U16Mappable>(&self, session_id: SessionId, blame: &[T], keygen: bool) {
+		let mut lock = self.inner.lock();
+		let blame = blame.iter().map(|r| r.to_u16()).collect::<Vec<_>>();
+		if keygen {
+			lock.keygen_blame.entry(session_id).or_default().retain(|x| !blame.contains(x));
+		} else {
+			lock.signing_blame.entry(session_id).or_default().retain(|x| !blame.contains(x));
+		}
+
+		// Print the current blames
+		lock.debug_logger.debug(format!("[BlameManager] Current blames: {lock:#?}",));
 	}
 
 	pub fn signing_session_has_blame(&self, session_id: SessionId) -> bool {
@@ -99,6 +132,34 @@ impl BlameManager {
 		let mut lock = self.inner.lock();
 		lock.keygen_blame.clear();
 		lock.signing_blame.clear();
+	}
+
+	#[cfg(test)]
+	fn blame_for_session_as_vec(&self, session_id: SessionId, keygen: bool) -> Vec<u16> {
+		let mut lock = self.inner.lock();
+		let blame = if keygen {
+			lock.keygen_blame.entry(session_id).or_default().clone()
+		} else {
+			lock.signing_blame.entry(session_id).or_default().clone()
+		};
+
+		blame.into_iter().sorted().collect()
+	}
+}
+
+pub trait U16Mappable {
+	fn to_u16(&self) -> u16;
+}
+
+impl U16Mappable for u16 {
+	fn to_u16(&self) -> u16 {
+		*self
+	}
+}
+
+impl U16Mappable for KeygenPartyId {
+	fn to_u16(&self) -> u16 {
+		*self.as_ref()
 	}
 }
 
@@ -166,5 +227,20 @@ mod tests {
 		blame_manager.update_blame(session_id, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], false);
 		assert_eq!(blame_manager.filter_signing_set(session_id, &input, &all_parties), None);
 		blame_manager.clear_blame();
+	}
+
+	#[tokio::test]
+	// Test that removing blames works as expected
+	async fn test_remove_blame() {
+		use super::*;
+		use dkg_logging::debug_logger::DebugLogger;
+
+		dkg_logging::setup_log();
+		let blame_manager = BlameManager::new(DebugLogger::new("test", None).unwrap());
+		let session_id = 0;
+
+		blame_manager.update_blame(session_id, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], false);
+		blame_manager.remove_blame(session_id, &[0, 1, 2, 3, 4, 5, 7, 8], false);
+		assert_eq!(blame_manager.blame_for_session_as_vec(session_id, false), vec![6, 9]);
 	}
 }
