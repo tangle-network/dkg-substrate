@@ -340,10 +340,10 @@ impl<T: Config> Pallet<T> {
 				let key = proposals.first().expect("cannot be empty").key;
 
 				// Skip expiration for keygen related proposals
-				match key {
-					RefreshProposal(_) => return false,
-					_ => (),
-				};
+				if let RefreshProposal(_) = key {
+					return false
+				}
+
 				let time_passed = now.checked_sub(timestamp).unwrap_or_default();
 				time_passed > T::UnsignedProposalExpiry::get()
 			},
