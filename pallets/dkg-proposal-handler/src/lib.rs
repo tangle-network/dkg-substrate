@@ -150,7 +150,6 @@ pub mod pallet {
 	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_system::{offchain::CreateSignedTransaction, pallet_prelude::*};
 	use log;
-	use sp_runtime::traits::Zero;
 	use webb_proposals::Proposal;
 
 	use super::*;
@@ -295,13 +294,18 @@ pub mod pallet {
 			data: Vec<u8>,
 		},
 		/// RuntimeEvent When a Proposal is removed from UnsignedProposalQueue.
-		ProposalRemoved {
-			/// The Payload Type or the Key.
-			key: DKGPayloadKey,
+		ProposalBatchRemoved {
 			/// The Target Chain.
 			target_chain: TypedChainId,
-			/// Whether the proposal is due to expiration
-			expired: bool,
+			/// The batch ID of the proposal
+			batch_id: T::BatchId,
+		},
+		/// RuntimeEvent When a Proposal is expired and removed from UnsignedProposalQueue.
+		ProposalBatchExpired {
+			/// The Target Chain.
+			target_chain: TypedChainId,
+			/// The batch ID of the proposal
+			batch_id: T::BatchId,
 		},
 		/// RuntimeEvent When a Proposal Gets Signed by DKG.
 		ProposalBatchSigned {
@@ -349,6 +353,8 @@ pub mod pallet {
 		ArithmeticOverflow,
 		/// Batch does not contain proposals
 		EmptyBatch,
+		/// Proposal batch does not exist
+		ProposalBatchNotFound,
 	}
 
 	#[pallet::hooks]
@@ -371,47 +377,11 @@ pub mod pallet {
 				return remaining_weight
 			}
 
-			// fetch all unsigned proposals
-			let unsigned_proposals: Vec<_> = UnsignedProposals::<T>::iter().collect();
-			let unsigned_proposals_len = unsigned_proposals.len() as u64;
-			remaining_weight =
-				remaining_weight.saturating_sub(T::DbWeight::get().reads(unsigned_proposals_len));
+			// create proposal batches
+			remaining_weight = Self::on_idle_create_proposal_batches(remaining_weight);
 
-			for (typed_chain_id, unsigned_proposals) in unsigned_proposals {
-				remaining_weight =
-					remaining_weight.saturating_sub(T::DbWeight::get().reads_writes(1, 3));
-
-				if remaining_weight.is_zero() {
-					break
-				}
-
-				let batch_id_res = Self::generate_next_batch_id();
-
-				if batch_id_res.is_err() {
-					log::debug!(
-						target: "runtime::dkg_proposal_handler",
-						"on_idle: Cannot generate next batch ID: {:?}",
-						batch_id_res,
-					);
-					return remaining_weight
-				}
-
-				let batch_id = batch_id_res.expect("checked above");
-
-				// create new proposal batch
-				let proposal_batch = StoredUnsignedProposalBatchOf::<T> {
-					batch_id,
-					proposals: unsigned_proposals,
-					timestamp: <frame_system::Pallet<T>>::block_number(),
-				};
-				// push the batch to unsigned proposal queue
-				UnsignedProposalQueue::<T>::insert(typed_chain_id, batch_id, proposal_batch);
-
-				// remove the batch from the unsigned proposal list
-				UnsignedProposals::<T>::remove(typed_chain_id);
-			}
-
-			remaining_weight
+			// remove expired proposals with remaining weight
+			Self::on_idle_remove_expired_batches(now, remaining_weight)
 		}
 	}
 
@@ -519,6 +489,27 @@ pub mod pallet {
 			} else {
 				Err(Error::<T>::ProposalMustBeUnsigned.into())
 			}
+		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::force_submit_unsigned_proposal())]
+		#[pallet::call_index(2)]
+		pub fn force_remove_unsigned_proposal_batch(
+			origin: OriginFor<T>,
+			typed_chain_id: TypedChainId,
+			batch_id: T::BatchId,
+		) -> DispatchResultWithPostInfo {
+			// Call must come from root (likely from a democracy proposal passing)
+			<T as pallet::Config>::ForceOrigin::ensure_origin(origin)?;
+			ensure!(
+				UnsignedProposalQueue::<T>::contains_key(typed_chain_id, batch_id),
+				Error::<T>::ProposalBatchNotFound
+			);
+			UnsignedProposalQueue::<T>::remove(typed_chain_id, batch_id);
+			Self::deposit_event(Event::ProposalBatchRemoved {
+				target_chain: typed_chain_id,
+				batch_id,
+			});
+			Ok(().into())
 		}
 	}
 

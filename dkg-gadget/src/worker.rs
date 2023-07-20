@@ -53,6 +53,7 @@ use dkg_runtime_primitives::{
 	GENESIS_AUTHORITY_SET_ID,
 };
 
+pub use crate::constants::worker::*;
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters},
 	dkg_modules::DKGModules,
@@ -69,17 +70,6 @@ use crate::{
 	utils::find_authorities_change,
 	Client,
 };
-
-pub const ENGINE_ID: sp_runtime::ConsensusEngineId = *b"WDKG";
-
-pub const STORAGE_SET_RETRY_NUM: usize = 5;
-
-pub const MAX_SUBMISSION_DELAY: u32 = 3;
-
-pub const MAX_KEYGEN_RETRIES: usize = 5;
-
-/// How many blocks to keep the proposal hash in out local cache.
-pub const PROPOSAL_HASH_LIFETIME: u32 = 10;
 
 pub type Shared<T> = Arc<RwLock<T>>;
 
