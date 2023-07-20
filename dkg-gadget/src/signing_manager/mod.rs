@@ -8,6 +8,7 @@ use dkg_primitives::{
 use self::work_manager::WorkManager;
 use crate::{
 	async_protocols::KeygenPartyId,
+	constants::signing_manager::*,
 	dkg_modules::SigningProtocolSetupParameters,
 	gossip_engine::GossipEngineIface,
 	metric_inc,
@@ -21,7 +22,6 @@ use dkg_runtime_primitives::crypto::Public;
 use sp_api::HeaderT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
-
 /// For balancing the amount of work done by each node
 pub mod work_manager;
 
@@ -50,13 +50,6 @@ impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
 	}
 }
-
-// the maximum number of tasks that the work manager tries to assign
-const MAX_RUNNING_TASKS: usize = 4;
-const MAX_ENQUEUED_TASKS: usize = 20;
-// How often to poll the jobs to check completion status
-const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
-pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 2;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
