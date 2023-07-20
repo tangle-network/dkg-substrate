@@ -118,6 +118,11 @@ impl<B: BlockT> WorkManager<B> {
 		this
 	}
 
+	pub fn clear_enqueued_tasks(&self) {
+		let mut lock = self.inner.write();
+		lock.enqueued_tasks.clear();
+	}
+
 	/// Pushes the task, but does not necessarily start it
 	pub fn push_task(
 		&self,

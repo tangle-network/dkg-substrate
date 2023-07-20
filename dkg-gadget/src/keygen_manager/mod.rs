@@ -433,6 +433,12 @@ where
 			self.active_keygen_retry_id.load(Ordering::SeqCst),
 		);
 
+		// If we are starting this keygen because of an emergency keygen, clear the unsigned
+		// proposals locally
+		if anticipated_execution_status.force_execute {
+			dkg_worker.signing_manager.clear_enqueued_proposal_tasks();
+		}
+
 		// For now, always use the MpEcdsa variant
 		let params = KeygenProtocolSetupParameters::MpEcdsa {
 			best_authorities,

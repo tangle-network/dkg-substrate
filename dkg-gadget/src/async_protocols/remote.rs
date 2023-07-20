@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use crate::{
-	async_protocols::CurrentRoundBlame, blame_manager::BlameManager, debug_logger::DebugLogger,
-	worker::ProtoStageType,
+	async_protocols::CurrentRoundBlame, debug_logger::DebugLogger, worker::ProtoStageType,
 };
 use atomic::Atomic;
 use dkg_primitives::types::{DKGError, NetworkMsgPayload, SessionId, SignedDKGMessage};
@@ -36,7 +35,6 @@ pub struct AsyncProtocolRemote<C> {
 	pub(crate) stop_rx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<ShutdownReason>>>>,
 	pub(crate) started_at: C,
 	pub(crate) is_primary_remote: bool,
-	pub(crate) local_blame: BlameManager,
 	current_round_blame: tokio::sync::watch::Receiver<CurrentRoundBlame>,
 	pub(crate) current_round_blame_tx: Arc<tokio::sync::watch::Sender<CurrentRoundBlame>>,
 	pub(crate) session_id: SessionId,
@@ -81,7 +79,6 @@ impl<C: Clone> Clone for AsyncProtocolRemote<C> {
 			logger: self.logger.clone(),
 			status_history: self.status_history.clone(),
 			associated_block_id: self.associated_block_id,
-			local_blame: self.local_blame.clone(),
 			ssid: self.ssid,
 			proto_stage_type: self.proto_stage_type,
 		}
@@ -112,7 +109,6 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 		logger: DebugLogger,
 		associated_block_id: u64,
 		ssid: u8,
-		local_blame: BlameManager,
 		proto_stage_type: ProtoStageType,
 	) -> Self {
 		let (stop_tx, stop_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -145,7 +141,6 @@ impl<C: AtLeast32BitUnsigned + Copy + Send> AsyncProtocolRemote<C> {
 			is_primary_remote: false,
 			session_id,
 			associated_block_id,
-			local_blame,
 			ssid,
 		}
 	}

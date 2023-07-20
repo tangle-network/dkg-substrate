@@ -56,7 +56,6 @@ use dkg_runtime_primitives::{
 
 use crate::{
 	async_protocols::{remote::AsyncProtocolRemote, AsyncProtocolParameters},
-	blame_manager::BlameManager,
 	dkg_modules::DKGModules,
 	error,
 	gossip_engine::GossipEngineIface,
@@ -146,11 +145,6 @@ where
 	pub signing_manager: SigningManager<B, BE, C, GE>,
 	pub keygen_manager: KeygenManager<B, BE, C, GE>,
 	pub(crate) error_handler_channel: ErrorHandlerChannel,
-	// Keeps a list of peers that have been blamed for misbehaviour for a
-	// particular session. Peers that have been blamed are used locally to construct
-	// "wildcard" signing sets. The values here are cleared during rotation of each session.
-	// Peers can be cleared intrasession if they successfully complete a DKG round.
-	pub(crate) local_blame: BlameManager,
 	// keep rustc happy
 	_backend: PhantomData<(BE, MaxProposalLength)>,
 }
@@ -203,7 +197,6 @@ where
 			signing_manager: self.signing_manager.clone(),
 			keygen_manager: self.keygen_manager.clone(),
 			error_handler_channel: self.error_handler_channel.clone(),
-			local_blame: self.local_blame.clone(),
 			_backend: PhantomData,
 		}
 	}
@@ -257,7 +250,6 @@ where
 		let error_handler_channel = ErrorHandlerChannel { tx, rx: Arc::new(Mutex::new(Some(rx))) };
 
 		let this = DKGWorker {
-			local_blame: BlameManager::new(logger.clone()),
 			client,
 			backend,
 			key_store,
@@ -347,7 +339,6 @@ where
 
 		let now = self.get_latest_block_number();
 		let associated_block_id: u64 = associated_block.saturated_into();
-		let local_blame_store = self.local_blame.clone();
 
 		let status_handle = AsyncProtocolRemote::new(
 			now,
@@ -355,7 +346,6 @@ where
 			self.logger.clone(),
 			associated_block_id,
 			ssid,
-			local_blame_store,
 			stage,
 		);
 		// Fetch the active key. This requires rotating the key to have happened with
@@ -710,7 +700,6 @@ where
 				self.logger.debug(format!("🕸️  Queued authority set id {queued_authority_set_id} is not the same as the on chain authority set id {set_id}, will not rotate the local sessions."));
 				return
 			}
-			let new_session_id = active.id;
 			// Update the validator sets
 			*self.current_validator_set.write() = active;
 			*self.queued_validator_set.write() = queued;
@@ -723,8 +712,6 @@ where
 			}
 			// Delete logs from old sessions to preserve disk space
 			self.logger.clear_local_logs();
-			// Delete any blame information locally
-			self.local_blame.on_session_rotated(new_session_id);
 		} else {
 			self.logger.info(
 				"🕸️  No update to local session found, not rotating local sessions".to_string(),

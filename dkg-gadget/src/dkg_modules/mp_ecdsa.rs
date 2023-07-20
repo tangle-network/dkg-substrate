@@ -5,6 +5,7 @@ use crate::{
 	},
 	gossip_engine::GossipEngineIface,
 	keygen_manager::KeygenState,
+	signing_manager::SigningResult,
 	worker::{DKGWorker, ProtoStageType},
 	Client,
 };
@@ -155,7 +156,7 @@ where
 			signing_set,
 			associated_block_id,
 			ssid,
-			blame_manager,
+			unsigned_proposal_hash,
 		} = params
 		{
 			self.dkg_worker.logger.debug(format!("{party_i:?} All Parameters: {best_authorities:?} | authority_pub_key: {authority_public_key:?} | session_id: {session_id:?} | threshold: {threshold:?} | stage: {stage:?} | unsigned_proposal_batch: {unsigned_proposal_batch:?} | signing_set: {signing_set:?} | associated_block_id: {associated_block_id:?}"));
@@ -171,31 +172,36 @@ where
 			)?;
 
 			let handle = async_proto_params.handle.clone();
-			let handle_task = handle.clone();
 
 			let err_handler_tx = self.dkg_worker.error_handler_channel.tx.clone();
 			let meta_handler = GenericAsyncHandler::setup_signing(
 				async_proto_params,
 				threshold,
 				unsigned_proposal_batch,
-				signing_set.clone(),
+				signing_set,
 			)?;
 			let logger = self.dkg_worker.logger.clone();
+			let signing_manager = self.dkg_worker.signing_manager.clone();
 			let task = async move {
 				match meta_handler.await {
 					Ok(_) => {
-						logger.info("The meta handler has executed successfully".to_string());
-						blame_manager.remove_blame(session_id, &signing_set, false);
+						logger.info("The meta handler has executed successfully");
+						signing_manager
+							.update_local_signing_set_state(SigningResult::Success {
+								unsigned_proposal_hash,
+							})
+							.await;
 						Ok(())
 					},
 
 					Err(err) => {
 						logger.error(format!("Error executing meta handler {:?}", &err));
-						let blame = handle_task.current_round_blame();
-						if !blame.blamed_parties.is_empty() {
-							blame_manager.update_blame(session_id, &blame.blamed_parties, false);
-						}
-
+						signing_manager
+							.update_local_signing_set_state(SigningResult::Failure {
+								unsigned_proposal_hash,
+								ssid,
+							})
+							.await;
 						let _ = err_handler_tx.send(err.clone());
 						Err(err)
 					},

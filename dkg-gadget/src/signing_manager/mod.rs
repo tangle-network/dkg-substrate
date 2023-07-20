@@ -1,6 +1,5 @@
 use std::{
-	collections::HashSet,
-	hash::{Hash, Hasher},
+	collections::{HashMap, HashSet},
 	marker::PhantomData,
 };
 
@@ -22,7 +21,6 @@ use crate::{
 use codec::Encode;
 use dkg_primitives::utils::select_random_set;
 use dkg_runtime_primitives::{crypto::Public, SessionId};
-use itertools::Itertools;
 use sp_api::HeaderT;
 use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
@@ -44,15 +42,22 @@ pub mod work_manager;
 /// if we are in this set, we send it to the work manager, and continue.
 /// if we are not, we continue the loop.
 pub struct SigningManager<B: Block, BE, C, GE> {
-	// governs the workload for each node
+	// Governs the workload for each node
 	work_manager: WorkManager<B>,
 	lock: Arc<AtomicBool>,
+	// A map that keeps track of each signing set used for a given proposal hash
+	ssid_history: Arc<tokio::sync::Mutex<HashMap<[u8; 32], HashSet<u8>>>>,
 	_pd: PhantomData<(B, BE, C, GE)>,
 }
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
-		Self { work_manager: self.work_manager.clone(), _pd: self._pd, lock: self.lock.clone() }
+		Self {
+			work_manager: self.work_manager.clone(),
+			_pd: self._pd,
+			lock: self.lock.clone(),
+			ssid_history: self.ssid_history.clone(),
+		}
 	}
 }
 
@@ -61,10 +66,11 @@ const MAX_RUNNING_TASKS: usize = 4;
 const MAX_ENQUEUED_TASKS: usize = 20;
 // How often to poll the jobs to check completion status
 const JOB_POLL_INTERVAL_IN_MILLISECONDS: u64 = 500;
-// Generate n signing sets per proposal
-pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 1;
-// Additionally, generate 1 wildcard signing sets per proposal
-pub const MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL: u8 = 1;
+// We only generate 1 at a time,
+// going up to the below constant times as a maximum if previous signing sets fail.
+// E.g.,: Signing set 0 fails
+// We then next generate signing set 1, that fails, and so on until we succeed.
+pub const MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL: u8 = 10;
 
 impl<B, BE, C, GE> SigningManager<B, BE, C, GE>
 where
@@ -83,6 +89,7 @@ where
 				MAX_ENQUEUED_TASKS,
 				PollMethod::Interval { millis: JOB_POLL_INTERVAL_IN_MILLISECONDS },
 			),
+			ssid_history: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
 			lock: Arc::new(AtomicBool::new(false)),
 			_pd: Default::default(),
 		}
@@ -92,6 +99,10 @@ where
 		let message_task_hash =
 			*message.msg.payload.unsigned_proposal_hash().expect("Bad message type");
 		self.work_manager.deliver_message(message, message_task_hash)
+	}
+
+	pub fn clear_enqueued_proposal_tasks(&self) {
+		self.work_manager.clear_enqueued_tasks();
 	}
 
 	// prevents on_block_finalized from executing
@@ -187,6 +198,8 @@ where
 		let threshold = dkg_worker.get_signature_threshold(header).await;
 		let authority_public_key = dkg_worker.get_authority_public_key();
 
+		let mut ssid_lock = self.ssid_history.lock().await;
+
 		for batch in unsigned_proposals {
 			let typed_chain_id = batch.proposals.first().expect("Empty batch!").typed_chain_id;
 			if !self.work_manager.can_submit_more_tasks() {
@@ -206,66 +219,37 @@ where
 			let unsigned_proposal_bytes = batch.encode();
 			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
 
-			let mut signing_sets = vec![];
-			// Generate the signing sets and load into `signing_sets`
-			for ssid in 0..MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
-				self.maybe_add_signing_set(
-					dkg_worker,
-					&dkg_pub_key,
-					&unsigned_proposal_bytes,
-					ssid,
-					threshold,
-					session_id,
-					party_i,
-					&best_authorities,
-					&mut signing_sets,
-					false,
-				);
+			// First, generate the next SSID
+			let next_ssid = ssid_lock
+				.entry(unsigned_proposal_hash)
+				.or_default()
+				.iter()
+				.max()
+				.copied()
+				.map(|r| r.wrapping_add(1)) // Take the max value and add one to it to get the next SSID
+				.unwrap_or(0); // If there are no elements, start off at SSID 0
 
-				// If this is the last signing set, then, we should add any wildcard sets
-				// Definition of "wildcard set": a signing set that may or may not be symmetric
-				// to other generated signing sets since we exclude blamed part indexes from the
-				// generated signing set and replace with non-blamed parties. Since blames are not
-				// necessarily symmetric between nodes, it follows that these wildcard sets are
-				// not necessarily symmetric either. As such, the only way a wildcard set converges
-				// successfully to completion is if the same node(s) is blamed on all nodes
-				// participating in the signing protocol.
-				if ssid == MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL - 1 {
-					// Only add a wildcard set if we detect nodes that are blamed
-					if dkg_worker.local_blame.signing_session_has_blame(session_id) {
-						// Add the wildcard signing sets
-						// E.g., prev ssid = 2
-						// Then next ssid = 3
-						// We thus go from (ssid+1)..(ssid+1 +
-						// MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
-						for ssid_wildcard in
-							(ssid + 1)..(ssid + 1 + MAX_WILDCARD_SIGNING_SETS_PER_PROPOSAL)
-						{
-							self.maybe_add_signing_set(
-								dkg_worker,
-								&dkg_pub_key,
-								&unsigned_proposal_bytes,
-								ssid_wildcard,
-								threshold,
-								session_id,
-								party_i,
-								&best_authorities,
-								&mut signing_sets,
-								true,
-							)
-						}
-					}
-				}
+			if next_ssid >= MAX_POTENTIAL_SIGNING_SETS_PER_PROPOSAL {
+				// In this case, the unsigned proposal will get removed from the on-chain queue and
+				// will eventually be retried in the future
+				dkg_worker.logger.warn(format!(
+					"🕸️  Session Id {session_id:?} | Already generated max number of signing sets for this proposal {}",
+					hex::encode(unsigned_proposal_hash)
+				));
+				continue
 			}
 
-			// We are only interested in the unique signing sets, that way, if the wildcard
-			// signing set is ever the same as one of the other signing sets, we don't
-			// redundantly submit the same job to the work manager.
-			let unique_signing_sets = signing_sets.into_iter().unique();
-
-			for signing_set in unique_signing_sets {
-				let ssid = signing_set.ssid;
-				let signing_set = signing_set.into_ordered_vec();
+			if let Some(signing_set) = self.maybe_create_signing_set(
+				dkg_worker,
+				&dkg_pub_key,
+				&unsigned_proposal_bytes,
+				next_ssid,
+				threshold,
+				session_id,
+				party_i,
+				&best_authorities,
+			) {
+				let ProposedSigningSet { signing_set, ssid } = signing_set;
 
 				dkg_worker.logger.info(format!(
 					"🕸️  Session Id {:?} | SSID {} | {}-out-of-{} signers: ({:?})",
@@ -287,7 +271,7 @@ where
 					signing_set,
 					associated_block_id: *header.number(),
 					ssid,
-					blame_manager: dkg_worker.local_blame.clone(),
+					unsigned_proposal_hash,
 				};
 
 				let signing_protocol = dkg_worker
@@ -321,20 +305,32 @@ where
 		Ok(())
 	}
 
+	/// Whenever a signing protocol finishes, it MUST call this function
+	pub async fn update_local_signing_set_state(&self, update: SigningResult) {
+		let mut lock = self.ssid_history.lock().await;
+		match update {
+			SigningResult::Success { unsigned_proposal_hash } => {
+				// On success, remove the signing set history for this unsigned proposal hash
+				lock.remove(&unsigned_proposal_hash);
+			},
+			SigningResult::Failure { unsigned_proposal_hash, ssid } => {
+				lock.entry(unsigned_proposal_hash).or_default().insert(ssid);
+			},
+		}
+	}
+
 	#[allow(clippy::too_many_arguments)]
-	fn maybe_add_signing_set(
+	fn maybe_create_signing_set(
 		&self,
 		dkg_worker: &DKGWorker<B, BE, C, GE>,
 		dkg_pub_key: &[u8],
 		unsigned_proposal_bytes: &[u8],
 		ssid: u8,
 		threshold: u16,
-		session_id: SessionId,
+		_session_id: SessionId,
 		party_i: KeygenPartyId,
 		best_authorities: &[(KeygenPartyId, Public)],
-		signing_sets: &mut Vec<ProposedSigningSet>,
-		wildcard: bool,
-	) {
+	) -> Option<ProposedSigningSet> {
 		let concat_data = dkg_pub_key
 			.iter()
 			.copied()
@@ -346,32 +342,13 @@ where
 		let maybe_set = self.generate_signers(&seed, threshold, best_authorities, dkg_worker).ok();
 
 		if let Some(signing_set) = maybe_set {
-			// If this is a wildcard set, then we need to filter out any blamed parties
-			let signing_set = if wildcard {
-				let signing_set_u16 = signing_set.iter().map(|i| *i.as_ref()).collect::<Vec<u16>>();
-				let best_authorities_u16 =
-					best_authorities.iter().map(|(i, _)| *i.as_ref()).collect::<Vec<u16>>();
-				dkg_worker
-					.local_blame
-					.filter_signing_set(session_id, &signing_set_u16, &best_authorities_u16)
-					.map(|r| {
-						r.into_iter()
-							.map(|r| KeygenPartyId::try_from(r).expect("Should be correct"))
-							.collect()
-					})
-					.unwrap_or(signing_set)
-			} else {
-				signing_set
-			};
-
 			// If we are in the set, send to work manager
 			if signing_set.contains(&party_i) {
-				signing_sets.push(ProposedSigningSet {
-					signing_set: HashSet::from_iter(signing_set),
-					ssid,
-				});
+				return Some(ProposedSigningSet { signing_set, ssid })
 			}
 		}
+
+		None
 	}
 
 	/// After keygen, this should be called to generate a random set of signers
@@ -408,25 +385,10 @@ where
 #[derive(Clone, Debug)]
 pub struct ProposedSigningSet {
 	pub ssid: u8,
-	pub signing_set: HashSet<KeygenPartyId>,
+	pub signing_set: Vec<KeygenPartyId>,
 }
 
-impl ProposedSigningSet {
-	pub fn into_ordered_vec(self) -> Vec<KeygenPartyId> {
-		self.signing_set.into_iter().sorted().collect()
-	}
+pub enum SigningResult {
+	Success { unsigned_proposal_hash: [u8; 32] },
+	Failure { unsigned_proposal_hash: [u8; 32], ssid: u8 },
 }
-
-impl Hash for ProposedSigningSet {
-	fn hash<H: Hasher>(&self, state: &mut H) {
-		self.clone().into_ordered_vec().hash(state)
-	}
-}
-
-impl PartialEq for ProposedSigningSet {
-	fn eq(&self, other: &Self) -> bool {
-		self.signing_set.eq(&other.signing_set)
-	}
-}
-
-impl Eq for ProposedSigningSet {}
