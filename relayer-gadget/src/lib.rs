@@ -27,7 +27,7 @@ pub async fn start_relayer_gadget(relayer_params: WebbRelayerParams) {
 	let mut config = match relayer_params.config_dir.as_ref() {
 		Some(p) => load_config(p).expect("failed to load relayer config"),
 		None => {
-			tracing::error!(
+			tracing::warn!(
 				target: "relayer-gadget",
 				"Error: Not Starting Webb Relayer Gadget. No Config Directory Specified"
 			);

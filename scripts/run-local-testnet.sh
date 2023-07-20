@@ -4,7 +4,7 @@ set -e
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 #define default ports
-ports=(30333 30305 30308)
+ports=(30333 30305 30308 30309 30310)
 
 #check to see process is not orphaned or already running
 for port in ${ports[@]}; do
@@ -54,10 +54,20 @@ echo "*** Start Webb DKG Node ***"
   --port ${ports[1]} \
   --rpc-port 9945 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
 # Charlie
-./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --charlie --output-path=./tmp/charlie/output.log \
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --charlie --output-path=./tmp/charlie/output.log \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
+  --port ${ports[2]} \
+  --rpc-port 9946 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
+# Dave
+./target/release/dkg-standalone-node --tmp --chain local --validator -lerror --dave --output-path=./tmp/dave/output.log \
+  --rpc-cors all --rpc-external --rpc-methods=unsafe \
+  --port ${ports[3]} \
+  --rpc-port 9947 --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp &
+# Eve
+./target/release/dkg-standalone-node --tmp --chain local --validator -linfo --eve --output-path=./tmp/eve/output.log \
     --rpc-cors all --rpc-external \
     --rpc-port 9948 \
-    --port ${ports[2]} \
+    --port ${ports[4]} \
     -ldkg=debug \
     -ldkg_gadget::worker=debug \
     -lruntime::dkg_metadata=debug \
