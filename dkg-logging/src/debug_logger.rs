@@ -234,8 +234,8 @@ impl DebugLogger {
 						MessageType::Clear => {
 							let lock = paths_task.lock();
 							for path in &*lock {
-								if let Err(err) = std::fs::remove_file(path) {
-									error!(target: "dkg", "Failed to remove file: {err}");
+								if let Err(err) = std::fs::File::create(path) {
+									error!(target: "dkg", "Failed to truncate file: {err}");
 								}
 							}
 						},

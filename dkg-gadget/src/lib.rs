@@ -43,16 +43,15 @@ pub mod worker;
 
 pub mod async_protocols;
 pub use dkg_logging::debug_logger;
+pub mod constants;
 pub mod dkg_modules;
 pub mod gossip_messages;
 pub mod storage;
 
+pub use constants::{DKG_KEYGEN_PROTOCOL_NAME, DKG_SIGNING_PROTOCOL_NAME};
 pub use debug_logger::RoundsEventType;
 use gossip_engine::NetworkGossipEngineBuilder;
 pub use keystore::DKGKeystore;
-
-pub const DKG_KEYGEN_PROTOCOL_NAME: &str = "/webb-tools/dkg/keygen/1";
-pub const DKG_SIGNING_PROTOCOL_NAME: &str = "/webb-tools/dkg/signing/1";
 
 /// Returns the configuration value to put in
 /// [`sc_network::config::NetworkConfiguration::extra_sets`].
