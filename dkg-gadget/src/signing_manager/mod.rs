@@ -262,7 +262,18 @@ where
 					// If this set it novel, and, we are NOT in this set, let the other nodes
 					// attempt this protocol. Break out of the loop
 					if is_novel && !local_in_this_set {
+						// TODO: figure out staggering issue. Also, since this signing set may complete successfully,
+						// we need a way for this node to clean this map when the other nodes succeed.
+						// The staggering issue means that if this signing set we delegate fails for the other nodes,
+						// they will not stall until STALL_LIMIT blocks. However, the next block we get, we will immediately
+						// start the next SSID protocol, meaning we are now staggered.
 						dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is novel and local is not in this set. Delegating to other nodes"));
+						// To ensure we count this the next time the delegated nodes fail, add this to the list
+						ssid_lock
+							.entry(unsigned_proposal_hash)
+							.or_default()
+							.attempted_sets
+							.insert(signing_set.clone());
 						break
 					}
 

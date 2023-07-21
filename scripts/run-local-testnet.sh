@@ -75,4 +75,4 @@ echo "*** Start Webb DKG Node ***"
     -lruntime::dkg_proposal_handler=debug \
     -lruntime::offchain=debug --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp \
     -ldkg_proposal_handler=debug --unsafe-rpc-external --rpc-methods=unsafe
-#popd
+popd
