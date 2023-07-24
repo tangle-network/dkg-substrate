@@ -22,9 +22,14 @@ use crate::{
 };
 use codec::Encode;
 use dkg_primitives::utils::select_random_set;
-use dkg_runtime_primitives::{crypto::Public, SessionId};
+use dkg_runtime_primitives::{
+	crypto::Public, BatchId, MaxProposalsInBatch, SessionId, StoredUnsignedProposalBatch,
+	SIGN_TIMEOUT,
+};
 use itertools::Itertools;
 use sp_api::HeaderT;
+use sp_arithmetic::traits::SaturatedConversion;
+use sp_runtime::traits::Header;
 use std::sync::atomic::{AtomicBool, Ordering};
 use webb_proposals::TypedChainId;
 /// For balancing the amount of work done by each node
@@ -57,6 +62,9 @@ struct SigningSetHistoryTracker {
 	ssids_attempted: HashSet<u8>,
 	attempted_sets: HashSet<ProposedSigningSet>,
 }
+
+type UnsignedProposalsVec<B> =
+	Vec<StoredUnsignedProposalBatch<BatchId, MaxProposalLength, MaxProposalsInBatch, B>>;
 
 impl<B: Block, BE, C, GE> Clone for SigningManager<B, BE, C, GE> {
 	fn clone(&self) -> Self {
@@ -134,6 +142,7 @@ where
 		let on_chain_dkg = dkg_worker.get_dkg_pub_key(header).await;
 		let session_id = on_chain_dkg.0;
 		let dkg_pub_key = on_chain_dkg.1;
+		let now: u64 = (*header.number()).saturated_into();
 
 		// Check whether the worker is in the best set or return
 		let party_i = match dkg_worker.get_party_index(header).await {
@@ -151,33 +160,11 @@ where
 
 		dkg_worker.logger.info_signing("About to get unsigned proposals ...");
 
-		let unsigned_proposals = match dkg_worker.get_unsigned_proposal_batches(header).await {
-			Ok(mut res) => {
-				// sort proposals by timestamp, we want to pick the oldest proposal to sign
-				res.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-				let mut filtered_unsigned_proposals = Vec::new();
-				for proposal in res {
-					if let Some(hash) = proposal.hash() {
-						// only submit the job if it isn't already running
-						if !self.work_manager.job_exists(&hash) {
-							// update unsigned proposal counter
-							metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
-							filtered_unsigned_proposals.push(proposal);
-						}
-					}
-				}
-				filtered_unsigned_proposals
-			},
-			Err(e) => {
-				dkg_worker
-					.logger
-					.error(format!("🕸️  PARTY {party_i} | Failed to get unsigned proposals: {e:?}"));
-				return Err(DKGError::GenericError {
-					reason: format!("Failed to get unsigned proposals: {e:?}"),
-				})
-			},
-		};
+		let (unsigned_proposals, full_unsigned_proposals) =
+			self.get_unsigned_proposals(header, dkg_worker, party_i).await?;
+
 		if unsigned_proposals.is_empty() {
+			dkg_worker.logger.info("No unsigned proposals to sign");
 			return Ok(())
 		} else {
 			dkg_worker.logger.debug(format!(
@@ -209,6 +196,42 @@ where
 
 			let unsigned_proposal_bytes = batch.encode();
 			let unsigned_proposal_hash = batch.hash().expect("unable to hash proposal");
+
+			// First, check to see if the proposal is already done. If it is, skip it
+			if !full_unsigned_proposals.iter().any(|p| p.hash() == Some(unsigned_proposal_hash)) {
+				dkg_worker
+					.logger
+					.info("Since this proposal is already done, we will move on to the next");
+				ssid_lock.remove(&unsigned_proposal_hash);
+				continue
+			}
+
+			let latest_attempt = ssid_lock
+				.entry(unsigned_proposal_hash)
+				.or_default()
+				.attempted_sets
+				.iter()
+				.map(|r| r.locally_proposed_at)
+				.max();
+
+			// Next, check to see if we are already locally waiting for this set to complete
+			if let Some(init_time) = latest_attempt {
+				let stalled = now >= init_time + SIGN_TIMEOUT as u64;
+				if stalled {
+					dkg_worker.logger.info(
+						"Since the latest attempt of this proposal is stalled, we will proceed",
+					)
+				} else {
+					dkg_worker.logger.info("Since the latest attempt of this proposal is not stalled, we will skip this proposal");
+					continue
+				}
+			}
+
+			// Either one of two cases are possible here
+			// * We have never attempted to sign this proposal before
+			// * We have attempted to sign this proposal before, but, it is stalled and we need to
+			//   start the next one
+			// In either case, we need to find the next UNIQUE signing set to attempt
 
 			// Loop until we generate a signing set that is unique compared to previous signing sets
 			for _ in 0..MAX_POTENTIAL_RETRIES_PER_UNSIGNED_PROPOSAL {
@@ -246,6 +269,7 @@ where
 					threshold,
 					session_id,
 					&best_authorities,
+					header,
 				) {
 					let ssid = next_ssid;
 					let local_in_this_set = signing_set.signing_set.contains(&party_i);
@@ -262,13 +286,17 @@ where
 					// If this set it novel, and, we are NOT in this set, let the other nodes
 					// attempt this protocol. Break out of the loop
 					if is_novel && !local_in_this_set {
-						// TODO: figure out staggering issue. Also, since this signing set may complete successfully,
-						// we need a way for this node to clean this map when the other nodes succeed.
-						// The staggering issue means that if this signing set we delegate fails for the other nodes,
-						// they will not stall until STALL_LIMIT blocks. However, the next block we get, we will immediately
-						// start the next SSID protocol, meaning we are now staggered.
+						// TODO: before trying the NEXT unique signing set the next time a finality
+						// notification happens, check to see if the full_unsigned_proposals
+						// contains this proposal. If it does, AND, we know it is stalled,
+						// we can try running again. If it does contain the proposal, but it's NOT
+						// stalled, we return immediately and don't run protocols for this unsigned
+						// hash until we know it is stalled OR if the protocol was a success. We can
+						// tell a protocol is a success if this unsigned proposal hash is not inside
+						// the full_unsigned_proposals anymore
 						dkg_worker.logger.debug(format!("Attempted SSID {ssid}={signing_set:?}, however, this set is novel and local is not in this set. Delegating to other nodes"));
-						// To ensure we count this the next time the delegated nodes fail, add this to the list
+						// To ensure we count this the next time the delegated nodes fail, add this
+						// to the list
 						ssid_lock
 							.entry(unsigned_proposal_hash)
 							.or_default()
@@ -331,6 +359,8 @@ where
 								handle,
 								task,
 							)?;
+							// Break from the inner loop to continue to the next unsigned proposal
+							break
 						},
 						Err(err) => {
 							dkg_worker
@@ -364,6 +394,46 @@ where
 		}
 	}
 
+	async fn get_unsigned_proposals(
+		&self,
+		header: &B::Header,
+		dkg_worker: &DKGWorker<B, BE, C, GE>,
+		party_i: KeygenPartyId,
+	) -> Result<
+		(
+			UnsignedProposalsVec<<<B as Block>::Header as Header>::Number>,
+			UnsignedProposalsVec<<<B as Block>::Header as Header>::Number>,
+		),
+		DKGError,
+	> {
+		match dkg_worker.get_unsigned_proposal_batches(header).await {
+			Ok(mut all_proposals) => {
+				// sort proposals by timestamp, we want to pick the oldest proposal to sign
+				all_proposals.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+				let mut filtered_unsigned_proposals = Vec::new();
+				for proposal in &all_proposals {
+					if let Some(hash) = proposal.hash() {
+						// only submit the job if it isn't already running
+						if !self.work_manager.job_exists(&hash) {
+							// update unsigned proposal counter
+							metric_inc!(dkg_worker, dkg_unsigned_proposal_counter);
+							filtered_unsigned_proposals.push(proposal.clone());
+						}
+					}
+				}
+				Ok((filtered_unsigned_proposals, all_proposals))
+			},
+			Err(e) => {
+				dkg_worker
+					.logger
+					.error(format!("🕸️  PARTY {party_i} | Failed to get unsigned proposals: {e:?}"));
+				Err(DKGError::GenericError {
+					reason: format!("Failed to get unsigned proposals: {e:?}"),
+				})
+			},
+		}
+	}
+
 	#[allow(clippy::too_many_arguments)]
 	/// Create a seed s where s is keccak256(pk, fN=at, unsignedProposal)
 	/// This seed is used in the random number generator to generate a
@@ -377,6 +447,7 @@ where
 		threshold: u16,
 		_session_id: SessionId,
 		best_authorities: &[(KeygenPartyId, Public)],
+		header: &B::Header,
 	) -> Option<ProposedSigningSet> {
 		let concat_data = dkg_pub_key
 			.iter()
@@ -385,11 +456,15 @@ where
 			.chain(ssid.encode())
 			.collect::<Vec<u8>>();
 		let seed = sp_core::keccak_256(&concat_data);
+		let locally_proposed_at: u64 = (*header.number()).saturated_into();
 
 		let maybe_set = self.generate_signers(&seed, threshold, best_authorities, dkg_worker).ok();
 
-		maybe_set
-			.map(|signing_set| ProposedSigningSet { signing_set: HashSet::from_iter(signing_set) })
+		maybe_set.map(|signing_set| ProposedSigningSet {
+			locally_proposed_at,
+			ssid,
+			signing_set: HashSet::from_iter(signing_set),
+		})
 	}
 
 	/// After keygen, this should be called to generate a random set of signers
@@ -425,6 +500,8 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposedSigningSet {
+	pub ssid: u8,
+	pub locally_proposed_at: u64,
 	pub signing_set: HashSet<KeygenPartyId>,
 }
 

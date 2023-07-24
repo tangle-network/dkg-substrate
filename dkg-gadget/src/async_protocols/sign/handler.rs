@@ -286,14 +286,15 @@ where
 							continue
 						}
 
-						if msg.body.associated_block_id != params.associated_block_id {
+						// The job manager checks for acceptability already, we don't need this code
+						/*if msg.body.associated_block_id != params.associated_block_id {
 							params.logger.warn_signing(format!(
 								"Received partial sig from {} with wrong associated block id",
 								msg.sender
 							));
 							params.logger.clear_checkpoint_for_message_raw(&payload);
 							continue
-						}
+						}*/
 
 						params.logger.checkpoint_message_raw(&payload, "CP-Voting-Received-3");
 						params.logger.info_signing("Found matching round key!".to_string());
